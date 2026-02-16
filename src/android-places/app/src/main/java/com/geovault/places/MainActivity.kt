@@ -319,8 +319,9 @@ class MainActivity : AppCompatActivity() {
             filteredPlaces = placesList
         } else {
             fun matches(feature: Feature): Boolean {
-                val name = feature.properties.name ?: "Unnamed Place"
-                return name.contains(query, ignoreCase = true)
+                val name = feature.properties.name ?: ""
+                val desc = feature.properties.description ?: ""
+                return name.contains(query, ignoreCase = true) || desc.contains(query, ignoreCase = true)
             }
 
             filteredOfflineFeatures = offlinePlacesList.filter { matches(it.feature) }

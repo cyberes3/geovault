@@ -54,10 +54,12 @@ like.
 We have a very thorough test suite in `src/tests` so make sure to run any changes through that. I like to have the AI
 write a test for each bug I fix.
 
-## Android Uploader App
+## Android Apps
 
-A simple Android app is included that allows you to quickly upload KML/KMZ/GPX files to your GeoVault server via
-Android's share intent. More info in `src/android`.
+Uploader app that allows you to quickly upload KML/KMZ/GPX files to your GeoVault server via
+Android's share intent.
+
+Places app to make it easy to manage and navigate to your bookmarked places. Supports offline usage.
 
 Compiled APKs available here: <https://git.evulid.cc/cyberes/geovault-app-release/releases>
 

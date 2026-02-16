@@ -16,6 +16,8 @@ import android.widget.Toast
 import com.google.android.material.button.MaterialButton
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -56,6 +58,11 @@ class PlaceEditActivity : AppCompatActivity() {
     private var saveCall: Call<Feature>? = null
     private var pendingFeature: Feature? = null
     private lateinit var fusedLocationClient: FusedLocationProviderClient
+
+    private var initialName: String = ""
+    private var initialDescription: String = ""
+    private var initialLat: String = ""
+    private var initialLon: String = ""
 
     private val prefs: SharedPreferences by lazy {
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
@@ -106,6 +113,17 @@ class PlaceEditActivity : AppCompatActivity() {
             }
         }
 
+        initialName = nameInput.text.toString().trim()
+        initialDescription = descriptionInput.text.toString().trim()
+        initialLat = latInput.text.toString().trim()
+        initialLon = lonInput.text.toString().trim()
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                tryFinish()
+            }
+        })
+
         setupListeners()
         validateForm() // Initial check
     }
@@ -123,8 +141,8 @@ class PlaceEditActivity : AppCompatActivity() {
         savingText = findViewById(R.id.savingText)
         savingTapHint = findViewById(R.id.savingTapHint)
 
-        findViewById<View>(R.id.closeButton).setOnClickListener { finish() }
-        findViewById<View>(R.id.cancelButton).setOnClickListener { finish() }
+        findViewById<View>(R.id.closeButton).setOnClickListener { tryFinish() }
+        findViewById<View>(R.id.cancelButton).setOnClickListener { tryFinish() }
     }
 
     private fun setupWindowInsets() {
@@ -321,6 +339,30 @@ class PlaceEditActivity : AppCompatActivity() {
     private fun hideSavingOverlay() {
         savingOverlay.visibility = View.GONE
         validateForm() // Re-validate to restore button state
+    }
+
+    private fun hasUnsavedChanges(): Boolean {
+        val currentName = nameInput.text.toString().trim()
+        val currentDescription = descriptionInput.text.toString().trim()
+        val currentLat = latInput.text.toString().trim()
+        val currentLon = lonInput.text.toString().trim()
+        return currentName != initialName ||
+            currentDescription != initialDescription ||
+            currentLat != initialLat ||
+            currentLon != initialLon
+    }
+
+    private fun tryFinish() {
+        if (!hasUnsavedChanges()) {
+            finish()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Discard changes?")
+            .setMessage("You have unsaved changes. Are you sure you want to leave?")
+            .setPositiveButton("Discard") { _, _ -> finish() }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun savePlace() {

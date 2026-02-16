@@ -342,13 +342,16 @@ export default {
       return window.innerWidth < 1024;
     });
 
+    // Search includes both name and description (client-side filter)
     const filteredPlaces = computed(() => {
       if (!searchQuery.value) return places.value;
       const lower = searchQuery.value.toLowerCase();
-      return places.value.filter(p =>
-          (p.properties.name && p.properties.name.toLowerCase().includes(lower)) ||
-          (p.properties.description && p.properties.description.toLowerCase().includes(lower))
-      );
+      return places.value.filter(p => {
+        const name = p.properties?.name;
+        const desc = p.properties?.description;
+        return (name != null && String(name).toLowerCase().includes(lower)) ||
+            (desc != null && String(desc).toLowerCase().includes(lower));
+      });
     });
 
     const fetchPlaces = async () => {

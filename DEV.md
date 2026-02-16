@@ -1,4 +1,4 @@
-# GeoVault development notes
+# GeoVault Development Notes
 
 ## Android app releases (dashboard links)
 

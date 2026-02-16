@@ -138,8 +138,8 @@
 </template>
 
 <script>
-import {computed, inject, nextTick, onDeactivated, onMounted, ref, watch} from 'vue';
-import {useRoute} from 'vue-router';
+import {computed, inject, onBeforeUnmount, onDeactivated, onMounted, ref, watch} from 'vue';
+import {onBeforeRouteLeave, useRoute} from 'vue-router';
 import {MagnifyingGlassIcon, MapPinIcon} from '@heroicons/vue/24/outline';
 
 export default {
@@ -186,6 +186,18 @@ export default {
     const isSearching = ref(false);
     const searchTimeout = ref(null);
     const currentSearchQuery = ref('');
+
+    // Snapshot of name, description, lat, lon when form was loaded or reset (for dirty check)
+    const initialFormSnapshot = ref(null);
+
+    const isDirty = computed(() => {
+      const s = initialFormSnapshot.value;
+      if (s == null) return false;
+      return name.value !== s.name ||
+          description.value !== s.description ||
+          latitude.value !== s.lat ||
+          longitude.value !== s.lon;
+    });
 
     function setCoords(lat, lon) {
       latitude.value = lat == null ? null : parseFloat(Number(lat).toFixed(6));
@@ -289,6 +301,12 @@ export default {
             });
           }
         }
+        initialFormSnapshot.value = {
+          name: name.value,
+          description: description.value,
+          lat: latitude.value,
+          lon: longitude.value
+        };
       } catch (err) {
         console.error('Failed to load place', err);
         toast.error(err.response?.data?.message || err.message || 'Failed to load place.');
@@ -416,6 +434,12 @@ export default {
           await api.post('/features/', payload);
           toast.success('Place created.');
         }
+        initialFormSnapshot.value = {
+          name: name.value.trim(),
+          description: (description.value || '').trim(),
+          lat: latitude.value,
+          lon: longitude.value
+        };
         if (router) router.navigate('');
       } catch (err) {
         console.error('Failed to save place', err);
@@ -429,6 +453,25 @@ export default {
       if (router) router.navigate('');
     }
 
+    function handleBeforeUnload(e) {
+      if (isDirty.value) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    }
+
+    onBeforeRouteLeave((_to, _from, next) => {
+      if (!isDirty.value) {
+        next();
+        return;
+      }
+      if (confirm('You have unsaved changes. Leave anyway?')) {
+        next();
+      } else {
+        next(false);
+      }
+    });
+
     function resetFormAndMap() {
       name.value = '';
       description.value = '';
@@ -440,6 +483,7 @@ export default {
       searchResults.value = [];
       showResults.value = false;
       currentSearchQuery.value = '';
+      initialFormSnapshot.value = {name: '', description: '', lat: null, lon: null};
       if (searchTimeout.value != null) {
         clearTimeout(searchTimeout.value);
         searchTimeout.value = null;
@@ -456,11 +500,16 @@ export default {
 
     onMounted(() => {
       initMap();
+      window.addEventListener('beforeunload', handleBeforeUnload);
       if (route.query.edit) {
         loadPlaceForEdit(parseInt(String(route.query.edit), 10));
       } else {
         resetFormAndMap();
       }
+    });
+
+    onBeforeUnmount(() => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     });
 
     onDeactivated(() => {
