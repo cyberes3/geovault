@@ -9,10 +9,11 @@ If you serve a lot of users or are uploading large files, you should consider ru
 Setting up an Overpass API server is a very involved and complicated process. This guide tries to
 walk you through the process.
 
-System minimum requirements:
+This guide has the following minimum system requirements:
 
 - 6 CPU cores
 - 16 GB memory
+- ???? GB storage space
 
 ## Paths
 
@@ -52,9 +53,27 @@ rm -rf /srv/overpass/tmp
 
 ```shell
 mkdir -p /srv/overpass/downloads
+```
+
+Download the MD5 hashes first:
+
+```shell
+curl -sL https://download.geofabrik.de/north-america-latest.osm.pbf.md5 | awk -v f='/srv/overpass/downloads/north-america-latest.osm.pbf' '{print $1"  "f}' > /srv/overpass/downloads/north-america-latest.osm.pbf.md5
+curl -sL https://download.geofabrik.de/europe-latest.osm.pbf.md5 | awk -v f='/srv/overpass/downloads/europe-latest.osm.pbf' '{print $1"  "f}' > /srv/overpass/downloads/europe-latest.osm.pbf.md5
+```
+
+```shell
 aria2c --continue=true --max-connection-per-server=16 --split=16 --dir=/srv/overpass/downloads --out=north-america-latest.osm.pbf https://download.geofabrik.de/north-america-latest.osm.pbf
 aria2c --continue=true --max-connection-per-server=16 --split=16 --dir=/srv/overpass/downloads --out=europe-latest.osm.pbf https://download.geofabrik.de/europe-latest.osm.pbf
 ```
+
+Wait a few hours. Then verify:
+
+```shell
+md5sum -c /srv/overpass/downloads/north-america-latest.osm.pbf.md5 /srv/overpass/downloads/europe-latest.osm.pbf.md5
+```
+
+Wait 10 minutes. Should see `OK` for both files. If not, you're SOL.
 
 ### Convert PBF to OSM XML Format
 
@@ -66,15 +85,35 @@ osmconvert /srv/overpass/downloads/north-america-latest.osm.pbf --out-osm | bzip
 osmconvert /srv/overpass/downloads/europe-latest.osm.pbf --out-osm | bzip2 > /srv/overpass/converted/europe-latest.osm.bz2
 ```
 
+Wait 1 day.
+
 ### Initialize Database
 
+Create directories and change to the correct root directory:
 ```shell
 mkdir -p /srv/overpass/databases
 cd /srv/overpass
-/usr/bin/init_osm3s.sh /srv/overpass/converted/north-america-latest.osm.bz2 /srv/overpass/databases /usr --meta
-/usr/bin/init_osm3s.sh /srv/overpass/converted/europe-latest.osm.bz2 /srv/overpass/databases /usr --meta
+```
+
+First import this:
+```shell
+/usr/bin/init_osm3s.sh /srv/overpass/converted/north-america-latest.osm.bz2 /srv/overpass/databases /usr --meta --flush-size=1
+```
+
+Then import that:
+```shell
+/usr/bin/init_osm3s.sh /srv/overpass/converted/europe-latest.osm.bz2 /srv/overpass/databases /usr --meta --flush-size=1
+```
+
+DO NOT run both these imports at the same time! Must be run sequentially.
+
+Then fix permissions:
+
+```shell
 chown -R overpass:overpass /srv/overpass/databases
 ```
+
+Wait 3 days.
 
 ## Systemd Service Setup
 
@@ -219,4 +258,4 @@ curl -k --data-urlencode "data=[out:json];node[\"amenity\"=\"restaurant\"](51.50
 We need to build the areas dataset to perform `is_in()` queries (required for reverse geocoding protected areas,
 administrative boundaries, etc).
 
-Areas is basically a completely different database. See [Areas Setup.md](Areas%20Setup.md) for instructions.
+Areas is basically a completely seperate database. See [Areas Setup.md](Areas%20Setup.md) for instructions.
