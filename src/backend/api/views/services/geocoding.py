@@ -1,7 +1,7 @@
 """
-Forward geocoding API view for MapTiler geocoding service.
-Provides place search functionality (forward geocoding) with server-side caching.
-Address search uses Google Geocoding API (API key only).
+Forward geocoding API view with pluggable backends (MapTiler or Google per geocoding_search_mode).
+Provides place search functionality with server-side caching.
+Address search (/api/geocoding/address-search/) uses Google Geocoding API only.
 """
 import hashlib
 from urllib.parse import quote, urlencode
@@ -17,6 +17,12 @@ from website.config_loader import get_config_loader
 
 _logger = get_tagged_logger()
 
+
+class GeocodingBackendError(Exception):
+    """Raised by search backends when the provider returns an error (e.g. all requests failed)."""
+    pass
+
+
 # Cache TTL: 7 days in seconds
 GEOCODING_CACHE_TTL = 604800
 
@@ -28,7 +34,7 @@ _GOOGLE_GEOCODE_BASE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 @api_or_login_required_401()
 def geocoding_search(request):
     """
-    Search for places using MapTiler Forward Geocoding API.
+    Search for places using the configured backend (MapTiler or Google per geocoding_search_mode).
 
     Query parameters:
         q: Search query string (required)
@@ -37,8 +43,7 @@ def geocoding_search(request):
         JSON response with geocoding results or error message
 
     Caching:
-        Results are cached server-side for 7 days.
-        HTTP Cache-Control header is set to 7 days.
+        Results are cached server-side for 7 days. Cache key includes mode so switching provider does not serve stale results.
     """
     query = request.GET.get('q', '').strip()
 
@@ -46,155 +51,43 @@ def geocoding_search(request):
         return error_response("Query parameter 'q' is required", code=400)
 
     config_loader = get_config_loader()
-    api_key = config_loader.get_maptiler_api_key()
+    mode = config_loader.get_geocoding_search_mode()
+    if mode is None:
+        return error_response(
+            "Forward geocoding service is not configured. Set geocoding_search_mode to 'maptiler' or 'google' in config.",
+            code=503
+        )
+    if mode == 'maptiler':
+        api_key = config_loader.get_maptiler_api_key()
+        key_label = "MapTiler API key"
+    else:
+        api_key = config_loader.get_google_api_key()
+        key_label = "Google API key"
 
     if not api_key:
         return error_response(
-            "Forward geocoding service is not available. MapTiler API key is not configured.",
+            f"Forward geocoding service is not available. {key_label} is not configured.",
             code=503
         )
 
-    # Check cache first
-    cache_key = _get_cache_key(query)
+    cache_key = _get_cache_key(query, mode)
     cached_result = cache.get(cache_key)
     if cached_result is not None:
-        result_data = {
-            'data': cached_result
-        }
-        response = success_response(data=result_data)
-        response['Cache-Control'] = 'public, max-age=604800'  # 7 days
+        response = success_response(data={'data': cached_result})
+        response['Cache-Control'] = 'public, max-age=604800'
         return response
 
-    # Make request to MapTiler Forward Geocoding API
-    # API endpoint: https://api.maptiler.com/geocoding/{query}.json?key={api_key}
-    # By not specifying 'types' parameter, we get ALL feature types:
-    # countries, regions, counties, municipalities, places, addresses, POIs,
-    # major landforms (mountains, valleys), continental/marine features, etc.
-    # Get site domain for Origin header (MapTiler expects just the domain, no protocol)
-    site_domain = config_loader.get_str('site.domain')
-    headers = {'Origin': site_domain}
-    api_url = f"https://api.maptiler.com/geocoding/{quote(query)}.json"
-
-    # Make three requests to ensure we get comprehensive results including major cities
-    # Request 1: Major administrative divisions only (regions, subregions, municipalities)
-    # This ensures major cities like Tokyo, Japan are captured even if they're not in the top 10 of other requests
-    params_admin = {
-        'key': api_key,
-        'limit': 10,  # MapTiler API maximum limit
-        'autocomplete': 'true',
-        'language': 'en',
-        'types': 'region,subregion,municipality,joint_municipality'  # Major administrative divisions
-    }
-
-    # Request 2: Geographic features (POIs, major landforms, administrative places) - this gets parks, mountains, etc.
-    # Include all administrative place types to ensure cities are captured
-    params_geographic = {
-        'key': api_key,
-        'limit': 10,  # MapTiler API maximum limit
-        'autocomplete': 'true',
-        'language': 'en',
-        'types': 'poi,major_landform,place,region,subregion,county,municipality,joint_municipality,joint_submunicipality,municipal_district,locality,neighbourhood'  # Focus on geographic features
-    }
-
-    # Request 3: All types (including addresses) - to get comprehensive results
-    params_all = {
-        'key': api_key,
-        'limit': 10,  # MapTiler API maximum limit
-        'autocomplete': 'true',
-        'language': 'en'
-    }
-
-    admin_features = []
-    geographic_features = []
-    all_features = []
-
+    backend = _get_search_backend(mode)
     try:
-        # Make administrative divisions request first (highest priority for major cities)
-        admin_response = requests.get(api_url, params=params_admin, headers=headers, timeout=10)
-        if admin_response.status_code == 200:
-            admin_data = admin_response.json()
-            admin_features = admin_data.get('features', [])
-        else:
-            _logger.error(f"Forward geocoding API error response: status={admin_response.status_code}, body={admin_response.text}")
-
-        # Make geographic features request
-        geo_response = requests.get(api_url, params=params_geographic, headers=headers, timeout=10)
-        if geo_response.status_code == 200:
-            geo_data = geo_response.json()
-            geographic_features = geo_data.get('features', [])
-        else:
-            _logger.error(f"Forward geocoding API error response: status={geo_response.status_code}, body={geo_response.text}")
-
-        # Make all types request
-        api_response = requests.get(api_url, params=params_all, headers=headers, timeout=10)
-        if api_response.status_code == 200:
-            api_data = api_response.json()
-            all_features = api_data.get('features', [])
-        else:
-            _logger.error(f"Forward geocoding API error response: status={api_response.status_code}, body={api_response.text}")
+        result = backend(query, config_loader)
     except requests.exceptions.Timeout:
         return error_response("Forward geocoding API request timed out", code=504)
+    except GeocodingBackendError as e:
+        return error_response(str(e), code=400)
 
-    # If all requests failed, return error
-    if not admin_features and not geographic_features and not all_features:
-        return error_response(
-            "Forward geocoding API error: all requests failed",
-            code=400
-        )
-
-    # Combine results: prioritize administrative divisions, then geographic features, then others
-    # Create sets of IDs to avoid duplicates
-    admin_ids = {f.get('id') for f in admin_features if f.get('id')}
-    geographic_ids = {f.get('id') for f in geographic_features if f.get('id')}
-    all_ids = admin_ids | geographic_ids
-
-    # Start with administrative divisions (major cities/regions)
-    features = list(admin_features)
-
-    # Add geographic features that aren't already in admin results
-    for feature in geographic_features:
-        if feature.get('id') not in admin_ids:
-            features.append(feature)
-
-    # Add other features that aren't already in results
-    for feature in all_features:
-        if feature.get('id') not in all_ids:
-            features.append(feature)
-
-    # Sort features to prioritize geographic features (POIs, major landforms, places) over addresses
-    # The API already sorts by relevance, but we can further prioritize geographic features
-
-    # Sort by priority (descending), then by relevance if available
-    features.sort(key=lambda f: (
-        -_get_feature_priority(f, query),
-        -f.get('relevance', 0)
-    ))
-
-    # Limit to top results (prioritized by city-level exact matches, then POIs, then others)
-    features = features[:10]
-
-    # Clean features to remove unnecessary fields and reduce payload size
-    cleaned_features = [_clean_feature(f) for f in features]
-
-    # Format response data (wrap in 'data' property to match other endpoints)
-    result_data = {
-        'data': {
-            'query': query,
-            'features': cleaned_features
-        }
-    }
-
-    # Cache the result for 7 days (cache the inner data structure)
-    # Cache cleaned features to save space
-    cache_data = {
-        'query': query,
-        'features': cleaned_features
-    }
-    cache.set(cache_key, cache_data, GEOCODING_CACHE_TTL)
-
-    # Return response with cache headers
-    response = success_response(data=result_data)
-    response['Cache-Control'] = 'public, max-age=604800'  # 7 days
+    cache.set(cache_key, result, GEOCODING_CACHE_TTL)
+    response = success_response(data={'data': result})
+    response['Cache-Control'] = 'public, max-age=604800'
     return response
 
 
@@ -273,22 +166,21 @@ def geocoding_address_search(request):
     return response
 
 
-def _get_cache_key(query: str) -> str:
+def _get_cache_key(query: str, mode: str = 'maptiler') -> str:
     """
     Generate cache key for forward geocoding query.
-
-    Uses a hash to ensure cache keys are safe for memcached (no spaces or special chars).
+    Mode-aware so switching provider does not serve stale results.
 
     Args:
         query: Search query
+        mode: Backend mode ('maptiler' or 'google')
 
     Returns:
         Cache key string safe for memcached
     """
     normalized = query.strip().lower()
-    # Use hash to create a safe cache key (memcached doesn't like spaces/special chars)
     query_hash = hashlib.md5(normalized.encode('utf-8')).hexdigest()
-    return f"geocoding:{query_hash}"
+    return f"geocoding:{mode}:{query_hash}"
 
 
 def _get_address_cache_key(query: str) -> str:
@@ -337,6 +229,49 @@ def _google_address_short_label(address_components: list) -> str | None:
     if not parts:
         return None
     return ' '.join(p for p in parts if p)
+
+
+def _google_result_to_place_feature(result: dict, index: int) -> dict:
+    """
+    Convert a Google Geocoding API result to place-search feature shape (same as MapTiler).
+    Includes bbox from viewport (southwest/northeast -> [west, south, east, north]).
+    """
+    place_name = (result.get('formatted_address') or '').strip() or None
+    coordinates = None
+    geometry = result.get('geometry')
+    if geometry and isinstance(geometry, dict):
+        loc = geometry.get('location')
+        if loc and isinstance(loc, dict):
+            lat = loc.get('lat')
+            lng = loc.get('lng')
+            if lat is not None and lng is not None:
+                coordinates = [float(lng), float(lat)]
+
+    bbox = None
+    if geometry and isinstance(geometry, dict):
+        viewport = geometry.get('viewport')
+        if viewport and isinstance(viewport, dict):
+            sw = viewport.get('southwest')
+            ne = viewport.get('northeast')
+            if sw and ne and isinstance(sw, dict) and isinstance(ne, dict):
+                sw_lat = sw.get('lat')
+                sw_lng = sw.get('lng')
+                ne_lat = ne.get('lat')
+                ne_lng = ne.get('lng')
+                if all(x is not None for x in (sw_lat, sw_lng, ne_lat, ne_lng)):
+                    bbox = [float(sw_lng), float(sw_lat), float(ne_lng), float(ne_lat)]
+
+    text = _google_address_short_label(result.get('address_components') or [])
+    if not text and place_name:
+        text = place_name.split(',')[0].strip() if place_name else None
+
+    return {
+        'coordinates': coordinates,
+        'id': result.get('place_id') or f'google-{index}',
+        'text': text,
+        'place_name': place_name,
+        'bbox': bbox,
+    }
 
 
 def _clean_feature(feature: dict) -> dict:
@@ -453,3 +388,133 @@ def _get_feature_priority(feature, query):
         return 30
     # Default
     return 0
+
+
+def _search_maptiler(query: str, config_loader) -> dict:
+    """
+    Place search using MapTiler Forward Geocoding API.
+    Returns {"query": str, "features": list} with features in place-search shape.
+    Raises requests.exceptions.Timeout on timeout, GeocodingBackendError when all requests fail.
+    """
+    api_key = config_loader.get_maptiler_api_key()
+    if not api_key:
+        raise GeocodingBackendError("MapTiler API key is not configured")
+
+    site_domain = config_loader.get_str('site.domain')
+    headers = {'Origin': site_domain}
+    api_url = f"https://api.maptiler.com/geocoding/{quote(query)}.json"
+
+    params_admin = {
+        'key': api_key,
+        'limit': 10,
+        'autocomplete': 'true',
+        'language': 'en',
+        'types': 'region,subregion,municipality,joint_municipality',
+    }
+    params_geographic = {
+        'key': api_key,
+        'limit': 10,
+        'autocomplete': 'true',
+        'language': 'en',
+        'types': 'poi,major_landform,place,region,subregion,county,municipality,joint_municipality,joint_submunicipality,municipal_district,locality,neighbourhood',
+    }
+    params_all = {
+        'key': api_key,
+        'limit': 10,
+        'autocomplete': 'true',
+        'language': 'en',
+    }
+
+    admin_features = []
+    geographic_features = []
+    all_features = []
+
+    admin_response = requests.get(api_url, params=params_admin, headers=headers, timeout=10)
+    if admin_response.status_code == 200:
+        admin_features = admin_response.json().get('features', [])
+    else:
+        _logger.error(f"Forward geocoding API error response: status={admin_response.status_code}, body={admin_response.text}")
+
+    geo_response = requests.get(api_url, params=params_geographic, headers=headers, timeout=10)
+    if geo_response.status_code == 200:
+        geographic_features = geo_response.json().get('features', [])
+    else:
+        _logger.error(f"Forward geocoding API error response: status={geo_response.status_code}, body={geo_response.text}")
+
+    api_response = requests.get(api_url, params=params_all, headers=headers, timeout=10)
+    if api_response.status_code == 200:
+        all_features = api_response.json().get('features', [])
+    else:
+        _logger.error(f"Forward geocoding API error response: status={api_response.status_code}, body={api_response.text}")
+
+    if not admin_features and not geographic_features and not all_features:
+        raise GeocodingBackendError("Forward geocoding API error: all requests failed")
+
+    admin_ids = {f.get('id') for f in admin_features if f.get('id')}
+    geographic_ids = {f.get('id') for f in geographic_features if f.get('id')}
+    all_ids = admin_ids | geographic_ids
+
+    features = list(admin_features)
+    for feature in geographic_features:
+        if feature.get('id') not in admin_ids:
+            features.append(feature)
+    for feature in all_features:
+        if feature.get('id') not in all_ids:
+            features.append(feature)
+
+    features.sort(key=lambda f: (
+        -_get_feature_priority(f, query),
+        -f.get('relevance', 0),
+    ))
+    features = features[:10]
+    cleaned_features = [_clean_feature(f) for f in features]
+    return {'query': query, 'features': cleaned_features}
+
+
+def _search_google(query: str, config_loader) -> dict:
+    """
+    Place search using Google Geocoding API.
+    Returns {"query": str, "features": list} with features in same shape as MapTiler (coordinates, text, place_name, bbox, id).
+    Raises requests.exceptions.Timeout on timeout, GeocodingBackendError on API error.
+    """
+    api_key = config_loader.get_google_api_key()
+    if not api_key:
+        raise GeocodingBackendError("Google API key is not configured")
+
+    params = {
+        'address': query,
+        'key': api_key,
+        'language': 'en',
+    }
+    request_url = _GOOGLE_GEOCODE_BASE_URL + "?" + urlencode(params)
+    api_response = requests.get(request_url, timeout=10)
+    if api_response.status_code != 200:
+        _logger.error(
+            f"Google Geocoding API error: status={api_response.status_code}, body={api_response.text}"
+        )
+        raise GeocodingBackendError("Geocoding API request failed")
+
+    api_data = api_response.json()
+    status = api_data.get('status')
+    if status == 'ZERO_RESULTS':
+        return {'query': query, 'features': []}
+    if status != 'OK':
+        _logger.error(f"Google Geocoding API status={status}, body={api_response.text}")
+        raise GeocodingBackendError(
+            api_data.get('error_message', f"Geocoding API error: {status}")
+        )
+
+    results = api_data.get('results', [])
+    features = [_google_result_to_place_feature(r, i) for i, r in enumerate(results[:10])]
+    return {'query': query, 'features': features}
+
+
+_SEARCH_BACKENDS = {
+    'maptiler': _search_maptiler,
+    'google': _search_google,
+}
+
+
+def _get_search_backend(mode: str):
+    """Return the search backend callable for the given mode. Unknown mode falls back to maptiler."""
+    return _SEARCH_BACKENDS.get(mode, _search_maptiler)

@@ -116,6 +116,12 @@ google:
     api_key:
 
 
+# Place search backend
+# Required: set to maptiler or google (no default)
+# Must also configure the maptiler or google api section elsewhere in the config
+geocoding_search_mode: maptiler
+
+
 icons:
   # Enable or disable icon processing for KML/KMZ files
   processing_enabled: true

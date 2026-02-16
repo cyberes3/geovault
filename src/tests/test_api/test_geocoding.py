@@ -105,10 +105,11 @@ class TestGeocodingAPI(TestCase):
         """
         import requests
         from website.config_loader import get_config_loader
-        
+
         config_loader = get_config_loader()
+        if config_loader.get_geocoding_search_mode() is None:
+            self.skipTest("geocoding_search_mode not configured")
         api_key = config_loader.get_maptiler_api_key()
-        
         if not api_key:
             self.skipTest("MapTiler API key not configured")
 
@@ -141,9 +142,10 @@ class TestGeocodingAPI(TestCase):
     @patch('api.views.services.geocoding.requests.get')
     def test_geocoding_search_rocky_mountain_national_park(self, mock_get, mock_config_loader):
         """Test that searching for 'rocky mountain national park' returns RMNP feature."""
-        # Mock config loader to return API key
+        # Mock config loader to return API key and mode
         mock_config = MagicMock()
         mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
         mock_config_loader.return_value = mock_config
 
         # Mock API responses - now 3 requests: admin, geographic, all types
@@ -198,9 +200,10 @@ class TestGeocodingAPI(TestCase):
     @patch('api.views.services.geocoding.requests.get')
     def test_geocoding_search_caching(self, mock_get, mock_config_loader):
         """Test that geocoding results are cached."""
-        # Mock config loader to return API key
+        # Mock config loader to return API key and mode
         mock_config = MagicMock()
         mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
         mock_config_loader.return_value = mock_config
 
         # Mock API responses - now 3 requests: admin, geographic, all types
@@ -241,8 +244,9 @@ class TestGeocodingAPI(TestCase):
     @patch('api.views.services.geocoding.get_config_loader')
     def test_geocoding_search_no_api_key(self, mock_config_loader):
         """Test geocoding search when API key is not configured."""
-        # Mock config loader to return None (no API key)
+        # Mock config loader: mode maptiler, no API key
         mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
         mock_config.get_maptiler_api_key.return_value = None
         mock_config_loader.return_value = mock_config
 
@@ -260,6 +264,7 @@ class TestGeocodingAPI(TestCase):
         """Test geocoding search without query parameter."""
         # Mock config loader
         mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
         mock_config.get_maptiler_api_key.return_value = 'test_api_key'
         mock_config_loader.return_value = mock_config
 
@@ -276,9 +281,10 @@ class TestGeocodingAPI(TestCase):
     @patch('api.views.services.geocoding.requests.get')
     def test_geocoding_search_api_error(self, mock_get, mock_config_loader):
         """Test geocoding search when MapTiler API returns an error."""
-        # Mock config loader to return API key
+        # Mock config loader to return API key and mode
         mock_config = MagicMock()
         mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
         mock_config_loader.return_value = mock_config
 
         # Mock API error response - admin succeeds, geographic succeeds, all types fails
@@ -308,9 +314,10 @@ class TestGeocodingAPI(TestCase):
     @patch('api.views.services.geocoding.requests.get')
     def test_geocoding_search_timeout(self, mock_get, mock_config_loader):
         """Test geocoding search when API request times out."""
-        # Mock config loader to return API key
+        # Mock config loader to return API key and mode
         mock_config = MagicMock()
         mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
         mock_config_loader.return_value = mock_config
 
         # Mock timeout exception
@@ -329,9 +336,10 @@ class TestGeocodingAPI(TestCase):
     @patch('api.views.services.geocoding.requests.get')
     def test_geocoding_search_feature_cleaning(self, mock_get, mock_config_loader):
         """Test that features are properly cleaned (unnecessary fields removed)."""
-        # Mock config loader to return API key
+        # Mock config loader to return API key and mode
         mock_config = MagicMock()
         mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
         mock_config_loader.return_value = mock_config
 
         # Mock API responses - now 3 requests: admin, geographic, all types
@@ -387,9 +395,10 @@ class TestGeocodingAPI(TestCase):
     @patch('api.views.services.geocoding.requests.get')
     def test_geocoding_search_prioritizes_geographic_features(self, mock_get, mock_config_loader):
         """Test that geographic features (parks, POIs) are prioritized over addresses."""
-        # Mock config loader to return API key
+        # Mock config loader to return API key and mode
         mock_config = MagicMock()
         mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
         mock_config_loader.return_value = mock_config
 
         # Mock API responses - now 3 requests: admin, geographic, all types
@@ -536,4 +545,134 @@ class TestGeocodingAPI(TestCase):
         data = json.loads(response.content)
         self.assertIn('data', data)
         self.assertIsInstance(data['data'], list)
+
+    # --- geocoding_search_mode config and pluggable backends ---
+
+    def test_get_geocoding_search_mode_default(self):
+        """get_geocoding_search_mode returns None when key is missing or unset."""
+        import tempfile
+        from pathlib import Path
+        from website.config_loader import ConfigLoader
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'config.yaml'
+            path.write_text('other_key: true\n')
+            loader = ConfigLoader(str(path))
+            self.assertIsNone(loader.get_geocoding_search_mode())
+
+    def test_get_geocoding_search_mode_maptiler(self):
+        """get_geocoding_search_mode returns 'maptiler' when set to maptiler (normalized to lowercase)."""
+        import tempfile
+        from pathlib import Path
+        from website.config_loader import ConfigLoader
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'config.yaml'
+            path.write_text('geocoding_search_mode: maptiler\n')
+            loader = ConfigLoader(str(path))
+            self.assertEqual(loader.get_geocoding_search_mode(), 'maptiler')
+            path.write_text('geocoding_search_mode: Maptiler\n')
+            loader._load_config()
+            self.assertEqual(loader.get_geocoding_search_mode(), 'maptiler')
+
+    def test_get_geocoding_search_mode_google(self):
+        """get_geocoding_search_mode returns 'google' when set to google."""
+        import tempfile
+        from pathlib import Path
+        from website.config_loader import ConfigLoader
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'config.yaml'
+            path.write_text('geocoding_search_mode: google\n')
+            loader = ConfigLoader(str(path))
+            self.assertEqual(loader.get_geocoding_search_mode(), 'google')
+
+    def test_get_geocoding_search_mode_invalid_returns_none(self):
+        """get_geocoding_search_mode returns None when set to invalid value."""
+        import tempfile
+        from pathlib import Path
+        from website.config_loader import ConfigLoader
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'config.yaml'
+            path.write_text('geocoding_search_mode: nominatim\n')
+            loader = ConfigLoader(str(path))
+            self.assertIsNone(loader.get_geocoding_search_mode())
+
+    @patch('api.views.services.geocoding.get_config_loader')
+    @patch('api.views.services.geocoding.requests.get')
+    def test_geocoding_search_mode_google_uses_google_backend(self, mock_get, mock_config_loader):
+        """With geocoding_search_mode google and Google key configured, view uses Google backend."""
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'google'
+        mock_config.get_google_api_key.return_value = 'test_google_key'
+        mock_config_loader.return_value = mock_config
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'status': 'OK',
+            'results': [
+                {
+                    'place_id': 'ChIJtest',
+                    'formatted_address': '123 Main St, Denver, CO, USA',
+                    'geometry': {
+                        'location': {'lat': 39.7, 'lng': -104.9},
+                        'viewport': {
+                            'southwest': {'lat': 39.6, 'lng': -105.0},
+                            'northeast': {'lat': 39.8, 'lng': -104.8},
+                        },
+                    },
+                    'address_components': [
+                        {'types': ['street_number'], 'long_name': '123'},
+                        {'types': ['route'], 'long_name': 'Main St'},
+                    ],
+                },
+            ],
+        }
+        mock_get.return_value = mock_response
+
+        response = self.client.get('/api/geocoding/search/?q=denver')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('data', data)
+        self.assertIn('features', data['data'])
+        self.assertEqual(len(data['data']['features']), 1)
+        feature = data['data']['features'][0]
+        self.assertEqual(feature['coordinates'], [-104.9, 39.7])
+        self.assertIn('place_name', feature)
+        self.assertIn('bbox', feature)
+        # Verify Google Geocoding API was called
+        mock_get.assert_called_once()
+        call_args = mock_get.call_args
+        self.assertIn('maps.googleapis.com', str(call_args))
+
+    @patch('api.views.services.geocoding.get_config_loader')
+    def test_geocoding_search_mode_google_no_key_returns_503(self, mock_config_loader):
+        """With geocoding_search_mode google and Google API key not configured, view returns 503."""
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'google'
+        mock_config.get_google_api_key.return_value = None
+        mock_config_loader.return_value = mock_config
+
+        response = self.client.get('/api/geocoding/search/?q=denver')
+        self.assertEqual(response.status_code, 503)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+        self.assertIn('not available', data['error'].lower())
+        self.assertIn('Google', data['error'])
+
+    @patch('api.views.services.geocoding.get_config_loader')
+    def test_geocoding_search_mode_unset_returns_503(self, mock_config_loader):
+        """When geocoding_search_mode is None (missing or unset), view returns 503."""
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = None
+        mock_config_loader.return_value = mock_config
+
+        response = self.client.get('/api/geocoding/search/?q=denver')
+        self.assertEqual(response.status_code, 503)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+        self.assertIn('not configured', data['error'].lower())
+        self.assertIn('geocoding_search_mode', data['error'])
 

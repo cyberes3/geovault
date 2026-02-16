@@ -202,6 +202,21 @@ class ConfigLoader:
             return api_key.strip()
         return None
 
+    def get_geocoding_search_mode(self) -> Optional[str]:
+        """
+        Get which provider backs /api/geocoding/search/ (place search).
+
+        Returns:
+            'maptiler', 'google', or None if key is missing, unset, or invalid.
+        """
+        value = self.get('geocoding_search_mode')
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        normalized = str(value).strip().lower()
+        if normalized in ('maptiler', 'google'):
+            return normalized
+        return None
+
 
 # Global config loader instance
 _config_loader: Optional[ConfigLoader] = None
