@@ -36,6 +36,7 @@ class PropertiesModel(BaseModel):
     name: str = ""
     id: Optional[str] = None
     description: Optional[str] = None
+    address: Optional[str] = None
     created: Optional[Union[str, datetime]] = None
     tags: Optional[List[str]] = Field(default_factory=list)
 

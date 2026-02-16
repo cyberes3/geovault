@@ -89,6 +89,7 @@
             <div class="flex items-center gap-2">
               <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Coordinates <span
                   class="text-red-500">*</span></label>
+              <Loader v-if="isGeocoding" size="sm" :show-message="false" class="!py-0 !mt-0"/>
               <span v-if="coordinateError" class="text-xs text-red-600">{{ coordinateError }}</span>
             </div>
             <div class="flex flex-row flex-wrap gap-2 items-center">
@@ -187,7 +188,13 @@ export default {
     const searchTimeout = ref(null);
     const currentSearchQuery = ref('');
 
-    // Snapshot of name, description, lat, lon when form was loaded or reset (for dirty check)
+    const storedAddress = ref(null);
+    const isGeocoding = ref(false);
+    const addressSearchTimeout = ref(null);
+    const addressAbortController = ref(null);
+    const lastAddressRequestId = ref(0);
+
+    // Snapshot of name, description, lat, lon, address when form was loaded or reset (for dirty check)
     const initialFormSnapshot = ref(null);
 
     const isDirty = computed(() => {
@@ -196,23 +203,81 @@ export default {
       return name.value !== s.name ||
           description.value !== s.description ||
           latitude.value !== s.lat ||
-          longitude.value !== s.lon;
+          longitude.value !== s.lon ||
+          (storedAddress.value || '') !== (s.address || '');
     });
 
-    function setCoords(lat, lon) {
+    function setCoords(lat, lon, displayText = null) {
       latitude.value = lat == null ? null : parseFloat(Number(lat).toFixed(6));
       longitude.value = lon == null ? null : parseFloat(Number(lon).toFixed(6));
-      coordinatesInput.value = latitude.value != null && longitude.value != null
-        ? `${latitude.value}, ${longitude.value}`
-        : '';
+      if (displayText != null && displayText !== '') {
+        coordinatesInput.value = displayText;
+        storedAddress.value = displayText;
+      } else {
+        coordinatesInput.value = latitude.value != null && longitude.value != null
+          ? `${latitude.value}, ${longitude.value}`
+          : '';
+        storedAddress.value = null;
+      }
       coordinateError.value = '';
       updateMarkerFromCoords();
+    }
+
+    function hasLetters(str) {
+      return /[a-zA-Z]/.test(str);
+    }
+
+    function performAddressSearch(query) {
+      if (addressAbortController.value) {
+        addressAbortController.value.abort();
+      }
+      addressAbortController.value = new AbortController();
+      const controller = addressAbortController.value;
+      lastAddressRequestId.value += 1;
+      const myId = lastAddressRequestId.value;
+      isGeocoding.value = true;
+      const url = `/api/geocoding/address-search/?q=${encodeURIComponent(query)}`;
+      fetch(url, { credentials: 'include', signal: controller.signal })
+        .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+          if (myId !== lastAddressRequestId.value) return;
+          if (!ok) {
+            coordinateError.value = (data && (data.message || data.error)) || 'Geocoding failed';
+            return;
+          }
+          const list = data.data;
+          if (list && list.length > 0 && list[0].coordinates && list[0].coordinates.length >= 2) {
+            const [lon, lat] = list[0].coordinates;
+            const placeName = list[0].place_name || query;
+            setCoords(lat, lon, placeName);
+            updateMarkerFromCoords(true);
+            if (map.value) {
+              map.value.getView().animate({
+                center: window.gv_core.ol.proj.fromLonLat([lon, lat]),
+                duration: 300
+              });
+            }
+          } else {
+            coordinateError.value = 'Address not found';
+          }
+        })
+        .catch((err) => {
+          if (err.name === 'AbortError') return;
+          if (myId !== lastAddressRequestId.value) return;
+          coordinateError.value = err.message || 'Geocoding failed';
+        })
+        .finally(() => {
+          if (myId === lastAddressRequestId.value) {
+            isGeocoding.value = false;
+          }
+        });
     }
 
     function validateCoordinates() {
       coordinateError.value = '';
       latitude.value = null;
       longitude.value = null;
+      storedAddress.value = null;
       const input = coordinatesInput.value.trim();
       if (!input) {
         return;
@@ -223,10 +288,26 @@ export default {
       if (coordinates) {
         latitude.value = coordinates.lat;
         longitude.value = coordinates.lng;
+        coordinatesInput.value = `${latitude.value}, ${longitude.value}`;
+        storedAddress.value = null;
         updateMarkerFromCoords(true);
-      } else {
-        coordinateError.value = 'Invalid coordinate format';
+        return;
       }
+      if (hasLetters(input)) {
+        if (addressSearchTimeout.value) {
+          clearTimeout(addressSearchTimeout.value);
+          addressSearchTimeout.value = null;
+        }
+        if (addressAbortController.value) {
+          addressAbortController.value.abort();
+        }
+        addressSearchTimeout.value = setTimeout(() => {
+          addressSearchTimeout.value = null;
+          performAddressSearch(input);
+        }, 400);
+        return;
+      }
+      coordinateError.value = 'Invalid coordinate format';
     }
 
     function updateMarkerFromCoords(panMap = false) {
@@ -292,7 +373,12 @@ export default {
         description.value = (f.properties && f.properties.description) ? String(f.properties.description) : '';
         const coords = f.geometry && f.geometry.coordinates;
         if (coords && coords.length >= 2) {
-          setCoords(coords[1], coords[0]);
+          const addressProp = f.properties && f.properties.address;
+          if (addressProp) {
+            setCoords(coords[1], coords[0], String(addressProp));
+          } else {
+            setCoords(coords[1], coords[0]);
+          }
           if (map.value) {
             map.value.getView().animate({
               center: window.gv_core.ol.proj.fromLonLat([coords[0], coords[1]]),
@@ -305,7 +391,8 @@ export default {
           name: name.value,
           description: description.value,
           lat: latitude.value,
-          lon: longitude.value
+          lon: longitude.value,
+          address: storedAddress.value || null
         };
       } catch (err) {
         console.error('Failed to load place', err);
@@ -416,16 +503,20 @@ export default {
       if (saving.value || !name.value.trim() || latitude.value == null || longitude.value == null) return;
       saving.value = true;
       try {
+        const properties = {
+          name: name.value.trim(),
+          description: (description.value || '').trim()
+        };
+        if (storedAddress.value) {
+          properties.address = storedAddress.value;
+        }
         const payload = {
           type: 'Feature',
           geometry: {
             type: 'Point',
             coordinates: [longitude.value, latitude.value]
           },
-          properties: {
-            name: name.value.trim(),
-            description: (description.value || '').trim()
-          }
+          properties
         };
         if (editId.value) {
           await api.put('/features/' + editId.value + '/', payload);
@@ -438,7 +529,8 @@ export default {
           name: name.value.trim(),
           description: (description.value || '').trim(),
           lat: latitude.value,
-          lon: longitude.value
+          lon: longitude.value,
+          address: storedAddress.value || null
         };
         if (router) router.navigate('');
       } catch (err) {
@@ -479,14 +571,23 @@ export default {
       longitude.value = null;
       coordinatesInput.value = '';
       coordinateError.value = '';
+      storedAddress.value = null;
       searchQuery.value = '';
       searchResults.value = [];
       showResults.value = false;
       currentSearchQuery.value = '';
-      initialFormSnapshot.value = {name: '', description: '', lat: null, lon: null};
+      initialFormSnapshot.value = {name: '', description: '', lat: null, lon: null, address: null};
       if (searchTimeout.value != null) {
         clearTimeout(searchTimeout.value);
         searchTimeout.value = null;
+      }
+      if (addressSearchTimeout.value != null) {
+        clearTimeout(addressSearchTimeout.value);
+        addressSearchTimeout.value = null;
+      }
+      if (addressAbortController.value) {
+        addressAbortController.value.abort();
+        addressAbortController.value = null;
       }
       if (vectorSource.value) {
         vectorSource.value.clear();
@@ -510,6 +611,14 @@ export default {
 
     onBeforeUnmount(() => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (addressSearchTimeout.value != null) {
+        clearTimeout(addressSearchTimeout.value);
+        addressSearchTimeout.value = null;
+      }
+      if (addressAbortController.value) {
+        addressAbortController.value.abort();
+        addressAbortController.value = null;
+      }
     });
 
     onDeactivated(() => {
@@ -534,6 +643,7 @@ export default {
       longitude,
       coordinatesInput,
       coordinateError,
+      isGeocoding,
       saving,
       loadingEdit,
       isGettingLocation,

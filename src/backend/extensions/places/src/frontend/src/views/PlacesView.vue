@@ -156,7 +156,7 @@
                     class="flex flex-row flex-wrap items-center justify-center gap-2 sm:flex-col sm:items-end sm:gap-1 sm:col-start-2 sm:row-start-2">
                   <span
                       class="inline-flex items-center gap-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 px-2 py-0.5 w-fit">
-                    {{ formatCoords(place.geometry.coordinates) }}
+                    {{ placeLocationLabel(place) }}
                     <button
                         type="button"
                         class="p-0.5 rounded text-gray-500 hover:text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-gray-400 disabled:pointer-events-none"
@@ -228,16 +228,14 @@
       <div class="flex flex-col h-full">
         <div class="flex-1 p-4 sm:p-6 space-y-4">
           <template v-if="descriptionModalEditing">
-            <div>
-              <label for="description-edit" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <textarea
-                  id="description-edit"
-                  ref="descriptionEditTextarea"
-                  v-model="descriptionEditDraft"
-                  class="block w-full min-h-[200px] px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none"
-                  placeholder="Add a description..."
-              />
-            </div>
+            <textarea
+                id="description-edit"
+                ref="descriptionEditTextarea"
+                v-model="descriptionEditDraft"
+                class="block w-full min-h-[200px] px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none"
+                placeholder="Add a description..."
+                aria-label="Description"
+            />
           </template>
           <template v-else>
             <div class="prose prose-sm max-w-none text-gray-700">
@@ -657,9 +655,20 @@ export default {
       }
     };
 
+    const COORDS_DISPLAY_LENGTH = 21; // e.g. "39.1227, -104.8552"
+
     const formatCoords = (coords) => {
       if (!coords || coords.length < 2) return '';
       return `${coords[1].toFixed(4)}, ${coords[0].toFixed(4)}`;
+    };
+
+    const placeLocationLabel = (place) => {
+      const address = place?.properties?.address;
+      if (address && String(address).trim()) {
+        const s = String(address).trim();
+        return s.length <= COORDS_DISPLAY_LENGTH ? s : s.slice(0, COORDS_DISPLAY_LENGTH - 1) + '…';
+      }
+      return formatCoords(place?.geometry?.coordinates);
     };
 
     const copyToClipboard = async (text) => {
@@ -784,7 +793,16 @@ export default {
       descriptionSaving.value = true;
       try {
         const res = await api.put(`/features/${id}/`, updatedFeature);
-        const updated = res.data;
+        const fromApi = res.data;
+        const existing = descriptionModalPlace.value;
+        // Preserve list-only fields (e.g. created_at) that the PUT response does not return
+        const updated = {
+          ...fromApi,
+          properties: {
+            ...fromApi.properties,
+            ...(existing?.properties?.created_at != null && { created_at: existing.properties.created_at })
+          }
+        };
         const idx = places.value.findIndex(p => p.properties.database_id === id);
         if (idx !== -1) places.value[idx] = updated;
         descriptionModalPlace.value = updated;
@@ -936,6 +954,7 @@ export default {
       saveDescriptionEdit,
       resetMapToDefaultExtent,
       formatCoords,
+      placeLocationLabel,
       copyCoordinates,
       formatCreatedDate,
       googleMapsUrl,
