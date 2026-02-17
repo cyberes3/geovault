@@ -10,7 +10,7 @@ privacy and remove Google dependencies, GrapheneOS and its browser Vanadium disa
 Without a WebAPK, you are limited to a "Homescreen Shortcut".
 
 This extension solves this by letting you self-host the minting process. It's really silly and way over-engineered but I
-was bored one night.
+was bored one night and stayed up late.
 
 ## Build Docker Image
 

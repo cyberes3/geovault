@@ -243,6 +243,8 @@ extensions:
     enabled: true
 
   pwa_mint:
+    # A self-hosted way to mint WebAPKs for the site without Google's services.
+    # Useful for GrapheneOS users.
     enabled: false
     # URL of the self-hosted pwabuilder-google-play container.
     # If running in Docker, use the service name (e.g., http://pwabuilder:5858)
