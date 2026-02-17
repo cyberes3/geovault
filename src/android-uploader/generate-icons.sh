@@ -8,7 +8,7 @@ LOGO_PATH="$SCRIPT_DIR/icon.jpg"
 RES_DIR="$SCRIPT_DIR/app/src/main/res"
 
 # Primary blue color from colors.xml (used for legacy icon padding if needed)
-BG_COLOR="#163D8A"
+BG_COLOR="#163d8c"
 
 if [ ! -f "$LOGO_PATH" ]; then
     echo "Error: Logo not found at $LOGO_PATH"
@@ -72,7 +72,7 @@ cat > "$RES_DIR/drawable/ic_launcher_background.xml" << 'EOF'
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#163D8A"
+        android:fillColor="#163d8c"
         android:pathData="M0,0h108v108h-108z" />
 </vector>
 EOF
