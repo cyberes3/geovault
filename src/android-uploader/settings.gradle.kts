@@ -19,4 +19,4 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "GeoVault Uploader"
+rootProject.name = "Uploader"

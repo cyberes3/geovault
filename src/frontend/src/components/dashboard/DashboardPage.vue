@@ -149,7 +149,7 @@
             </div>
           </div>
           <div class="ml-4 flex-1 min-w-0">
-            <h3 class="text-sm font-medium text-gray-900 group-hover:text-green-600">GeoVault Uploader</h3>
+            <h3 class="text-sm font-medium text-gray-900 group-hover:text-green-600">Uploader</h3>
             <p class="text-sm text-gray-500">Upload KML/KMZ/GPX files</p>
           </div>
           <ArrowDownTrayIcon class="w-5 h-5 text-gray-400 flex-shrink-0"/>
@@ -167,7 +167,7 @@
             </div>
           </div>
           <div class="ml-4 flex-1 min-w-0">
-            <h3 class="text-sm font-medium text-gray-900 group-hover:text-yellow-600">GeoVault Places</h3>
+            <h3 class="text-sm font-medium text-gray-900 group-hover:text-yellow-600">Places</h3>
             <p class="text-sm text-gray-500">Manage and view your places</p>
           </div>
           <ArrowDownTrayIcon class="w-5 h-5 text-gray-400 flex-shrink-0"/>

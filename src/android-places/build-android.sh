@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build script for GeoVault Android Uploader app
+# Build script for Android Places app
 
 set -e
 
