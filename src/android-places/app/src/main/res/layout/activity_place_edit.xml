@@ -122,14 +122,31 @@
                 android:textSize="16sp"
                 android:layout_marginBottom="16dp" />
 
-            <TextView
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Coordinates or Address *"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:textColor="@color/text_secondary"
-                android:layout_marginBottom="4dp" />
+                android:orientation="horizontal"
+                android:layout_marginBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Coordinates or Address *"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_secondary" />
+
+                <TextView
+                    android:id="@+id/coordinatesError"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textColor="@android:color/holo_red_dark"
+                    android:visibility="gone"
+                    android:gravity="end" />
+
+            </LinearLayout>
 
             <EditText
                 android:id="@+id/coordinatesInput"
@@ -140,79 +157,104 @@
                 android:padding="12dp"
                 android:background="@drawable/edit_text_background"
                 android:textSize="14sp"
-                android:layout_marginBottom="4dp" />
-
-            <TextView
-                android:id="@+id/coordinatesError"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textSize="12sp"
-                android:textColor="@android:color/holo_red_dark"
-                android:visibility="gone"
                 android:layout_marginBottom="8dp" />
 
-            <LinearLayout
+            <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginTop="8dp"
-                android:layout_marginBottom="24dp">
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="12dp">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/useMyLocationButton"
-                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:text=""
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    app:icon="@null"
+                    app:cornerRadius="8dp"
+                    android:textAllCaps="false"
+                    app:strokeColor="@color/primary_blue" />
+
+                <LinearLayout
+                    android:id="@+id/locationButtonContent"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Use my location"
-                    app:icon="@drawable/ic_location"
-                    app:iconSize="20dp"
-                    app:iconTint="@color/primary_blue"
-                    app:iconPadding="8dp"
-                    android:textColor="@color/primary_blue"
-                    android:textAllCaps="false" />
+                    android:layout_gravity="center"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:clickable="false">
 
-                <ProgressBar
-                    android:id="@+id/locationProgress"
-                    style="?android:attr/progressBarStyleSmall"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="8dp"
-                    android:visibility="gone"
-                    android:indeterminateTint="@color/primary_blue" />
+                    <FrameLayout
+                        android:layout_width="20dp"
+                        android:layout_height="20dp">
 
-            </LinearLayout>
+                        <ImageView
+                            android:id="@+id/btnLocationIcon"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:src="@drawable/ic_location"
+                            app:tint="@color/primary_blue" />
+
+                        <androidx.appcompat.widget.AppCompatImageView
+                            android:id="@+id/btnLocationSpinner"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:src="@drawable/ic_location_spinner"
+                            android:tint="@color/spinner_blue"
+                            android:visibility="gone" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="Use my location"
+                        android:textColor="@color/primary_blue"
+                        android:textSize="14sp"
+                        android:textAllCaps="false" />
+                </LinearLayout>
+
+            </FrameLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal">
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/saveButton"
+                    style="@style/Widget.MaterialComponents.Button"
                     android:layout_width="0dp"
-                    android:layout_height="wrap_content"
+                    android:layout_height="48dp"
                     android:layout_weight="1"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
                     android:text="Save Place"
                     android:textColor="@color/white"
-                    android:backgroundTint="@color/primary_blue"
-                    android:textAllCaps="false"
-                    android:padding="12dp" />
+                    app:backgroundTint="@color/primary_blue"
+                    app:cornerRadius="8dp"
+                    android:textAllCaps="false" />
 
                 <Space
                     android:layout_width="12dp"
                     android:layout_height="wrap_content" />
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/cancelButton"
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="0dp"
-                    android:layout_height="wrap_content"
+                    android:layout_height="48dp"
                     android:layout_weight="1"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
                     android:text="Cancel"
                     android:textColor="@color/text_secondary"
-                    android:textAllCaps="false"
-                    android:padding="12dp" />
+                    app:strokeColor="@color/text_secondary"
+                    app:cornerRadius="8dp"
+                    android:textAllCaps="false" />
 
             </LinearLayout>
 
@@ -237,26 +279,26 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:orientation="vertical"
-            android:padding="32dp"
-            android:background="@drawable/bg_place_item_selected"
-            android:elevation="8dp">
+            android:padding="40dp"
+            android:gravity="center"
+            android:background="@drawable/bg_modal"
+            android:elevation="12dp">
 
-            <ProgressBar
-                android:id="@+id/savingProgress"
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/savingSpinner"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:layout_gravity="center"
-                android:indeterminateTint="@color/primary_blue" />
+                android:src="@drawable/ic_location_spinner"
+                android:tint="@color/spinner_blue" />
 
             <TextView
                 android:id="@+id/savingText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="20dp"
                 android:text="Saving..."
                 android:textSize="16sp"
-                android:textColor="@color/text_primary"
-                android:textStyle="bold" />
+                android:textColor="@color/text_secondary" />
 
             <TextView
                 android:id="@+id/savingTapHint"
@@ -265,7 +307,8 @@
                 android:layout_marginTop="8dp"
                 android:text="Tap to save offline"
                 android:textSize="12sp"
-                android:textColor="@color/text_secondary" />
+                android:textColor="@color/text_secondary"
+                android:alpha="0.7" />
 
         </LinearLayout>
 

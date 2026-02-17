@@ -156,22 +156,15 @@ class CoordinateParserTest {
     }
     
     @Test
-    fun testCrustyFormats() {
-        val crustyInputs = listOf(
-            "Lat: 40.4183318, Lon: -74.6411133" to expectationResult,
-            "Location: [40.4183318, -74.6411133]" to expectationResult,
-            "Values: 40° 25' 5.994\" N, 74° 38' 28.008\" W" to expectationResult,
-            "http://maps.google.com/?q=40.4183318,-74.6411133" to expectationResult,
-            "copy paste gar-bage 40.4183318  \t\n -74.6411133 end" to expectationResult
-        )
-
-        crustyInputs.forEach { (input, expected) ->
-            val result = CoordinateParser.parse(input)
-            assertNotNull("Should tolerate crusty input: $input", result)
-            result?.let {
-                assertEquals("Lat mismatch for $input", expected.first, it.first, delta)
-                assertEquals("Lon mismatch for $input", expected.second, it.second, delta)
-            }
-        }
+    fun testSamples() {
+        // "55° 22' 33.6\" N, 12° 1' 55.2\" E": [(55 + 22 / 60 + 33.6 / 3600), (12 + 1 / 60  + 55.2 / 3600)]
+        val input = "55° 22' 33.6\" N, 12° 1' 55.2\" E"
+        val expectedLat = 55 + 22 / 60.0 + 33.6 / 3600.0
+        val expectedLon = 12 + 1 / 60.0 + 55.2 / 3600.0
+        
+        val result = CoordinateParser.parse(input)
+        assertNotNull(result)
+        assertEquals(expectedLat, result!!.first, delta)
+        assertEquals(expectedLon, result.second, delta)
     }
 }

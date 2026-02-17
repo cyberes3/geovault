@@ -115,12 +115,17 @@ class PlacesAdapter(
         }
         holder.dateText.setTextIsSelectable(true)
         
-        // Format coordinates
-        val coords = place.geometry.coordinates
-        if (coords.size >= 2) {
-            holder.coordinatesText.text = String.format("%.6f, %.6f", coords[1], coords[0])
+        // Format coordinates or address
+        val address = place.properties.address
+        if (!address.isNullOrEmpty()) {
+            holder.coordinatesText.text = address
         } else {
-            holder.coordinatesText.text = ""
+            val coords = place.geometry.coordinates
+            if (coords.size >= 2) {
+                holder.coordinatesText.text = String.format("%.6f, %.6f", coords[1], coords[0])
+            } else {
+                holder.coordinatesText.text = ""
+            }
         }
         
         val description = place.properties.description ?: "No description"

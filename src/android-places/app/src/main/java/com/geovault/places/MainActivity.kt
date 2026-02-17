@@ -28,15 +28,18 @@ import java.io.Serializable
 import android.os.Handler
 import android.os.Looper
 import androidx.activity.result.contract.ActivityResultContracts
+import com.google.android.material.snackbar.Snackbar
 
 class MainActivity : AppCompatActivity() {
     private lateinit var recyclerView: RecyclerView
-    private lateinit var emptyText: TextView
+    private lateinit var emptyState: View
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var refreshOverlay: View
+    private lateinit var syncSpinner: android.widget.ImageView
     private lateinit var syncText: TextView
     private lateinit var searchInput: EditText
     private lateinit var searchClear: View
+    private lateinit var searchDivider: View
     private lateinit var fabAdd: View
     private lateinit var fabMap: View
     private lateinit var adapter: PlacesAdapter
@@ -46,6 +49,8 @@ class MainActivity : AppCompatActivity() {
     private var initialLoadDone = false
     private var searchQuery: String = ""
     private val handler = Handler(Looper.getMainLooper())
+    private lateinit var rotationHelper: RotationHelper
+    private var lastSyncTime: Long = 0
     private val timeoutRunnable = Runnable {
         if (swipeRefresh.isRefreshing) {
             cancelRefresh("Refresh timed out (10s)")
@@ -119,14 +124,17 @@ class MainActivity : AppCompatActivity() {
         }
 
         recyclerView = findViewById(R.id.placesRecyclerView)
-        emptyText = findViewById(R.id.emptyText)
+        emptyState = findViewById(R.id.emptyState)
         swipeRefresh = findViewById(R.id.swipeRefresh)
         refreshOverlay = findViewById(R.id.refreshOverlay)
+        syncSpinner = findViewById(R.id.syncSpinner)
         syncText = findViewById(R.id.syncText)
         searchInput = findViewById(R.id.searchInput)
         searchClear = findViewById(R.id.searchClear)
+        searchDivider = findViewById(R.id.searchDivider)
         fabAdd = findViewById(R.id.fab_add)
         fabMap = findViewById(R.id.fab_map)
+        rotationHelper = RotationHelper(syncSpinner)
 
         adapter = PlacesAdapter(
             placesList, 
@@ -166,6 +174,14 @@ class MainActivity : AppCompatActivity() {
         )
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
+
+        recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                super.onScrolled(recyclerView, dx, dy)
+                val canScrollUp = recyclerView.canScrollVertically(-1)
+                searchDivider.visibility = if (canScrollUp) View.VISIBLE else View.INVISIBLE
+            }
+        })
 
         searchInput.addTextChangedListener { text ->
             searchQuery = text?.toString()?.trim() ?: ""
@@ -226,7 +242,8 @@ class MainActivity : AppCompatActivity() {
             // Sync from server only on first load; returning from edit/new triggers sync via editLauncher
             if (!initialLoadDone) {
                 initialLoadDone = true
-                loadPlaces()
+                // Post load to allow UI to settle, ensuring spinner animation starts correctly
+                handler.post { loadPlaces() }
             }
         }
     }
@@ -261,11 +278,12 @@ class MainActivity : AppCompatActivity() {
         refreshCall?.cancel()
         refreshCall = null
         handler.removeCallbacks(timeoutRunnable)
+        stopSyncAnimation()
         swipeRefresh.isRefreshing = false
         refreshOverlay.visibility = View.GONE
         fabAdd.isEnabled = true
         fabMap.isEnabled = true
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        showSnackbar(message)
         // If we cancelled, ensure we at least show what's in cache if lists are empty
         if (placesList.isEmpty() && offlinePlacesList.isEmpty()) {
             loadOfflinePlaces()
@@ -275,11 +293,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadFromCache() {
         val cachedJson = prefs.getString("cached_places", null)
+        lastSyncTime = prefs.getLong("last_sync_time", 0L)
+        
         if (cachedJson != null) {
             try {
                 val collection = Gson().fromJson(cachedJson, FeatureCollection::class.java)
                 placesList.clear()
                 placesList.addAll(collection.features)
+                updateLastSyncUI()
                 updateList()
             } catch (e: Exception) {}
         }
@@ -323,7 +344,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun saveToCache(collection: FeatureCollection) {
         val json = Gson().toJson(collection)
-        prefs.edit().putString("cached_places", json).apply()
+        prefs.edit()
+            .putString("cached_places", json)
+            .putLong("last_sync_time", lastSyncTime)
+            .apply()
     }
 
     private fun updateList() {
@@ -353,10 +377,10 @@ class MainActivity : AppCompatActivity() {
         )
         
         if (filteredPlaces.isEmpty() && filteredOfflineFeatures.isEmpty()) {
-            emptyText.visibility = View.VISIBLE
+            emptyState.visibility = View.VISIBLE
             recyclerView.visibility = View.GONE
         } else {
-            emptyText.visibility = View.GONE
+            emptyState.visibility = View.GONE
             recyclerView.visibility = View.VISIBLE
         }
     }
@@ -369,8 +393,10 @@ class MainActivity : AppCompatActivity() {
         refreshCall?.cancel()
         val api = RetrofitClient.getClient(baseUrl, apiKey).create(GeovaultApi::class.java)
         
+        
         swipeRefresh.isRefreshing = true
         refreshOverlay.visibility = View.VISIBLE
+        startSyncAnimation()
         syncText.text = "Syncing..."
         fabAdd.isEnabled = false
         fabMap.isEnabled = false
@@ -385,6 +411,7 @@ class MainActivity : AppCompatActivity() {
                 if (call.isCanceled) return
                 
                 handler.removeCallbacks(timeoutRunnable)
+                stopSyncAnimation()
                 swipeRefresh.isRefreshing = false
                 refreshOverlay.visibility = View.GONE
                 fabAdd.isEnabled = true
@@ -397,12 +424,14 @@ class MainActivity : AppCompatActivity() {
                         saveToCache(body)
                         placesList.clear()
                         placesList.addAll(body.features)
+                        lastSyncTime = System.currentTimeMillis()
+                        updateLastSyncUI()
                         updateList()
                         // Sync offline items AFTER we have fresh server data for conflict detection
                         syncOfflinePlaces()
                     }
                 } else {
-                    Toast.makeText(this@MainActivity, "Server Error: ${response.code()}", Toast.LENGTH_SHORT).show()
+                    showSnackbar("Server Error: ${response.code()}")
                     loadFromCache() // Use cache on error
                 }
             }
@@ -411,13 +440,14 @@ class MainActivity : AppCompatActivity() {
                 if (call.isCanceled) return
                 
                 handler.removeCallbacks(timeoutRunnable)
+                stopSyncAnimation()
                 swipeRefresh.isRefreshing = false
                 refreshOverlay.visibility = View.GONE
                 fabAdd.isEnabled = true
                 fabMap.isEnabled = true
                 refreshCall = null
 
-                Toast.makeText(this@MainActivity, "Network failed: ${t.message}", Toast.LENGTH_SHORT).show()
+                showSnackbar("Network failed: ${t.message}")
                 loadOfflinePlaces()
                 loadFromCache() // Use cache on failure
                 updateList()
@@ -425,6 +455,22 @@ class MainActivity : AppCompatActivity() {
         })
         
         syncOfflinePlaces()
+    }
+
+    private fun startSyncAnimation() {
+        rotationHelper.start()
+    }
+
+    private fun stopSyncAnimation() {
+        rotationHelper.stop()
+    }
+
+    private fun updateLastSyncUI() {
+        if (lastSyncTime == 0L) return
+        val sdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+        val timeStr = sdf.format(java.util.Date(lastSyncTime))
+        // We'll add this view to activity_main.xml next
+        findViewById<TextView>(R.id.lastSyncText)?.text = "Last synced: $timeStr"
     }
 
     private fun syncOfflinePlaces() {
@@ -437,6 +483,7 @@ class MainActivity : AppCompatActivity() {
 
         // Show syncing status in overlay
         refreshOverlay.visibility = View.VISIBLE
+        startSyncAnimation()
         syncText.text = "Syncing ${offlinePlacesList.size} offline item(s)..."
 
         // Process one by one
@@ -456,7 +503,10 @@ class MainActivity : AppCompatActivity() {
                         if (!response.isSuccessful || currentServer == null) {
                             // Could not fetch current state — leave offline, do not overwrite
                             syncedCount++
-                            if (syncedCount >= toSync.size) refreshOverlay.visibility = View.GONE
+                            if (syncedCount >= toSync.size) {
+                                refreshOverlay.visibility = View.GONE
+                                stopSyncAnimation()
+                            }
                             return
                         }
                         if (isChanged(original, currentServer)) {
@@ -480,13 +530,17 @@ class MainActivity : AppCompatActivity() {
                                         ).show()
                                         if (offlinePlacesList.isEmpty()) {
                                             refreshOverlay.visibility = View.GONE
+                                            stopSyncAnimation()
                                             loadPlaces()
                                         }
                                     }
                                 }
                                 override fun onFailure(createCall: Call<Feature>, t: Throwable) {
                                     syncedCount++
-                                    if (syncedCount >= toSync.size) refreshOverlay.visibility = View.GONE
+                                    if (syncedCount >= toSync.size) {
+                                        refreshOverlay.visibility = View.GONE
+                                        stopSyncAnimation()
+                                    }
                                 }
                             })
                             return
@@ -500,20 +554,27 @@ class MainActivity : AppCompatActivity() {
                                     syncedCount++
                                     if (offlinePlacesList.isEmpty()) {
                                         refreshOverlay.visibility = View.GONE
+                                        stopSyncAnimation()
                                         loadPlaces()
                                     }
                                 }
                             }
                             override fun onFailure(updateCall: Call<Feature>, t: Throwable) {
                                 syncedCount++
-                                if (syncedCount >= toSync.size) refreshOverlay.visibility = View.GONE
+                                if (syncedCount >= toSync.size) {
+                                    refreshOverlay.visibility = View.GONE
+                                    stopSyncAnimation()
+                                }
                             }
                         })
                     }
                     override fun onFailure(call: Call<Feature>, t: Throwable) {
                         // Network error fetching place — skip this item (keep offline), don't overwrite
                         syncedCount++
-                        if (syncedCount >= toSync.size) refreshOverlay.visibility = View.GONE
+                        if (syncedCount >= toSync.size) {
+                            refreshOverlay.visibility = View.GONE
+                            stopSyncAnimation()
+                        }
                     }
                 })
             } else {
@@ -526,6 +587,7 @@ class MainActivity : AppCompatActivity() {
                             syncedCount++
                             if (offlinePlacesList.isEmpty()) {
                                 refreshOverlay.visibility = View.GONE
+                                stopSyncAnimation()
                                 loadPlaces()
                             }
                         }
@@ -534,6 +596,7 @@ class MainActivity : AppCompatActivity() {
                         syncedCount++
                         if (syncedCount >= toSync.size) {
                             refreshOverlay.visibility = View.GONE
+                            stopSyncAnimation()
                         }
                     }
                 })
@@ -623,10 +686,14 @@ class MainActivity : AppCompatActivity() {
         updateList()
         
         if (offlineFeature.feature.properties.database_id != null) {
-            Toast.makeText(this, "Changes reverted - showing original", Toast.LENGTH_SHORT).show()
+            showSnackbar("Changes reverted - showing original")
         } else {
-            Toast.makeText(this, "Offline place discarded", Toast.LENGTH_SHORT).show()
+            showSnackbar("Offline place discarded")
         }
+    }
+
+    private fun showSnackbar(message: String) {
+        Snackbar.make(findViewById(R.id.rootLayout), message, Snackbar.LENGTH_LONG).show()
     }
 }
 

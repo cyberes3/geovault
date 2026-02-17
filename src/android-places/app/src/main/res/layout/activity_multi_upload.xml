@@ -88,27 +88,35 @@
             android:layout_marginBottom="16dp"
             android:visibility="gone" />
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/uploadAllButton"
+            style="@style/Widget.MaterialComponents.Button"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="48dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
             android:text="Upload All"
             android:textColor="@color/white"
-            android:backgroundTint="@color/primary_blue"
+            app:backgroundTint="@color/primary_blue"
+            app:cornerRadius="8dp"
             android:textSize="16sp"
             android:textStyle="bold"
             android:layout_marginBottom="12dp"
-            android:elevation="0dp" />
+            android:textAllCaps="false" />
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/cancelButton"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="match_parent"
             android:layout_height="48dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
             android:text="@string/cancel_button"
             android:textColor="@color/text_secondary"
-            android:backgroundTint="@color/border_light"
+            app:strokeColor="@color/text_secondary"
+            app:cornerRadius="8dp"
             android:textSize="15sp"
-            android:elevation="0dp" />
+            android:textAllCaps="false" />
     </LinearLayout>
 
 </LinearLayout>

@@ -89,14 +89,18 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal">
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/viewInListButton"
+                style="@style/Widget.MaterialComponents.Button"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="48dp"
                 android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
                 android:text="View in List"
                 android:textColor="@color/white"
-                android:backgroundTint="@color/primary_blue"
+                app:backgroundTint="@color/primary_blue"
+                app:cornerRadius="8dp"
                 android:textAllCaps="false"
                 android:enabled="false"
                 android:alpha="0.5" />
@@ -105,31 +109,36 @@
                 android:layout_width="8dp"
                 android:layout_height="wrap_content" />
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/editPlaceButton"
                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="48dp"
                 android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
                 android:text="Edit"
                 android:textColor="@color/primary_blue"
+                app:strokeColor="@color/primary_blue"
+                app:cornerRadius="8dp"
                 android:textAllCaps="false"
                 android:enabled="false"
                 android:alpha="0.5" />
 
         </LinearLayout>
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/navigateButton"
+            style="@style/Widget.MaterialComponents.Button"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="48dp"
             android:layout_marginTop="8dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
             android:text="Navigate"
             android:textColor="@color/white"
-            android:backgroundTint="@color/primary_blue"
-            android:drawableStart="@android:drawable/ic_menu_directions"
-            android:drawableTint="@color/white"
-            android:drawablePadding="8dp"
+            app:backgroundTint="@color/primary_blue"
+            app:cornerRadius="8dp"
             android:textAllCaps="false"
             android:enabled="false"
             android:alpha="0.5" />

@@ -14,6 +14,7 @@
     <color name="success_green">#5B8A3C</color>     <!-- green-500 -->
     <color name="error_red">#FF3E41</color>         <!-- red-500 -->
     <color name="warning_yellow">#F4AC45</color>    <!-- yellow-500 -->
+    <color name="spinner_blue">#4B6BAB</color>      <!-- Specific blue used in website Loader.vue -->
     
     <!-- Basic colors -->
     <color name="white">#FFFFFF</color>

@@ -45,8 +45,12 @@ class PlaceEditActivity : AppCompatActivity() {
     private lateinit var coordinatesInput: EditText
     private lateinit var coordinatesError: TextView
     private lateinit var saveButton: MaterialButton
-    private lateinit var locationProgress: android.widget.ProgressBar
+    private lateinit var useMyLocationButton: MaterialButton
+    private lateinit var btnLocationIcon: ImageView
+    private lateinit var btnLocationSpinner: ImageView
+    private lateinit var savingSpinner: ImageView
     private lateinit var titleText: TextView
+    private lateinit var locationLoadingOverlay: View
     private lateinit var savingOverlay: View
     private lateinit var savingText: TextView
     private lateinit var savingTapHint: TextView
@@ -62,9 +66,12 @@ class PlaceEditActivity : AppCompatActivity() {
     private var saveCall: Call<Feature>? = null
     private var addressSearchCall: Call<AddressSearchResponse>? = null
     private var pendingFeature: Feature? = null
+    private var addressSearchRunnable: Runnable? = null
     private lateinit var fusedLocationClient: FusedLocationProviderClient
 
-    private var addressSearchRunnable: Runnable? = null
+    private lateinit var locationRotationHelper: RotationHelper
+    private lateinit var savingRotationHelper: RotationHelper
+
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private var skipNextCoordinatesValidation = false
 
@@ -144,11 +151,20 @@ class PlaceEditActivity : AppCompatActivity() {
         coordinatesInput = findViewById(R.id.coordinatesInput)
         coordinatesError = findViewById(R.id.coordinatesError)
         saveButton = findViewById(R.id.saveButton)
-        locationProgress = findViewById(R.id.locationProgress)
+        useMyLocationButton = findViewById(R.id.useMyLocationButton)
+        saveButton = findViewById(R.id.saveButton)
+        useMyLocationButton = findViewById(R.id.useMyLocationButton)
+        btnLocationIcon = findViewById(R.id.btnLocationIcon)
+        btnLocationSpinner = findViewById(R.id.btnLocationSpinner)
+        savingSpinner = findViewById(R.id.savingSpinner)
+        locationLoadingOverlay = findViewById(R.id.locationButtonContent)
         titleText = findViewById(R.id.titleText)
         savingOverlay = findViewById(R.id.savingOverlay)
         savingText = findViewById(R.id.savingText)
         savingTapHint = findViewById(R.id.savingTapHint)
+
+        locationRotationHelper = RotationHelper(btnLocationSpinner)
+        savingRotationHelper = RotationHelper(savingSpinner)
 
         findViewById<View>(R.id.closeButton).setOnClickListener { tryFinish() }
         findViewById<View>(R.id.cancelButton).setOnClickListener { tryFinish() }
@@ -210,8 +226,7 @@ class PlaceEditActivity : AppCompatActivity() {
                 if (addressSearchCall != null) {
                     addressSearchCall?.cancel()
                     addressSearchCall = null
-                    locationProgress.visibility = View.GONE
-                    findViewById<View>(R.id.useMyLocationButton).isEnabled = true
+                    setLocationLoading(false)
                 }
                 addressSearchRunnable?.let { handler.removeCallbacks(it) }
                 addressSearchRunnable = null
@@ -219,11 +234,12 @@ class PlaceEditActivity : AppCompatActivity() {
                     skipNextCoordinatesValidation = false
                     return
                 }
-                addressSearchRunnable = Runnable { validateCoordinatesFromInput() }
-                handler.postDelayed(addressSearchRunnable!!, 400)
+                val r = Runnable { validateCoordinatesFromInput() }
+                addressSearchRunnable = r
+                handler.postDelayed(r, 400)
             }
         })
-        findViewById<View>(R.id.useMyLocationButton).setOnClickListener {
+        useMyLocationButton.setOnClickListener {
             checkLocationPermissionAndGet()
         }
         saveButton.setOnClickListener { savePlace() }
@@ -291,14 +307,12 @@ class PlaceEditActivity : AppCompatActivity() {
         }
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
         val api = RetrofitClient.getClient(baseUrl, apiKey).create(GeovaultApi::class.java)
-        locationProgress.visibility = View.VISIBLE
-        findViewById<View>(R.id.useMyLocationButton).isEnabled = false
+        setLocationLoading(true)
         addressSearchCall = api.addressSearch(query)
         addressSearchCall!!.enqueue(object : Callback<AddressSearchResponse> {
             override fun onResponse(call: Call<AddressSearchResponse>, response: Response<AddressSearchResponse>) {
                 addressSearchCall = null
-                locationProgress.visibility = View.GONE
-                findViewById<View>(R.id.useMyLocationButton).isEnabled = true
+                setLocationLoading(false)
                 if (call.isCanceled) return
                 if (!response.isSuccessful) {
                     coordinatesError.text = response.message() ?: "Geocoding failed"
@@ -335,8 +349,7 @@ class PlaceEditActivity : AppCompatActivity() {
             }
             override fun onFailure(call: Call<AddressSearchResponse>, t: Throwable) {
                 addressSearchCall = null
-                locationProgress.visibility = View.GONE
-                findViewById<View>(R.id.useMyLocationButton).isEnabled = true
+                setLocationLoading(false)
                 if (call.isCanceled) return
                 coordinatesError.text = t.message ?: "Geocoding failed"
                 coordinatesError.visibility = View.VISIBLE
@@ -396,23 +409,20 @@ class PlaceEditActivity : AppCompatActivity() {
             return
         }
         
-        locationProgress.visibility = View.VISIBLE
-        findViewById<View>(R.id.useMyLocationButton).isEnabled = false
+        setLocationLoading(true)
         
         val cts = CancellationTokenSource()
         fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
             .addOnSuccessListener { location: Location? ->
                 location?.let {
-                    locationProgress.visibility = View.GONE
-                    findViewById<View>(R.id.useMyLocationButton).isEnabled = true
+                    setLocationLoading(false)
                     updateCoords(it.latitude, it.longitude, null)
                     map.controller.animateTo(GeoPoint(it.latitude, it.longitude))
                     map.controller.setZoom(15.0)
                 } ?: run {
                     // Fallback to last location if fresh one fails
                     fusedLocationClient.lastLocation.addOnSuccessListener { lastLoc ->
-                        locationProgress.visibility = View.GONE
-                        findViewById<View>(R.id.useMyLocationButton).isEnabled = true
+                        setLocationLoading(false)
                         lastLoc?.let {
                             updateCoords(it.latitude, it.longitude, null)
                             map.controller.animateTo(GeoPoint(it.latitude, it.longitude))
@@ -424,8 +434,7 @@ class PlaceEditActivity : AppCompatActivity() {
                 }
             }
             .addOnFailureListener {
-                locationProgress.visibility = View.GONE
-                findViewById<View>(R.id.useMyLocationButton).isEnabled = true
+                setLocationLoading(false)
                 Toast.makeText(this, "Location request failed: ${it.message}", Toast.LENGTH_SHORT).show()
             }
     }
@@ -440,6 +449,7 @@ class PlaceEditActivity : AppCompatActivity() {
     private fun showSavingOverlay(message: String = "Saving...") {
         savingText.text = message
         savingOverlay.visibility = View.VISIBLE
+        startSavingAnimation()
         saveButton.isEnabled = false
 
         val isSavingOffline = message == "Saving offline..."
@@ -465,6 +475,7 @@ class PlaceEditActivity : AppCompatActivity() {
 
     private fun hideSavingOverlay() {
         savingOverlay.visibility = View.GONE
+        stopSavingAnimation()
         validateForm() // Re-validate to restore button state
     }
 
@@ -619,6 +630,27 @@ class PlaceEditActivity : AppCompatActivity() {
         addressSearchRunnable = null
         addressSearchCall?.cancel()
         addressSearchCall = null
+        locationRotationHelper.stop()
+        savingRotationHelper.stop()
         map.onPause()
+    }
+    private fun setLocationLoading(loading: Boolean) {
+        if (loading) {
+            btnLocationIcon.visibility = View.GONE
+            useMyLocationButton.isEnabled = false
+            locationRotationHelper.start()
+        } else {
+            locationRotationHelper.stop()
+            btnLocationIcon.visibility = View.VISIBLE
+            useMyLocationButton.isEnabled = true
+        }
+    }
+
+    private fun startSavingAnimation() {
+        savingRotationHelper.start()
+    }
+
+    private fun stopSavingAnimation() {
+        savingRotationHelper.stop()
     }
 }
