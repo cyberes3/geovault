@@ -19,4 +19,4 @@ Make sure to explcitly define responses via pydantic for the backend and typescr
 
 We have a bunch of common frontend components in the `parts/` folder. Please use those where possible.
 
-Android apps should be built with `./build-android.sh` located in the root of each app src dir.
+Android apps should be built with `./build-android.sh` located in the root of each app src dir. These apps share visual styles so make sure that changes are made in both places.

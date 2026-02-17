@@ -5,11 +5,11 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.View
-import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.button.MaterialButton
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -18,7 +18,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var serverUrlEdit: EditText
     private lateinit var apiKeyEdit: EditText
     private lateinit var addSuffixCheckbox: CheckBox
-    private lateinit var saveButton: Button
+    private lateinit var saveButton: MaterialButton
     
     private val prefs: SharedPreferences by lazy {
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)

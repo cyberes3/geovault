@@ -7,13 +7,13 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
-import android.widget.Button
 import android.widget.ImageButton
 import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.button.MaterialButton
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -37,8 +37,8 @@ class MultiUploadActivity : AppCompatActivity() {
     private lateinit var fileCountText: TextView
     private lateinit var uploadProgressBar: ProgressBar
     private lateinit var statusText: TextView
-    private lateinit var uploadAllButton: Button
-    private lateinit var cancelButton: Button
+    private lateinit var uploadAllButton: MaterialButton
+    private lateinit var cancelButton: MaterialButton
     private lateinit var menuButton: ImageButton
     
     private lateinit var adapter: FileQueueAdapter

@@ -65,35 +65,50 @@
                     android:layout_marginBottom="16dp"
                     android:textColor="@color/text_primary" />
 
-                <ProgressBar
-                    android:id="@+id/validationProgressBar"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="24dp" />
-
-                <TextView
-                    android:id="@+id/validationStatusText"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textSize="16sp"
-                    android:textColor="@color/text_secondary"
-                    android:gravity="center"
-                    android:lineSpacingMultiplier="1.3"
-                    android:padding="16dp" />
+                    android:minHeight="160dp"
+                    android:orientation="vertical"
+                    android:gravity="center">
 
-                <Button
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/validationSpinner"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginBottom="16dp"
+                        android:src="@drawable/ic_spinner_design"
+                        app:tint="@color/spinner_blue"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/validationStatusText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textSize="16sp"
+                        android:textColor="@color/text_secondary"
+                        android:gravity="center"
+                        android:lineSpacingMultiplier="1.3"
+                        android:padding="16dp" />
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/settingsButton"
+                    style="@style/Widget.MaterialComponents.Button"
                     android:layout_width="wrap_content"
-                    android:layout_height="56dp"
+                    android:layout_height="48dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
                     android:text="Settings"
                     android:textColor="@color/white"
-                    android:backgroundTint="@color/primary_blue"
+                    app:backgroundTint="@color/primary_blue"
+                    app:cornerRadius="8dp"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:paddingStart="32dp"
                     android:paddingEnd="32dp"
                     android:layout_marginTop="24dp"
-                    android:elevation="0dp" />
+                    android:textAllCaps="false" />
             </LinearLayout>
 
         </androidx.core.widget.NestedScrollView>
@@ -106,7 +121,8 @@
             android:layout_weight="1"
             android:fillViewport="true"
             android:background="@color/white"
-            android:visibility="gone">
+            android:visibility="gone"
+            android:clipToPadding="false">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -144,45 +160,63 @@
                     android:textColor="@color/text_secondary"
                     android:layout_marginBottom="24dp" />
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/uploadButton"
+                    style="@style/Widget.MaterialComponents.Button"
                     android:layout_width="match_parent"
-                    android:layout_height="56dp"
+                    android:layout_height="48dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
                     android:text="@string/upload_button"
                     android:textColor="@color/white"
-                    android:backgroundTint="@color/primary_blue"
+                    app:backgroundTint="@color/primary_blue"
+                    app:cornerRadius="8dp"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:layout_marginBottom="12dp"
-                    android:elevation="0dp" />
+                    android:textAllCaps="false" />
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/cancelButton"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
                     android:text="@string/cancel_button"
                     android:textColor="@color/text_secondary"
-                    android:backgroundTint="@color/border_light"
+                    app:strokeColor="@color/text_secondary"
+                    app:cornerRadius="8dp"
                     android:textSize="15sp"
-                    android:elevation="0dp" />
+                    android:textAllCaps="false" />
 
-                <ProgressBar
-                    android:id="@+id/progressBar"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:layout_marginTop="24dp"
-                    android:visibility="gone" />
-
-                <TextView
-                    android:id="@+id/statusText"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:textSize="16sp"
-                    android:textColor="@color/text_secondary"
-                    android:gravity="center"
-                    android:lineSpacingMultiplier="1.3" />
+                    android:minHeight="120dp"
+                    android:orientation="vertical"
+                    android:gravity="center">
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/uploadSpinner"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_gravity="center"
+                        android:layout_marginTop="24dp"
+                        android:src="@drawable/ic_spinner_design"
+                        app:tint="@color/spinner_blue"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/statusText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:textSize="16sp"
+                        android:textColor="@color/text_secondary"
+                        android:gravity="center"
+                        android:lineSpacingMultiplier="1.3" />
+                </LinearLayout>
             </LinearLayout>
 
         </androidx.core.widget.NestedScrollView>

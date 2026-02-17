@@ -6,12 +6,12 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
-import android.widget.Button
 import android.widget.EditText
-import android.widget.ProgressBar
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.button.MaterialButton
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -33,17 +33,20 @@ import java.util.concurrent.TimeUnit
 class MainActivity : AppCompatActivity() {
     private lateinit var filenameEdit: EditText
     private lateinit var suffixText: TextView
-    private lateinit var uploadButton: Button
-    private lateinit var cancelButton: Button
-    private lateinit var progressBar: ProgressBar
+    private lateinit var uploadButton: MaterialButton
+    private lateinit var cancelButton: MaterialButton
+    private lateinit var uploadSpinner: ImageView
     private lateinit var statusText: TextView
     
     private lateinit var validationLayout: androidx.core.widget.NestedScrollView
     private lateinit var uploaderLayout: androidx.core.widget.NestedScrollView
-    private lateinit var validationProgressBar: ProgressBar
+    private lateinit var validationSpinner: ImageView
     private lateinit var validationStatusText: TextView
     private lateinit var validationTitleText: TextView
-    private lateinit var settingsButton: Button
+    private lateinit var settingsButton: MaterialButton
+    
+    private lateinit var uploadRotationHelper: RotationHelper
+    private lateinit var validationRotationHelper: RotationHelper
     
     private var fileUri: Uri? = null
     private var originalFilename: String? = null
@@ -95,15 +98,18 @@ class MainActivity : AppCompatActivity() {
         suffixText = findViewById(R.id.suffixText)
         uploadButton = findViewById(R.id.uploadButton)
         cancelButton = findViewById(R.id.cancelButton)
-        progressBar = findViewById(R.id.progressBar)
+        uploadSpinner = findViewById(R.id.uploadSpinner)
         statusText = findViewById(R.id.statusText)
         
         validationLayout = findViewById(R.id.validationLayout)
         uploaderLayout = findViewById(R.id.uploaderLayout)
-        validationProgressBar = findViewById(R.id.validationProgressBar)
+        validationSpinner = findViewById(R.id.validationSpinner)
         validationStatusText = findViewById(R.id.validationStatusText)
         validationTitleText = findViewById(R.id.validationTitleText)
         settingsButton = findViewById(R.id.settingsButton)
+        
+        uploadRotationHelper = RotationHelper(uploadSpinner)
+        validationRotationHelper = RotationHelper(validationSpinner)
         
         // Set up settings button click listener
         settingsButton.setOnClickListener {
@@ -271,7 +277,8 @@ class MainActivity : AppCompatActivity() {
         }
         
         // Show progress
-        progressBar.visibility = View.VISIBLE
+        uploadSpinner.visibility = View.VISIBLE
+        uploadRotationHelper.start()
         uploadButton.isEnabled = false
         cancelButton.isEnabled = false
         statusText.visibility = View.VISIBLE
@@ -318,7 +325,8 @@ class MainActivity : AppCompatActivity() {
             client.newCall(request).enqueue(object : Callback {
                 override fun onFailure(call: Call, e: java.io.IOException) {
                     runOnUiThread {
-                        progressBar.visibility = View.GONE
+                        uploadRotationHelper.stop()
+                        uploadSpinner.visibility = View.GONE
                         uploadButton.isEnabled = true
                         cancelButton.isEnabled = true
                         val errorMsg = e.message ?: "Unknown error"
@@ -339,7 +347,8 @@ class MainActivity : AppCompatActivity() {
                     val statusCode = response.code
                     
                     runOnUiThread {
-                        progressBar.visibility = View.GONE
+                        uploadRotationHelper.stop()
+                        uploadSpinner.visibility = View.GONE
                         uploadButton.isEnabled = true
                         cancelButton.isEnabled = true
                         
@@ -388,7 +397,8 @@ class MainActivity : AppCompatActivity() {
                 }
             })
         } catch (e: Exception) {
-            progressBar.visibility = View.GONE
+            uploadRotationHelper.stop()
+            uploadSpinner.visibility = View.GONE
             uploadButton.isEnabled = true
             cancelButton.isEnabled = true
             showError("Error: ${e.message}")
@@ -407,12 +417,14 @@ class MainActivity : AppCompatActivity() {
         if (serverUrl.isEmpty() || apiKey.isEmpty()) {
             validationTitleText.text = getString(R.string.config_required)
             validationStatusText.text = getString(R.string.config_settings_first)
-            validationProgressBar.visibility = android.view.View.GONE
+            validationRotationHelper.stop()
+            validationSpinner.visibility = android.view.View.GONE
             return
         }
         
         validationTitleText.text = getString(R.string.validating_key)
-        validationProgressBar.visibility = android.view.View.VISIBLE
+        validationSpinner.visibility = android.view.View.VISIBLE
+        validationRotationHelper.start()
         validationStatusText.text = getString(R.string.connecting_server)
         
         val client = OkHttpClient.Builder()
@@ -437,7 +449,8 @@ class MainActivity : AppCompatActivity() {
             override fun onFailure(call: Call, e: java.io.IOException) {
                 runOnUiThread {
                     validationTitleText.text = getString(R.string.validation_failed)
-                    validationProgressBar.visibility = android.view.View.GONE
+                    validationRotationHelper.stop()
+                    validationSpinner.visibility = android.view.View.GONE
                     
                     val errorMsg = e.message ?: "Unknown error"
                     val cleanErrorMsg = errorMsg.replace(Regex("^Failed to connect to /"), "Failed to connect to ")
@@ -461,7 +474,8 @@ class MainActivity : AppCompatActivity() {
                     // Handle "end of stream" errors when reading body
                     runOnUiThread {
                         validationTitleText.text = getString(R.string.validation_failed)
-                        validationProgressBar.visibility = android.view.View.GONE
+                        validationRotationHelper.stop()
+                        validationSpinner.visibility = android.view.View.GONE
                         validationStatusText.text = "✗ Error reading response\n\nThe server connection was interrupted.\nTap Settings to retry."
                     }
                     response.close()
@@ -471,7 +485,8 @@ class MainActivity : AppCompatActivity() {
                 val statusCode = response.code
                 
                 runOnUiThread {
-                    validationProgressBar.visibility = android.view.View.GONE
+                    validationRotationHelper.stop()
+                    validationSpinner.visibility = android.view.View.GONE
                     
                     try {
                         if (response.isSuccessful) {
