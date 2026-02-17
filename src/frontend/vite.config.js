@@ -87,7 +87,7 @@ export default defineConfig({
                 short_name: 'GeoVault',
                 description: 'Self-hosted platform to organize your personal spatial data',
                 theme_color: '#163D8A',
-                background_color: '#ffffff',
+                background_color: '#163D8A',
                 display: 'standalone',
                 display_override: ['window-controls-overlay', 'standalone', 'minimal-ui'],
                 start_url: '/',

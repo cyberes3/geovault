@@ -191,6 +191,20 @@
           </div>
           <ArrowDownTrayIcon class="w-5 h-5 text-gray-400 flex-shrink-0"/>
         </button>
+
+        <!-- Compiled PWA APK Button (Extension) – only on mobile/tablet, not desktop -->
+        <a
+            v-if="pwaMintEnabled && !isDesktop"
+            href="/api/extensions/pwa-mint/download/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="flex items-center px-4 py-2 border border-gray-200 rounded hover:bg-gray-100 transition-colors duration-200"
+        >
+          <div class="flex-1 min-w-0">
+            <h3 class="text-xs font-medium text-gray-500">Compiled Webview APK</h3>
+            <p class="text-[10px] text-gray-400">Self-hosted TWA build</p>
+          </div>
+        </a>
       </div>
       <a
           :href="releasesPageUrl"
@@ -225,6 +239,13 @@ export default {
     placesApkUrl() {
       return this.appReleases?.places_url ?? this.releasesPageUrl;
     },
+    pwaMintEnabled() {
+      return this.extensions.some(ext => ext.name === 'pwa_mint');
+    },
+    isDesktop() {
+      if (typeof navigator === 'undefined') return true;
+      return !/Mobile|Android/i.test(navigator.userAgent);
+    },
     canInstallPWA() {
       return !!this.$store.state.deferredPrompt;
     },
@@ -246,6 +267,7 @@ export default {
       storageLoading: false,
       storageError: false,
       appReleases: null,
+      extensions: [],
     };
   },
   methods: {
@@ -318,6 +340,15 @@ export default {
         // Keep appReleases null; computed URLs fall back to releases page
       }
     },
+    async fetchExtensions() {
+      try {
+        const response = await fetch("/api/extensions/");
+        if (!response.ok) return;
+        this.extensions = await response.json();
+      } catch (_) {
+        this.extensions = [];
+      }
+    },
     async installPwa() {
       const promptEvent = this.$store.state.deferredPrompt;
       if (!promptEvent) return;
@@ -338,6 +369,7 @@ export default {
   async mounted() {
     await this.fetchStorageUsage();
     await this.fetchAppReleases();
+    await this.fetchExtensions();
   },
   watch: {},
 }

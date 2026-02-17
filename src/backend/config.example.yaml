@@ -241,3 +241,9 @@ extensions:
 
   caltopo:
     enabled: true
+
+  pwa_mint:
+    enabled: false
+    # URL of the self-hosted pwabuilder-google-play container.
+    # If running in Docker, use the service name (e.g., http://pwabuilder:5858)
+    pwa_builder_url: "http://pwabuilder:5858"

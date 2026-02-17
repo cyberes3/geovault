@@ -2,8 +2,7 @@
   "name": "GeoVault",
   "short_name": "GeoVault",
   "description": "Self-hosted platform to organize your personal spatial data",
-  "icons": [
-    {
+  "icons": [{
       "src": "/pwa-192x192.png",
       "sizes": "192x192",
       "type": "image/png"
@@ -27,6 +26,6 @@
     }
   ],
   "theme_color": "#163D8A",
-  "background_color": "#ffffff",
+  "background_color": "#163D8A",
   "display": "standalone"
 }

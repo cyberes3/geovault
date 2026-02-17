@@ -17,10 +17,21 @@ Including another URLconf
 from django.conf.urls import include
 from django.contrib import admin
 from django.urls import path, re_path
+from django.http import HttpResponse
 
 from users.views.account_management import block_account_email_view
 from website.exception_handler import custom_exception_handler
 from website.views import index
+
+def well_known_routing(request, path):
+    """
+    Dynamic routing for /.well-known/ items registered by extensions.
+    """
+    from website.extensions.extension_hooks import get_well_known_callback
+    callback = get_well_known_callback(path)
+    if callback:
+        return callback(request)
+    return HttpResponse(status=404)
 
 # Set custom exception handler
 handler500 = custom_exception_handler
@@ -56,6 +67,7 @@ def serve_extension_static(request, path, **kwargs):
 
 urlpatterns = [
     path('', index, name='index'),  # Root route
+    re_path(r'^\.well-known/(?P<path>.*)$', well_known_routing),
     # Block access to /accounts/email/ and redirect to frontend settings
     path('accounts/email/', block_account_email_view, name='account_email'),
     path('accounts/', include('allauth.urls')),  # Django allauth URLs

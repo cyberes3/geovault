@@ -1,3 +1,9 @@
+TODO:
+- Oauth
+- Celery for background workers (replacement cleanup and allow extensions to register workers so the pwa generator can do its thing)
+
+Pay some stupid retard to draw us SVGs of our various icons
+
 Sharing between users:
 - Visibility: private, public, restricted (only logged in users)
 - Group support and share to group

@@ -208,13 +208,17 @@ class ExtensionRegistry:
                 
                 # Find the AppConfig class (look for classes ending in "Config" that inherit from AppConfig)
                 from django.apps import AppConfig as DjangoAppConfig
+                from website.extensions.extension_base import ExtensionAppConfig
                 app_config_class = None
                 for attr_name in dir(apps_module):
                     if attr_name.endswith('Config'):
                         attr = getattr(apps_module, attr_name)
                         if (isinstance(attr, type) and 
                             issubclass(attr, DjangoAppConfig) and 
-                            attr is not DjangoAppConfig):
+                            attr is not DjangoAppConfig and
+                            attr is not ExtensionAppConfig and
+                            (attr.__module__ == apps_module_name or 
+                             attr.__module__ == full_apps_module_name)):
                             app_config_class = attr_name
                             break
                 

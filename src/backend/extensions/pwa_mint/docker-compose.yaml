@@ -1,0 +1,16 @@
+services:
+  pwabuilder:
+    container_name: pwabuilder
+    # This image must be built locally from the PWABuilder repository.
+    # Go to: PWABuilder/apps/pwabuilder-google-play/
+    # And run: npm run docker:build
+    image: cloud-apk:latest
+    restart: always
+    environment:
+      - PORT=5858
+      - NODE_ENV=development
+      # Allow self-signed certificates (common for self-hosted deployments)
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+    ports:
+      - "5858:5858"
+    # Note: If GeoVault is in the same Docker network, it can also use http://pwabuilder:5858

@@ -15,3 +15,5 @@ After setting up your project in Google Cloud, go to <https://console.cloud.goog
 generate a new API key. Enter it into your `config.yaml`.
 
 Learn how to set quotas at <https://developers.google.com/maps/documentation/geocoding/usage-and-billing>
+and <https://developers.google.com/maps/billing-and-pricing/pricing#places-pricing>. First 10,000 requests per day are
+free.

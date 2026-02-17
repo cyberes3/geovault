@@ -23,6 +23,8 @@ logger = logging.getLogger('website.extension_hooks')
 
 # Registry: hook_type -> List of (full_hook_id, callback, extension_name) tuples
 _hook_registry: Dict[str, List[Tuple[str, Callable, str]]] = {}
+# Registry: well_known_path -> (callback, extension_name)
+_well_known_registry: Dict[str, Tuple[Callable, str]] = {}
 _registry_lock = Lock()
 
 # Track current extension name during registration (set by ExtensionAppConfig)
@@ -101,6 +103,52 @@ def register_hook(hook_type: str, hook_id: str, callback: Callable) -> None:
         # Register the hook
         _hook_registry[hook_type].append((full_hook_id, callback, _current_extension_name))
         logger.debug(f"Registered {hook_type} hook: {full_hook_id}")
+
+
+def register_well_known(path: str, callback: Callable) -> None:
+    """
+    Register a .well-known item.
+    Path should be relative to .well-known/, e.g. 'assetlinks.json'.
+    
+    Args:
+        path: The path relative to .well-known/
+        callback: Django view function to handle the request
+        
+    Raises:
+        ValueError: If path is already registered by another extension or 
+                   if called outside of extension context.
+    """
+    if not callable(callback):
+        raise TypeError(f"Well-known callback must be callable, got {type(callback)}")
+
+    if _current_extension_name is None:
+        raise ValueError(
+            "Cannot register .well-known item outside of extension context. "
+            "Register items in the extension_ready() method of your AppConfig."
+        )
+
+    with _registry_lock:
+        if path in _well_known_registry:
+            _, existing_ext = _well_known_registry[path]
+            # If it's the same extension, we allow replacing it (for hot-reloading)
+            if existing_ext != _current_extension_name:
+                raise ValueError(
+                    f".well-known path '{path}' is already registered by extension '{existing_ext}'. "
+                    f"Extension '{_current_extension_name}' cannot register the same path."
+                )
+
+        # Register the well-known item
+        _well_known_registry[path] = (callback, _current_extension_name)
+        logger.debug(f"Registered .well-known item: {path} (extension: {_current_extension_name})")
+
+
+def get_well_known_callback(path: str) -> Optional[Callable]:
+    """
+    Get the callback for a registered .well-known path.
+    """
+    with _registry_lock:
+        item = _well_known_registry.get(path)
+        return item[0] if item else None
 
 
 def get_hooks(hook_type: str) -> List[Tuple[str, Callable]]:
