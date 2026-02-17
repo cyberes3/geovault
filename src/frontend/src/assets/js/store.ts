@@ -56,6 +56,7 @@ interface State {
         importHistory: ImportHistoryItem[]
         [key: string]: any
     }
+    deferredPrompt: any | null
 }
 
 // Store type is inferred from createStore<State>
@@ -83,7 +84,8 @@ export default createStore<State>({
             importTable: [],
             importHistory: []
         },
-    }, 
+        deferredPrompt: null
+    },
     mutations: {
         userInfo(state: State, payload: UserInfo | null) {
             state.userInfo = payload
@@ -97,7 +99,7 @@ export default createStore<State>({
                 state.hiddenFeatures = []
                 return
             }
-            
+
             // Handle both old format (string[]) and new format ({id, name, geometry_type}[])
             state.hiddenFeatures = payload.map(item => {
                 if (typeof item === 'string') {
@@ -167,7 +169,7 @@ export default createStore<State>({
         setRealtimeModuleData(state: State, { module, data }: { module: string, data: any }) {
             state.realtimeData[module] = data;
         },
-        setImportHistory(state: State, payload: ImportHistoryItem[] | {items: ImportHistoryItem[], pagination: any}) {
+        setImportHistory(state: State, payload: ImportHistoryItem[] | { items: ImportHistoryItem[], pagination: any }) {
             // Handle both old format (array) and new format (paginated object)
             if (Array.isArray(payload)) {
                 state.importHistory = payload;
@@ -191,18 +193,18 @@ export default createStore<State>({
         setImportHistoryPage(state: State, page: number) {
             state.importHistoryPagination.page = page;
         },
-        addImportHistoryItem(state: State, payload: ImportHistoryItem | {item: ImportHistoryItem, page: number}) {
+        addImportHistoryItem(state: State, payload: ImportHistoryItem | { item: ImportHistoryItem, page: number }) {
             // Handle both old format (just item) and new format (item with page)
             let item: ImportHistoryItem;
             let page: number | undefined;
-            
+
             if ('item' in payload && 'page' in payload) {
                 item = payload.item;
                 page = payload.page;
             } else {
                 item = payload as ImportHistoryItem;
             }
-            
+
             // Check if item already exists to avoid duplicates
             const existingIndex = state.importHistory.findIndex(existing => existing.id === item.id);
             if (existingIndex === -1) {
@@ -213,7 +215,7 @@ export default createStore<State>({
                     state.importHistoryPagination.totalItems / state.importHistoryPagination.pageSize
                 );
                 state.importHistoryPagination.hasNext = state.importHistoryPagination.page < state.importHistoryPagination.totalPages;
-                
+
                 // Only add item to visible list if it belongs to page 1 (new items always go to page 1)
                 // Items for other pages will appear when user navigates to those pages via REST
                 if (page === undefined || page === 1) {
@@ -230,7 +232,10 @@ export default createStore<State>({
             }
             Object.assign(state.realtimeData[module], updates);
         },
-    }, 
+        setDeferredPrompt(state: State, payload: any) {
+            state.deferredPrompt = payload
+        }
+    },
     getters: {
     },
     actions: {
@@ -258,7 +263,7 @@ export default createStore<State>({
         setRealtimeModuleData({ commit }: { commit: Commit }, payload: { module: string, data: any }) {
             commit('setRealtimeModuleData', payload);
         },
-        setImportHistory({ commit }: { commit: Commit }, payload: ImportHistoryItem[] | {items: ImportHistoryItem[], pagination: PaginationState}) {
+        setImportHistory({ commit }: { commit: Commit }, payload: ImportHistoryItem[] | { items: ImportHistoryItem[], pagination: PaginationState }) {
             commit('setImportHistory', payload);
         },
         setImportHistoryPagination({ commit }: { commit: Commit }, pagination: PaginationState) {
@@ -267,7 +272,7 @@ export default createStore<State>({
         setImportHistoryPage({ commit }: { commit: Commit }, page: number) {
             commit('setImportHistoryPage', page);
         },
-        addImportHistoryItem({ commit }: { commit: Commit }, payload: ImportHistoryItem | {item: ImportHistoryItem, page: number}) {
+        addImportHistoryItem({ commit }: { commit: Commit }, payload: ImportHistoryItem | { item: ImportHistoryItem, page: number }) {
             commit('addImportHistoryItem', payload);
         },
         setImportHistoryLoaded({ commit }: { commit: Commit }, loaded: boolean) {
@@ -281,10 +286,10 @@ export default createStore<State>({
                 const userStatus = await getUserInfo();
                 if (userStatus && userStatus.authorized) {
                     const userInfo = new UserInfo(
-                        userStatus.email, 
-                        userStatus.id, 
-                        userStatus.featureCount, 
-                        userStatus.tags || [], 
+                        userStatus.email,
+                        userStatus.id,
+                        userStatus.featureCount,
+                        userStatus.tags || [],
                         userStatus.isSuperuser
                     );
                     commit('userInfo', userInfo);
@@ -311,7 +316,7 @@ export default createStore<State>({
 
             try {
                 const csrfToken = getCookie('csrftoken');
-                
+
                 const response = await fetch('/api/user/settings/', {
                     method: 'GET',
                     headers: {
@@ -331,7 +336,7 @@ export default createStore<State>({
                 }
 
                 const data = await response.json();
-                
+
                 if (response.ok && data.settings) {
                     commit('userSettings', data.settings);
                     commit('setHiddenFeatures', data.hidden_features || []);

@@ -172,6 +172,25 @@
           </div>
           <ArrowDownTrayIcon class="w-5 h-5 text-gray-400 flex-shrink-0"/>
         </a>
+
+        <!-- PWA Install Button -->
+        <button
+            v-if="canInstallPWA"
+            @click="installPwa"
+            class="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors duration-200 group text-left w-full"
+        >
+          <div class="flex-shrink-0">
+            <div
+                class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors duration-200">
+              <ArrowDownOnSquareIcon class="w-6 h-6 text-blue-600"/>
+            </div>
+          </div>
+          <div class="ml-4 flex-1 min-w-0">
+            <h3 class="text-sm font-medium text-gray-900 group-hover:text-blue-600">Install Web App</h3>
+            <p class="text-sm text-gray-500">Run GeoVault as a desktop/mobile app</p>
+          </div>
+          <ArrowDownTrayIcon class="w-5 h-5 text-gray-400 flex-shrink-0"/>
+        </button>
       </div>
       <a
           :href="releasesPageUrl"
@@ -194,6 +213,7 @@ import {
   ArrowTopRightOnSquareIcon,
   DevicePhoneMobileIcon,
   MapPinIcon,
+  ArrowDownOnSquareIcon,
 } from "@heroicons/vue/24/outline";
 
 export default {
@@ -205,6 +225,9 @@ export default {
     placesApkUrl() {
       return this.appReleases?.places_url ?? this.releasesPageUrl;
     },
+    canInstallPWA() {
+      return !!this.$store.state.deferredPrompt;
+    },
     releasesPageUrl() {
       return this.appReleases?.releases_page_url ?? "https://git.evulid.cc/cyberes/geovault-app-release/releases";
     },
@@ -215,6 +238,7 @@ export default {
     ArrowDownTrayIcon,
     ArrowTopRightOnSquareIcon,
     MapPinIcon,
+    ArrowDownOnSquareIcon,
   },
   data() {
     return {
@@ -293,6 +317,20 @@ export default {
       } catch (_) {
         // Keep appReleases null; computed URLs fall back to releases page
       }
+    },
+    async installPwa() {
+      const promptEvent = this.$store.state.deferredPrompt;
+      if (!promptEvent) return;
+
+      // Show the install prompt
+      promptEvent.prompt();
+
+      // Wait for the user to respond to the prompt
+      const { outcome } = await promptEvent.userChoice;
+      console.log(`PWA: User response to install prompt: ${outcome}`);
+
+      // We've used the prompt, and can't use it again, clear it from state
+      this.$store.commit("setDeferredPrompt", null);
     },
   },
   async created() {

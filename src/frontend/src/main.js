@@ -1,4 +1,22 @@
 import './assets/css/main.css'
+import { registerSW } from 'virtual:pwa-register'
+
+registerSW({
+    immediate: true,
+    onNeedRefresh() { console.log('PWA: New content available, please refresh.') },
+    onOfflineReady() { console.log('PWA: App ready for limited offline use.') },
+    onRegistered(r) { console.log('PWA: Service worker registered:', r) },
+    onRegisterError(error) { console.error('PWA: Service worker registration failed:', error) }
+})
+
+// PWA Install Prompt Handling
+window.addEventListener('beforeinstallprompt', (e) => {
+    // Prevent the mini-infobar from appearing on mobile
+    e.preventDefault();
+    // Stash the event so it can be triggered later.
+    store.commit('setDeferredPrompt', e);
+    console.log('PWA: beforeinstallprompt event captured');
+});
 
 import { createApp, h, markRaw } from 'vue'
 import * as VueState from 'vue'

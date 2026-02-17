@@ -4,6 +4,7 @@ import fs from 'node:fs'
 
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { VitePWA } from 'vite-plugin-pwa'
 
 // Plugin to trigger full reload when an extension's frontend dist changes (dev only)
 const extensionReloadPlugin = () => {
@@ -55,7 +56,93 @@ const highlightJsOptimizer = () => {
 
 // https://vitejs.dev/config/
 export default defineConfig({
-    plugins: [vue(), highlightJsOptimizer(), extensionReloadPlugin()],
+    plugins: [
+        vue(),
+        VitePWA({
+            registerType: 'autoUpdate',
+            devOptions: {
+                enabled: true
+            },
+            includeAssets: [
+                'favicon.ico',
+                'apple-touch-icon.png',
+                'pwa-72x72.png',
+                'pwa-96x96.png',
+                'pwa-128x128.png',
+                'pwa-144x144.png',
+                'pwa-192x192.png',
+                'pwa-384x384.png',
+                'pwa-512x512.png',
+                'maskable-icon-72x72.png',
+                'maskable-icon-96x96.png',
+                'maskable-icon-128x128.png',
+                'maskable-icon-144x144.png',
+                'maskable-icon-192x192.png',
+                'maskable-icon-384x384.png',
+                'maskable-icon-512x512.png'
+            ],
+            manifest: {
+                id: '/',
+                name: 'GeoVault',
+                short_name: 'GeoVault',
+                description: 'Self-hosted platform to organize your personal spatial data',
+                theme_color: '#163D8A',
+                background_color: '#ffffff',
+                display: 'standalone',
+                display_override: ['window-controls-overlay', 'standalone', 'minimal-ui'],
+                start_url: '/',
+                scope: '/',
+                orientation: 'any',
+                categories: ['productivity', 'utilities', 'geospatial'],
+                icons: [
+                    { src: 'pwa-72x72.png', sizes: '72x72', type: 'image/png', purpose: 'any' },
+                    { src: 'pwa-96x96.png', sizes: '96x96', type: 'image/png', purpose: 'any' },
+                    { src: 'pwa-128x128.png', sizes: '128x128', type: 'image/png', purpose: 'any' },
+                    { src: 'pwa-144x144.png', sizes: '144x144', type: 'image/png', purpose: 'any' },
+                    { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+                    { src: 'pwa-384x384.png', sizes: '384x384', type: 'image/png', purpose: 'any' },
+                    { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+                    { src: 'maskable-icon-72x72.png', sizes: '72x72', type: 'image/png', purpose: 'maskable' },
+                    { src: 'maskable-icon-96x96.png', sizes: '96x96', type: 'image/png', purpose: 'maskable' },
+                    { src: 'maskable-icon-128x128.png', sizes: '128x128', type: 'image/png', purpose: 'maskable' },
+                    { src: 'maskable-icon-144x144.png', sizes: '144x144', type: 'image/png', purpose: 'maskable' },
+                    { src: 'maskable-icon-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+                    { src: 'maskable-icon-384x384.png', sizes: '384x384', type: 'image/png', purpose: 'maskable' },
+                    { src: 'maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+                ],
+                shortcuts: [
+                    {
+                        name: 'View Map',
+                        short_name: 'Map',
+                        description: 'Open the interactive map',
+                        url: '/map',
+                        icons: [{ src: 'pwa-96x96.png', sizes: '96x96' }]
+                    },
+                    {
+                        name: 'Import Data',
+                        short_name: 'Import',
+                        description: 'Upload geospatial files',
+                        url: '/import',
+                        icons: [{ src: 'pwa-96x96.png', sizes: '96x96' }]
+                    }
+                ]
+            },
+            workbox: {
+                globPatterns: ['index.html', 'pwa-*.png', 'maskable-icon-*.png', 'manifest.webmanifest'], // Precache shell + icons
+                runtimeCaching: [
+                    {
+                        urlPattern: ({ request }) => request.destination === 'script' || request.destination === 'style' || request.destination === 'image',
+                        handler: 'NetworkFirst',
+                        options: {
+                            cacheName: 'static-resources',
+                        }
+                    }
+                ]
+            }
+        }),
+        highlightJsOptimizer(),
+        extensionReloadPlugin()
+    ],
     resolve: {
         alias: {
             '@': fileURLToPath(new URL('./src', import.meta.url))
