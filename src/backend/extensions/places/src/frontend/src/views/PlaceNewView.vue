@@ -236,7 +236,7 @@ export default {
       lastAddressRequestId.value += 1;
       const myId = lastAddressRequestId.value;
       isGeocoding.value = true;
-      const url = `/api/geocoding/address-search/?q=${encodeURIComponent(query)}`;
+      const url = `/api/geocoding/search/?q=${encodeURIComponent(query)}`;
       fetch(url, { credentials: 'include', signal: controller.signal })
         .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
         .then(({ ok, data }) => {

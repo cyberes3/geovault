@@ -89,7 +89,7 @@ def success_response(
     if data is None:
         data = {}
 
-    # JsonResponse(safe=True) only accepts dict; wrap lists (e.g. address-search payload) as {"data": ...}
+    # JsonResponse(safe=True) only accepts dict; wrap lists (e.g. geocoding search payload) as {"data": ...}
     if not isinstance(data, dict):
         data = {"data": data}
 

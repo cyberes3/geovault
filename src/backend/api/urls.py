@@ -45,7 +45,7 @@ from api.views.imports.queue_management import (
     import_to_featurestore,
 )
 from api.views.imports.upload import upload_item
-from api.views.services.geocoding import geocoding_search, geocoding_address_search
+from api.views.services.geocoding import geocoding_search
 from api.views.services.geolocation import get_user_location, get_location_by_ip
 from api.views.services.tiles import tile_proxy, get_tile_sources, style_proxy
 from api.views.sharing.collections import get_public_collection_share
@@ -165,7 +165,6 @@ urlpatterns = [
 
     # Geocoding API endpoints
     path('geocoding/search/', geocoding_search),
-    path('geocoding/address-search/', geocoding_address_search),
 
     # Extensions API endpoints
     path('extensions/', list_extensions),

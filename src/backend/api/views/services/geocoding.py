@@ -1,7 +1,6 @@
 """
 Forward geocoding API view with pluggable backends (MapTiler or Google per geocoding_search_mode).
 Provides place search functionality with server-side caching.
-Address search (/api/geocoding/address-search/) uses Google Geocoding API only.
 """
 import hashlib
 from urllib.parse import quote, urlencode
@@ -91,89 +90,6 @@ def geocoding_search(request):
     return response
 
 
-@require_http_methods(["GET"])
-@api_or_login_required_401()
-def geocoding_address_search(request):
-    """
-    Search for addresses using Google Geocoding API.
-    Returns a minimal array of at most 5 results (coordinates + place_name, no full response).
-
-    Query parameters:
-        q: Search query string (required)
-
-    Returns:
-        JSON response: { "data": [ { "coordinates": [lng, lat], "place_name": "...", "text": "..."? }, ... ] }
-        When Google returns INVALID_REQUEST, responds 200 with data=[] and "error_type": "INVALID_REQUEST" so clients get no results while still seeing the underlying status.
-    """
-    query = request.GET.get('q', '').strip()
-
-    if not query:
-        return error_response("Query parameter 'q' is required", code=400)
-
-    config_loader = get_config_loader()
-    api_key = config_loader.get_google_api_key()
-
-    if not api_key:
-        return error_response(
-            "Address search is not available. Google API key is not configured.",
-            code=503
-        )
-
-    cache_key = _get_address_cache_key(query)
-    cached_result = cache.get(cache_key)
-    if cached_result is not None:
-        response = success_response(data=cached_result)
-        response['Cache-Control'] = 'public, max-age=604800'
-        return response
-
-    params = {
-        'address': query,
-        'key': api_key,
-        'language': 'en',
-    }
-    request_url = _GOOGLE_GEOCODE_BASE_URL + "?" + urlencode(params)
-    try:
-        api_response = requests.get(request_url, timeout=10)
-    except requests.exceptions.Timeout:
-        return error_response("Geocoding API request timed out", code=504)
-
-    if api_response.status_code != 200:
-        _logger.error(
-            f"Google Geocoding API error: status={api_response.status_code}, body={api_response.text}"
-        )
-        return error_response("Geocoding API request failed", code=400)
-
-    api_data = api_response.json()
-    status = api_data.get('status')
-    if status == 'ZERO_RESULTS':
-        minimal_list = []
-        cache.set(cache_key, minimal_list, GEOCODING_CACHE_TTL)
-        response = success_response(data=minimal_list)
-        response['Cache-Control'] = 'public, max-age=604800'
-        return response
-    if status == 'INVALID_REQUEST':
-        _logger.error(f"Google Geocoding API status={status}, body={api_response.text}")
-        payload = {"data": [], "error_type": status}
-        cache.set(cache_key, payload, GEOCODING_CACHE_TTL)
-        response = success_response(data=payload)
-        response['Cache-Control'] = 'public, max-age=604800'
-        return response
-    if status != 'OK':
-        _logger.error(f"Google Geocoding API status={status}, body={api_response.text}")
-        return error_response(
-            api_data.get('error_message', f"Geocoding API error: {status}"),
-            code=400 if status in ('INVALID_REQUEST', 'REQUEST_DENIED') else 502
-        )
-
-    results = api_data.get('results', [])
-    minimal_list = [_clean_google_address_result(r) for r in results[:5]]
-    cache.set(cache_key, minimal_list, GEOCODING_CACHE_TTL)
-
-    response = success_response(data=minimal_list)
-    response['Cache-Control'] = 'public, max-age=604800'
-    return response
-
-
 def _get_cache_key(query: str, mode: str = 'maptiler') -> str:
     """
     Generate cache key for forward geocoding query.
@@ -189,40 +105,6 @@ def _get_cache_key(query: str, mode: str = 'maptiler') -> str:
     normalized = query.strip().lower()
     query_hash = hashlib.md5(normalized.encode('utf-8')).hexdigest()
     return f"geocoding:{mode}:{query_hash}"
-
-
-def _get_address_cache_key(query: str) -> str:
-    """Cache key for address-only search (separate from place search)."""
-    normalized = query.strip().lower()
-    query_hash = hashlib.md5(normalized.encode('utf-8')).hexdigest()
-    return f"geocoding_address:{query_hash}"
-
-
-def _clean_google_address_result(result: dict) -> dict:
-    """
-    Reduce a Google Geocoding API result to a minimal object: coordinates and place_name.
-    geometry.location is lat/lng; we return [lng, lat] for consistency with GeoJSON.
-    """
-    place_name = (result.get('formatted_address') or '').strip() or None
-    coordinates = None
-    geometry = result.get('geometry')
-    if geometry and isinstance(geometry, dict):
-        loc = geometry.get('location')
-        if loc and isinstance(loc, dict):
-            lat = loc.get('lat')
-            lng = loc.get('lng')
-            if lat is not None and lng is not None:
-                coordinates = [float(lng), float(lat)]
-
-    out = {
-        'coordinates': coordinates,
-        'place_name': place_name,
-    }
-    # Optional short label from address_components (e.g. street_number + route)
-    text = _google_address_short_label(result.get('address_components') or [])
-    if text:
-        out['text'] = text
-    return out
 
 
 def _google_address_short_label(address_components: list) -> str | None:
@@ -524,5 +406,7 @@ _SEARCH_BACKENDS = {
 
 
 def _get_search_backend(mode: str):
-    """Return the search backend callable for the given mode. Unknown mode falls back to maptiler."""
-    return _SEARCH_BACKENDS.get(mode, _search_maptiler)
+    """Return the search backend callable for the given mode. Unknown mode raises ValueError."""
+    if mode not in _SEARCH_BACKENDS:
+        raise ValueError(f"Unknown geocoding search mode: {mode!r}. Valid modes: {list(_SEARCH_BACKENDS)}")
+    return _SEARCH_BACKENDS[mode]

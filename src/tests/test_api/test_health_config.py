@@ -41,8 +41,10 @@ class TestHealthConfigAPI(TestCase):
             # Mock config loader
             mock_config = mock_get_config.return_value
             mock_config.get_bool.return_value = False  # reverse_geocoding.enabled = False
-            mock_config.get_maptiler_api_key.return_value = None  # No API key
-            
+            mock_config.get_geocoding_search_mode.return_value = None  # no forward geocoding mode
+            mock_config.get_maptiler_api_key.return_value = None
+            mock_config.get_google_api_key.return_value = None
+
             response = self.client.get('/api/health/')
             self.assertEqual(response.status_code, 200)
             data = json.loads(response.content)
@@ -64,12 +66,14 @@ class TestHealthConfigAPI(TestCase):
                     return False
                 return 'default_value'
             mock_get_setting.side_effect = get_setting_side_effect
-            
+
             # Mock config loader
             mock_config = mock_get_config.return_value
             mock_config.get_bool.return_value = False  # reverse_geocoding.enabled = False
-            mock_config.get_maptiler_api_key.return_value = None  # No API key
-            
+            mock_config.get_geocoding_search_mode.return_value = None
+            mock_config.get_maptiler_api_key.return_value = None
+            mock_config.get_google_api_key.return_value = None
+
             response = self.client.get('/api/health/')
             self.assertEqual(response.status_code, 500)
             data = json.loads(response.content)
@@ -95,8 +99,10 @@ class TestHealthConfigAPI(TestCase):
             # Mock config loader
             mock_config = mock_get_config.return_value
             mock_config.get_bool.return_value = False  # reverse_geocoding.enabled = False
-            mock_config.get_maptiler_api_key.return_value = None  # No API key
-            
+            mock_config.get_geocoding_search_mode.return_value = None
+            mock_config.get_maptiler_api_key.return_value = None
+            mock_config.get_google_api_key.return_value = None
+
             response = self.client.get('/api/health/')
             self.assertEqual(response.status_code, 500)
             data = json.loads(response.content)
@@ -151,8 +157,10 @@ class TestHealthConfigAPI(TestCase):
             # Mock config loader to return a config with reverse_geocoding disabled
             mock_config = mock_get_config.return_value
             mock_config.get_bool.return_value = False  # reverse_geocoding.enabled = False
-            mock_config.get_maptiler_api_key.return_value = None  # No API key
-            
+            mock_config.get_geocoding_search_mode.return_value = None
+            mock_config.get_maptiler_api_key.return_value = None
+            mock_config.get_google_api_key.return_value = None
+
             response = self.client.get(
                 '/api/health/',
                 HTTP_AUTHORIZATION=f'Bearer {raw_key}'
@@ -219,4 +227,56 @@ class TestHealthConfigAPI(TestCase):
         # Verify API key IS present
         self.assertIn('apiKey', maptiler_config, "API key should be exposed when proxying is disabled")
         self.assertEqual(maptiler_config['apiKey'], 'test-api-key-12345')
+
+    def test_health_check_geocoding_mode_none(self):
+        """When geocoding_search_mode is None, forward_geocoding_api is not_configured and no check runs."""
+        with patch('api.views.health.check_database_connection', return_value=True), \
+             patch('api.views.health.check_redis_connection', return_value=True), \
+             patch('api.views.health.check_postgis_installation', return_value=True), \
+             patch('api.views.health.check_overpass_api', return_value=True), \
+             patch('api.views.health.check_elevation_api', return_value=True), \
+             patch('website.settings_utils.get_required_setting') as mock_get_setting, \
+             patch('api.views.health.get_config_loader') as mock_get_config:
+            def get_setting_side_effect(attr_name):
+                if attr_name == 'ELEVATION_API_ENABLED':
+                    return False
+                return 'default_value'
+            mock_get_setting.side_effect = get_setting_side_effect
+            mock_config = mock_get_config.return_value
+            mock_config.get_bool.return_value = False
+            mock_config.get_geocoding_search_mode.return_value = None
+            mock_config.get_maptiler_api_key.return_value = None
+            mock_config.get_google_api_key.return_value = None
+
+            response = self.client.get('/api/health/')
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.content)
+            self.assertEqual(data['status'], 'healthy')
+            self.assertEqual(data['components']['forward_geocoding_api'], 'not_configured')
+
+    def test_health_check_geocoding_mode_google_healthy(self):
+        """When geocoding_search_mode is google and key set, check_google_geocoding_api runs."""
+        with patch('api.views.health.check_database_connection', return_value=True), \
+             patch('api.views.health.check_redis_connection', return_value=True), \
+             patch('api.views.health.check_postgis_installation', return_value=True), \
+             patch('api.views.health.check_overpass_api', return_value=True), \
+             patch('api.views.health.check_elevation_api', return_value=True), \
+             patch('api.views.health.check_google_geocoding_api', return_value=True), \
+             patch('website.settings_utils.get_required_setting') as mock_get_setting, \
+             patch('api.views.health.get_config_loader') as mock_get_config:
+            def get_setting_side_effect(attr_name):
+                if attr_name == 'ELEVATION_API_ENABLED':
+                    return False
+                return 'default_value'
+            mock_get_setting.side_effect = get_setting_side_effect
+            mock_config = mock_get_config.return_value
+            mock_config.get_bool.return_value = False
+            mock_config.get_geocoding_search_mode.return_value = 'google'
+            mock_config.get_google_api_key.return_value = 'google-key'
+
+            response = self.client.get('/api/health/')
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.content)
+            self.assertEqual(data['status'], 'healthy')
+            self.assertEqual(data['components']['google_geocoding_api'], 'healthy')
 

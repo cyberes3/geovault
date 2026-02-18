@@ -308,7 +308,7 @@ class PlaceEditActivity : AppCompatActivity() {
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
         val api = RetrofitClient.getClient(baseUrl, apiKey).create(GeovaultApi::class.java)
         setLocationLoading(true)
-        addressSearchCall = api.addressSearch(query)
+        addressSearchCall = api.geocodingSearch(query)
         addressSearchCall!!.enqueue(object : Callback<AddressSearchResponse> {
             override fun onResponse(call: Call<AddressSearchResponse>, response: Response<AddressSearchResponse>) {
                 addressSearchCall = null

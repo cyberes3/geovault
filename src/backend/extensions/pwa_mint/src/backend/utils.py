@@ -25,9 +25,6 @@ INFO_PATH = DATA_DIR / "info.json"
 def ensure_data_dir():
     if not DATA_DIR.exists():
         DATA_DIR.mkdir(parents=True, exist_ok=True)
-        # Ensure it's not browsable
-        with open(DATA_DIR / ".gitignore", "w") as f:
-            f.write("*")
 
 def generate_random_password(length=16):
     alphabet = string.ascii_letters + string.digits

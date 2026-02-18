@@ -63,12 +63,20 @@ def health_check(request):
         else:
             checks_to_run.append(("elevation_api", check_elevation_api))
 
-        # Check MapTiler Geocoding API only if API key is set
-        maptiler_api_key = config.get_maptiler_api_key()
-        if maptiler_api_key:
-            checks_to_run.append(("maptiler_geocoding_api", check_maptiler_geocoding_api))
-        else:
-            components["maptiler_geocoding_api"] = "not_configured"
+        # Check forward geocoding API based on geocoding_search_mode
+        geocoding_mode = config.get_geocoding_search_mode()
+        if geocoding_mode is None:
+            components["forward_geocoding_api"] = "not_configured"
+        elif geocoding_mode == "maptiler":
+            if config.get_maptiler_api_key():
+                checks_to_run.append(("maptiler_geocoding_api", check_maptiler_geocoding_api))
+            else:
+                components["maptiler_geocoding_api"] = "not_configured"
+        elif geocoding_mode == "google":
+            if config.get_google_api_key():
+                checks_to_run.append(("google_geocoding_api", check_google_geocoding_api))
+            else:
+                components["google_geocoding_api"] = "not_configured"
 
         # Run all checks in parallel using ThreadPoolExecutor with overall timeout
         with ThreadPoolExecutor(max_workers=len(checks_to_run)) as executor:
@@ -193,6 +201,38 @@ def check_maptiler_geocoding_api() -> bool:
         # Log unexpected exceptions (network errors are expected, but bugs are not)
         if not isinstance(e, (requests.exceptions.RequestException, requests.exceptions.Timeout)):
             _logger.warning(f"MapTiler Geocoding API health check failed with unexpected exception:\n{traceback.format_exc()}")
+        return False
+
+
+def check_google_geocoding_api() -> bool:
+    """
+    Check Google Geocoding API health by making a minimal geocode request.
+    Uses a shorter timeout for health checks to prevent hanging.
+
+    Returns:
+        True if API is healthy, False otherwise
+    """
+    try:
+        config = get_config_loader()
+        api_key = config.get_google_api_key()
+        if not api_key:
+            return True
+
+        response = requests.get(
+            "https://maps.googleapis.com/maps/api/geocode/json",
+            params={'address': 'test', 'key': api_key, 'language': 'en'},
+            timeout=HEALTH_CHECK_EXTERNAL_API_TIMEOUT
+        )
+        if response.status_code != 200:
+            return False
+        data = response.json()
+        status = data.get('status')
+        return status in ('OK', 'ZERO_RESULTS')
+    except Exception as e:
+        if not isinstance(e, (requests.exceptions.RequestException, requests.exceptions.Timeout)):
+            _logger.warning(
+                f"Google Geocoding API health check failed with unexpected exception:\n{traceback.format_exc()}"
+            )
         return False
 
 
