@@ -177,7 +177,7 @@ class TestTagSeparation(TestCase):
             'source-file:test.gpx',
             'type:track',
             'elevation:high',
-            'geocoding:success',
+            'reverse_geocoding:success',
             'driving:yes'  # The specific tag from the bug report
         ]
 

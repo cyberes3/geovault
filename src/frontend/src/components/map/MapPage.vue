@@ -552,7 +552,7 @@ export default {
       savedMapZoom: null,
       savedMapPitch: null,
       savedMapBearing: null,
-      geocodingMarker: null, // Marker for forward geocoding search results
+      geocodingMarker: null, // Marker for forward reverse_geocoding search results
       trackingState: 'disabled', // 'disabled', 'tracking', 'locked'
       locationMarker: null,
       isAutoMoving: false,
@@ -3681,26 +3681,26 @@ export default {
     async handleGeocodingResult(result) {
       if (!this.map || !result) return
 
-      // Extract coordinates from forward geocoding result for marker placement
-      // Forward geocoding results have coordinates [lng, lat] directly
+      // Extract coordinates from forward reverse_geocoding result for marker placement
+      // Forward reverse_geocoding results have coordinates [lng, lat] directly
       let coordinates = null
       if (result.coordinates && Array.isArray(result.coordinates)) {
         coordinates = result.coordinates
       } else if (result.center && Array.isArray(result.center)) {
         coordinates = result.center
       } else {
-        console.error('Forward geocoding result missing coordinates:', result)
+        console.error('Forward reverse_geocoding result missing coordinates:', result)
         return
       }
 
       // Extract bbox - there will always be a bbox
       const bbox = result.bbox
       if (!bbox || !Array.isArray(bbox) || bbox.length !== 4) {
-        console.error('Forward geocoding result missing bbox:', result)
+        console.error('Forward reverse_geocoding result missing bbox:', result)
         return
       }
 
-      // Remove previous forward geocoding marker if exists
+      // Remove previous forward reverse_geocoding marker if exists
       if (this.geocodingMarker) {
         this.geocodingMarker.remove()
         this.geocodingMarker = null
@@ -3785,7 +3785,7 @@ export default {
       }
     },
     clearGeocodingMarker() {
-      // Remove forward geocoding marker if it exists
+      // Remove forward reverse_geocoding marker if it exists
       if (this.geocodingMarker) {
         this.geocodingMarker.remove()
         this.geocodingMarker = null

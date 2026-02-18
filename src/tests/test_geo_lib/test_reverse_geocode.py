@@ -1,21 +1,21 @@
 """
-Comprehensive tests for reverse geocoding service.
+Comprehensive tests for reverse reverse_geocoding service.
 
-All geocoding functions are imported at the top level. The autouse fixture
+All reverse_geocoding functions are imported at the top level. The autouse fixture
 in conftest.py mocks query_overpass with real fixture data automatically.
 """
 import pytest
 from django.test import TestCase
 from django.core.cache import cache, caches
 
-from geo_lib.geocoding.admin_boundaries import get_admin_hierarchy
-from geo_lib.geocoding.nearby_places import find_nearby_cities, search_nearby_lakes
-from geo_lib.geocoding.protected_areas import get_protected_areas
-from geo_lib.geocoding.location_tags import get_location_tags, batch_reverse_geocode_coordinates
-from geo_lib.geocoding.cache import _get_cache_key, _REVERSE_GEOCODING_CACHE
-from geo_lib.geocoding.ski_resorts import load_ski_resorts, search_nearby_ski_resorts
+from geo_lib.reverse_geocoding.admin_boundaries import get_admin_hierarchy
+from geo_lib.reverse_geocoding.nearby_places import find_nearby_cities, search_nearby_lakes
+from geo_lib.reverse_geocoding.protected_areas import get_protected_areas
+from geo_lib.reverse_geocoding.location_tags import get_location_tags, batch_reverse_geocode_coordinates
+from geo_lib.reverse_geocoding.cache import _get_cache_key, _REVERSE_GEOCODING_CACHE
+from geo_lib.reverse_geocoding.ski_resorts import load_ski_resorts, search_nearby_ski_resorts
 from geo_lib.spatial.haversine import haversine_distance_miles
-from geo_lib.geocoding import overpass_api
+from geo_lib.reverse_geocoding import overpass_api
 
 
 @pytest.mark.django_db
@@ -106,7 +106,7 @@ class TestSkiResortDatabase(TestCase):
 
 @pytest.mark.django_db
 class TestReverseGeocodingService(TestCase):
-    """Test reverse geocoding service with mocked Overpass API."""
+    """Test reverse reverse_geocoding service with mocked Overpass API."""
     
     def setUp(self):
         """Set up test fixtures."""
@@ -150,7 +150,7 @@ class TestReverseGeocodingService(TestCase):
     
     def test_protected_areas_misc_parks(self):
         """Test that misc parks are correctly identified and tagged as protected-area."""
-        from geo_lib.geocoding.protected_areas import classify_protected_area
+        from geo_lib.reverse_geocoding.protected_areas import classify_protected_area
         
         # South Valley Park, Colorado - should be tagged as protected-area
         areas, errors = get_protected_areas(39.5626793, -105.1501089)
@@ -180,7 +180,7 @@ class TestReverseGeocodingService(TestCase):
     
     def test_city_park_classification(self):
         """Test that city parks (leisure=park without boundary=protected_area) are tagged as 'park'."""
-        from geo_lib.geocoding.protected_areas import classify_protected_area
+        from geo_lib.reverse_geocoding.protected_areas import classify_protected_area
         
         # James N. Manley Park, Colorado - city park with leisure=park but no boundary=protected_area
         areas, errors = get_protected_areas(39.72294740028117, -104.95773491586752)
@@ -545,7 +545,7 @@ class TestCaching(TestCase):
 
 @pytest.mark.django_db
 class TestErrorHandling(TestCase):
-    """Test error handling in reverse geocoding."""
+    """Test error handling in reverse reverse_geocoding."""
     
     def setUp(self):
         """Set up test fixtures."""

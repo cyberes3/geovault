@@ -1,13 +1,13 @@
 """
 Management command to re-reverse-geocode all features.
-Removes existing reverse geocoding tags and regenerates them using current reverse geocoding service.
+Removes existing reverse reverse_geocoding tags and regenerates them using current reverse reverse_geocoding service.
 """
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from api.models import FeatureStore
-from geo_lib.geocoding.constants import REVERSE_GEOCODING_TAG_PREFIXES
-from geo_lib.geocoding.location_tags import get_location_tags
+from geo_lib.reverse_geocoding.constants import REVERSE_GEOCODING_TAG_PREFIXES
+from geo_lib.reverse_geocoding.location_tags import get_location_tags
 from geo_lib.processing.logging import ImportLog
 from geo_lib.processing.tagging.generate import generate_auto_tags
 from geo_lib.processing.tagging.modules.geocoding import get_representative_points
@@ -17,11 +17,11 @@ from geo_lib.types.feature import (
 
 
 class Command(BaseCommand):
-    help = 'Re-reverse-geocode all features by removing existing reverse geocoding tags and regenerating them'
+    help = 'Re-reverse-geocode all features by removing existing reverse reverse_geocoding tags and regenerating them'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # List of reverse geocoding tag prefixes with colons for matching
+        # List of reverse reverse_geocoding tag prefixes with colons for matching
         self.geocoding_prefixes = [f"{prefix}:" for prefix in REVERSE_GEOCODING_TAG_PREFIXES]
 
     def _get_feature_class(self, geometry_type: str):
@@ -39,7 +39,7 @@ class Command(BaseCommand):
                 return None
 
     def _separate_tags(self, system_tags: list):
-        """Separate reverse geocoding tags from other system tags."""
+        """Separate reverse reverse_geocoding tags from other system tags."""
         geocoding_tags = [
             tag for tag in system_tags
             if any(tag.startswith(prefix) for prefix in self.geocoding_prefixes)
@@ -58,7 +58,7 @@ class Command(BaseCommand):
             feature_store.save()
 
     def _regenerate_other_tags(self, feature_store, geojson, preserved_geocoding_tags, dry_run):
-        """Regenerate non-geocoding tags while preserving reverse geocoding tags."""
+        """Regenerate non-reverse_geocoding tags while preserving reverse reverse_geocoding tags."""
         geometry_type = geojson.get('geometry', {}).get('type', '').lower()
         feature_class = self._get_feature_class(geometry_type)
         
@@ -82,7 +82,7 @@ class Command(BaseCommand):
             # tags won't be regenerated. We preserve all existing tags.
             new_tags = generate_auto_tags(feature_instance, import_log, skip_reverse_geocoding=True)
             
-            # Get all existing non-geocoding tags (preserve all of them)
+            # Get all existing non-reverse_geocoding tags (preserve all of them)
             old_other_tags = [
                 tag for tag in geojson.get('properties', {}).get('system_tags', [])
                 if not any(tag.startswith(prefix) for prefix in self.geocoding_prefixes)
@@ -91,7 +91,7 @@ class Command(BaseCommand):
             # Union: keep all old tags and add any new ones (never remove)
             all_other_tags = sorted(set(old_other_tags + new_tags))
             
-            # Combine with preserved reverse geocoding tags
+            # Combine with preserved reverse reverse_geocoding tags
             all_tags = sorted(set(all_other_tags + preserved_geocoding_tags))
             
             # Check if anything changed (new tags were added)
@@ -105,7 +105,7 @@ class Command(BaseCommand):
                 if added > 0:
                     parts.append(f'added {added}')
                 if len(preserved_geocoding_tags) > 0:
-                    parts.append(f'preserved {len(preserved_geocoding_tags)} reverse geocoding')
+                    parts.append(f'preserved {len(preserved_geocoding_tags)} reverse reverse_geocoding')
                 msg = f'regenerated other tags ({", ".join(parts)})' if parts else 'regenerated other tags'
                 
                 # Display warnings/errors from tag generation
@@ -121,13 +121,13 @@ class Command(BaseCommand):
             raise Exception(f'Failed to generate tags: {e}')
 
     def _regenerate_geocoding_tags(self, feature_store, geojson, filtered_tags, dry_run):
-        """Regenerate reverse geocoding tags (original mode)."""
+        """Regenerate reverse reverse_geocoding tags (original mode)."""
         original_tags = geojson.get('properties', {}).get('system_tags', [])
         original_geocoding_tags, _ = self._separate_tags(original_tags)
         geometry_type = geojson.get('geometry', {}).get('type', '').lower()
         
         if geometry_type not in ['point', 'multipoint', 'linestring', 'multilinestring']:
-            # Polygon - just remove old geocoding tags if any
+            # Polygon - just remove old reverse_geocoding tags if any
             removed = len(original_geocoding_tags)
             if removed > 0:
                 self._update_feature_tags(feature_store, geojson, filtered_tags, dry_run)
@@ -153,7 +153,7 @@ class Command(BaseCommand):
                 location_tags, log_messages = get_location_tags(lat, lon)
                 all_location_tags.update(location_tags)
                 
-                # Display warnings/errors from geocoding
+                # Display warnings/errors from reverse_geocoding
                 for log_msg in log_messages:
                     if log_msg.level == 'ERROR':
                         self.stdout.write(self.style.ERROR(f'  {log_msg.message}'))
@@ -162,7 +162,7 @@ class Command(BaseCommand):
             except Exception as e:
                 self.stdout.write(self.style.WARNING(f'  Warning: Failed to geocode point ({lat}, {lon}): {e}'))
         
-        # Add new geocoding tags
+        # Add new reverse_geocoding tags
         filtered_tags.extend(sorted(all_location_tags))
         removed = len(original_geocoding_tags)
         added = len(all_location_tags)
@@ -200,9 +200,9 @@ class Command(BaseCommand):
             help='Continue processing even if individual features fail',
         )
         parser.add_argument(
-            '--skip-reverse-geocoding',
+            '--skip-reverse-reverse_geocoding',
             action='store_true',
-            help='Skip reverse geocoding and only regenerate other tags. Preserves existing reverse geocoding tags.',
+            help='Skip reverse reverse_geocoding and only regenerate other tags. Preserves existing reverse reverse_geocoding tags.',
         )
 
     def handle(self, *args, **options):
@@ -217,7 +217,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING('DRY RUN MODE - No changes will be made'))
         
         if skip_reverse_geocoding:
-            self.stdout.write(self.style.WARNING('SKIP REVERSE GEOCODING MODE - Only regenerating other tags, preserving reverse geocoding tags'))
+            self.stdout.write(self.style.WARNING('SKIP REVERSE GEOCODING MODE - Only regenerating other tags, preserving reverse reverse_geocoding tags'))
 
         # Build query
         queryset = FeatureStore.objects.all()
@@ -259,7 +259,7 @@ class Command(BaseCommand):
                         system_tags = geojson.get('properties', {}).get('system_tags', [])
                         
                         if skip_reverse_geocoding:
-                            # Mode: Skip reverse geocoding, only regenerate other tags
+                            # Mode: Skip reverse reverse_geocoding, only regenerate other tags
                             preserved_geocoding_tags, _ = self._separate_tags(system_tags)
                             try:
                                 was_updated, msg = self._regenerate_other_tags(
@@ -276,7 +276,7 @@ class Command(BaseCommand):
                                 if not skip_errors:
                                     raise
                         else:
-                            # Original mode: Re-geocode reverse geocoding tags
+                            # Original mode: Re-geocode reverse reverse_geocoding tags
                             _, filtered_tags = self._separate_tags(system_tags)
                             try:
                                 was_updated, msg = self._regenerate_geocoding_tags(
@@ -306,7 +306,7 @@ class Command(BaseCommand):
         if skip_reverse_geocoding:
             self.stdout.write(self.style.SUCCESS('Tag regeneration complete!'))
         else:
-            self.stdout.write(self.style.SUCCESS('Re-reverse-geocoding complete!'))
+            self.stdout.write(self.style.SUCCESS('Re-reverse-reverse_geocoding complete!'))
         self.stdout.write('')
         self.stdout.write(f'Total features processed: {processed}')
         self.stdout.write(f'Features updated: {updated}')

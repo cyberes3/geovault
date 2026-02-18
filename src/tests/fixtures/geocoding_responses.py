@@ -1,5 +1,5 @@
 """
-Real geocoding responses from Overpass API for test fixtures.
+Real reverse_geocoding responses from Overpass API for test fixtures.
 
 This module contains actual raw responses captured from the Overpass API
 for common test coordinates. This allows tests to be fast and deterministic
@@ -22,7 +22,7 @@ Responses captured: December 8, 2025
 import json
 
 # Raw Overpass API responses for administrative hierarchy queries
-# These are actual responses from the Overpass API that the geocoding service
+# These are actual responses from the Overpass API that the reverse_geocoding service
 # will process to generate location tags
 
 # San Francisco, California (37.7749, -122.4194)

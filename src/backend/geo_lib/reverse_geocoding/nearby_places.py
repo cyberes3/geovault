@@ -8,8 +8,8 @@ from typing import List, Dict, Any, Tuple
 
 from django.conf import settings
 
-from geo_lib.geocoding.overpass_api import query_overpass
-from geo_lib.geocoding.osm_tags import get_name_from_tags
+from geo_lib.reverse_geocoding.overpass_api import query_overpass
+from geo_lib.reverse_geocoding.osm_tags import get_name_from_tags
 from geo_lib.spatial.haversine import haversine_distance_miles
 
 

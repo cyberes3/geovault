@@ -322,7 +322,7 @@ def large_feature_set(db, user):
 def mock_external_services():
     """
     DEPRECATED: Use conditional_external_api_mocking instead.
-    Mock external services (elevation, geocoding) for error testing.
+    Mock external services (elevation, reverse_geocoding) for error testing.
     """
     mocks = {}
     
@@ -331,8 +331,8 @@ def mock_external_services():
         mock_elevation.return_value = [100.0]  # Default elevation
         mocks['elevation'] = mock_elevation
         
-        # Mock geocoding service
-        with patch('geo_lib.processing.geocoding.reverse_geocode') as mock_geocode:
+        # Mock reverse_geocoding service
+        with patch('geo_lib.processing.reverse_geocoding.reverse_geocode') as mock_geocode:
             mock_geocode.return_value = {'address': 'Test Address'}
             mocks['geocode'] = mock_geocode
             
@@ -351,13 +351,13 @@ def conditional_external_api_mocking():
     logger = logging.getLogger(__name__)
     patches = []
     
-    # Always mock geocoding services with realistic data from real Overpass API responses
+    # Always mock reverse_geocoding services with realistic data from real Overpass API responses
     # We need to mock query_overpass in all modules that import it
     
     # Import cache here to avoid circular imports
-    from geo_lib.geocoding.cache import _REVERSE_GEOCODING_CACHE
-    from geo_lib.geocoding.constants import REVERSE_GEOCODING_CACHE_TTL
-    from geo_lib.geocoding.overpass_api import round_coordinate
+    from geo_lib.reverse_geocoding.cache import _REVERSE_GEOCODING_CACHE
+    from geo_lib.reverse_geocoding.constants import REVERSE_GEOCODING_CACHE_TTL
+    from geo_lib.reverse_geocoding.overpass_api import round_coordinate
     import hashlib
     
     # Custom mock class that only increments call_count on cache misses
@@ -369,7 +369,7 @@ def conditional_external_api_mocking():
         def __call__(self, query, max_retries=3, latitude=None, longitude=None):
             """Mock implementation that returns fixture data based on query, with cache support."""
             # Normalize query string for cache key generation (same as real function)
-            from geo_lib.geocoding.overpass_api import _normalize_query_for_cache
+            from geo_lib.reverse_geocoding.overpass_api import _normalize_query_for_cache
             normalized_query = _normalize_query_for_cache(query, latitude, longitude)
             
             # Generate cache key same way as real query_overpass function
@@ -404,10 +404,10 @@ def conditional_external_api_mocking():
     # We need to patch where it's used, not where it's defined
     # We patch the original module first so tests can access it
     modules_to_patch = [
-        'geo_lib.geocoding.overpass_api.query_overpass',  # Original module (tests access this)
-        'geo_lib.geocoding.admin_boundaries.query_overpass',  # Used in admin_boundaries
-        'geo_lib.geocoding.nearby_places.query_overpass',  # Used in nearby_places
-        'geo_lib.geocoding.protected_areas.query_overpass',  # Used in protected_areas
+        'geo_lib.reverse_geocoding.overpass_api.query_overpass',  # Original module (tests access this)
+        'geo_lib.reverse_geocoding.admin_boundaries.query_overpass',  # Used in admin_boundaries
+        'geo_lib.reverse_geocoding.nearby_places.query_overpass',  # Used in nearby_places
+        'geo_lib.reverse_geocoding.protected_areas.query_overpass',  # Used in protected_areas
     ]
     
     # Create the cache-aware mock

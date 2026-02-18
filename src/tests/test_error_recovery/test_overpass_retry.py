@@ -10,7 +10,7 @@ import json
 from unittest.mock import patch, MagicMock, Mock
 import requests
 
-from geo_lib.geocoding.overpass_api import query_overpass
+from geo_lib.reverse_geocoding.overpass_api import query_overpass
 from fixtures.geocoding_responses import RETRY_TEST_SUCCESS_RESPONSE, EMPTY_RESPONSE
 
 
@@ -42,9 +42,9 @@ class TestOverpassAPIRetry:
             mock_response.json.return_value = RETRY_TEST_SUCCESS_RESPONSE
             return mock_response
         
-        with patch('geo_lib.geocoding.overpass_api.requests.post', side_effect=mock_post_timeout), \
-             patch('geo_lib.geocoding.overpass_api.time.sleep', side_effect=mock_sleep), \
-             patch('geo_lib.geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post_timeout), \
+             patch('geo_lib.reverse_geocoding.overpass_api.time.sleep', side_effect=mock_sleep), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
              patch('django.conf.settings') as mock_settings:
             mock_cache.get.return_value = None  # Cache miss
             mock_settings.OVERPASS_API_URL = "https://overpass.private.coffee/api/interpreter"
@@ -76,9 +76,9 @@ class TestOverpassAPIRetry:
             call_count[0] += 1
             raise requests.exceptions.Timeout("Read timed out")
         
-        with patch('geo_lib.geocoding.overpass_api.requests.post', side_effect=mock_post_always_timeout), \
-             patch('geo_lib.geocoding.overpass_api.time.sleep'), \
-             patch('geo_lib.geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post_always_timeout), \
+             patch('geo_lib.reverse_geocoding.overpass_api.time.sleep'), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
              patch('django.conf.settings') as mock_settings:
             mock_cache.get.return_value = None  # Cache miss
             mock_settings.OVERPASS_API_URL = "https://overpass.private.coffee/api/interpreter"
@@ -119,9 +119,9 @@ class TestOverpassAPIRetry:
             mock_response.json.return_value = RETRY_TEST_SUCCESS_RESPONSE
             return mock_response
         
-        with patch('geo_lib.geocoding.overpass_api.requests.post', side_effect=mock_post_timeout_then_success), \
-             patch('geo_lib.geocoding.overpass_api.time.sleep', side_effect=mock_sleep), \
-             patch('geo_lib.geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post_timeout_then_success), \
+             patch('geo_lib.reverse_geocoding.overpass_api.time.sleep', side_effect=mock_sleep), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
              patch('django.conf.settings') as mock_settings:
             mock_cache.get.return_value = None  # Cache miss
             mock_settings.OVERPASS_API_URL = "https://overpass.private.coffee/api/interpreter"
@@ -170,9 +170,9 @@ class TestOverpassAPIRetry:
             mock_response.json.return_value = RETRY_TEST_SUCCESS_RESPONSE
             return mock_response
         
-        with patch('geo_lib.geocoding.overpass_api.requests.post', side_effect=mock_post_429_then_success), \
-             patch('geo_lib.geocoding.overpass_api.time.sleep', side_effect=mock_sleep), \
-             patch('geo_lib.geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post_429_then_success), \
+             patch('geo_lib.reverse_geocoding.overpass_api.time.sleep', side_effect=mock_sleep), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
              patch('django.conf.settings') as mock_settings:
             mock_cache.get.return_value = None  # Cache miss
             mock_settings.OVERPASS_API_URL = "https://overpass.private.coffee/api/interpreter"
@@ -220,9 +220,9 @@ class TestOverpassAPIRetry:
             mock_response.json.return_value = RETRY_TEST_SUCCESS_RESPONSE
             return mock_response
         
-        with patch('geo_lib.geocoding.overpass_api.requests.post', side_effect=mock_post_504_then_success), \
-             patch('geo_lib.geocoding.overpass_api.time.sleep', side_effect=mock_sleep), \
-             patch('geo_lib.geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post_504_then_success), \
+             patch('geo_lib.reverse_geocoding.overpass_api.time.sleep', side_effect=mock_sleep), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
              patch('django.conf.settings') as mock_settings:
             mock_cache.get.return_value = None  # Cache miss
             mock_settings.OVERPASS_API_URL = "https://overpass.private.coffee/api/interpreter"
@@ -269,9 +269,9 @@ class TestOverpassAPIRetry:
             mock_response.json.return_value = RETRY_TEST_SUCCESS_RESPONSE
             return mock_response
         
-        with patch('geo_lib.geocoding.overpass_api.requests.post', side_effect=mock_post_500_then_success), \
-             patch('geo_lib.geocoding.overpass_api.time.sleep', side_effect=mock_sleep), \
-             patch('geo_lib.geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post_500_then_success), \
+             patch('geo_lib.reverse_geocoding.overpass_api.time.sleep', side_effect=mock_sleep), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
              patch('django.conf.settings') as mock_settings:
             mock_cache.get.return_value = None  # Cache miss
             mock_settings.OVERPASS_API_URL = "https://overpass.private.coffee/api/interpreter"
@@ -308,9 +308,9 @@ class TestOverpassAPIRetry:
             mock_response.text = 'Internal server error'
             return mock_response
         
-        with patch('geo_lib.geocoding.overpass_api.requests.post', side_effect=mock_post_always_500), \
-             patch('geo_lib.geocoding.overpass_api.time.sleep'), \
-             patch('geo_lib.geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post_always_500), \
+             patch('geo_lib.reverse_geocoding.overpass_api.time.sleep'), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
              patch('django.conf.settings') as mock_settings:
             mock_cache.get.return_value = None  # Cache miss
             mock_settings.OVERPASS_API_URL = "https://overpass.private.coffee/api/interpreter"
@@ -356,9 +356,9 @@ class TestOverpassAPIRetry:
             mock_response.json.return_value = RETRY_TEST_SUCCESS_RESPONSE
             return mock_response
         
-        with patch('geo_lib.geocoding.overpass_api.requests.post', side_effect=mock_post_empty_then_success), \
-             patch('geo_lib.geocoding.overpass_api.time.sleep', side_effect=mock_sleep), \
-             patch('geo_lib.geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post_empty_then_success), \
+             patch('geo_lib.reverse_geocoding.overpass_api.time.sleep', side_effect=mock_sleep), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
              patch('django.conf.settings') as mock_settings:
             mock_cache.get.return_value = None  # Cache miss
             mock_settings.OVERPASS_API_URL = "https://overpass.private.coffee/api/interpreter"
@@ -406,9 +406,9 @@ class TestOverpassAPIRetry:
             mock_response.json.return_value = RETRY_TEST_SUCCESS_RESPONSE
             return mock_response
         
-        with patch('geo_lib.geocoding.overpass_api.requests.post', side_effect=mock_post_html_then_success), \
-             patch('geo_lib.geocoding.overpass_api.time.sleep', side_effect=mock_sleep), \
-             patch('geo_lib.geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post_html_then_success), \
+             patch('geo_lib.reverse_geocoding.overpass_api.time.sleep', side_effect=mock_sleep), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
              patch('django.conf.settings') as mock_settings:
             mock_cache.get.return_value = None  # Cache miss
             mock_settings.OVERPASS_API_URL = "https://overpass.private.coffee/api/interpreter"
@@ -444,8 +444,8 @@ class TestOverpassAPIRetry:
             mock_response.json.side_effect = json.JSONDecodeError("Expecting value", "", 0)
             return mock_response
         
-        with patch('geo_lib.geocoding.overpass_api.requests.post', side_effect=mock_post_invalid_json), \
-             patch('geo_lib.geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post_invalid_json), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
              patch('django.conf.settings') as mock_settings:
             mock_cache.get.return_value = None  # Cache miss
             mock_settings.OVERPASS_API_URL = "https://overpass.private.coffee/api/interpreter"
@@ -477,8 +477,8 @@ class TestOverpassAPIRetry:
             mock_response.json.return_value = RETRY_TEST_SUCCESS_RESPONSE
             return mock_response
         
-        with patch('geo_lib.geocoding.overpass_api.requests.post', side_effect=mock_post_success), \
-             patch('geo_lib.geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post_success), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
              patch('django.conf.settings') as mock_settings:
             mock_cache.get.return_value = None  # Cache miss
             mock_settings.OVERPASS_API_URL = "https://overpass.private.coffee/api/interpreter"
@@ -509,8 +509,8 @@ class TestOverpassAPIRetry:
             mock_response.json.return_value = RETRY_TEST_SUCCESS_RESPONSE
             return mock_response
         
-        with patch('geo_lib.geocoding.overpass_api.requests.post', side_effect=mock_post_success), \
-             patch('geo_lib.geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post_success), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
              patch('django.conf.settings') as mock_settings:
             mock_settings.OVERPASS_API_URL = "https://overpass.private.coffee/api/interpreter"
             mock_settings.OVERPASS_API_TIMEOUT = 30
@@ -546,8 +546,8 @@ class TestOverpassAPIRetry:
             mock_response.json.return_value = empty_response
             return mock_response
         
-        with patch('geo_lib.geocoding.overpass_api.requests.post', side_effect=mock_post_empty), \
-             patch('geo_lib.geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post_empty), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
              patch('django.conf.settings') as mock_settings:
             mock_settings.OVERPASS_API_URL = "https://overpass.private.coffee/api/interpreter"
             mock_settings.OVERPASS_API_TIMEOUT = 30
@@ -576,8 +576,8 @@ class TestOverpassAPIRetry:
             call_count[0] += 1
             raise requests.exceptions.ConnectionError("Connection failed")
         
-        with patch('geo_lib.geocoding.overpass_api.requests.post', side_effect=mock_post_connection_error), \
-             patch('geo_lib.geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post_connection_error), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
              patch('django.conf.settings') as mock_settings:
             mock_cache.get.return_value = None  # Cache miss
             mock_settings.OVERPASS_API_URL = "https://overpass.private.coffee/api/interpreter"
@@ -604,8 +604,8 @@ class TestOverpassAPIRetry:
             call_count[0] += 1
             raise ValueError("Unexpected error")
         
-        with patch('geo_lib.geocoding.overpass_api.requests.post', side_effect=mock_post_general_error), \
-             patch('geo_lib.geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post_general_error), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
              patch('django.conf.settings') as mock_settings:
             mock_cache.get.return_value = None  # Cache miss
             mock_settings.OVERPASS_API_URL = "https://overpass.private.coffee/api/interpreter"
@@ -637,8 +637,8 @@ class TestOverpassAPIRetry:
             mock_response.json.return_value = RETRY_TEST_SUCCESS_RESPONSE
             return mock_response
         
-        with patch('geo_lib.geocoding.overpass_api.requests.post', side_effect=mock_post), \
-             patch('geo_lib.geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
              patch('django.conf.settings') as mock_settings:
             mock_settings.OVERPASS_API_URL = "https://overpass.private.coffee/api/interpreter"
             mock_settings.OVERPASS_API_TIMEOUT = 30
@@ -670,8 +670,8 @@ class TestOverpassAPIRetry:
             mock_response.text = 'Internal server error'
             return mock_response
         
-        with patch('geo_lib.geocoding.overpass_api.requests.post', side_effect=mock_post_always_500), \
-             patch('geo_lib.geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post_always_500), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
              patch('django.conf.settings') as mock_settings:
             mock_cache.get.return_value = None  # Cache miss
             mock_cache.set = Mock()  # Track cache.set calls

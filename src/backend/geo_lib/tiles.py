@@ -60,9 +60,7 @@ def tile_proxy(request, service, z, x, y):
         elif '.jpg' in url_template or '.jpeg' in url_template:
             url_extension = 'jpg'
 
-    # Check cache if enabled
     tile_data = None
-    cache_path = None
 
     if settings.TILE_CACHE_ENABLED:
         # Only check for the extension from URL template (no fallback)
@@ -200,8 +198,7 @@ def style_proxy(request, map_id):
         'MAPTILER_API_KEY',
         None
     )
-    site_domain = config_loader.get_str('site.domain', '')
-    
+
     if not api_key:
         return HttpResponse('MapTiler API key not configured', status=500)
     

@@ -79,10 +79,10 @@ class TestElevationServiceFailures:
 
 @pytest.mark.django_db
 class TestGeocodingServiceFailures:
-    """Test handling of geocoding service failures."""
+    """Test handling of reverse_geocoding service failures."""
     
     def test_geocoding_service_unavailable(self, user):
-        """Test that geocoding service unavailability doesn't break feature creation."""
+        """Test that reverse_geocoding service unavailability doesn't break feature creation."""
         feature_data = {
             'type': 'Feature',
             'geometry': {
@@ -92,12 +92,12 @@ class TestGeocodingServiceFailures:
             'properties': {'name': 'Test Feature'}
         }
         
-        # Mock geocoding service to be unavailable
+        # Mock reverse_geocoding service to be unavailable
         # We patch the function directly now
-        with patch('geo_lib.geocoding.location_tags.get_location_tags') as mock_geocode:
+        with patch('geo_lib.reverse_geocoding.location_tags.get_location_tags') as mock_geocode:
             mock_geocode.side_effect = requests.ConnectionError("Service unavailable")
             
-            # Feature should still be created without geocoding info
+            # Feature should still be created without reverse_geocoding info
             # Geocoding happens during import, not feature creation
             feature = FeatureStore.objects.create(
                 user=user,
@@ -110,7 +110,7 @@ class TestGeocodingServiceFailures:
             # Geocoding info should be absent or indicate failure gracefully
 
     def test_geocoding_rate_limit_handling(self, user):
-        """Test that geocoding rate limits are handled gracefully."""
+        """Test that reverse_geocoding rate limits are handled gracefully."""
         features = []
         for i in range(5):
             feature_data = {
@@ -123,8 +123,8 @@ class TestGeocodingServiceFailures:
             }
             features.append(feature_data)
         
-        # Mock geocoding to hit rate limit after 2 requests
-        with patch('geo_lib.geocoding.location_tags.get_location_tags') as mock_geocode:
+        # Mock reverse_geocoding to hit rate limit after 2 requests
+        with patch('geo_lib.reverse_geocoding.location_tags.get_location_tags') as mock_geocode:
             call_count = [0]
             
             def rate_limit_side_effect(*args, **kwargs):
@@ -135,7 +135,7 @@ class TestGeocodingServiceFailures:
             
             mock_geocode.side_effect = rate_limit_side_effect
             
-            # All features should still be created (geocoding happens at import time)
+            # All features should still be created (reverse_geocoding happens at import time)
             for feature_data in features:
                 feature = FeatureStore.objects.create(
                     user=user,
@@ -150,7 +150,7 @@ class TestGeocodingServiceFailures:
                 assert feature.id is not None
 
     def test_geocoding_invalid_response(self, user):
-        """Test handling of invalid geocoding responses."""
+        """Test handling of invalid reverse_geocoding responses."""
         feature_data = {
             'type': 'Feature',
             'geometry': {
@@ -160,12 +160,12 @@ class TestGeocodingServiceFailures:
             'properties': {'name': 'Test Feature'}
         }
         
-        # Mock geocoding to return invalid/malformed data
-        with patch('geo_lib.geocoding.location_tags.get_location_tags') as mock_geocode:
+        # Mock reverse_geocoding to return invalid/malformed data
+        with patch('geo_lib.reverse_geocoding.location_tags.get_location_tags') as mock_geocode:
             mock_geocode.return_value = ([], []) # Empty return on failure if caught, or just bad data
             # If the test expected "invalid output" to be handled, now we just return empty tuple
             
-            # Feature should still be created (geocoding happens at import time)
+            # Feature should still be created (reverse_geocoding happens at import time)
             feature = FeatureStore.objects.create(
                 user=user,
                 geojson=feature_data,

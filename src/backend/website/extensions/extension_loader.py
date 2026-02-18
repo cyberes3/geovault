@@ -71,7 +71,6 @@ class ExtensionRegistry:
         if str(self.extensions_dir) not in sys.path:
             sys.path.insert(0, str(self.extensions_dir))
 
-        config_loader = get_config_loader()
         installed_apps_additions: List[str] = []
         loaded_names: List[str] = []
 
@@ -124,7 +123,7 @@ class ExtensionRegistry:
                 manifest_path = item / 'manifest.py'
                 if manifest_path.exists():
                     try:
-                        app_config = self._load_extension(item, manifest_path, config_loader)
+                        app_config = self._load_extension(item, manifest_path)
                         if app_config:
                             installed_apps_additions.append(app_config)
                             # Extract extension name for logging
@@ -139,7 +138,7 @@ class ExtensionRegistry:
 
         return installed_apps_additions
 
-    def _load_extension(self, extension_path: Path, manifest_path: Path, config_loader: Any) -> Optional[str]:
+    def _load_extension(self, extension_path: Path, manifest_path: Path) -> Optional[str]:
         """
         Validates manifest and registers the extension.
         Returns the AppConfig string/class path if successful.
@@ -165,7 +164,7 @@ class ExtensionRegistry:
         # config key: extensions.<name>.enabled
         # Default to manifest.enabled_by_default (True if not specified)
         default_enabled = getattr(manifest, 'enabled_by_default', True)
-        enabled = config_loader.get_bool(f'extensions.{ext_name}.enabled', default_enabled)
+        enabled = get_config_loader().get_bool(f'extensions.{ext_name}.enabled', default_enabled)
 
         if not enabled:
             logger.info(f"Extension '{ext_name}' is disabled in configuration.")

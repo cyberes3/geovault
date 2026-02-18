@@ -53,10 +53,10 @@
       </button>
       <button
         v-if="geocodingAvailable"
-        @click="activeTab = 'geocoding'"
+        @click="activeTab = 'reverse_geocoding'"
         :class="[
           'px-2 py-1 text-xs font-medium transition-colors',
-          activeTab === 'geocoding'
+          activeTab === 'reverse_geocoding'
             ? 'text-blue-500 border-b-2 border-blue-500'
             : 'text-gray-600 hover:text-gray-900'
         ]"
@@ -275,7 +275,7 @@
     </div>
 
     <!-- Forward Geocoding Tab Content (place search) -->
-    <div v-if="activeTab === 'geocoding'" class="flex flex-col flex-1 min-h-0">
+    <div v-if="activeTab === 'reverse_geocoding'" class="flex flex-col flex-1 min-h-0">
       <!-- Search Input -->
       <div class="mb-2 px-1 lg:px-0.5 xl:px-1">
         <div class="relative">
@@ -408,7 +408,7 @@ export default {
       default: false
     }
   },
-  emits: ['feature-click', 'feature-hide', 'tag-filter-change', 'tag-filter-loading-change', 'tag-filter-start', 'geocoding-result-click', 'geocoding-clear', 'close'],
+  emits: ['feature-click', 'feature-hide', 'tag-filter-change', 'tag-filter-loading-change', 'tag-filter-start', 'reverse_geocoding-result-click', 'reverse_geocoding-clear', 'close'],
   data() {
     return {
       activeTab: 'features-in-vicinity',
@@ -424,7 +424,7 @@ export default {
       tagFilteredFeatures: [],
       isFiltering: false,
       filterTimeout: null,
-      // Forward geocoding state (place search)
+      // Forward reverse_geocoding state (place search)
       geocodingQuery: '',
       geocodingResults: [],
       isGeocodingSearching: false,
@@ -494,7 +494,7 @@ export default {
       }))
     },
     geocodingResultsWithKeys() {
-      // Convert forward geocoding results to objects with keys for RecycleScroller
+      // Convert forward reverse_geocoding results to objects with keys for RecycleScroller
       return this.geocodingResults.map((result, index) => ({
         ...result,
         id: result.id || `geocoding-${index}-${result.place_name || ''}`
@@ -729,7 +729,7 @@ export default {
       
       this.$emit('tag-filter-loading-change', false)
     },
-    // Forward geocoding methods (place search)
+    // Forward reverse_geocoding methods (place search)
     handleGeocodingInput() {
       // Clear existing timeout
       if (this.geocodingTimeout) {
@@ -790,7 +790,7 @@ export default {
         return
       }
 
-      // Not coordinates, proceed with forward geocoding search
+      // Not coordinates, proceed with forward reverse_geocoding search
       try {
         const url = `${APIHOST}/api/geocoding/search/?q=${encodeURIComponent(query)}`
         const response = await fetch(url)
@@ -805,7 +805,7 @@ export default {
         if (response.ok && data.data && data.data.features) {
           this.geocodingResults = data.data.features
         } else {
-          console.error('Forward geocoding search failed:', data.error || 'Unknown error')
+          console.error('Forward reverse_geocoding search failed:', data.error || 'Unknown error')
           // Only clear results if this is still the current query
           if (this.currentSearchQuery === query) {
             this.geocodingResults = []
@@ -834,7 +834,7 @@ export default {
         this.geocodingTimeout = null
       }
       // Emit event to clear marker on map
-      this.$emit('geocoding-clear')
+      this.$emit('reverse_geocoding-clear')
     },
     getGeocodingResultName(result) {
       // Use 'text' as the title (e.g., "Denver International Airport")
@@ -844,7 +844,7 @@ export default {
       return result.place_name || null
     },
     handleGeocodingResultClick(result) {
-      this.$emit('geocoding-result-click', result)
+      this.$emit('reverse_geocoding-result-click', result)
       // Close modal on mobile when a result is selected
       if (this.isMobileOpen) {
         this.$emit('close')

@@ -41,7 +41,7 @@ class TestHealthConfigAPI(TestCase):
             # Mock config loader
             mock_config = mock_get_config.return_value
             mock_config.get_bool.return_value = False  # reverse_geocoding.enabled = False
-            mock_config.get_geocoding_search_mode.return_value = None  # no forward geocoding mode
+            mock_config.get_geocoding_search_mode.return_value = None  # no forward reverse_geocoding mode
             mock_config.get_maptiler_api_key.return_value = None
             mock_config.get_google_api_key.return_value = None
 

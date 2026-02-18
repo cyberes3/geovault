@@ -13,8 +13,8 @@ from typing import Optional, Dict, Any, Tuple
 import requests
 from django.conf import settings
 
-from geo_lib.geocoding.cache import _REVERSE_GEOCODING_CACHE
-from geo_lib.geocoding.constants import REVERSE_GEOCODING_CACHE_TTL
+from geo_lib.reverse_geocoding.cache import _REVERSE_GEOCODING_CACHE
+from geo_lib.reverse_geocoding.constants import REVERSE_GEOCODING_CACHE_TTL
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.spatial.coordinates import round_coordinate
 

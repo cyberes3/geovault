@@ -1,8 +1,8 @@
 """
-Background reverse geocoding service for features.
+Background reverse reverse_geocoding service for features.
 
-This module provides asynchronous reverse geocoding functionality that allows
-features to be saved immediately while reverse geocoding tags are generated in
+This module provides asynchronous reverse reverse_geocoding functionality that allows
+features to be saved immediately while reverse reverse_geocoding tags are generated in
 the background.
 """
 import threading
@@ -46,11 +46,11 @@ def _get_feature_class_from_geojson(geojson: dict):
 
 def reverse_geocode_feature_async(feature_id: int):
     """
-    Perform reverse geocoding for a feature in a background thread.
+    Perform reverse reverse_geocoding for a feature in a background thread.
     
     This function:
     1. Locks the feature row using select_for_update()
-    2. Generates reverse geocoding tags using ReverseGeocodingTagGenerator
+    2. Generates reverse reverse_geocoding tags using ReverseGeocodingTagGenerator
     3. Updates the feature's system_tags in the geojson field
     4. Saves the updated feature
     
@@ -68,7 +68,7 @@ def reverse_geocode_feature_async(feature_id: int):
                 try:
                     feature_store = FeatureStore.objects.select_for_update().get(id=feature_id)
                 except FeatureStore.DoesNotExist:
-                    _logger.warning(f"Feature {feature_id} not found for background reverse geocoding")
+                    _logger.warning(f"Feature {feature_id} not found for background reverse reverse_geocoding")
                     return
 
                 # Get the geojson data
@@ -80,19 +80,19 @@ def reverse_geocode_feature_async(feature_id: int):
                 # Determine the appropriate feature class
                 feature_class = _get_feature_class_from_geojson(geojson)
                 if not feature_class:
-                    _logger.warning(f"Feature {feature_id} has unsupported geometry type for reverse geocoding")
+                    _logger.warning(f"Feature {feature_id} has unsupported geometry type for reverse reverse_geocoding")
                     return
 
                 geojson_for_validation = geojson.copy()
                 geojson_for_validation['properties']['geojson_hash'] = feature_store.geojson_hash
                 feature_instance = feature_class(**geojson_for_validation)
 
-                # Generate reverse geocoding tags using the tag generator
+                # Generate reverse reverse_geocoding tags using the tag generator
                 reverse_geocoding_generator = ReverseGeocodingTagGenerator()
                 try:
                     reverse_geocoding_tags = reverse_geocoding_generator.process(feature_instance, import_log=None)
                 except:
-                    _logger.warning(f"Reverse geocoding tag generation failed for feature {feature_id}: {traceback.format_exc()}")
+                    _logger.warning(f"Reverse reverse_geocoding tag generation failed for feature {feature_id}: {traceback.format_exc()}")
                     return
 
                 geojson.setdefault('properties', {})
@@ -104,9 +104,9 @@ def reverse_geocode_feature_async(feature_id: int):
                 feature_store.save(update_fields=['geojson'])
         except:
             # Log error but don't raise - this is background processing
-            _logger.error(f"Error in background reverse geocoding for feature {feature_id}: {traceback.format_exc()}")
+            _logger.error(f"Error in background reverse reverse_geocoding for feature {feature_id}: {traceback.format_exc()}")
 
-    # Start the reverse geocoding in a background thread
+    # Start the reverse reverse_geocoding in a background thread
     thread = threading.Thread(target=_reverse_geocode_worker, daemon=True, name=f"ReverseGeocodeFeature-{feature_id}")
     thread.start()
-    _logger.debug(f"Started background reverse geocoding thread for feature {feature_id}")
+    _logger.debug(f"Started background reverse reverse_geocoding thread for feature {feature_id}")

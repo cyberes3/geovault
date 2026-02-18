@@ -299,7 +299,7 @@ class ProcessJob(BaseJob):
             realtime_log.add(f"Processing {file_size_mb:.1f}MB file", "ProcessJob", DatabaseLogLevel.INFO)
 
             # Create processor instance
-            # Use minimal processing for replacement uploads (skip tags, geocoding)
+            # Use minimal processing for replacement uploads (skip tags, reverse_geocoding)
             processor = get_processor(
                 file_data,
                 filename,
@@ -440,7 +440,7 @@ class ProcessJob(BaseJob):
                 realtime_log.extend(elevation_log)
 
             # Step 5: Tagging and Reverse Geocoding (minimal_processing flag skips this)
-            # Note: All tagging (including reverse geocoding) is now done in step 7
+            # Note: All tagging (including reverse reverse_geocoding) is now done in step 7
             if not is_replacement:
                 self._update_and_broadcast_status(
                     job_id, user_id, import_queue_id,
@@ -454,8 +454,8 @@ class ProcessJob(BaseJob):
                 realtime_log.extend(tagging_log)
                 realtime_log.add_timing("Tagging and Reverse Geocoding", tagging_duration, "ProcessJob")
 
-                # Check for cancellation after tagging and reverse geocoding
-                if self._check_cancellation(job_id, realtime_log, "after tagging and reverse geocoding"):
+                # Check for cancellation after tagging and reverse reverse_geocoding
+                if self._check_cancellation(job_id, realtime_log, "after tagging and reverse reverse_geocoding"):
                     return
 
             # Check if job was canceled before finalization

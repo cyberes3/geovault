@@ -7,8 +7,8 @@ wilderness areas, and other protected lands.
 """
 from typing import List, Dict, Tuple
 
-from geo_lib.geocoding.overpass_api import query_overpass
-from geo_lib.geocoding.osm_tags import get_name_from_tags
+from geo_lib.reverse_geocoding.overpass_api import query_overpass
+from geo_lib.reverse_geocoding.osm_tags import get_name_from_tags
 
 
 def get_protected_areas(latitude: float, longitude: float) -> Tuple[List[Dict[str, str]], List[str]]:

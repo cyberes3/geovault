@@ -11,7 +11,7 @@ from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, success_response, handle_404
 from api.views.features.updates.shared import extract_system_tags, _validate_and_preserve_feature, _validate_tags
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.geocoding.background_geocoding import reverse_geocode_feature_async
+from geo_lib.reverse_geocoding.background_geocoding import reverse_geocode_feature_async
 from geo_lib.processing.logging import ImportLog
 from geo_lib.processing.tagging.generate import generate_auto_tags
 from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
@@ -180,7 +180,7 @@ def create_feature(request):
         normalized_feature['properties'] = {}
     normalized_feature['properties']['geojson_hash'] = geojson_hash
     
-    # Generate system tags using PointFeature type (skip geocoding for async processing)
+    # Generate system tags using PointFeature type (skip reverse_geocoding for async processing)
     point_feature = PointFeature(**normalized_feature)
     system_tags = generate_auto_tags(point_feature, import_log=ImportLog(), filename='example-extension', skip_reverse_geocoding=True)
     
@@ -205,7 +205,7 @@ def create_feature(request):
         geojson_hash=geojson_hash
     )
     
-    # Start background reverse geocoding (non-blocking)
+    # Start background reverse reverse_geocoding (non-blocking)
     reverse_geocode_feature_async(feature_store.id)
     
     # Add database_id to properties for response

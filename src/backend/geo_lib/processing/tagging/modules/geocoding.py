@@ -1,15 +1,15 @@
 """
-Reverse geocoding tag generator.
+Reverse reverse_geocoding tag generator.
 Generates location-based tags (city, state, country, protected areas, lakes, etc.)
-using reverse geocoding.
+using reverse reverse_geocoding.
 """
 from typing import List, Tuple, Dict
 
 from website.settings_utils import get_required_setting
 
 from geo_lib.types.feature import GeoFeatureSupported
-from geo_lib.geocoding.constants import REVERSE_GEOCODING_TAG_PREFIXES
-from geo_lib.geocoding.location_tags import batch_reverse_geocode_coordinates
+from geo_lib.reverse_geocoding.constants import REVERSE_GEOCODING_TAG_PREFIXES
+from geo_lib.reverse_geocoding.location_tags import batch_reverse_geocode_coordinates
 from geo_lib.processing.tagging.base import TagGenerator
 from geo_lib.processing.logging import DatabaseLogLevel
 from geo_lib.logging.console import get_tagged_logger
@@ -19,7 +19,7 @@ logger = get_tagged_logger()
 
 def get_representative_points(feature: GeoFeatureSupported) -> List[Tuple[float, float]]:
     """
-    Get representative points from a feature for reverse geocoding.
+    Get representative points from a feature for reverse reverse_geocoding.
     For points: returns the point itself
     For linestrings: returns only the middle point
     For multilinestrings: returns the centroid (average) of all coordinates from all linestrings
@@ -69,12 +69,12 @@ def get_representative_points(feature: GeoFeatureSupported) -> List[Tuple[float,
 
 
 class ReverseGeocodingTagGenerator(TagGenerator):
-    """Generates location-based tags using reverse geocoding."""
+    """Generates location-based tags using reverse reverse_geocoding."""
     
-    priority = 100  # Execute last (reverse geocoding can be slow)
+    priority = 100  # Execute last (reverse reverse_geocoding can be slow)
     
     def __init__(self):
-        # Register all reverse geocoding tag prefixes that this generator produces
+        # Register all reverse reverse_geocoding tag prefixes that this generator produces
         # Use the centralized constant to ensure consistency
         super().__init__(REVERSE_GEOCODING_TAG_PREFIXES)
     
@@ -162,7 +162,7 @@ class ReverseGeocodingTagGenerator(TagGenerator):
             **kwargs: Additional keyword arguments (not used)
             
         Returns:
-            List of reverse geocoding tags
+            List of reverse reverse_geocoding tags
         """
         # Call batch version with single feature
         result = self.process_batch([feature], import_log, **kwargs)

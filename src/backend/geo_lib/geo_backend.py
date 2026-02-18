@@ -1,2 +1,0 @@
-SOFTWARE_NAME = 'backend'
-SOFTWARE_VERSION = '0.0.0'

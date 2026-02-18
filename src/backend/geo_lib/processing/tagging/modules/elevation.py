@@ -21,7 +21,7 @@ LOW_ELEVATION_METERS = LOW_ELEVATION_FEET / METERS_TO_FEET  # ~30.48 meters
 class ElevationTagGenerator(TagGenerator):
     """Generates high-elevation and low-elevation tags for points and linestrings."""
 
-    priority = 60  # Execute after source file, before geocoding
+    priority = 60  # Execute after source file, before reverse_geocoding
 
     def __init__(self):
         super().__init__('elevation')

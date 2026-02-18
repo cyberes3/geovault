@@ -145,10 +145,10 @@ icons:
 
 
 reverse_geocoding:
-  # Enable or disable reverse geocoding
+  # Enable or disable reverse reverse_geocoding
   enabled: true
 
-  # Overpass API server URL for reverse geocoding
+  # Overpass API server URL for reverse reverse_geocoding
   # This is the main API endpoint for querying OpenStreetMap data
   # Default: https://overpass.private.coffee/api/interpreter (free, unlimited)
   overpass_api_url: https://overpass.private.coffee/api/interpreter

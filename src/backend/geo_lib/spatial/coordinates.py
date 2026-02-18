@@ -1,6 +1,6 @@
 from typing import List, Tuple
 
-from geo_lib.geocoding.constants import COORDINATE_PRECISION
+from geo_lib.reverse_geocoding.constants import COORDINATE_PRECISION
 from geo_lib.processing.duplicate_detection.constants import COORDINATE_TOLERANCE
 
 

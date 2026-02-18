@@ -5,17 +5,20 @@ Loads configuration from a YAML file and provides it to Django settings.
 Supports environment variable overrides for sensitive values.
 """
 import os
-import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional
+
+import yaml
+
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.search_geocoding.backends import list_search_backends
 
 logger = get_tagged_logger('config')
 
 
 class ConfigLoader:
     """Loads and manages YAML configuration for the application."""
-    
+
     def __init__(self, config_path: Optional[str] = None):
         """
         Initialize the config loader.
@@ -27,7 +30,7 @@ class ConfigLoader:
         if config_path is None:
             # Check environment variable first
             config_path = os.environ.get('GEOVAULT_CONFIG_PATH')
-            
+
             # If not set, default to config.yaml in project root (backend directory)
             if config_path is None:
                 # Get the directory containing this file (website/)
@@ -39,11 +42,11 @@ class ConfigLoader:
                 config_path = Path(config_path)
         else:
             config_path = Path(config_path)
-        
+
         self.config_path = config_path
         self.config: Dict[str, Any] = {}
         self._load_config()
-    
+
     def _load_config(self):
         """Load configuration from YAML file."""
         if not self.config_path.exists():
@@ -53,7 +56,7 @@ class ConfigLoader:
             )
             self.config = {}
             return
-        
+
         try:
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 self.config = yaml.safe_load(f) or {}
@@ -64,7 +67,7 @@ class ConfigLoader:
         except Exception as e:
             logger.error(f"Error loading config file {self.config_path}: {e}")
             self.config = {}
-    
+
     def get(self, key_path: str, default: Any = None) -> Any:
         """
         Get a configuration value using dot-notation path.
@@ -78,15 +81,15 @@ class ConfigLoader:
         """
         keys = key_path.split('.')
         value = self.config
-        
+
         for key in keys:
             if isinstance(value, dict) and key in value:
                 value = value[key]
             else:
                 return default
-        
+
         return value
-    
+
     def get_bool(self, key_path: str, default: bool = False) -> bool:
         """Get a boolean configuration value."""
         value = self.get(key_path, default)
@@ -95,7 +98,7 @@ class ConfigLoader:
         if isinstance(value, str):
             return value.lower() in ('true', '1', 'yes', 'on')
         return bool(value)
-    
+
     def get_int(self, key_path: str, default: int = 0) -> int:
         """Get an integer configuration value."""
         value = self.get(key_path, default)
@@ -103,7 +106,7 @@ class ConfigLoader:
             return int(value)
         except (ValueError, TypeError):
             return default
-    
+
     def get_float(self, key_path: str, default: float = 0.0) -> float:
         """Get a float configuration value."""
         value = self.get(key_path, default)
@@ -111,7 +114,7 @@ class ConfigLoader:
             return float(value)
         except (ValueError, TypeError):
             return default
-    
+
     def get_list(self, key_path: str, default: Optional[list] = None) -> list:
         """Get a list configuration value."""
         if default is None:
@@ -120,14 +123,14 @@ class ConfigLoader:
         if isinstance(value, list):
             return value
         return default
-    
+
     def get_str(self, key_path: str, default: str = '') -> str:
         """Get a string configuration value."""
         value = self.get(key_path, default)
         if value is None:
             return default
         return str(value)
-    
+
     def get_with_env_override(self, key_path: str, env_var: str, default: Any = None) -> Any:
         """
         Get a configuration value with environment variable override.
@@ -143,10 +146,10 @@ class ConfigLoader:
         # Check environment variable first (highest priority)
         if env_var in os.environ:
             return os.environ[env_var]
-        
+
         # Fall back to config file
         return self.get(key_path, default)
-    
+
     def get_bool_with_env_override(self, key_path: str, env_var: str, default: bool = False) -> bool:
         """
         Get a boolean configuration value with environment variable override.
@@ -165,10 +168,10 @@ class ConfigLoader:
             if isinstance(value, str):
                 return value.lower() in ('true', '1', 'yes', 'on')
             return bool(value)
-        
+
         # Fall back to config file
         return self.get_bool(key_path, default)
-    
+
     def get_maptiler_api_key(self) -> Optional[str]:
         """
         Get MapTiler API key with environment variable override.
@@ -194,7 +197,7 @@ class ConfigLoader:
             Google Geocoding API key from environment variable or config file, or None if not configured
         """
         api_key = self.get_with_env_override(
-            'google.geocoding.api_key',
+            'google.reverse_geocoding.api_key',
             'GOOGLE_API_KEY',
             None
         )
@@ -205,6 +208,7 @@ class ConfigLoader:
     def get_geocoding_search_mode(self) -> Optional[str]:
         """
         Get which provider backs /api/geocoding/search/ (place search).
+        Validates the config value; invalid or unsupported values are rejected and a warning is logged.
 
         Returns:
             'maptiler', 'google', or None if key is missing, unset, or invalid.
@@ -213,8 +217,13 @@ class ConfigLoader:
         if value is None or (isinstance(value, str) and not value.strip()):
             return None
         normalized = str(value).strip().lower()
-        if normalized in ('maptiler', 'google'):
+        if normalized in list_search_backends():
             return normalized
+        logger.warning(
+            "geocoding_search_mode has invalid value %r; expected one of %s. Forward geocoding is disabled.",
+            value,
+            ', '.join(repr(m) for m in list_search_backends()),
+        )
         return None
 
 
@@ -228,4 +237,3 @@ def get_config_loader() -> ConfigLoader:
     if _config_loader is None:
         _config_loader = ConfigLoader()
     return _config_loader
-

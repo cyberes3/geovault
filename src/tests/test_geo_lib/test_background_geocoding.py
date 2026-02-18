@@ -1,5 +1,5 @@
 """
-Tests for background geocoding functionality.
+Tests for background reverse_geocoding functionality.
 """
 import time
 from unittest.mock import patch, MagicMock
@@ -10,7 +10,7 @@ from django.contrib.gis.geos import Point
 from django.contrib.auth import get_user_model
 
 from api.models import FeatureStore
-from geo_lib.geocoding.background_geocoding import reverse_geocode_feature_async
+from geo_lib.reverse_geocoding.background_geocoding import reverse_geocode_feature_async
 from geo_lib.types.feature import PointFeature
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.tagging.generate import generate_auto_tags
@@ -21,28 +21,28 @@ User = get_user_model()
 
 @pytest.mark.django_db(transaction=True)
 class TestBackgroundGeocoding(TransactionTestCase):
-    """Test background geocoding functionality."""
+    """Test background reverse_geocoding functionality."""
     
     def setUp(self):
         """Set up test fixtures."""
         self.user = User.objects.create_user(
-            email='geocoding@example.com',
+            email='reverse_geocoding@example.com',
             password='testpass123',
             username='geocodinguser'
         )
     
     def _wait_for_geocoding(self, feature_id, expected_tags=None, timeout=2.0, poll_interval=0.1):
         """
-        Wait for background geocoding to complete by polling the database.
+        Wait for background reverse_geocoding to complete by polling the database.
         
         Args:
             feature_id: ID of the feature to check
-            expected_tags: List of tags to wait for (if None, just waits for any geocoding tags)
+            expected_tags: List of tags to wait for (if None, just waits for any reverse_geocoding tags)
             timeout: Maximum time to wait in seconds
             poll_interval: Time between checks in seconds
             
         Returns:
-            True if geocoding completed, False if timeout
+            True if reverse_geocoding completed, False if timeout
         """
         start_time = time.time()
         while time.time() - start_time < timeout:
@@ -56,7 +56,7 @@ class TestBackgroundGeocoding(TransactionTestCase):
                     if all(tag in system_tags for tag in expected_tags):
                         return True
                 else:
-                    # Check if any geocoding tags are present (tags starting with 'geo-')
+                    # Check if any reverse_geocoding tags are present (tags starting with 'geo-')
                     if any(tag.startswith('geo-') for tag in system_tags):
                         return True
             except FeatureStore.DoesNotExist:
@@ -67,7 +67,7 @@ class TestBackgroundGeocoding(TransactionTestCase):
         return False
     
     def _create_test_feature(self, with_geocoding_tags=False):
-        """Create a test feature for geocoding."""
+        """Create a test feature for reverse_geocoding."""
         geojson = {
             'type': 'Feature',
             'geometry': {
@@ -92,11 +92,11 @@ class TestBackgroundGeocoding(TransactionTestCase):
         )
         return feature_store
     
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.batch_reverse_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
     def test_background_geocoding_adds_tags(self, mock_batch_reverse_geocode, mock_setting):
-        """Test that background reverse geocoding adds tags to a feature."""
-        # Enable reverse geocoding
+        """Test that background reverse reverse_geocoding adds tags to a feature."""
+        # Enable reverse reverse_geocoding
         mock_setting.return_value = True
         
         # Mock batch_reverse_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
@@ -111,13 +111,13 @@ class TestBackgroundGeocoding(TransactionTestCase):
             )
         }
         
-        # Create feature without geocoding tags
+        # Create feature without reverse_geocoding tags
         feature_store = self._create_test_feature(with_geocoding_tags=False)
         
-        # Start background geocoding
+        # Start background reverse_geocoding
         reverse_geocode_feature_async(feature_store.id)
         
-        # Wait for geocoding to complete
+        # Wait for reverse_geocoding to complete
         expected_tags = ['geo-city:San Francisco', 'geo-state:California', 'geo-country:United States']
         self.assertTrue(
             self._wait_for_geocoding(feature_store.id, expected_tags),
@@ -129,7 +129,7 @@ class TestBackgroundGeocoding(TransactionTestCase):
         geojson = feature_store.geojson
         system_tags = geojson.get('properties', {}).get('system_tags', [])
         
-        # Verify geocoding tags were added
+        # Verify reverse_geocoding tags were added
         self.assertIn('geo-city:San Francisco', system_tags)
         self.assertIn('geo-state:California', system_tags)
         self.assertIn('geo-country:United States', system_tags)
@@ -138,11 +138,11 @@ class TestBackgroundGeocoding(TransactionTestCase):
         self.assertIn('type:point', system_tags)
         self.assertIn('quick-point', system_tags)
     
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.batch_reverse_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
     def test_background_geocoding_handles_errors_gracefully(self, mock_batch_geocode, mock_setting):
-        """Test that background geocoding handles errors without affecting the feature."""
-        # Enable geocoding
+        """Test that background reverse_geocoding handles errors without affecting the feature."""
+        # Enable reverse_geocoding
         mock_setting.return_value = True
         
         # Mock batch_reverse_geocode_coordinates to raise an error
@@ -152,7 +152,7 @@ class TestBackgroundGeocoding(TransactionTestCase):
         feature_store = self._create_test_feature(with_geocoding_tags=False)
         original_geojson = feature_store.geojson.copy()
         
-        # Start background geocoding
+        # Start background reverse_geocoding
         reverse_geocode_feature_async(feature_store.id)
         
         # Wait a bit for the error to be handled (errors are logged but don't modify feature)
@@ -165,20 +165,20 @@ class TestBackgroundGeocoding(TransactionTestCase):
         # Verify feature was not modified (error was handled gracefully)
         self.assertEqual(geojson, original_geojson)
     
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
     def test_background_geocoding_skips_when_disabled(self, mock_setting):
-        """Test that background geocoding does nothing when geocoding is disabled."""
-        # Disable geocoding
+        """Test that background reverse_geocoding does nothing when reverse_geocoding is disabled."""
+        # Disable reverse_geocoding
         mock_setting.return_value = False
         
         # Create feature
         feature_store = self._create_test_feature(with_geocoding_tags=False)
         original_geojson = feature_store.geojson.copy()
         
-        # Start background geocoding
+        # Start background reverse_geocoding
         reverse_geocode_feature_async(feature_store.id)
         
-        # Wait a bit (geocoding is disabled, so nothing should happen)
+        # Wait a bit (reverse_geocoding is disabled, so nothing should happen)
         time.sleep(0.3)
         
         # Refresh from database
@@ -199,10 +199,10 @@ class TestBackgroundGeocoding(TransactionTestCase):
             geojson_normalized['properties'] = geojson_normalized['properties'].copy()
             geojson_normalized['properties']['system_tags'] = sorted(geojson_normalized['properties']['system_tags'])
         
-        self.assertEqual(geojson_normalized, original_geojson_normalized, "Feature should not be modified when geocoding is disabled")
+        self.assertEqual(geojson_normalized, original_geojson_normalized, "Feature should not be modified when reverse_geocoding is disabled")
     
     def test_background_geocoding_handles_nonexistent_feature(self):
-        """Test that background geocoding handles nonexistent feature gracefully."""
+        """Test that background reverse_geocoding handles nonexistent feature gracefully."""
         # Try to geocode a non-existent feature
         reverse_geocode_feature_async(99999)
         
@@ -212,11 +212,11 @@ class TestBackgroundGeocoding(TransactionTestCase):
         # Should not raise any exceptions (error is logged but not raised)
         # This test just verifies it doesn't crash
     
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.batch_reverse_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
     def test_background_geocoding_prevents_duplicate_tags(self, mock_batch_geocode, mock_setting):
-        """Test that background geocoding doesn't add duplicate tags."""
-        # Enable geocoding
+        """Test that background reverse_geocoding doesn't add duplicate tags."""
+        # Enable reverse_geocoding
         mock_setting.return_value = True
         
         # Mock batch_reverse_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
@@ -230,13 +230,13 @@ class TestBackgroundGeocoding(TransactionTestCase):
             )
         }
         
-        # Create feature with one geocoding tag already present
+        # Create feature with one reverse_geocoding tag already present
         feature_store = self._create_test_feature(with_geocoding_tags=True)
         
-        # Start background geocoding
+        # Start background reverse_geocoding
         reverse_geocode_feature_async(feature_store.id)
         
-        # Wait for geocoding to complete
+        # Wait for reverse_geocoding to complete
         expected_tags = ['geo-state:California']
         self.assertTrue(
             self._wait_for_geocoding(feature_store.id, expected_tags),
@@ -257,16 +257,16 @@ class TestBackgroundGeocoding(TransactionTestCase):
         # But new tags should be added
         self.assertIn('geo-state:California', system_tags)
     
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.batch_reverse_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
     def test_background_geocoding_row_locking(self, mock_batch_geocode, mock_setting):
-        """Test that background geocoding uses row locking to prevent race conditions."""
-        # Enable geocoding
+        """Test that background reverse_geocoding uses row locking to prevent race conditions."""
+        # Enable reverse_geocoding
         mock_setting.return_value = True
         
-        # Mock batch_reverse_geocode_coordinates with a delay to simulate slow geocoding
+        # Mock batch_reverse_geocode_coordinates with a delay to simulate slow reverse_geocoding
         def slow_batch_geocode(coordinates):
-            time.sleep(0.1)  # Simulate slow geocoding
+            time.sleep(0.1)  # Simulate slow reverse_geocoding
             # Return dict mapping each coordinate to (tags, log_messages)
             return {coord: (['geo-city:San Francisco'], []) for coord in coordinates}
         
@@ -275,7 +275,7 @@ class TestBackgroundGeocoding(TransactionTestCase):
         # Create feature
         feature_store = self._create_test_feature(with_geocoding_tags=False)
         
-        # Start background geocoding
+        # Start background reverse_geocoding
         reverse_geocode_feature_async(feature_store.id)
         
         # Immediately try to update the feature (simulating concurrent access)
@@ -286,7 +286,7 @@ class TestBackgroundGeocoding(TransactionTestCase):
         feature_store.geojson = geojson
         feature_store.save()
         
-        # Wait for geocoding to complete
+        # Wait for reverse_geocoding to complete
         self.assertTrue(
             self._wait_for_geocoding(feature_store.id, ['geo-city:San Francisco']),
             "Geocoding should complete within timeout"
@@ -316,11 +316,11 @@ class TestSkipReverseGeocodingParameter(TestCase):
             username='tagginguser'
         )
     
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.batch_reverse_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
     def test_generate_auto_tags_skips_reverse_geocoding(self, mock_batch_reverse_geocode, mock_setting):
-        """Test that generate_auto_tags skips reverse geocoding when flag is set."""
-        # Enable reverse geocoding
+        """Test that generate_auto_tags skips reverse reverse_geocoding when flag is set."""
+        # Enable reverse reverse_geocoding
         mock_setting.return_value = True
         
         # Mock batch_reverse_geocode_coordinates
@@ -337,16 +337,16 @@ class TestSkipReverseGeocodingParameter(TestCase):
             properties={'name': 'Test Point', 'geojson_hash': 'test'}
         )
         
-        # Generate tags without skipping reverse geocoding
+        # Generate tags without skipping reverse reverse_geocoding
         tags_with_reverse_geocoding = generate_auto_tags(feature, import_log=ImportLog(), skip_reverse_geocoding=False)
         
-        # Generate tags with reverse geocoding skipped
+        # Generate tags with reverse reverse_geocoding skipped
         tags_without_reverse_geocoding = generate_auto_tags(feature, import_log=ImportLog(), skip_reverse_geocoding=True)
         
-        # Verify reverse geocoding tags are present when not skipped
+        # Verify reverse reverse_geocoding tags are present when not skipped
         self.assertTrue(any('geo-city' in tag for tag in tags_with_reverse_geocoding))
         
-        # Verify reverse geocoding tags are absent when skipped
+        # Verify reverse reverse_geocoding tags are absent when skipped
         self.assertFalse(any('geo-city' in tag for tag in tags_without_reverse_geocoding))
         
         # Verify other tags are still present in both cases

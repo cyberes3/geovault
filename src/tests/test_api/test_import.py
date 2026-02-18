@@ -69,7 +69,7 @@ class TestImportAPI(TransactionTestCase):
         self.assertEqual(data['msg'], 'File uploaded successfully, processing queued')
         
         # Wait for real processing to complete
-        # Use longer timeout to accommodate external services (elevation API, geocoding, etc.)
+        # Use longer timeout to accommodate external services (elevation API, reverse_geocoding, etc.)
         job_id = data['job_id']
         job_status = self._wait_for_job_completion(job_id, timeout=120.0)
         

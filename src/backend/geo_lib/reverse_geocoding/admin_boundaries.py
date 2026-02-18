@@ -6,8 +6,8 @@ administrative boundaries that contain a given coordinate.
 """
 from typing import Dict, Optional, Tuple, List
 
-from geo_lib.geocoding.overpass_api import query_overpass
-from geo_lib.geocoding.osm_tags import get_name_from_tags
+from geo_lib.reverse_geocoding.overpass_api import query_overpass
+from geo_lib.reverse_geocoding.osm_tags import get_name_from_tags
 
 
 def get_admin_hierarchy(latitude: float, longitude: float) -> Tuple[Dict[str, Optional[str]], List[str]]:

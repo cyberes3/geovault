@@ -10,8 +10,8 @@ from pathlib import Path
 from threading import Lock
 from typing import List, Dict, Any
 
-from geo_lib.geocoding.cache import _REVERSE_GEOCODING_CACHE, _get_cache_key
-from geo_lib.geocoding.constants import REVERSE_GEOCODING_CACHE_TTL
+from geo_lib.reverse_geocoding.cache import _REVERSE_GEOCODING_CACHE, _get_cache_key
+from geo_lib.reverse_geocoding.constants import REVERSE_GEOCODING_CACHE_TTL
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.spatial.haversine import haversine_distance_miles
 

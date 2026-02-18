@@ -1,5 +1,5 @@
 /**
- * User location and forward geocoding utilities for map
+ * User location and forward reverse_geocoding utilities for map
  */
 
 /**

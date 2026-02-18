@@ -18,7 +18,7 @@ from extensions.caltopo.src.backend.services.caltopo_api import get_feature, con
 from extensions.caltopo.src.backend.utils.caltopo_helpers import require_caltopo_connection, perform_caltopo_call, VALID_CALTOPO_FEATURE_CLASSES
 from extensions.caltopo.src.backend.utils.rate_limit import caltopo_rate_limit
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.geocoding.background_geocoding import reverse_geocode_feature_async
+from geo_lib.reverse_geocoding.background_geocoding import reverse_geocode_feature_async
 from geo_lib.processing.duplicate_detection.find import _find_hash_duplicates, _find_geometry_duplicates
 from geo_lib.processing.tagging.generate import generate_auto_tags
 from geo_lib.types.validation import match_geometry_class

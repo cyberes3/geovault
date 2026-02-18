@@ -1,5 +1,5 @@
 """
-Tests for geocoding API endpoints.
+Tests for reverse_geocoding API endpoints.
 """
 import json
 import requests
@@ -10,7 +10,7 @@ from django.contrib.auth import get_user_model
 
 
 class TestGeocodingAPI(TestCase):
-    """Test geocoding API endpoints."""
+    """Test reverse_geocoding API endpoints."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -108,13 +108,13 @@ class TestGeocodingAPI(TestCase):
 
         config_loader = get_config_loader()
         if config_loader.get_geocoding_search_mode() != 'maptiler':
-            self.skipTest("MapTiler geocoding backend not enabled (run only when geocoding_search_mode is maptiler)")
+            self.skipTest("MapTiler reverse_geocoding backend not enabled (run only when geocoding_search_mode is maptiler)")
         api_key = config_loader.get_maptiler_api_key()
         if not api_key:
             self.skipTest("MapTiler API key not configured")
 
         # Make a real request to our API endpoint
-        response = self.client.get('/api/geocoding/search/?q=niggerhead rock')
+        response = self.client.get('/api/reverse_geocoding/search/?q=niggerhead rock')
         
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
@@ -138,8 +138,8 @@ class TestGeocodingAPI(TestCase):
                 has_cyrillic = bool(cyrillic_pattern.search(place_name))
                 self.assertFalse(has_cyrillic, f"Feature place_name '{place_name}' contains Cyrillic characters")
 
-    @patch('api.views.services.geocoding.get_config_loader')
-    @patch('api.views.services.geocoding.requests.get')
+    @patch('api.views.services.reverse_geocoding.get_config_loader')
+    @patch('api.views.services.reverse_geocoding.requests.get')
     def test_geocoding_search_rocky_mountain_national_park(self, mock_get, mock_config_loader):
         """Test that searching for 'rocky mountain national park' returns RMNP feature."""
         # Mock config loader to return API key and mode
@@ -165,7 +165,7 @@ class TestGeocodingAPI(TestCase):
         mock_get.side_effect = [mock_admin_response, mock_geo_response, mock_all_response]
 
         # Make request
-        response = self.client.get('/api/geocoding/search/?q=rocky mountain national park')
+        response = self.client.get('/api/reverse_geocoding/search/?q=rocky mountain national park')
 
         # Verify response
         self.assertEqual(response.status_code, 200)
@@ -196,10 +196,10 @@ class TestGeocodingAPI(TestCase):
         self.assertNotIn('context', rmnp_feature)
         self.assertNotIn('place_type', rmnp_feature)
 
-    @patch('api.views.services.geocoding.get_config_loader')
-    @patch('api.views.services.geocoding.requests.get')
+    @patch('api.views.services.reverse_geocoding.get_config_loader')
+    @patch('api.views.services.reverse_geocoding.requests.get')
     def test_geocoding_search_caching(self, mock_get, mock_config_loader):
-        """Test that geocoding results are cached."""
+        """Test that reverse_geocoding results are cached."""
         # Mock config loader to return API key and mode
         mock_config = MagicMock()
         mock_config.get_maptiler_api_key.return_value = 'test_api_key'
@@ -222,7 +222,7 @@ class TestGeocodingAPI(TestCase):
         mock_get.side_effect = [mock_admin_response, mock_geo_response, mock_all_response]
 
         # First request - should call API
-        response1 = self.client.get('/api/geocoding/search/?q=denver')
+        response1 = self.client.get('/api/reverse_geocoding/search/?q=denver')
         self.assertEqual(response1.status_code, 200)
         # Verify API was called
         self.assertEqual(mock_get.call_count, 3)  # Admin + geographic + all types
@@ -231,7 +231,7 @@ class TestGeocodingAPI(TestCase):
         mock_get.reset_mock()
 
         # Second request with same query - should use cache
-        response2 = self.client.get('/api/geocoding/search/?q=denver')
+        response2 = self.client.get('/api/reverse_geocoding/search/?q=denver')
         self.assertEqual(response2.status_code, 200)
         # Verify API was NOT called again (cache hit)
         self.assertEqual(mock_get.call_count, 0)
@@ -241,9 +241,9 @@ class TestGeocodingAPI(TestCase):
         data2 = json.loads(response2.content)
         self.assertEqual(data1, data2)
 
-    @patch('api.views.services.geocoding.get_config_loader')
+    @patch('api.views.services.reverse_geocoding.get_config_loader')
     def test_geocoding_search_no_api_key(self, mock_config_loader):
-        """Test geocoding search when API key is not configured."""
+        """Test reverse_geocoding search when API key is not configured."""
         # Mock config loader: mode maptiler, no API key
         mock_config = MagicMock()
         mock_config.get_geocoding_search_mode.return_value = 'maptiler'
@@ -251,7 +251,7 @@ class TestGeocodingAPI(TestCase):
         mock_config_loader.return_value = mock_config
 
         # Make request
-        response = self.client.get('/api/geocoding/search/?q=denver')
+        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
 
         # Verify error response
         self.assertEqual(response.status_code, 503)
@@ -259,9 +259,9 @@ class TestGeocodingAPI(TestCase):
         self.assertIn('error', data)
         self.assertIn('not available', data['error'].lower())
 
-    @patch('api.views.services.geocoding.get_config_loader')
+    @patch('api.views.services.reverse_geocoding.get_config_loader')
     def test_geocoding_search_missing_query(self, mock_config_loader):
-        """Test geocoding search without query parameter."""
+        """Test reverse_geocoding search without query parameter."""
         # Mock config loader
         mock_config = MagicMock()
         mock_config.get_geocoding_search_mode.return_value = 'maptiler'
@@ -269,7 +269,7 @@ class TestGeocodingAPI(TestCase):
         mock_config_loader.return_value = mock_config
 
         # Make request without query
-        response = self.client.get('/api/geocoding/search/')
+        response = self.client.get('/api/reverse_geocoding/search/')
 
         # Verify error response
         self.assertEqual(response.status_code, 400)
@@ -277,10 +277,10 @@ class TestGeocodingAPI(TestCase):
         self.assertIn('error', data)
         self.assertIn('required', data['error'].lower())
 
-    @patch('api.views.services.geocoding.get_config_loader')
-    @patch('api.views.services.geocoding.requests.get')
+    @patch('api.views.services.reverse_geocoding.get_config_loader')
+    @patch('api.views.services.reverse_geocoding.requests.get')
     def test_geocoding_search_api_error(self, mock_get, mock_config_loader):
-        """Test geocoding search when MapTiler API returns an error."""
+        """Test reverse_geocoding search when MapTiler API returns an error."""
         # Mock config loader to return API key and mode
         mock_config = MagicMock()
         mock_config.get_maptiler_api_key.return_value = 'test_api_key'
@@ -303,17 +303,17 @@ class TestGeocodingAPI(TestCase):
         mock_get.side_effect = [mock_admin_response, mock_geo_response, mock_all_response]
 
         # Make request
-        response = self.client.get('/api/geocoding/search/?q=denver')
+        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
 
         # Should still work with geographic features only
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('features', data['data'])
 
-    @patch('api.views.services.geocoding.get_config_loader')
-    @patch('api.views.services.geocoding.requests.get')
+    @patch('api.views.services.reverse_geocoding.get_config_loader')
+    @patch('api.views.services.reverse_geocoding.requests.get')
     def test_geocoding_search_timeout(self, mock_get, mock_config_loader):
-        """Test geocoding search when API request times out."""
+        """Test reverse_geocoding search when API request times out."""
         # Mock config loader to return API key and mode
         mock_config = MagicMock()
         mock_config.get_maptiler_api_key.return_value = 'test_api_key'
@@ -324,7 +324,7 @@ class TestGeocodingAPI(TestCase):
         mock_get.side_effect = requests.exceptions.Timeout('Request timed out')
 
         # Make request
-        response = self.client.get('/api/geocoding/search/?q=denver')
+        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
 
         # Verify error response
         self.assertEqual(response.status_code, 504)
@@ -332,8 +332,8 @@ class TestGeocodingAPI(TestCase):
         self.assertIn('error', data)
         self.assertIn('timed out', data['error'].lower())
 
-    @patch('api.views.services.geocoding.get_config_loader')
-    @patch('api.views.services.geocoding.requests.get')
+    @patch('api.views.services.reverse_geocoding.get_config_loader')
+    @patch('api.views.services.reverse_geocoding.requests.get')
     def test_geocoding_search_feature_cleaning(self, mock_get, mock_config_loader):
         """Test that features are properly cleaned (unnecessary fields removed)."""
         # Mock config loader to return API key and mode
@@ -358,7 +358,7 @@ class TestGeocodingAPI(TestCase):
         mock_get.side_effect = [mock_admin_response, mock_geo_response, mock_all_response]
 
         # Make request
-        response = self.client.get('/api/geocoding/search/?q=test')
+        response = self.client.get('/api/reverse_geocoding/search/?q=test')
 
         # Verify response
         self.assertEqual(response.status_code, 200)
@@ -391,8 +391,8 @@ class TestGeocodingAPI(TestCase):
                 self.assertNotIn('feature_tags', props)
                 self.assertNotIn('categories', props)
 
-    @patch('api.views.services.geocoding.get_config_loader')
-    @patch('api.views.services.geocoding.requests.get')
+    @patch('api.views.services.reverse_geocoding.get_config_loader')
+    @patch('api.views.services.reverse_geocoding.requests.get')
     def test_geocoding_search_prioritizes_geographic_features(self, mock_get, mock_config_loader):
         """Test that geographic features (parks, POIs) are prioritized over addresses."""
         # Mock config loader to return API key and mode
@@ -417,7 +417,7 @@ class TestGeocodingAPI(TestCase):
         mock_get.side_effect = [mock_admin_response, mock_geo_response, mock_all_response]
 
         # Make request
-        response = self.client.get('/api/geocoding/search/?q=rocky mountain')
+        response = self.client.get('/api/reverse_geocoding/search/?q=rocky mountain')
 
         # Verify response
         self.assertEqual(response.status_code, 200)
@@ -486,8 +486,8 @@ class TestGeocodingAPI(TestCase):
             loader = ConfigLoader(str(path))
             self.assertIsNone(loader.get_geocoding_search_mode())
 
-    @patch('api.views.services.geocoding.get_config_loader')
-    @patch('api.views.services.geocoding.requests.get')
+    @patch('api.views.services.reverse_geocoding.get_config_loader')
+    @patch('api.views.services.reverse_geocoding.requests.get')
     def test_geocoding_search_mode_google_uses_google_backend(self, mock_get, mock_config_loader):
         """With geocoding_search_mode google and Google key configured, view uses Google backend."""
         mock_config = MagicMock()
@@ -519,7 +519,7 @@ class TestGeocodingAPI(TestCase):
         }
         mock_get.return_value = mock_response
 
-        response = self.client.get('/api/geocoding/search/?q=denver')
+        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('data', data)
@@ -534,7 +534,7 @@ class TestGeocodingAPI(TestCase):
         call_args = mock_get.call_args
         self.assertIn('maps.googleapis.com', str(call_args))
 
-    @patch('api.views.services.geocoding.get_config_loader')
+    @patch('api.views.services.reverse_geocoding.get_config_loader')
     def test_geocoding_search_mode_google_no_key_returns_503(self, mock_config_loader):
         """With geocoding_search_mode google and Google API key not configured, view returns 503."""
         mock_config = MagicMock()
@@ -542,21 +542,21 @@ class TestGeocodingAPI(TestCase):
         mock_config.get_google_api_key.return_value = None
         mock_config_loader.return_value = mock_config
 
-        response = self.client.get('/api/geocoding/search/?q=denver')
+        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
         self.assertEqual(response.status_code, 503)
         data = json.loads(response.content)
         self.assertIn('error', data)
         self.assertIn('not available', data['error'].lower())
         self.assertIn('Google', data['error'])
 
-    @patch('api.views.services.geocoding.get_config_loader')
+    @patch('api.views.services.reverse_geocoding.get_config_loader')
     def test_geocoding_search_mode_unset_returns_503(self, mock_config_loader):
         """When geocoding_search_mode is None (missing or unset), view returns 503."""
         mock_config = MagicMock()
         mock_config.get_geocoding_search_mode.return_value = None
         mock_config_loader.return_value = mock_config
 
-        response = self.client.get('/api/geocoding/search/?q=denver')
+        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
         self.assertEqual(response.status_code, 503)
         data = json.loads(response.content)
         self.assertIn('error', data)

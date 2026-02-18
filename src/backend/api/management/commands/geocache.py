@@ -1,10 +1,10 @@
 """
-Management command for managing the reverse geocoding cache.
+Management command for managing the reverse reverse_geocoding cache.
 
 Usage:
     python manage.py geocache list          - List all cached queries
     python manage.py geocache stats         - Show cache statistics
-    python manage.py geocache clear         - Clear all reverse geocoding cache
+    python manage.py geocache clear         - Clear all reverse reverse_geocoding cache
     python manage.py geocache clear <key>   - Clear specific cache key
 """
 
@@ -14,7 +14,7 @@ from django.conf import settings
 
 
 class Command(BaseCommand):
-    help = 'Manage the reverse geocoding cache'
+    help = 'Manage the reverse reverse_geocoding cache'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -44,7 +44,7 @@ class Command(BaseCommand):
         try:
             cache = caches['reverse_geocoding']
         except Exception as e:
-            self.stdout.write(self.style.ERROR(f'Failed to get reverse geocoding cache: {e}'))
+            self.stdout.write(self.style.ERROR(f'Failed to get reverse reverse_geocoding cache: {e}'))
             self.stdout.write(self.style.WARNING('Falling back to default cache'))
             cache = caches['default']
 
@@ -188,8 +188,8 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f'Error clearing key: {e}'))
 
     def _clear_all(self, cache, redis_conn):
-        """Clear all reverse geocoding cache."""
-        confirm = input('Are you sure you want to clear ALL reverse geocoding cache? (yes/no): ')
+        """Clear all reverse reverse_geocoding cache."""
+        confirm = input('Are you sure you want to clear ALL reverse reverse_geocoding cache? (yes/no): ')
         
         if confirm.lower() != 'yes':
             self.stdout.write(self.style.WARNING('Canceled'))
@@ -210,7 +210,7 @@ class Command(BaseCommand):
             else:
                 # For other cache backends, just clear everything
                 cache.clear()
-                self.stdout.write(self.style.SUCCESS('Cleared reverse geocoding cache'))
+                self.stdout.write(self.style.SUCCESS('Cleared reverse reverse_geocoding cache'))
                 
         except Exception as e:
             self.stdout.write(self.style.ERROR(f'Error clearing cache: {e}'))

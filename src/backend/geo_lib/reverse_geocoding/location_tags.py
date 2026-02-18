@@ -1,7 +1,7 @@
 """
 Main public API for generating location tags from coordinates.
 
-This module provides the primary entry point for reverse geocoding:
+This module provides the primary entry point for reverse reverse_geocoding:
 - batch_geocode_coordinates(): Batch process multiple coordinates (RECOMMENDED)
 - get_location_tags(): Generate tags for a single coordinate
 
@@ -16,10 +16,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Tuple, Dict
 
-from geo_lib.geocoding.admin_boundaries import get_admin_hierarchy
-from geo_lib.geocoding.nearby_places import find_nearby_cities, search_nearby_lakes
-from geo_lib.geocoding.protected_areas import get_protected_areas, classify_protected_area
-from geo_lib.geocoding.ski_resorts import search_nearby_ski_resorts
+from geo_lib.reverse_geocoding.admin_boundaries import get_admin_hierarchy
+from geo_lib.reverse_geocoding.nearby_places import find_nearby_cities, search_nearby_lakes
+from geo_lib.reverse_geocoding.protected_areas import get_protected_areas, classify_protected_area
+from geo_lib.reverse_geocoding.ski_resorts import search_nearby_ski_resorts
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.spatial.coordinates import round_coordinate
 
@@ -28,7 +28,7 @@ _logger = get_tagged_logger()
 
 @dataclass
 class ReverseGeocodingLogMessage:
-    """Log message from reverse geocoding operations."""
+    """Log message from reverse reverse_geocoding operations."""
     timestamp: datetime
     message: str
     level: str  # 'INFO', 'WARNING', 'ERROR'
@@ -95,7 +95,7 @@ def get_location_tags(
             # No data returned but also no explicit errors - generic warning
             # If we represent explicit errors, we might skip this generic one to avoid noise
             warning_msg = (
-                f"Reverse geocoding returned no data for coordinates "
+                f"Reverse reverse_geocoding returned no data for coordinates "
                 f"({latitude}, {longitude}) - no matching features found"
             )
             _logger.info(warning_msg) # Downgrade to INFO if no error
@@ -246,7 +246,7 @@ def batch_reverse_geocode_coordinates(
                 tags, log_messages = future.result()
                 results[(lat, lon)] = (tags, log_messages)
             except Exception as e:
-                _logger.error(f"Error reverse geocoding ({lat}, {lon}): {e}")
+                _logger.error(f"Error reverse reverse_geocoding ({lat}, {lon}): {e}")
                 results[(lat, lon)] = ([], [])
 
     # Step 3: Map all original coordinates back to results

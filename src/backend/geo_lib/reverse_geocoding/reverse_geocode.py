@@ -1,5 +1,5 @@
 """
-Backwards-compatibility wrapper for reverse geocoding.
+Backwards-compatibility wrapper for reverse reverse_geocoding.
 
 This module re-exports the new functional API for backwards compatibility.
 All functionality has been refactored into separate modules:
@@ -25,7 +25,7 @@ PUBLIC API:
 """
 
 # Re-export the public API from the new modules
-from geo_lib.geocoding.location_tags import (
+from geo_lib.reverse_geocoding.location_tags import (
     batch_reverse_geocode_coordinates,
     get_location_tags,
     ReverseGeocodingLogMessage,

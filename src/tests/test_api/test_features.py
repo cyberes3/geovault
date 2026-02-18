@@ -1642,14 +1642,14 @@ class TestQuickPointCreation(TestCase):
         self.assertIn('quick-point', system_tags)
     
     @patch('api.views.features.creation._fetch_elevation_for_point')
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.geocoding.location_tags.get_location_tags')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
+    @patch('geo_lib.reverse_geocoding.location_tags.get_location_tags')
     def test_create_quick_point_geocoding_non_blocking(self, mock_get_location_tags, mock_setting, mock_elevation):
-        """Test that quick point creation returns without geocoding tags (geocoding happens in background)."""
+        """Test that quick point creation returns without reverse_geocoding tags (reverse_geocoding happens in background)."""
         mock_elevation.return_value = 1500.0
         mock_setting.return_value = True
         
-        # Mock geocoding service to return tags (but these won't be in response since geocoding is async)
+        # Mock reverse_geocoding service to return tags (but these won't be in response since reverse_geocoding is async)
         # Return format is (tags, log_messages)
         mock_get_location_tags.return_value = (
             ['geo-city:San Francisco', 'geo-state:California'], 
@@ -1679,13 +1679,13 @@ class TestQuickPointCreation(TestCase):
             self.assertIn('database_id', feature['properties'])
             feature_id = feature['properties']['database_id']
             
-            # Verify reverse geocoding tags are NOT in initial response (reverse geocoding happens in background)
-            # This is the key test: if reverse geocoding was blocking, these tags would be present
+            # Verify reverse reverse_geocoding tags are NOT in initial response (reverse reverse_geocoding happens in background)
+            # This is the key test: if reverse reverse_geocoding was blocking, these tags would be present
             system_tags = feature['properties'].get('system_tags', [])
             self.assertNotIn('geo-city:San Francisco', system_tags)
             self.assertNotIn('geo-state:California', system_tags)
             
-            # Verify background reverse geocoding was called (proving it's async, not blocking)
+            # Verify background reverse reverse_geocoding was called (proving it's async, not blocking)
             mock_async_reverse_geocode.assert_called_once_with(feature_id)
             
             # Verify other system tags are present (proving tag generation worked)
@@ -1693,9 +1693,9 @@ class TestQuickPointCreation(TestCase):
             self.assertIn('quick-point', system_tags)
     
     @patch('api.views.features.creation._fetch_elevation_for_point')
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
     def test_create_quick_point_skips_reverse_geocoding_synchronously(self, mock_setting, mock_elevation):
-        """Test that quick point creation skips reverse geocoding in generate_auto_tags."""
+        """Test that quick point creation skips reverse reverse_geocoding in generate_auto_tags."""
         mock_elevation.return_value = 1500.0
         mock_setting.return_value = True
         
@@ -1716,10 +1716,10 @@ class TestQuickPointCreation(TestCase):
             # Verify response is successful
             self.assertEqual(response.status_code, 201)
             
-            # Verify background reverse geocoding was started
+            # Verify background reverse reverse_geocoding was started
             mock_async_reverse_geocode.assert_called_once()
             
-            # Get the feature ID that was passed to background reverse geocoding
+            # Get the feature ID that was passed to background reverse reverse_geocoding
             call_args = mock_async_reverse_geocode.call_args
             feature_id = call_args[0][0]
             
@@ -1729,10 +1729,10 @@ class TestQuickPointCreation(TestCase):
 
 class TestQuickPointCreationBackgroundGeocoding(TransactionTestCase):
     """
-    Tests for quick point creation with actual background geocoding.
+    Tests for quick point creation with actual background reverse_geocoding.
     
     Uses TransactionTestCase instead of TestCase because:
-    1. Background geocoding runs in separate threads
+    1. Background reverse_geocoding runs in separate threads
     2. TestCase wraps tests in transactions that aren't visible to other threads
     3. TransactionTestCase commits data so threads can access it
     """
@@ -1748,10 +1748,10 @@ class TestQuickPointCreationBackgroundGeocoding(TransactionTestCase):
         self.client.force_login(self.user)
     
     @patch('api.views.features.creation._fetch_elevation_for_point')
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.batch_reverse_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
     def test_background_geocoding_adds_tags(self, mock_batch_reverse_geocode, mock_setting, mock_elevation):
-        """Test that background reverse geocoding actually adds tags to the feature."""
+        """Test that background reverse reverse_geocoding actually adds tags to the feature."""
         mock_elevation.return_value = 1500.0
         mock_setting.return_value = True
         
@@ -1789,14 +1789,14 @@ class TestQuickPointCreationBackgroundGeocoding(TransactionTestCase):
         self.assertIn('database_id', feature['properties'])
         feature_id = feature['properties']['database_id']
         
-        # Verify geocoding tags are NOT in initial response
+        # Verify reverse_geocoding tags are NOT in initial response
         system_tags = feature['properties'].get('system_tags', [])
         self.assertNotIn('geo-city:San Francisco', system_tags)
         
-        # Wait for background geocoding to complete
+        # Wait for background reverse_geocoding to complete
         time.sleep(0.5)
         
-        # Verify geocoding tags were added in background
+        # Verify reverse_geocoding tags were added in background
         feature_store = FeatureStore.objects.get(id=feature_id)
         geojson = feature_store.geojson
         updated_system_tags = geojson.get('properties', {}).get('system_tags', [])

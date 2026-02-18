@@ -13,7 +13,7 @@ from api.utils.responses import error_response, success_response
 from api.validation.feature_updates import validate_payload
 from api.views.features.payload import QuickPointCreatePayload
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.geocoding.background_geocoding import reverse_geocode_feature_async
+from geo_lib.reverse_geocoding.background_geocoding import reverse_geocode_feature_async
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.elevation_service import _fetch_elevation_batch_with_retry
 from geo_lib.processing.tagging.generate import generate_auto_tags
@@ -104,7 +104,7 @@ def create_quick_point(request, validated_data):
         normalized_feature['properties'] = {}
     normalized_feature['properties']['geojson_hash'] = geojson_hash
 
-    # Generate system tags using PointFeature type (skip geocoding for async processing)
+    # Generate system tags using PointFeature type (skip reverse_geocoding for async processing)
     from geo_lib.processing.logging import ImportLog
     point_feature = PointFeature(**normalized_feature)
     system_tags = generate_auto_tags(point_feature, import_log=ImportLog(), filename='quick-point', skip_reverse_geocoding=True)
@@ -130,7 +130,7 @@ def create_quick_point(request, validated_data):
         geojson_hash=geojson_hash
     )
 
-    # Start background reverse geocoding (non-blocking)
+    # Start background reverse reverse_geocoding (non-blocking)
     reverse_geocode_feature_async(feature_store.id)
 
     # Add database_id to properties for response

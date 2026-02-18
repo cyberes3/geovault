@@ -141,7 +141,7 @@ class TestLineVsTrackTags(TestCase):
             'properties': {'geojson_hash': 'test123', 'name': 'Regular Line'}
         })
         
-        # Generate all tags (skip geocoding for speed)
+        # Generate all tags (skip reverse_geocoding for speed)
         import_log = ImportLog()
         tags = generate_auto_tags(regular_line, import_log=import_log, skip_reverse_geocoding=True)
         
@@ -166,7 +166,7 @@ class TestLineVsTrackTags(TestCase):
             }
         })
         
-        # Generate all tags (skip geocoding for speed)
+        # Generate all tags (skip reverse_geocoding for speed)
         import_log = ImportLog()
         tags = generate_auto_tags(gpx_track, import_log=import_log, skip_reverse_geocoding=True)
         
@@ -189,7 +189,7 @@ class TestLineVsTrackTags(TestCase):
             }
         })
         
-        # Generate all tags (skip geocoding for speed)
+        # Generate all tags (skip reverse_geocoding for speed)
         import_log = ImportLog()
         tags = generate_auto_tags(gpx_route, import_log=import_log, skip_reverse_geocoding=True)
         
@@ -212,7 +212,7 @@ class TestLineVsTrackTags(TestCase):
             }
         })
         
-        # Generate all tags (skip geocoding for speed)
+        # Generate all tags (skip reverse_geocoding for speed)
         import_log = ImportLog()
         tags = generate_auto_tags(multi_track, import_log=import_log, skip_reverse_geocoding=True)
         

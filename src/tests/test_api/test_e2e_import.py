@@ -238,7 +238,7 @@ class TestE2EImport(TransactionTestCase):
         2. Feature splitting and validation
         3. Elevation data filling
         4. Feature tagging
-        5. Reverse geocoding
+        5. Reverse reverse_geocoding
         """
         # Load test KML file
         kml_content = self._load_test_file('Test Items.kml')
@@ -269,7 +269,7 @@ class TestE2EImport(TransactionTestCase):
                 'KML conversion',  # Step 3: File conversion
                 'Feature splitting and validation',  # Step 4
                 # 'Elevation data filling' is optional (depends on settings)
-                'Tagging and Reverse Geocoding',  # Step 7: All tagging (including reverse geocoding)
+                'Tagging and Reverse Geocoding',  # Step 7: All tagging (including reverse reverse_geocoding)
             ]
             
             for expected_step in expected_timing_steps:
@@ -295,7 +295,7 @@ class TestE2EImport(TransactionTestCase):
             
             if splitting_idx is not None and tagging_idx is not None:
                 self.assertLess(splitting_idx, tagging_idx,
-                              "Feature splitting should happen before tagging and reverse geocoding")
+                              "Feature splitting should happen before tagging and reverse reverse_geocoding")
         
         # Verify the processing produced valid output
         self.assertGreater(len(import_item.geofeatures), 0, "Should have processed features")
@@ -341,16 +341,16 @@ class TestE2EImport(TransactionTestCase):
             # Step 7: Tagging and Reverse Geocoding (combined)
             self.assertTrue(
                 any('Tagging and Reverse Geocoding' in msg or 'tagging' in msg.lower() for msg in log_messages),
-                "Should have tagging and reverse geocoding step in logs"
+                "Should have tagging and reverse reverse_geocoding step in logs"
             )
             
-            # Reverse geocoding is now part of the tagging step, but may be skipped if disabled
-            has_geocoding_step = any('geocoding' in msg.lower() or 'Reverse geocoding' in msg for msg in log_messages)
-            # If geocoding is enabled in settings, it should be present
+            # Reverse reverse_geocoding is now part of the tagging step, but may be skipped if disabled
+            has_geocoding_step = any('reverse_geocoding' in msg.lower() or 'Reverse reverse_geocoding' in msg for msg in log_messages)
+            # If reverse_geocoding is enabled in settings, it should be present
             # Note: We don't fail the test if it's not present, as it may be disabled
             if has_geocoding_step:
                 # If present, verify it's a separate step (not combined with tagging)
-                self.assertTrue(has_geocoding_step, "Reverse geocoding should be a separate step")
+                self.assertTrue(has_geocoding_step, "Reverse reverse_geocoding should be a separate step")
         
         # Verify ImportQueue entry was created with geofeatures
         self.assertEqual(import_item.original_filename, 'Test Items.kml')
@@ -419,7 +419,7 @@ class TestE2EImport(TransactionTestCase):
         # Load test GPX file
         gpx_content = self._load_test_file('blue_hills.gpx')
         
-        # Upload and process (GPX files may take longer due to track processing, elevation, geocoding)
+        # Upload and process (GPX files may take longer due to track processing, elevation, reverse_geocoding)
         process_job_id, item_id, process_status = self._upload_file(gpx_content, 'blue_hills.gpx', timeout=60.0)
         
         # Verify processing succeeded

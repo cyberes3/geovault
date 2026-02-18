@@ -158,7 +158,7 @@ def extract_coordinates_and_timestamps(feature: GeoFeatureSupported) -> Tuple[Li
 class DrivingDetectionTagGenerator(TagGenerator):
     """Detects tracks with driving speeds and generates driving:yes tag."""
 
-    priority = 50  # Execute after track detection (40), before geocoding (60)
+    priority = 50  # Execute after track detection (40), before reverse_geocoding (60)
 
     def __init__(self):
         super().__init__('driving')
