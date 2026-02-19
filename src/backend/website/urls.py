@@ -63,7 +63,10 @@ def serve_extension_static(request, path, **kwargs):
     
     logger.debug(f"Extension static serving: {path} (root: {EXTENSIONS_DIR})")
     kwargs['document_root'] = EXTENSIONS_DIR
-    return serve(request, path, **kwargs)
+    response = serve(request, path, **kwargs)
+    if response.status_code == 200:
+        response['Cache-Control'] = 'public, max-age=31536000, immutable'
+    return response
 
 urlpatterns = [
     path('', index, name='index'),  # Root route

@@ -5,6 +5,7 @@ import tempfile
 import importlib
 from unittest.mock import patch, MagicMock
 from pathlib import Path
+import re
 from website.extensions.extension_loader import ExtensionRegistry, get_extension_registry
 from django.test import TestCase
 import sys
@@ -899,6 +900,65 @@ class TestFrontendAssetDiscovery:
                 meta = registry.loaded_extensions['js_umd_ext']
                 assert '.umd.' in meta['frontend_entry']
                 assert '.iife.' not in meta['frontend_entry']
+
+    def test_frontend_entry_and_css_have_cache_busting_version(self):
+        """Test that frontend_entry and frontend_css URLs include ?v=<12-char hex> for cache busting."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ext_dir = Path(tmpdir)
+            ext_path = ext_dir / 'cache_bust_ext'
+            ext_path.mkdir()
+            manifest_path = ext_path / 'manifest.py'
+            manifest_path.write_text('name = "cache_bust_ext"\nversion = "1.0.0"')
+            backend_path = ext_path / 'src' / 'backend'
+            backend_path.mkdir(parents=True)
+            (backend_path / '__init__.py').write_text('')
+            dist_path = ext_path / 'src' / 'frontend' / 'dist'
+            dist_path.mkdir(parents=True)
+            (dist_path / 'index.umd.js').write_text('// umd bundle')
+            (dist_path / 'index.css').write_text('/* styles */')
+            registry = ExtensionRegistry(ext_dir)
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
+                mock_config = MagicMock()
+                mock_config.get_bool.return_value = True
+                mock_loader_get.return_value = mock_config
+                registry.discover_extensions()
+            meta = registry.loaded_extensions['cache_bust_ext']
+            for url in (meta['frontend_entry'], meta['frontend_css']):
+                assert '?v=' in url, f"Expected ?v= in {url}"
+                suffix = url.split('?v=')[-1]
+                assert re.fullmatch(r'[0-9a-f]{12}', suffix), f"Expected 12-char hex after ?v=, got {suffix!r}"
+
+    def test_static_url_version_changes_with_content(self):
+        """Test that changing file content changes the ?v= hash (deterministic cache busting)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ext_dir = Path(tmpdir)
+            ext_path = ext_dir / 'content_hash_ext'
+            ext_path.mkdir()
+            manifest_path = ext_path / 'manifest.py'
+            manifest_path.write_text('name = "content_hash_ext"\nversion = "1.0.0"')
+            backend_path = ext_path / 'src' / 'backend'
+            backend_path.mkdir(parents=True)
+            (backend_path / '__init__.py').write_text('')
+            dist_path = ext_path / 'src' / 'frontend' / 'dist'
+            dist_path.mkdir(parents=True)
+            js_file = dist_path / 'index.umd.js'
+            js_file.write_text('// version A')
+            registry = ExtensionRegistry(ext_dir)
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
+                mock_config = MagicMock()
+                mock_config.get_bool.return_value = True
+                mock_loader_get.return_value = mock_config
+                registry.discover_extensions()
+            v1 = registry.loaded_extensions['content_hash_ext']['frontend_entry'].split('?v=')[-1]
+            js_file.write_text('// version B')
+            registry2 = ExtensionRegistry(ext_dir)
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
+                mock_config = MagicMock()
+                mock_config.get_bool.return_value = True
+                mock_loader_get.return_value = mock_config
+                registry2.discover_extensions()
+            v2 = registry2.loaded_extensions['content_hash_ext']['frontend_entry'].split('?v=')[-1]
+            assert v1 != v2, "Hash should change when file content changes"
 
     def test_js_file_in_assets_subdirectory(self):
         """Test that JS files in dist/assets/ are discovered."""

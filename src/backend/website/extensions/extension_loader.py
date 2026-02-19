@@ -1,3 +1,4 @@
+import hashlib
 import importlib
 import importlib.util
 import logging
@@ -9,6 +10,16 @@ from website.config_loader import get_config_loader
 from website.extensions.extension_base import ExtensionAppConfig
 
 logger = logging.getLogger('website.extension_loader')
+
+
+def _static_url_with_version(file_path: Path, url_path: str) -> str:
+    """
+    Append a content-based ?v= query string to url_path for cache busting.
+    When the file is rebuilt, the hash changes so browsers fetch the new file.
+    """
+    content = file_path.read_bytes()
+    h = hashlib.sha256(content).hexdigest()[:12]
+    return f"{url_path}?v={h}"
 
 
 def _register_module_with_prefix(short_name: str, full_name: str, module: Any) -> None:
@@ -255,11 +266,13 @@ class ExtensionRegistry:
 
                 js_files.sort(key=js_sort_key)
                 frontend_entry = f"/extensions/static/{kebab_name}/src/frontend/dist/{js_files[0].name}"
+                frontend_entry = _static_url_with_version(dist_path / js_files[0].name, frontend_entry)
             else:
                 assets_dir = dist_path / 'assets'
                 assets_js = list(assets_dir.glob('index*.js')) if assets_dir.exists() else []
                 if assets_js:
                     frontend_entry = f"/extensions/static/{kebab_name}/src/frontend/dist/assets/{assets_js[0].name}"
+                    frontend_entry = _static_url_with_version(assets_dir / assets_js[0].name, frontend_entry)
 
             # 2. Discover CSS entry point
             css_files = list(dist_path.glob('*.css'))
@@ -273,11 +286,13 @@ class ExtensionRegistry:
 
                 css_files.sort(key=css_sort_key)
                 frontend_css = f"/extensions/static/{kebab_name}/src/frontend/dist/{css_files[0].name}"
+                frontend_css = _static_url_with_version(dist_path / css_files[0].name, frontend_css)
             else:
                 assets_dir = dist_path / 'assets'
                 assets_css = list(assets_dir.glob('*.css')) if assets_dir.exists() else []
                 if assets_css:
                     frontend_css = f"/extensions/static/{kebab_name}/src/frontend/dist/assets/{assets_css[0].name}"
+                    frontend_css = _static_url_with_version(assets_dir / assets_css[0].name, frontend_css)
 
         # Check for urls.py
         urls_module = None
