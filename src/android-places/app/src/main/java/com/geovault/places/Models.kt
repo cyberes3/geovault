@@ -32,8 +32,13 @@ data class Properties(
     val address: String? = null
 ) : Parcelable
 
-/** Backend returns { "data": [ { "coordinates": [lng, lat], "place_name": "...", "text": "..."? }, ... ] } */
-data class AddressSearchResponse(val data: List<AddressSearchResult>?)
+/** Backend returns { "data": { "query": "...", "features": [ { "coordinates": [lng, lat], "place_name": "...", "text": "..."? }, ... ] } } */
+data class AddressSearchResponse(val data: GeocodingResponseData?)
+
+data class GeocodingResponseData(
+    val query: String? = null,
+    val features: List<AddressSearchResult>? = null
+)
 
 data class AddressSearchResult(
     val coordinates: List<Double>?,

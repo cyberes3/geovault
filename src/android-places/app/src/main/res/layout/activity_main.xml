@@ -63,7 +63,7 @@
 
         </LinearLayout>
 
-        <!-- Search bar -->
+        <!-- Search bar: same style as new/edit page with X inside the box -->
         <LinearLayout
             android:id="@+id/searchBarContainer"
             android:layout_width="match_parent"
@@ -77,32 +77,44 @@
             android:background="@color/blue_extra_light"
             android:elevation="0dp">
 
-            <EditText
-                android:id="@+id/searchInput"
-                android:layout_width="0dp"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:hint="@string/search_places_hint"
-                android:singleLine="true"
-                android:inputType="text"
-                android:background="@drawable/edit_text_background"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/bg_search_bar_standalone"
                 android:paddingStart="12dp"
-                android:paddingEnd="12dp"
+                android:paddingEnd="4dp"
                 android:paddingTop="8dp"
-                android:paddingBottom="8dp" />
+                android:paddingBottom="8dp">
 
-            <ImageView
-                android:id="@+id/searchClear"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:layout_marginStart="8dp"
-                android:src="@drawable/ic_close"
-                android:contentDescription="@string/close"
-                android:visibility="gone"
-                android:clickable="true"
-                android:focusable="true"
-                app:tint="@color/text_secondary" />
+                <EditText
+                    android:id="@+id/searchInput"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:minHeight="40dp"
+                    android:hint="@string/search_places_hint"
+                    android:singleLine="true"
+                    android:inputType="text"
+                    android:background="@null"
+                    android:padding="0dp"
+                    android:gravity="center_vertical"
+                    android:textSize="14sp" />
 
+                <ImageView
+                    android:id="@+id/searchClear"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/ic_close"
+                    android:contentDescription="@string/close"
+                    android:visibility="gone"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:padding="8dp"
+                    app:tint="@color/text_secondary" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- Search bar divider -->

@@ -8,9 +8,16 @@ import android.location.Location
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.KeyEvent
 import android.view.View
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
+import android.widget.AdapterView
+import android.view.LayoutInflater
+import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.ImageView
+import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
 import com.google.android.material.button.MaterialButton
@@ -55,6 +62,16 @@ class PlaceEditActivity : AppCompatActivity() {
     private lateinit var savingText: TextView
     private lateinit var savingTapHint: TextView
 
+    private lateinit var searchPlaceButton: ImageView
+    private lateinit var searchBarPanel: View
+    private lateinit var searchBarInputRow: View
+    private lateinit var searchPlaceInput: EditText
+    private lateinit var searchPlaceCloseButton: ImageView
+    private lateinit var searchPlaceSpinner: ImageView
+    private lateinit var searchPlaceResults: ListView
+    private lateinit var mapContainer: View
+    private lateinit var searchPlaceRotationHelper: RotationHelper
+
     private var latitude: Double? = null
     private var longitude: Double? = null
     private var storedAddress: String? = null
@@ -67,6 +84,10 @@ class PlaceEditActivity : AppCompatActivity() {
     private var addressSearchCall: Call<AddressSearchResponse>? = null
     private var pendingFeature: Feature? = null
     private var addressSearchRunnable: Runnable? = null
+    private var mapSearchRunnable: Runnable? = null
+    private var mapSearchCall: Call<AddressSearchResponse>? = null
+    private var mapSearchResults: MutableList<AddressSearchResult> = mutableListOf()
+    private lateinit var mapSearchAdapter: android.widget.BaseAdapter
     private lateinit var fusedLocationClient: FusedLocationProviderClient
 
     private lateinit var locationRotationHelper: RotationHelper
@@ -168,6 +189,36 @@ class PlaceEditActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.closeButton).setOnClickListener { tryFinish() }
         findViewById<View>(R.id.cancelButton).setOnClickListener { tryFinish() }
+
+        searchPlaceButton = findViewById(R.id.searchPlaceButton)
+        searchBarPanel = findViewById(R.id.searchBarPanel)
+        searchBarInputRow = findViewById(R.id.searchBarInputRow)
+        searchPlaceInput = findViewById(R.id.searchPlaceInput)
+        searchPlaceCloseButton = findViewById(R.id.searchPlaceCloseButton)
+        searchPlaceSpinner = findViewById(R.id.searchPlaceSpinner)
+        searchPlaceResults = findViewById(R.id.searchPlaceResults)
+        mapContainer = findViewById(R.id.mapContainer)
+        searchPlaceRotationHelper = RotationHelper(searchPlaceSpinner)
+
+        mapSearchAdapter = object : android.widget.BaseAdapter() {
+            override fun getCount(): Int = mapSearchResults.size
+            override fun getItem(position: Int): AddressSearchResult = mapSearchResults[position]
+            override fun getItemId(position: Int): Long = position.toLong()
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                val view = convertView ?: LayoutInflater.from(this@PlaceEditActivity)
+                    .inflate(R.layout.item_search_result, parent, false)
+                val result = mapSearchResults[position]
+                val title = view.findViewById<TextView>(R.id.searchResultTitle)
+                val subtitle = view.findViewById<TextView>(R.id.searchResultSubtitle)
+                title.text = result.text ?: result.place_name ?: ""
+                val sub = result.place_name?.takeIf { it != title.text }
+                subtitle.text = sub
+                subtitle.visibility = if (sub.isNullOrBlank()) View.GONE else View.VISIBLE
+                return view
+            }
+        }
+        searchPlaceResults.adapter = mapSearchAdapter
+        setupMapSearch()
     }
 
     private fun setupWindowInsets() {
@@ -179,8 +230,10 @@ class PlaceEditActivity : AppCompatActivity() {
             
             headerView.updatePadding(top = systemBars.top + 20)
             
-            // Apply the larger of the two bottom insets (navigation bar or keyboard)
-            val bottomInset = if (ime.bottom > systemBars.bottom) ime.bottom else systemBars.bottom
+            // When focus is in the map search box, don't push the form up (ignore IME inset).
+            // Otherwise use the larger of navigation bar or keyboard.
+            val bottomInset = if (searchPlaceInput.hasFocus()) systemBars.bottom
+                else if (ime.bottom > systemBars.bottom) ime.bottom else systemBars.bottom
             view.updatePadding(bottom = bottomInset)
             
             windowInsets
@@ -243,6 +296,165 @@ class PlaceEditActivity : AppCompatActivity() {
             checkLocationPermissionAndGet()
         }
         saveButton.setOnClickListener { savePlace() }
+    }
+
+    private fun setupMapSearch() {
+        searchPlaceButton.setOnClickListener {
+            searchBarPanel.visibility = View.VISIBLE
+            searchPlaceResults.visibility = View.GONE
+            searchPlaceInput.requestFocus()
+            ViewCompat.requestApplyInsets(findViewById(R.id.rootLayout))
+            (getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+                ?.showSoftInput(searchPlaceInput, InputMethodManager.SHOW_IMPLICIT)
+        }
+        searchPlaceCloseButton.setOnClickListener { closeSearchBar() }
+        searchPlaceInput.setOnEditorActionListener { _, actionId, event ->
+            if (actionId == EditorInfo.IME_ACTION_SEARCH ||
+                (event != null && event.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)) {
+                handler.post { performMapSearch() }
+                true
+            } else false
+        }
+        searchPlaceInput.setOnFocusChangeListener { _, _ ->
+            ViewCompat.requestApplyInsets(findViewById(R.id.rootLayout))
+        }
+        searchPlaceInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                mapSearchRunnable?.let { handler.removeCallbacks(it) }
+                mapSearchRunnable = null
+                mapSearchCall?.cancel()
+                mapSearchCall = null
+                searchPlaceRotationHelper.stop()
+                val query = searchPlaceInput.text.toString().trim()
+                if (query.isEmpty()) {
+                    mapSearchResults.clear()
+                    mapSearchAdapter.notifyDataSetChanged()
+                    searchPlaceResults.visibility = View.GONE
+                    setSearchBarCornersForResults(false)
+                    return
+                }
+                val r = Runnable { performMapSearch() }
+                mapSearchRunnable = r
+                handler.postDelayed(r, 300)
+            }
+        })
+        searchPlaceResults.onItemClickListener = AdapterView.OnItemClickListener { _, _, position, _ ->
+            val result = mapSearchResults.getOrNull(position) ?: return@OnItemClickListener
+            applyMapSearchResult(result)
+        }
+    }
+
+    private fun performMapSearch() {
+        mapSearchRunnable = null
+        val query = searchPlaceInput.text.toString().trim()
+        if (query.isEmpty()) return
+        val parsed = CoordinateParser.parse(query)
+        if (parsed != null) {
+            val (lat, lon) = parsed
+            val synthetic = AddressSearchResult(
+                coordinates = listOf(lon, lat),
+                place_name = "Coordinates: ${String.format("%.6f", lat)}°, ${String.format("%.6f", lon)}°",
+                text = null
+            )
+            mapSearchResults.clear()
+            mapSearchResults.add(synthetic)
+            mapSearchAdapter.notifyDataSetChanged()
+            setSearchBarCornersForResults(true)
+            searchPlaceResults.visibility = View.VISIBLE
+            searchPlaceResults.post { updateSearchResultsListHeight() }
+            return
+        }
+        val serverUrl = prefs.getString("server_url", "") ?: ""
+        val apiKey = prefs.getString("api_key", "") ?: ""
+        if (serverUrl.isEmpty()) {
+            mapSearchResults.clear()
+            mapSearchAdapter.notifyDataSetChanged()
+            searchPlaceResults.visibility = View.GONE
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(baseUrl, apiKey).create(GeovaultApi::class.java)
+        mapSearchCall = api.geocodingSearch(query)
+        searchPlaceRotationHelper.start()
+        mapSearchCall!!.enqueue(object : Callback<AddressSearchResponse> {
+            override fun onResponse(call: Call<AddressSearchResponse>, response: Response<AddressSearchResponse>) {
+                mapSearchCall = null
+                searchPlaceRotationHelper.stop()
+                if (call.isCanceled) return
+                val features = response.body()?.data?.features
+                mapSearchResults.clear()
+                if (!features.isNullOrEmpty()) mapSearchResults.addAll(features)
+                mapSearchAdapter.notifyDataSetChanged()
+                if (mapSearchResults.isEmpty()) {
+                    setSearchBarCornersForResults(false)
+                    searchPlaceResults.visibility = View.GONE
+                } else {
+                    setSearchBarCornersForResults(true)
+                    searchPlaceResults.visibility = View.VISIBLE
+                    searchPlaceResults.post { updateSearchResultsListHeight() }
+                }
+            }
+            override fun onFailure(call: Call<AddressSearchResponse>, t: Throwable) {
+                mapSearchCall = null
+                searchPlaceRotationHelper.stop()
+                if (call.isCanceled) return
+                mapSearchResults.clear()
+                mapSearchAdapter.notifyDataSetChanged()
+                setSearchBarCornersForResults(false)
+                searchPlaceResults.visibility = View.GONE
+            }
+        })
+    }
+
+    private fun applyMapSearchResult(result: AddressSearchResult) {
+        val coords = result.coordinates
+        if (coords == null || coords.size < 2) return
+        val lon = coords[0]
+        val lat = coords[1]
+        val displayText = result.place_name ?: result.text
+        updateCoords(lat, lon, displayText)
+        map.controller.animateTo(GeoPoint(lat, lon))
+        map.controller.setZoom(15.0)
+        closeSearchBar()
+    }
+
+    private fun closeSearchBar() {
+        searchPlaceInput.setText("")
+        searchPlaceInput.clearFocus()
+        mapSearchResults.clear()
+        mapSearchAdapter.notifyDataSetChanged()
+        setSearchBarCornersForResults(false)
+        searchBarPanel.visibility = View.GONE
+        searchPlaceResults.visibility = View.GONE
+        (getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+            ?.hideSoftInputFromWindow(searchPlaceInput.windowToken, 0)
+        ViewCompat.requestApplyInsets(findViewById(R.id.rootLayout))
+    }
+
+    private fun setSearchBarCornersForResults(visible: Boolean) {
+        searchBarInputRow.background = ContextCompat.getDrawable(
+            this,
+            if (visible) R.drawable.bg_search_bar_top_rounded else R.drawable.bg_search_bar_standalone
+        )
+    }
+
+    private fun updateSearchResultsListHeight() {
+        val count = mapSearchResults.size
+        if (count == 0) return
+        val rowHeightPx = (56 * resources.displayMetrics.density).toInt()
+        val contentHeight = count * rowHeightPx
+        val availableHeight = if (mapContainer.height > 0 && searchBarInputRow.height > 0) {
+            val panelPadding = searchBarPanel.paddingTop + searchBarPanel.paddingBottom
+            (mapContainer.height - searchBarInputRow.height - panelPadding - 24).coerceAtLeast(0)
+        } else {
+            (220 * resources.displayMetrics.density).toInt()
+        }
+        val height = contentHeight.coerceAtMost(availableHeight).coerceAtLeast(rowHeightPx)
+        val params = searchPlaceResults.layoutParams ?: return
+        params.height = height
+        searchPlaceResults.requestLayout()
     }
 
     private fun validateCoordinatesFromInput() {
@@ -320,9 +532,9 @@ class PlaceEditActivity : AppCompatActivity() {
                     validateForm()
                     return
                 }
-                val data = response.body()?.data
-                if (!data.isNullOrEmpty()) {
-                    val first = data[0]
+                val features = response.body()?.data?.features
+                if (!features.isNullOrEmpty()) {
+                    val first = features[0]
                     val coords = first.coordinates
                     if (coords != null && coords.size >= 2) {
                         val lat = coords[1]
@@ -630,6 +842,11 @@ class PlaceEditActivity : AppCompatActivity() {
         addressSearchRunnable = null
         addressSearchCall?.cancel()
         addressSearchCall = null
+        mapSearchRunnable?.let { handler.removeCallbacks(it) }
+        mapSearchRunnable = null
+        mapSearchCall?.cancel()
+        mapSearchCall = null
+        searchPlaceRotationHelper.stop()
         locationRotationHelper.stop()
         savingRotationHelper.stop()
         map.onPause()

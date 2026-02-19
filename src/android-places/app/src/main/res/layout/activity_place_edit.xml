@@ -52,15 +52,117 @@
         android:orientation="horizontal"
         app:layout_constraintGuide_percent="0.34" />
 
-    <!-- Map: Takes remaining space (above guideline or above form) -->
-    <org.osmdroid.views.MapView
-        android:id="@+id/map"
+    <!-- Map container with overlay for search -->
+    <FrameLayout
+        android:id="@+id/mapContainer"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:clickable="true"
-        android:focusable="true"
         app:layout_constraintTop_toBottomOf="@id/headerLayout"
-        app:layout_constraintBottom_toTopOf="@id/nestedScrollView" />
+        app:layout_constraintBottom_toTopOf="@id/nestedScrollView">
+
+        <org.osmdroid.views.MapView
+            android:id="@+id/map"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <!-- Search icon button: top-right of map -->
+        <ImageView
+            android:id="@+id/searchPlaceButton"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="8dp"
+            android:src="@drawable/ic_search"
+            android:contentDescription="Search place"
+            app:tint="@color/primary_blue"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="8dp" />
+
+        <!-- Search bar panel (hidden by default) -->
+        <LinearLayout
+            android:id="@+id/searchBarPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            android:orientation="vertical"
+            android:visibility="gone"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="4dp">
+
+            <LinearLayout
+                android:id="@+id/searchBarInputRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/bg_search_bar_standalone"
+                android:paddingStart="12dp"
+                android:paddingEnd="4dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp">
+
+                <EditText
+                    android:id="@+id/searchPlaceInput"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="Search..."
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:imeOptions="actionSearch"
+                    android:background="@null"
+                    android:textSize="14sp"
+                    android:padding="0dp" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <ImageView
+                        android:id="@+id/searchPlaceSpinner"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:src="@drawable/ic_location_spinner"
+                        android:contentDescription="Searching"
+                        android:visibility="gone"
+                        app:tint="@color/spinner_blue"
+                        android:padding="8dp" />
+
+                    <ImageView
+                        android:id="@+id/searchPlaceCloseButton"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:src="@drawable/ic_close"
+                        android:contentDescription="Clear and close"
+                        app:tint="@color/text_secondary"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:padding="8dp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Results list: height set in code to fit content and stay inside map; -1dp overlap to avoid double border -->
+            <ListView
+                android:id="@+id/searchPlaceResults"
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="-1dp"
+                android:visibility="gone"
+                android:background="@drawable/bg_search_results_bottom_rounded"
+                android:divider="@android:color/transparent"
+                android:dividerHeight="0dp" />
+        </LinearLayout>
+    </FrameLayout>
 
     <!-- Form: Fits content, up to 66% height (enforced by guideline + constraints) -->
     <androidx.core.widget.NestedScrollView
