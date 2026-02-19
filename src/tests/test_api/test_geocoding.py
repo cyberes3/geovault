@@ -212,7 +212,7 @@ class TestGeocodingAPI(TestCase):
         mock_config.get_google_api_key.return_value = None
         _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
 
-        response = self.client.get('/api/reverse_geocoding/search/?q=niggerhead rock')
+        response = self.client.get('/api/geocoding/search/?q=niggerhead rock')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self._assert_no_cyrillic_in_search_results(data)
@@ -235,7 +235,7 @@ class TestGeocodingAPI(TestCase):
         mock_config.get_maptiler_api_key.return_value = None
         _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
 
-        response = self.client.get('/api/reverse_geocoding/search/?q=niggerhead rock')
+        response = self.client.get('/api/geocoding/search/?q=niggerhead rock')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self._assert_no_cyrillic_in_search_results(data)
@@ -264,7 +264,7 @@ class TestGeocodingAPI(TestCase):
         mock_all.json.return_value = self._create_mock_all_types_response()
         mock_get.side_effect = [mock_admin, mock_geo, mock_all]
 
-        response = self.client.get('/api/reverse_geocoding/search/?q=rocky mountain national park')
+        response = self.client.get('/api/geocoding/search/?q=rocky mountain national park')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self._assert_search_response_contract(data, 'rocky mountain national park')
@@ -293,7 +293,7 @@ class TestGeocodingAPI(TestCase):
         mock_get.side_effect = None
         mock_get.return_value = mock_resp
 
-        response = self.client.get('/api/reverse_geocoding/search/?q=rocky mountain national park')
+        response = self.client.get('/api/geocoding/search/?q=rocky mountain national park')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self._assert_search_response_contract(data, 'rocky mountain national park')
@@ -327,12 +327,12 @@ class TestGeocodingAPI(TestCase):
         mock_all.json.return_value = self._create_mock_all_types_response()
         mock_get.side_effect = [mock_admin, mock_geo, mock_all]
 
-        response1 = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        response1 = self.client.get('/api/geocoding/search/?q=denver')
         self.assertEqual(response1.status_code, 200)
         self.assertEqual(mock_get.call_count, 3)
 
         mock_get.reset_mock()
-        response2 = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        response2 = self.client.get('/api/geocoding/search/?q=denver')
         self.assertEqual(response2.status_code, 200)
         self.assertEqual(mock_get.call_count, 0, msg="cache hit on second request")
 
@@ -358,12 +358,12 @@ class TestGeocodingAPI(TestCase):
         mock_get.side_effect = None
         mock_get.return_value = mock_resp
 
-        response1 = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        response1 = self.client.get('/api/geocoding/search/?q=denver')
         self.assertEqual(response1.status_code, 200)
         self.assertEqual(mock_get.call_count, 1)
 
         mock_get.reset_mock()
-        response2 = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        response2 = self.client.get('/api/geocoding/search/?q=denver')
         self.assertEqual(response2.status_code, 200)
         self.assertEqual(mock_get.call_count, 0, msg="cache hit on second request")
 
@@ -381,7 +381,7 @@ class TestGeocodingAPI(TestCase):
         mock_config.get_google_api_key.return_value = 'x'
         _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
 
-        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        response = self.client.get('/api/geocoding/search/?q=denver')
         self.assertEqual(response.status_code, 503)
         data = json.loads(response.content)
         self.assertIn('error', data)
@@ -400,7 +400,7 @@ class TestGeocodingAPI(TestCase):
         mock_config.get_google_api_key.return_value = None
         _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
 
-        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        response = self.client.get('/api/geocoding/search/?q=denver')
         self.assertEqual(response.status_code, 503)
         data = json.loads(response.content)
         self.assertIn('error', data)
@@ -418,7 +418,7 @@ class TestGeocodingAPI(TestCase):
         mock_config.get_maptiler_api_key.return_value = 'test_api_key'
         _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
 
-        response = self.client.get('/api/reverse_geocoding/search/')
+        response = self.client.get('/api/geocoding/search/')
         self.assertEqual(response.status_code, 400)
         data = json.loads(response.content)
         self.assertIn('error', data)
@@ -447,7 +447,7 @@ class TestGeocodingAPI(TestCase):
         mock_all.status_code = 400
         mock_all.text = 'ERR_VALIDATION: Invalid parameter'
         mock_get.side_effect = [mock_admin, mock_geo, mock_all]
-        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        response = self.client.get('/api/geocoding/search/?q=denver')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('features', data['data'])
@@ -470,7 +470,7 @@ class TestGeocodingAPI(TestCase):
         mock_resp.json.return_value = {'status': 'OVER_QUERY_LIMIT', 'error_message': 'Quota exceeded'}
         mock_get.side_effect = None
         mock_get.return_value = mock_resp
-        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        response = self.client.get('/api/geocoding/search/?q=denver')
         self.assertEqual(response.status_code, 400)
         data = json.loads(response.content)
         self.assertIn('error', data)
@@ -489,7 +489,7 @@ class TestGeocodingAPI(TestCase):
         _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
 
         mock_get.side_effect = requests.exceptions.Timeout('Request timed out')
-        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        response = self.client.get('/api/geocoding/search/?q=denver')
         self.assertEqual(response.status_code, 504)
         data = json.loads(response.content)
         self.assertIn('error', data)
@@ -509,7 +509,7 @@ class TestGeocodingAPI(TestCase):
         _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
 
         mock_get.side_effect = requests.exceptions.Timeout('Request timed out')
-        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        response = self.client.get('/api/geocoding/search/?q=denver')
         self.assertEqual(response.status_code, 504)
         data = json.loads(response.content)
         self.assertIn('error', data)
@@ -539,7 +539,7 @@ class TestGeocodingAPI(TestCase):
         mock_all.json.return_value = self._create_mock_all_types_response()
         mock_get.side_effect = [mock_admin, mock_geo, mock_all]
 
-        response = self.client.get('/api/reverse_geocoding/search/?q=test')
+        response = self.client.get('/api/geocoding/search/?q=test')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self._assert_search_response_contract(data, 'test')
@@ -574,7 +574,7 @@ class TestGeocodingAPI(TestCase):
         mock_get.side_effect = None
         mock_get.return_value = mock_resp
 
-        response = self.client.get('/api/reverse_geocoding/search/?q=test')
+        response = self.client.get('/api/geocoding/search/?q=test')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self._assert_search_response_contract(data, 'test')
@@ -614,7 +614,7 @@ class TestGeocodingAPI(TestCase):
         mock_all.json.return_value = self._create_mock_all_types_response()
         mock_get.side_effect = [mock_admin, mock_geo, mock_all]
 
-        response = self.client.get('/api/reverse_geocoding/search/?q=rocky mountain')
+        response = self.client.get('/api/geocoding/search/?q=rocky mountain')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self._assert_search_response_contract(data, 'rocky mountain')
@@ -645,7 +645,7 @@ class TestGeocodingAPI(TestCase):
         mock_get.side_effect = None
         mock_get.return_value = mock_resp
 
-        response = self.client.get('/api/reverse_geocoding/search/?q=rocky mountain')
+        response = self.client.get('/api/geocoding/search/?q=rocky mountain')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self._assert_search_response_contract(data, 'rocky mountain')
@@ -739,7 +739,7 @@ class TestGeocodingAPI(TestCase):
         }
         mock_get.return_value = mock_response
 
-        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        response = self.client.get('/api/geocoding/search/?q=denver')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('data', data)
@@ -764,7 +764,7 @@ class TestGeocodingAPI(TestCase):
         mock_config.get_google_api_key.return_value = None
         _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
 
-        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        response = self.client.get('/api/geocoding/search/?q=denver')
         self.assertEqual(response.status_code, 503)
         data = json.loads(response.content)
         self.assertIn('error', data)
@@ -781,7 +781,7 @@ class TestGeocodingAPI(TestCase):
         mock_config.get_geocoding_search_mode.return_value = None
         _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
 
-        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        response = self.client.get('/api/geocoding/search/?q=denver')
         self.assertEqual(response.status_code, 503)
         data = json.loads(response.content)
         self.assertIn('error', data)

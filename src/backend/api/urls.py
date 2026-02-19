@@ -164,7 +164,7 @@ urlpatterns = [
     path('tiles/<str:service>/<int:z>/<int:x>/<int:y>', tile_proxy),
 
     # Geocoding API endpoints
-    path('reverse_geocoding/search/', geocoding_search),
+    path('geocoding/search/', geocoding_search),
 
     # Extensions API endpoints
     path('extensions/', list_extensions),

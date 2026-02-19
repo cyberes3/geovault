@@ -102,35 +102,36 @@ def delete_api_key(request, key_id):
         }, status=500)
 
 
+# Generic message for auth failures so we don't leak whether the key was missing or invalid
+VALIDATE_API_KEY_UNAUTHORIZED_MESSAGE = 'Invalid or missing credentials'
+
+
 @api_or_login_required_401(allow_api_keys=True)
 @require_http_methods(["POST"])
 def validate_api_key_endpoint(request):
     """
     Validate an API key.
     Can be called by either a logged-in user or by a client presenting an API key.
+    Returns 401 with a generic message for missing or invalid key (no information leakage).
     """
     try:
-        # Get the API key from the Authorization header
         auth_header = request.META.get('HTTP_AUTHORIZATION', '')
         if not auth_header.startswith('Bearer '):
             return JsonResponse({
-                'valid': False,
-                'error': 'No API key provided'
-            }, status=400)
-        
-        token = auth_header[7:].strip()  # Remove 'Bearer ' prefix
-        
-        # Validate the key
+                'error': VALIDATE_API_KEY_UNAUTHORIZED_MESSAGE
+            }, status=401)
+
+        token = auth_header[7:].strip()
+
         result = validate_api_key(token)
-        
+
         if result is None:
             return JsonResponse({
-                'valid': False
-            })
-        
+                'error': VALIDATE_API_KEY_UNAUTHORIZED_MESSAGE
+            }, status=401)
+
         user, api_key = result
-        
-        # Return key info (but not the raw key)
+
         return JsonResponse({
             'valid': True,
             'key_name': api_key.name,

@@ -10,6 +10,7 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.tile_sources.registry import get_all_tile_sources
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
+from users.api_keys import validate_api_key
 from users.models import UserProfile
 
 _logger = get_tagged_logger()
@@ -99,10 +100,11 @@ class LoggingMiddleware:
         # Log API requests and errors
         if request.path.startswith('/api/'):
             query_string = request.GET.urlencode()
+            api_key_suffix = ' (API KEY)' if getattr(request, 'is_api_authenticated', False) else ''
             if query_string:
-                log_msg = f"{request.method} {request.path}?{query_string} - {user_identifier}@{client_ip}"
+                log_msg = f"{request.method} {request.path}?{query_string} - {user_identifier}@{client_ip}{api_key_suffix}"
             else:
-                log_msg = f"{request.method} {request.path} - {user_identifier}@{client_ip}"
+                log_msg = f"{request.method} {request.path} - {user_identifier}@{client_ip}{api_key_suffix}"
 
             if response.status_code >= 400:
                 # Log errors with status
@@ -155,6 +157,31 @@ class LoggingMiddleware:
                     _logger.info(log_msg)
 
         return response
+
+
+class APIKeyResolutionMiddleware:
+    """
+    Resolve API key from Bearer token for /api/ requests when user is not yet authenticated.
+    Sets request.user, request.api_key, and request.is_api_authenticated so logging and
+    view decorators see the correct user (e.g. for 404s and other responses before the view).
+    Validates the key and updates last_used_at in one place (2 DB ops per API-key request).
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.path.startswith('/api/'):
+            auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+            if auth_header.startswith('Bearer ') and not request.user.is_authenticated:
+                token = auth_header[7:].strip()
+                result = validate_api_key(token)
+                if result is not None:
+                    user, api_key = result
+                    request.user = user
+                    request.api_key = api_key
+                    request.is_api_authenticated = True
+        return self.get_response(request)
 
 
 class ActivityTrackingMiddleware:

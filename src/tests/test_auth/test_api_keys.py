@@ -162,16 +162,16 @@ class TestAPIKeys(TestCase):
         self.assertEqual(data['key_name'], 'Test Key')
 
     def test_validate_api_key_endpoint_invalid(self):
-        """Test API key validation endpoint with invalid key."""
-        # Endpoint requires authentication, so login first
+        """Test API key validation endpoint with invalid key returns 401 and generic message."""
         self.client.force_login(self.user)
         response = self.client.post(
             '/api/user/api-keys/validate/',
             HTTP_AUTHORIZATION='Bearer invalid-key'
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 401)
         data = json.loads(response.content)
-        self.assertFalse(data['valid'])
+        self.assertIn('error', data)
+        self.assertEqual(data['error'], 'Invalid or missing credentials')
 
     def test_api_key_prefix_uniqueness(self):
         """Test that API key prefixes are unique per user."""
