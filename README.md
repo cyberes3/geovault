@@ -62,7 +62,7 @@ Android's share intent.
 Places app to make it easy to manage and navigate to your bookmarked places. Supports offline usage.
 
 The website also supports PWA installation and can even be set up for the automated compilation of
-WebView APKs without Google's minting service
+WebView APKs without Google's minting service (useful for GrapheneOS).
 
 Compiled APKs available here: <https://git.evulid.cc/cyberes/geovault-app-release/releases>
 

@@ -6,7 +6,13 @@ from unittest.mock import patch
 from geo_lib.processing.icons.icon_manager import (
     _process_single_icon_href
 )
-from geo_lib.processing.icons.caltopo import _fix_nested_caltopo_url, _is_caltopo_point_icon, _extract_color_from_caltopo_url
+from geo_lib.processing.icons.caltopo import (
+    _fix_nested_caltopo_url,
+    _is_allowed_caltopo_netloc,
+    _is_caltopo_point_icon,
+    _is_caltopo_url,
+    _extract_color_from_caltopo_url,
+)
 from geo_lib.processing.logging import ImportLog
 
 
@@ -132,6 +138,69 @@ class TestCalTopoIconDetection:
         url = "http://caltopo.com/icon.png?cfg="
         assert _is_caltopo_point_icon(url) is False
         assert _extract_color_from_caltopo_url(url) is None
+
+
+class TestCalTopoSecurityRejectBadDomains:
+    """Security tests: system must correctly reject bad domains."""
+
+    def test_lookalike_host_not_caltopo(self):
+        """Lookalike host caltopo.com.evil.com must not be treated as CalTopo."""
+        url = "https://caltopo.com.evil.com/icon.png?cfg=point"
+        assert _is_caltopo_url(url) is False
+        assert _is_caltopo_point_icon(url) is False
+        assert _extract_color_from_caltopo_url(url) is None
+        assert _fix_nested_caltopo_url(url) == url
+
+    def test_malicious_cfg_substring_only_returns_original(self):
+        """cfg with evil.com URL containing caltopo as substring must not extract inner URL."""
+        # Outer URL is caltopo.com; cfg decodes to http://evil.com?x=http://caltopo.com
+        malicious = "http://caltopo.com/icon.png?cfg=" + "http%3A%2F%2Fevil.com%3Fx%3Dhttp%3A%2F%2Fcaltopo.com"
+        result = _fix_nested_caltopo_url(malicious)
+        assert result == malicious
+
+    def test_malicious_cfg_lookalike_host_returns_original(self):
+        """If cfg contains a URL with host caltopo.com.evil.com, regex may match but validation rejects."""
+        # cfg decodes to http://caltopo.com.evil.com/icon.png?cfg=point
+        # Regex matches; parsed netloc is caltopo.com.evil.com -> _is_allowed_caltopo_netloc False
+        malicious = "http://caltopo.com/icon.png?cfg=" + "http%3A%2F%2Fcaltopo.com.evil.com%2Ficon.png%3Fcfg%3Dpoint"
+        result = _fix_nested_caltopo_url(malicious)
+        assert result == malicious
+
+    def test_unrelated_domain_not_caltopo(self):
+        """Unrelated domain must not be a CalTopo URL."""
+        url = "https://evil.com/icon.png?cfg=point"
+        assert _is_caltopo_url(url) is False
+        assert _is_caltopo_point_icon(url) is False
+        assert _extract_color_from_caltopo_url(url) is None
+        assert _fix_nested_caltopo_url(url) == url
+
+    def test_empty_netloc_rejected(self):
+        """Empty or missing netloc must not be treated as CalTopo."""
+        assert _is_allowed_caltopo_netloc('') is False
+        # URL with no netloc
+        url = "http:///icon.png?cfg=point"
+        assert _is_caltopo_url(url) is False
+        assert _extract_color_from_caltopo_url(url) is None
+
+
+class TestCalTopoSecurityAllowGoodDomains:
+    """Security tests: system must correctly allow good domains."""
+
+    def test_subdomain_allowed(self):
+        """api.caltopo.com (subdomain) must be considered CalTopo URL."""
+        url = "https://api.caltopo.com/icon.png?cfg=point"
+        assert _is_caltopo_url(url) is True
+        assert _is_caltopo_point_icon(url) is True
+        assert _fix_nested_caltopo_url(url) == url
+
+    def test_valid_nested_still_extracts(self):
+        """Valid nested CalTopo URLs still extract inner URL (existing behavior)."""
+        nested_url = "http://caltopo.com/icon.png?cfg=http%3A%2F%2Fcaltopo.com%2Ficon.png%3Fcfg%3Dpoint%252CFF0000%25231.0"
+        fixed_url = _fix_nested_caltopo_url(nested_url)
+        assert fixed_url != nested_url
+        assert "point" in fixed_url or "FF0000" in fixed_url
+        assert _is_caltopo_point_icon(fixed_url) is True
+        assert _extract_color_from_caltopo_url(fixed_url) == "#FF0000"
 
 
 class TestCalTopoIconProcessingIntegration:

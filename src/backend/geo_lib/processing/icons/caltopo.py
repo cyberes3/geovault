@@ -8,6 +8,14 @@ from geo_lib.logging.console import get_tagged_logger
 _logger = get_tagged_logger()
 
 
+def _is_allowed_caltopo_netloc(netloc: str) -> bool:
+    """Return True if netloc is caltopo.com or a subdomain (e.g. api.caltopo.com). Rejects e.g. caltopo.com.evil.com."""
+    if not netloc:
+        return False
+    n = netloc.lower()
+    return n == 'caltopo.com' or n.endswith('.caltopo.com')
+
+
 def _fix_nested_caltopo_url(url: str) -> str:
     """
     Fix nested CalTopo URLs that occur when CalTopo reimports files.
@@ -28,7 +36,7 @@ def _fix_nested_caltopo_url(url: str) -> str:
     try:
         parsed = urlparse(url)
 
-        if 'caltopo.com' not in parsed.netloc.lower():
+        if not _is_allowed_caltopo_netloc(parsed.netloc):
             return url
 
         if parsed.path.lower() != '/icon.png':
@@ -42,14 +50,19 @@ def _fix_nested_caltopo_url(url: str) -> str:
         cfg_value = query_params['cfg'][0]
         cfg_decoded = unquote(cfg_value)
 
-        # Check if cfg contains a full CalTopo URL (nested)
-        if 'http://caltopo.com' in cfg_decoded.lower() or 'https://caltopo.com' in cfg_decoded.lower():
-            inner_url_match = re.search(r'(https?://caltopo\.com/icon\.png\?cfg=[^#]+(?:#1\.0)?)', cfg_decoded, re.IGNORECASE)
-            if inner_url_match:
-                inner_url = inner_url_match.group(1)
+        # Find a candidate inner CalTopo URL by regex (no substring gate)
+        inner_url_match = re.search(r'(https?://caltopo\.com/icon\.png\?cfg=[^#]+(?:#1\.0)?)', cfg_decoded, re.IGNORECASE)
+        if inner_url_match:
+            inner_url = inner_url_match.group(1)
+            inner_parsed = urlparse(inner_url)
+            if (
+                inner_parsed.scheme in ('http', 'https')
+                and _is_allowed_caltopo_netloc(inner_parsed.netloc)
+                and inner_parsed.path.lower() == '/icon.png'
+            ):
                 return inner_url
 
-        # Not nested, return original
+        # Not nested or validation failed, return original
         return url
     except:
         _logger.debug(f"Failed to fix nested CalTopo URL {url}: {traceback.format_exc()}")
@@ -58,7 +71,7 @@ def _fix_nested_caltopo_url(url: str) -> str:
 
 def _is_caltopo_url(url: str) -> bool:
     parsed = urlparse(url)
-    return 'caltopo.com' in parsed.netloc.lower() if parsed.netloc else False
+    return _is_allowed_caltopo_netloc(parsed.netloc)
 
 
 def _is_caltopo_point_icon(url: str) -> bool:
@@ -117,7 +130,7 @@ def _extract_color_from_caltopo_url(url: str) -> Optional[str]:
     parsed = urlparse(url)
 
     # Check if it's a CalTopo URL
-    if 'caltopo.com' not in parsed.netloc.lower():
+    if not _is_allowed_caltopo_netloc(parsed.netloc):
         return None
 
     # Parse query parameters
