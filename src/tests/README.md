@@ -14,6 +14,8 @@ When doing AI programming its really really nice to have comprehensive tests.
 ./run-tests.sh -v
 ```
 
+`-v` is the only supported arg. Pytest args are not supported. 
+
 ### Run a specific test folder
 ```shell
 # Run all API tests

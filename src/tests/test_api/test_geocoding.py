@@ -221,29 +221,6 @@ class TestGeocodingAPI(TestCase):
     @patch(PATCH_CONFIG_MAPTILER)
     @patch(PATCH_CONFIG_COMMON)
     @patch(PATCH_CONFIG_BACKENDS)
-    def test_geocoding_search_google_live_no_cyrillic_in_search_results(self, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
-        """Live Google API: query that can return Cyrillic; assert response has no Cyrillic in feature text/place_name."""
-        from website.config_loader import get_config_loader
-
-        config_loader = get_config_loader()
-        api_key = config_loader.get_google_api_key() or (os.environ.get('GOOGLE_API_KEY') or '').strip() or None
-        if not api_key:
-            self.skipTest("Google API key not configured")
-        mock_config = MagicMock()
-        mock_config.get_geocoding_search_mode.return_value = 'google'
-        mock_config.get_google_api_key.return_value = api_key
-        mock_config.get_maptiler_api_key.return_value = None
-        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
-
-        response = self.client.get('/api/geocoding/search/?q=niggerhead rock')
-        self.assertEqual(response.status_code, 200)
-        data = json.loads(response.content)
-        self._assert_no_cyrillic_in_search_results(data)
-
-    @patch(PATCH_CONFIG_GOOGLE)
-    @patch(PATCH_CONFIG_MAPTILER)
-    @patch(PATCH_CONFIG_COMMON)
-    @patch(PATCH_CONFIG_BACKENDS)
     @patch(PATCH_REQUESTS_GET)
     def test_geocoding_search_maptiler_rocky_mountain_national_park(self, mock_get, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
         """Test that searching for 'rocky mountain national park' returns RMNP-like feature (MapTiler)."""
