@@ -37,10 +37,11 @@ def well_known_routing(request, path):
 handler500 = custom_exception_handler
 
 import os
+from pathlib import Path
 
 from django.views.static import serve
 
-from geo_lib.utils.secure_path import secure_path
+from geo_lib.utils.secure_path import is_path_under_base, secure_path
 from website.settings import EXTENSIONS_DIR
 
 def serve_extension_static(request, path, **kwargs):
@@ -50,7 +51,8 @@ def serve_extension_static(request, path, **kwargs):
     """
     import logging
     logger = logging.getLogger('django')
-    
+
+    ext_folder = None
     parts = path.split('/', 1)
     if parts:
         ext_folder = parts[0].replace('-', '_')
@@ -60,7 +62,19 @@ def serve_extension_static(request, path, **kwargs):
             path = ext_folder
 
     path = secure_path(path)
-    
+
+    extensions_base = Path(EXTENSIONS_DIR)
+    try:
+        candidate = (extensions_base / path).resolve()
+    except (OSError, RuntimeError):
+        return HttpResponse(status=404)
+    if not is_path_under_base(candidate, extensions_base):
+        return HttpResponse(status=404)
+    if ext_folder is not None:
+        extension_base = extensions_base / ext_folder
+        if not is_path_under_base(candidate, extension_base):
+            return HttpResponse(status=404)
+
     logger.debug(f"Extension static serving: {path} (root: {EXTENSIONS_DIR})")
     kwargs['document_root'] = EXTENSIONS_DIR
     response = serve(request, path, **kwargs)

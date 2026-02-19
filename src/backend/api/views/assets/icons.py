@@ -122,16 +122,15 @@ def serve_user_icon(request, icon_hash):
 
     storage_dir = Path(settings.ICON_STORAGE_DIR)
     icon_path = storage_dir / hash_part[0:2] / hash_part[2:4] / icon_hash
+    resolved = icon_path.resolve()
 
-    # Ensure resolved path is under storage dir (defense in depth, e.g. symlinks)
-    if not is_path_under_base(icon_path, storage_dir):
+    if not is_path_under_base(resolved, storage_dir):
         raise Http404("Invalid icon path")
 
-    if not icon_path.exists() or not icon_path.is_file():
+    if not resolved.exists() or not resolved.is_file():
         raise Http404("Icon not found")
 
-    # Read icon file
-    icon_data = icon_path.read_bytes()
+    icon_data = resolved.read_bytes()
 
     # Determine content type based on extension
     content_type = _CONTENT_TYPES.get(extension, 'image/png')

@@ -11,7 +11,7 @@ from django.http import HttpResponse, JsonResponse
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.tile_sources.registry import get_tile_source, get_tile_sources_for_client
-from geo_lib.utils.secure_path import secure_filename
+from geo_lib.utils.secure_path import is_path_under_base, secure_filename
 from website.config_loader import get_config_loader
 
 _logger = get_tagged_logger()
@@ -66,7 +66,7 @@ def tile_proxy(request, service, z, x, y):
         # Only check for the extension from URL template (no fallback)
         if url_extension != 'tile':
             cache_path = get_tile_cache_path(service, z, x, y, url_extension)
-            if is_tile_cached(cache_path):
+            if cache_path is not None and is_tile_cached(cache_path):
                 tile_data = read_tile_from_cache(cache_path)
                 if not tile_data:
                     return HttpResponse('Cached file not found', status=400)
@@ -133,7 +133,8 @@ def tile_proxy(request, service, z, x, y):
         if settings.TILE_CACHE_ENABLED:
             try:
                 cache_path = get_tile_cache_path(service, z, x, y, url_extension)
-                save_tile_to_cache(cache_path, tile_data)
+                if cache_path is not None:
+                    save_tile_to_cache(cache_path, tile_data)
                 _logger.debug(f"Tile cached: {service}/{z}/{x}/{y}")
             except Exception as e:
                 # Log cache save error but don't fail the request
@@ -247,53 +248,83 @@ def style_proxy(request, map_id):
         return HttpResponse(f'Unexpected error', status=500)
 
 
+_TILE_CACHE_EXTENSIONS = frozenset({'pbf', 'png', 'webp', 'jpg', 'tile'})
+_MAX_ZOOM = 30
+
+
 def get_tile_cache_path(service, z, x, y, extension='tile'):
     """
     Generate the cache file path for a tile.
-    
+    Validates z/x/y and extension, resolves the path, and ensures it stays under TILE_CACHE_DIR.
+
     Args:
         service: The tile service name
         z: Zoom level
         x: Tile X coordinate
         y: Tile Y coordinate
         extension: File extension (default: 'tile' for generic)
-    
+
     Returns:
-        Path object for the cache file
+        Resolved Path under TILE_CACHE_DIR, or None if validation fails
     """
+    try:
+        z = int(z)
+        x = int(x)
+        y = int(y)
+    except (TypeError, ValueError):
+        return None
+    if z < 0 or z > _MAX_ZOOM:
+        return None
+    max_tile = 2**z
+    if x < 0 or x >= max_tile or y < 0 or y >= max_tile:
+        return None
+    if extension not in _TILE_CACHE_EXTENSIONS:
+        return None
     cache_dir = Path(settings.TILE_CACHE_DIR)
     service = secure_filename(service)
     if not service:
         service = "tile_service"
-    return cache_dir / service / str(z) / str(x) / f"{y}.{extension}"
+    path = cache_dir / service / str(z) / str(x) / f"{y}.{extension}"
+    try:
+        resolved = path.resolve()
+    except (OSError, RuntimeError):
+        return None
+    if not is_path_under_base(resolved, cache_dir):
+        return None
+    return resolved
 
 
 def is_tile_cached(cache_path):
     """
     Check if a tile is cached and not expired.
-    
+    Path must resolve under TILE_CACHE_DIR; only the resolved path is used for I/O.
+
     Args:
         cache_path: Path to the cached tile file
-    
+
     Returns:
         True if cached and valid, False otherwise
     """
+    cache_dir = Path(settings.TILE_CACHE_DIR)
     try:
-        if not cache_path.exists():
+        resolved = cache_path.resolve()
+    except (OSError, RuntimeError):
+        return False
+    if not is_path_under_base(resolved, cache_dir):
+        return False
+    try:
+        if not resolved.exists():
             return False
     except PermissionError:
-        # If we can't check if file exists due to permissions, treat as cache miss
         return False
 
     try:
-        # Check if file is expired
-        file_mtime = datetime.fromtimestamp(cache_path.stat().st_mtime)
+        file_mtime = datetime.fromtimestamp(resolved.stat().st_mtime)
         expiry_time = timedelta(days=settings.TILE_CACHE_EXPIRY_DAYS)
 
         if datetime.now() - file_mtime > expiry_time:
-            # File expired, remove it
             try:
-                cache_path.unlink()
+                resolved.unlink()
             except OSError:
                 pass
             return False
@@ -306,25 +337,31 @@ def is_tile_cached(cache_path):
 def ensure_cache_directory(cache_path):
     """
     Ensure the cache directory structure exists with proper permissions.
-    
+    Path must resolve under TILE_CACHE_DIR; only the resolved path's parent is used for I/O.
+
     Args:
         cache_path: Path to the cache file (parent directories will be created)
-    
+
     Returns:
         True if successful, False otherwise
     """
-    cache_dir = cache_path.parent
+    cache_base = Path(settings.TILE_CACHE_DIR)
     try:
-        # Create directory structure with 0o700 permissions
-        original_umask = os.umask(0o077)  # Restrict permissions to owner only
+        resolved = cache_path.resolve()
+    except (OSError, RuntimeError):
+        return False
+    if not is_path_under_base(resolved, cache_base):
+        return False
+    cache_dir = resolved.parent
+    try:
+        original_umask = os.umask(0o077)
         try:
             cache_dir.mkdir(parents=True, exist_ok=True)
-            # Ensure directory has correct permissions
             os.chmod(cache_dir, 0o700)
         finally:
             os.umask(original_umask)
         return True
-    except:
+    except Exception:
         _logger.error(f"Failed to create cache directory {cache_dir}: {traceback.format_exc()}")
         return False
 
@@ -332,46 +369,59 @@ def ensure_cache_directory(cache_path):
 def save_tile_to_cache(cache_path, tile_data):
     """
     Save tile data to cache with proper permissions.
-    
+    Path must resolve under TILE_CACHE_DIR; only the resolved path is used for I/O.
+
     Args:
         cache_path: Path where to save the tile
         tile_data: Binary tile data
-    
+
     Returns:
         True if successful, False otherwise
     """
+    cache_dir = Path(settings.TILE_CACHE_DIR)
     try:
-        # Ensure parent directories exist
-        if not ensure_cache_directory(cache_path):
+        resolved = cache_path.resolve()
+    except (OSError, RuntimeError):
+        return False
+    if not is_path_under_base(resolved, cache_dir):
+        return False
+    try:
+        if not ensure_cache_directory(resolved):
             return False
 
-        # Write file with restricted permissions
-        original_umask = os.umask(0o177)  # Restrict to owner read/write only (0o600)
+        original_umask = os.umask(0o177)
         try:
-            cache_path.write_bytes(tile_data)
-            # Ensure file has correct permissions
-            os.chmod(cache_path, 0o600)
+            resolved.write_bytes(tile_data)
+            os.chmod(resolved, 0o600)
         finally:
             os.umask(original_umask)
 
         return True
-    except:
-        _logger.error(f"Failed to save tile to cache {cache_path}: {traceback.format_exc()}")
+    except Exception:
+        _logger.error(f"Failed to save tile to cache {resolved}: {traceback.format_exc()}")
         return False
 
 
 def read_tile_from_cache(cache_path):
     """
     Read tile data from cache.
-    
+    Path must resolve under TILE_CACHE_DIR; only the resolved path is used for I/O.
+
     Args:
         cache_path: Path to the cached tile file
-    
+
     Returns:
-        Binary tile data, or None if read fails
+        Binary tile data, or None if read fails or path invalid
     """
+    cache_dir = Path(settings.TILE_CACHE_DIR)
     try:
-        return cache_path.read_bytes()
-    except:
-        _logger.error(f"Failed to read tile from cache {cache_path}: {traceback.format_exc()}")
+        resolved = cache_path.resolve()
+    except (OSError, RuntimeError):
+        return None
+    if not is_path_under_base(resolved, cache_dir):
+        return None
+    try:
+        return resolved.read_bytes()
+    except Exception:
+        _logger.error(f"Failed to read tile from cache {resolved}: {traceback.format_exc()}")
         return None

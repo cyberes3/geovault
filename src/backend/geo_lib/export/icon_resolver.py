@@ -6,39 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from geo_lib.processing.icons.get import parse_user_icon_hash
-from geo_lib.utils.secure_path import secure_path
-
-
-def _is_safe_path(path: Path, base: Path) -> bool:
-    """
-    Check if a path is safe (within base directory, no path traversal).
-
-    Args:
-        path: Path to check
-        base: Base directory that path must be within
-
-    Returns:
-        True if path is safe, False otherwise
-    """
-    try:
-        # Resolve both paths to absolute to handle symlinks and .. properly
-        resolved_path = path.resolve()
-        resolved_base = base.resolve()
-        # Check if resolved_path is within resolved_base
-        # Use is_relative_to for Python 3.9+, fallback for older versions
-        try:
-            return resolved_path.is_relative_to(resolved_base)
-        except AttributeError:
-            # Fallback for Python < 3.9: use relative_to which raises ValueError if not relative
-            try:
-                resolved_path.relative_to(resolved_base)
-                return True
-            except ValueError:
-                return False
-    except (ValueError, RuntimeError):
-        # ValueError: path not relative to base
-        # RuntimeError: can occur with symlink loops
-        return False
+from geo_lib.utils.secure_path import is_path_under_base, secure_path
 
 
 def resolve_icon_path(icon_url: str, base_dir: str, icon_storage_dir: str) -> Optional[str]:
@@ -72,7 +40,7 @@ def resolve_icon_path(icon_url: str, base_dir: str, icon_storage_dir: str) -> Op
 
         # Ensure the resolved path is within base_dir/assets/icons/
         assets_icons_dir = base_path / "assets" / "icons"
-        if not _is_safe_path(full_path.resolve(), assets_icons_dir):
+        if not is_path_under_base(full_path, assets_icons_dir):
             return None
 
         if full_path.exists() and full_path.is_file():
@@ -95,9 +63,9 @@ def resolve_icon_path(icon_url: str, base_dir: str, icon_storage_dir: str) -> Op
             # Reject icons outside base_dir instead of returning absolute path
             try:
                 relative = icon_path.relative_to(base_path)
-                # Double-check the resolved path is safe
-                if _is_safe_path(icon_path.resolve(), base_path.resolve()):
-                    return str(relative)
+                if not is_path_under_base(icon_path, base_path):
+                    return None
+                return str(relative)
             except ValueError:
                 # Icon is outside base_dir - reject it for security
                 return None

@@ -1226,6 +1226,43 @@ class TestStaticAssetServingEdgeCases(TestCase):
             # Should either 404 or be blocked, not serve the file
             assert response.status_code in [404, 403, 400]
 
+    def test_static_asset_cross_extension_access_blocked(self):
+        """
+        Adversarial: URL says one extension but path resolves to another.
+        Must 404 so one extension cannot serve another extension's files.
+        """
+        client = self.client
+
+        # Paths that use example-extension in URL but traverse to another extension's dir
+        cross_extension_paths = [
+            '/extensions/static/example-extension/../../caltopo/src/frontend/dist/index.css',
+            '/extensions/static/example-extension/../caltopo/src/frontend/dist/index.css',
+            '/extensions/static/example-extension/../../places/src/frontend/dist/index.umd.js',
+            '/extensions/static/example-extension/../../exif_geotagger/src/frontend/dist/index.css',
+        ]
+        for url in cross_extension_paths:
+            response = client.get(url)
+            assert response.status_code == 404, f"Expected 404 for cross-extension path: {url}"
+
+        # Sanity: same file requested with correct extension prefix should succeed when file exists
+        correct_url = '/extensions/static/caltopo/src/frontend/dist/index.css'
+        response_ok = client.get(correct_url)
+        if response_ok.status_code == 200:
+            # Cross-extension URL must not serve that file
+            cross_url = '/extensions/static/example-extension/../../caltopo/src/frontend/dist/index.css'
+            response_blocked = client.get(cross_url)
+            assert response_blocked.status_code == 404
+
+    def test_static_asset_traversal_escape_extension_dir_only_returns_404(self):
+        """
+        Adversarial: path stays under EXTENSIONS_DIR but leaves the requested extension's dir.
+        Resolved path must be under extension_base (first URL segment), so 404.
+        """
+        client = self.client
+        url = '/extensions/static/example-extension/../../caltopo/src/frontend/dist/index.css'
+        response = client.get(url)
+        assert response.status_code == 404
+
     def test_static_asset_kebab_case_conversion(self):
         """Test that kebab-case URLs are converted to snake_case paths."""
         client = self.client
