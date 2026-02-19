@@ -291,10 +291,11 @@ def bulk_update_features_metadata(request, validated_data):
                     normalized_feature = _validate_and_preserve_feature(merged_feature)
                     # Ensure system_tags are preserved after normalization
                     normalized_feature['properties']['system_tags'] = updated_system_tags
-                except GeometryValidationError as e:
+                except GeometryValidationError:
+                    logger.error("Feature validation failed for %s in bulk update:\n%s", feature_id, traceback.format_exc())
                     errors.append({
                         'feature_id': feature_id,
-                        'error': f'Feature validation failed: {str(e)}'
+                        'error': 'Feature validation failed'
                     })
                     continue
 
