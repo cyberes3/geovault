@@ -159,8 +159,8 @@ class TestTilesAPI(TestCase):
         self.assertTrue(user_agent.startswith('GeoVault/'), f"User-Agent should start with 'GeoVault/', got '{user_agent}'")
         self.assertEqual(user_agent, get_user_agent(), "User-Agent should match get_user_agent()")
 
-    @patch('api.views.services.tiles.requests.get')
-    @patch('api.views.services.tiles.settings.TILE_CACHE_ENABLED', False)
+    @patch('geo_lib.tiles.requests.get')
+    @patch('geo_lib.tiles.settings.TILE_CACHE_ENABLED', False)
     def test_tile_proxy_uses_custom_user_agent(self, mock_requests_get):
         """Test that tile proxy uses custom User-Agent header from proxy_config when proxying is enabled."""
         # Create a mock response
@@ -302,7 +302,7 @@ class TestTilesAPI(TestCase):
         registry_module._tile_sources = {}
         registry_module._registered = False
 
-    @patch('api.views.services.tiles.requests.get')
+    @patch('geo_lib.tiles.requests.get')
     @override_settings(TILE_CACHE_ENABLED=False)
     def test_tile_proxy_cache_control_header_uses_cache_expiry_days(self, mock_requests_get):
         """Test that Cache-Control header uses TILE_CACHE_EXPIRY_DAYS setting."""
@@ -338,7 +338,7 @@ class TestTilesAPI(TestCase):
         self.assertIn('public', cache_control)
         self.assertIn(f'max-age={expected_max_age}', cache_control)
 
-    @patch('api.views.services.tiles.requests.get')
+    @patch('geo_lib.tiles.requests.get')
     @override_settings(TILE_CACHE_ENABLED=False, TILE_CACHE_EXPIRY_DAYS=7)
     def test_tile_proxy_cache_control_header_respects_custom_cache_expiry_days(self, mock_requests_get):
         """Test that Cache-Control header respects custom TILE_CACHE_EXPIRY_DAYS setting."""
@@ -375,7 +375,7 @@ class TestTilesAPI(TestCase):
         # Verify it's NOT using the default 30 days
         self.assertNotIn('max-age=2592000', cache_control)
 
-    @patch('api.views.services.tiles.requests.get')
+    @patch('geo_lib.tiles.requests.get')
     @override_settings(TILE_CACHE_ENABLED=False)
     def test_tile_proxy_removes_set_cookie_header_for_cloudflare_caching(self, mock_requests_get):
         """Test that tile proxy responses do not include Set-Cookie headers to allow Cloudflare caching."""
@@ -515,8 +515,8 @@ class TestTilesAPI(TestCase):
         registry_module._tile_sources = {}
         registry_module._registered = False
 
-    @patch('api.views.services.tiles.requests.get')
-    @patch('api.views.services.tiles.get_config_loader')
+    @patch('geo_lib.tiles.requests.get')
+    @patch('geo_lib.tiles.get_config_loader')
     def test_style_proxy_replaces_tile_urls(self, mock_get_config_loader, mock_requests_get):
         """Test that style_proxy endpoint replaces MapTiler tile URLs with proxy URLs."""
         # Mock config loader
@@ -578,7 +578,7 @@ class TestTilesAPI(TestCase):
         registry_module._tile_sources = {}
         registry_module._registered = False
 
-    @patch('api.views.services.tiles.requests.get')
+    @patch('geo_lib.tiles.requests.get')
     @override_settings(TILE_CACHE_ENABLED=False)
     def test_tile_proxy_handles_pbf_vector_tiles(self, mock_requests_get):
         """Test that tile proxy correctly handles .pbf vector tile files."""
@@ -630,10 +630,10 @@ class TestTilesAPI(TestCase):
         response = self.client.get('/api/tiles/style/nonexistent-map')
         self.assertEqual(response.status_code, 404)
 
-    @patch('api.views.services.tiles.get_tile_cache_path')
-    @patch('api.views.services.tiles.is_tile_cached')
-    @patch('api.views.services.tiles.read_tile_from_cache')
-    @patch('api.views.services.tiles.requests.get')
+    @patch('geo_lib.tiles.get_tile_cache_path')
+    @patch('geo_lib.tiles.is_tile_cached')
+    @patch('geo_lib.tiles.read_tile_from_cache')
+    @patch('geo_lib.tiles.requests.get')
     @override_settings(TILE_CACHE_ENABLED=True)
     def test_tile_proxy_uses_correct_extension_from_url_template(self, mock_requests_get, 
                                                                    mock_read_tile_from_cache,

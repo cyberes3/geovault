@@ -16,7 +16,7 @@ from geo_lib.processing.tagging.modules.driving_detection import DrivingDetectio
 from geo_lib.processing.tagging.modules.source_device import SourceDeviceTagGenerator
 from geo_lib.processing.tagging.modules.source_file import SourceFileTagGenerator
 from geo_lib.processing.tagging.modules.elevation import ElevationTagGenerator
-from geo_lib.processing.tagging.modules.geocoding import ReverseGeocodingTagGenerator
+from geo_lib.processing.tagging.modules.reverse_geocoding import ReverseGeocodingTagGenerator
 from geo_lib.types.feature import (
     PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 )
