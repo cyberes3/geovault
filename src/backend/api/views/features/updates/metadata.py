@@ -309,11 +309,11 @@ def bulk_update_features_metadata(request, validated_data):
                     'feature_id': feature_id,
                     'error': 'Feature not found or access denied'
                 })
-            except Exception as e:
-                logger.error(f"Error updating feature metadata {feature_id} in bulk update: {traceback.format_exc()}")
+            except Exception:
+                logger.error("Error updating feature metadata %s in bulk update:\n%s", feature_id, traceback.format_exc())
                 errors.append({
                     'feature_id': feature_id,
-                    'error': f'Failed to update feature metadata: {str(e)}'
+                    'error': 'Failed to update feature metadata'
                 })
 
     return JsonResponse({

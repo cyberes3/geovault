@@ -1,4 +1,5 @@
 import json
+import traceback
 from django.contrib.gis.geos import Point
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -17,8 +18,11 @@ from geo_lib.processing.tagging.generate import generate_auto_tags
 from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
 from geo_lib.types.feature import PointFeature
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.validation.geometry_validation import GeometryValidationError
 from geo_lib.website.auth import api_or_login_required_401
+
+_logger = get_tagged_logger(__name__)
 
 # ==============================================================================
 # Extension Views (API Endpoints)
@@ -50,8 +54,9 @@ def item_list_create(request):
                 'name': item.name,
                 'description': item.description
             }, status=201)
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=400)
+        except Exception:
+            _logger.error("Failed to create item:\n%s", traceback.format_exc())
+            return JsonResponse({'error': 'Failed to create item'}, status=400)
 
 @require_http_methods(["DELETE"])
 @csrf_exempt

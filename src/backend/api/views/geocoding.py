@@ -2,6 +2,7 @@
 Forward reverse_geocoding API view with pluggable backends (MapTiler or Google per geocoding_search_mode).
 Provides place search functionality with server-side caching.
 """
+import traceback
 import requests
 from django.core.cache import cache
 from django.views.decorators.http import require_http_methods
@@ -58,9 +59,9 @@ def geocoding_search(request):
     except requests.exceptions.Timeout:
         _logger.warning("geocoding_search: Forward reverse_geocoding API request timed out (code=504)")
         return error_response("Forward reverse_geocoding API request timed out", code=504)
-    except GeocodingBackendError as e:
-        _logger.warning("geocoding_search: %s (code=400)", e)
-        return error_response(str(e), code=400)
+    except GeocodingBackendError:
+        _logger.error("geocoding_search: GeocodingBackendError (code=400):\n%s", traceback.format_exc())
+        return error_response("Geocoding request failed", code=400)
 
     cache.set(cache_key, result, GEOCODING_CACHE_TTL)
     response = success_response(data={'data': result})

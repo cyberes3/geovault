@@ -165,9 +165,10 @@ def forbidden_response(message: str = "Forbidden") -> JsonResponse:
 def server_error_response(message: str = "Internal server error") -> JsonResponse:
     """
     Create a 500 internal server error response.
+    Callers should log the exception in-line (e.g. with traceback.format_exc()) before calling this.
     
     Args:
-        message: Error message
+        message: Error message (never expose exception details to the client)
         
     Returns:
         JsonResponse with 500 status
@@ -194,9 +195,8 @@ def handle_404(view_func):
     def wrapper(request, *args, **kwargs):
         try:
             return view_func(request, *args, **kwargs)
-        except Http404 as e:
-            # Extract message from Http404 if available
-            message = str(e) if str(e) else "Resource not found"
-            return not_found_response(message)
+        except Http404:
+            # Use fixed message so no view can expose detail via raise Http404(detail)
+            return not_found_response("Resource not found")
 
     return wrapper

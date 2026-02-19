@@ -1,4 +1,5 @@
 """Tag regeneration operations"""
+import traceback
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
@@ -65,9 +66,9 @@ def regenerate_feature_tags(request, feature_id):
     # Create feature instance
     try:
         feature_instance: GeoFeatureSupported = feature_class(**geojson_data)
-    except Exception as e:
-        logger.error(f"Error creating feature instance for tag regeneration {feature_id}: {str(e)}")
-        return error_response(f'Invalid feature structure: {str(e)}', 400)
+    except Exception:
+        logger.error("Error creating feature instance for tag regeneration %s:\n%s", feature_id, traceback.format_exc())
+        return error_response('Invalid feature structure', 400)
 
     # Get existing user tags (preserve them)
     existing_user_tags = geojson_data.get('properties', {}).get('tags', [])

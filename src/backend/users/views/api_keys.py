@@ -1,10 +1,14 @@
 import json
+import traceback
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
 from users.models import ApiKey
 from users.api_keys import create_user_api_key, validate_api_key
+
+_logger = get_tagged_logger(__name__)
 
 
 @api_or_login_required_401(allow_api_keys=False)  # API keys cannot manage other API keys
@@ -31,10 +35,9 @@ def list_api_keys(request):
         return JsonResponse({
             'api_keys': keys_data
         })
-    except Exception as e:
-        return JsonResponse({
-            'error': f'An error occurred: {str(e)}'
-        }, status=500)
+    except Exception:
+        _logger.error("Failed to list API keys:\n%s", traceback.format_exc())
+        return JsonResponse({'error': 'Failed to list API keys'}, status=500)
 
 
 @api_or_login_required_401(allow_api_keys=False)  # API keys cannot create other API keys
@@ -65,10 +68,9 @@ def create_api_key(request):
         return JsonResponse({
             'error': 'Invalid JSON data'
         }, status=400)
-    except Exception as e:
-        return JsonResponse({
-            'error': f'An error occurred: {str(e)}'
-        }, status=500)
+    except Exception:
+        _logger.error("Failed to create API key:\n%s", traceback.format_exc())
+        return JsonResponse({'error': 'Failed to create API key'}, status=500)
 
 
 @api_or_login_required_401(allow_api_keys=False)  # API keys cannot delete other API keys
@@ -96,10 +98,9 @@ def delete_api_key(request, key_id):
         return JsonResponse({
             'error': 'API key not found'
         }, status=404)
-    except Exception as e:
-        return JsonResponse({
-            'error': f'An error occurred: {str(e)}'
-        }, status=500)
+    except Exception:
+        _logger.error("Failed to delete API key:\n%s", traceback.format_exc())
+        return JsonResponse({'error': 'Failed to delete API key'}, status=500)
 
 
 # Generic message for auth failures so we don't leak whether the key was missing or invalid
@@ -138,9 +139,10 @@ def validate_api_key_endpoint(request):
             'created_at': api_key.created_at.isoformat(),
             'last_used_at': api_key.last_used_at.isoformat() if api_key.last_used_at else None,
         })
-    except Exception as e:
+    except Exception:
+        _logger.error("Failed to validate API key:\n%s", traceback.format_exc())
         return JsonResponse({
             'valid': False,
-            'error': f'An error occurred: {str(e)}'
+            'error': 'Failed to validate API key'
         }, status=500)
 

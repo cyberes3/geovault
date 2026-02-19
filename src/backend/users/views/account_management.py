@@ -1,16 +1,20 @@
+import json
+import traceback
 from django.http import JsonResponse, HttpResponseRedirect
 from django.views.decorators.http import require_http_methods
 from django.core.cache import cache
 from django.utils import timezone
 from allauth.account.forms import ChangePasswordForm
 from allauth.account.models import EmailAddress
-from geo_lib.website.auth import api_or_login_required_401
-import json
 
+from geo_lib.logging.console import get_tagged_logger
+from geo_lib.website.auth import api_or_login_required_401
 from users.constants import (
     EMAIL_VERIFICATION_CACHE_KEY,
     EMAIL_VERIFICATION_COOLDOWN_SECONDS,
 )
+
+_logger = get_tagged_logger(__name__)
 
 
 @api_or_login_required_401(allow_api_keys=False)  # Password changes should only be via session
@@ -40,10 +44,9 @@ def change_password_api(request):
         return JsonResponse({
             'error': 'Invalid JSON data'
         }, status=400)
-    except Exception as e:
-        return JsonResponse({
-            'error': f'An error occurred: {str(e)}'
-        }, status=500)
+    except Exception:
+        _logger.error("Failed to change password:\n%s", traceback.format_exc())
+        return JsonResponse({'error': 'Failed to change password'}, status=500)
 
 
 @api_or_login_required_401(allow_api_keys=False)  # Email status should only be via session
@@ -98,10 +101,9 @@ def get_email_status_api(request):
             'resend_cooldown_remaining': cooldown_remaining,
             'resend_on_cooldown': on_cooldown
         })
-    except Exception as e:
-        return JsonResponse({
-            'error': f'An error occurred: {str(e)}'
-        }, status=500)
+    except Exception:
+        _logger.error("Failed to get email status:\n%s", traceback.format_exc())
+        return JsonResponse({'error': 'Failed to get email status'}, status=500)
 
 
 @api_or_login_required_401(allow_api_keys=False)  # Email verification should only be via session
@@ -164,10 +166,9 @@ def resend_verification_api(request):
         return JsonResponse({
             'error': 'Invalid JSON data'
         }, status=400)
-    except Exception as e:
-        return JsonResponse({
-            'error': f'An error occurred: {str(e)}'
-        }, status=500)
+    except Exception:
+        _logger.error("Failed to resend verification email:\n%s", traceback.format_exc())
+        return JsonResponse({'error': 'Failed to resend verification email'}, status=500)
 
 
 def block_account_email_view(request):

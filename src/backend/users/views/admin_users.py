@@ -1,5 +1,4 @@
 import traceback
-
 from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
 from django.db import connection
@@ -12,6 +11,7 @@ from geo_lib.website.auth import api_or_login_required_401
 from users.models import UserProfile
 
 User = get_user_model()
+_logger = get_tagged_logger(__name__)
 
 
 @api_or_login_required_401(allow_api_keys=False)  # Admin routes should only be accessible via session
@@ -135,11 +135,9 @@ def list_all_users(request):
             'users': users_data
         })
 
-    except Exception as e:
-        logger = get_tagged_logger()
-        logger.error(f"Error listing users for admin:\n{traceback.format_exc()}")
+    except Exception:
+        _logger.error("Error listing users for admin:\n%s", traceback.format_exc())
         return JsonResponse({
-            'error': 'Failed to list users',
-            'message': str(e)
+            'error': 'Failed to list users'
         }, status=500)
 

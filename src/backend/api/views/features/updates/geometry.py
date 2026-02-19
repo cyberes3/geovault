@@ -337,8 +337,12 @@ def apply_replacement_geometry(request, feature_id, validated_data):
                 # Create feature instance with the updated geometry for tag generation
                 try:
                     feature_instance: GeoFeatureSupported = tag_feature_class(**feature_data)
-                except Exception as e:
-                    _logger.error(f"Error creating feature instance for tag regeneration {feature_id}: {str(e)}")
+                except Exception:
+                    _logger.error(
+                        "Error creating feature instance for tag regeneration %s:\n%s",
+                        feature_id,
+                        traceback.format_exc()
+                    )
                     # Continue without regenerating tags if feature instance creation fails
                 else:
                     # Get existing user tags (preserve them)
@@ -449,13 +453,13 @@ def _validate_feature_with_class(feature_data: dict, feature_id: str = None) -> 
         # Convert back to dict for storage (this ensures proper structure)
         feature_data = json.loads(validated_feature.model_dump_json())
         return True, feature_data, None
-    except Exception as e:
-        log_msg = f"Feature validation error"
-        if feature_id:
-            log_msg += f" for feature {feature_id}"
-        log_msg += f": {str(e)}"
-        _logger.error(log_msg)
-        return False, None, f'Feature validation failed: {str(e)}'
+    except Exception:
+        _logger.error(
+            "Feature validation error for feature %s:\n%s",
+            feature_id or "unknown",
+            traceback.format_exc()
+        )
+        return False, None, 'Feature validation failed'
 
 
 def _normalize_geometry_coordinates(geom_data: dict) -> dict:
@@ -518,6 +522,6 @@ def _update_feature_geometry_field(feature: FeatureStore, feature_data: dict, fe
                 # Normalize coordinates to 3D
                 geom_data = _normalize_geometry_coordinates(geom_data)
                 feature.geometry = GEOSGeometry(json.dumps(geom_data))
-    except Exception as e:
-        _logger.warning(f"Error updating geometry for feature {feature_id}: {e}")
+    except Exception:
+        _logger.error("Error updating geometry for feature %s:\n%s", feature_id, traceback.format_exc())
         # Continue without updating geometry if there's an error

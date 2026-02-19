@@ -1,5 +1,4 @@
 import traceback
-
 from allauth.account.models import EmailAddress
 from django.db import connection
 from django.http import JsonResponse
@@ -7,6 +6,8 @@ from django.http import JsonResponse
 from api.models import FeatureStore, ImportQueue
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
+
+_logger = get_tagged_logger(__name__)
 
 
 def check_auth(request):
@@ -84,10 +85,8 @@ def get_user_storage(request):
         return JsonResponse({
             'storage_bytes': total_storage_bytes
         })
-    except Exception as e:
-        logger = get_tagged_logger()
-        logger.error(f"Error calculating storage usage for user {request.user.id}:\n{traceback.format_exc()}")
+    except Exception:
+        _logger.error("Error calculating storage usage for user %s:\n%s", request.user.id, traceback.format_exc())
         return JsonResponse({
-            'error': 'Failed to calculate storage usage',
-            'message': str(e)
+            'error': 'Failed to calculate storage usage'
         }, status=500)
