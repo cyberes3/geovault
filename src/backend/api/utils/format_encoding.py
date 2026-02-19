@@ -4,12 +4,13 @@ Supports both JSON and geobuf (protobuf) formats with content negotiation
 via query parameters or Accept headers.
 """
 import gzip
-import logging
 
 import geobuf
 from django.http import JsonResponse, HttpResponse
 
-logger = logging.getLogger(__name__)
+from geo_lib.logging.console import get_tagged_logger
+
+logger = get_tagged_logger(__name__)
 
 # Format constants
 FORMAT_JSON = 'json'

@@ -7,6 +7,7 @@ from django.core.cache import cache
 from django.views.decorators.http import require_http_methods
 
 from api.utils.responses import error_response, success_response
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.search_geocoding.backends import get_geocoding_not_available_message, get_search_backend
 from geo_lib.search_geocoding.common import (
     GEOCODING_CACHE_TTL,
@@ -14,6 +15,8 @@ from geo_lib.search_geocoding.common import (
     get_geocoding_cache_key,
 )
 from geo_lib.website.auth import api_or_login_required_401
+
+_logger = get_tagged_logger(__name__)
 
 
 @require_http_methods(["GET"])
@@ -34,10 +37,12 @@ def geocoding_search(request):
     query = request.GET.get('q', '').strip()
 
     if not query:
+        _logger.warning("geocoding_search: query parameter 'q' is required")
         return error_response("Query parameter 'q' is required", code=400)
 
     not_available = get_geocoding_not_available_message()
     if not_available is not None:
+        _logger.warning("geocoding_search: %s (code=503)", not_available)
         return error_response(not_available, code=503)
 
     cache_key = get_geocoding_cache_key(query)
@@ -51,8 +56,10 @@ def geocoding_search(request):
     try:
         result = backend(query)
     except requests.exceptions.Timeout:
+        _logger.warning("geocoding_search: Forward reverse_geocoding API request timed out (code=504)")
         return error_response("Forward reverse_geocoding API request timed out", code=504)
     except GeocodingBackendError as e:
+        _logger.warning("geocoding_search: %s (code=400)", e)
         return error_response(str(e), code=400)
 
     cache.set(cache_key, result, GEOCODING_CACHE_TTL)

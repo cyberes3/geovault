@@ -102,9 +102,9 @@ class LoggingMiddleware:
             query_string = request.GET.urlencode()
             api_key_suffix = ' (API KEY)' if getattr(request, 'is_api_authenticated', False) else ''
             if query_string:
-                log_msg = f"{request.method} {request.path}?{query_string} - {user_identifier}@{client_ip}{api_key_suffix}"
+                log_msg = f"{request.method} {request.path}?{query_string} - {user_identifier} - {client_ip}{api_key_suffix}"
             else:
-                log_msg = f"{request.method} {request.path} - {user_identifier}@{client_ip}{api_key_suffix}"
+                log_msg = f"{request.method} {request.path} - {user_identifier} - {client_ip}{api_key_suffix}"
 
             if response.status_code >= 400:
                 # Log errors with status

@@ -28,7 +28,6 @@ import django
 if not django.apps.apps.ready:
     django.setup()
 
-import logging
 import time
 import zipfile
 from io import BytesIO
@@ -42,6 +41,7 @@ from django.test import Client
 
 from api.models import FeatureStore, ImportQueue, Collection, UserSettings
 from geo_lib.feature_id import generate_geojson_hash
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
 from users.api_keys import create_user_api_key
 from fixtures.geocoding_responses import get_mock_overpass_response
@@ -348,7 +348,7 @@ def conditional_external_api_mocking():
     - Geocoding: Always mocked (not ready yet per requirements)
     - Logs warnings on external API timeouts/failures without failing tests
     """
-    logger = logging.getLogger(__name__)
+    logger = get_tagged_logger(__name__)
     patches = []
     
     # Always mock reverse_geocoding services with realistic data from real Overpass API responses

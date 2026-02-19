@@ -3,14 +3,14 @@ Utility functions for serializing features through Pydantic models.
 Ensures all features are validated and serialized through Pydantic before storage.
 """
 
-import logging
 from typing import List, Dict, Any, Optional
 
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.types.feature import (
     PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 )
 
-logger = logging.getLogger(__name__)
+logger = get_tagged_logger(__name__)
 
 
 def convert_feature_to_pydantic(feature: Dict[str, Any]) -> Optional[Dict[str, Any]]:

@@ -4,9 +4,10 @@ Django management command to test email configuration.
 from django.core.management.base import BaseCommand
 from django.core.mail import send_mail
 from django.conf import settings
-import logging
 
-logger = logging.getLogger(__name__)
+from geo_lib.logging.console import get_tagged_logger
+
+logger = get_tagged_logger(__name__)
 
 
 class Command(BaseCommand):
