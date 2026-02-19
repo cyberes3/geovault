@@ -3,7 +3,7 @@ import os
 import traceback
 import zipfile
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
@@ -18,6 +18,36 @@ _logger = get_tagged_logger()
 
 # Valid image file extensions
 VALID_ICON_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'}
+
+
+def parse_user_icon_hash(icon_hash: str) -> Optional[Tuple[str, str]]:
+    """
+    Parse and validate a user-provided icon hash string (hash + extension).
+
+    Use for any request-derived value that will be used to build a filesystem path
+    for user icons. Ensures the hash is 64 hex chars and extension is allowlisted.
+
+    Args:
+        icon_hash: String like '{64-char-hex}.png' (e.g. from URL path or icon URL).
+
+    Returns:
+        (hash_part, extension_with_dot) on success, None if invalid.
+    """
+    if not icon_hash or len(icon_hash) < 5:
+        return None
+    if "." not in icon_hash:
+        return None
+    hash_part, ext = icon_hash.rsplit(".", 1)
+    extension = "." + ext
+    if len(hash_part) != 64:
+        return None
+    if extension not in VALID_ICON_EXTENSIONS:
+        return None
+    try:
+        int(hash_part, 16)
+    except ValueError:
+        return None
+    return (hash_part, extension)
 
 
 def _get_icon_extension(filename_or_url: str) -> Optional[str]:

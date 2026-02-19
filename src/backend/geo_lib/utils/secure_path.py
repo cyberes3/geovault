@@ -6,6 +6,7 @@ Allows spaces (unlike werkzeug's secure_filename which uses underscores).
 import os
 import re
 import unicodedata
+from pathlib import Path
 
 # Allow alphanumeric, space, underscore, dot, hyphen (same as werkzeug but with space)
 _filename_ascii_allow_spaces_re = re.compile(r"[^A-Za-z0-9 _.\-]")
@@ -57,3 +58,23 @@ def secure_path(path: str) -> str:
         return "_"
     safe = "/".join(secure_filename(seg) for seg in segments)
     return safe if safe else "_"
+
+
+def is_path_under_base(path: Path, base: Path) -> bool:
+    """
+    Return True if path is under base (after resolving both). Use to prevent path traversal
+    when serving or reading files from request-derived paths.
+    """
+    try:
+        resolved_path = path.resolve()
+        resolved_base = base.resolve()
+        try:
+            return resolved_path.is_relative_to(resolved_base)
+        except AttributeError:
+            try:
+                resolved_path.relative_to(resolved_base)
+                return True
+            except ValueError:
+                return False
+    except (ValueError, RuntimeError):
+        return False

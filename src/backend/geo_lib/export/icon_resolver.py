@@ -5,6 +5,7 @@ Icon path resolution utilities for export functionality.
 from pathlib import Path
 from typing import Optional
 
+from geo_lib.processing.icons.get import parse_user_icon_hash
 from geo_lib.utils.secure_path import secure_path
 
 
@@ -80,25 +81,12 @@ def resolve_icon_path(icon_url: str, base_dir: str, icon_storage_dir: str) -> Op
 
     # User icons: /api/icons/user/{hash}.png -> {ICON_STORAGE_DIR}/{hash[0:2]}/{hash[2:4]}/{hash}.png
     if icon_url.startswith("/api/icons/user/"):
-        # Extract hash and extension from URL
         icon_hash_with_ext = icon_url.replace("/api/icons/user/", "")
-        if "." not in icon_hash_with_ext:
+        parsed = parse_user_icon_hash(icon_hash_with_ext)
+        if not parsed:
             return None
+        hash_part, _extension = parsed
 
-        hash_part, extension = icon_hash_with_ext.rsplit(".", 1)
-        extension = "." + extension
-
-        # Validate hash length (should be 64 chars for SHA-256)
-        if len(hash_part) != 64:
-            return None
-
-        # Security: Validate hash contains only hexadecimal characters
-        try:
-            int(hash_part, 16)
-        except ValueError:
-            return None
-
-        # Build storage path
         storage_dir = Path(icon_storage_dir)
         icon_path = storage_dir / hash_part[0:2] / hash_part[2:4] / icon_hash_with_ext
 

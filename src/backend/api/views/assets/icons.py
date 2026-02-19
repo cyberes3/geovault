@@ -11,9 +11,10 @@ from django.http import HttpResponse, Http404, JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.processing.icons.get import parse_user_icon_hash
 from geo_lib.processing.icons.icon_manager import store_icon
 from geo_lib.processing.logging import ImportLog
-from geo_lib.utils.secure_path import secure_filename, secure_path
+from geo_lib.utils.secure_path import is_path_under_base, secure_filename, secure_path
 from geo_lib.website.auth import api_or_login_required_401
 
 _logger = get_tagged_logger()
@@ -114,35 +115,18 @@ def serve_user_icon(request, icon_hash):
     URL parameter:
     - icon_hash: Hash of the icon file (with extension, e.g., 'abc123def456.png')
     """
-    # Validate icon_hash format (should be hash + extension)
-    if not icon_hash or len(icon_hash) < 5:  # At least hash (64 chars) + extension (e.g., .png)
+    parsed = parse_user_icon_hash(icon_hash)
+    if not parsed:
         raise Http404("Invalid icon hash")
+    hash_part, extension = parsed
 
-    # Extract hash and extension
-    # Icon hash format: {hash}{extension} (e.g., abc123def456.png)
-    # Hash is 64 characters (SHA-256), extension starts after that
-    # Find the last dot to separate hash from extension
-    if '.' not in icon_hash:
-        raise Http404("Invalid icon hash format - missing extension")
-
-    # Split on last dot to get hash and extension
-    hash_part, extension = icon_hash.rsplit('.', 1)
-    extension = '.' + extension  # Add leading dot back
-
-    # Validate hash length (should be 64 characters for SHA-256)
-    if len(hash_part) != 64:
-        raise Http404("Invalid icon hash format - hash length incorrect")
-
-    # Validate extension
-    valid_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'}
-    if extension not in valid_extensions:
-        raise Http404("Invalid icon extension")
-
-    # Get storage path
     storage_dir = Path(settings.ICON_STORAGE_DIR)
     icon_path = storage_dir / hash_part[0:2] / hash_part[2:4] / icon_hash
 
-    # Check if file exists
+    # Ensure resolved path is under storage dir (defense in depth, e.g. symlinks)
+    if not is_path_under_base(icon_path, storage_dir):
+        raise Http404("Invalid icon path")
+
     if not icon_path.exists() or not icon_path.is_file():
         raise Http404("Icon not found")
 
@@ -175,15 +159,9 @@ def serve_system_icon(request, path):
     # Get assets icons directory path
     assets_icons_dir = Path(settings.BASE_DIR) / 'assets' / 'icons'
 
-    # Build the full file path
     file_path = (assets_icons_dir / path).resolve()
 
-    # Security check: ensure the file is within the assets/icons directory
-    try:
-        assets_icons_dir_resolved = assets_icons_dir.resolve()
-        if not str(file_path).startswith(str(assets_icons_dir_resolved)):
-            raise Http404("Invalid icon path")
-    except (OSError, ValueError):
+    if not is_path_under_base(file_path, assets_icons_dir):
         raise Http404("Invalid icon path")
 
     # Check if file exists
@@ -241,19 +219,10 @@ def recolor_icon(request):
 
     icon_path_param = secure_path(icon_path_param)
 
-    # Get icon path from assets directory
     assets_icons_dir = Path(settings.BASE_DIR) / 'assets' / 'icons'
     icon_path = (assets_icons_dir / icon_path_param).resolve()
 
-    # Validate path is within assets/icons directory (prevent directory traversal)
-    try:
-        assets_icons_dir_resolved = assets_icons_dir.resolve()
-        if not str(icon_path).startswith(str(assets_icons_dir_resolved)):
-            return JsonResponse({
-                'error': 'Invalid icon path',
-                'code': 400
-            }, status=400)
-    except (OSError, ValueError):
+    if not is_path_under_base(icon_path, assets_icons_dir):
         return JsonResponse({
             'error': 'Invalid icon path',
             'code': 400
