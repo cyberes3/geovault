@@ -12,8 +12,7 @@ source "$SCRIPT_DIR"/venv/bin/activate
 HOST="0.0.0.0"
 PORT="8000"
 
-# Note: Daphne is single-process. For multiple workers, run multiple instances
-# or use a process manager like supervisord/systemd.
+# Note: Daphne is single-process. For multiple workers, run multiple instances.
 exec daphne \
     --bind "$HOST" \
     --port "$PORT" \

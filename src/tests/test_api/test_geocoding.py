@@ -2,11 +2,36 @@
 Tests for reverse_geocoding API endpoints.
 """
 import json
+import os
+import re
 import requests
 from unittest.mock import MagicMock, patch
 from django.test import TestCase
 from django.core.cache import cache
 from django.contrib.auth import get_user_model
+
+from website.config_loader import get_config_loader
+
+# Real config captured at load time (before any patches) for auth/site-related keys
+_REAL_CONFIG = get_config_loader()
+
+# Patch get_config_loader everywhere it is used (backends, common, maptiler, google each import it)
+PATCH_CONFIG_BACKENDS = 'geo_lib.search_geocoding.backends.get_config_loader'
+PATCH_CONFIG_COMMON = 'geo_lib.search_geocoding.common.get_config_loader'
+PATCH_CONFIG_MAPTILER = 'geo_lib.search_geocoding.maptiler.get_config_loader'
+PATCH_CONFIG_GOOGLE = 'geo_lib.search_geocoding.google.get_config_loader'
+# Both backends use the same requests module, so one patch suffices
+PATCH_REQUESTS_GET = 'requests.get'
+
+
+def _set_config_mocks(mock_backends, mock_common, mock_maptiler, mock_google, mock_config):
+    """Assign mock_config as return_value for all get_config_loader mocks."""
+    mock_backends.return_value = mock_config
+    mock_common.return_value = mock_config
+    mock_maptiler.return_value = mock_config
+    mock_google.return_value = mock_config
+    # Pull real values for auth/site-related config (e.g. site.domain for Origin header)
+    mock_config.get_str.side_effect = lambda key, default='': _REAL_CONFIG.get_str(key, default)
 
 
 class TestGeocodingAPI(TestCase):
@@ -98,340 +123,532 @@ class TestGeocodingAPI(TestCase):
             ]
         }
 
-    def test_geocoding_search_live_edge_case(self):
-        """
-        Live API test for 'niggerhead rock' edge case.
-        Asserts that no non-English (non-ASCII) characters are present in the results.
-        """
-        import requests
-        from website.config_loader import get_config_loader
+    def _create_mock_google_response(self, results=None):
+        """Create mock response for Google Geocoding API (status OK + results list)."""
+        if results is None:
+            results = [
+                {
+                    'place_id': 'ChIJtest',
+                    'formatted_address': '123 Main St, Denver, CO, USA',
+                    'geometry': {
+                        'location': {'lat': 39.7, 'lng': -104.9},
+                        'viewport': {
+                            'southwest': {'lat': 39.6, 'lng': -105.0},
+                            'northeast': {'lat': 39.8, 'lng': -104.8},
+                        },
+                    },
+                    'address_components': [
+                        {'types': ['street_number'], 'long_name': '123'},
+                        {'types': ['route'], 'long_name': 'Main St'},
+                    ],
+                },
+            ]
+        return {'status': 'OK', 'results': results}
 
-        config_loader = get_config_loader()
-        if config_loader.get_geocoding_search_mode() != 'maptiler':
-            self.skipTest("MapTiler reverse_geocoding backend not enabled (run only when geocoding_search_mode is maptiler)")
-        api_key = config_loader.get_maptiler_api_key()
-        if not api_key:
-            self.skipTest("MapTiler API key not configured")
+    def _create_mock_google_response_rocky_mountain(self):
+        """Google-style response with Rocky Mountain National Park–like result."""
+        return self._create_mock_google_response(results=[
+            {
+                'place_id': 'ChIJRMNP',
+                'formatted_address': 'Rocky Mountain National Park, Larimer, CO, USA',
+                'geometry': {
+                    'location': {'lat': 40.33331796070216, 'lng': -105.70889554917812},
+                    'viewport': {
+                        'southwest': {'lat': 40.2, 'lng': -105.9},
+                        'northeast': {'lat': 40.5, 'lng': -105.5},
+                    },
+                },
+                'address_components': [
+                    {'types': ['establishment'], 'long_name': 'Rocky Mountain National Park'},
+                ],
+            },
+        ])
 
-        # Make a real request to our API endpoint
-        response = self.client.get('/api/reverse_geocoding/search/?q=niggerhead rock')
-        
-        self.assertEqual(response.status_code, 200)
-        data = json.loads(response.content)
-        features = data['data']['features']
-        
-        self.assertTrue(len(features) > 0, "Should return at least one feature for 'niggerhead rock'")
-        
-        for feature in features:
-            text = feature.get('text', '')
-            place_name = feature.get('place_name', '')
-            
-            # Assert that text and place_name do not contain Cyrillic characters
-            # (which was the reported issue). We use a regex to check for Cyrillic range.
-            import re
-            cyrillic_pattern = re.compile(r'[\u0400-\u04FF]')
-            
-            if text:
-                has_cyrillic = bool(cyrillic_pattern.search(text))
-                self.assertFalse(has_cyrillic, f"Feature text '{text}' contains Cyrillic characters")
-            if place_name:
-                has_cyrillic = bool(cyrillic_pattern.search(place_name))
-                self.assertFalse(has_cyrillic, f"Feature place_name '{place_name}' contains Cyrillic characters")
-
-    @patch('api.views.services.reverse_geocoding.get_config_loader')
-    @patch('api.views.services.reverse_geocoding.requests.get')
-    def test_geocoding_search_rocky_mountain_national_park(self, mock_get, mock_config_loader):
-        """Test that searching for 'rocky mountain national park' returns RMNP feature."""
-        # Mock config loader to return API key and mode
-        mock_config = MagicMock()
-        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
-        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
-        mock_config_loader.return_value = mock_config
-
-        # Mock API responses - now 3 requests: admin, geographic, all types
-        mock_admin_response = MagicMock()
-        mock_admin_response.status_code = 200
-        mock_admin_response.json.return_value = self._create_mock_admin_response()
-
-        mock_geo_response = MagicMock()
-        mock_geo_response.status_code = 200
-        mock_geo_response.json.return_value = self._create_mock_geographic_response()
-
-        mock_all_response = MagicMock()
-        mock_all_response.status_code = 200
-        mock_all_response.json.return_value = self._create_mock_all_types_response()
-
-        # Three calls: admin divisions, geographic features, all types
-        mock_get.side_effect = [mock_admin_response, mock_geo_response, mock_all_response]
-
-        # Make request
-        response = self.client.get('/api/reverse_geocoding/search/?q=rocky mountain national park')
-
-        # Verify response
-        self.assertEqual(response.status_code, 200)
-        data = json.loads(response.content)
+    def _assert_search_response_contract(self, data, query=None):
+        """Assert common response contract: data.data has query and features with cleaned shape."""
         self.assertIn('data', data)
         self.assertIn('features', data['data'])
-        self.assertIn('query', data['data'])
-        self.assertEqual(data['data']['query'], 'rocky mountain national park')
-
-        # Verify RMNP feature is in results
-        features = data['data']['features']
-        rmnp_feature = next((f for f in features if f.get('id') == 'poi.48602113'), None)
-        self.assertIsNotNone(rmnp_feature, "Rocky Mountain National Park feature should be in results")
-        self.assertEqual(rmnp_feature['text'], 'Rocky Mountain National Park')
-        # Note: place_name has the redundant text stripped by _clean_feature
-        self.assertEqual(rmnp_feature['place_name'], 'Larimer, United States of America')
-
-        # Verify feature is cleaned (no unnecessary fields)
-        self.assertIn('coordinates', rmnp_feature)
-        self.assertIn('bbox', rmnp_feature)
-        self.assertIn('id', rmnp_feature)
-        self.assertIn('text', rmnp_feature)
-        self.assertIn('place_name', rmnp_feature)
-        # Should not have unnecessary fields
-        self.assertNotIn('geometry', rmnp_feature)
-        self.assertNotIn('type', rmnp_feature)
-        self.assertNotIn('relevance', rmnp_feature)
-        self.assertNotIn('context', rmnp_feature)
-        self.assertNotIn('place_type', rmnp_feature)
-
-    @patch('api.views.services.reverse_geocoding.get_config_loader')
-    @patch('api.views.services.reverse_geocoding.requests.get')
-    def test_geocoding_search_caching(self, mock_get, mock_config_loader):
-        """Test that reverse_geocoding results are cached."""
-        # Mock config loader to return API key and mode
-        mock_config = MagicMock()
-        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
-        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
-        mock_config_loader.return_value = mock_config
-
-        # Mock API responses - now 3 requests: admin, geographic, all types
-        mock_admin_response = MagicMock()
-        mock_admin_response.status_code = 200
-        mock_admin_response.json.return_value = self._create_mock_admin_response()
-
-        mock_geo_response = MagicMock()
-        mock_geo_response.status_code = 200
-        mock_geo_response.json.return_value = self._create_mock_geographic_response()
-
-        mock_all_response = MagicMock()
-        mock_all_response.status_code = 200
-        mock_all_response.json.return_value = self._create_mock_all_types_response()
-
-        mock_get.side_effect = [mock_admin_response, mock_geo_response, mock_all_response]
-
-        # First request - should call API
-        response1 = self.client.get('/api/reverse_geocoding/search/?q=denver')
-        self.assertEqual(response1.status_code, 200)
-        # Verify API was called
-        self.assertEqual(mock_get.call_count, 3)  # Admin + geographic + all types
-
-        # Reset mock call count
-        mock_get.reset_mock()
-
-        # Second request with same query - should use cache
-        response2 = self.client.get('/api/reverse_geocoding/search/?q=denver')
-        self.assertEqual(response2.status_code, 200)
-        # Verify API was NOT called again (cache hit)
-        self.assertEqual(mock_get.call_count, 0)
-
-        # Verify responses are the same
-        data1 = json.loads(response1.content)
-        data2 = json.loads(response2.content)
-        self.assertEqual(data1, data2)
-
-    @patch('api.views.services.reverse_geocoding.get_config_loader')
-    def test_geocoding_search_no_api_key(self, mock_config_loader):
-        """Test reverse_geocoding search when API key is not configured."""
-        # Mock config loader: mode maptiler, no API key
-        mock_config = MagicMock()
-        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
-        mock_config.get_maptiler_api_key.return_value = None
-        mock_config_loader.return_value = mock_config
-
-        # Make request
-        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
-
-        # Verify error response
-        self.assertEqual(response.status_code, 503)
-        data = json.loads(response.content)
-        self.assertIn('error', data)
-        self.assertIn('not available', data['error'].lower())
-
-    @patch('api.views.services.reverse_geocoding.get_config_loader')
-    def test_geocoding_search_missing_query(self, mock_config_loader):
-        """Test reverse_geocoding search without query parameter."""
-        # Mock config loader
-        mock_config = MagicMock()
-        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
-        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
-        mock_config_loader.return_value = mock_config
-
-        # Make request without query
-        response = self.client.get('/api/reverse_geocoding/search/')
-
-        # Verify error response
-        self.assertEqual(response.status_code, 400)
-        data = json.loads(response.content)
-        self.assertIn('error', data)
-        self.assertIn('required', data['error'].lower())
-
-    @patch('api.views.services.reverse_geocoding.get_config_loader')
-    @patch('api.views.services.reverse_geocoding.requests.get')
-    def test_geocoding_search_api_error(self, mock_get, mock_config_loader):
-        """Test reverse_geocoding search when MapTiler API returns an error."""
-        # Mock config loader to return API key and mode
-        mock_config = MagicMock()
-        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
-        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
-        mock_config_loader.return_value = mock_config
-
-        # Mock API error response - admin succeeds, geographic succeeds, all types fails
-        mock_admin_response = MagicMock()
-        mock_admin_response.status_code = 200
-        mock_admin_response.json.return_value = self._create_mock_admin_response()
-
-        mock_geo_response = MagicMock()
-        mock_geo_response.status_code = 200
-        mock_geo_response.json.return_value = self._create_mock_geographic_response()
-
-        mock_all_response = MagicMock()
-        mock_all_response.status_code = 400
-        mock_all_response.text = 'ERR_VALIDATION: Invalid parameter'
-
-        mock_get.side_effect = [mock_admin_response, mock_geo_response, mock_all_response]
-
-        # Make request
-        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
-
-        # Should still work with geographic features only
-        self.assertEqual(response.status_code, 200)
-        data = json.loads(response.content)
-        self.assertIn('features', data['data'])
-
-    @patch('api.views.services.reverse_geocoding.get_config_loader')
-    @patch('api.views.services.reverse_geocoding.requests.get')
-    def test_geocoding_search_timeout(self, mock_get, mock_config_loader):
-        """Test reverse_geocoding search when API request times out."""
-        # Mock config loader to return API key and mode
-        mock_config = MagicMock()
-        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
-        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
-        mock_config_loader.return_value = mock_config
-
-        # Mock timeout exception
-        mock_get.side_effect = requests.exceptions.Timeout('Request timed out')
-
-        # Make request
-        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
-
-        # Verify error response
-        self.assertEqual(response.status_code, 504)
-        data = json.loads(response.content)
-        self.assertIn('error', data)
-        self.assertIn('timed out', data['error'].lower())
-
-    @patch('api.views.services.reverse_geocoding.get_config_loader')
-    @patch('api.views.services.reverse_geocoding.requests.get')
-    def test_geocoding_search_feature_cleaning(self, mock_get, mock_config_loader):
-        """Test that features are properly cleaned (unnecessary fields removed)."""
-        # Mock config loader to return API key and mode
-        mock_config = MagicMock()
-        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
-        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
-        mock_config_loader.return_value = mock_config
-
-        # Mock API responses - now 3 requests: admin, geographic, all types
-        mock_admin_response = MagicMock()
-        mock_admin_response.status_code = 200
-        mock_admin_response.json.return_value = self._create_mock_admin_response()
-
-        mock_geo_response = MagicMock()
-        mock_geo_response.status_code = 200
-        mock_geo_response.json.return_value = self._create_mock_geographic_response()
-
-        mock_all_response = MagicMock()
-        mock_all_response.status_code = 200
-        mock_all_response.json.return_value = self._create_mock_all_types_response()
-
-        mock_get.side_effect = [mock_admin_response, mock_geo_response, mock_all_response]
-
-        # Make request
-        response = self.client.get('/api/reverse_geocoding/search/?q=test')
-
-        # Verify response
-        self.assertEqual(response.status_code, 200)
-        data = json.loads(response.content)
-        features = data['data']['features']
-
-        # Verify all features are cleaned
-        for feature in features:
-            # Should have essential fields
+        if query is not None:
+            self.assertEqual(data['data']['query'], query)
+        for feature in data['data']['features']:
             self.assertIn('coordinates', feature)
             self.assertIn('id', feature)
             self.assertIn('text', feature)
             self.assertIn('place_name', feature)
             self.assertIn('bbox', feature)
-
-            # Should not have unnecessary fields
             self.assertNotIn('geometry', feature)
             self.assertNotIn('type', feature)
             self.assertNotIn('relevance', feature)
+
+    def _assert_no_cyrillic_in_search_results(self, data):
+        """Assert no Cyrillic characters in feature text/place_name (live edge-case check)."""
+        features = data['data']['features']
+        self.assertTrue(len(features) > 0, "Should return at least one feature")
+        cyrillic_pattern = re.compile(r'[\u0400-\u04FF]')
+        for feature in features:
+            for field in ('text', 'place_name'):
+                val = feature.get(field, '')
+                if val:
+                    self.assertFalse(
+                        bool(cyrillic_pattern.search(val)),
+                        f"Feature {field} '{val}' contains Cyrillic characters",
+                    )
+
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    def test_geocoding_search_maptiler_live_no_cyrillic_in_search_results(self, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
+        """Live MapTiler API: query that can return Cyrillic; assert response has no Cyrillic in feature text/place_name."""
+        from website.config_loader import get_config_loader
+
+        config_loader = get_config_loader()
+        api_key = config_loader.get_maptiler_api_key() or (os.environ.get('MAPTILER_API_KEY') or '').strip() or None
+        if not api_key:
+            self.skipTest("MapTiler API key not configured")
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
+        mock_config.get_maptiler_api_key.return_value = api_key
+        mock_config.get_google_api_key.return_value = None
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
+
+        response = self.client.get('/api/reverse_geocoding/search/?q=niggerhead rock')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self._assert_no_cyrillic_in_search_results(data)
+
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    def test_geocoding_search_google_live_no_cyrillic_in_search_results(self, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
+        """Live Google API: query that can return Cyrillic; assert response has no Cyrillic in feature text/place_name."""
+        from website.config_loader import get_config_loader
+
+        config_loader = get_config_loader()
+        api_key = config_loader.get_google_api_key() or (os.environ.get('GOOGLE_API_KEY') or '').strip() or None
+        if not api_key:
+            self.skipTest("Google API key not configured")
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'google'
+        mock_config.get_google_api_key.return_value = api_key
+        mock_config.get_maptiler_api_key.return_value = None
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
+
+        response = self.client.get('/api/reverse_geocoding/search/?q=niggerhead rock')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self._assert_no_cyrillic_in_search_results(data)
+
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    @patch(PATCH_REQUESTS_GET)
+    def test_geocoding_search_maptiler_rocky_mountain_national_park(self, mock_get, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
+        """Test that searching for 'rocky mountain national park' returns RMNP-like feature (MapTiler)."""
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
+        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config.get_google_api_key.return_value = None
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
+
+        mock_admin = MagicMock()
+        mock_admin.status_code = 200
+        mock_admin.json.return_value = self._create_mock_admin_response()
+        mock_geo = MagicMock()
+        mock_geo.status_code = 200
+        mock_geo.json.return_value = self._create_mock_geographic_response()
+        mock_all = MagicMock()
+        mock_all.status_code = 200
+        mock_all.json.return_value = self._create_mock_all_types_response()
+        mock_get.side_effect = [mock_admin, mock_geo, mock_all]
+
+        response = self.client.get('/api/reverse_geocoding/search/?q=rocky mountain national park')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self._assert_search_response_contract(data, 'rocky mountain national park')
+        features = data['data']['features']
+        rmnp = next((f for f in features if f.get('id') == 'poi.48602113'), None)
+        self.assertIsNotNone(rmnp, msg="RMNP feature should be in results")
+        self.assertEqual(rmnp['text'], 'Rocky Mountain National Park')
+        self.assertEqual(rmnp['place_name'], 'Larimer, United States of America')
+
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    @patch(PATCH_REQUESTS_GET)
+    def test_geocoding_search_google_rocky_mountain_national_park(self, mock_get, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
+        """Test that searching for 'rocky mountain national park' returns RMNP-like feature (Google)."""
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'google'
+        mock_config.get_maptiler_api_key.return_value = None
+        mock_config.get_google_api_key.return_value = 'test_google_key'
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = self._create_mock_google_response_rocky_mountain()
+        mock_get.side_effect = None
+        mock_get.return_value = mock_resp
+
+        response = self.client.get('/api/reverse_geocoding/search/?q=rocky mountain national park')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self._assert_search_response_contract(data, 'rocky mountain national park')
+        features = data['data']['features']
+        rmnp = next((f for f in features if f.get('id') == 'ChIJRMNP'), None)
+        self.assertIsNotNone(rmnp, msg="RMNP-like feature should be in results")
+        self.assertIn('Rocky Mountain', rmnp['text'] or '')
+
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    @patch(PATCH_REQUESTS_GET)
+    def test_geocoding_search_maptiler_caching(self, mock_get, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
+        """Test that reverse_geocoding results are cached (MapTiler)."""
+        cache.clear()
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
+        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config.get_google_api_key.return_value = None
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
+
+        mock_admin = MagicMock()
+        mock_admin.status_code = 200
+        mock_admin.json.return_value = self._create_mock_admin_response()
+        mock_geo = MagicMock()
+        mock_geo.status_code = 200
+        mock_geo.json.return_value = self._create_mock_geographic_response()
+        mock_all = MagicMock()
+        mock_all.status_code = 200
+        mock_all.json.return_value = self._create_mock_all_types_response()
+        mock_get.side_effect = [mock_admin, mock_geo, mock_all]
+
+        response1 = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        self.assertEqual(response1.status_code, 200)
+        self.assertEqual(mock_get.call_count, 3)
+
+        mock_get.reset_mock()
+        response2 = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        self.assertEqual(response2.status_code, 200)
+        self.assertEqual(mock_get.call_count, 0, msg="cache hit on second request")
+
+        self.assertEqual(json.loads(response1.content), json.loads(response2.content))
+
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    @patch(PATCH_REQUESTS_GET)
+    def test_geocoding_search_google_caching(self, mock_get, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
+        """Test that reverse_geocoding results are cached (Google)."""
+        cache.clear()
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'google'
+        mock_config.get_maptiler_api_key.return_value = None
+        mock_config.get_google_api_key.return_value = 'test_google_key'
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = self._create_mock_google_response()
+        mock_get.side_effect = None
+        mock_get.return_value = mock_resp
+
+        response1 = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        self.assertEqual(response1.status_code, 200)
+        self.assertEqual(mock_get.call_count, 1)
+
+        mock_get.reset_mock()
+        response2 = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        self.assertEqual(response2.status_code, 200)
+        self.assertEqual(mock_get.call_count, 0, msg="cache hit on second request")
+
+        self.assertEqual(json.loads(response1.content), json.loads(response2.content))
+
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    def test_geocoding_search_maptiler_no_api_key(self, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
+        """Test reverse_geocoding search when MapTiler API key is not configured."""
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
+        mock_config.get_maptiler_api_key.return_value = None
+        mock_config.get_google_api_key.return_value = 'x'
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
+
+        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        self.assertEqual(response.status_code, 503)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+        self.assertIn('not available', data['error'].lower())
+        self.assertIn('MapTiler', data['error'])
+
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    def test_geocoding_search_google_no_api_key(self, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
+        """Test reverse_geocoding search when Google API key is not configured."""
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'google'
+        mock_config.get_maptiler_api_key.return_value = 'x'
+        mock_config.get_google_api_key.return_value = None
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
+
+        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        self.assertEqual(response.status_code, 503)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+        self.assertIn('not available', data['error'].lower())
+        self.assertIn('Google', data['error'])
+
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    def test_geocoding_search_maptiler_missing_query(self, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
+        """Test reverse_geocoding search without query parameter."""
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
+        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
+
+        response = self.client.get('/api/reverse_geocoding/search/')
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+        self.assertIn('required', data['error'].lower())
+
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    @patch(PATCH_REQUESTS_GET)
+    def test_geocoding_search_maptiler_api_error(self, mock_get, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
+        """Test reverse_geocoding search when MapTiler API returns error (partial failure still returns 200)."""
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
+        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config.get_google_api_key.return_value = None
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
+
+        mock_admin = MagicMock()
+        mock_admin.status_code = 200
+        mock_admin.json.return_value = self._create_mock_admin_response()
+        mock_geo = MagicMock()
+        mock_geo.status_code = 200
+        mock_geo.json.return_value = self._create_mock_geographic_response()
+        mock_all = MagicMock()
+        mock_all.status_code = 400
+        mock_all.text = 'ERR_VALIDATION: Invalid parameter'
+        mock_get.side_effect = [mock_admin, mock_geo, mock_all]
+        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('features', data['data'])
+
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    @patch(PATCH_REQUESTS_GET)
+    def test_geocoding_search_google_api_error(self, mock_get, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
+        """Test reverse_geocoding search when Google API returns error."""
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'google'
+        mock_config.get_maptiler_api_key.return_value = None
+        mock_config.get_google_api_key.return_value = 'test_google_key'
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {'status': 'OVER_QUERY_LIMIT', 'error_message': 'Quota exceeded'}
+        mock_get.side_effect = None
+        mock_get.return_value = mock_resp
+        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    @patch(PATCH_REQUESTS_GET)
+    def test_geocoding_search_maptiler_timeout(self, mock_get, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
+        """Test reverse_geocoding search when MapTiler request times out."""
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
+        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config.get_google_api_key.return_value = None
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
+
+        mock_get.side_effect = requests.exceptions.Timeout('Request timed out')
+        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        self.assertEqual(response.status_code, 504)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+        self.assertIn('timed out', data['error'].lower())
+
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    @patch(PATCH_REQUESTS_GET)
+    def test_geocoding_search_google_timeout(self, mock_get, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
+        """Test reverse_geocoding search when Google request times out."""
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'google'
+        mock_config.get_maptiler_api_key.return_value = None
+        mock_config.get_google_api_key.return_value = 'test_google_key'
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
+
+        mock_get.side_effect = requests.exceptions.Timeout('Request timed out')
+        response = self.client.get('/api/reverse_geocoding/search/?q=denver')
+        self.assertEqual(response.status_code, 504)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+        self.assertIn('timed out', data['error'].lower())
+
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    @patch(PATCH_REQUESTS_GET)
+    def test_geocoding_search_maptiler_feature_cleaning(self, mock_get, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
+        """Test that MapTiler features are properly cleaned."""
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
+        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config.get_google_api_key.return_value = None
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
+
+        mock_admin = MagicMock()
+        mock_admin.status_code = 200
+        mock_admin.json.return_value = self._create_mock_admin_response()
+        mock_geo = MagicMock()
+        mock_geo.status_code = 200
+        mock_geo.json.return_value = self._create_mock_geographic_response()
+        mock_all = MagicMock()
+        mock_all.status_code = 200
+        mock_all.json.return_value = self._create_mock_all_types_response()
+        mock_get.side_effect = [mock_admin, mock_geo, mock_all]
+
+        response = self.client.get('/api/reverse_geocoding/search/?q=test')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self._assert_search_response_contract(data, 'test')
+        features = data['data']['features']
+        for feature in features:
             self.assertNotIn('context', feature)
             self.assertNotIn('place_type', feature)
             self.assertNotIn('center', feature)
-
-            # Properties should only have minimal fields
             if 'properties' in feature:
                 props = feature['properties']
-                # Should not have unnecessary properties
                 self.assertNotIn('ref', props)
                 self.assertNotIn('wikidata', props)
                 self.assertNotIn('feature_tags', props)
                 self.assertNotIn('categories', props)
 
-    @patch('api.views.services.reverse_geocoding.get_config_loader')
-    @patch('api.views.services.reverse_geocoding.requests.get')
-    def test_geocoding_search_prioritizes_geographic_features(self, mock_get, mock_config_loader):
-        """Test that geographic features (parks, POIs) are prioritized over addresses."""
-        # Mock config loader to return API key and mode
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    @patch(PATCH_REQUESTS_GET)
+    def test_geocoding_search_google_feature_cleaning(self, mock_get, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
+        """Test that Google features are properly cleaned."""
         mock_config = MagicMock()
-        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
-        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
-        mock_config_loader.return_value = mock_config
+        mock_config.get_geocoding_search_mode.return_value = 'google'
+        mock_config.get_maptiler_api_key.return_value = None
+        mock_config.get_google_api_key.return_value = 'test_google_key'
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
 
-        # Mock API responses - now 3 requests: admin, geographic, all types
-        mock_admin_response = MagicMock()
-        mock_admin_response.status_code = 200
-        mock_admin_response.json.return_value = self._create_mock_admin_response()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = self._create_mock_google_response()
+        mock_get.side_effect = None
+        mock_get.return_value = mock_resp
 
-        mock_geo_response = MagicMock()
-        mock_geo_response.status_code = 200
-        mock_geo_response.json.return_value = self._create_mock_geographic_response()
-
-        mock_all_response = MagicMock()
-        mock_all_response.status_code = 200
-        mock_all_response.json.return_value = self._create_mock_all_types_response()
-
-        mock_get.side_effect = [mock_admin_response, mock_geo_response, mock_all_response]
-
-        # Make request
-        response = self.client.get('/api/reverse_geocoding/search/?q=rocky mountain')
-
-        # Verify response
+        response = self.client.get('/api/reverse_geocoding/search/?q=test')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
+        self._assert_search_response_contract(data, 'test')
         features = data['data']['features']
+        for feature in features:
+            self.assertNotIn('context', feature)
+            self.assertNotIn('place_type', feature)
+            self.assertNotIn('center', feature)
+            if 'properties' in feature:
+                props = feature['properties']
+                self.assertNotIn('ref', props)
+                self.assertNotIn('wikidata', props)
+                self.assertNotIn('feature_tags', props)
+                self.assertNotIn('categories', props)
 
-        # Verify RMNP (geographic feature) appears before addresses
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    @patch(PATCH_REQUESTS_GET)
+    def test_geocoding_search_maptiler_prioritizes_geographic_features(self, mock_get, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
+        """Test MapTiler geographic prioritization (geographic features before addresses)."""
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'maptiler'
+        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config.get_google_api_key.return_value = None
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
+
+        mock_admin = MagicMock()
+        mock_admin.status_code = 200
+        mock_admin.json.return_value = self._create_mock_admin_response()
+        mock_geo = MagicMock()
+        mock_geo.status_code = 200
+        mock_geo.json.return_value = self._create_mock_geographic_response()
+        mock_all = MagicMock()
+        mock_all.status_code = 200
+        mock_all.json.return_value = self._create_mock_all_types_response()
+        mock_get.side_effect = [mock_admin, mock_geo, mock_all]
+
+        response = self.client.get('/api/reverse_geocoding/search/?q=rocky mountain')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self._assert_search_response_contract(data, 'rocky mountain')
+        features = data['data']['features']
         feature_ids = [f.get('id') for f in features]
         rmnp_index = feature_ids.index('poi.48602113') if 'poi.48602113' in feature_ids else -1
         address_index = feature_ids.index('address.21312537') if 'address.21312537' in feature_ids else -1
-
         if rmnp_index >= 0 and address_index >= 0:
-            self.assertLess(rmnp_index, address_index, 
-                          "Geographic features should appear before addresses")
+            self.assertLess(rmnp_index, address_index,
+                            "Geographic features should appear before addresses")
+
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    @patch(PATCH_REQUESTS_GET)
+    def test_geocoding_search_google_prioritizes_geographic_features(self, mock_get, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
+        """Test Google search returns valid contract (prioritization is backend-specific)."""
+        mock_config = MagicMock()
+        mock_config.get_geocoding_search_mode.return_value = 'google'
+        mock_config.get_maptiler_api_key.return_value = None
+        mock_config.get_google_api_key.return_value = 'test_google_key'
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = self._create_mock_google_response()
+        mock_get.side_effect = None
+        mock_get.return_value = mock_resp
+
+        response = self.client.get('/api/reverse_geocoding/search/?q=rocky mountain')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self._assert_search_response_contract(data, 'rocky mountain')
 
     # --- geocoding_search_mode config and pluggable backends ---
 
@@ -486,14 +703,17 @@ class TestGeocodingAPI(TestCase):
             loader = ConfigLoader(str(path))
             self.assertIsNone(loader.get_geocoding_search_mode())
 
-    @patch('api.views.services.reverse_geocoding.get_config_loader')
-    @patch('api.views.services.reverse_geocoding.requests.get')
-    def test_geocoding_search_mode_google_uses_google_backend(self, mock_get, mock_config_loader):
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    @patch(PATCH_REQUESTS_GET)
+    def test_geocoding_search_google_uses_backend(self, mock_get, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
         """With geocoding_search_mode google and Google key configured, view uses Google backend."""
         mock_config = MagicMock()
         mock_config.get_geocoding_search_mode.return_value = 'google'
         mock_config.get_google_api_key.return_value = 'test_google_key'
-        mock_config_loader.return_value = mock_config
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -529,18 +749,20 @@ class TestGeocodingAPI(TestCase):
         self.assertEqual(feature['coordinates'], [-104.9, 39.7])
         self.assertIn('place_name', feature)
         self.assertIn('bbox', feature)
-        # Verify Google Geocoding API was called
         mock_get.assert_called_once()
         call_args = mock_get.call_args
         self.assertIn('maps.googleapis.com', str(call_args))
 
-    @patch('api.views.services.reverse_geocoding.get_config_loader')
-    def test_geocoding_search_mode_google_no_key_returns_503(self, mock_config_loader):
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    def test_geocoding_search_google_no_key_returns_503(self, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
         """With geocoding_search_mode google and Google API key not configured, view returns 503."""
         mock_config = MagicMock()
         mock_config.get_geocoding_search_mode.return_value = 'google'
         mock_config.get_google_api_key.return_value = None
-        mock_config_loader.return_value = mock_config
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
 
         response = self.client.get('/api/reverse_geocoding/search/?q=denver')
         self.assertEqual(response.status_code, 503)
@@ -549,12 +771,15 @@ class TestGeocodingAPI(TestCase):
         self.assertIn('not available', data['error'].lower())
         self.assertIn('Google', data['error'])
 
-    @patch('api.views.services.reverse_geocoding.get_config_loader')
-    def test_geocoding_search_mode_unset_returns_503(self, mock_config_loader):
+    @patch(PATCH_CONFIG_GOOGLE)
+    @patch(PATCH_CONFIG_MAPTILER)
+    @patch(PATCH_CONFIG_COMMON)
+    @patch(PATCH_CONFIG_BACKENDS)
+    def test_geocoding_search_unset_returns_503(self, mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google):
         """When geocoding_search_mode is None (missing or unset), view returns 503."""
         mock_config = MagicMock()
         mock_config.get_geocoding_search_mode.return_value = None
-        mock_config_loader.return_value = mock_config
+        _set_config_mocks(mock_config_backends, mock_config_common, mock_config_maptiler, mock_config_google, mock_config)
 
         response = self.client.get('/api/reverse_geocoding/search/?q=denver')
         self.assertEqual(response.status_code, 503)

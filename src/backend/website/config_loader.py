@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 import yaml
 
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.search_geocoding.backends import list_search_backends
+from geo_lib.search_geocoding.constants import GEOCODING_SEARCH_MODES
 
 logger = get_tagged_logger('config')
 
@@ -217,12 +217,12 @@ class ConfigLoader:
         if value is None or (isinstance(value, str) and not value.strip()):
             return None
         normalized = str(value).strip().lower()
-        if normalized in list_search_backends():
+        if normalized in GEOCODING_SEARCH_MODES:
             return normalized
         logger.warning(
             "geocoding_search_mode has invalid value %r; expected one of %s. Forward geocoding is disabled.",
             value,
-            ', '.join(repr(m) for m in list_search_backends()),
+            ', '.join(repr(m) for m in GEOCODING_SEARCH_MODES),
         )
         return None
 

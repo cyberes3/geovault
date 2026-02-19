@@ -7,7 +7,7 @@ from django.core.cache import cache
 from django.views.decorators.http import require_http_methods
 
 from api.utils.responses import error_response, success_response
-from geo_lib.search_geocoding.backends import get_search_backend, check_geocoding_enabled
+from geo_lib.search_geocoding.backends import get_geocoding_not_available_message, get_search_backend
 from geo_lib.search_geocoding.common import (
     GEOCODING_CACHE_TTL,
     GeocodingBackendError,
@@ -36,11 +36,9 @@ def geocoding_search(request):
     if not query:
         return error_response("Query parameter 'q' is required", code=400)
 
-    if not check_geocoding_enabled():
-        return error_response(
-            "Forward geocoding service is not configured",
-            code=503
-        )
+    not_available = get_geocoding_not_available_message()
+    if not_available is not None:
+        return error_response(not_available, code=503)
 
     cache_key = get_geocoding_cache_key(query)
     cached_result = cache.get(cache_key)
