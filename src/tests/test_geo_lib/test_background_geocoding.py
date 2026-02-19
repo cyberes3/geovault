@@ -95,8 +95,8 @@ class TestBackgroundGeocoding(TransactionTestCase):
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
     def test_background_geocoding_adds_tags(self, mock_batch_reverse_geocode, mock_setting):
-        """Test that background reverse reverse_geocoding adds tags to a feature."""
-        # Enable reverse reverse_geocoding
+        """Test that background reverse geocoding adds tags to a feature."""
+        # Enable reverse geocoding
         mock_setting.return_value = True
         
         # Mock batch_reverse_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
@@ -319,8 +319,8 @@ class TestSkipReverseGeocodingParameter(TestCase):
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
     def test_generate_auto_tags_skips_reverse_geocoding(self, mock_batch_reverse_geocode, mock_setting):
-        """Test that generate_auto_tags skips reverse reverse_geocoding when flag is set."""
-        # Enable reverse reverse_geocoding
+        """Test that generate_auto_tags skips reverse geocoding when flag is set."""
+        # Enable reverse geocoding
         mock_setting.return_value = True
         
         # Mock batch_reverse_geocode_coordinates
@@ -337,16 +337,16 @@ class TestSkipReverseGeocodingParameter(TestCase):
             properties={'name': 'Test Point', 'geojson_hash': 'test'}
         )
         
-        # Generate tags without skipping reverse reverse_geocoding
+        # Generate tags without skipping reverse geocoding
         tags_with_reverse_geocoding = generate_auto_tags(feature, import_log=ImportLog(), skip_reverse_geocoding=False)
         
-        # Generate tags with reverse reverse_geocoding skipped
+        # Generate tags with reverse geocoding skipped
         tags_without_reverse_geocoding = generate_auto_tags(feature, import_log=ImportLog(), skip_reverse_geocoding=True)
         
-        # Verify reverse reverse_geocoding tags are present when not skipped
+        # Verify reverse geocoding tags are present when not skipped
         self.assertTrue(any('geo-city' in tag for tag in tags_with_reverse_geocoding))
         
-        # Verify reverse reverse_geocoding tags are absent when skipped
+        # Verify reverse geocoding tags are absent when skipped
         self.assertFalse(any('geo-city' in tag for tag in tags_without_reverse_geocoding))
         
         # Verify other tags are still present in both cases

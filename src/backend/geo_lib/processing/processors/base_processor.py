@@ -202,7 +202,7 @@ class BaseProcessor(ABC):
     def step_4_split_and_validate_features(self, geojson_data: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], ImportLog]:
         """
         Step 4: Split complex geometries and validate coordinates.
-        Does NOT generate tags - that happens in step 7 (tagging and reverse reverse_geocoding).
+        Does NOT generate tags - that happens in step 7 (tagging and reverse geocoding).
         
         Args:
             geojson_data: GeoJSON data dictionary
@@ -339,7 +339,7 @@ class BaseProcessor(ABC):
 
     def step_7_tag_features(self) -> ImportLog:
         """
-        Step 7: Generate all tags for features including reverse reverse_geocoding.
+        Step 7: Generate all tags for features including reverse geocoding.
         Generates tags for: type, import date, source file, elevation,
         and location-based tags (city, state, country, protected areas, etc.)
         Uses batch processing with coordinate deduplication.
@@ -352,13 +352,13 @@ class BaseProcessor(ABC):
         if not self.processed_features or self.minimal_processing:
             return feature_log
 
-        # Log start of tagging and reverse reverse_geocoding process
-        feature_log.add(f"Starting tagging and reverse reverse_geocoding for {len(self.processed_features)} feature(s)", "Tagging and Reverse Geocoding", DatabaseLogLevel.INFO)
+        # Log start of tagging and reverse geocoding process
+        feature_log.add(f"Starting tagging and reverse geocoding for {len(self.processed_features)} feature(s)", "Tagging and Reverse Geocoding", DatabaseLogLevel.INFO)
 
         try:
             # Check for cancellation before starting
             if self._is_canceled():
-                feature_log.add("Processing canceled before tagging and reverse reverse_geocoding", "Tagging and Reverse Geocoding", DatabaseLogLevel.WARNING)
+                feature_log.add("Processing canceled before tagging and reverse geocoding", "Tagging and Reverse Geocoding", DatabaseLogLevel.WARNING)
                 return feature_log
 
             # Create feature instances for all features
@@ -394,7 +394,7 @@ class BaseProcessor(ABC):
                 feature_log.add("Processing canceled during feature instance creation", "Tagging and Reverse Geocoding", DatabaseLogLevel.WARNING)
                 return feature_log
 
-            # Batch generate all tags for all features at once (including reverse reverse_geocoding)
+            # Batch generate all tags for all features at once (including reverse geocoding)
             from geo_lib.processing.tagging.generate import generate_auto_tags_batch
             # Normalize file_data for tag generators (strip BOM if present)
             _logger.debug(
@@ -415,7 +415,7 @@ class BaseProcessor(ABC):
                 [f for f in feature_instances if f is not None],
                 import_log=feature_log,
                 filename=self.filename,
-                skip_reverse_geocoding=False,  # Include reverse reverse_geocoding
+                skip_reverse_geocoding=False,  # Include reverse geocoding
                 file_content=normalized_file_data
             )
 
@@ -461,11 +461,11 @@ class BaseProcessor(ABC):
 
         except Exception as e:
             feature_log.add(
-                f"Tagging and reverse reverse_geocoding failed: {str(e)}",
+                f"Tagging and reverse geocoding failed: {str(e)}",
                 "Tagging and Reverse Geocoding",
                 DatabaseLogLevel.ERROR
             )
-            _logger.error(f"Tagging and reverse reverse_geocoding error: {traceback.format_exc()}")
+            _logger.error(f"Tagging and reverse geocoding error: {traceback.format_exc()}")
 
         return feature_log
 
@@ -714,7 +714,7 @@ class BaseProcessor(ABC):
     def _step_4_process_single_feature(self, feature: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], ImportLog, int, bool]:
         """
         Worker for step 4: Split and validate a single feature.
-        Does NOT generate tags - that happens in step 7 (tagging and reverse reverse_geocoding).
+        Does NOT generate tags - that happens in step 7 (tagging and reverse geocoding).
         
         Args:
             feature: Single feature dictionary from GeoJSON

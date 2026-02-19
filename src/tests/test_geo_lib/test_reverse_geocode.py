@@ -1,5 +1,5 @@
 """
-Comprehensive tests for reverse reverse_geocoding service.
+Comprehensive tests for reverse geocoding service.
 
 All reverse_geocoding functions are imported at the top level. The autouse fixture
 in conftest.py mocks query_overpass with real fixture data automatically.
@@ -106,7 +106,7 @@ class TestSkiResortDatabase(TestCase):
 
 @pytest.mark.django_db
 class TestReverseGeocodingService(TestCase):
-    """Test reverse reverse_geocoding service with mocked Overpass API."""
+    """Test reverse geocoding service with mocked Overpass API."""
     
     def setUp(self):
         """Set up test fixtures."""
@@ -545,7 +545,7 @@ class TestCaching(TestCase):
 
 @pytest.mark.django_db
 class TestErrorHandling(TestCase):
-    """Test error handling in reverse reverse_geocoding."""
+    """Test error handling in reverse geocoding."""
     
     def setUp(self):
         """Set up test fixtures."""

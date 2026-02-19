@@ -1,5 +1,5 @@
 """
-Backwards-compatibility wrapper for reverse reverse_geocoding.
+Backwards-compatibility wrapper for reverse geocoding.
 
 This module re-exports the new functional API for backwards compatibility.
 All functionality has been refactored into separate modules:

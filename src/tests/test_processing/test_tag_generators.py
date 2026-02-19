@@ -909,11 +909,11 @@ class TestElevationTagGenerator:
 
 
 class TestReverseGeocodingTagGenerator:
-    """Test the reverse reverse_geocoding tag generator."""
+    """Test the reverse geocoding tag generator."""
     
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
     def test_reverse_geocoding_disabled(self, mock_setting):
-        """Test that no tags are generated when reverse reverse_geocoding is disabled."""
+        """Test that no tags are generated when reverse geocoding is disabled."""
         mock_setting.return_value = False
         
         generator = ReverseGeocodingTagGenerator()
@@ -931,7 +931,7 @@ class TestReverseGeocodingTagGenerator:
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
     def test_reverse_geocoding_for_point(self, mock_setting, mock_batch_reverse_geocode):
-        """Test that reverse reverse_geocoding tags are generated for points."""
+        """Test that reverse geocoding tags are generated for points."""
         mock_setting.return_value = True
         
         # Mock batch_reverse_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
@@ -963,7 +963,7 @@ class TestReverseGeocodingTagGenerator:
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
     def test_reverse_geocoding_for_linestring(self, mock_setting, mock_batch_reverse_geocode):
-        """Test that reverse reverse_geocoding tags are generated for linestrings."""
+        """Test that reverse geocoding tags are generated for linestrings."""
         mock_setting.return_value = True
         
         # Mock batch_reverse_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
@@ -996,7 +996,7 @@ class TestReverseGeocodingTagGenerator:
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
     def test_reverse_geocoding_for_multilinestring(self, mock_setting, mock_batch_reverse_geocode):
-        """Test that reverse reverse_geocoding tags are generated for multilinestrings using centroid."""
+        """Test that reverse geocoding tags are generated for multilinestrings using centroid."""
         mock_setting.return_value = True
         
         # Mock batch_reverse_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
@@ -1037,7 +1037,7 @@ class TestReverseGeocodingTagGenerator:
     
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
     def test_polygon_not_processed(self, mock_setting):
-        """Test that polygons are not processed for reverse reverse_geocoding."""
+        """Test that polygons are not processed for reverse geocoding."""
         mock_setting.return_value = True
         
         generator = ReverseGeocodingTagGenerator()
@@ -1063,7 +1063,7 @@ class TestReverseGeocodingTagGenerator:
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
     def test_reverse_geocoding_with_none_result(self, mock_setting, mock_batch_reverse_geocode):
-        """Test that no tags are generated when reverse reverse_geocoding returns empty list."""
+        """Test that no tags are generated when reverse geocoding returns empty list."""
         mock_setting.return_value = True
         
         # Mock batch_reverse_geocode_coordinates - returns dict with empty tags

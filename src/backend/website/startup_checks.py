@@ -13,7 +13,7 @@ This module performs essential checks when the server starts up:
 9. Site configuration (for email confirmation URLs)
 10. Clean up stale Redis queues and job status data
 11. Clear Redis cache (ensures fresh data on startup)
-12. Preload ski resorts database (for reverse reverse_geocoding)
+12. Preload ski resorts database (for reverse geocoding)
 13. Recover interrupted jobs (re-enqueue jobs that were processing when server stopped)
 
 Warning checks (don't fail startup):
@@ -764,7 +764,7 @@ def clear_redis_cache():
     Clear the Redis cache on startup.
     
     This ensures fresh data after server restarts and prevents stale
-    cached data (especially important for reverse reverse_geocoding which caches
+    cached data (especially important for reverse geocoding which caches
     results for 30 days).
     """
     try:
@@ -784,7 +784,7 @@ def preload_ski_resorts():
     Preload the ski resorts database during startup.
     
     This ensures the ski resorts are loaded once during startup rather than
-    during the first reverse reverse_geocoding operation. This avoids race conditions
+    during the first reverse geocoding operation. This avoids race conditions
     in multi-threaded processing and provides better startup diagnostics.
     
     Returns:
@@ -793,7 +793,7 @@ def preload_ski_resorts():
     ski_resorts = load_ski_resorts()
 
     if ski_resorts:
-        _logger.info(f"✓ Preloaded {len(ski_resorts)} ski resorts for reverse reverse_geocoding")
+        _logger.info(f"✓ Preloaded {len(ski_resorts)} ski resorts for reverse geocoding")
     else:
         _logger.warning("⚠ Ski resorts database is empty or failed to load")
 
@@ -914,7 +914,7 @@ def run_startup_checks():
     11. Verify Site configuration (for email confirmation URLs)
     12. Clean up stale Redis processing queues and job status data
     13. Clear Redis cache (ensures fresh data on startup)
-    14. Preload ski resorts database (for reverse reverse_geocoding)
+    14. Preload ski resorts database (for reverse geocoding)
     15. Recover interrupted jobs (re-enqueue jobs that were processing when server stopped)
     16. Check for duplicate extension names
     

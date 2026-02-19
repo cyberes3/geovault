@@ -269,7 +269,7 @@ class TestE2EImport(TransactionTestCase):
                 'KML conversion',  # Step 3: File conversion
                 'Feature splitting and validation',  # Step 4
                 # 'Elevation data filling' is optional (depends on settings)
-                'Tagging and Reverse Geocoding',  # Step 7: All tagging (including reverse reverse_geocoding)
+                'Tagging and Reverse Geocoding',  # Step 7: All tagging (including reverse geocoding)
             ]
             
             for expected_step in expected_timing_steps:
@@ -295,7 +295,7 @@ class TestE2EImport(TransactionTestCase):
             
             if splitting_idx is not None and tagging_idx is not None:
                 self.assertLess(splitting_idx, tagging_idx,
-                              "Feature splitting should happen before tagging and reverse reverse_geocoding")
+                              "Feature splitting should happen before tagging and reverse geocoding")
         
         # Verify the processing produced valid output
         self.assertGreater(len(import_item.geofeatures), 0, "Should have processed features")
@@ -341,7 +341,7 @@ class TestE2EImport(TransactionTestCase):
             # Step 7: Tagging and Reverse Geocoding (combined)
             self.assertTrue(
                 any('Tagging and Reverse Geocoding' in msg or 'tagging' in msg.lower() for msg in log_messages),
-                "Should have tagging and reverse reverse_geocoding step in logs"
+                "Should have tagging and reverse geocoding step in logs"
             )
             
             # Reverse reverse_geocoding is now part of the tagging step, but may be skipped if disabled

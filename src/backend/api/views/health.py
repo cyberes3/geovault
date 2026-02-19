@@ -49,7 +49,7 @@ def health_check(request):
             ("postgis", lambda: check_postgis_installation(suppress_logging=True))
         ]
 
-        # Check Overpass API only if reverse reverse_geocoding is enabled
+        # Check Overpass API only if reverse geocoding is enabled
         reverse_geocoding_enabled = config.get_bool('reverse_geocoding.enabled', True)
         if reverse_geocoding_enabled:
             checks_to_run.append(("overpass_api", check_overpass_api))

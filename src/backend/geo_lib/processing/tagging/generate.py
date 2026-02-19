@@ -45,10 +45,10 @@ def generate_auto_tags_batch(
         file_content: Optional[Union[str, bytes]] = None
 ) -> List[List[str]]:
     """
-    Generate tags for multiple features at once with batched reverse reverse_geocoding.
+    Generate tags for multiple features at once with batched reverse geocoding.
 
     This is the preferred method for processing multiple features as it:
-    - Deduplicates coordinates before reverse reverse_geocoding
+    - Deduplicates coordinates before reverse geocoding
     - Makes fewer API calls
     - Leverages cache more efficiently
 
@@ -92,16 +92,16 @@ def generate_auto_tags_batch(
                     DatabaseLogLevel.WARNING
                 )
 
-    # Batch process reverse reverse_geocoding for ALL features at once
+    # Batch process reverse geocoding for ALL features at once
     if reverse_geocoding_gen and not skip_reverse_geocoding:
         try:
             reverse_geocode_tags = reverse_geocoding_gen.process_batch(features, import_log=import_log)
             for i, tags in reverse_geocode_tags.items():
                 all_feature_tags[i].extend(tags)
         except:
-            _logger.warning(f"Batch reverse reverse_geocoding failed: {traceback.format_exc()}")
+            _logger.warning(f"Batch reverse geocoding failed: {traceback.format_exc()}")
             import_log.add(
-                f"Batch reverse reverse_geocoding failed",
+                f"Batch reverse geocoding failed",
                 "Tagging",
                 DatabaseLogLevel.WARNING
             )

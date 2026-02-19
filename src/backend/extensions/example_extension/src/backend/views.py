@@ -205,7 +205,7 @@ def create_feature(request):
         geojson_hash=geojson_hash
     )
     
-    # Start background reverse reverse_geocoding (non-blocking)
+    # Start background reverse geocoding (non-blocking)
     reverse_geocode_feature_async(feature_store.id)
     
     # Add database_id to properties for response

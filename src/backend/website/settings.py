@@ -244,7 +244,7 @@ CACHES = {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'unique-snowflake',  # Unique identifier for this cache instance
     },
-    # Separate Redis cache for reverse reverse_geocoding results
+    # Separate Redis cache for reverse geocoding results
     # Uses a different Redis DB to persist across restarts (not cleared on startup)
     'reverse_geocoding': {
         'BACKEND': 'django_redis.cache.RedisCache',
@@ -457,7 +457,7 @@ ICON_UPLOAD_ALLOWED_EXTENSIONS = set(config.get_list('icons.upload_allowed_exten
 ICON_FETCH_TIMEOUT = config.get_float('icons.fetch_timeout', 5.0)
 
 # Reverse Geocoding Configuration
-# Enable or disable reverse reverse_geocoding (enabled by default)
+# Enable or disable reverse geocoding (enabled by default)
 REVERSE_GEOCODING_ENABLED = config.get_bool('reverse_geocoding.enabled', True)
 
 # Distance thresholds for proximity tags (in miles)

@@ -1,7 +1,7 @@
 """
 Main public API for generating location tags from coordinates.
 
-This module provides the primary entry point for reverse reverse_geocoding:
+This module provides the primary entry point for reverse geocoding:
 - batch_geocode_coordinates(): Batch process multiple coordinates (RECOMMENDED)
 - get_location_tags(): Generate tags for a single coordinate
 
@@ -28,7 +28,7 @@ _logger = get_tagged_logger()
 
 @dataclass
 class ReverseGeocodingLogMessage:
-    """Log message from reverse reverse_geocoding operations."""
+    """Log message from reverse geocoding operations."""
     timestamp: datetime
     message: str
     level: str  # 'INFO', 'WARNING', 'ERROR'
@@ -246,7 +246,7 @@ def batch_reverse_geocode_coordinates(
                 tags, log_messages = future.result()
                 results[(lat, lon)] = (tags, log_messages)
             except Exception as e:
-                _logger.error(f"Error reverse reverse_geocoding ({lat}, {lon}): {e}")
+                _logger.error(f"Error reverse geocoding ({lat}, {lon}): {e}")
                 results[(lat, lon)] = ([], [])
 
     # Step 3: Map all original coordinates back to results
