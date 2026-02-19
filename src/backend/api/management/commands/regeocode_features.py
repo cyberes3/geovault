@@ -10,7 +10,7 @@ from geo_lib.reverse_geocoding.constants import REVERSE_GEOCODING_TAG_PREFIXES
 from geo_lib.reverse_geocoding.location_tags import get_location_tags
 from geo_lib.processing.logging import ImportLog
 from geo_lib.processing.tagging.generate import generate_auto_tags
-from geo_lib.processing.tagging.modules.geocoding import get_representative_points
+from geo_lib.processing.tagging.modules.reverse_geocoding import get_representative_points
 from geo_lib.types.feature import (
     PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 )

@@ -12,7 +12,7 @@ from django.db import transaction
 
 from api.models import FeatureStore
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.processing.tagging.modules.geocoding import ReverseGeocodingTagGenerator
+from geo_lib.processing.tagging.modules.reverse_geocoding import ReverseGeocodingTagGenerator
 from geo_lib.types.feature import (
     PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 )

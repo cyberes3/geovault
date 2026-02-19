@@ -11,7 +11,7 @@ from geo_lib.processing.tagging.base import TagGenerator
 from geo_lib.processing.tagging.modules.driving_detection import DrivingDetectionTagGenerator
 from geo_lib.processing.tagging.modules.elevation import ElevationTagGenerator
 from geo_lib.processing.tagging.modules.feature_date import FeatureDateTagGenerator, update_feature_date_tags
-from geo_lib.processing.tagging.modules.geocoding import ReverseGeocodingTagGenerator
+from geo_lib.processing.tagging.modules.reverse_geocoding import ReverseGeocodingTagGenerator
 from geo_lib.processing.tagging.modules.geometry_type import GeometryTypeTagGenerator
 from geo_lib.processing.tagging.modules.import_date import ImportDateTagGenerator
 from geo_lib.processing.tagging.modules.source_device import SourceDeviceTagGenerator
