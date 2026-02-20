@@ -289,7 +289,7 @@ class PlaceEditActivity : AppCompatActivity() {
                 }
                 val r = Runnable { validateCoordinatesFromInput() }
                 addressSearchRunnable = r
-                handler.postDelayed(r, 400)
+                handler.postDelayed(r, 1000)
             }
         })
         useMyLocationButton.setOnClickListener {
@@ -457,6 +457,9 @@ class PlaceEditActivity : AppCompatActivity() {
         searchPlaceResults.requestLayout()
     }
 
+    // Unified rule (same as web): try parse as coordinates; if fail, geocode only when
+    // address-like (has letter not N/S/E/W/D); else if looks like coordinate attempt show error;
+    // else clear with no error (e.g. "123 " while typing).
     private fun validateCoordinatesFromInput() {
         addressSearchRunnable = null
         coordinatesError.visibility = View.GONE
@@ -487,15 +490,23 @@ class PlaceEditActivity : AppCompatActivity() {
             validateForm()
             return
         }
+        if (input.any { it.isLetter() && it.lowercaseChar() !in "nsewd" }) {
+            performAddressSearch(input)
+            return
+        }
         if (CoordinateParser.looksLikeCoordinates(input)) {
             showCoordinatesErrorAndClear()
             return
         }
-        if (input.any { it.isLetter() }) {
-            performAddressSearch(input)
-            return
+        latitude = null
+        longitude = null
+        storedAddress = null
+        if (marker != null) {
+            map.overlays.remove(marker)
+            marker = null
+            map.invalidate()
         }
-        showCoordinatesErrorAndClear()
+        validateForm()
     }
 
     private fun showCoordinatesErrorAndClear() {

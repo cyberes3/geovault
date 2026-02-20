@@ -35,7 +35,7 @@ import { toast } from '@/utils/toast';
 import { updateUserSetting, loadSettingsFromStore } from '@/utils/userSettingsService.js';
 import { keyValueToNested, getNestedValue } from '@/utils/settingsUtils.js';
 import { geolocationManager } from '@/utils/map/geolocationManager.js';
-import { parseCoordinates } from '@/utils/coordinateParser.js';
+import { parseCoordinates, looksLikeCoordinates } from '@/utils/coordinateParser.js';
 import { ExtensionApi } from './utils/extensionApi.js';
 import * as HeroiconsOutline from '@heroicons/vue/24/outline';
 import * as HeroiconsSolid from '@heroicons/vue/24/solid';
@@ -67,7 +67,8 @@ const GeoVault = {
         getNestedValue,
         getCurrentPosition: () => geolocationManager.getCurrentPosition(),
         checkGeolocationPermission: () => geolocationManager.checkPermission(),
-        parseCoordinates
+        parseCoordinates,
+        looksLikeCoordinates
     },
     toast
 };

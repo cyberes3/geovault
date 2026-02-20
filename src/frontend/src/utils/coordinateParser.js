@@ -32,3 +32,25 @@ export function parseCoordinates(input) {
   }
 }
 
+/**
+ * Returns true if the string looks like a coordinate attempt (only N/S/E/W/D letters, 2-6 numbers,
+ * valid cardinal orientation). Used to show "Invalid coordinate format" instead of geocoding.
+ * Mirrors Android CoordinateParser.looksLikeCoordinates / Validator.
+ * @param {string} input
+ * @returns {boolean}
+ */
+export function looksLikeCoordinates(input) {
+  if (!input || typeof input !== 'string') return false
+  const s = input.trim()
+  if (!s) return false
+  // Only allow letters n, s, e, w, d (e.g. "39 N 104 W")
+  if (/(?![neswd])[a-z]/i.test(s)) return false
+  // Valid cardinal orientation: optional N/S and E/W in order
+  if (!/^[^nsew]*[ns]?[^nsew]*[ew]?[^nsew]*$/i.test(s)) return false
+  // 2, 4, or 6 numbers (lat/lon pairs)
+  const numbers = s.match(/-?\d+(\.\d+)?/g)
+  const count = numbers ? numbers.length : 0
+  if (count === 0 || count % 2 !== 0 || count > 6) return false
+  return true
+}
+

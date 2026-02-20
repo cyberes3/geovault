@@ -99,7 +99,7 @@
                   placeholder="37.7749, -122.4194"
                   class="flex-1 min-w-[120px] h-10 px-3 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all sm:text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                   :disabled="loadingEdit"
-                  @input="validateCoordinates"
+                  @input="onCoordinatesInput"
               />
               <BaseButton
                   type="button"
@@ -191,6 +191,7 @@ export default {
     const storedAddress = ref(null);
     const isGeocoding = ref(false);
     const addressSearchTimeout = ref(null);
+    const coordinatesValidationTimeout = ref(null);
     const addressAbortController = ref(null);
     const lastAddressRequestId = ref(0);
 
@@ -223,8 +224,9 @@ export default {
       updateMarkerFromCoords();
     }
 
-    function hasLetters(str) {
-      return /[a-zA-Z]/.test(str);
+    /** True if the string has a letter that is not a coordinate direction (N,S,E,W,D). Used to avoid geocoding inputs like "39.5 N, 104.8 W". */
+    function hasAddressLikeLetters(str) {
+      return /[a-zA-Z]/.test(str.replace(/[nsewd]/gi, ''));
     }
 
     function performAddressSearch(query) {
@@ -273,6 +275,20 @@ export default {
         });
     }
 
+    function onCoordinatesInput() {
+      if (coordinatesValidationTimeout.value) {
+        clearTimeout(coordinatesValidationTimeout.value);
+        coordinatesValidationTimeout.value = null;
+      }
+      coordinatesValidationTimeout.value = setTimeout(() => {
+        coordinatesValidationTimeout.value = null;
+        validateCoordinates();
+      }, 1000);
+    }
+
+    // Unified rule (same as Android): try parse as coordinates; if fail, geocode only when
+    // address-like (has letter not N/S/E/W/D); else if looks like coordinate attempt show error;
+    // else clear with no error (e.g. "123 " while typing).
     function validateCoordinates() {
       coordinateError.value = '';
       latitude.value = null;
@@ -293,21 +309,20 @@ export default {
         updateMarkerFromCoords(true);
         return;
       }
-      if (hasLetters(input)) {
-        if (addressSearchTimeout.value) {
-          clearTimeout(addressSearchTimeout.value);
-          addressSearchTimeout.value = null;
-        }
+      if (hasAddressLikeLetters(input)) {
         if (addressAbortController.value) {
           addressAbortController.value.abort();
         }
-        addressSearchTimeout.value = setTimeout(() => {
-          addressSearchTimeout.value = null;
-          performAddressSearch(input);
-        }, 400);
+        performAddressSearch(input);
         return;
       }
-      coordinateError.value = 'Invalid coordinate format';
+      const looksLikeCoordinates = window.gv_core?.GeoVault?.utils?.looksLikeCoordinates;
+      if (looksLikeCoordinates && looksLikeCoordinates(input)) {
+        coordinateError.value = 'Invalid coordinate format';
+        updateMarkerFromCoords();
+        return;
+      }
+      updateMarkerFromCoords();
     }
 
     function updateMarkerFromCoords(panMap = false) {
@@ -585,6 +600,10 @@ export default {
         clearTimeout(addressSearchTimeout.value);
         addressSearchTimeout.value = null;
       }
+      if (coordinatesValidationTimeout.value != null) {
+        clearTimeout(coordinatesValidationTimeout.value);
+        coordinatesValidationTimeout.value = null;
+      }
       if (addressAbortController.value) {
         addressAbortController.value.abort();
         addressAbortController.value = null;
@@ -614,6 +633,10 @@ export default {
       if (addressSearchTimeout.value != null) {
         clearTimeout(addressSearchTimeout.value);
         addressSearchTimeout.value = null;
+      }
+      if (coordinatesValidationTimeout.value != null) {
+        clearTimeout(coordinatesValidationTimeout.value);
+        coordinatesValidationTimeout.value = null;
       }
       if (addressAbortController.value) {
         addressAbortController.value.abort();
@@ -656,6 +679,7 @@ export default {
       handleSearchInput,
       performSearch,
       selectSearchResult,
+      onCoordinatesInput,
       validateCoordinates,
       useCurrentLocation,
       savePlace,
