@@ -427,8 +427,7 @@ class MainActivity : AppCompatActivity() {
                         lastSyncTime = System.currentTimeMillis()
                         updateLastSyncUI()
                         updateList()
-                        // Sync offline items AFTER we have fresh server data for conflict detection
-                        syncOfflinePlaces()
+                        runPendingSync(serverUrl, apiKey)
                     }
                 } else {
                     showSnackbar("Server Error: ${response.code()}")
@@ -471,6 +470,11 @@ class MainActivity : AppCompatActivity() {
         val timeStr = sdf.format(java.util.Date(lastSyncTime))
         // We'll add this view to activity_main.xml next
         findViewById<TextView>(R.id.lastSyncText)?.text = "Last synced: $timeStr"
+    }
+
+    private fun runPendingSync(serverUrl: String, apiKey: String) {
+        syncOfflinePlaces()
+        NavigationHelper.flushPendingNavigations(this, serverUrl, apiKey)
     }
 
     private fun syncOfflinePlaces() {
