@@ -10,6 +10,8 @@
         #authorizationForm button[type="submit"] { pointer-events: auto; position: relative; }
         #authorizationForm button[type="submit"]:hover { transition: background-color 0.15s ease; }
         #authorizationForm button[name="allow"]:hover { background-color: var(--color-blue-700) !important; }
+        #pwa-redirect-fallback { margin-top: 1rem; padding: 0.75rem; background: var(--color-blue-50, #eff6ff); border-radius: 0.5rem; font-size: 0.875rem; display: none; }
+        #pwa-redirect-fallback a { color: var(--color-blue-700, #1d4ed8); font-weight: 500; }
     </style>
 {% endblock extra_head %}
 
@@ -57,6 +59,9 @@
                             class="cursor-pointer inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                         >{% trans 'Authorize' %}</button>
                     </div>
+                    <div id="pwa-redirect-fallback" role="alert" aria-live="polite">
+                        {% trans "If the app didn't open," %} <a id="pwa-redirect-link" href="#">{% trans "tap here to open in app" %}</a>.
+                    </div>
                 </form>
             {% else %}
                 <h2 class="text-lg font-semibold text-red-800 mb-2">{% trans "Error" %}: {{ error.error }}</h2>
@@ -64,4 +69,48 @@
             {% endif %}
         </div>
     </div>
+    <script>
+    (function() {
+        // When the user authorizes in the PWA, a 302 to a custom scheme (e.g. com.geovault.uploader://)
+        // may not hand off to the native app. Intercept submit, get redirect URL, then navigate + show fallback link.
+        var form = document.getElementById('authorizationForm');
+        if (!form) return;
+        var redirectInput = form.querySelector('input[name="redirect_uri"]');
+        var redirectUri = redirectInput ? redirectInput.value : '';
+        function isCustomScheme(uri) {
+            if (!uri || typeof uri !== 'string') return false;
+            var trimmed = uri.trim();
+            if (trimmed.indexOf('http://') === 0 || trimmed.indexOf('https://') === 0) return false;
+            return trimmed.indexOf('://') > 0;
+        }
+        function isPwaStandalone() {
+            return window.matchMedia('(display-mode: standalone)').matches ||
+                window.navigator.standalone === true ||
+                document.referrer === '' && window.location.hostname !== '';
+        }
+        form.addEventListener('submit', function(ev) {
+            if (ev.submitter && ev.submitter.getAttribute('name') !== 'allow') return;
+            if (!isPwaStandalone() || !isCustomScheme(redirectUri)) return;
+            ev.preventDefault();
+            var fallbackEl = document.getElementById('pwa-redirect-fallback');
+            var linkEl = document.getElementById('pwa-redirect-link');
+            var fd = new FormData(form);
+            fd.append('allow', '1');
+            fetch(form.action, { method: 'POST', body: fd, redirect: 'manual', credentials: 'same-origin' })
+                .then(function(res) {
+                    if (res.status === 302) {
+                        var location = res.headers.get('Location');
+                        if (location) {
+                            if (fallbackEl) fallbackEl.style.display = 'block';
+                            if (linkEl) linkEl.href = location;
+                            window.location.href = location;
+                            return;
+                        }
+                    }
+                    form.submit();
+                })
+                .catch(function() { form.submit(); });
+        });
+    })();
+    </script>
 {% endblock content %}
