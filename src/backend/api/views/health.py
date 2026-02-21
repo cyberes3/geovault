@@ -2,6 +2,7 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FutureTimeoutError
 
 import requests
+import urllib3
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
@@ -125,12 +126,15 @@ def check_overpass_api() -> bool:
         True if API is healthy, False otherwise
     """
     try:
+        verify_ssl = get_required_setting('OVERPASS_API_VERIFY_SSL')
+        if not verify_ssl:
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         response = requests.post(
             get_required_setting('OVERPASS_API_URL'),
             data="[out:json];out;",
             timeout=HEALTH_CHECK_EXTERNAL_API_TIMEOUT,
             headers={'Content-Type': 'text/plain; charset=utf-8'},
-            verify=get_required_setting('OVERPASS_API_VERIFY_SSL')
+            verify=verify_ssl
         )
         return response.status_code == 200
     except Exception as e:

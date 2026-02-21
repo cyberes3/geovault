@@ -688,3 +688,61 @@ class TestOverpassAPIRetry:
         # Should return (None, error_message)
         assert result is None
         assert error is not None
+
+    def test_verify_ssl_true_passed_to_requests(self):
+        """Test that OVERPASS_API_VERIFY_SSL=True is passed as verify=True to requests.post."""
+        query = "[out:json];node(around:1000,37.7749,-122.4194);out;"
+        post_kwargs = []
+
+        def mock_post_success(*args, **kwargs):
+            post_kwargs.append(kwargs)
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.headers = {'content-type': 'application/json'}
+            mock_response.content = json.dumps(RETRY_TEST_SUCCESS_RESPONSE).encode('utf-8')
+            mock_response.json.return_value = RETRY_TEST_SUCCESS_RESPONSE
+            return mock_response
+
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post_success), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+             patch('geo_lib.reverse_geocoding.overpass_api.settings') as mock_settings:
+            mock_cache.get.return_value = None
+            mock_settings.OVERPASS_API_URL = "https://overpass.private.coffee/api/interpreter"
+            mock_settings.OVERPASS_API_TIMEOUT = 30
+            mock_settings.OVERPASS_API_VERIFY_SSL = True
+
+            result, error = query_overpass(query, latitude=37.7749, longitude=-122.4194)
+
+        assert result == RETRY_TEST_SUCCESS_RESPONSE
+        assert error is None
+        assert len(post_kwargs) == 1
+        assert post_kwargs[0].get('verify') is True
+
+    def test_verify_ssl_false_passed_to_requests(self):
+        """Test that OVERPASS_API_VERIFY_SSL=False is passed as verify=False to requests.post."""
+        query = "[out:json];node(around:1000,37.7749,-122.4194);out;"
+        post_kwargs = []
+
+        def mock_post_success(*args, **kwargs):
+            post_kwargs.append(kwargs)
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.headers = {'content-type': 'application/json'}
+            mock_response.content = json.dumps(RETRY_TEST_SUCCESS_RESPONSE).encode('utf-8')
+            mock_response.json.return_value = RETRY_TEST_SUCCESS_RESPONSE
+            return mock_response
+
+        with patch('geo_lib.reverse_geocoding.overpass_api.requests.post', side_effect=mock_post_success), \
+             patch('geo_lib.reverse_geocoding.overpass_api._REVERSE_GEOCODING_CACHE') as mock_cache, \
+             patch('geo_lib.reverse_geocoding.overpass_api.settings') as mock_settings:
+            mock_cache.get.return_value = None
+            mock_settings.OVERPASS_API_URL = "https://overpass.private.coffee/api/interpreter"
+            mock_settings.OVERPASS_API_TIMEOUT = 30
+            mock_settings.OVERPASS_API_VERIFY_SSL = False
+
+            result, error = query_overpass(query, latitude=37.7749, longitude=-122.4194)
+
+        assert result == RETRY_TEST_SUCCESS_RESPONSE
+        assert error is None
+        assert len(post_kwargs) == 1
+        assert post_kwargs[0].get('verify') is False

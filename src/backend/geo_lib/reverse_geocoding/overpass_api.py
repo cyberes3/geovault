@@ -11,6 +11,7 @@ import time
 from typing import Optional, Dict, Any, Tuple
 
 import requests
+import urllib3
 from django.conf import settings
 
 from geo_lib.reverse_geocoding.cache import _REVERSE_GEOCODING_CACHE
@@ -179,12 +180,15 @@ def query_overpass(
             time.sleep(retry_wait_time)
 
         try:
+            verify_ssl = settings.OVERPASS_API_VERIFY_SSL
+            if not verify_ssl:
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
             response = requests.post(
                 settings.OVERPASS_API_URL,
                 data=query,
                 timeout=settings.OVERPASS_API_TIMEOUT,
                 headers={'Content-Type': 'text/plain; charset=utf-8'},
-                verify=settings.OVERPASS_API_VERIFY_SSL
+                verify=verify_ssl
             )
 
             if response.status_code == 200:

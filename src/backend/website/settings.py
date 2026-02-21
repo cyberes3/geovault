@@ -486,13 +486,13 @@ LAKE_PROXIMITY_MILES = config.get_float('reverse_geocoding.lake_proximity_miles'
 
 # Overpass API Configuration
 # Overpass API server URL
-OVERPASS_API_URL = config.get_str('reverse_geocoding.overpass_api_url', 'https://overpass.private.coffee/api/interpreter')
+OVERPASS_API_URL = config.get_str('reverse_geocoding.api_url', 'https://overpass.private.coffee/api/interpreter')
 
 # Overpass API timeout settings (in seconds)
-OVERPASS_API_TIMEOUT = config.get_int('reverse_geocoding.overpass_request_timeout_seconds', 45)
+OVERPASS_API_TIMEOUT = config.get_int('reverse_geocoding.request_timeout_seconds', 45)
 
 # Overpass API SSL verification setting (enabled by default)
-OVERPASS_API_VERIFY_SSL = config.get_bool('reverse_geocoding.overpass_api_verify_ssl', True)
+OVERPASS_API_VERIFY_SSL = config.get_bool('reverse_geocoding.verify_ssl', True)
 
 # Elevation API Configuration
 # Elevation API server URL (racemap's elevation service)
