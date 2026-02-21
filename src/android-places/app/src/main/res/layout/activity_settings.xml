@@ -86,12 +86,9 @@
                     android:insetBottom="0dp"
                     android:text="@string/connect_account"
                     android:textColor="@color/primary_blue"
-                    app:backgroundTint="@color/white"
                     app:strokeColor="@color/primary_blue"
-                    app:strokeWidth="2dp"
                     app:cornerRadius="8dp"
                     android:textSize="16sp"
-                    android:textStyle="bold"
                     android:textAllCaps="false"
                     android:layout_marginBottom="16dp" />
 
@@ -103,6 +100,8 @@
                     android:insetTop="0dp"
                     android:insetBottom="0dp"
                     android:text="@string/disconnect"
+                    android:textColor="@color/primary_blue"
+                    app:strokeColor="@color/primary_blue"
                     app:cornerRadius="8dp"
                     android:textSize="16sp"
                     android:textAllCaps="false"
