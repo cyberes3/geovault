@@ -83,14 +83,9 @@
             if (trimmed.indexOf('http://') === 0 || trimmed.indexOf('https://') === 0) return false;
             return trimmed.indexOf('://') > 0;
         }
-        function isPwaStandalone() {
-            return window.matchMedia('(display-mode: standalone)').matches ||
-                window.navigator.standalone === true ||
-                document.referrer === '' && window.location.hostname !== '';
-        }
         form.addEventListener('submit', function(ev) {
             if (ev.submitter && ev.submitter.getAttribute('name') !== 'allow') return;
-            if (!isPwaStandalone() || !isCustomScheme(redirectUri)) return;
+            if (!isCustomScheme(redirectUri)) return;
             ev.preventDefault();
             var fallbackEl = document.getElementById('pwa-redirect-fallback');
             var linkEl = document.getElementById('pwa-redirect-link');
@@ -102,8 +97,14 @@
                         var location = res.headers.get('Location');
                         if (location) {
                             if (fallbackEl) fallbackEl.style.display = 'block';
-                            if (linkEl) linkEl.href = location;
-                            window.location.href = location;
+                            if (linkEl) {
+                                linkEl.href = location;
+                                linkEl.setAttribute('target', '_blank');
+                            }
+                            var opened = window.open(location, '_blank', 'noopener');
+                            if (!opened) {
+                                window.location.href = location;
+                            }
                             return;
                         }
                     }
