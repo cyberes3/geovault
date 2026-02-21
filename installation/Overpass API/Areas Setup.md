@@ -45,10 +45,9 @@ cd /srv/overpass
 sudo -u overpass /usr/bin/rules_loop.sh databases
 ```
 
-You can monitor progress by checking for area files:
+You can monitor progress by checking for area files being created:
 
 ```bash
-# Watch for area files being created
 watch -n 30 'ls -lh /srv/overpass/databases/area_*.bin 2>/dev/null | tail -5'
 ```
 
@@ -70,10 +69,10 @@ systemctl status overpass-areas-generator.timer
 Once area generation completes, test with a simple query:
 
 ```bash
-curl -k --data-urlencode "data=[out:json];is_in(27.819,-82.675)->.a;area.a[\"boundary\"=\"protected_area\"];out tags;" "https://127.0.0.1/api/interpreter"
+curl -k --data-urlencode "data=[out:json][timeout:10];(relation[\"boundary\"=\"protected_area\"](27.81,-82.68,27.83,-82.66);way[\"leisure\"=\"park\"](27.81,-82.68,27.83,-82.66););out tags;" "https://127.0.0.1/api/interpreter"
 ```
 
-You may have to restart the `overpass-areas-dispatcher` service for it to load the new database.
+You may have to restart the `overpass-areas-dispatcher` and `overpass-dispatcher` services for them to load the new database.
 
 ## Monitoring the Areas Updater
 

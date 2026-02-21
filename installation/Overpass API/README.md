@@ -13,7 +13,7 @@ This guide has the following minimum system requirements:
 
 - 6 CPU cores
 - 16 GB memory
-- ???? GB storage space
+- 500 GB storage space
 
 ## Paths
 
@@ -90,17 +90,20 @@ Wait 1 day.
 ### Initialize Database
 
 Create directories and change to the correct root directory:
+
 ```shell
 mkdir -p /srv/overpass/databases
 cd /srv/overpass
 ```
 
 First import this:
+
 ```shell
 /usr/bin/init_osm3s.sh /srv/overpass/converted/north-america-latest.osm.bz2 /srv/overpass/databases /usr --meta --flush-size=1
 ```
 
 Then import that:
+
 ```shell
 /usr/bin/init_osm3s.sh /srv/overpass/converted/europe-latest.osm.bz2 /srv/overpass/databases /usr --meta --flush-size=1
 ```
@@ -171,7 +174,7 @@ your replicant sequence number.
 
 ### Start Services
 
-Start services in order (`dispatcher` must start first):
+Start services in order. `dispatcher` must start first:
 
 ```shell
 systemctl start overpass-dispatcher.service
@@ -185,6 +188,23 @@ systemctl start overpass-apply.service
 systemctl status overpass-dispatcher.service
 systemctl status overpass-fetch.service
 systemctl status overpass-apply.service
+```
+
+Once `overpass-fetch.service` has finished its downloads (once you see it fetch `state.txt` it's done), start the
+`apply` service:
+
+```shell
+systemctl start overpass-apply.service
+systemctl status overpass-apply.service
+journalctl -b -f -u overpass-apply.service
+```
+
+Verify that the apply service has updated the database. The response includes a `<meta osm_base="..."/>` attribute: it
+is empty until apply has successfully applied replication diffs. After that it shows the last replication timestamp (
+e.g. `osm_base="2026-02-20T12:00:00Z"`).
+
+```shell
+curl -k -s "https://127.0.0.1/api/interpreter?data=%3Cprint%20mode=%22body%22/%3E" | grep -oP 'osm_base="[^"]*"'
 ```
 
 ## Nginx Setup
