@@ -13,6 +13,7 @@ from website.oauth_views import (
     ApplicationUpdate,
     ApplicationDelete,
     ApplicationRegistration,
+    AuthorizationView,
     AuthorizedTokensListView,
     AuthorizedTokenDeleteView,
 )
@@ -20,7 +21,7 @@ from website.oauth_views import (
 app_name = "oauth2_provider"
 
 base_urlpatterns = [
-    path("authorize/", dot_views.AuthorizationView.as_view(), name="authorize"),
+    path("authorize/", AuthorizationView.as_view(), name="authorize"),
     path("token/", dot_views.TokenView.as_view(), name="token"),
     path("revoke_token/", dot_views.RevokeTokenView.as_view(), name="revoke-token"),
     path("introspect/", dot_views.IntrospectTokenView.as_view(), name="introspect"),

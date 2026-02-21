@@ -7,11 +7,17 @@ and direct URL access returns 404.
 
 OAuth management (applications, authorized tokens) is session-only: API keys and
 OAuth Bearer tokens cannot access these views.
+
+When the user authorizes an app that uses a custom redirect scheme (e.g. native Android
+com.geovault.uploader://), we return an HTML handoff page instead of a 302 so that PWAs
+and in-app browsers can open the redirect URL (e.g. in a new tab) and hand off to the app.
 """
 from django.conf import settings
 from django.forms.models import modelform_factory
 from django.http import JsonResponse
+from django.shortcuts import render
 from oauth2_provider import views as dot_views
+from oauth2_provider.exceptions import OAuthToolkitError
 from oauth2_provider.models import get_application_model
 
 
@@ -22,6 +28,57 @@ class SessionOnlyMixin:
         if getattr(request, "is_api_authenticated", False):
             return JsonResponse({"error": "Unauthorized"}, status=401)
         return super().dispatch(request, *args, **kwargs)
+
+
+def _is_custom_scheme(url):
+    """True if url uses a non-http(s) scheme (e.g. com.geovault.uploader://)."""
+    if not url or not isinstance(url, str):
+        return False
+    u = url.strip()
+    return not (u.startswith("http://") or u.startswith("https://")) and "://" in u
+
+
+class AuthorizationView(dot_views.AuthorizationView):
+    """
+    When the redirect target is a custom scheme (native app), return an HTML handoff page
+    instead of 302 so PWAs/in-app browsers can open the URL and hand off to the app.
+    """
+
+    def form_valid(self, form):
+        client_id = form.cleaned_data["client_id"]
+        application = get_application_model().objects.get(client_id=client_id)
+        credentials = {
+            "client_id": form.cleaned_data.get("client_id"),
+            "redirect_uri": form.cleaned_data.get("redirect_uri"),
+            "response_type": form.cleaned_data.get("response_type", None),
+            "state": form.cleaned_data.get("state", None),
+        }
+        if form.cleaned_data.get("code_challenge", False):
+            credentials["code_challenge"] = form.cleaned_data.get("code_challenge")
+        if form.cleaned_data.get("code_challenge_method", False):
+            credentials["code_challenge_method"] = form.cleaned_data.get("code_challenge_method")
+        if form.cleaned_data.get("nonce", False):
+            credentials["nonce"] = form.cleaned_data.get("nonce")
+        if form.cleaned_data.get("claims", False):
+            credentials["claims"] = form.cleaned_data.get("claims")
+
+        scopes = form.cleaned_data.get("scope")
+        allow = form.cleaned_data.get("allow")
+
+        try:
+            uri, headers, body, status = self.create_authorization_response(
+                request=self.request, scopes=scopes, credentials=credentials, allow=allow
+            )
+        except OAuthToolkitError as error:
+            return self.error_response(error, application)
+
+        if allow and _is_custom_scheme(uri):
+            return render(
+                self.request,
+                "oauth2_provider/authorize_redirect_handoff.html",
+                {"redirect_url": uri},
+            )
+        return self.redirect(uri, application)
 
 
 def _protected_client_ids():
