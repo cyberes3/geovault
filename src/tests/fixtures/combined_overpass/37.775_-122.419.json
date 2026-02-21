@@ -1,0 +1,41 @@
+{
+  "version": 0.6,
+  "generator": "test",
+  "osm3s": {},
+  "elements": [
+    {
+      "type": "area",
+      "id": 3600148838,
+      "tags": {
+        "admin_level": "2",
+        "boundary": "administrative",
+        "flag": "https://upload.wikimedia.org/wikipedia/en/a/a4/Flag_of_the_United_States.svg",
+        "name": "United States",
+        "name:en": "United States",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600165475,
+      "tags": {
+        "admin_level": "4",
+        "boundary": "administrative",
+        "name": "California",
+        "name:en": "California",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600111968,
+      "tags": {
+        "admin_level": "6",
+        "boundary": "administrative",
+        "name": "San Francisco",
+        "name:en": "San Francisco",
+        "type": "boundary"
+      }
+    }
+  ]
+}

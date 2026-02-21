@@ -1,0 +1,58 @@
+{
+  "version": 0.6,
+  "generator": "test",
+  "osm3s": {},
+  "elements": [
+    {
+      "type": "area",
+      "id": 3600148838,
+      "tags": {
+        "admin_level": "2",
+        "boundary": "administrative",
+        "name": "United States of America",
+        "name:en": "United States of America",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600161961,
+      "tags": {
+        "admin_level": "4",
+        "boundary": "administrative",
+        "name": "Colorado",
+        "name:en": "Colorado",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600112090,
+      "tags": {
+        "admin_level": "6",
+        "boundary": "administrative",
+        "name": "Jefferson County",
+        "name:en": "Jefferson County",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3609155815,
+      "tags": {
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "South Valley Park",
+        "operator": "Jefferson County Open Space",
+        "operator:short": "JCOS",
+        "operator:type": "public",
+        "operator:wikidata": "Q111904267",
+        "protect_class": "5",
+        "protection_title": "Open Space",
+        "source": "knowledge",
+        "type": "boundary",
+        "website": "https://www.jeffco.us/1431/South-Valley-Park"
+      }
+    }
+  ]
+}

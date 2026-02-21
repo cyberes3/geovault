@@ -74,6 +74,32 @@ curl -k --data-urlencode "data=[out:json][timeout:10];(relation[\"boundary\"=\"p
 
 You may have to restart the `overpass-areas-dispatcher` and `overpass-dispatcher` services for them to load the new database.
 
+## Sample combined reverse-geocoding query
+
+The reverse geocoding system uses a single combined Overpass query per coordinate (admin boundaries, protected areas, lakes, cities). The union must be assigned to a set and output in a separate statement. Example for latitude 40.34, longitude -105.68 (use `-k` if your server uses a self-signed certificate):
+
+```bash
+time curl -k --data-urlencode 'data=[out:json][timeout:15];
+(
+  relation["boundary"="administrative"]["admin_level"~"2|4|6|8"](40.29,-105.73,40.39,-105.63);
+  relation["boundary"="protected_area"](40.29,-105.73,40.39,-105.63);
+  relation["leisure"="nature_reserve"](40.29,-105.73,40.39,-105.63);
+  relation["boundary"="national_park"](40.29,-105.73,40.39,-105.63);
+  relation["leisure"="park"](40.29,-105.73,40.39,-105.63);
+  relation["landuse"="recreation_ground"](40.29,-105.73,40.39,-105.63);
+  way["boundary"="protected_area"](40.29,-105.73,40.39,-105.63);
+  way["leisure"="park"](40.29,-105.73,40.39,-105.63);
+  way["landuse"="recreation_ground"](40.29,-105.73,40.39,-105.63);
+  way["natural"="water"]["name"](around:1609,40.34,-105.68);
+  relation["natural"="water"]["name"](around:1609,40.34,-105.68);
+  way["water"="lake"]["name"](around:1609,40.34,-105.68);
+  relation["water"="lake"]["name"](around:1609,40.34,-105.68);
+  node["place"~"town|city|village"](around:8047,40.34,-105.68);
+)->.all;
+.all out geom center;
+' "https://127.0.0.1/api/interpreter"
+```
+
 ## Monitoring the Areas Updater
 
 ```shell

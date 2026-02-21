@@ -1,0 +1,201 @@
+{
+  "version": 0.6,
+  "generator": "test",
+  "osm3s": {},
+  "elements": [
+    {
+      "type": "area",
+      "id": 3600390960,
+      "tags": {
+        "boundary": "protected_area",
+        "name": "Rocky Mountain National Park",
+        "operator": "National Park Service",
+        "protection_title": "National Park",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3616849460,
+      "tags": {
+        "boundary": "protected_area",
+        "leisure": "nature_reserve",
+        "name": "Rocky Mountain Wilderness",
+        "operator": "National Park Service",
+        "protection_title": "Wilderness Area",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600148838,
+      "tags": {
+        "admin_level": "2",
+        "boundary": "administrative",
+        "name": "United States of America",
+        "name:en": "United States of America",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600161993,
+      "tags": {
+        "admin_level": "4",
+        "boundary": "administrative",
+        "name": "Colorado",
+        "name:en": "Colorado",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600112090,
+      "tags": {
+        "admin_level": "6",
+        "boundary": "administrative",
+        "name": "Park County",
+        "name:en": "Park County",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "way",
+      "id": 37452105,
+      "center": {
+        "lat": 40.342179,
+        "lon": -105.6874982
+      },
+      "tags": {
+        "intermittent": "no",
+        "name": "Spruce Lake",
+        "natural": "water",
+        "salt": "no",
+        "source:geometry": "USGS 3D Elevation Program Data",
+        "tidal": "no",
+        "water": "lake"
+      }
+    },
+    {
+      "type": "way",
+      "id": 106286047,
+      "center": {
+        "lat": 40.3316965,
+        "lon": -105.6704161
+      },
+      "tags": {
+        "name": "Round Pond",
+        "natural": "water"
+      }
+    },
+    {
+      "type": "way",
+      "id": 106286122,
+      "center": {
+        "lat": 40.3317474,
+        "lon": -105.6933816
+      },
+      "tags": {
+        "intermittent": "no",
+        "name": "Tourmaline Lake",
+        "natural": "water",
+        "salt": "no",
+        "tidal": "no",
+        "water": "lake"
+      }
+    },
+    {
+      "type": "way",
+      "id": 106286194,
+      "center": {
+        "lat": 40.3378279,
+        "lon": -105.6963964
+      },
+      "tags": {
+        "intermittent": "no",
+        "name": "Loomis Lake",
+        "natural": "water",
+        "salt": "no",
+        "tidal": "no",
+        "water": "lake"
+      }
+    },
+    {
+      "type": "way",
+      "id": 106286219,
+      "center": {
+        "lat": 40.3393818,
+        "lon": -105.6934459
+      },
+      "tags": {
+        "intermittent": "no",
+        "name": "Primrose Pond",
+        "natural": "water",
+        "salt": "no",
+        "tidal": "no",
+        "water": "lake"
+      }
+    },
+    {
+      "type": "way",
+      "id": 106286253,
+      "center": {
+        "lat": 40.330161,
+        "lon": -105.6807739
+      },
+      "tags": {
+        "name": "Marigold Lake",
+        "natural": "water"
+      }
+    },
+    {
+      "type": "way",
+      "id": 106286632,
+      "center": {
+        "lat": 40.3529514,
+        "lon": -105.6714518
+      },
+      "tags": {
+        "name": "Black Pool",
+        "natural": "water"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 6019049,
+      "center": {
+        "lat": 40.336815,
+        "lon": -105.6766574
+      },
+      "tags": {
+        "intermittent": "no",
+        "name": "Fern Lake",
+        "natural": "water",
+        "salt": "no",
+        "source:geometry": "USGS 3D Elevation Program",
+        "tidal": "no",
+        "type": "multipolygon",
+        "water": "lake",
+        "wikidata": "Q5444462"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 6019050,
+      "center": {
+        "lat": 40.3303349,
+        "lon": -105.6853067
+      },
+      "tags": {
+        "intermittent": "no",
+        "name": "Odessa Lake",
+        "natural": "water",
+        "salt": "no",
+        "source:geometry": "USGS 3D Elevation Program",
+        "tidal": "no",
+        "type": "multipolygon",
+        "water": "lake"
+      }
+    }
+  ]
+}

@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """
-Helper script to fetch real Overpass API responses for test fixtures.
+Legacy helper: fetch per-type Overpass responses (admin, protected, cities, lakes).
 
-This script helps verify which coordinates actually return empty responses
-from Overpass API, and captures real responses for coordinates that have data.
+Reverse geocoding now uses a single combined query per coordinate. Fixtures are
+stored in fixtures/combined_overpass/{lat}_{lon}.json. To capture a combined
+response, use scripts/fetch_combined_overpass.py instead.
+
+This script is kept for one-off debugging of individual query types.
 
 Usage:
     python3 fetch_overpass_responses.py <lat> <lon> <query_type>
-    
-Query types: 'admin', 'protected', 'cities', 'lakes'
-
-Example:
-    python3 fetch_overpass_responses.py 40.34 -105.68 lakes
+Query types: admin, protected, cities, lakes
 """
 import sys
 import json
@@ -127,11 +126,9 @@ def main():
     element_count = len(response.get('elements', []))
     if element_count == 0:
         print(f"\n✓ Verified: This response is EMPTY (no elements)")
-        print(f"  You can use EMPTY_RESPONSE for this coordinate/query_type")
     else:
         print(f"\n✓ Found {element_count} element(s)")
-        print(f"  Add this as a real response constant in geocoding_responses.py")
-        print(f"  Key: ({lat_rounded}, {lon_rounded}, '{query_type}')")
+        print(f"  For combined fixtures, use scripts/fetch_combined_overpass.py and save to fixtures/combined_overpass/{lat_rounded}_{lon_rounded}.json")
 
 if __name__ == '__main__':
     main()

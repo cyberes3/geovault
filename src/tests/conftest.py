@@ -405,9 +405,7 @@ def conditional_external_api_mocking():
     # We patch the original module first so tests can access it
     modules_to_patch = [
         'geo_lib.reverse_geocoding.overpass_api.query_overpass',  # Original module (tests access this)
-        'geo_lib.reverse_geocoding.admin_boundaries.query_overpass',  # Used in admin_boundaries
-        'geo_lib.reverse_geocoding.nearby_places.query_overpass',  # Used in nearby_places
-        'geo_lib.reverse_geocoding.protected_areas.query_overpass',  # Used in protected_areas
+        'geo_lib.reverse_geocoding.combined_overpass.query_overpass',  # Used by fetch_combined
     ]
     
     # Create the cache-aware mock

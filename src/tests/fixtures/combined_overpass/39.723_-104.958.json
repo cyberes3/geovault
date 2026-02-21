@@ -1,0 +1,60 @@
+{
+  "version": 0.6,
+  "generator": "test",
+  "osm3s": {},
+  "elements": [
+    {
+      "type": "area",
+      "id": 3600148838,
+      "tags": {
+        "admin_level": "2",
+        "boundary": "administrative",
+        "name": "United States of America",
+        "name:en": "United States of America",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600161961,
+      "tags": {
+        "admin_level": "4",
+        "boundary": "administrative",
+        "name": "Colorado",
+        "name:en": "Colorado",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600112875,
+      "tags": {
+        "admin_level": "8",
+        "boundary": "administrative",
+        "name": "Denver",
+        "place": "city",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600109488,
+      "tags": {
+        "admin_level": "6",
+        "boundary": "administrative",
+        "name": "Denver County",
+        "name:en": "Denver County",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "way",
+      "id": 282847873,
+      "tags": {
+        "leisure": "park",
+        "name": "James N. Manley Park",
+        "source": "Bing"
+      }
+    }
+  ]
+}

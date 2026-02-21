@@ -1,0 +1,126 @@
+{
+  "version": 0.6,
+  "generator": "test",
+  "osm3s": {},
+  "elements": [
+    {
+      "type": "area",
+      "id": 3600148838,
+      "tags": {
+        "admin_level": "2",
+        "boundary": "administrative",
+        "name": "United States of America",
+        "name:en": "United States of America",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600161993,
+      "tags": {
+        "admin_level": "4",
+        "boundary": "administrative",
+        "name": "Colorado",
+        "name:en": "Colorado",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600112090,
+      "tags": {
+        "admin_level": "6",
+        "boundary": "administrative",
+        "name": "Park County",
+        "name:en": "Park County",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600391173,
+      "tags": {
+        "boundary": "protected_area",
+        "name": "Pike National Forest",
+        "protection_title": "National Forest",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "way",
+      "id": 39683020,
+      "center": {
+        "lat": 39.0083474,
+        "lon": -104.9930248
+      },
+      "tags": {
+        "ele": "2767",
+        "gnis:feature_id": "193225",
+        "name": "Leo Lake",
+        "natural": "water",
+        "water": "reservoir"
+      }
+    },
+    {
+      "type": "way",
+      "id": 39683085,
+      "center": {
+        "lat": 39.0067846,
+        "lon": -104.9955963
+      },
+      "tags": {
+        "ele": "2768",
+        "gnis:feature_id": "197584",
+        "name": "Sapphire Lake",
+        "natural": "water",
+        "water": "reservoir"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 223995,
+      "center": {
+        "lat": 39.0119952,
+        "lon": -104.9948265
+      },
+      "tags": {
+        "ele": "2759",
+        "gnis:feature_id": "193226",
+        "name": "Grace Lake",
+        "natural": "water",
+        "type": "multipolygon",
+        "water": "reservoir"
+      }
+    },
+    {
+      "type": "node",
+      "id": 151352413,
+      "lat": 38.9341238,
+      "lon": -105.0151688,
+      "tags": {
+        "ele": "2364",
+        "gnis:feature_id": "191196",
+        "name": "Green Mountain Falls",
+        "place": "village",
+        "population": "622"
+      }
+    },
+    {
+      "type": "node",
+      "id": 151604236,
+      "lat": 38.9938016,
+      "lon": -105.057045,
+      "tags": {
+        "ele": "2585",
+        "gnis:feature_id": "204768",
+        "name": "Woodland Park",
+        "place": "town",
+        "population": "6729",
+        "population:date": "2006",
+        "source:population": "US Census",
+        "wikidata": "Q2009757",
+        "wikipedia": "en:Woodland Park, Colorado"
+      }
+    }
+  ]
+}

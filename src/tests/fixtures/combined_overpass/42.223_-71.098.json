@@ -1,0 +1,60 @@
+{
+  "version": 0.6,
+  "generator": "test",
+  "osm3s": {},
+  "elements": [
+    {
+      "type": "area",
+      "id": 3600148838,
+      "tags": {
+        "admin_level": "2",
+        "boundary": "administrative",
+        "name": "United States",
+        "name:en": "United States",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600061315,
+      "tags": {
+        "admin_level": "4",
+        "boundary": "administrative",
+        "name": "Massachusetts",
+        "name:en": "Massachusetts",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600062959,
+      "tags": {
+        "admin_level": "6",
+        "boundary": "administrative",
+        "name": "Norfolk County",
+        "name:en": "Norfolk County",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3604122197,
+      "tags": {
+        "access": "yes",
+        "boundary": "protected_area",
+        "leisure": "nature_reserve",
+        "name": "Blue Hills Reservation",
+        "operator": "Division of State Parks and Recreation",
+        "operator:type": "government",
+        "operator:wikidata": "Q130236044",
+        "owner": "Commonwealth of Massachusetts",
+        "ownership": "state",
+        "protect_class": "5",
+        "protected": "perpetuity",
+        "type": "boundary",
+        "wikidata": "Q885725",
+        "wikipedia": "en:Blue Hills Reservation"
+      }
+    }
+  ]
+}

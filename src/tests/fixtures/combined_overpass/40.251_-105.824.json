@@ -1,0 +1,76 @@
+{
+  "version": 0.6,
+  "generator": "test",
+  "osm3s": {},
+  "elements": [
+    {
+      "type": "way",
+      "id": 37516043,
+      "center": {
+        "lat": 40.2430893,
+        "lon": -105.8141204
+      },
+      "tags": {
+        "name": "Grand Lake",
+        "natural": "water",
+        "water": "lake"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600148838,
+      "tags": {
+        "admin_level": "2",
+        "boundary": "administrative",
+        "name": "United States of America",
+        "name:en": "United States of America",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600161993,
+      "tags": {
+        "admin_level": "4",
+        "boundary": "administrative",
+        "name": "Colorado",
+        "name:en": "Colorado",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600112090,
+      "tags": {
+        "admin_level": "6",
+        "boundary": "administrative",
+        "name": "Park County",
+        "name:en": "Park County",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600390960,
+      "tags": {
+        "boundary": "protected_area",
+        "name": "Rocky Mountain National Park",
+        "operator": "National Park Service",
+        "protection_title": "National Park",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3616849460,
+      "tags": {
+        "boundary": "protected_area",
+        "leisure": "nature_reserve",
+        "name": "Rocky Mountain Wilderness",
+        "operator": "National Park Service",
+        "protection_title": "Wilderness Area",
+        "type": "multipolygon"
+      }
+    }
+  ]
+}

@@ -1,85 +1,85 @@
 """
 Protected area lookup (national parks, forests, wilderness areas, etc.).
 
-This module queries OpenStreetMap data to find protected areas that
-contain a given coordinate, including national parks, state parks,
-wilderness areas, and other protected lands.
+Parser-only: accepts a pre-fetched combined Overpass response and returns
+the same list of protected area dicts. The combined query is executed by combined_overpass.fetch_combined.
 """
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Any, Optional
 
-from geo_lib.reverse_geocoding.overpass_api import query_overpass
+from geo_lib.reverse_geocoding.geometry_helpers import point_in_polygon
 from geo_lib.reverse_geocoding.osm_tags import get_name_from_tags
 
 
-def get_protected_areas(latitude: float, longitude: float) -> Tuple[List[Dict[str, str]], List[str]]:
+def get_protected_areas(
+    response: Optional[Dict[str, Any]],
+    latitude: float,
+    longitude: float,
+) -> Tuple[List[Dict[str, str]], List[str]]:
     """
-    Get all protected areas containing a point.
-    
+    Parse protected areas containing the point from combined Overpass response.
+
+    Elements of type "area" (legacy is_in result) are treated as containing the point.
+    Elements of type "relation" or "way" with "geometry" use point-in-polygon.
+
     Returns information about national parks, state parks, wilderness areas,
     national forests, and other protected lands.
-    
+
     Args:
+        response: Combined Overpass response dict (with "elements") or None
         latitude: Latitude coordinate
         longitude: Longitude coordinate
-    
+
     Returns:
         Tuple of (list_of_protected_area_dicts, list_of_error_messages)
     """
-    # Query for protected areas
-    # This query finds areas (ways/relations converted to areas) that contain the point
-    # and match various park/protected area tags
-    query = f"""
-[out:json];
-is_in({latitude},{longitude})->.a;
-(
-  area.a["boundary"="protected_area"];
-  area.a["leisure"="nature_reserve"];
-  area.a["boundary"="national_park"];
-  area.a["leisure"="park"];
-  area.a["landuse"="recreation_ground"];
-);
-out tags;
-"""
-
     protected_areas = []
     errors = []
 
-    response, error = query_overpass(query, latitude=latitude, longitude=longitude)
-    if response:
-        for element in response.get('elements', []):
-            tags = element.get('tags', {})
-            name = get_name_from_tags(tags)
-            
-            if not name:
-                continue
+    if not response:
+        return protected_areas, errors
 
-            boundary = tags.get('boundary', '')
-            leisure = tags.get('leisure', '')
-            landuse = tags.get('landuse', '')
+    for element in response.get('elements', []):
+        tags = element.get('tags', {})
+        name = get_name_from_tags(tags)
+        if not name:
+            continue
 
-            # Check if this is a protected area or park
-            # Include boundary=protected_area, leisure=nature_reserve/park, 
-            # boundary=national_park, and landuse=recreation_ground
-            if (boundary == 'protected_area' or 
-                boundary == 'national_park' or
-                leisure == 'nature_reserve' or
-                leisure == 'park' or
-                landuse == 'recreation_ground'):
-                
-                area_info = {
-                    'name': name,
-                    'protection_title': tags.get('protection_title', ''),
-                    'protect_class': tags.get('protect_class', ''),
-                    'designation': tags.get('designation', ''),
-                    'operator': tags.get('operator', ''),
-                    'leisure': leisure,
-                    'landuse': landuse,
-                    'boundary': boundary
-                }
-                protected_areas.append(area_info)
-    
-    if error:
-        errors.append(f"Protected areas lookup failed: {error}")
+        boundary = tags.get('boundary', '')
+        leisure = tags.get('leisure', '')
+        landuse = tags.get('landuse', '')
+
+        if (boundary != 'protected_area' and boundary != 'national_park' and
+                leisure != 'nature_reserve' and leisure != 'park' and
+                landuse != 'recreation_ground'):
+            continue
+
+        elem_type = element.get('type', '')
+        contains = False
+        if elem_type == 'area':
+            contains = True
+        elif elem_type in ('relation', 'way'):
+            geometry = element.get('geometry')
+            if geometry and isinstance(geometry, list):
+                contains = point_in_polygon(latitude, longitude, geometry)
+            else:
+                # No geometry (e.g. fixture or server omitted it): assume contains
+                # since combined query already filters by bbox
+                contains = True
+
+        if not contains:
+            continue
+
+        area_info = {
+            'name': name,
+            'protection_title': tags.get('protection_title', ''),
+            'protect_class': tags.get('protect_class', ''),
+            'designation': tags.get('designation', ''),
+            'operator': tags.get('operator', ''),
+            'leisure': leisure,
+            'landuse': landuse,
+            'boundary': boundary
+        }
+        protected_areas.append(area_info)
 
     return protected_areas, errors
 
@@ -87,13 +87,13 @@ out tags;
 def classify_protected_area(area: Dict[str, str]) -> str:
     """
     Classify a protected area into a specific category based on OSM tags.
-    
+
     Returns a tag prefix like "national-park", "state-park", "wilderness", "park", etc.
     based on the area's protection_title, designation, operator, and boundary tags.
-    
+
     Args:
         area: Protected area dict with classification info
-    
+
     Returns:
         Tag prefix string (e.g., "national-park", "state-park", "wilderness", "park", "protected-area")
     """
@@ -103,7 +103,6 @@ def classify_protected_area(area: Dict[str, str]) -> str:
     boundary = area.get('boundary', '').lower()
     leisure = area.get('leisure', '').lower()
 
-    # Check in priority order (most specific first)
     if 'national forest' in protection_title:
         return "national-forest"
     elif 'wilderness' in protection_title or 'wilderness' in designation:
@@ -124,9 +123,7 @@ def classify_protected_area(area: Dict[str, str]) -> str:
         return "national-lakeshore"
     elif 'state park' in protection_title or 'state park' in designation or 'state park' in operator:
         return "state-park"
-    # City parks: leisure=park but no boundary=protected_area
     elif leisure == 'park' and boundary != 'protected_area':
         return "park"
-    
-    # Default fallback for protected areas
+
     return "protected-area"

@@ -1,0 +1,40 @@
+{
+  "version": 0.6,
+  "generator": "test",
+  "osm3s": {},
+  "elements": [
+    {
+      "type": "area",
+      "id": 3600148838,
+      "tags": {
+        "admin_level": "2",
+        "boundary": "administrative",
+        "name": "United States",
+        "name:en": "United States",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600161991,
+      "tags": {
+        "admin_level": "4",
+        "boundary": "administrative",
+        "name": "Nebraska",
+        "name:en": "Nebraska",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600122837,
+      "tags": {
+        "admin_level": "6",
+        "boundary": "administrative",
+        "name": "Dawes County",
+        "name:en": "Dawes County",
+        "type": "boundary"
+      }
+    }
+  ]
+}

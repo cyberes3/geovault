@@ -1,0 +1,51 @@
+{
+  "version": 0.6,
+  "generator": "test",
+  "osm3s": {},
+  "elements": [
+    {
+      "type": "area",
+      "id": 3605453168,
+      "tags": {
+        "boundary": "national_park",
+        "leisure": "nature_reserve",
+        "name": "Colorado National Monument",
+        "protection_title": "National Monument",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600148838,
+      "tags": {
+        "admin_level": "2",
+        "boundary": "administrative",
+        "name": "United States of America",
+        "name:en": "United States of America",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600161993,
+      "tags": {
+        "admin_level": "4",
+        "boundary": "administrative",
+        "name": "Colorado",
+        "name:en": "Colorado",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600112090,
+      "tags": {
+        "admin_level": "6",
+        "boundary": "administrative",
+        "name": "Park County",
+        "name:en": "Park County",
+        "type": "boundary"
+      }
+    }
+  ]
+}

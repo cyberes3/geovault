@@ -1,0 +1,60 @@
+{
+  "version": 0.6,
+  "generator": "test",
+  "osm3s": {},
+  "elements": [
+    {
+      "type": "area",
+      "id": 3600148838,
+      "tags": {
+        "admin_level": "2",
+        "boundary": "administrative",
+        "name": "United States of America",
+        "name:en": "United States of America",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600161838,
+      "tags": {
+        "admin_level": "4",
+        "boundary": "administrative",
+        "name": "Tennessee",
+        "name:en": "Tennessee",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3600197472,
+      "tags": {
+        "admin_level": "8",
+        "boundary": "administrative",
+        "name": "Nashville",
+        "name:en": "Nashville",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "area",
+      "id": 3601847619,
+      "tags": {
+        "admin_level": "6",
+        "boundary": "administrative",
+        "name": "Davidson County",
+        "name:en": "Davidson County",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "way",
+      "id": 609338420,
+      "tags": {
+        "boundary": "protected_area",
+        "name": "Bells Bend Park",
+        "wikidata": "Q47669456"
+      }
+    }
+  ]
+}

@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Tuple, Dict
 
+from geo_lib.reverse_geocoding.combined_overpass import fetch_combined
 from geo_lib.reverse_geocoding.admin_boundaries import get_admin_hierarchy
 from geo_lib.reverse_geocoding.nearby_places import find_nearby_cities, search_nearby_lakes
 from geo_lib.reverse_geocoding.protected_areas import get_protected_areas, classify_protected_area
@@ -59,20 +60,15 @@ def get_location_tags(
     log_messages = []
 
     try:
-        # Run independent queries in parallel for better performance
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            admin_future = executor.submit(get_admin_hierarchy, latitude, longitude)
-            protected_future = executor.submit(get_protected_areas, latitude, longitude)
-            lakes_future = executor.submit(search_nearby_lakes, latitude, longitude)
+        # Single combined Overpass query; parse into admin, protected, lakes, cities
+        response, fetch_errors = fetch_combined(latitude, longitude)
+        admin_info, admin_errors = get_admin_hierarchy(response, latitude, longitude)
+        protected_areas, protected_errors = get_protected_areas(response, latitude, longitude)
+        nearby_lakes, lake_errors = search_nearby_lakes(response, latitude, longitude)
+        nearby_cities_parsed, city_errors = find_nearby_cities(response, latitude, longitude)
 
-            # Wait for results
-            # Each function now returns (data, errors)
-            admin_info, admin_errors = admin_future.result()
-            protected_areas, protected_errors = protected_future.result()
-            nearby_lakes, lake_errors = lakes_future.result()
-
-        # Collect errors from all sources
-        all_errors = admin_errors + protected_errors + lake_errors
+        # Collect errors from fetch and all parsers
+        all_errors = fetch_errors + admin_errors + protected_errors + lake_errors + city_errors
 
         # Add specific API errors to log
         for error in all_errors:
@@ -113,11 +109,8 @@ def get_location_tags(
             tags.append(f"city:{admin_info['city']}")
             city_found = True
 
-        # If no city found in admin boundaries, search for nearby cities
+        # If no city found in admin boundaries, use closest city from combined response
         if not city_found:
-            nearby_cities, city_errors = find_nearby_cities(latitude, longitude)
-            
-            # log city errors
             for error in city_errors:
                 _logger.warning(error)
                 log_messages.append(ReverseGeocodingLogMessage(
@@ -126,10 +119,8 @@ def get_location_tags(
                     level='WARNING',
                     source='Reverse Geocoding'
                 ))
-                
-            if nearby_cities:
-                # Use closest city
-                closest_city = nearby_cities[0]
+            if nearby_cities_parsed:
+                closest_city = nearby_cities_parsed[0]
                 tags.append(f"city:{closest_city['name']}")
                 city_found = True
 
