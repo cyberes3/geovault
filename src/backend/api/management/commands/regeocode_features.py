@@ -121,18 +121,17 @@ class Command(BaseCommand):
             raise Exception(f'Failed to generate tags: {e}')
 
     def _regenerate_geocoding_tags(self, feature_store, geojson, filtered_tags, dry_run):
-        """Regenerate reverse geocoding tags (original mode)."""
+        """Regenerate reverse geocoding tags (original mode). Returns (updated, msg, removed_tags, added_tags)."""
         original_tags = geojson.get('properties', {}).get('system_tags', [])
         original_geocoding_tags, _ = self._separate_tags(original_tags)
         geometry_type = geojson.get('geometry', {}).get('type', '').lower()
         
         if geometry_type not in ['point', 'multipoint', 'linestring', 'multilinestring']:
             # Polygon - just remove old reverse_geocoding tags if any
-            removed = len(original_geocoding_tags)
-            if removed > 0:
+            if len(original_geocoding_tags) > 0:
                 self._update_feature_tags(feature_store, geojson, filtered_tags, dry_run)
-                return True, f'removed {removed} tags'
-            return False, None
+                return True, f'removed {len(original_geocoding_tags)} tags', sorted(original_geocoding_tags), []
+            return False, None, [], []
         
         # Create feature object for get_representative_points
         feature_class = PointFeature if geometry_type in ['point', 'multipoint'] else LineStringFeature
@@ -140,11 +139,10 @@ class Command(BaseCommand):
         points = get_representative_points(feature_obj)
         
         if not points:
-            removed = len(original_geocoding_tags)
-            if removed > 0:
+            if len(original_geocoding_tags) > 0:
                 self._update_feature_tags(feature_store, geojson, filtered_tags, dry_run)
-                return True, f'removed {removed} tags, no new tags'
-            return False, None
+                return True, f'removed {len(original_geocoding_tags)} tags, no new tags', sorted(original_geocoding_tags), []
+            return False, None, [], []
         
         # Get location tags for all representative points
         all_location_tags = set()
@@ -163,14 +161,13 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING(f'  Warning: Failed to geocode point ({lat}, {lon}): {e}'))
         
         # Add new reverse_geocoding tags
-        filtered_tags.extend(sorted(all_location_tags))
-        removed = len(original_geocoding_tags)
-        added = len(all_location_tags)
+        added_tags_sorted = sorted(all_location_tags)
+        filtered_tags.extend(added_tags_sorted)
         
-        if removed > 0 or added > 0:
+        if len(original_geocoding_tags) > 0 or len(all_location_tags) > 0:
             self._update_feature_tags(feature_store, geojson, filtered_tags, dry_run)
-            return True, f'removed {removed} tags, added {added} tags'
-        return False, None
+            return True, f'removed {len(original_geocoding_tags)} tags, added {len(all_location_tags)} tags', sorted(original_geocoding_tags), added_tags_sorted
+        return False, None, [], []
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -279,12 +276,16 @@ class Command(BaseCommand):
                             # Original mode: Re-geocode reverse geocoding tags
                             _, filtered_tags = self._separate_tags(system_tags)
                             try:
-                                was_updated, msg = self._regenerate_geocoding_tags(
+                                was_updated, msg, removed_tags, added_tags = self._regenerate_geocoding_tags(
                                     feature_store, geojson, filtered_tags, dry_run
                                 )
                                 if was_updated:
                                     updated += 1
                                     self.stdout.write(f'  Feature {feature_store.id}: {msg}')
+                                    if removed_tags:
+                                        self.stdout.write(f'    Removed: {", ".join(removed_tags)}')
+                                    if added_tags:
+                                        self.stdout.write(f'    Added: {", ".join(added_tags)}')
                                 else:
                                     skipped += 1
                             except Exception as e:
