@@ -41,18 +41,22 @@ class TestUserStatusEndpoint(TestCase):
         self.assertIn('is_superuser', data)
         self.assertFalse(data['is_superuser'])
 
-    def test_user_status_unauthenticated(self):
-        """Test user status for unauthenticated user."""
+    def test_user_status_unauthenticated_returns_401(self):
+        """GET /api/user/status/ without auth returns 401 (never 200)."""
         response = self.client.get('/api/user/status/')
-        
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 401)
         data = json.loads(response.content)
-        
-        self.assertFalse(data['authorized'])
-        self.assertIsNone(data['id'])
-        self.assertIsNone(data['email'])
-        self.assertEqual(data['featureCount'], 0)
-        self.assertEqual(data['tags'], [])
+        self.assertIn('error', data)
+
+    def test_user_status_invalid_bearer_returns_401(self):
+        """GET /api/user/status/ with invalid or revoked Bearer token returns 401."""
+        response = self.client.get(
+            '/api/user/status/',
+            HTTP_AUTHORIZATION='Bearer invalid_or_revoked_token',
+        )
+        self.assertEqual(response.status_code, 401)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
 
     def test_user_status_superuser_flag(self):
         """Test that is_superuser flag is correctly set for superuser."""

@@ -229,10 +229,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkConfigAndLoad() {
-        val serverUrl = prefs.getString("server_url", "") ?: ""
-        val apiKey = prefs.getString("api_key", "") ?: ""
-
-        if (serverUrl.isEmpty() || apiKey.isEmpty()) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(this)
+        if (serverUrl.isEmpty() || !GeovaultAuthManager.isLoggedIn(this)) {
             startActivity(Intent(this, SettingsActivity::class.java))
             safeNoAnimation()
         } else {
@@ -386,12 +384,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadPlaces() {
-        val serverUrl = prefs.getString("server_url", "") ?: ""
-        val apiKey = prefs.getString("api_key", "") ?: ""
+        val serverUrl = GeovaultAuthManager.getServerUrl(this)
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
 
         refreshCall?.cancel()
-        val api = RetrofitClient.getClient(baseUrl, apiKey).create(GeovaultApi::class.java)
+        val api = RetrofitClient.getClient(this, baseUrl).create(GeovaultApi::class.java)
         
         
         swipeRefresh.isRefreshing = true
@@ -427,7 +424,7 @@ class MainActivity : AppCompatActivity() {
                         lastSyncTime = System.currentTimeMillis()
                         updateLastSyncUI()
                         updateList()
-                        runPendingSync(serverUrl, apiKey)
+                        runPendingSync(serverUrl)
                     }
                 } else {
                     showSnackbar("Server Error: ${response.code()}")
@@ -472,18 +469,17 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.lastSyncText)?.text = "Last synced: $timeStr"
     }
 
-    private fun runPendingSync(serverUrl: String, apiKey: String) {
+    private fun runPendingSync(serverUrl: String) {
         syncOfflinePlaces()
-        NavigationHelper.flushPendingNavigations(this, serverUrl, apiKey)
+        NavigationHelper.flushPendingNavigations(this, serverUrl)
     }
 
     private fun syncOfflinePlaces() {
         if (offlinePlacesList.isEmpty()) return
 
-        val serverUrl = prefs.getString("server_url", "") ?: ""
-        val apiKey = prefs.getString("api_key", "") ?: ""
+        val serverUrl = GeovaultAuthManager.getServerUrl(this)
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(baseUrl, apiKey).create(GeovaultApi::class.java)
+        val api = RetrofitClient.getClient(this, baseUrl).create(GeovaultApi::class.java)
 
         // Show syncing status in overlay
         refreshOverlay.visibility = View.VISIBLE
@@ -616,9 +612,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun navigateToPlace(feature: Feature) {
-        val serverUrl = prefs.getString("server_url", "") ?: ""
-        val apiKey = prefs.getString("api_key", "") ?: ""
-        NavigationHelper.navigateToPlace(this, feature, apiKey, serverUrl)
+        val serverUrl = GeovaultAuthManager.getServerUrl(this)
+        NavigationHelper.navigateToPlace(this, feature, serverUrl)
     }
 
     private fun openMapToPlace(feature: Feature) {
@@ -654,10 +649,9 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val serverUrl = prefs.getString("server_url", "") ?: ""
-        val apiKey = prefs.getString("api_key", "") ?: ""
+        val serverUrl = GeovaultAuthManager.getServerUrl(this)
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(baseUrl, apiKey).create(GeovaultApi::class.java)
+        val api = RetrofitClient.getClient(this, baseUrl).create(GeovaultApi::class.java)
 
         api.deletePlace(dbId).enqueue(object : Callback<Void> {
             override fun onResponse(call: Call<Void>, response: Response<Void>) {

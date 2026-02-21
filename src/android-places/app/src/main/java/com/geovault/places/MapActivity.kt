@@ -36,14 +36,10 @@ class MapActivity : AppCompatActivity() {
         // Set internal cache directory to avoid permission issues
         Configuration.getInstance().osmdroidTileCache = java.io.File(ctx.cacheDir, "osmdroid")
 
-        // Get API Key and URL from settings
-        val sharedPreferences = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val apiKey = sharedPreferences.getString("api_key", "") ?: ""
-        val serverUrl = sharedPreferences.getString("server_url", "") ?: ""
-
-        // Set Authorization header for tile requests
-        if (apiKey.isNotEmpty()) {
-            Configuration.getInstance().additionalHttpRequestProperties["Authorization"] = "Bearer $apiKey"
+        // Set Authorization header for tile requests (OAuth access token)
+        val accessToken = GeovaultAuthManager.getValidAccessToken(this)
+        if (!accessToken.isNullOrBlank()) {
+            Configuration.getInstance().additionalHttpRequestProperties["Authorization"] = "Bearer $accessToken"
         }
 
         setContentView(R.layout.activity_map)
@@ -98,9 +94,8 @@ class MapActivity : AppCompatActivity() {
 
         navigateButton.setOnClickListener {
             selectedFeature?.let { feature ->
-                val serverUrl = sharedPreferences.getString("server_url", "") ?: ""
-                val apiKey = sharedPreferences.getString("api_key", "") ?: ""
-                NavigationHelper.navigateToPlace(this, feature, apiKey, serverUrl)
+                val serverUrl = GeovaultAuthManager.getServerUrl(this)
+                NavigationHelper.navigateToPlace(this, feature, serverUrl)
             }
         }
         

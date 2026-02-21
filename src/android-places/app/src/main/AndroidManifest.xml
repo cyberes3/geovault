@@ -44,6 +44,19 @@
             android:exported="false"
             android:theme="@style/Theme.GeoVaultUploader"
             android:parentActivityName=".MainActivity" />
+        <activity
+            android:name=".OAuthCallbackActivity"
+            android:exported="true"
+            android:theme="@style/Theme.GeoVaultUploader"
+            android:launchMode="singleTask"
+            android:noHistory="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.geovault.places" android:host="oauth" android:pathPrefix="/callback" />
+            </intent-filter>
+        </activity>
 
     </application>
 

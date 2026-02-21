@@ -13,24 +13,28 @@ import com.google.android.material.button.MaterialButton
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import java.util.concurrent.TimeUnit
 
 class SettingsActivity : AppCompatActivity() {
     private lateinit var serverUrlEdit: EditText
-    private lateinit var apiKeyEdit: EditText
+    private lateinit var connectButton: MaterialButton
+    private lateinit var disconnectButton: MaterialButton
     private lateinit var addSuffixCheckbox: CheckBox
     private lateinit var saveButton: MaterialButton
-    
+
     private val prefs: SharedPreferences by lazy {
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
     }
-    
+
     companion object {
-        private const val PREF_SERVER_URL = "server_url"
-        private const val PREF_API_KEY = "api_key"
         private const val PREF_ADD_SUFFIX = "add_suffix"
-        private const val DEFAULT_SERVER_URL = ""
     }
-    
+
     private fun normalizeServerUrl(url: String): String {
         var serverUrl = url.trim().trimStart('/').trimEnd('/')
         if (serverUrl.isNotEmpty() && !serverUrl.startsWith("http://") && !serverUrl.startsWith("https://")) {
@@ -42,54 +46,107 @@ class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
-        
+
         serverUrlEdit = findViewById(R.id.serverUrlEdit)
-        apiKeyEdit = findViewById(R.id.apiKeyEdit)
+        connectButton = findViewById(R.id.connectButton)
+        disconnectButton = findViewById(R.id.disconnectButton)
         addSuffixCheckbox = findViewById(R.id.addSuffixCheckbox)
         saveButton = findViewById(R.id.saveButton)
-        
-        // Handle window insets for status bar and navigation bar
+
         val rootView = findViewById<View>(R.id.rootLayout)
         val headerView = findViewById<View>(R.id.headerLayout)
-        
+
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            // Apply top padding to header
             headerView.updatePadding(top = insets.top + 20)
             WindowInsetsCompat.CONSUMED
         }
-        
-        // Load current settings
-        serverUrlEdit.setText(prefs.getString(PREF_SERVER_URL, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL)
-        apiKeyEdit.setText(prefs.getString(PREF_API_KEY, "") ?: "")
+
+        serverUrlEdit.setText(GeovaultAuthManager.getServerUrl(this))
         addSuffixCheckbox.isChecked = prefs.getBoolean(PREF_ADD_SUFFIX, true)
-        
+
+        updateConnectDisconnectVisibility()
+
+        connectButton.setOnClickListener {
+            val serverUrl = normalizeServerUrl(serverUrlEdit.text.toString())
+            if (serverUrl.isEmpty()) {
+                Toast.makeText(this, getString(R.string.settings_required), Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            GeovaultAuthManager.setServerUrl(this, serverUrl)
+            val (verifier, challenge) = GeovaultAuthManager.generatePkcePair()
+            val state = (1..16).map { "abcdef0123456789"[kotlin.random.Random.nextInt(16)] }.joinToString("")
+            GeovaultAuthManager.savePkceState(this, verifier, state)
+            val authorizeUrl = GeovaultAuthManager.buildAuthorizeUrl(serverUrl, challenge, state)
+            GeovaultAuthManager.launchOAuthInBrowser(this, authorizeUrl)
+        }
+
+        disconnectButton.setOnClickListener {
+            GeovaultAuthManager.clearTokens(this)
+            updateConnectDisconnectVisibility()
+            Toast.makeText(this, getString(R.string.disconnect), Toast.LENGTH_SHORT).show()
+        }
+
         saveButton.setOnClickListener {
             saveSettings()
         }
     }
-    
+
+    override fun onResume() {
+        super.onResume()
+        updateConnectDisconnectVisibility()
+        checkTokenStillValid()
+    }
+
+    /**
+     * If we think we're logged in, verify the token with the server.
+     * /api/user/status/ returns 401 when the token is invalid or revoked; then we clear local tokens.
+     */
+    private fun checkTokenStillValid() {
+        if (!GeovaultAuthManager.isLoggedIn(this)) return
+        val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
+        if (serverUrl.isBlank()) return
+        val token = GeovaultAuthManager.getValidAccessToken(this) ?: return
+        val request = Request.Builder()
+            .url("$serverUrl/api/user/status/")
+            .addHeader("Authorization", "Bearer $token")
+            .build()
+        OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .build()
+            .newCall(request)
+            .enqueue(object : Callback {
+                override fun onFailure(call: Call, e: java.io.IOException) {}
+                override fun onResponse(call: Call, response: Response) {
+                    val code = response.code
+                    response.close()
+                    if (code == 401) {
+                        runOnUiThread {
+                            GeovaultAuthManager.clearTokens(this@SettingsActivity)
+                            updateConnectDisconnectVisibility()
+                        }
+                    }
+                }
+            })
+    }
+
+    private fun updateConnectDisconnectVisibility() {
+        val loggedIn = GeovaultAuthManager.isLoggedIn(this)
+        connectButton.visibility = if (loggedIn) View.GONE else View.VISIBLE
+        disconnectButton.visibility = if (loggedIn) View.VISIBLE else View.GONE
+    }
+
     private fun saveSettings() {
-        var serverUrl = normalizeServerUrl(serverUrlEdit.text.toString())
-        val apiKey = apiKeyEdit.text.toString().trim()
-        val addSuffix = addSuffixCheckbox.isChecked
-        
-        if (serverUrl.isEmpty() || apiKey.isEmpty()) {
+        val serverUrl = normalizeServerUrl(serverUrlEdit.text.toString())
+        if (serverUrl.isEmpty()) {
             Toast.makeText(this, getString(R.string.settings_required), Toast.LENGTH_LONG).show()
             return
         }
-        
-        prefs.edit()
-            .putString(PREF_SERVER_URL, serverUrl)
-            .putString(PREF_API_KEY, apiKey)
-            .putBoolean(PREF_ADD_SUFFIX, addSuffix)
-            .apply()
-        
+        GeovaultAuthManager.setServerUrl(this, serverUrl)
+        prefs.edit().putBoolean(PREF_ADD_SUFFIX, addSuffixCheckbox.isChecked).apply()
         Toast.makeText(this, getString(R.string.settings_saved), Toast.LENGTH_SHORT).show()
-        
-        // Return result to indicate settings were saved
         setResult(RESULT_OK)
         finish()
     }
 }
-

@@ -27,27 +27,6 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/api_key_hint"
-        android:textSize="14sp"
-        android:layout_marginBottom="8dp"
-        android:textColor="@color/text_primary" />
-
-    <EditText
-        android:id="@+id/apiKeyEdit"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="gv_..."
-        android:inputType="text"
-        android:padding="12dp"
-        android:background="@android:drawable/edit_text"
-        android:textSize="14sp"
-        android:layout_marginBottom="16dp" />
-
-
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
         android:text="@string/settings_help_text"
         android:textSize="12sp"
         android:textColor="@color/text_secondary"

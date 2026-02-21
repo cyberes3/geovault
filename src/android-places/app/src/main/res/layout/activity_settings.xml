@@ -76,31 +76,38 @@
                     android:layout_marginBottom="24dp"
                     android:minHeight="56dp" />
 
-                <!-- API Key -->
-                <TextView
+                <!-- Connect / Disconnect -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/connectButton"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/api_key_hint"
-                    android:textSize="14sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/text_primary"
-                    android:layout_marginBottom="8dp" />
-
-                <EditText
-                    android:id="@+id/apiKeyEdit"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="gv_..."
-                    android:inputType="text"
-                    android:padding="14dp"
-                    android:background="@drawable/edit_text_background"
+                    android:layout_height="48dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:text="@string/connect_account"
+                    android:textColor="@color/primary_blue"
+                    app:backgroundTint="@color/white"
+                    app:strokeColor="@color/primary_blue"
+                    app:strokeWidth="2dp"
+                    app:cornerRadius="8dp"
                     android:textSize="16sp"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_secondary"
+                    android:textStyle="bold"
+                    android:textAllCaps="false"
+                    android:layout_marginBottom="16dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/disconnectButton"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:text="@string/disconnect"
+                    app:cornerRadius="8dp"
+                    android:textSize="16sp"
+                    android:textAllCaps="false"
                     android:layout_marginBottom="24dp"
-                    android:minHeight="56dp" />
-
-
+                    android:visibility="gone" />
 
                 <!-- Help Text -->
                 <TextView

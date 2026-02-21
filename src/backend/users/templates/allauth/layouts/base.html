@@ -203,11 +203,14 @@
             .ring-blue-500 { --tw-ring-color: var(--color-blue-500) !important; }
             .ring-red-500 { --tw-ring-color: var(--color-red-500) !important; }
 
-            /* Hover states */
+            /* Hover states (authorize button: blue-600 → blue-700; login/prominent button: blue-500 → blue-600) */
             .hover\:bg-blue-600:hover { background-color: var(--color-blue-600) !important; }
+            .hover\:bg-blue-700:hover { background-color: var(--color-blue-700) !important; }
             .hover\:bg-red-600:hover { background-color: var(--color-red-600) !important; }
             .hover\:bg-red-700:hover { background-color: var(--color-red-700) !important; }
             .hover\:text-blue-600:hover { color: var(--color-blue-600) !important; }
+            /* Smooth hover transition for primary blue buttons */
+            .bg-blue-500:hover, .bg-blue-600:hover { transition: background-color 0.15s ease; }
 
             /* Style Django form fields */
             input[type="text"],

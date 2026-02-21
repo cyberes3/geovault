@@ -65,10 +65,7 @@ class MainActivity : AppCompatActivity() {
     }
     
     companion object {
-        private const val PREF_SERVER_URL = "server_url"
-        private const val PREF_API_KEY = "api_key"
         private const val PREF_ADD_SUFFIX = "add_suffix"
-        private const val DEFAULT_SERVER_URL = ""
     }
 
     private fun normalizeServerUrl(url: String): String {
@@ -116,11 +113,9 @@ class MainActivity : AppCompatActivity() {
             openSettings()
         }
         
-        // Check if we have settings configured
-        val serverUrl = normalizeServerUrl(prefs.getString(PREF_SERVER_URL, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL)
-        val apiKey = prefs.getString(PREF_API_KEY, "") ?: ""
-        
-        if (serverUrl.isEmpty() || apiKey.isEmpty()) {
+        // Check if we have settings configured and account connected
+        val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
+        if (serverUrl.isEmpty() || !GeovaultAuthManager.isLoggedIn(this)) {
             openSettings()
             return
         }
@@ -243,10 +238,9 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun uploadFile() {
-        var serverUrl = normalizeServerUrl(prefs.getString(PREF_SERVER_URL, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL)
-        val apiKey = prefs.getString(PREF_API_KEY, "") ?: ""
-        
-        if (serverUrl.isEmpty() || apiKey.isEmpty()) {
+        val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
+        val apiKey = GeovaultAuthManager.getValidAccessToken(this)
+        if (serverUrl.isEmpty() || apiKey == null) {
             openSettings()
             return
         }
@@ -371,6 +365,9 @@ class MainActivity : AppCompatActivity() {
                                 ""
                             }
                             
+                            if (statusCode == 401) {
+                                GeovaultAuthManager.clearTokens(this@MainActivity)
+                            }
                             val errorMessage = when (statusCode) {
                                 400 -> "Upload failed (400)\nInvalid request. Check your file format."
                                 401 -> "Upload failed (401)\nAPI key is invalid or expired.\nCheck Settings."
@@ -379,7 +376,6 @@ class MainActivity : AppCompatActivity() {
                                 500 -> "Upload failed (500)\nServer error. Try again later."
                                 else -> "Upload failed ($statusCode)"
                             }
-                            
                             // Add server message if available and not too long
                             val fullMessage = if (serverMessage.isNotEmpty() && serverMessage.length < 100) {
                                 "$errorMessage\n\n$serverMessage"
@@ -388,7 +384,6 @@ class MainActivity : AppCompatActivity() {
                             } else {
                                 errorMessage
                             }
-                            
                             showError(fullMessage)
                         }
                     }
@@ -411,149 +406,74 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun validateApiKey() {
-        var serverUrl = normalizeServerUrl(prefs.getString(PREF_SERVER_URL, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL)
-        val apiKey = prefs.getString(PREF_API_KEY, "") ?: ""
-        
-        if (serverUrl.isEmpty() || apiKey.isEmpty()) {
+        val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
+        val token = GeovaultAuthManager.getValidAccessToken(this)
+
+        if (serverUrl.isEmpty() || token == null) {
             validationTitleText.text = getString(R.string.config_required)
             validationStatusText.text = getString(R.string.config_settings_first)
             validationRotationHelper.stop()
             validationSpinner.visibility = android.view.View.GONE
             return
         }
-        
+
         validationTitleText.text = getString(R.string.validating_key)
         validationSpinner.visibility = android.view.View.VISIBLE
         validationRotationHelper.start()
         validationStatusText.text = getString(R.string.connecting_server)
-        
+
         val client = OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(20, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build()
-        
-        // Construct the full URL
-        val validateUrl = "$serverUrl/api/user/api-keys/validate/"
-        
+
+        val statusUrl = "$serverUrl/api/user/status/"
         val request = Request.Builder()
-            .url(validateUrl)
-            .addHeader("Authorization", "Bearer $apiKey")
-            .addHeader("Content-Type", "application/json")
-            .addHeader("Connection", "close")
-            .post("{}".toByteArray().toRequestBody("application/json".toMediaType()))
+            .url(statusUrl)
+            .addHeader("Authorization", "Bearer $token")
             .build()
-        
+
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: java.io.IOException) {
                 runOnUiThread {
                     validationTitleText.text = getString(R.string.validation_failed)
                     validationRotationHelper.stop()
                     validationSpinner.visibility = android.view.View.GONE
-                    
                     val errorMsg = e.message ?: "Unknown error"
                     val cleanErrorMsg = errorMsg.replace(Regex("^Failed to connect to /"), "Failed to connect to ")
-                    
-                    // Special handling for "end of stream" errors
                     val displayMsg = if (cleanErrorMsg.contains("end of stream", ignoreCase = true)) {
-                        "✗ Connection closed unexpectedly\n\nThe server may be slow or not responding.\nTap Settings to retry."
+                        "✗ Connection closed unexpectedly\n\nTap Settings to retry."
                     } else {
                         "✗ Connection failed\n\n$cleanErrorMsg\n\nCheck your server URL and network connection."
                     }
-                    
                     validationStatusText.text = displayMsg
                 }
             }
-            
+
             override fun onResponse(call: Call, response: Response) {
-                // Read response body before checking status (can only read once)
-                val responseBody = try {
-                    response.body?.string() ?: ""
-                } catch (e: Exception) {
-                    // Handle "end of stream" errors when reading body
-                    runOnUiThread {
-                        validationTitleText.text = getString(R.string.validation_failed)
-                        validationRotationHelper.stop()
-                        validationSpinner.visibility = android.view.View.GONE
-                        validationStatusText.text = "✗ Error reading response\n\nThe server connection was interrupted.\nTap Settings to retry."
-                    }
-                    response.close()
-                    return
-                }
-                
+                val responseBody = try { response.body?.string() ?: "" } catch (e: Exception) { "" }
                 val statusCode = response.code
-                
                 runOnUiThread {
                     validationRotationHelper.stop()
                     validationSpinner.visibility = android.view.View.GONE
-                    
-                    try {
-                        if (response.isSuccessful) {
-                            // Parse JSON response
-                            val jsonResponse = try {
-                                if (responseBody.isNotEmpty() && responseBody.trimStart().startsWith("{")) {
-                                    org.json.JSONObject(responseBody)
-                                } else {
-                                    null
-                                }
-                            } catch (e: Exception) {
-                                null
-                            }
-                            
-                            if (jsonResponse != null && jsonResponse.optBoolean("valid", false)) {
-                                validationTitleText.text = getString(R.string.api_key_valid)
-                                val keyName = jsonResponse.optString("key_name", "Unnamed Key")
-                                validationStatusText.text = getString(R.string.api_key_valid_msg, keyName)
-                            } else {
-                                validationTitleText.text = getString(R.string.validation_failed)
-                                validationStatusText.text = "✗ API key validation failed\n\nThe key may be invalid or disabled."
-                            }
-                        } else {
-                            validationTitleText.text = getString(R.string.validation_failed)
-                            
-                            // Extract server message if available
-                            val serverMessage = try {
-                                if (responseBody.isNotEmpty() && responseBody.trimStart().startsWith("{")) {
-                                    val json = org.json.JSONObject(responseBody)
-                                    json.optString("error", "")
-                                } else {
-                                    ""
-                                }
-                            } catch (e: Exception) {
-                                ""
-                            }
-                            
-                            // Provide specific error messages based on status code
-                            val errorMessage = when (statusCode) {
-                                400 -> "✗ Invalid request (400)\n\nCheck your API key format."
-                                401 -> "✗ Unauthorized (401)\n\nAPI key is invalid or expired.\nCheck Settings."
-                                403 -> "✗ Forbidden (403)\n\nAPI key may be disabled or inactive."
-                                404 -> "✗ Not found (404)\n\nValidation endpoint not found.\nCheck your server URL: $validateUrl"
-                                500 -> "✗ Server error (500)\n\nTry again later."
-                                else -> "✗ Validation failed ($statusCode)"
-                            }
-                            
-                            // Add server message if available and not too long
-                            val fullMessage = if (serverMessage.isNotEmpty() && serverMessage.length < 80) {
-                                "$errorMessage\n\n$serverMessage"
-                            } else {
-                                errorMessage
-                            }
-                            
-                            validationStatusText.text = fullMessage
+                    if (response.isSuccessful) {
+                        validationTitleText.text = getString(R.string.api_key_valid)
+                        validationStatusText.text = getString(R.string.api_key_valid_msg)
+                    } else {
+                        if (statusCode == 401) {
+                            GeovaultAuthManager.clearTokens(this@MainActivity)
                         }
-                    } catch (e: Exception) {
                         validationTitleText.text = getString(R.string.validation_failed)
-                        val errorMsg = if (e.message?.contains("end of stream", ignoreCase = true) == true) {
-                            "✗ Connection interrupted\n\nTap Settings to retry."
-                        } else {
-                            "✗ Error: ${e.message ?: "Unknown error"}"
+                        val msg = when (statusCode) {
+                            401 -> "✗ Unauthorized.\n\nReconnect in Settings."
+                            404 -> "✗ Not found.\n\nCheck your server URL."
+                            else -> "✗ Request failed ($statusCode)"
                         }
-                        validationStatusText.text = errorMsg
-                    } finally {
-                        response.close()
+                        validationStatusText.text = msg
                     }
+                    response.close()
                 }
             }
         })

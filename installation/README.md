@@ -128,6 +128,7 @@ Once the database is ready, create the tables:
 
 ```shell
 ./venv/bin/python manage.py migrate --noinput
+./venv/bin/python manage.py ensure_oauth2_app
 ```
 
 If you get the error `django.db.utils.ProgrammingError: permission denied to create extension "postgis"` then you forgot

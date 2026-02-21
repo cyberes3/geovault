@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import time
 import traceback
@@ -159,12 +160,31 @@ class LoggingMiddleware:
         return response
 
 
+def _resolve_oauth2_access_token(token_string):
+    """
+    Resolve Bearer token as an OAuth2 access token. Returns (user, access_token) if valid,
+    else None. Caller must ensure token_string is non-empty.
+    """
+    from oauth2_provider.models import get_access_token_model
+
+    if not token_string:
+        return None
+    token_checksum = hashlib.sha256(token_string.encode("utf-8")).hexdigest()
+    AccessToken = get_access_token_model()
+    try:
+        token = AccessToken.objects.select_related("user").get(token_checksum=token_checksum)
+    except AccessToken.DoesNotExist:
+        return None
+    if token.is_expired():
+        return None
+    return (token.user, token)
+
+
 class APIKeyResolutionMiddleware:
     """
-    Resolve API key from Bearer token for /api/ requests when user is not yet authenticated.
-    Sets request.user, request.api_key, and request.is_api_authenticated so logging and
-    view decorators see the correct user (e.g. for 404s and other responses before the view).
-    Validates the key and updates last_used_at in one place (2 DB ops per API-key request).
+    Resolve Bearer token for /api/ requests when user is not yet authenticated.
+    Tries OAuth2 access token first, then API key. Sets request.user,
+    request.is_api_authenticated, and optionally request.api_key or request.oauth2_access_token.
     """
 
     def __init__(self, get_response):
@@ -175,12 +195,20 @@ class APIKeyResolutionMiddleware:
             auth_header = request.META.get('HTTP_AUTHORIZATION', '')
             if auth_header.startswith('Bearer ') and not request.user.is_authenticated:
                 token = auth_header[7:].strip()
-                result = validate_api_key(token)
-                if result is not None:
-                    user, api_key = result
-                    request.user = user
-                    request.api_key = api_key
-                    request.is_api_authenticated = True
+                if token:
+                    oauth_result = _resolve_oauth2_access_token(token)
+                    if oauth_result is not None:
+                        user, access_token = oauth_result
+                        request.user = user
+                        request.oauth2_access_token = access_token
+                        request.is_api_authenticated = True
+                    else:
+                        result = validate_api_key(token)
+                        if result is not None:
+                            user, api_key = result
+                            request.user = user
+                            request.api_key = api_key
+                            request.is_api_authenticated = True
         return self.get_response(request)
 
 

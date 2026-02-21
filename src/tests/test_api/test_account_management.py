@@ -7,6 +7,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from allauth.account.models import EmailAddress
 
+from users.api_keys import create_user_api_key
+
 
 class TestPasswordChangeAPI(TestCase):
     """Test password change API endpoint."""
@@ -284,6 +286,16 @@ class TestEmailManagementAPI(TestCase):
         response = self.client.get('/api/user/email/status/')
         self.assertEqual(response.status_code, 401)
 
+    def test_email_status_rejects_api_key(self):
+        """API key cannot access email status (allow_api_keys=False)."""
+        _, raw_key = create_user_api_key(self.user, "Test Key")
+        self.client.logout()
+        response = self.client.get(
+            "/api/user/email/status/",
+            HTTP_AUTHORIZATION=f"Bearer {raw_key}",
+        )
+        self.assertEqual(response.status_code, 401)
+
     def test_email_status_unverified_email(self):
         """Test email status with unverified email."""
         # Update email to unverified
@@ -325,6 +337,18 @@ class TestEmailManagementAPI(TestCase):
         self.client.logout()
         
         response = self.client.post('/api/user/email/resend-verification/')
+        self.assertEqual(response.status_code, 401)
+
+    def test_resend_verification_rejects_api_key(self):
+        """API key cannot access resend verification (allow_api_keys=False)."""
+        _, raw_key = create_user_api_key(self.user, "Test Key")
+        self.client.logout()
+        response = self.client.post(
+            "/api/user/email/resend-verification/",
+            data=json.dumps({"email": "test@example.com"}),
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {raw_key}",
+        )
         self.assertEqual(response.status_code, 401)
 
     def test_resend_verification_no_email_address(self):

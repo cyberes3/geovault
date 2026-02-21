@@ -59,8 +59,6 @@ class MultiUploadActivity : AppCompatActivity() {
     }
     
     companion object {
-        private const val PREF_SERVER_URL = "server_url"
-        private const val PREF_API_KEY = "api_key"
         private const val PREF_ADD_SUFFIX = "add_suffix"
     }
 
@@ -282,12 +280,11 @@ class MultiUploadActivity : AppCompatActivity() {
     
     private fun startUploadQueue() {
         if (isUploading) return
-        
-        val serverUrl = normalizeServerUrl(prefs.getString(PREF_SERVER_URL, "") ?: "")
-        val apiKey = prefs.getString(PREF_API_KEY, "") ?: ""
-        
-        if (serverUrl.isEmpty() || apiKey.isEmpty()) {
-            statusText.text = "Please configure settings first"
+
+        val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
+        val token = GeovaultAuthManager.getValidAccessToken(this)
+        if (serverUrl.isEmpty() || token == null) {
+            statusText.text = getString(R.string.config_settings_first)
             statusText.visibility = View.VISIBLE
             return
         }
@@ -400,8 +397,14 @@ class MultiUploadActivity : AppCompatActivity() {
     }
     
     private fun uploadFile(fileItem: FileItem, index: Int) {
-        val serverUrl = normalizeServerUrl(prefs.getString(PREF_SERVER_URL, "") ?: "")
-        val apiKey = prefs.getString(PREF_API_KEY, "") ?: ""
+        val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
+        val apiKey = GeovaultAuthManager.getValidAccessToken(this)
+        if (apiKey == null) {
+            adapter.updateFileStatus(index, FileStatus.ERROR, "Not signed in")
+            currentUploadIndex++
+            uploadNextFile()
+            return
+        }
         val addSuffix = prefs.getBoolean(PREF_ADD_SUFFIX, true)
         
         // Apply suffix if enabled
@@ -475,21 +478,24 @@ class MultiUploadActivity : AppCompatActivity() {
                 
                 override fun onResponse(call: Call, response: Response) {
                     val success = response.isSuccessful
+                    val statusCode = response.code
                     val errorMsg = if (!success) {
                         try {
                             val body = response.body?.string() ?: ""
                             if (body.isNotEmpty() && body.trimStart().startsWith("{")) {
                                 val json = org.json.JSONObject(body)
-                                json.optString("error", "Upload failed (${response.code})")
+                                json.optString("error", "Upload failed ($statusCode)")
                             } else {
-                                "Upload failed (${response.code})"
+                                "Upload failed ($statusCode)"
                             }
                         } catch (e: Exception) {
-                            "Upload failed (${response.code})"
+                            "Upload failed ($statusCode)"
                         }
                     } else null
-                    
                     runOnUiThread {
+                        if (statusCode == 401) {
+                            GeovaultAuthManager.clearTokens(this@MultiUploadActivity)
+                        }
                         if (isCancelled) {
                             adapter.updateFileStatus(index, FileStatus.PENDING)
                         } else {
@@ -503,7 +509,6 @@ class MultiUploadActivity : AppCompatActivity() {
                             uploadNextFile()
                         }
                     }
-                    
                     tempFile.delete()
                     response.close()
                 }

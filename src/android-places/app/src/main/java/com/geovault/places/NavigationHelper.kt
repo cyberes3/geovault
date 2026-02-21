@@ -16,7 +16,7 @@ object NavigationHelper {
     private val gson = Gson()
     private val intListType = object : TypeToken<List<Int>>() {}.type
 
-    fun navigateToPlace(context: Context, feature: Feature, apiKey: String, serverUrl: String) {
+    fun navigateToPlace(context: Context, feature: Feature, serverUrl: String) {
         val coords = feature.geometry.coordinates
         if (coords.size >= 2) {
             val lon = coords[0]
@@ -33,9 +33,9 @@ object NavigationHelper {
             if (databaseId != null && serverUrl.isNotEmpty()) {
                 val appContext = context.applicationContext
                 val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-                val api = RetrofitClient.getClient(baseUrl, apiKey).create(GeovaultApi::class.java)
+                val api = RetrofitClient.getClient(appContext, baseUrl).create(GeovaultApi::class.java)
 
-                flushPendingNavigations(appContext, baseUrl, apiKey, api)
+                flushPendingNavigations(appContext, api)
                 api.trackNavigation(databaseId).enqueue(object : Callback<Void> {
                     override fun onResponse(call: Call<Void>, response: Response<Void>) {
                         // Successfully notified
@@ -48,17 +48,15 @@ object NavigationHelper {
         }
     }
 
-    fun flushPendingNavigations(context: Context, serverUrl: String, apiKey: String) {
+    fun flushPendingNavigations(context: Context, serverUrl: String) {
         val appContext = context.applicationContext
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(baseUrl, apiKey).create(GeovaultApi::class.java)
-        flushPendingNavigations(appContext, baseUrl, apiKey, api)
+        val api = RetrofitClient.getClient(appContext, baseUrl).create(GeovaultApi::class.java)
+        flushPendingNavigations(appContext, api)
     }
 
     private fun flushPendingNavigations(
         context: Context,
-        baseUrl: String,
-        apiKey: String,
         api: GeovaultApi
     ) {
         val pendingIds = getPendingNavigationIds(context)

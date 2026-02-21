@@ -45,9 +45,13 @@ def api_or_login_required_401(allow_api_keys=True):
         # Wrap the view function
         @wraps(view_func)
         def _wrapped_view(request, *args, **kwargs):
-            # API key (set by APIKeyResolutionMiddleware): bypass CSRF so Bearer token is enough
-            if getattr(request, 'is_api_authenticated', False) and allow_api_keys:
-                return view_func(request, *args, **kwargs)
+            is_bearer_auth = getattr(request, 'is_api_authenticated', False)
+            # API key or OAuth Bearer (set by APIKeyResolutionMiddleware): allow only if this view permits it
+            if is_bearer_auth:
+                if allow_api_keys:
+                    return view_func(request, *args, **kwargs)
+                # This view allows only session auth (e.g. password change, API key management, admin)
+                return JsonResponse({'error': 'Unauthorized'}, status=401)
             # Session auth: requires CSRF for POST and other state-changing methods
             if request.user.is_authenticated:
                 protected_view = csrf_protect(view_func)

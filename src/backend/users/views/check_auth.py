@@ -37,15 +37,13 @@ def check_auth(request):
             'tags': [],
             'is_superuser': request.user.is_superuser
         }
-    else:
-        data = {
-            'authorized': False,
-            'email': None,
-            'id': None,
-            'featureCount': 0,
-            'tags': []
-        }
-    return JsonResponse(data)
+        return JsonResponse(data)
+
+    # Unauthenticated: always return 401 (never 200)
+    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+    if auth_header.startswith('Bearer ') and auth_header[7:].strip():
+        return JsonResponse({'error': 'Invalid or revoked token'}, status=401)
+    return JsonResponse({'error': 'Authentication required'}, status=401)
 
 
 @api_or_login_required_401()

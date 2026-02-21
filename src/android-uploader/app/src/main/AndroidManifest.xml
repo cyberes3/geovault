@@ -29,6 +29,19 @@
             android:parentActivityName=".MainActivity" />
         <!-- Handle both single and multiple file shares -->
         <activity
+            android:name=".OAuthCallbackActivity"
+            android:exported="true"
+            android:theme="@style/Theme.GeoVaultUploader"
+            android:launchMode="singleTask"
+            android:noHistory="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.geovault.uploader" android:host="oauth" android:pathPrefix="/callback" />
+            </intent-filter>
+        </activity>
+        <activity
             android:name=".MultiUploadActivity"
             android:exported="true"
             android:theme="@style/Theme.GeoVaultUploader">

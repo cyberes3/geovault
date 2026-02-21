@@ -19,6 +19,7 @@ from django.contrib import admin
 from django.urls import path, re_path
 from django.http import HttpResponse
 
+
 from users.views.account_management import block_account_email_view
 from website.exception_handler import custom_exception_handler
 from website.views import index
@@ -88,6 +89,7 @@ urlpatterns = [
     # Block access to /accounts/email/ and redirect to frontend settings
     path('accounts/email/', block_account_email_view, name='account_email'),
     path('accounts/', include('allauth.urls')),  # Django allauth URLs
+    path('api/oauth/', include('website.oauth_urls')),
     path('admin/', admin.site.urls),
     path('', include("users.urls")),
     path('api/', include("api.urls")),

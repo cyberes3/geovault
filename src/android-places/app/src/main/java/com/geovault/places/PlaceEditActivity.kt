@@ -244,9 +244,6 @@ class PlaceEditActivity : AppCompatActivity() {
         map.setMultiTouchControls(true)
         map.zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER)
 
-        val serverUrl = prefs.getString("server_url", "") ?: ""
-        val apiKey = prefs.getString("api_key", "") ?: ""
-
         // Set standard OSM tile source
         map.setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
         map.invalidate()
@@ -366,8 +363,7 @@ class PlaceEditActivity : AppCompatActivity() {
             searchPlaceResults.post { updateSearchResultsListHeight() }
             return
         }
-        val serverUrl = prefs.getString("server_url", "") ?: ""
-        val apiKey = prefs.getString("api_key", "") ?: ""
+        val serverUrl = GeovaultAuthManager.getServerUrl(this)
         if (serverUrl.isEmpty()) {
             mapSearchResults.clear()
             mapSearchAdapter.notifyDataSetChanged()
@@ -375,7 +371,7 @@ class PlaceEditActivity : AppCompatActivity() {
             return
         }
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(baseUrl, apiKey).create(GeovaultApi::class.java)
+        val api = RetrofitClient.getClient(this, baseUrl).create(GeovaultApi::class.java)
         mapSearchCall = api.geocodingSearch(query)
         searchPlaceRotationHelper.start()
         mapSearchCall!!.enqueue(object : Callback<AddressSearchResponse> {
@@ -520,8 +516,7 @@ class PlaceEditActivity : AppCompatActivity() {
 
     private fun performAddressSearch(query: String) {
         addressSearchCall?.cancel()
-        val serverUrl = prefs.getString("server_url", "") ?: ""
-        val apiKey = prefs.getString("api_key", "") ?: ""
+        val serverUrl = GeovaultAuthManager.getServerUrl(this)
         if (serverUrl.isEmpty()) {
             coordinatesError.text = "Geocoding failed"
             coordinatesError.visibility = View.VISIBLE
@@ -529,7 +524,7 @@ class PlaceEditActivity : AppCompatActivity() {
             return
         }
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(baseUrl, apiKey).create(GeovaultApi::class.java)
+        val api = RetrofitClient.getClient(this, baseUrl).create(GeovaultApi::class.java)
         setLocationLoading(true)
         addressSearchCall = api.geocodingSearch(query)
         addressSearchCall!!.enqueue(object : Callback<AddressSearchResponse> {
@@ -751,10 +746,9 @@ class PlaceEditActivity : AppCompatActivity() {
             )
         )
 
-        val serverUrl = prefs.getString("server_url", "") ?: ""
-        val apiKey = prefs.getString("api_key", "") ?: ""
+        val serverUrl = GeovaultAuthManager.getServerUrl(this)
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(baseUrl, apiKey).create(GeovaultApi::class.java)
+        val api = RetrofitClient.getClient(this, baseUrl).create(GeovaultApi::class.java)
 
         pendingFeature = feature
         

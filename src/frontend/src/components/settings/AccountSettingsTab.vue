@@ -239,17 +239,17 @@
       <!-- Existing API Keys List -->
       <div>
         <h3 class="text-md font-medium text-gray-900 mb-3">Your API Keys</h3>
-        <div v-if="apiKeysLoading" class="text-sm text-gray-600">
-          Loading...
+        <div v-if="apiKeysLoading" class="flex items-center justify-center py-12 min-h-[120px]">
+          <Loader size="sm" layout="inline" message="Loading API keys..." :showMessage="true" />
         </div>
-        <div v-else-if="apiKeys.length === 0" class="text-sm text-gray-600">
+        <div v-else-if="apiKeys.length === 0" class="py-8 px-4 text-center text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-md">
           No API keys created yet.
         </div>
         <div v-else class="space-y-3">
           <div
               v-for="key in apiKeys"
               :key="key.id"
-              class="p-4 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100"
+              class="p-4 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100 transition-colors"
           >
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div class="flex-1 min-w-0">
@@ -277,6 +277,62 @@
                 <span v-else>Delete</span>
               </BaseButton>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Authorized OAuth Applications Section -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">Authorized OAuth Applications</h2>
+      <p class="text-sm text-gray-600 mb-4">
+        Applications that you have signed in to with OAuth. Revoking removes their access. To create or manage OAuth
+        applications (for development or third-party integrations), use the link below.
+      </p>
+      <p class="mb-4">
+        <a
+          :href="oauthApplicationsUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-blue-600 hover:text-blue-800 underline"
+        >
+          Manage your OAuth applications
+        </a>
+      </p>
+
+      <div v-if="oauthTokensLoading" class="flex items-center justify-center py-12 min-h-[120px]">
+        <Loader size="sm" layout="inline" message="Loading authorized applications..." :showMessage="true" />
+      </div>
+      <div v-else-if="oauthTokens.length === 0" class="py-8 px-4 text-center text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-md">
+        No authorized OAuth applications.
+      </div>
+      <div v-else class="space-y-3">
+        <div
+          v-for="token in oauthTokens"
+          :key="token.id"
+          class="p-4 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100 transition-colors"
+        >
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-sm font-medium text-gray-900">{{ token.application_name }}</span>
+              </div>
+              <div class="text-xs text-gray-500 space-y-1">
+                <div>Authorized: {{ formatDate(token.created) }}</div>
+                <div>Expires: {{ formatDate(token.expires) }}</div>
+              </div>
+            </div>
+            <BaseButton
+              @click="handleRevokeOAuthToken(token.id)"
+              :disabled="revokeOAuthLoading === token.id"
+              variant="secondary"
+              color="red"
+              size="sm"
+              title="Revoke access for this application"
+            >
+              <span v-if="revokeOAuthLoading === token.id">Revoking...</span>
+              <span v-else>Revoke</span>
+            </BaseButton>
           </div>
         </div>
       </div>
@@ -339,7 +395,16 @@ export default {
       deleteKeyLoading: null,
       apiKeyMessage: '',
       apiKeyMessageType: '',
-      copyButtonShowingIcon: false
+      copyButtonShowingIcon: false,
+      // OAuth authorized applications
+      oauthTokens: [],
+      oauthTokensLoading: false,
+      revokeOAuthLoading: null
+    }
+  },
+  computed: {
+    oauthApplicationsUrl() {
+      return `${window.location.origin}/api/oauth/applications/`;
     }
   },
   methods: {
@@ -716,6 +781,61 @@ export default {
         this.copyButtonShowingIcon = false;
       }, 1000);
     },
+    async loadOAuthTokens() {
+      this.oauthTokensLoading = true;
+      try {
+        const response = await axios.get('/api/user/oauth-authorized-tokens/', {
+          headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+          }
+        });
+        if (response.status === 200) {
+          this.oauthTokens = response.data.authorized_tokens || [];
+        }
+      } catch (error) {
+        console.error('Error loading OAuth tokens:', error);
+        this.oauthTokens = [];
+      } finally {
+        this.oauthTokensLoading = false;
+      }
+    },
+    async handleRevokeOAuthToken(tokenId) {
+      if (!confirm('Revoke access for this application? It will need to be authorized again to access your account.')) {
+        return;
+      }
+      this.revokeOAuthLoading = tokenId;
+      try {
+        const response = await axios.delete(`/api/user/oauth-authorized-tokens/${tokenId}/`, {
+          headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+          }
+        });
+        if (response.status >= 200 && response.status < 300) {
+          this.oauthTokens = this.oauthTokens.filter((t) => t.id !== tokenId);
+          await this.loadOAuthTokens();
+        } else {
+          this.apiKeyMessage = response.data?.error || 'Failed to revoke';
+          this.apiKeyMessageType = 'error';
+          setTimeout(() => {
+            this.apiKeyMessage = '';
+            this.apiKeyMessageType = '';
+          }, 3000);
+        }
+      } catch (error) {
+        if (error.response && error.response.data) {
+          this.apiKeyMessage = error.response.data.error || 'Failed to revoke authorization';
+        } else {
+          this.apiKeyMessage = 'Failed to revoke authorization';
+        }
+        this.apiKeyMessageType = 'error';
+        setTimeout(() => {
+          this.apiKeyMessage = '';
+          this.apiKeyMessageType = '';
+        }, 3000);
+      } finally {
+        this.revokeOAuthLoading = null;
+      }
+    },
     formatDate
   },
   async created() {
@@ -725,8 +845,9 @@ export default {
     }
     // Load settings from store using mixin method
     this.loadSettingsFromStore();
-    // Load API keys
+    // Load API keys and OAuth authorized tokens
     await this.loadApiKeys();
+    await this.loadOAuthTokens();
   },
   watch: {
     // Watch for changes in the store and reload settings

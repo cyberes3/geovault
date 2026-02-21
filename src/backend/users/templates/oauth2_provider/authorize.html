@@ -1,0 +1,67 @@
+{% extends "allauth/layouts/base.html" %}
+{% load i18n %}
+
+{% block head_title %}
+    {% trans "Authorize application" %}
+{% endblock head_title %}
+
+{% block extra_head %}
+    <style>
+        #authorizationForm button[type="submit"] { pointer-events: auto; position: relative; }
+        #authorizationForm button[type="submit"]:hover { transition: background-color 0.15s ease; }
+        #authorizationForm button[name="allow"]:hover { background-color: var(--color-blue-700) !important; }
+    </style>
+{% endblock extra_head %}
+
+{% block content %}
+    <div class="max-w-md mx-auto">
+        <div class="bg-white rounded-lg shadow-md border border-gray-200 p-4 sm:p-6 lg:p-8">
+            {% if not error %}
+                <form id="authorizationForm" method="post">
+                    <h1 class="text-xl font-bold text-gray-900 mb-4">
+                        {% trans "Authorize" %} {{ application.name }}?
+                    </h1>
+                    {% csrf_token %}
+
+                    {% for field in form %}
+                        {% if field.is_hidden %}
+                            {{ field }}
+                        {% endif %}
+                    {% endfor %}
+
+                    <p class="text-sm text-gray-600 mb-3">
+                        {% trans "Application requires the following permissions" %}
+                    </p>
+                    <ul class="list-disc list-inside text-sm text-gray-700 mb-6 space-y-1">
+                        {% for scope in scopes_descriptions %}
+                            <li>{{ scope }}</li>
+                        {% endfor %}
+                    </ul>
+
+                    {% if form.errors or form.non_field_errors %}
+                        <div class="mb-4 p-4 rounded-md bg-red-50 text-red-800 border border-red-200">
+                            {{ form.errors }}
+                            {{ form.non_field_errors }}
+                        </div>
+                    {% endif %}
+
+                    <div class="flex flex-wrap gap-3 relative z-10">
+                        <button
+                            type="submit"
+                            class="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                        >{% trans 'Cancel' %}</button>
+                        <button
+                            type="submit"
+                            name="allow"
+                            value="1"
+                            class="cursor-pointer inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                        >{% trans 'Authorize' %}</button>
+                    </div>
+                </form>
+            {% else %}
+                <h2 class="text-lg font-semibold text-red-800 mb-2">{% trans "Error" %}: {{ error.error }}</h2>
+                <p class="text-sm text-gray-700">{{ error.description }}</p>
+            {% endif %}
+        </div>
+    </div>
+{% endblock content %}
