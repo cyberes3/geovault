@@ -24,7 +24,7 @@ touch the main GeoVault schema.
    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA is_in TO is_in_areas;
    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA is_in TO is_in_areas;
    ALTER DEFAULT PRIVILEGES IN SCHEMA is_in GRANT ALL ON TABLES TO is_in_areas;
-   ALTER ROLE is_in_areas SET search_path TO is_in;
+   ALTER ROLE is_in_areas SET search_path TO is_in, public;
    ```
 
 Exit with `\q`.
@@ -91,15 +91,15 @@ Create an environment file with the database URL under `/etc/secrets` (so the pa
 ```shell
 sudo mkdir -p /etc/secrets
 sudo chmod 600 /etc/secrets
-echo 'IS_IN_DATABASE=postgresql://is_in_areas:your_password_here@localhost/is_in_areas' | sudo tee /etc/secrets/is_in_areas.env
+echo 'IS_IN_DATABASE=postgresql://is_in_areas:your_password_here@localhost/is_in_areas' | sudo tee /etc/secrets/areas_server.env
 ```
 
-Copy the service file and adjust paths if your repo is not at `/srv/geovault/geovault`:
+Copy the service and timer files and adjust paths if your repo is not at `/srv/geovault/geovault`:
 
 ```shell
-sudo cp installation/is_in_areas.service /etc/systemd/system/
-sudo cp installation/is_in_areas_update.* /etc/systemd/system/
+sudo cp installation/areas_server.service /etc/systemd/system/
+sudo cp installation/areas_server_update.service installation/areas_server_update.timer /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now is_in_areas is_in_areas_update.timer
-sudo systemctl status is_in_areas is_in_areas_update.timer
+sudo systemctl enable --now areas_server areas_server_update.timer
+sudo systemctl status areas_server areas_server_update.timer
 ```

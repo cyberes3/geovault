@@ -1,12 +1,12 @@
 [Unit]
-Description=GeoVault is_in Areas Server incremental update
+Description=GeoVault Areas Server incremental update
 After=network.target postgresql.service
 
 [Service]
 Type=oneshot
 User=geovault
 WorkingDirectory=/srv/geovault/geovault/src/areas_server
-EnvironmentFile=-/etc/secrets/is_in_areas.env
+EnvironmentFile=-/etc/secrets/areas_server.env
 ExecStart=/srv/geovault/geovault/src/areas_server/scripts/update.sh
 
 [Install]
