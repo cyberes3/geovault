@@ -145,7 +145,7 @@ sudo chmod 600 /srv/geovault
 
 ## Nginx
 
-Example config file is located at `geovault.conf`.
+Example Nginx config file is located at `geovault nginx.conf`.
 
 ## Systemd
 
@@ -159,7 +159,7 @@ systemctl status geovault
 ## Overpass Server
 
 You can use a third party [Overpass API server](https://wiki.openstreetmap.org/wiki/Overpass_API) to perform reverse
-geocoding butyou should really host your own. See
+geocoding butyou should really host your own to avoid resource limits. See
 the [Overpass API](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation/Overpass%20API) directory
 for installation instructions.
 
