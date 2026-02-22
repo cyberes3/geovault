@@ -29,19 +29,33 @@ local function is_protected_area_tag(tags)
     return false
 end
 
--- Water bodies: name required; natural=water or water=lake/reservoir/pond. No tags column.
+-- Flowing/linear water types we exclude (not standing lakes): river, stream, canal, ditch, drain, rapids.
+local WATER_EXCLUDE = {
+    ['river'] = true, ['stream'] = true, ['canal'] = true,
+    ['ditch'] = true, ['drain'] = true, ['rapids'] = true,
+}
+
+-- Water bodies: name required. Include natural=water (and water=* except excluded), natural=lake, landuse=reservoir.
+-- Exclude water=river/stream/canal/ditch/drain/rapids so we keep standing water (lakes, ponds, reservoirs, lagoons, etc.).
 local function is_water_tag(tags)
     if not get_name(tags) then return false end
     local natural = tags.natural or ''
     local water = tags.water or ''
+    local landuse = tags.landuse or ''
+    if WATER_EXCLUDE[water] then return false end
     if natural == 'water' then return true end
+    if natural == 'lake' then return true end  -- deprecated, prefer natural=water + water=lake
+    if landuse == 'reservoir' then return true end  -- deprecated, prefer natural=water + water=reservoir
     if water == 'lake' or water == 'reservoir' or water == 'pond' then return true end
+    if water == 'lagoon' or water == 'oxbow' or water == 'basin' or water == 'cenote' then return true end
     return false
 end
 
 local function water_type_from_tags(tags)
     local w = tags and tags.water or ''
     if w == 'lake' or w == 'reservoir' or w == 'pond' then return w end
+    if w == 'lagoon' or w == 'oxbow' or w == 'basin' or w == 'cenote' then return w end
+    if tags and tags.landuse == 'reservoir' then return 'reservoir' end
     return 'water'
 end
 
@@ -71,7 +85,7 @@ local protected_areas = osm2pgsql.define_area_table('protected_areas', {
     { column = 'geom', method = 'gist' },
 }})
 
--- Water bodies: lakes, reservoirs, ponds (polygon for shoreline + on-water). No tags column.
+-- Water bodies: lakes, reservoirs, ponds (polygon for shoreline + on-water).
 local water_bodies = osm2pgsql.define_area_table('water_bodies', {
     { column = 'osm_id', type = 'int8', not_null = true },
     { column = 'name', type = 'text' },

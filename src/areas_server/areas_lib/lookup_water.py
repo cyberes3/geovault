@@ -25,7 +25,7 @@ def build_nearby_lakes(rows: List[Tuple[Any, ...]]) -> List[Dict[str, Any]]:
         out.append({
             "name": str(name).strip(),
             "water_type": str(water_type or "water").strip(),
-            "distance_miles": float(distance_miles) if distance_miles is not None else 0.0,
+            "distance_miles": round(float(distance_miles), 2) if distance_miles is not None else 0.0,
             "on_water": bool(on_water),
         })
     return out
@@ -50,7 +50,7 @@ def run_water_single(
              WHERE public.ST_Contains(w.geom, pt.geom)
              LIMIT %s)
             UNION ALL
-            (SELECT name, water_type,
+            (SELECT w.name, w.water_type,
                     (public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)) / 1609.34)::double precision,
                     false
              FROM {SCHEMA}.{TABLE_NAME} w, pt
