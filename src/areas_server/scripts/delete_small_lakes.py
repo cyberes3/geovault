@@ -13,6 +13,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import psycopg
+from tqdm import tqdm
+
 from config import SCHEMA
 
 # 1 sq mi = 2.589988110336 km²
@@ -63,15 +65,28 @@ def main() -> None:
             if args.dry_run:
                 print(f"Would delete {n} water bodies with area < {args.min_area_sqmi} sq mi (< {min_sqkm:.4f} km²).")
                 return
-            cur.execute(
-                f"""
-                DELETE FROM {SCHEMA}.water_bodies
-                WHERE ({area_expr}) < %s
-                """,
-                (min_sqkm,),
-            )
-            deleted = cur.rowcount
-        conn.commit()
+            batch_size = 5000
+            deleted = 0
+            with tqdm(total=n, unit="rows", desc="Deleting small lakes") as pbar:
+                while True:
+                    cur.execute(
+                        f"""
+                        WITH to_del AS (
+                            SELECT ctid FROM {SCHEMA}.water_bodies
+                            WHERE ({area_expr}) < %s
+                            LIMIT %s
+                        )
+                        DELETE FROM {SCHEMA}.water_bodies
+                        WHERE ctid IN (SELECT ctid FROM to_del)
+                        """,
+                        (min_sqkm, batch_size),
+                    )
+                    batch_deleted = cur.rowcount
+                    if batch_deleted == 0:
+                        break
+                    deleted += batch_deleted
+                    pbar.update(batch_deleted)
+            conn.commit()
     print(f"Deleted {deleted} water bodies with area < {args.min_area_sqmi} sq mi.")
 
 
