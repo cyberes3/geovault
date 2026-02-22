@@ -4,3 +4,4 @@ pycountry==26.2.16
 cachetools==7.0.1
 shapely==2.1.2
 pyproj==3.7.2
+gunicorn==25.1.0
