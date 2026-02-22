@@ -31,8 +31,9 @@ Exit with `\q`.
 
 ## Installation
 
-1. `sudo apt install osm2pgsql`
-
+```shell
+sudo apt install osm2pgsql
+```
 
 
 Then, set up the Python server:
@@ -72,28 +73,41 @@ export IS_IN_DATABASE="postgresql://is_in_areas:your_password_here@localhost/is_
 
 
 
-## Systemd
-
-To run the Areas Server as a systemd service (same host and user as main GeoVault).
-
-1. Create an environment file with the database URL under `/etc/secrets` (so the password is not in the unit file):
-
-   ```shell
-   sudo mkdir -p /etc/secrets
-   sudo chmod 600 /etc/secrets
-   echo 'IS_IN_DATABASE=postgresql://is_in_areas:your_password_here@localhost/is_in_areas' | sudo tee /etc/secrets/is_in_areas.env
-   ```
-
-2. Copy the service file and adjust paths if your repo is not at `/srv/geovault/geovault`:
-
-   ```shell
-   sudo cp installation/is_in_areas.service /etc/systemd/system/
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now is_in_areas
-   sudo systemctl status is_in_areas
-   ```
-
-
-
 ## Incremental Updates
 
+`osm2pgsql` supports easily importing update diffs from the OSM server.
+
+```shell
+export IS_IN_DATABASE="postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
+./update.sh init
+```
+
+It will output something like this:
+
+```
+2026-02-22 10:02:14 [INFO]: Initialised updates for service 'https://download.geofabrik.de/north-america-updates'.
+2026-02-22 10:02:14 [INFO]: Starting at sequence 4683 (2026-01-30T21:21:29Z).
+```
+
+Then run `./update.sh` to tell it to fetch the data. Later runs will be run via Systemd.
+
+
+## Systemd
+
+Create an environment file with the database URL under `/etc/secrets` (so the password is not in the unit file):
+
+```shell
+sudo mkdir -p /etc/secrets
+sudo chmod 600 /etc/secrets
+echo 'IS_IN_DATABASE=postgresql://is_in_areas:your_password_here@localhost/is_in_areas' | sudo tee /etc/secrets/is_in_areas.env
+```
+
+Copy the service file and adjust paths if your repo is not at `/srv/geovault/geovault`:
+
+```shell
+sudo cp installation/is_in_areas.service /etc/systemd/system/
+sudo cp installation/is_in_areas_update.* /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now is_in_areas is_in_areas_update.timer
+sudo systemctl status is_in_areas is_in_areas_update.timer
+```

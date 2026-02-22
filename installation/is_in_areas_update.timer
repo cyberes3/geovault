@@ -1,0 +1,11 @@
+[Unit]
+Description=Run GeoVault is_in areas incremental update daily
+Requires=is_in_areas_update.service
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
