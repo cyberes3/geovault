@@ -1,6 +1,6 @@
 """
 Flask app for is_in area server.
-GET /is_in?lat=&lon= (single), POST /is_in (batch), GET /health.
+GET /query?lat=&lon= (single), POST /query (batch), GET /health, GET /stats (DB stats).
 """
 import json
 from typing import Any, Dict, List, Optional, Tuple
@@ -15,12 +15,18 @@ from config import (
     get_conninfo,
     MAX_BATCH_SIZE,
 )
-from query import check_health, query_batch, query_single
+from query import check_health, get_stats, query_batch, query_single
 
 app = Flask(__name__)
 
 _pool: Optional[ConnectionPool] = None
 _cache: Optional[Any] = None
+
+
+def _configure_read_only(conn):
+    """Set session to read-only so this connection cannot modify data."""
+    conn.execute("SET default_transaction_read_only = on")
+    conn.rollback()
 
 
 def get_pool() -> ConnectionPool:
@@ -30,6 +36,7 @@ def get_pool() -> ConnectionPool:
             get_conninfo(),
             min_size=1,
             max_size=4,
+            configure=_configure_read_only,
         )
     return _pool
 
@@ -93,6 +100,7 @@ def health():
                 )
             return {"status": "ok"}
         finally:
+            conn.rollback()
             pool.putconn(conn)
     except Exception as e:
         return Response(
@@ -102,9 +110,28 @@ def health():
         )
 
 
-@app.route("/is_in", methods=["GET"])
-def is_in_single():
-    """Single-point query: GET /is_in?lat=40.34&lon=-105.68"""
+@app.route("/stats")
+def stats():
+    """Return database stats: feature counts, geographic extent, admin level breakdown."""
+    try:
+        pool = get_pool()
+        conn = pool.getconn()
+        try:
+            return get_stats(conn)
+        finally:
+            conn.rollback()
+            pool.putconn(conn)
+    except Exception as e:
+        return Response(
+            json.dumps({"error": str(e)}),
+            status=500,
+            mimetype="application/json",
+        )
+
+
+@app.route("/query", methods=["GET"])
+def get_query():
+    """Single-point query: GET /query?lat=40.34&lon=-105.68"""
     lat = request.args.get("lat")
     lon = request.args.get("lon")
     err = _validate_lat_lon(lat, lon)
@@ -138,9 +165,9 @@ def is_in_single():
         )
 
 
-@app.route("/is_in", methods=["POST"])
-def is_in_batch():
-    """Batch query: POST /is_in with body {"points": [[lat, lon], ...]}"""
+@app.route("/query", methods=["POST"])
+def post_query():
+    """Batch query: POST /query with body {"points": [[lat, lon], ...]}"""
     if not request.is_json:
         return Response(
             json.dumps({"error": "Content-Type must be application/json"}),
@@ -208,4 +235,4 @@ def create_app() -> Flask:
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=5001)

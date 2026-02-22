@@ -1,8 +1,13 @@
 -- Flex config for is_in area server: admin boundaries and protected areas.
--- Import with: osm2pgsql -O flex -S areas.lua --schema is_in -s -d $DB planet.pbf
--- Geometry in EPSG:4326 for point-in-polygon with ST_Contains(geom, point).
+-- Import with: osm2pgsql -x -O flex -S areas.lua --schema is_in -s -d $DB planet.pbf
+-- (-x = extra-attributes for object.timestamp). Geometry in EPSG:4326.
 
 local ADMIN_LEVELS = { ['2'] = true, ['4'] = true, ['6'] = true, ['8'] = true }
+
+local function format_timestamp(ts)
+    if ts == nil then return nil end
+    return os.date('!%Y-%m-%dT%H:%M:%SZ', ts)
+end
 
 local function get_name(tags)
     return tags.name or tags['name:en'] or tags['int_name']
@@ -32,6 +37,7 @@ local admin_areas = osm2pgsql.define_relation_table('admin_areas', {
     { column = 'name', type = 'text' },
     { column = 'tags', type = 'jsonb' },
     { column = 'geom', type = 'polygon', not_null = true, projection = 4326 },
+    { column = 'created', sql_type = 'timestamptz' },
 }, { indexes = {
     { column = 'geom', method = 'gist' },
     { column = 'admin_level', method = 'btree' },
@@ -44,6 +50,7 @@ local protected_areas = osm2pgsql.define_area_table('protected_areas', {
     { column = 'name', type = 'text' },
     { column = 'tags', type = 'jsonb' },
     { column = 'geom', type = 'geometry', not_null = true, projection = 4326 },
+    { column = 'created', sql_type = 'timestamptz' },
 }, { indexes = {
     { column = 'geom', method = 'gist' },
 }})
@@ -56,6 +63,7 @@ function osm2pgsql.process_relation(object)
         local admin_level = tonumber(t.admin_level)
         if not admin_level then return end
         local name = get_name(t)
+        local created = format_timestamp(object.timestamp)
         for geom in object:as_multipolygon():geometries() do
             admin_areas:insert({
                 osm_id = object.id,
@@ -63,6 +71,7 @@ function osm2pgsql.process_relation(object)
                 name = name,
                 tags = t,
                 geom = geom,
+                created = created,
             })
         end
         return
@@ -77,6 +86,7 @@ function osm2pgsql.process_relation(object)
                 name = get_name(t),
                 tags = t,
                 geom = geom,
+                created = format_timestamp(object.timestamp),
             })
         end
     end
@@ -94,5 +104,6 @@ function osm2pgsql.process_way(object)
         name = get_name(object.tags),
         tags = object.tags,
         geom = geom,
+        created = format_timestamp(object.timestamp),
     })
 end

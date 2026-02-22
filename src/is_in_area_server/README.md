@@ -24,24 +24,27 @@ only).
 | `IS_IN_CACHE_TTL`                  | Response cache TTL in seconds for single-point GET (default: 0 = disabled). |
 | `IS_IN_CACHE_COORD_DECIMALS`       | Decimal places for cache key (default: 4).                                  |
 
-## Installation
+## Installation and Setup
 
-See `installation/AReas Server.md`
+See `installation/Areas Server.md`
 
 ## Run the server
-
-From this directory (`src/is_in_area_server`):
 
 ```bash
 pip install -r requirements.txt
 export IS_IN_DATABASE="postgresql://user:pass@localhost/dbname"
-flask --app app run --host 0.0.0.0 --port 5000
-# or: gunicorn -w 4 -b 0.0.0.0:5000 app:app
+flask --app app run --host 0.0.0.0 --port 5001
 ```
 
-- **GET /is_in?lat=40.34&lon=-105.68** — single-point query. Returns
+## Routes
+
+**GET /query?lat=40.34&lon=-105.68** — single-point query. Returns
   `{ "admin_hierarchy": { "country", "state", "county", "city" }, "protected_areas": [ ... ] }`.
-- **POST /is_in** — batch. Body: `{"points": [[lat, lon], ...]}`. Returns
+
+**POST /query** — batch. Body: `{"points": [[lat, lon], ...]}`. Returns
   `{"results": [{ "admin_hierarchy", "protected_areas" }, ...]}` in the same order. More efficient than N single-point
   calls (two DB round-trips total).
-- **GET /health** — health check (DB and table existence).
+
+**GET /health** — health check (DB and table existence).
+
+**GET /stats** — database stats: feature counts, geographic extent (bbox) per layer, admin level breakdown, oldest/newest feature timestamps (requires import with `-x`).

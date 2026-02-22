@@ -3,12 +3,7 @@
 The Areas Server is a standalone Flask service that answers “which admin and protected areas contain this point?” using
 PostGIS and OSM data loaded via osm2pgsql. It is separate service from the main GeoVault stack.
 
-## Requirements
 
-- Python 3.10+
-- PostgreSQL with PostGIS (same as main GeoVault; see [installation/README.md](README.md) for PostGIS install)
-- **osm2pgsql** (1.8+ with flex output)
-- For incremental updates: **osm2pgsql-replication** (from the osm2pgsql repo) and pyosmium
 
 ## Database
 
@@ -32,34 +27,50 @@ touch the main GeoVault schema.
 
 Exit with `\q`.
 
-## Install and run
 
-From the repo root:
+
+## Installation
+
+1. `sudo apt install osm2pgsql`
+
+
+
+Then, set up the Python server:
 
 ```shell
 cd src/is_in_area_server
 python3 -m venv venv
 ./venv/bin/pip install -r requirements.txt
-export IS_IN_DATABASE="postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
-./venv/bin/flask --app app run --host 0.0.0.0 --port 5000
 ```
+
+
 
 ## Import OSM data
 
-Before the server can answer queries, load area data from an OSM PBF (e.g. planet or regional extract):
+Before the server can answer queries, load area data from an OSM PBF:
 
 ```shell
 export IS_IN_DATABASE="postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
 ./scripts/import_pbf.sh /path/to/planet-latest.osm.pbf
 ```
 
-After the first import, to enable incremental updates:
+To import multiple regions:
 
-```shell
-./scripts/update.sh init
+```bash
+./scripts/import_pbf.sh north-america-latest.pbf
+./scripts/import_pbf.sh --append europe-latest.pbf
 ```
 
-Then run `./scripts/update.sh` periodically (e.g. via cron).
+
+
+## Running the Server
+
+```shell
+export IS_IN_DATABASE="postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
+./venv/bin/flask --app app run --host 0.0.0.0 --port 5001
+```
+
+
 
 ## Systemd
 
@@ -77,10 +88,12 @@ To run the Areas Server as a systemd service (same host and user as main GeoVaul
 
    ```shell
    sudo cp installation/is_in_areas.service /etc/systemd/system/
-   # If needed, edit WorkingDirectory and ExecStart paths
    sudo systemctl daemon-reload
    sudo systemctl enable --now is_in_areas
    sudo systemctl status is_in_areas
    ```
 
-The service listens on port 5000 by default.
+
+
+## Incremental Updates
+

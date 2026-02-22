@@ -153,6 +153,8 @@ def query_single(
             _build_protected_list(protected_rows),
         )
     finally:
+        conn1.rollback()
+        conn2.rollback()
         pool.putconn(conn1)
         pool.putconn(conn2)
 
@@ -229,6 +231,8 @@ def query_batch(
             admin_rows = f_admin.result()
             protected_rows = f_protected.result()
     finally:
+        conn1.rollback()
+        conn2.rollback()
         pool.putconn(conn1)
         pool.putconn(conn2)
 
@@ -276,3 +280,93 @@ def check_health(conn: Any) -> Tuple[bool, Optional[str]]:
         return True, None
     except Exception as e:
         return False, str(e)
+
+
+def _extent_from_row(row: Optional[Tuple[Any, ...]]) -> Optional[Dict[str, float]]:
+    """Build {min_lon, min_lat, max_lon, max_lat} from (minx, miny, maxx, maxy) or None."""
+    if not row or len(row) < 4 or any(v is None for v in row):
+        return None
+    minx, miny, maxx, maxy = row[0], row[1], row[2], row[3]
+    return {
+        "min_lon": float(minx),
+        "min_lat": float(miny),
+        "max_lon": float(maxx),
+        "max_lat": float(maxy),
+    }
+
+
+def get_stats(conn: Any) -> Dict[str, Any]:
+    """Return database stats: feature counts, geographic extent, admin level breakdown, oldest/newest feature timestamps."""
+    stats: Dict[str, Any] = {
+        "admin_areas": {"count": 0, "extent": None, "by_admin_level": {}, "oldest_feature": None, "newest_feature": None},
+        "protected_areas": {"count": 0, "extent": None, "oldest_feature": None, "newest_feature": None},
+    }
+    with conn.cursor() as cur:
+        cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.admin_areas")
+        row = cur.fetchone()
+        if row and row[0] is not None:
+            stats["admin_areas"]["count"] = row[0]
+
+        cur.execute(
+            f"""
+            SELECT ST_XMin(e), ST_YMin(e), ST_XMax(e), ST_YMax(e)
+            FROM (SELECT ST_Extent(geom) AS e FROM {SCHEMA}.admin_areas) _t
+            """,
+        )
+        row = cur.fetchone()
+        if row and row[0] is not None:
+            stats["admin_areas"]["extent"] = _extent_from_row(tuple(row))
+
+        cur.execute(
+            f"""
+            SELECT admin_level, COUNT(*)
+            FROM {SCHEMA}.admin_areas
+            GROUP BY admin_level
+            ORDER BY admin_level
+            """,
+        )
+        for row in cur.fetchall():
+            if row and len(row) >= 2:
+                stats["admin_areas"]["by_admin_level"][int(row[0])] = row[1]
+
+        cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.protected_areas")
+        row = cur.fetchone()
+        if row and row[0] is not None:
+            stats["protected_areas"]["count"] = row[0]
+
+        cur.execute(
+            f"""
+            SELECT ST_XMin(e), ST_YMin(e), ST_XMax(e), ST_YMax(e)
+            FROM (SELECT ST_Extent(geom) AS e FROM {SCHEMA}.protected_areas) _t
+            """,
+        )
+        row = cur.fetchone()
+        if row and row[0] is not None:
+            stats["protected_areas"]["extent"] = _extent_from_row(tuple(row))
+
+        # Oldest/newest feature timestamps (require re-import with -x if column missing)
+        def _ts_str(val: Any) -> Optional[str]:
+            if val is None:
+                return None
+            if hasattr(val, "isoformat"):
+                return val.isoformat()
+            return str(val)
+
+        try:
+            cur.execute(
+                f"SELECT MIN(created), MAX(created) FROM {SCHEMA}.admin_areas",
+            )
+            row = cur.fetchone()
+            if row:
+                stats["admin_areas"]["oldest_feature"] = _ts_str(row[0])
+                stats["admin_areas"]["newest_feature"] = _ts_str(row[1])
+            cur.execute(
+                f"SELECT MIN(created), MAX(created) FROM {SCHEMA}.protected_areas",
+            )
+            row = cur.fetchone()
+            if row:
+                stats["protected_areas"]["oldest_feature"] = _ts_str(row[0])
+                stats["protected_areas"]["newest_feature"] = _ts_str(row[1])
+        except Exception:
+            pass
+    return stats
