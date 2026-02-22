@@ -1,6 +1,6 @@
 """
 Tests for the standalone is_in area server (Flask + PostGIS).
-All tests hit the real server at reverse_geocoding.areas_server.api_url (IS_IN_AREAS_SERVER_URL).
+All tests hit the real server at reverse_geocoding.areas_server.api_url (AREAS_SERVER_URL).
 Validation and error-path tests use the in-process client with mocks where needed.
 
 Uses urllib for HTTP so real-server tests are not affected by conftest's requests mocks.
@@ -22,7 +22,7 @@ if str(_areas_server_dir) not in sys.path:
 
 def _areas_server_base_url():
     from django.conf import settings
-    url = (getattr(settings, "IS_IN_AREAS_SERVER_URL", None) or "").strip()
+    url = (getattr(settings, "AREAS_SERVER_URL", None) or "").strip()
     return url.rstrip("/") if url else ""
 
 
@@ -74,7 +74,7 @@ def areas_server_url():
     """Base URL of the areas server from settings (reverse_geocoding.areas_server.api_url)."""
     url = _areas_server_base_url()
     if not url:
-        pytest.fail("IS_IN_AREAS_SERVER_URL not set")
+        pytest.fail("AREAS_SERVER_URL not set")
     return url
 
 

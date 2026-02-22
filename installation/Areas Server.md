@@ -47,22 +47,24 @@ python3 -m venv venv
 
 Download the `.osm.pbf` data from <https://download.geofabrik.de/>. Then, load the data:
 
-```shell
-export IS_IN_DATABASE="postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
-./scripts/import_pbf.sh /path/to/planet-latest.osm.pbf
-```
-
-To import multiple regions:
-
 ```bash
-./scripts/import_pbf.sh north-america-latest.pbf
-./scripts/import_pbf.sh --append europe-latest.pbf
+./scripts/import_pbf.sh --database "postgresql://..." /srv/downloads/north-america-latest.osm.pbf
+./scripts/import_pbf.sh --append --database "postgresql://..." /srv/downloads/europe-latest.osm.pbf
 ```
+
+(Run the first `.osm.pbf` import then add the `--append` for subsequent ones.)
+
+Optional arguments for faster imports:
+
+| Argument        | Effect                                                                |
+|-----------------|-----------------------------------------------------------------------|
+| `--cache MB`    | Node cache size in MB. Rule of thumb: ~50% of free RAM. Default: 800. |
+| `--processes N` | Parallel threads. Default: `nproc` (if available).                    |
 
 ## Running the Server
 
 ```shell
-export IS_IN_DATABASE="postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
+export AREAS_SERVER_DATABASE="postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
 ./venv/bin/flask --app app run --host 0.0.0.0 --port 5001
 ```
 
@@ -70,9 +72,16 @@ export IS_IN_DATABASE="postgresql://is_in_areas:your_password_here@localhost/is_
 
 `osm2pgsql` supports easily importing update diffs from the OSM server.
 
+First, initalize the diffs:
+
 ```shell
-export IS_IN_DATABASE="postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
-./update.sh init
+./scripts/update.sh --database "postgresql://is_in_areas:your_password_here@localhost/is_in_areas" init
+```
+
+To run the update:
+
+```shell
+./scripts/update.sh --database "postgresql://..." update
 ```
 
 It will output something like this:
@@ -82,7 +91,7 @@ It will output something like this:
 2026-02-22 10:02:14 [INFO]: Starting at sequence 4683 (2026-01-30T21:21:29Z).
 ```
 
-Then run `./update.sh` to tell it to fetch the data. Later runs will be run via Systemd.
+Later runs are typically done via the systemd timer (daily).
 
 ## Systemd
 
@@ -91,10 +100,10 @@ Create an environment file with the database URL under `/etc/secrets` (so the pa
 ```shell
 sudo mkdir -p /etc/secrets
 sudo chmod 600 /etc/secrets
-echo 'IS_IN_DATABASE=postgresql://is_in_areas:your_password_here@localhost/is_in_areas' | sudo tee /etc/secrets/areas_server.env
+echo 'AREAS_SERVER_DATABASE=postgresql://is_in_areas:your_password_here@localhost/is_in_areas' | sudo tee /etc/secrets/areas_server.env
 ```
 
-Copy the service and timer files and adjust paths if your repo is not at `/srv/geovault/geovault`:
+Copy the service and timer files:
 
 ```shell
 sudo cp installation/areas_server.service /etc/systemd/system/

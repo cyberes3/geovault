@@ -489,10 +489,10 @@ OVERPASS_API_URL = config.get_str('reverse_geocoding.overpass.api_url', 'https:/
 OVERPASS_API_TIMEOUT = config.get_int('reverse_geocoding.overpass.request_timeout_seconds', 75)
 OVERPASS_API_VERIFY_SSL = config.get_bool('reverse_geocoding.overpass.verify_ssl', True)
 
-# is_in area server (admin + protected areas). Required when reverse geocoding is used.
-IS_IN_AREAS_SERVER_URL = config.get_str('reverse_geocoding.areas_server.api_url', 'http://127.0.0.1:5001')
-IS_IN_AREAS_SERVER_TIMEOUT = config.get_int('reverse_geocoding.areas_server.request_timeout_seconds', 10)
-IS_IN_AREAS_SERVER_VERIFY_SSL = config.get_bool('reverse_geocoding.areas_server.verify_ssl', True)
+# Areas server (admin + protected areas). Required when reverse geocoding is used.
+AREAS_SERVER_URL = config.get_str('reverse_geocoding.areas_server.api_url', 'http://127.0.0.1:5001')
+AREAS_SERVER_TIMEOUT = config.get_int('reverse_geocoding.areas_server.request_timeout_seconds', 10)
+AREAS_SERVER_VERIFY_SSL = config.get_bool('reverse_geocoding.areas_server.verify_ssl', True)
 
 # Elevation API Configuration
 # Elevation API server URL (racemap's elevation service)

@@ -7,7 +7,7 @@ Type=oneshot
 User=geovault
 WorkingDirectory=/srv/geovault/geovault/src/areas_server
 EnvironmentFile=-/etc/secrets/areas_server.env
-ExecStart=/srv/geovault/geovault/src/areas_server/scripts/update.sh
+ExecStart=/bin/bash -c 'exec /srv/geovault/geovault/src/areas_server/scripts/update.sh --database "$AREAS_SERVER_DATABASE" update'
 
 [Install]
 WantedBy=multi-user.target

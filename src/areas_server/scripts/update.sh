@@ -1,33 +1,53 @@
 #!/usr/bin/env bash
-# Incremental update for is_in area server (osm2pgsql-replication).
+# Incremental update for areas server (osm2pgsql-replication).
 # Usage:
-#   ./update.sh          # run update (download and apply diffs)
-#   ./update.sh init     # init replication state (run once after first import)
-#   ./update.sh init --osm-file /path/to/file.pbf   # init from PBF replication metadata
-# Env: IS_IN_DATABASE or DATABASE_URL, IS_IN_SCHEMA (default is_in),
-#      IS_IN_FLEX_CONFIG (path to areas.lua), OSM2PGSQL_REPLICATION, OSM2PGSQL.
+#   ./update.sh [options] init [init args...]
+#   ./update.sh [options] update
+# Options: --database URL, --cache MB, --processes N. Schema is hard-coded as is_in.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCHEMA="is_in"
 
-DB="${IS_IN_DATABASE:-${DATABASE_URL:-}}"
+DB=""
+CACHE_MB=""
+PROCESSES=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --database)  DB="$2"; shift 2 ;;
+    --cache)     CACHE_MB="$2"; shift 2 ;;
+    --processes) PROCESSES="$2"; shift 2 ;;
+    -h|--help)
+      echo "Usage: $0 [--database URL] [--cache MB] [--processes N] init|update [init args...]" >&2
+      echo "  init    - initialise replication (run once after first PBF import)" >&2
+      echo "  update  - download and apply incremental diffs (default)" >&2
+      echo "  --database   connection URL (required)" >&2
+      echo "  --cache      node cache size in MB" >&2
+      echo "  --processes  parallel threads" >&2
+      exit 0
+      ;;
+    --) shift; break ;;
+    -*) echo "Unknown option: $1" >&2; exit 1 ;;
+    *)  break ;;
+  esac
+done
+
 if [[ -z "$DB" ]]; then
-  echo "IS_IN_DATABASE or DATABASE_URL not set" >&2
+  echo "Database not set. Use --database URL." >&2
   exit 1
 fi
 
-SCHEMA="${IS_IN_SCHEMA:-is_in}"
-FLEX_CONFIG="${IS_IN_FLEX_CONFIG:-${SERVER_DIR}/flex_config/areas.lua}"
+FLEX_CONFIG="${AREAS_SERVER_FLEX_CONFIG:-${SERVER_DIR}/flex_config/areas.lua}"
 if [[ ! -f "$FLEX_CONFIG" ]]; then
-  echo "Flex config not found: $FLEX_CONFIG (set IS_IN_FLEX_CONFIG if needed)" >&2
+  echo "Flex config not found: $FLEX_CONFIG (set AREAS_SERVER_FLEX_CONFIG if needed)" >&2
   exit 1
 fi
 
 REPLICATION_SCRIPT="${OSM2PGSQL_REPLICATION:-osm2pgsql-replication}"
 
-# Run osm2pgsql-replication: subcommand must come first (argparse subparsers).
 run_replication() {
   local subcmd="$1"
   shift
@@ -42,21 +62,24 @@ shift || true
 case "$SUBCOMMAND" in
   init)
     run_replication init "$@"
-    echo "Replication initialised. Run ./update.sh periodically (e.g. via cron) to apply updates." >&2
+    echo "Replication initialised. Run ./update.sh update periodically (e.g. via cron)." >&2
     ;;
   update)
     POST_SCRIPT=""
     if [[ -f "$SCRIPT_DIR/post_analyze.sh" ]]; then
       POST_SCRIPT="$SCRIPT_DIR/post_analyze.sh"
     fi
+    EXTRA_OSM2PGSQL=()
+    [[ -n "$CACHE_MB" ]] && EXTRA_OSM2PGSQL+=(-C "$CACHE_MB")
+    [[ -n "$PROCESSES" ]] && EXTRA_OSM2PGSQL+=(--number-processes "$PROCESSES")
     if [[ -n "$POST_SCRIPT" ]]; then
-      run_replication update --post-processing "$POST_SCRIPT" -- -O flex -S "$FLEX_CONFIG" --schema "$SCHEMA" -x
+      run_replication update --post-processing "$POST_SCRIPT" -- "${EXTRA_OSM2PGSQL[@]}" -O flex -S "$FLEX_CONFIG" --schema "$SCHEMA" -x
     else
-      run_replication update -- -O flex -S "$FLEX_CONFIG" --schema "$SCHEMA" -x
+      run_replication update -- "${EXTRA_OSM2PGSQL[@]}" -O flex -S "$FLEX_CONFIG" --schema "$SCHEMA" -x
     fi
     ;;
   *)
-    echo "Usage: $0 [init|update] [init args...]" >&2
+    echo "Usage: $0 [--database URL] [--cache MB] [--processes N] init|update [init args...]" >&2
     echo "  init    - initialise replication (run once after first PBF import)" >&2
     echo "  update  - download and apply incremental diffs (default)" >&2
     exit 1

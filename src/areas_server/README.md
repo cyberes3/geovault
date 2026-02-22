@@ -1,6 +1,6 @@
-# is_in Area Server
+# Areas Server
 
-A standalone Flask server that answers point-in-area queries for the OSM dataset. Backed by PostGIS with data is
+A standalone Flask server that answers point-in-area queries for the OSM dataset. Backed by PostGIS with data
 imported from OSM PBF files via osm2pgsql.
 
 This server is a replacement for the Overpass API server. Overpass is just too large, heavy, and complicated for our use
@@ -8,13 +8,13 @@ case. Specifically, the `is_in()` query consumes dozens of GBs of memory for a s
 
 ## Environment
 
-| Variable                           | Description                                                                 |
-|------------------------------------|-----------------------------------------------------------------------------|
-| `IS_IN_DATABASE` or `DATABASE_URL` | PostgreSQL connection string (required).                                    |
-| `IS_IN_SCHEMA`                     | Schema for tables (default: `is_in`). Use lowercase.                        |
-| `IS_IN_MAX_BATCH_SIZE`             | Max points per batch request (default: 500).                                |
-| `IS_IN_CACHE_TTL`                  | Response cache TTL in seconds for single-point GET (default: 0 = disabled). |
-| `IS_IN_CACHE_COORD_DECIMALS`       | Decimal places for cache key (default: 4).                                  |
+| Variable                     | Description                                      |
+|------------------------------|--------------------------------------------------|
+| `AREAS_SERVER_DATABASE`      | PostgreSQL connection string (required).        |
+| `AREAS_SERVER_SCHEMA`                    | Schema for tables (default: `is_in`). Use lowercase.                        |
+| `AREAS_SERVER_MAX_BATCH_SIZE`            | Max points per batch request (default: 500).                                |
+| `AREAS_SERVER_CACHE_TTL`                 | Response cache TTL in seconds for single-point GET (default: 0 = disabled). |
+| `AREAS_SERVER_CACHE_COORD_DECIMALS`      | Decimal places for cache key (default: 4).                                  |
 
 ## Installation and Setup
 
@@ -24,7 +24,7 @@ See `installation/Areas Server.md`
 
 ```bash
 pip install -r requirements.txt
-export IS_IN_DATABASE="postgresql://user:pass@localhost/dbname"
+export AREAS_SERVER_DATABASE="postgresql://user:pass@localhost/dbname"
 flask --app app run --host 0.0.0.0 --port 5001
 ```
 

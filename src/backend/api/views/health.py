@@ -55,7 +55,7 @@ def health_check(request):
         reverse_geocoding_enabled = config.get_bool('reverse_geocoding.enabled', True)
         if reverse_geocoding_enabled:
             checks_to_run.append(("overpass_api", check_overpass_api))
-            base_url = (getattr(settings, "IS_IN_AREAS_SERVER_URL", None) or "").strip()
+            base_url = (getattr(settings, "AREAS_SERVER_URL", None) or "").strip()
             if base_url:
                 checks_to_run.append(("areas_server", check_areas_server))
             else:
@@ -127,17 +127,17 @@ def health_check(request):
 
 def check_areas_server() -> bool:
     """
-    Check is_in areas server health by GETting its /health endpoint.
+    Check areas server health by GETting its /health endpoint.
 
     Returns:
         True if the server returns 200 and status "ok", False otherwise.
     """
     try:
-        base_url = (getattr(settings, "IS_IN_AREAS_SERVER_URL", None) or "").strip()
+        base_url = (getattr(settings, "AREAS_SERVER_URL", None) or "").strip()
         if not base_url:
             return False
         url = base_url.rstrip("/") + "/health"
-        verify_ssl = getattr(settings, "IS_IN_AREAS_SERVER_VERIFY_SSL", True)
+        verify_ssl = getattr(settings, "AREAS_SERVER_VERIFY_SSL", True)
         if not verify_ssl:
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         response = requests.get(

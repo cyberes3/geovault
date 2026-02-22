@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # Post-processing for replication update: run ANALYZE on is_in tables.
 # Usage: called by osm2pgsql-replication --post-processing (gets sequence and timestamp args).
-# Env: IS_IN_DATABASE or DATABASE_URL, IS_IN_SCHEMA (default is_in).
+# Env: AREAS_SERVER_DATABASE, AREAS_SERVER_SCHEMA (default is_in).
 
 set -euo pipefail
 
-DB="${IS_IN_DATABASE:-${DATABASE_URL:-}}"
+DB="${AREAS_SERVER_DATABASE:-}"
 if [[ -z "$DB" ]]; then
-  echo "IS_IN_DATABASE or DATABASE_URL not set" >&2
+  echo "AREAS_SERVER_DATABASE not set" >&2
   exit 1
 fi
 
-SCHEMA="${IS_IN_SCHEMA:-is_in}"
+SCHEMA="${AREAS_SERVER_SCHEMA:-is_in}"
 
 # Geography GIST speeds up ST_DWithin(geography(geom), ...) for water nearby-shore queries
 psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS water_bodies_geom_geog_gist ON \"$SCHEMA\".water_bodies USING GIST ((geom::geography));"
