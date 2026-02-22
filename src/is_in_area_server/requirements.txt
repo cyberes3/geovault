@@ -1,0 +1,5 @@
+Flask>=3.0
+psycopg[binary]>=3.1
+pycountry>=24.0
+# Optional for response cache (IS_IN_CACHE_TTL > 0):
+cachetools>=5.0
