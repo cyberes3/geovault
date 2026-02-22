@@ -103,12 +103,11 @@ export default [
       parser: vue.parser,
       parserOptions: {
         parser: typescriptParser,
-        parserOptions: {
-          project: './tsconfig.json',
-          tsconfigRootDir: __dirname,
-          ecmaVersion: 2021,
-          sourceType: 'module'
-        }
+        project: './tsconfig.json',
+        tsconfigRootDir: __dirname,
+        extraFileExtensions: ['.vue'],
+        ecmaVersion: 2021,
+        sourceType: 'module'
       },
       globals: {
         console: 'readonly',
