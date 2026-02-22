@@ -19,6 +19,8 @@ _areas_server_dir = Path(__file__).resolve().parent.parent / "areas_server"
 if str(_areas_server_dir) not in sys.path:
     sys.path.insert(0, str(_areas_server_dir))
 
+from areas_lib import lookup_protected_areas, lookup_water
+
 
 def _areas_server_base_url():
     from website.settings_utils import get_setting
@@ -216,3 +218,415 @@ class TestQueryPost:
         for item in data["results"]:
             assert "admin_hierarchy" in item
             assert "protected_areas" in item
+
+
+# --- Fake feature data for top-5 limit tests (no real DB). ---
+
+
+def _fake_protected_row(osm_id: int, name: str, **tag_overrides) -> tuple:
+    """Fake DB row (osm_id, name, tags) for protected_areas."""
+    tags = {
+        "protection_title": "",
+        "protect_class": "",
+        "designation": "",
+        "operator": "",
+        "leisure": "",
+        "landuse": "",
+        "boundary": "",
+    }
+    tags.update(tag_overrides)
+    return (osm_id, name, tags)
+
+
+def _fake_lake_row(name: str, water_type: str = "water", distance_miles: float = 0.0, on_water: bool = True) -> tuple:
+    """Fake DB row (name, water_type, distance_miles, on_water) for nearby_lakes."""
+    return (name, water_type, distance_miles, on_water)
+
+
+class TestProtectedAreasTop5:
+    """Validate protected areas are limited to top 5 per point; DB is mocked, no real DB."""
+
+    def test_build_protected_list_empty(self):
+        out = lookup_protected_areas.build_protected_list([])
+        assert out == []
+
+    def test_build_protected_list_one(self):
+        rows = [_fake_protected_row(1, "Park A")]
+        out = lookup_protected_areas.build_protected_list(rows)
+        assert len(out) == 1
+        assert out[0]["name"] == "Park A"
+
+    def test_build_protected_list_five_at_limit(self):
+        rows = [_fake_protected_row(i, f"Park {i}") for i in range(1, 6)]
+        out = lookup_protected_areas.build_protected_list(rows)
+        assert len(out) == 5
+        assert [x["name"] for x in out] == ["Park 1", "Park 2", "Park 3", "Park 4", "Park 5"]
+
+    def test_build_protected_list_skips_rows_without_name(self):
+        rows = [
+            _fake_protected_row(1, "Park A"),
+            (999, None, {}),
+            (998, "", {"name": "From Tags"}),
+        ]
+        out = lookup_protected_areas.build_protected_list(rows)
+        assert len(out) == 2
+        assert out[0]["name"] == "Park A"
+        assert out[1]["name"] == "From Tags"
+
+    def test_build_protected_list_no_truncation_beyond_five(self):
+        """build_protected_list does not truncate; limit is enforced in SQL. 6 rows -> 6 items."""
+        rows = [_fake_protected_row(i, f"Park {i}") for i in range(1, 8)]
+        out = lookup_protected_areas.build_protected_list(rows)
+        assert len(out) == 7
+
+    def test_run_protected_single_execute_receives_limit_5(self):
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchall.return_value = []
+        lookup_protected_areas.run_protected_single(conn, 40.0, -105.0)
+        cur.execute.assert_called_once()
+        args = cur.execute.call_args[0]
+        params = args[1]
+        assert params[1] == lookup_protected_areas.PROTECTED_LIMIT_PER_POINT
+        assert params[1] == 5
+
+    def test_run_protected_single_returns_at_most_five_when_mock_returns_five(self):
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchall.return_value = [_fake_protected_row(i, f"Park {i}") for i in range(1, 6)]
+        rows = lookup_protected_areas.run_protected_single(conn, 40.0, -105.0)
+        assert len(rows) == 5
+
+    def test_run_protected_single_empty(self):
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchall.return_value = []
+        rows = lookup_protected_areas.run_protected_single(conn, 40.0, -105.0)
+        assert len(rows) == 0
+
+    def test_run_protected_batch_execute_receives_limit_5(self):
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchall.return_value = []
+        lookup_protected_areas.run_protected_batch(conn, [0], [-105.0], [40.0])
+        cur.execute.assert_called_once()
+        args = cur.execute.call_args[0]
+        params = args[1]
+        assert params[-1] == lookup_protected_areas.PROTECTED_LIMIT_PER_POINT
+        assert params[-1] == 5
+
+    def test_run_protected_batch_five_per_point(self):
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchall.return_value = [
+            (0, i, f"Park P0 {i}", {}) for i in range(1, 6)
+        ] + [
+            (1, i, f"Park P1 {i}", {}) for i in range(1, 6)
+        ]
+        rows = lookup_protected_areas.run_protected_batch(conn, [0, 1], [-105.0, -106.0], [40.0, 41.0])
+        assert len(rows) == 10
+        by_idx = {}
+        for r in rows:
+            by_idx.setdefault(r[0], []).append(r)
+        assert len(by_idx[0]) == 5
+        assert len(by_idx[1]) == 5
+
+    def test_query_single_protected_at_most_five(self, mock_pool):
+        """End-to-end: query_single returns at most 5 protected areas when run_protected_single returns 5."""
+        from areas_lib.query import query_single
+        conn1 = MagicMock()
+        conn2 = MagicMock()
+        conn3 = MagicMock()
+        mock_pool.getconn.side_effect = [conn1, conn2, conn3]
+        cur2 = MagicMock()
+        conn2.cursor.return_value.__enter__ = MagicMock(return_value=cur2)
+        conn2.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur2.fetchall.return_value = [_fake_protected_row(i, f"Park {i}") for i in range(1, 6)]
+        cur1 = MagicMock()
+        conn1.cursor.return_value.__enter__ = MagicMock(return_value=cur1)
+        conn1.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur1.fetchall.return_value = []
+        cur3 = MagicMock()
+        conn3.cursor.return_value.__enter__ = MagicMock(return_value=cur3)
+        conn3.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        conn3.cursor.return_value.__enter__ = MagicMock(return_value=cur3)
+        conn3.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur3.fetchall.side_effect = [[], []]
+        with patch("areas_lib.query.lookup_admin.run_admin_single", return_value=[]), \
+             patch("areas_lib.query.lookup_protected_areas.run_protected_single", return_value=cur2.fetchall.return_value), \
+             patch("areas_lib.query.lookup_water.run_water_single", return_value=[]):
+            admin, protected, lakes = query_single(mock_pool, 40.0, -105.0)
+        assert len(protected) == 5
+        assert protected[0]["name"] == "Park 1"
+
+    def test_run_protected_single_when_mock_returns_six_no_python_truncation(self):
+        """If DB returned 6 rows (e.g. bug), we'd get 6; limit is enforced in SQL only."""
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        six_rows = [_fake_protected_row(i, f"Park {i}") for i in range(1, 7)]
+        cur.fetchall.return_value = six_rows
+        rows = lookup_protected_areas.run_protected_single(conn, 40.0, -105.0)
+        assert len(rows) == 6
+        out = lookup_protected_areas.build_protected_list(rows)
+        assert len(out) == 6
+
+    def test_run_protected_batch_single_point_five_results(self):
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchall.return_value = [(0, i, f"Park {i}", {}) for i in range(1, 6)]
+        rows = lookup_protected_areas.run_protected_batch(conn, [0], [-105.0], [40.0])
+        assert len(rows) == 5
+        out = lookup_protected_areas.build_protected_list([r[1:] for r in rows])
+        assert len(out) == 5
+
+    def test_run_protected_batch_mixed_zero_and_five_per_point(self):
+        """Point 0 has 0 results, point 1 has 5; grouping must still give 5 for point 1."""
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchall.return_value = [(1, i, f"Park P1 {i}", {}) for i in range(1, 6)]
+        rows = lookup_protected_areas.run_protected_batch(conn, [0, 1], [-105.0, -106.0], [40.0, 41.0])
+        assert len(rows) == 5
+        by_idx = {}
+        for r in rows:
+            by_idx.setdefault(r[0], []).append(r)
+        assert 0 not in by_idx
+        assert len(by_idx[1]) == 5
+
+    def test_build_protected_list_skips_short_rows(self):
+        """Rows with len < 3 are skipped (no crash, don't count toward 5)."""
+        rows = [
+            (1,),
+            (1, "Park A"),  # len 2, skipped
+            _fake_protected_row(2, "Park B"),
+        ]
+        out = lookup_protected_areas.build_protected_list(rows)
+        assert len(out) == 1
+        assert out[0]["name"] == "Park B"
+
+
+class TestNearbyLakesTop5:
+    """Validate nearby_lakes are limited to top 5 per point (on-water + near-shore); DB mocked."""
+
+    def test_build_nearby_lakes_empty(self):
+        out = lookup_water.build_nearby_lakes([])
+        assert out == []
+
+    def test_build_nearby_lakes_one(self):
+        rows = [_fake_lake_row("Lake A")]
+        out = lookup_water.build_nearby_lakes(rows)
+        assert len(out) == 1
+        assert out[0]["name"] == "Lake A"
+        assert out[0]["on_water"] is True
+
+    def test_build_nearby_lakes_five_at_limit(self):
+        rows = [_fake_lake_row(f"Lake {i}", on_water=(i <= 2)) for i in range(1, 6)]
+        out = lookup_water.build_nearby_lakes(rows)
+        assert len(out) == 5
+
+    def test_build_nearby_lakes_skips_empty_name(self):
+        rows = [
+            _fake_lake_row("Lake A"),
+            ("", "water", 0.0, True),
+            _fake_lake_row("Lake B"),
+        ]
+        out = lookup_water.build_nearby_lakes(rows)
+        assert len(out) == 2
+        assert [x["name"] for x in out] == ["Lake A", "Lake B"]
+
+    def test_build_nearby_lakes_no_truncation_beyond_five(self):
+        rows = [_fake_lake_row(f"Lake {i}") for i in range(1, 8)]
+        out = lookup_water.build_nearby_lakes(rows)
+        assert len(out) == 7
+
+    def test_run_water_single_execute_receives_limit_5(self):
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchall.side_effect = [[], []]
+        lookup_water.run_water_single(conn, 40.0, -105.0, 1.0)
+        assert cur.execute.call_count == 2
+        params_first = cur.execute.call_args_list[0][0][1]
+        params_second = cur.execute.call_args_list[1][0][1]
+        assert params_first[-1] == lookup_water.NEARBY_LAKES_LIMIT
+        assert params_second[-1] == lookup_water.NEARBY_LAKES_LIMIT
+        assert params_first[-1] == 5
+        assert params_second[-1] == 5
+
+    def test_run_water_single_empty(self):
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchall.side_effect = [[], []]
+        rows = lookup_water.run_water_single(conn, 40.0, -105.0, 1.0)
+        assert len(rows) == 0
+
+    def test_run_water_single_five_on_water_plus_five_near(self):
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        on_water = [_fake_lake_row(f"On {i}", on_water=True) for i in range(1, 6)]
+        near = [_fake_lake_row(f"Near {i}", on_water=False, distance_miles=float(i)) for i in range(1, 6)]
+        cur.fetchall.side_effect = [on_water, near]
+        rows = lookup_water.run_water_single(conn, 40.0, -105.0, 1.0)
+        assert len(rows) == 10
+        built = lookup_water.build_nearby_lakes(rows)
+        assert len(built) == 10
+
+    def test_run_water_batch_execute_receives_limit_5(self):
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchall.return_value = []
+        lookup_water.run_water_batch(conn, [0], [-105.0], [40.0], 1.0)
+        cur.execute.assert_called_once()
+        params = cur.execute.call_args[0][1]
+        assert params[-1] == lookup_water.NEARBY_LAKES_LIMIT
+        assert params[-1] == 5
+
+    def test_run_water_batch_five_per_point(self):
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchall.return_value = [
+            (0, f"Lake P0 {i}", "water", 0.0 if i <= 2 else float(i), i <= 2)
+            for i in range(1, 6)
+        ] + [
+            (1, f"Lake P1 {i}", "reservoir", 0.0 if i <= 1 else float(i), i <= 1)
+            for i in range(1, 6)
+        ]
+        by_idx = lookup_water.run_water_batch(conn, [0, 1], [-105.0, -106.0], [40.0, 41.0], 1.0)
+        assert len(by_idx) == 2
+        assert len(by_idx[0]) == 5
+        assert len(by_idx[1]) == 5
+        built0 = lookup_water.build_nearby_lakes(by_idx[0])
+        built1 = lookup_water.build_nearby_lakes(by_idx[1])
+        assert len(built0) == 5
+        assert len(built1) == 5
+
+    def test_query_single_nearby_lakes_at_most_five_plus_five(self, mock_pool):
+        """query_single returns at most 5 on-water + 5 near-shore (current contract)."""
+        from areas_lib.query import query_single
+        mock_pool.getconn.side_effect = [MagicMock(), MagicMock(), MagicMock()]
+        lakes = [_fake_lake_row(f"Lake {i}") for i in range(1, 6)]
+        with patch("areas_lib.query.lookup_admin.run_admin_single", return_value=[]), \
+             patch("areas_lib.query.lookup_protected_areas.run_protected_single", return_value=[]), \
+             patch("areas_lib.query.lookup_water.run_water_single", return_value=lakes):
+            admin, protected, water = query_single(mock_pool, 40.0, -105.0)
+        assert len(water) == 5
+        assert water[0]["name"] == "Lake 1"
+
+    def test_run_water_single_only_on_water_five(self):
+        """Five on-water, zero near-shore: total 5."""
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        on_water = [_fake_lake_row(f"On {i}", on_water=True) for i in range(1, 6)]
+        cur.fetchall.side_effect = [on_water, []]
+        rows = lookup_water.run_water_single(conn, 40.0, -105.0, 1.0)
+        assert len(rows) == 5
+        built = lookup_water.build_nearby_lakes(rows)
+        assert len(built) == 5
+        assert all(b["on_water"] for b in built)
+
+    def test_run_water_single_only_near_shore_five(self):
+        """Zero on-water, five near-shore: total 5."""
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        near = [_fake_lake_row(f"Near {i}", on_water=False, distance_miles=float(i)) for i in range(1, 6)]
+        cur.fetchall.side_effect = [[], near]
+        rows = lookup_water.run_water_single(conn, 40.0, -105.0, 1.0)
+        assert len(rows) == 5
+        built = lookup_water.build_nearby_lakes(rows)
+        assert len(built) == 5
+        assert not any(b["on_water"] for b in built)
+
+    def test_run_water_batch_single_point_five_results(self):
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchall.return_value = [(0, f"Lake {i}", "water", 0.0, True) for i in range(1, 6)]
+        by_idx = lookup_water.run_water_batch(conn, [0], [-105.0], [40.0], 1.0)
+        assert list(by_idx.keys()) == [0]
+        assert len(by_idx[0]) == 5
+
+    def test_run_water_batch_mixed_zero_and_five_per_point(self):
+        """Point 0 has 0 lakes, point 1 has 5."""
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchall.return_value = [(1, f"Lake P1 {i}", "water", 0.0, True) for i in range(1, 6)]
+        by_idx = lookup_water.run_water_batch(conn, [0, 1], [-105.0, -106.0], [40.0, 41.0], 1.0)
+        assert 0 not in by_idx
+        assert len(by_idx[1]) == 5
+
+    def test_build_nearby_lakes_skips_short_rows(self):
+        """Rows with len < 4 are skipped."""
+        rows = [
+            ("A",),
+            ("A", "water"),
+            ("A", "water", 0.0),
+            _fake_lake_row("Lake B"),
+        ]
+        out = lookup_water.build_nearby_lakes(rows)
+        assert len(out) == 1
+        assert out[0]["name"] == "Lake B"
+
+    def test_build_nearby_lakes_none_optional_fields(self):
+        """None distance_miles -> 0.0; None water_type -> 'water'."""
+        rows = [("Pond", None, None, True)]
+        out = lookup_water.build_nearby_lakes(rows)
+        assert len(out) == 1
+        assert out[0]["water_type"] == "water"
+        assert out[0]["distance_miles"] == 0.0
+
+    def test_query_batch_protected_and_lakes_five_per_point(self, mock_pool):
+        """query_batch: each result has at most 5 protected and at most 5 lakes (mocked)."""
+        from areas_lib.query import query_batch
+        conn1, conn2, conn3 = MagicMock(), MagicMock(), MagicMock()
+        mock_pool.getconn.side_effect = [conn1, conn2, conn3]
+        for c in (conn1, conn2, conn3):
+            cur = MagicMock()
+            c.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+            c.cursor.return_value.__exit__ = MagicMock(return_value=None)
+            cur.fetchall.return_value = []
+        protected_rows = [(0, i, f"Park P0 {i}", {}) for i in range(1, 6)] + [
+            (1, i, f"Park P1 {i}", {}) for i in range(1, 6)
+        ]
+        water_by_idx = {
+            0: [_fake_lake_row(f"Lake P0 {i}") for i in range(1, 6)],
+            1: [_fake_lake_row(f"Lake P1 {i}") for i in range(1, 6)],
+        }
+        with patch("areas_lib.query.lookup_admin.run_admin_batch", return_value=[]), \
+             patch("areas_lib.query.lookup_protected_areas.run_protected_batch", return_value=protected_rows), \
+             patch("areas_lib.query.lookup_water.run_water_batch", return_value=water_by_idx):
+            results = query_batch(mock_pool, [(40.0, -105.0), (41.0, -106.0)])
+        assert len(results) == 2
+        for i, (admin, protected, lakes) in enumerate(results):
+            assert len(protected) == 5, f"point {i} protected"
+            assert len(lakes) == 5, f"point {i} lakes"

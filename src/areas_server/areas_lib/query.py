@@ -14,7 +14,6 @@ def query_single(
         lat: float,
         lon: float,
         lake_radius_miles: float = 1.0,
-        nearby_lakes_limit: int = 10,
 ) -> Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]]]:
     """Run admin + protected + water queries in parallel; return (admin_hierarchy, protected_areas, nearby_lakes)."""
     conn1 = pool.getconn()
@@ -24,9 +23,7 @@ def query_single(
         with ThreadPoolExecutor(max_workers=3) as ex:
             f_admin = ex.submit(lookup_admin.run_admin_single, conn1, lat, lon)
             f_protected = ex.submit(lookup_protected_areas.run_protected_single, conn2, lat, lon)
-            f_water = ex.submit(
-                lookup_water.run_water_single, conn3, lat, lon, lake_radius_miles, nearby_lakes_limit
-            )
+            f_water = ex.submit(lookup_water.run_water_single, conn3, lat, lon, lake_radius_miles)
             wait([f_admin, f_protected, f_water])
             admin_rows = f_admin.result()
             protected_rows = f_protected.result()
@@ -49,7 +46,6 @@ def query_batch(
         pool: Any,
         points: List[Tuple[float, float]],
         lake_radius_miles: float = 1.0,
-        nearby_lakes_limit: int = 10,
 ) -> List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]]]]:
     """Run admin + protected + water batch queries; return list of (admin_hierarchy, protected_areas, nearby_lakes) in order."""
     if not points:
@@ -73,7 +69,6 @@ def query_batch(
                 lons,
                 lats,
                 lake_radius_miles,
-                nearby_lakes_limit,
             )
             wait([f_admin, f_protected, f_water])
             admin_rows = f_admin.result()

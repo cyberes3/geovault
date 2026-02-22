@@ -6,6 +6,9 @@ from .lookup_common import extent_from_row
 
 TABLE_NAME = "water_bodies"
 
+# Top N most relevant nearby lakes per point (on water + near shore)
+NEARBY_LAKES_LIMIT = 5
+
 # 1 mile ≈ 1609.34 m
 _MILES_TO_M = 1609.34
 
@@ -33,9 +36,8 @@ def run_water_single(
         lat: float,
         lon: float,
         lake_radius_miles: float,
-        nearby_lakes_limit: int,
 ) -> List[Tuple[Any, ...]]:
-    """Return rows (name, water_type, distance_miles, on_water): on-water first, then near shore by distance."""
+    """Return rows (name, water_type, distance_miles, on_water): on-water first, then near shore by distance (top N)."""
     point_wkt = f"POINT({lon} {lat})"
     radius_m = lake_radius_miles * _MILES_TO_M
     with conn.cursor() as cur:
@@ -44,24 +46,25 @@ def run_water_single(
             SELECT name, water_type, 0::float, true
             FROM {SCHEMA}.{TABLE_NAME}
             WHERE public.ST_Contains(geom, public.ST_SetSRID(public.ST_GeomFromText(%s::text), 4326))
-            LIMIT 100
+            LIMIT %s
             """,
-            (point_wkt,),
+            (point_wkt, NEARBY_LAKES_LIMIT),
         )
         on_water_rows = list(cur.fetchall())
 
+        # Use literal for divisor to avoid locale-dependent param formatting; cast so alias is unambiguous
         cur.execute(
             f"""
             SELECT name, water_type,
-                   (public.ST_Distance(public.geography(w.geom), public.geography(public.ST_SetSRID(public.ST_GeomFromText(%s::text), 4326))) / %s AS distance_miles,
-                   false
+                   (public.ST_Distance(public.geography(w.geom), public.geography(public.ST_SetSRID(public.ST_GeomFromText(%s::text), 4326))) / 1609.34)::double precision AS distance_miles,
+                   false AS on_water
             FROM {SCHEMA}.{TABLE_NAME} w
             WHERE NOT public.ST_Contains(w.geom, public.ST_SetSRID(public.ST_GeomFromText(%s::text), 4326))
               AND public.ST_DWithin(public.geography(w.geom), public.geography(public.ST_SetSRID(public.ST_GeomFromText(%s::text), 4326)), %s)
-            ORDER BY distance_miles
+            ORDER BY 3
             LIMIT %s
             """,
-            (point_wkt, _MILES_TO_M, point_wkt, point_wkt, radius_m, nearby_lakes_limit),
+            (point_wkt, point_wkt, point_wkt, radius_m, NEARBY_LAKES_LIMIT),
         )
         near_rows = cur.fetchall()
 
@@ -74,7 +77,6 @@ def run_water_batch(
         lons: List[float],
         lats: List[float],
         lake_radius_miles: float,
-        nearby_lakes_limit: int,
 ) -> Dict[int, List[Tuple[Any, ...]]]:
     """Returns dict point_idx -> list of (name, water_type, distance_miles, on_water)."""
     radius_m = lake_radius_miles * _MILES_TO_M
@@ -92,14 +94,14 @@ def run_water_batch(
             ),
             matches AS (
                 SELECT pt.point_idx, w.name, w.water_type,
-                       CASE WHEN public.ST_Contains(w.geom, pt.geom) THEN 0.0
-                            ELSE public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)) / %s END AS distance_miles,
+                       (CASE WHEN public.ST_Contains(w.geom, pt.geom) THEN 0.0
+                             ELSE public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)) / 1609.34 END)::double precision AS distance_miles,
                        public.ST_Contains(w.geom, pt.geom) AS on_water,
                        ROW_NUMBER() OVER (
                            PARTITION BY pt.point_idx
                            ORDER BY public.ST_Contains(w.geom, pt.geom) DESC NULLS LAST,
                                     (CASE WHEN public.ST_Contains(w.geom, pt.geom) THEN 0.0
-                                          ELSE public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)) / %s END)
+                                          ELSE public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)) / 1609.34 END)::double precision
                        ) AS rn
                 FROM pt
                 JOIN {SCHEMA}.{TABLE_NAME} w
@@ -112,7 +114,7 @@ def run_water_batch(
             WHERE rn <= %s
             ORDER BY point_idx, rn
             """,
-            (indices, lons, lats, _MILES_TO_M, _MILES_TO_M, radius_m, nearby_lakes_limit),
+            (indices, lons, lats, radius_m, NEARBY_LAKES_LIMIT),
         )
         rows = cur.fetchall()
 

@@ -172,7 +172,7 @@ def stats():
 
 @app.route("/query", methods=["GET"])
 def get_query():
-    """Single-point query: GET /query?lat=40.34&lon=-105.68. Optional: lake_radius_miles (default 1), nearby_lakes_limit (default 10)."""
+    """Single-point query: GET /query?lat=40.34&lon=-105.68. Optional: lake-radius-miles (default 1)."""
     lat = request.args.get("lat")
     lon = request.args.get("lon")
     err = _validate_lat_lon(lat, lon)
@@ -185,16 +185,13 @@ def get_query():
     lat_f = float(lat)
     lon_f = float(lon)
 
-    lake_radius_miles, err = _parse_float_arg(request.args.get("lake_radius_miles"), 1.0, "lake_radius_miles")
-    if err:
-        return Response(json.dumps({"error": err}), status=400, mimetype="application/json")
-    nearby_lakes_limit, err = _parse_int_arg(request.args.get("nearby_lakes_limit"), 10, "nearby_lakes_limit")
+    lake_radius_miles, err = _parse_float_arg(request.args.get("lake-radius-miles"), 1.0, "lake-radius-miles")
     if err:
         return Response(json.dumps({"error": err}), status=400, mimetype="application/json")
 
     cache = get_cache()
     if cache is not None:
-        key = (_round_coord(lat_f), _round_coord(lon_f), lake_radius_miles, nearby_lakes_limit)
+        key = (_round_coord(lat_f), _round_coord(lon_f), lake_radius_miles)
         if key in cache:
             return cache[key]
 
@@ -203,7 +200,6 @@ def get_query():
         admin_hierarchy, protected_areas, nearby_lakes = query_single(
             pool, lat_f, lon_f,
             lake_radius_miles=lake_radius_miles,
-            nearby_lakes_limit=nearby_lakes_limit,
         )
         out = _make_response(admin_hierarchy, protected_areas, nearby_lakes)
         if cache is not None:
@@ -220,7 +216,7 @@ def get_query():
 
 @app.route("/query", methods=["POST"])
 def post_query():
-    """Batch query: POST /query with body {"points": [[lat, lon], ...]}. Optional query args or body keys: lake_radius_miles (default 1), nearby_lakes_limit (default 10)."""
+    """Batch query: POST /query with body {"points": [[lat, lon], ...]}. Optional: lake-radius-miles (default 1)."""
     if not request.is_json:
         return Response(
             json.dumps({"error": "Content-Type must be application/json"}),
@@ -266,16 +262,10 @@ def post_query():
         points.append((float(p[0]), float(p[1])))
 
     # Optional params: query args override body keys
-    lake_radius_arg = request.args.get("lake_radius_miles")
-    if lake_radius_arg is None and data and "lake_radius_miles" in data:
-        lake_radius_arg = str(data["lake_radius_miles"])
-    nearby_limit_arg = request.args.get("nearby_lakes_limit")
-    if nearby_limit_arg is None and data and "nearby_lakes_limit" in data:
-        nearby_limit_arg = str(data["nearby_lakes_limit"])
-    lake_radius_miles, err = _parse_float_arg(lake_radius_arg, 1.0, "lake_radius_miles")
-    if err:
-        return Response(json.dumps({"error": err}), status=400, mimetype="application/json")
-    nearby_lakes_limit, err = _parse_int_arg(nearby_limit_arg, 10, "nearby_lakes_limit")
+    lake_radius_arg = request.args.get("lake-radius-miles")
+    if lake_radius_arg is None and data and "lake-radius-miles" in data:
+        lake_radius_arg = str(data["lake-radius-miles"])
+    lake_radius_miles, err = _parse_float_arg(lake_radius_arg, 1.0, "lake-radius-miles")
     if err:
         return Response(json.dumps({"error": err}), status=400, mimetype="application/json")
 
@@ -284,7 +274,6 @@ def post_query():
         results = query_batch(
             pool, points,
             lake_radius_miles=lake_radius_miles,
-            nearby_lakes_limit=nearby_lakes_limit,
         )
         out = {
             "results": [

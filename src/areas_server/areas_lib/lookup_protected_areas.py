@@ -6,8 +6,8 @@ from .lookup_common import extent_from_row, get_name_from_tags
 
 TABLE_NAME = "protected_areas"
 
-# Max rows per point in batch to avoid unbounded result sets in dense areas
-BATCH_LIMIT_PER_POINT = 100
+# Top N most relevant protected areas per point (single and batch)
+PROTECTED_LIMIT_PER_POINT = 5
 
 
 def build_protected_list(rows: List[Tuple[Any, ...]]) -> List[Dict[str, str]]:
@@ -42,9 +42,9 @@ def run_protected_single(conn: Any, lat: float, lon: float) -> List[Tuple[Any, .
             SELECT osm_id, name, tags
             FROM {SCHEMA}.{TABLE_NAME}
             WHERE public.ST_Contains(geom, public.ST_SetSRID(public.ST_GeomFromText(%s::text), 4326))
-            LIMIT 100
+            LIMIT %s
             """,
-            (point_wkt,),
+            (point_wkt, PROTECTED_LIMIT_PER_POINT),
         )
         return cur.fetchall()
 
@@ -75,7 +75,7 @@ def run_protected_batch(
             WHERE rn <= %s
             ORDER BY point_idx, rn
             """,
-            (indices, lons, lats, BATCH_LIMIT_PER_POINT),
+            (indices, lons, lats, PROTECTED_LIMIT_PER_POINT),
         )
         return cur.fetchall()
 
