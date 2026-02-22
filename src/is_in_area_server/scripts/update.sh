@@ -11,7 +11,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_ROOT="$(cd "$SERVER_DIR/../.." && pwd)"
 
 DB="${IS_IN_DATABASE:-${DATABASE_URL:-}}"
 if [[ -z "$DB" ]]; then
@@ -26,14 +25,7 @@ if [[ ! -f "$FLEX_CONFIG" ]]; then
   exit 1
 fi
 
-REPLICATION_SCRIPT="${OSM2PGSQL_REPLICATION:-}"
-if [[ -z "$REPLICATION_SCRIPT" ]]; then
-  if [[ -f "$REPO_ROOT/osm2pgsql/scripts/osm2pgsql-replication" ]]; then
-    REPLICATION_SCRIPT="$REPO_ROOT/osm2pgsql/scripts/osm2pgsql-replication"
-  else
-    REPLICATION_SCRIPT="osm2pgsql-replication"
-  fi
-fi
+REPLICATION_SCRIPT="${OSM2PGSQL_REPLICATION:-osm2pgsql-replication}"
 
 # Run osm2pgsql-replication with our DB, schema, and pass -O flex -S style to osm2pgsql
 run_replication() {
