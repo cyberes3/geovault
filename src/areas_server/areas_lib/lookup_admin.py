@@ -1,4 +1,5 @@
 """Admin hierarchy lookup (country, state, county, city) from admin_areas table."""
+import functools
 from typing import Any, Dict, List, Optional, Tuple
 
 import pycountry
@@ -13,6 +14,7 @@ _COUNTRY_NAME_ALIASES: Dict[str, str] = {
 }
 
 
+@functools.lru_cache(maxsize=256)
 def _country_code_to_name(code: Optional[str]) -> Optional[str]:
     if not code or not isinstance(code, str):
         return None
@@ -74,16 +76,15 @@ def build_admin_hierarchy(rows: List[Tuple[Any, ...]]) -> Dict[str, Optional[str
 
 
 def run_admin_single(conn: Any, lat: float, lon: float) -> List[Tuple[Any, ...]]:
-    point_wkt = f"POINT({lon} {lat})"
     with conn.cursor() as cur:
         cur.execute(
             f"""
             SELECT osm_id, admin_level, name, tags
             FROM {SCHEMA}.{TABLE_NAME}
-            WHERE public.ST_Contains(geom, public.ST_SetSRID(public.ST_GeomFromText(%s::text), 4326))
+            WHERE public.ST_Contains(geom, public.ST_SetSRID(public.ST_MakePoint(%s, %s), 4326))
             ORDER BY admin_level ASC
             """,
-            (point_wkt,),
+            (lon, lat),
         )
         return cur.fetchall()
 
@@ -94,19 +95,23 @@ def run_admin_batch(
         lons: List[float],
         lats: List[float],
 ) -> List[Tuple[int, Any, Any, Any, Any]]:
-    """Returns (point_idx, osm_id, admin_level, name, tags)."""
+    """Returns (point_idx, osm_id, admin_level, name, tags). At most one row per (point_idx, admin_level)."""
     with conn.cursor() as cur:
         cur.execute(
             f"""
             WITH p AS (
                 SELECT * FROM unnest(%s::bigint[], %s::double precision[], %s::double precision[])
                 AS t(point_idx, lon, lat)
+            ),
+            joined AS (
+                SELECT p.point_idx, a.osm_id, a.admin_level, a.name, a.tags
+                FROM p
+                JOIN {SCHEMA}.{TABLE_NAME} a
+                    ON public.ST_Contains(a.geom, public.ST_SetSRID(public.ST_GeomFromText(('POINT(' || p.lon::text || ' ' || p.lat::text || ')')::text), 4326))
             )
-            SELECT p.point_idx, a.osm_id, a.admin_level, a.name, a.tags
-            FROM p
-            JOIN {SCHEMA}.{TABLE_NAME} a
-                ON public.ST_Contains(a.geom, public.ST_SetSRID(public.ST_GeomFromText(('POINT(' || p.lon::text || ' ' || p.lat::text || ')')::text), 4326))
-            ORDER BY p.point_idx, a.admin_level
+            SELECT DISTINCT ON (point_idx, admin_level) point_idx, osm_id, admin_level, name, tags
+            FROM joined
+            ORDER BY point_idx, admin_level, osm_id
             """,
             (indices, lons, lats),
         )

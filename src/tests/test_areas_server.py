@@ -289,8 +289,9 @@ class TestProtectedAreasTop5:
         cur.execute.assert_called_once()
         args = cur.execute.call_args[0]
         params = args[1]
-        assert params[1] == lookup_protected_areas.PROTECTED_LIMIT_PER_POINT
-        assert params[1] == 5
+        assert params[0] == -105.0 and params[1] == 40.0
+        assert params[2] == lookup_protected_areas.PROTECTED_LIMIT_PER_POINT
+        assert params[2] == 5
 
     def test_run_protected_single_returns_at_most_five_when_mock_returns_five(self):
         conn = MagicMock()
@@ -455,19 +456,19 @@ class TestNearbyLakesTop5:
         assert len(out) == 7
 
     def test_run_water_single_execute_receives_limit_5(self):
+        """Water single uses one round-trip (UNION ALL); params include lon, lat, both limits, radius."""
         conn = MagicMock()
         cur = MagicMock()
         conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
         conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur.fetchall.side_effect = [[], []]
+        cur.fetchall.return_value = []
         lookup_water.run_water_single(conn, 40.0, -105.0, 1.0)
-        assert cur.execute.call_count == 2
-        params_first = cur.execute.call_args_list[0][0][1]
-        params_second = cur.execute.call_args_list[1][0][1]
-        assert params_first[-1] == lookup_water.NEARBY_LAKES_LIMIT
-        assert params_second[-1] == lookup_water.NEARBY_LAKES_LIMIT
-        assert params_first[-1] == 5
-        assert params_second[-1] == 5
+        cur.execute.assert_called_once()
+        params = cur.execute.call_args[0][1]
+        assert params[0] == -105.0 and params[1] == 40.0
+        assert params[2] == lookup_water.NEARBY_LAKES_LIMIT
+        assert params[3] == pytest.approx(1609.34, rel=1e-2)
+        assert params[4] == lookup_water.NEARBY_LAKES_LIMIT
 
     def test_run_water_single_empty(self):
         conn = MagicMock()
@@ -479,13 +480,14 @@ class TestNearbyLakesTop5:
         assert len(rows) == 0
 
     def test_run_water_single_five_on_water_plus_five_near(self):
+        """One round-trip returns on-water first, then near-shore (combined list)."""
         conn = MagicMock()
         cur = MagicMock()
         conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
         conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
         on_water = [_fake_lake_row(f"On {i}", on_water=True) for i in range(1, 6)]
         near = [_fake_lake_row(f"Near {i}", on_water=False, distance_miles=float(i)) for i in range(1, 6)]
-        cur.fetchall.side_effect = [on_water, near]
+        cur.fetchall.return_value = on_water + near
         rows = lookup_water.run_water_single(conn, 40.0, -105.0, 1.0)
         assert len(rows) == 10
         built = lookup_water.build_nearby_lakes(rows)
@@ -537,13 +539,13 @@ class TestNearbyLakesTop5:
         assert water[0]["name"] == "Lake 1"
 
     def test_run_water_single_only_on_water_five(self):
-        """Five on-water, zero near-shore: total 5."""
+        """Five on-water, zero near-shore: total 5 (one combined fetchall)."""
         conn = MagicMock()
         cur = MagicMock()
         conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
         conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
         on_water = [_fake_lake_row(f"On {i}", on_water=True) for i in range(1, 6)]
-        cur.fetchall.side_effect = [on_water, []]
+        cur.fetchall.return_value = on_water
         rows = lookup_water.run_water_single(conn, 40.0, -105.0, 1.0)
         assert len(rows) == 5
         built = lookup_water.build_nearby_lakes(rows)
@@ -551,13 +553,13 @@ class TestNearbyLakesTop5:
         assert all(b["on_water"] for b in built)
 
     def test_run_water_single_only_near_shore_five(self):
-        """Zero on-water, five near-shore: total 5."""
+        """Zero on-water, five near-shore: total 5 (one combined fetchall)."""
         conn = MagicMock()
         cur = MagicMock()
         conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
         conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
         near = [_fake_lake_row(f"Near {i}", on_water=False, distance_miles=float(i)) for i in range(1, 6)]
-        cur.fetchall.side_effect = [[], near]
+        cur.fetchall.return_value = near
         rows = lookup_water.run_water_single(conn, 40.0, -105.0, 1.0)
         assert len(rows) == 5
         built = lookup_water.build_nearby_lakes(rows)

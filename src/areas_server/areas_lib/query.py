@@ -92,16 +92,16 @@ def query_batch(
         idx = row[0]
         protected_by_idx.setdefault(idx, []).append(row[1:])
 
-    results: List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]]]] = []
+    results: List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]]]] = [None] * n
     for i in range(n):
         admin_rows_i = admin_by_idx.get(i, [])
         protected_rows_i = protected_by_idx.get(i, [])
         water_rows_i = water_by_idx.get(i, [])
-        results.append((
+        results[i] = (
             lookup_admin.build_admin_hierarchy(admin_rows_i),
             lookup_protected_areas.build_protected_list(protected_rows_i),
             lookup_water.build_nearby_lakes(water_rows_i),
-        ))
+        )
     return results
 
 

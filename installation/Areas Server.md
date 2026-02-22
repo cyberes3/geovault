@@ -4,20 +4,19 @@ The Areas Server is a standalone Flask service used in the reverse geocoding pro
 loaded via osm2pgsql. It is a separate service from the main GeoVault stack.
 
 Your Postgres server and `.osm.pbf` files need to be stored on fast SSDs. The host should have at least 4 CPUs and 4GB
-RAM.
+RAM. This python server is pretty lightweight as Postgres does the heavy lifting.
 
 ## Database
 
-Use a dedicated database (or an existing one with a dedicated schema). The server uses the schema `is_in` and does not
-touch the main GeoVault schema.
+Use a dedicated database seperate from the main GeoVault one.
 
 1. Generate a secure password, e.g. `pwgen 32 1`
 2. `sudo -u postgres psql`
 3. `CREATE DATABASE is_in_areas WITH ENCODING 'UTF8' LC_COLLATE='C.utf8' LC_CTYPE='C.utf8' TEMPLATE=template0;`
 4. `CREATE USER is_in_areas WITH PASSWORD 'your_password_here';`
-5. `GRANT ALL PRIVILEGES ON DATABASE is_in_areas TO is_in_areas;`
 6. `\c is_in_areas`
 7. ```sql
+   GRANT ALL PRIVILEGES ON DATABASE is_in_areas TO is_in_areas;
    CREATE EXTENSION IF NOT EXISTS postgis;
    CREATE SCHEMA IF NOT EXISTS is_in;
    GRANT ALL ON SCHEMA is_in TO is_in_areas;

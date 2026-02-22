@@ -35,16 +35,15 @@ def build_protected_list(rows: List[Tuple[Any, ...]]) -> List[Dict[str, str]]:
 
 
 def run_protected_single(conn: Any, lat: float, lon: float) -> List[Tuple[Any, ...]]:
-    point_wkt = f"POINT({lon} {lat})"
     with conn.cursor() as cur:
         cur.execute(
             f"""
             SELECT osm_id, name, tags
             FROM {SCHEMA}.{TABLE_NAME}
-            WHERE public.ST_Contains(geom, public.ST_SetSRID(public.ST_GeomFromText(%s::text), 4326))
+            WHERE public.ST_Contains(geom, public.ST_SetSRID(public.ST_MakePoint(%s, %s), 4326))
             LIMIT %s
             """,
-            (point_wkt, PROTECTED_LIMIT_PER_POINT),
+            (lon, lat, PROTECTED_LIMIT_PER_POINT),
         )
         return cur.fetchall()
 

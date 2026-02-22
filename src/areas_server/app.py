@@ -26,6 +26,7 @@ from config import (
     CACHE_TTL_SECONDS,
     get_conninfo,
     MAX_BATCH_SIZE,
+    POOL_MAX_SIZE,
 )
 
 app = Flask(__name__)
@@ -46,7 +47,7 @@ def get_pool() -> ConnectionPool:
         _pool = ConnectionPool(
             get_conninfo(),
             min_size=1,
-            max_size=4,
+            max_size=POOL_MAX_SIZE,
             configure=_configure_read_only,
         )
     return _pool

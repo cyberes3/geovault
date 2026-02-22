@@ -20,6 +20,9 @@ CACHE_TTL_SECONDS: int = int(os.environ.get("AREAS_SERVER_CACHE_TTL", "86400"))
 # Coordinate rounding for cache key (decimal places); 4 ≈ 11 m
 CACHE_COORD_DECIMALS: int = int(os.environ.get("AREAS_SERVER_CACHE_COORD_DECIMALS", "4"))
 
+# Connection pool max size (3 conns per request; default 10 allows 2–3 concurrent requests)
+POOL_MAX_SIZE: int = int(os.environ.get("AREAS_SERVER_POOL_MAX_SIZE", "10"))
+
 
 def get_conninfo() -> str:
     if not DATABASE_URL or not DATABASE_URL.strip():

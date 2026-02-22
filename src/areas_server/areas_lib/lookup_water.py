@@ -37,38 +37,31 @@ def run_water_single(
         lon: float,
         lake_radius_miles: float,
 ) -> List[Tuple[Any, ...]]:
-    """Return rows (name, water_type, distance_miles, on_water): on-water first, then near shore by distance (top N)."""
-    point_wkt = f"POINT({lon} {lat})"
+    """Return rows (name, water_type, distance_miles, on_water): on-water first, then near shore by distance (top N). One round-trip."""
     radius_m = lake_radius_miles * _MILES_TO_M
     with conn.cursor() as cur:
         cur.execute(
             f"""
-            SELECT name, water_type, 0::float, true
-            FROM {SCHEMA}.{TABLE_NAME}
-            WHERE public.ST_Contains(geom, public.ST_SetSRID(public.ST_GeomFromText(%s::text), 4326))
-            LIMIT %s
+            WITH pt AS (
+                SELECT public.ST_SetSRID(public.ST_MakePoint(%s, %s), 4326) AS geom
+            )
+            (SELECT w.name, w.water_type, 0::float, true
+             FROM {SCHEMA}.{TABLE_NAME} w, pt
+             WHERE public.ST_Contains(w.geom, pt.geom)
+             LIMIT %s)
+            UNION ALL
+            (SELECT name, water_type,
+                    (public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)) / 1609.34)::double precision,
+                    false
+             FROM {SCHEMA}.{TABLE_NAME} w, pt
+             WHERE NOT public.ST_Contains(w.geom, pt.geom)
+               AND public.ST_DWithin(public.geography(w.geom), public.geography(pt.geom), %s)
+             ORDER BY 3
+             LIMIT %s)
             """,
-            (point_wkt, NEARBY_LAKES_LIMIT),
+            (lon, lat, NEARBY_LAKES_LIMIT, radius_m, NEARBY_LAKES_LIMIT),
         )
-        on_water_rows = list(cur.fetchall())
-
-        # Use literal for divisor to avoid locale-dependent param formatting; cast so alias is unambiguous
-        cur.execute(
-            f"""
-            SELECT name, water_type,
-                   (public.ST_Distance(public.geography(w.geom), public.geography(public.ST_SetSRID(public.ST_GeomFromText(%s::text), 4326))) / 1609.34)::double precision AS distance_miles,
-                   false AS on_water
-            FROM {SCHEMA}.{TABLE_NAME} w
-            WHERE NOT public.ST_Contains(w.geom, public.ST_SetSRID(public.ST_GeomFromText(%s::text), 4326))
-              AND public.ST_DWithin(public.geography(w.geom), public.geography(public.ST_SetSRID(public.ST_GeomFromText(%s::text), 4326)), %s)
-            ORDER BY 3
-            LIMIT %s
-            """,
-            (point_wkt, point_wkt, point_wkt, radius_m, NEARBY_LAKES_LIMIT),
-        )
-        near_rows = cur.fetchall()
-
-    return on_water_rows + list(near_rows)
+        return list(cur.fetchall())
 
 
 def run_water_batch(
