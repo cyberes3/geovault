@@ -343,9 +343,10 @@ def _build_bbox_sql_query(
     # Build spatial filter - AGGRESSIVE: Use ONLY && operator (skip ST_Intersects)
     # The && operator uses GIST index and is 2-3x faster than ST_Intersects
     # Trade-off: May include features slightly outside bbox, acceptable for map display
+    # Cast envelope coords to double precision to avoid PostGIS overload resolution issues
     spatial_filter = ""
     if bbox is not None:
-        spatial_filter = " AND geometry && ST_MakeEnvelope(%s, %s, %s, %s, 4326)"
+        spatial_filter = " AND geometry && ST_MakeEnvelope(%s::double precision, %s::double precision, %s::double precision, %s::double precision, 4326)"
         params.extend([min_lon, min_lat, max_lon, max_lat])
 
     # Build tag filter

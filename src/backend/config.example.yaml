@@ -148,23 +148,21 @@ reverse_geocoding:
   # Enable or disable reverse geocoding
   enabled: true
 
-  # Overpass API server URL for reverse geocoding
-  # This is the main API endpoint for querying OpenStreetMap data
-  # Default: https://overpass.private.coffee/api/interpreter (free, unlimited)
-  api_url: https://overpass.private.coffee/api/interpreter
-
-  # HTTP request timeout for Overpass API calls (in seconds)
-  # This is the timeout for the HTTP request itself
-  request_timeout_seconds: 45
-
-  # Enable SSL certificate validation for Overpass API requests
-  # Set to false to disable SSL verification (useful for self-signed certificates).
-  # When false, InsecureRequestWarning is also disabled so logs are not spammed.
-  verify_ssl: true
-
   # Distance thresholds for proximity tags (in miles)
   city_proximity_miles: 5.0
   lake_proximity_miles: 1.0
+
+  # Overpass API (lakes, cities)
+  overpass:
+    api_url: https://overpass.private.coffee/api/interpreter
+    request_timeout_seconds: 75
+    verify_ssl: true
+
+  # is_in area server (admin boundaries, protected areas). Required when reverse geocoding is enabled.
+  areas_server:
+    api_url: http://127.0.0.1:5001
+    request_timeout_seconds: 10
+    verify_ssl: true
 
 
 processing:

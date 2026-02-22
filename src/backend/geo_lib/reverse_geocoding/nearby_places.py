@@ -1,8 +1,8 @@
 """
 Nearby place searches (cities, lakes, water bodies).
 
-Parser-only: accepts a pre-fetched combined Overpass response and returns
-the same list shapes. The combined query is executed by combined_overpass.fetch_combined.
+Parser-only: accepts a pre-fetched Overpass response (lakes and cities)
+and returns the same list shapes. Query: combined_overpass.fetch_lakes_and_cities.
 """
 from typing import List, Dict, Any, Tuple, Optional
 
@@ -19,10 +19,10 @@ def find_nearby_cities(
     threshold_miles: float = None,
 ) -> Tuple[List[Dict[str, Any]], List[str]]:
     """
-    Parse cities/towns from combined Overpass response within threshold_miles.
+    Parse cities/towns from Overpass response (lakes/cities query) within threshold_miles.
 
     Args:
-        response: Combined Overpass response dict (with "elements") or None
+        response: Lakes-and-cities Overpass response dict (with "elements") or None
         latitude: Latitude coordinate
         longitude: Longitude coordinate
         threshold_miles: Search radius in miles (defaults to CITY_PROXIMITY_MILES setting)
@@ -69,10 +69,10 @@ def search_nearby_lakes(
     proximity_miles: float = None,
 ) -> Tuple[List[Dict[str, Any]], List[str]]:
     """
-    Parse lakes and water bodies from combined Overpass response within proximity_miles.
+    Parse lakes and water bodies from Overpass response (lakes/cities query) within proximity_miles.
 
     Args:
-        response: Combined Overpass response dict (with "elements") or None
+        response: Lakes-and-cities Overpass response dict (with "elements") or None
         latitude: Latitude coordinate
         longitude: Longitude coordinate
         proximity_miles: Distance threshold in miles (defaults to LAKE_PROXIMITY_MILES setting)

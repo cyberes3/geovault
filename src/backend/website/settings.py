@@ -484,15 +484,15 @@ REVERSE_GEOCODING_ENABLED = config.get_bool('reverse_geocoding.enabled', True)
 CITY_PROXIMITY_MILES = config.get_float('reverse_geocoding.city_proximity_miles', 5.0)
 LAKE_PROXIMITY_MILES = config.get_float('reverse_geocoding.lake_proximity_miles', 1.0)
 
-# Overpass API Configuration
-# Overpass API server URL
-OVERPASS_API_URL = config.get_str('reverse_geocoding.api_url', 'https://overpass.private.coffee/api/interpreter')
+# Overpass API (lakes, cities)
+OVERPASS_API_URL = config.get_str('reverse_geocoding.overpass.api_url', 'https://overpass.private.coffee/api/interpreter')
+OVERPASS_API_TIMEOUT = config.get_int('reverse_geocoding.overpass.request_timeout_seconds', 75)
+OVERPASS_API_VERIFY_SSL = config.get_bool('reverse_geocoding.overpass.verify_ssl', True)
 
-# Overpass API timeout settings (in seconds); must be > combined query [timeout:60]
-OVERPASS_API_TIMEOUT = config.get_int('reverse_geocoding.request_timeout_seconds', 75)
-
-# Overpass API SSL verification setting (enabled by default)
-OVERPASS_API_VERIFY_SSL = config.get_bool('reverse_geocoding.verify_ssl', True)
+# is_in area server (admin + protected areas). Required when reverse geocoding is used.
+IS_IN_AREAS_SERVER_URL = config.get_str('reverse_geocoding.areas_server.api_url', 'http://127.0.0.1:5001')
+IS_IN_AREAS_SERVER_TIMEOUT = config.get_int('reverse_geocoding.areas_server.request_timeout_seconds', 10)
+IS_IN_AREAS_SERVER_VERIFY_SSL = config.get_bool('reverse_geocoding.areas_server.verify_ssl', True)
 
 # Elevation API Configuration
 # Elevation API server URL (racemap's elevation service)

@@ -39,5 +39,5 @@ REVERSE_GEOCODING_TAG_PREFIXES = [
     'national-lakeshore',
     'state-park',
     'wilderness',
-    'protected-area',  # Default fallback for unclassified protected areas
+    'protected-area',  # Default for unclassified protected areas
 ]

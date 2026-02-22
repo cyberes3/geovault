@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-Regenerate combined Overpass response fixtures from the live API.
+Regenerate reverse geocoding test fixtures from the live Overpass API and is_in area server.
 
-Fetches the same combined query used by reverse geocoding for each default test
-coordinate and writes fixtures/combined_overpass/{lat}_{lon}.json. Use after
-changing the query or when fixtures were deleted.
+Fetches for each default test coordinate:
+  1. Lakes-and-cities Overpass query -> fixtures/combined_overpass/{lat}_{lon}.json
+  2. Areas server GET /query?lat=&lon= -> fixtures/areas_server/{lat}_{lon}.json
 
-Usage (no Django or backend required):
+Usage:
 
-  cd src/tests && python fetch_combined_overpass_fixtures.py --url https://overpass-api.de/api/interpreter
-  python fetch_combined_overpass_fixtures.py --url https://... --dry-run
+  cd src/tests && python fetch_combined_overpass_fixtures.py --url https://overpass-api.de/api/interpreter --areas-url http://localhost:5001
+  python fetch_combined_overpass_fixtures.py --url https://... --areas-url http://... --dry-run
 
 Options:
   --url URL           Overpass API URL (required)
-  --no-verify-ssl     Skip SSL certificate verification (e.g. for self-signed local servers)
+  --areas-url URL     is_in area server base URL (required)
+  --no-verify-ssl     Skip SSL certificate verification
   --dry-run           Only list coordinates that would be fetched
-  --existing          Only refresh existing fixture files (do not create from default list)
   --jobs N            Number of concurrent requests (default 4)
 """
 import argparse
@@ -24,37 +24,24 @@ import os
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Optional, Tuple
 
 import requests
 import urllib3
 
 tests_dir = os.path.dirname(os.path.abspath(__file__))
 
-# Must match geo_lib.reverse_geocoding.combined_overpass.build_combined_query
-_BBOX_HALF_DEGREES = 0.5  # match combined_overpass (0.25 misses e.g. Yellowstone)
-_LAKE_RADIUS_M = int(1.0 * 1609.34)   # 1 mile, same as LAKE_PROXIMITY_MILES default
-_CITY_RADIUS_M = int(5.0 * 1609.34)    # 5 miles, same as CITY_PROXIMITY_MILES default
+# Must match geo_lib.reverse_geocoding.combined_overpass (build_lakes_and_cities_query)
+_LAKE_RADIUS_M = int(1.0 * 1609.34)   # LAKE_PROXIMITY_MILES default 1.0
+_CITY_RADIUS_M = int(5.0 * 1609.34)   # CITY_PROXIMITY_MILES default 5.0
+_OVERPASS_TIMEOUT = 60                 # same as [timeout:60] in combined_overpass
 _COORDINATE_PRECISION = 3
 
 
-def _build_combined_query(latitude: float, longitude: float) -> str:
-    """Build the combined Overpass QL query (same as combined_overpass.build_combined_query)."""
-    south = latitude - _BBOX_HALF_DEGREES
-    north = latitude + _BBOX_HALF_DEGREES
-    west = longitude - _BBOX_HALF_DEGREES
-    east = longitude + _BBOX_HALF_DEGREES
-    # Longer timeout for fixture fetch; large bbox can be slow on public APIs
-    return f"""[out:json][timeout:120];
+def _build_lakes_and_cities_query(latitude: float, longitude: float) -> str:
+    """Build lakes-and-cities Overpass query (identical to combined_overpass.build_lakes_and_cities_query)."""
+    return f"""[out:json][timeout:{_OVERPASS_TIMEOUT}];
 (
-  relation["boundary"="administrative"]["admin_level"~"2|4|6|8"]({south},{west},{north},{east});
-  relation["boundary"="protected_area"]({south},{west},{north},{east});
-  relation["leisure"="nature_reserve"]({south},{west},{north},{east});
-  relation["boundary"="national_park"]({south},{west},{north},{east});
-  relation["leisure"="park"]({south},{west},{north},{east});
-  relation["landuse"="recreation_ground"]({south},{west},{north},{east});
-  way["boundary"="protected_area"]({south},{west},{north},{east});
-  way["leisure"="park"]({south},{west},{north},{east});
-  way["landuse"="recreation_ground"]({south},{west},{north},{east});
   way["natural"="water"]["name"](around:{_LAKE_RADIUS_M},{latitude},{longitude});
   relation["natural"="water"]["name"](around:{_LAKE_RADIUS_M},{latitude},{longitude});
   way["water"="lake"]["name"](around:{_LAKE_RADIUS_M},{latitude},{longitude});
@@ -66,11 +53,9 @@ def _build_combined_query(latitude: float, longitude: float) -> str:
 
 
 def _round_coordinate(latitude: float, longitude: float) -> tuple:
-    """Round to cache precision (same as geo_lib.spatial.coordinates.round_coordinate)."""
     return (round(latitude, _COORDINATE_PRECISION), round(longitude, _COORDINATE_PRECISION))
 
 
-# Coordinates used by test_geo_lib.test_reverse_geocode.
 DEFAULT_FIXTURE_COORDINATES = [
     (36.156, -86.925),
     (37.775, -122.419),
@@ -93,136 +78,142 @@ DEFAULT_FIXTURE_COORDINATES = [
     (42.218, -71.113),
     (42.223, -71.098),
     (42.729, -102.417),
-    (44.604, -110.476),  # Yellowstone NP (44.60384, -110.47567)
+    (44.604, -110.476),
 ]
 
 
-def _parse_fixture_filename(name: str):
-    """Return (lat, lon) or None for a filename like 39.0_-105.0.json."""
-    if not name.endswith('.json'):
-        return None
-    base = name[:-5]
-    parts = base.split('_', 1)
-    if len(parts) != 2:
-        return None
+def _fetch_areas_from_server(lat: float, lon: float, base_url: str, timeout: int, verify_ssl: bool) -> Tuple[Optional[dict], Optional[str]]:
+    """GET areas server /query?lat=&lon=; return (response_dict, error_message)."""
+    url = base_url.rstrip('/') + '/query'
     try:
-        lat = float(parts[0])
-        lon = float(parts[1])
-        return (lat, lon)
-    except ValueError:
-        return None
+        r = requests.get(url, params={'lat': lat, 'lon': lon}, timeout=timeout, verify=verify_ssl)
+        r.raise_for_status()
+        data = r.json()
+        if 'admin_hierarchy' in data and 'protected_areas' in data:
+            return (data, None)
+        return (None, 'response missing admin_hierarchy or protected_areas')
+    except requests.RequestException as e:
+        return (None, str(e))
+    except json.JSONDecodeError as e:
+        return (None, f'invalid JSON: {e}')
 
 
 def _fetch_one(
     name: str,
     lat: float,
     lon: float,
-    url: str,
+    overpass_url: str,
+    areas_url: str,
     timeout: int,
     verify_ssl: bool,
-    fixtures_dir: str,
-) -> tuple[str, bool, str | None]:
+    overpass_dir: str,
+    areas_dir: str,
+) -> Tuple[str, bool, Optional[str]]:
     """
-    Fetch one fixture. Returns (name, success, error_message).
+    Fetch Overpass lakes+cities and areas fixtures for one coordinate.
+    Returns (name, success, error_message). Success is True only if both writes succeed.
     """
-    query = _build_combined_query(lat, lon)
+    # 1. Lakes+cities Overpass
+    query = _build_lakes_and_cities_query(lat, lon)
     try:
-        response = requests.post(
-            url,
+        r = requests.post(
+            overpass_url,
             data=query,
             timeout=timeout,
             headers={'Content-Type': 'text/plain; charset=utf-8'},
             verify=verify_ssl,
         )
-        response.raise_for_status()
-        data = response.json()
+        r.raise_for_status()
+        data = r.json()
     except requests.RequestException as e:
-        return (name, False, f'request failed: {e}')
+        return (name, False, f'Overpass request failed: {e}')
     except json.JSONDecodeError as e:
-        return (name, False, f'invalid JSON: {e}')
+        return (name, False, f'Overpass invalid JSON: {e}')
 
     remark = data.get('remark') or ''
-    elements = data.get('elements') or []
-    if 'runtime error' in remark or 'timed out' in remark or (not elements and 'remark' in data):
-        return (name, False, f'Overpass error or empty (not overwriting): {remark[:80]!r}')
+    if 'runtime error' in remark or 'timed out' in remark:
+        return (name, False, f'Overpass error: {remark[:80]!r}')
 
-    out_path = os.path.join(fixtures_dir, name)
-    with open(out_path, 'w', encoding='utf-8') as f:
+    overpass_path = os.path.join(overpass_dir, name)
+    with open(overpass_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+    # 2. Areas response (areas_url is required)
+    areas_data, areas_err = _fetch_areas_from_server(lat, lon, areas_url, timeout, verify_ssl)
+    if areas_err:
+        return (name, False, f'areas: {areas_err}')
+    areas_path = os.path.join(areas_dir, name)
+    with open(areas_path, 'w', encoding='utf-8') as f:
+        json.dump(areas_data, f, indent=2, ensure_ascii=False)
+
     return (name, True, None)
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Fetch combined Overpass responses into test fixtures.')
+    parser = argparse.ArgumentParser(
+        description='Fetch lakes+cities Overpass and areas server fixtures for reverse geocoding tests.',
+    )
     parser.add_argument('--url', type=str, default=None, help='Overpass API URL (required)')
+    parser.add_argument('--areas-url', type=str, default=None, help='is_in area server base URL (required)')
     parser.add_argument('--no-verify-ssl', action='store_true', help='Skip SSL certificate verification')
     parser.add_argument('--dry-run', action='store_true', help='Only list coordinates that would be fetched')
-    parser.add_argument(
-        '--existing',
-        action='store_true',
-        help='Only refresh existing fixture files; do not create from default coordinate list',
-    )
     parser.add_argument('--jobs', type=int, default=4, help='Number of concurrent requests (default 4)')
     args = parser.parse_args()
 
     if not args.url:
         print('Error: --url required', file=sys.stderr)
         sys.exit(1)
-    url = args.url
+    if not args.areas_url or not args.areas_url.strip():
+        print('Error: --areas-url required', file=sys.stderr)
+        sys.exit(1)
+    overpass_url = args.url
+    areas_url = args.areas_url.strip()
 
-    fixtures_dir = os.path.join(tests_dir, 'fixtures', 'combined_overpass')
+    overpass_dir = os.path.join(tests_dir, 'fixtures', 'combined_overpass')
+    areas_dir = os.path.join(tests_dir, 'fixtures', 'areas_server')
 
-    if args.existing:
-        if not os.path.isdir(fixtures_dir):
-            print(f'Error: Fixtures directory not found: {fixtures_dir}', file=sys.stderr)
-            sys.exit(1)
-        names = [n for n in os.listdir(fixtures_dir) if n.endswith('.json')]
-        coords = []
-        for name in sorted(names):
-            parsed = _parse_fixture_filename(name)
-            if parsed is None:
-                print(f'Warning: Skipping unparseable filename: {name}', file=sys.stderr)
-                continue
-            coords.append((name, parsed[0], parsed[1]))
-        if not coords:
-            print('No fixture files found. Run without --existing to create from default coordinates.', file=sys.stderr)
-            sys.exit(1)
-    else:
-        seen = set()
-        coords = []
-        for lat, lon in DEFAULT_FIXTURE_COORDINATES:
-            lat_r, lon_r = _round_coordinate(lat, lon)
-            name = f'{lat_r}_{lon_r}.json'
-            if name in seen:
-                continue
-            seen.add(name)
-            coords.append((name, lat_r, lon_r))
-        if not os.path.isdir(fixtures_dir):
-            os.makedirs(fixtures_dir, exist_ok=True)
-            print(f'Created {fixtures_dir}')
+    seen = set()
+    coords = []
+    for lat, lon in DEFAULT_FIXTURE_COORDINATES:
+        lat_r, lon_r = _round_coordinate(lat, lon)
+        name = f'{lat_r}_{lon_r}.json'
+        if name in seen:
+            continue
+        seen.add(name)
+        coords.append((name, lat_r, lon_r))
+    for d in (overpass_dir, areas_dir):
+        if not os.path.isdir(d):
+            os.makedirs(d, exist_ok=True)
+            print(f'Created {d}')
 
-    print(f'Found {len(coords)} fixture(s) in {fixtures_dir}')
+    print(f'Found {len(coords)} fixture(s). Overpass -> {overpass_dir}, areas -> {areas_dir}')
     if args.dry_run:
         for name, lat, lon in coords:
             print(f'  {name}  -> ({lat}, {lon})')
         return
 
     verify_ssl = not args.no_verify_ssl
-    timeout = 150  # HTTP timeout; must be longer than Overpass [timeout:120]
+    timeout = 150
     jobs = max(1, args.jobs)
+    os.makedirs(overpass_dir, exist_ok=True)
+    os.makedirs(areas_dir, exist_ok=True)
     if not verify_ssl:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     print_lock = threading.Lock()
-
-    def run_one(item):
-        name, lat, lon = item
-        return _fetch_one(name, lat, lon, url, timeout, verify_ssl, fixtures_dir)
-
     ok = 0
     err = 0
     with ThreadPoolExecutor(max_workers=jobs) as executor:
-        futures = {executor.submit(run_one, (name, lat, lon)): (name, lat, lon) for name, lat, lon in coords}
+        futures = {
+            executor.submit(
+                _fetch_one,
+                name, lat, lon,
+                overpass_url, areas_url,
+                timeout, verify_ssl,
+                overpass_dir, areas_dir,
+            ): (name, lat, lon)
+            for name, lat, lon in coords
+        }
         for future in as_completed(futures):
             name, success, error_message = future.result()
             if success:

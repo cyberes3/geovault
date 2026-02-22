@@ -1,27 +1,23 @@
 """
-Administrative boundary lookup (country, state, county, city).
+Administrative boundary helpers.
 
-Parser-only: accepts a pre-fetched combined Overpass response and returns
-the same hierarchy dict. The combined query is executed by combined_overpass.fetch_combined.
-
-When no admin_level 2 (country) relation contains the point, country is derived from
-is_in:country_code on a containing state/county relation (resolved via pycountry).
+Admin hierarchy (country, state, county, city) is provided by the is_in area server in production.
+This module keeps normalize_country_name and get_admin_hierarchy (the latter for test fixtures only).
 """
-from typing import Dict, Optional, Tuple, List, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 import pycountry
 
 from geo_lib.reverse_geocoding.geometry_helpers import point_in_polygon, point_in_bounds
 from geo_lib.reverse_geocoding.osm_tags import get_name_from_tags
 
-# Prefer official names so we get "United States of America" not "United States"
 _COUNTRY_NAME_ALIASES: Dict[str, str] = {
     "United States": "United States of America",
 }
 
 
 def _country_code_to_name(code: str) -> Optional[str]:
-    """Resolve ISO 3166-1 alpha-2 country code to canonical full name (official_name when available)."""
+    """Resolve ISO 3166-1 alpha-2 country code to canonical full name."""
     if not code or not isinstance(code, str):
         return None
     code = code.strip().upper()
@@ -38,7 +34,7 @@ def _country_code_to_name(code: str) -> Optional[str]:
 
 
 def normalize_country_name(name: Optional[str]) -> Optional[str]:
-    """Return a canonical country name so OSM and code-derived names match (e.g. United States → United States of America)."""
+    """Return a canonical country name (e.g. United States → United States of America)."""
     if not name or not name.strip():
         return None
     return _COUNTRY_NAME_ALIASES.get(name.strip(), name.strip())
@@ -50,48 +46,22 @@ def get_admin_hierarchy(
     longitude: float,
 ) -> Tuple[Dict[str, Optional[str]], List[str]]:
     """
-    Parse administrative hierarchy (country, state, county, city) from combined Overpass response.
-
-    Uses OpenStreetMap admin_level tags:
-    - Level 2: Country
-    - Level 4: State/Province
-    - Level 6: County
-    - Level 8: City/Municipality
-
-    Elements of type "area" are treated as containing the point.
-    Elements of type "relation" or "way" must have "geometry" (point-in-polygon) or "bounds" (point-in-bounds)
-    to be considered containing the point; otherwise they are skipped.
-
-    Args:
-        response: Combined Overpass response dict (with "elements") or None
-        latitude: Latitude coordinate
-        longitude: Longitude coordinate
-
-    Returns:
-        Tuple of (admin_hierarchy_dict, list_of_error_messages)
+    Parse administrative hierarchy from an Overpass response (for test fixtures only).
+    Production uses the is_in area server.
     """
-    result = {
-        'country': None,
-        'state': None,
-        'county': None,
-        'city': None
-    }
+    result = {'country': None, 'state': None, 'county': None, 'city': None}
     errors = []
-
     if not response:
         return result, errors
-
     for element in response.get('elements', []):
         tags = element.get('tags', {})
         name = get_name_from_tags(tags)
         if not name:
             continue
-
         admin_level = tags.get('admin_level')
         boundary = tags.get('boundary', '')
         if not admin_level or boundary != 'administrative':
             continue
-
         elem_type = element.get('type', '')
         contains = False
         if elem_type == 'area':
@@ -103,10 +73,8 @@ def get_admin_hierarchy(
                 contains = point_in_polygon(latitude, longitude, geometry)
             elif bounds:
                 contains = point_in_bounds(latitude, longitude, bounds)
-
         if not contains:
             continue
-
         if admin_level == '2':
             result['country'] = normalize_country_name(name) or name
         elif admin_level == '4':
@@ -125,5 +93,4 @@ def get_admin_hierarchy(
                 result['state'] = tags.get('is_in:state')
         elif admin_level == '8':
             result['city'] = name
-
     return result, errors

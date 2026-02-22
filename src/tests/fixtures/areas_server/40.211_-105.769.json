@@ -1,0 +1,30 @@
+{
+  "admin_hierarchy": {
+    "city": null,
+    "country": "United States of America",
+    "county": "Grand County",
+    "state": "Colorado"
+  },
+  "protected_areas": [
+    {
+      "boundary": "protected_area",
+      "designation": "",
+      "landuse": "",
+      "leisure": "",
+      "name": "Rocky Mountain National Park",
+      "operator": "National Park Service",
+      "protect_class": "2",
+      "protection_title": "National Park"
+    },
+    {
+      "boundary": "protected_area",
+      "designation": "",
+      "landuse": "",
+      "leisure": "nature_reserve",
+      "name": "Rocky Mountain Wilderness",
+      "operator": "National Park Service",
+      "protect_class": "1a",
+      "protection_title": "Wilderness Area"
+    }
+  ]
+}

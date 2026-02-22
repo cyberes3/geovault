@@ -16,10 +16,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Tuple, Dict
 
-from geo_lib.reverse_geocoding.combined_overpass import fetch_combined
-from geo_lib.reverse_geocoding.admin_boundaries import get_admin_hierarchy
+from geo_lib.reverse_geocoding.areas_server_client import query_areas_server
+from geo_lib.reverse_geocoding.combined_overpass import fetch_lakes_and_cities
 from geo_lib.reverse_geocoding.nearby_places import find_nearby_cities, search_nearby_lakes
-from geo_lib.reverse_geocoding.protected_areas import get_protected_areas, classify_protected_area
+from geo_lib.reverse_geocoding.protected_areas import classify_protected_area
 from geo_lib.reverse_geocoding.ski_resorts import search_nearby_ski_resorts
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.spatial.coordinates import round_coordinate
@@ -60,42 +60,48 @@ def get_location_tags(
     log_messages = []
 
     try:
-        # Single combined Overpass query; parse into admin, protected, lakes, cities
-        response, fetch_errors = fetch_combined(latitude, longitude)
-        admin_info, admin_errors = get_admin_hierarchy(response, latitude, longitude)
-        protected_areas, protected_errors = get_protected_areas(response, latitude, longitude)
+        # Admin and protected areas from is_in area server (required)
+        admin_hierarchy, protected_areas, areas_err = query_areas_server(latitude, longitude)
+        if areas_err:
+            _logger.error(areas_err)
+            log_messages.append(ReverseGeocodingLogMessage(
+                timestamp=datetime.now(),
+                message=areas_err,
+                level='ERROR',
+                source='Reverse Geocoding',
+            ))
+            admin_info = {'country': None, 'state': None, 'county': None, 'city': None}
+            protected_areas = []
+        else:
+            admin_info = admin_hierarchy
+
+        # Lakes and cities from Overpass
+        response, fetch_errors = fetch_lakes_and_cities(latitude, longitude)
         nearby_lakes, lake_errors = search_nearby_lakes(response, latitude, longitude)
         nearby_cities_parsed, city_errors = find_nearby_cities(response, latitude, longitude)
+        all_errors = fetch_errors + lake_errors + city_errors
 
-        # Collect errors from fetch and all parsers
-        all_errors = fetch_errors + admin_errors + protected_errors + lake_errors + city_errors
-
-        # Add specific API errors to log
         for error in all_errors:
             _logger.warning(error)
             log_messages.append(ReverseGeocodingLogMessage(
                 timestamp=datetime.now(),
                 message=error,
                 level='WARNING',
-                source='Reverse Geocoding'
+                source='Reverse Geocoding',
             ))
 
-        # Check if we got any location data at all
         has_any_data = (
             admin_info.get('country') or admin_info.get('state') or
             admin_info.get('county') or admin_info.get('city') or
             protected_areas or nearby_lakes
         )
-
-        if not has_any_data and not all_errors:
-            # No data returned but also no explicit errors - generic warning
-            # If we represent explicit errors, we might skip this generic one to avoid noise
+        if not has_any_data and not all_errors and not areas_err:
             warning_msg = (
-                f"Reverse reverse_geocoding returned no data for coordinates "
+                f"Reverse geocoding returned no data for coordinates "
                 f"({latitude}, {longitude}) - no matching features found"
             )
-            _logger.info(warning_msg) # Downgrade to INFO if no error
-            
+            _logger.info(warning_msg)
+
         # Add administrative tags
         if admin_info['country']:
             tags.append(f"country:{admin_info['country']}")
@@ -109,7 +115,7 @@ def get_location_tags(
             tags.append(f"city:{admin_info['city']}")
             city_found = True
 
-        # If no city found in admin boundaries, use closest city from combined response
+        # If no city found in admin boundaries, use closest city from Overpass
         if not city_found:
             for error in city_errors:
                 _logger.warning(error)

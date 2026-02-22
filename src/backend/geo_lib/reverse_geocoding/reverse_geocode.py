@@ -1,13 +1,12 @@
 """
-Backwards-compatibility wrapper for reverse geocoding.
+Public API for reverse geocoding.
 
-This module re-exports the new functional API for backwards compatibility.
-All functionality has been refactored into separate modules:
+Re-exports from location_tags. Other modules:
 
 - location_tags.py: Main public API (batch_reverse_geocode_coordinates, get_location_tags)
-- admin_boundaries.py: Administrative hierarchy lookup
-- protected_areas.py: Protected area detection
-- nearby_places.py: Cities and lakes proximity search
+- admin_boundaries.py: Administrative hierarchy parser (tests only; production uses areas server)
+- protected_areas.py: Protected area classification and parser (tests only; production uses areas server)
+- nearby_places.py: Cities and lakes from Overpass response
 - ski_resorts.py: Ski resort detection
 - overpass_api.py: Low-level Overpass API client
 - cache.py: Caching utilities

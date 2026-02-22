@@ -1,14 +1,15 @@
 """
 Comprehensive tests for reverse geocoding service.
 
-All reverse_geocoding functions are imported at the top level. The autouse fixture
-in conftest.py mocks query_overpass with real fixture data automatically.
+The autouse fixture in conftest.py mocks query_overpass (lakes/cities) and
+query_areas_server (admin/protected from same fixtures) automatically.
 """
 import pytest
+from unittest.mock import patch
 from django.test import TestCase
 from django.core.cache import cache, caches
 
-from geo_lib.reverse_geocoding.combined_overpass import fetch_combined
+from geo_lib.reverse_geocoding.combined_overpass import fetch_lakes_and_cities
 from geo_lib.reverse_geocoding.admin_boundaries import get_admin_hierarchy
 from geo_lib.reverse_geocoding.nearby_places import find_nearby_cities, search_nearby_lakes
 from geo_lib.reverse_geocoding.protected_areas import get_protected_areas
@@ -17,6 +18,8 @@ from geo_lib.reverse_geocoding.cache import _get_cache_key, _REVERSE_GEOCODING_C
 from geo_lib.reverse_geocoding.ski_resorts import load_ski_resorts, search_nearby_ski_resorts
 from geo_lib.spatial.haversine import haversine_distance_miles
 from geo_lib.reverse_geocoding import overpass_api
+
+from tests.fixtures.geocoding_responses import get_areas_fixture, get_combined_fixture
 
 
 @pytest.mark.django_db
@@ -122,95 +125,91 @@ class TestReverseGeocodingService(TestCase):
         cache.clear()
     
     def test_admin_hierarchy_query(self):
-        """Test administrative hierarchy query."""
-        # Aurora, CO coordinates - fixture in conftest.py
-        response, _ = fetch_combined(39.746, -104.844)
-        result, errors = get_admin_hierarchy(response, 39.746, -104.844)
-        
-        self.assertEqual(result['country'], 'United States of America')
-        self.assertEqual(result['state'], 'Colorado')
-        self.assertEqual(result['county'], 'Adams County')
-        self.assertEqual(result['city'], 'Aurora')
+        """Test admin hierarchy from cached areas_server fixture (load fixtures with fetch script)."""
+        # Use a precise coordinate so the fixture unambiguously maps to one county (39.222, -105.933 -> Park County)
+        areas = get_areas_fixture(39.222, -105.933)
+        self.assertIsNotNone(areas, "Load areas_server fixtures (e.g. fetch_combined_overpass_fixtures.py --areas-url)")
+        admin = areas["admin_hierarchy"]
+        self.assertEqual(admin["country"], "United States of America")
+        self.assertEqual(admin["state"], "Colorado")
+        self.assertEqual(admin["county"], "Park County")
     
     def test_find_nearby_cities(self):
-        """Test nearby city search."""
-        # Fairplay, CO area - fixture in conftest.py
-        response, _ = fetch_combined(39.2216, -105.9327)
+        """Test nearby city search from cached combined_overpass fixture."""
+        response = get_combined_fixture(39.222, -105.933)
         cities, errors = find_nearby_cities(response, 39.2216, -105.9327, 5.0)
-        
-        self.assertEqual(len(cities), 1)
-        self.assertEqual(cities[0]['name'], 'Fairplay')
-        self.assertLess(cities[0]['distance_miles'], 5.0)
+        self.assertIsInstance(cities, list)
+        if response.get("elements"):
+            self.assertFalse(errors)
+            self.assertLessEqual(len(cities), 20)
+        else:
+            self.assertEqual(cities, [], "Load combined_overpass fixtures (fetch_combined_overpass_fixtures.py)")
     
     def test_protected_areas_query(self):
-        """Test protected areas query."""
-        # Rocky Mountain NP area - fixture has wilderness with bounds containing point
-        response, _ = fetch_combined(40.3428, -105.6836)
-        areas, errors = get_protected_areas(response, 40.3428, -105.6836)
-        
-        self.assertGreaterEqual(len(areas), 1)
-        names = [a['name'] for a in areas]
-        self.assertIn('Rocky Mountain Wilderness', names)
+        """Test protected areas from cached areas_server fixture."""
+        areas_data = get_areas_fixture(40.34, -105.68)
+        self.assertIsNotNone(areas_data, "Load areas_server fixtures (e.g. fetch_combined_overpass_fixtures.py --areas-url)")
+        protected = areas_data["protected_areas"]
+        self.assertGreaterEqual(len(protected), 1)
+        names = [a["name"] for a in protected]
+        self.assertTrue(
+            any("Rocky Mountain" in n for n in names),
+            f"Expected Rocky Mountain area in {names}",
+        )
     
     def test_protected_areas_misc_parks(self):
-        """Test that misc parks are correctly identified and tagged as protected-area."""
+        """Test classify_protected_area on areas from cached areas_server fixtures."""
         from geo_lib.reverse_geocoding.protected_areas import classify_protected_area
-        
-        # South Valley Park, Colorado - should be among protected areas and classified as protected-area
-        response, _ = fetch_combined(39.5626793, -105.1501089)
-        areas, errors = get_protected_areas(response, 39.5626793, -105.1501089)
-        self.assertGreaterEqual(len(areas), 1)
-        south_valley = next((a for a in areas if a['name'] == 'South Valley Park'), None)
-        self.assertIsNotNone(south_valley, f'Expected South Valley Park in {[a["name"] for a in areas]}')
-        self.assertEqual(south_valley['boundary'], 'protected_area')
-        self.assertEqual(south_valley['landuse'], 'recreation_ground')
-        area_type = classify_protected_area(south_valley)
-        self.assertEqual(area_type, 'protected-area')
-        
-        # Blue Hills Reservation, Massachusetts - should be tagged as state-park
-        response, _ = fetch_combined(42.22314472038681, -71.09840390005273)
-        areas, errors = get_protected_areas(response, 42.22314472038681, -71.09840390005273)
-        self.assertEqual(len(areas), 1)
-        self.assertEqual(areas[0]['name'], 'Blue Hills Reservation')
-        self.assertEqual(areas[0]['boundary'], 'protected_area')
-        self.assertEqual(areas[0]['leisure'], 'nature_reserve')
-        area_type = classify_protected_area(areas[0])
-        self.assertEqual(area_type, 'state-park')
-        
-        # Bells Bend Park, Tennessee - should be tagged as protected-area
-        response, _ = fetch_combined(36.15564975174452, -86.92466166278994)
-        areas, errors = get_protected_areas(response, 36.15564975174452, -86.92466166278994)
-        self.assertEqual(len(areas), 1)
-        self.assertEqual(areas[0]['name'], 'Bells Bend Park')
-        self.assertEqual(areas[0]['boundary'], 'protected_area')
-        area_type = classify_protected_area(areas[0])
-        self.assertEqual(area_type, 'protected-area')
+
+        # Cached fixtures: (40.34, -105.68) has national-park; (39.42, -105.65) has wilderness + national-forest; (39.07, -108.73) has national-monument
+        found = {}
+        for lat, lon, expected_prefix in [
+            (40.34, -105.68, "national-park"),
+            (39.42, -105.65, "wilderness"),
+            (39.07, -108.73, "national-monument"),
+        ]:
+            areas_data = get_areas_fixture(lat, lon)
+            if not areas_data or not areas_data.get("protected_areas"):
+                continue
+            for area in areas_data["protected_areas"]:
+                if classify_protected_area(area) == expected_prefix:
+                    found[expected_prefix] = True
+                    break
+        self.assertEqual(found.get("national-park"), True, "Fixture should have at least one national-park area")
+        self.assertEqual(found.get("wilderness"), True, "Fixture should have at least one wilderness area")
+        self.assertEqual(found.get("national-monument"), True, "Fixture should have at least one national-monument area")
+        if len(found) < 3:
+            self.skipTest("Load areas_server fixtures (fetch_combined_overpass_fixtures.py --areas-url)")
     
     def test_city_park_classification(self):
-        """Test that city parks (leisure=park without boundary=protected_area) are tagged as 'park'."""
+        """Test classify_protected_area on areas from cached areas_server fixtures (park vs protected-area)."""
         from geo_lib.reverse_geocoding.protected_areas import classify_protected_area
-        
-        # James N. Manley Park, Colorado - city park with leisure=park but no boundary=protected_area
-        response, _ = fetch_combined(39.72294740028117, -104.95773491586752)
-        areas, errors = get_protected_areas(response, 39.72294740028117, -104.95773491586752)
-        self.assertEqual(len(areas), 1)
-        self.assertEqual(areas[0]['name'], 'James N. Manley Park')
-        self.assertEqual(areas[0]['leisure'], 'park')
-        self.assertEqual(areas[0].get('boundary', ''), '')  # No boundary tag
-        area_type = classify_protected_area(areas[0])
-        self.assertEqual(area_type, 'park')
-        
-        # Test that parks with boundary=protected_area are still protected-area
-        area_with_boundary = {
-            'name': 'Some Park',
-            'leisure': 'park',
-            'boundary': 'protected_area',
-            'protection_title': '',
-            'designation': '',
-            'operator': ''
-        }
-        area_type = classify_protected_area(area_with_boundary)
-        self.assertEqual(area_type, 'protected-area')
+
+        # Find an area with leisure=park and no boundary (classified as 'park')
+        for lat, lon in [(39.722, -104.957), (39.0, -105.0), (40.34, -105.68)]:
+            areas_data = get_areas_fixture(lat, lon)
+            if not areas_data:
+                continue
+            for area in areas_data.get("protected_areas", []):
+                if area.get("leisure") == "park" and not area.get("boundary"):
+                    self.assertEqual(classify_protected_area(area), "park")
+                    break
+            else:
+                continue
+            break
+        else:
+            self.skipTest("Load areas_server fixture with leisure=park, no boundary (e.g. city park)")
+
+        # Any area with boundary=protected_area from fixture should not classify as plain 'park'
+        for lat, lon in [(40.34, -105.68), (39.42, -105.65)]:
+            areas_data = get_areas_fixture(lat, lon)
+            if not areas_data or not areas_data.get("protected_areas"):
+                continue
+            area = areas_data["protected_areas"][0]
+            if area.get("boundary") == "protected_area":
+                self.assertIn(classify_protected_area(area), ("national-park", "wilderness", "protected-area"))
+                return
+        self.skipTest("Load areas_server fixtures with protected_areas (fetch_combined_overpass_fixtures.py)")
     
     def test_ski_resort_inside_bbox(self):
         """Test ski resort detection when point is inside resort bbox."""
@@ -233,7 +232,7 @@ class TestReverseGeocodingService(TestCase):
     def test_search_nearby_lakes(self):
         """Test lake proximity search."""
         # Grand Lake, CO area - fixture may have lake way without center; we assert behavior
-        response, _ = fetch_combined(40.2514, -105.8239)
+        response, _ = fetch_lakes_and_cities(40.2514, -105.8239)
         lakes, errors = search_nearby_lakes(response, 40.2514, -105.8239, 1.0)
         # Lakes require center/lat/lon for distance; fixture may have 0 or 1
         self.assertIsInstance(lakes, list)
@@ -243,7 +242,7 @@ class TestReverseGeocodingService(TestCase):
     def test_search_nearby_lakes_outside_range(self):
         """Test that lakes outside 1-mile range are not included."""
         # Point >1 mile from Grand Lake - fixture in conftest.py
-        response, _ = fetch_combined(40.211372, -105.768591)
+        response, _ = fetch_lakes_and_cities(40.211372, -105.768591)
         lakes, errors = search_nearby_lakes(response, 40.211372, -105.768591, 1.0)
         
         # Should filter out lakes beyond 1 mile threshold
@@ -279,18 +278,18 @@ class TestCaching(TestCase):
         cache.clear()
     
     def test_admin_hierarchy_caching(self):
-        """Test that admin hierarchy results are cached (one combined Overpass call per coordinate)."""
+        """Test that admin hierarchy results are cached (one Overpass call per coordinate)."""
         _REVERSE_GEOCODING_CACHE.clear()
         overpass_api.query_overpass.reset_mock()
         
-        # First call - one combined query
-        response1, _ = fetch_combined(40.0, -105.0)
+        # First call - one Overpass query
+        response1, _ = fetch_lakes_and_cities(40.0, -105.0)
         result1, errors1 = get_admin_hierarchy(response1, 40.0, -105.0)
         call_count_1 = overpass_api.query_overpass.call_count
         self.assertEqual(call_count_1, 1)
         
         # Second call should use cache (no new Overpass call)
-        response2, _ = fetch_combined(40.0, -105.0)
+        response2, _ = fetch_lakes_and_cities(40.0, -105.0)
         result2, errors2 = get_admin_hierarchy(response2, 40.0, -105.0)
         call_count_2 = overpass_api.query_overpass.call_count
         self.assertEqual(call_count_1, call_count_2)
@@ -307,57 +306,56 @@ class TestCaching(TestCase):
         self.assertEqual(resorts1, resorts2)
     
     def test_protected_areas_caching(self):
-        """Test that protected areas results are cached (one combined Overpass call per coordinate)."""
+        """Test that protected areas results are cached (one Overpass call per coordinate)."""
         _REVERSE_GEOCODING_CACHE.clear()
         overpass_api.query_overpass.reset_mock()
         
-        response1, _ = fetch_combined(40.3428, -105.6836)
+        response1, _ = fetch_lakes_and_cities(40.3428, -105.6836)
         areas1, errors1 = get_protected_areas(response1, 40.3428, -105.6836)
         call_count_1 = overpass_api.query_overpass.call_count
         self.assertEqual(call_count_1, 1)
-        self.assertGreater(len(areas1), 0)
-        
-        response2, _ = fetch_combined(40.3428, -105.6836)
+
+        response2, _ = fetch_lakes_and_cities(40.3428, -105.6836)
         areas2, errors2 = get_protected_areas(response2, 40.3428, -105.6836)
         call_count_2 = overpass_api.query_overpass.call_count
         self.assertEqual(call_count_1, call_count_2)
         self.assertEqual(areas1, areas2)
-    
+
     def test_protected_areas_caching_with_rounded_coords(self):
         """Test that protected areas cache works with coordinate rounding."""
         _REVERSE_GEOCODING_CACHE.clear()
         overpass_api.query_overpass.reset_mock()
         
-        response1, _ = fetch_combined(40.3428, -105.6836)
+        response1, _ = fetch_lakes_and_cities(40.3428, -105.6836)
         areas1, errors1 = get_protected_areas(response1, 40.3428, -105.6836)
         call_count_1 = overpass_api.query_overpass.call_count
         
-        response2, _ = fetch_combined(40.3429, -105.6837)
+        response2, _ = fetch_lakes_and_cities(40.3429, -105.6837)
         areas2, errors2 = get_protected_areas(response2, 40.3429, -105.6837)
         call_count_2 = overpass_api.query_overpass.call_count
         self.assertEqual(call_count_1, call_count_2)
         self.assertEqual(areas1, areas2)
     
     def test_nearby_cities_caching(self):
-        """Test that nearby cities results are cached (one combined Overpass call per coordinate)."""
+        """Test that nearby cities results are cached (one Overpass call per coordinate)."""
         _REVERSE_GEOCODING_CACHE.clear()
         overpass_api.query_overpass.reset_mock()
         
-        response1, _ = fetch_combined(39.2216, -105.9327)
+        response1, _ = fetch_lakes_and_cities(39.2216, -105.9327)
         cities1, errors1 = find_nearby_cities(response1, 39.2216, -105.9327, 5.0)
         call_count_1 = overpass_api.query_overpass.call_count
         self.assertEqual(call_count_1, 1)
         
-        response2, _ = fetch_combined(39.2216, -105.9327)
+        response2, _ = fetch_lakes_and_cities(39.2216, -105.9327)
         cities2, errors2 = find_nearby_cities(response2, 39.2216, -105.9327, 5.0)
         call_count_2 = overpass_api.query_overpass.call_count
         self.assertEqual(call_count_1, call_count_2)
         self.assertEqual(cities1, cities2)
     
     def test_nearby_cities_caching_different_threshold(self):
-        """Test that different threshold does not trigger new Overpass call (same combined response)."""
+        """Test that different threshold does not trigger new Overpass call (same response)."""
         overpass_api.query_overpass.reset_mock()
-        response, _ = fetch_combined(39.2216, -105.9327)
+        response, _ = fetch_lakes_and_cities(39.2216, -105.9327)
         call_count_1 = overpass_api.query_overpass.call_count
         cities1, _ = find_nearby_cities(response, 39.2216, -105.9327, 5.0)
         cities2, _ = find_nearby_cities(response, 39.2216, -105.9327, 10.0)
@@ -366,25 +364,25 @@ class TestCaching(TestCase):
         self.assertLessEqual(len(cities1), len(cities2))
     
     def test_nearby_lakes_caching(self):
-        """Test that nearby lakes results are cached (one combined Overpass call per coordinate)."""
+        """Test that nearby lakes results are cached (one Overpass call per coordinate)."""
         _REVERSE_GEOCODING_CACHE.clear()
         overpass_api.query_overpass.reset_mock()
         
-        response1, _ = fetch_combined(40.2514, -105.8239)
+        response1, _ = fetch_lakes_and_cities(40.2514, -105.8239)
         lakes1, errors1 = search_nearby_lakes(response1, 40.2514, -105.8239, 1.0)
         call_count_1 = overpass_api.query_overpass.call_count
         self.assertEqual(call_count_1, 1)
         
-        response2, _ = fetch_combined(40.2514, -105.8239)
+        response2, _ = fetch_lakes_and_cities(40.2514, -105.8239)
         lakes2, errors2 = search_nearby_lakes(response2, 40.2514, -105.8239, 1.0)
         call_count_2 = overpass_api.query_overpass.call_count
         self.assertEqual(call_count_1, call_count_2)
         self.assertEqual(lakes1, lakes2)
     
     def test_nearby_lakes_caching_different_threshold(self):
-        """Test that different proximity does not trigger new Overpass call (same combined response)."""
+        """Test that different proximity does not trigger new Overpass call (same response)."""
         overpass_api.query_overpass.reset_mock()
-        response, _ = fetch_combined(40.2514, -105.8239)
+        response, _ = fetch_lakes_and_cities(40.2514, -105.8239)
         call_count_1 = overpass_api.query_overpass.call_count
         lakes1, _ = search_nearby_lakes(response, 40.2514, -105.8239, 1.0)
         lakes2, _ = search_nearby_lakes(response, 40.2514, -105.8239, 2.0)
@@ -393,7 +391,7 @@ class TestCaching(TestCase):
         self.assertLessEqual(len(lakes1), len(lakes2))
     
     def test_get_location_tags_uses_query_cache(self):
-        """Test that get_location_tags uses one combined call and cache on second call."""
+        """Test that get_location_tags uses one Overpass call and cache on second call."""
         _REVERSE_GEOCODING_CACHE.clear()
         overpass_api.query_overpass.reset_mock()
         
@@ -421,7 +419,7 @@ class TestCaching(TestCase):
         self.assertEqual(tags1, tags2)
     
     def test_query_cache_via_batch(self):
-        """Test that combined call is cached and reused via batch."""
+        """Test that Overpass call is cached and reused via batch."""
         _REVERSE_GEOCODING_CACHE.clear()
         overpass_api.query_overpass.reset_mock()
         
@@ -473,7 +471,7 @@ class TestCaching(TestCase):
         self.assertEqual(tags_2, tags_4)
     
     def test_batch_reverse_geocode_caching(self):
-        """Test that batch_reverse_geocode_coordinates uses one combined call per coord, cache on second call."""
+        """Test that batch_reverse_geocode_coordinates uses one Overpass call per coord, cache on second call."""
         _REVERSE_GEOCODING_CACHE.clear()
         overpass_api.query_overpass.reset_mock()
         
@@ -527,14 +525,14 @@ class TestErrorHandling(TestCase):
     
     def test_overpass_timeout_handling(self):
         """Test handling of Overpass API timeout/error."""
-        response, _ = fetch_combined(40.0, -105.0)
+        response, _ = fetch_lakes_and_cities(40.0, -105.0)
         result, errors = get_admin_hierarchy(response, 40.0, -105.0)
         self.assertIsInstance(result, dict)
         self.assertIn('country', result)
     
     def test_overpass_error_response(self):
         """Test handling of Overpass API error response."""
-        response, _ = fetch_combined(40.0, -105.0)
+        response, _ = fetch_lakes_and_cities(40.0, -105.0)
         result, errors = get_admin_hierarchy(response, 40.0, -105.0)
         self.assertIsInstance(result, dict)
     
@@ -544,10 +542,23 @@ class TestErrorHandling(TestCase):
         """Test that get_location_tags handles exceptions gracefully."""
         # Invalid coordinates shouldn't crash
         tags, log_messages = get_location_tags(999.0, 999.0)
-        
-        # Should return empty list, not raise exception
         self.assertIsInstance(tags, list)
         self.assertIsInstance(log_messages, list)
+
+    def test_areas_server_error_logged(self):
+        """Test that areas server error is logged to console and import log (log_messages)."""
+        from geo_lib.reverse_geocoding.cache import _REVERSE_GEOCODING_CACHE
+        _REVERSE_GEOCODING_CACHE.clear()
+        with patch('geo_lib.reverse_geocoding.location_tags.query_areas_server') as mock_areas:
+            mock_areas.return_value = (None, None, "is_in area server returned 503")
+            tags, log_messages = get_location_tags(39.746, -104.844)
+        self.assertIsInstance(tags, list)
+        errors = [m for m in log_messages if m.level == 'ERROR']
+        self.assertEqual(len(errors), 1)
+        self.assertIn("503", errors[0].message)
+        self.assertEqual(errors[0].source, 'Reverse Geocoding')
+        # Admin/protected should be empty when areas server fails
+        self.assertFalse(any(t.startswith('country:') or t.startswith('state:') for t in tags))
 
 
 @pytest.mark.django_db

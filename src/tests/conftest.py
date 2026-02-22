@@ -404,17 +404,30 @@ def conditional_external_api_mocking():
     # We need to patch where it's used, not where it's defined
     # We patch the original module first so tests can access it
     modules_to_patch = [
-        'geo_lib.reverse_geocoding.overpass_api.query_overpass',  # Original module (tests access this)
-        'geo_lib.reverse_geocoding.combined_overpass.query_overpass',  # Used by fetch_combined
+        'geo_lib.reverse_geocoding.overpass_api.query_overpass',
+        'geo_lib.reverse_geocoding.combined_overpass.query_overpass',  # Used by fetch_lakes_and_cities
     ]
-    
-    # Create the cache-aware mock
     primary_mock = CacheAwareMock()
     for module_path in modules_to_patch:
         geocoding_patch = patch(module_path, primary_mock)
         geocoding_patch.start()
         patches.append(geocoding_patch)
-    
+
+    def mock_query_areas_server(latitude: float, longitude: float):
+        from tests.fixtures.geocoding_responses import get_areas_fixture
+        areas = get_areas_fixture(latitude, longitude)
+        if areas is not None:
+            return (areas['admin_hierarchy'], areas['protected_areas'], None)
+        empty_admin = {'country': None, 'state': None, 'county': None, 'city': None}
+        return (empty_admin, [], None)
+
+    areas_server_patch = patch(
+        'geo_lib.reverse_geocoding.areas_server_client.query_areas_server',
+        side_effect=mock_query_areas_server,
+    )
+    areas_server_patch.start()
+    patches.append(areas_server_patch)
+
     # Mock IP geolocation service
     geocoding_patch2 = patch('geo_lib.ip_geolocation.get_geolocation_service')
     mock_ip_geo = geocoding_patch2.start()

@@ -1,10 +1,10 @@
 """
-Protected area lookup (national parks, forests, wilderness areas, etc.).
+Protected area classification and parsing.
 
-Parser-only: accepts a pre-fetched combined Overpass response and returns
-the same list of protected area dicts. The combined query is executed by combined_overpass.fetch_combined.
+Protected area data is provided by the is_in area server in production.
+This module provides classify_protected_area() and get_protected_areas() (for test fixtures only).
 """
-from typing import List, Dict, Tuple, Any, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from geo_lib.reverse_geocoding.geometry_helpers import point_in_polygon, point_in_bounds
 from geo_lib.reverse_geocoding.osm_tags import get_name_from_tags
@@ -16,44 +16,25 @@ def get_protected_areas(
     longitude: float,
 ) -> Tuple[List[Dict[str, str]], List[str]]:
     """
-    Parse protected areas containing the point from combined Overpass response.
-
-    Elements of type "area" are treated as containing the point.
-    Elements of type "relation" or "way" must have "geometry" (point-in-polygon) or "bounds" (point-in-bounds)
-    to be considered containing the point; otherwise they are skipped.
-
-    Returns information about national parks, state parks, wilderness areas,
-    national forests, and other protected lands.
-
-    Args:
-        response: Combined Overpass response dict (with "elements") or None
-        latitude: Latitude coordinate
-        longitude: Longitude coordinate
-
-    Returns:
-        Tuple of (list_of_protected_area_dicts, list_of_error_messages)
+    Parse protected areas from an Overpass response (for test fixtures only).
+    Production uses the is_in area server.
     """
     protected_areas = []
     errors = []
-
     if not response:
         return protected_areas, errors
-
     for element in response.get('elements', []):
         tags = element.get('tags', {})
         name = get_name_from_tags(tags)
         if not name:
             continue
-
         boundary = tags.get('boundary', '')
         leisure = tags.get('leisure', '')
         landuse = tags.get('landuse', '')
-
         if (boundary != 'protected_area' and boundary != 'national_park' and
                 leisure != 'nature_reserve' and leisure != 'park' and
                 landuse != 'recreation_ground'):
             continue
-
         elem_type = element.get('type', '')
         contains = False
         if elem_type == 'area':
@@ -65,10 +46,8 @@ def get_protected_areas(
                 contains = point_in_polygon(latitude, longitude, geometry)
             elif bounds:
                 contains = point_in_bounds(latitude, longitude, bounds)
-
         if not contains:
             continue
-
         area_info = {
             'name': name,
             'protection_title': tags.get('protection_title', ''),
@@ -80,7 +59,6 @@ def get_protected_areas(
             'boundary': boundary
         }
         protected_areas.append(area_info)
-
     return protected_areas, errors
 
 
@@ -89,13 +67,6 @@ def classify_protected_area(area: Dict[str, str]) -> str:
     Classify a protected area into a specific category based on OSM tags.
 
     Returns a tag prefix like "national-park", "state-park", "wilderness", "park", etc.
-    based on the area's protection_title, designation, operator, and boundary tags.
-
-    Args:
-        area: Protected area dict with classification info
-
-    Returns:
-        Tag prefix string (e.g., "national-park", "state-park", "wilderness", "park", "protected-area")
     """
     protection_title = area.get('protection_title', '').lower()
     designation = area.get('designation', '').lower()

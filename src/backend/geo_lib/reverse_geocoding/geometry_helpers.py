@@ -1,9 +1,8 @@
 """
-Geometry helpers for reverse geocoding (point-in-polygon for admin/protected areas).
+Geometry helpers for reverse geocoding (point-in-polygon).
 
-Used when parsing combined Overpass responses: elements may include "geometry"
-(list of {lat, lon}) when using "out geom", and "bounds" when using "out bb".
-Type "area" elements are treated as containing the point when geometry is absent.
+Used when parsing Overpass-style responses: elements may include "geometry"
+(list of {lat, lon}) or "bounds". Type "area" elements are treated as containing the point when geometry is absent.
 """
 from typing import List, Dict, Any
 
