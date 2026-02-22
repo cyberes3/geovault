@@ -5,3 +5,4 @@ redis==7.2.0
 shapely==2.1.2
 pyproj==3.7.2
 gunicorn==25.1.0
+pyshp==3.0.3

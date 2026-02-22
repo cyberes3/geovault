@@ -4,18 +4,20 @@ A standalone Flask server that answers point-in-area queries for the OSM dataset
 imported from OSM PBF files via osm2pgsql.
 
 This server is a replacement for the Overpass API server. Overpass is just too large, heavy, and complicated for our use
-case. Specifically, the `is_in()` query consumes dozens of GBs of memory for a single query.
+case. Specifically, the `is_in()` query consumes dozens of GBs of memory for a single query. This standalone server also
+allows us to load alternative data sources beyond OSM.
 
 ## Data served
 
-All data comes from OSM, imported into the `is_in` schema via osm2pgsql (flex config in `flex_config/areas.lua`).
-Each response contains three parts:
+Data comes from OSM (imported via osm2pgsql flex config in `flex_config/areas.lua`) and from Natural Earth (marine
+polygons via `scripts/import_ocean_polygons.py`).
 
-| Layer               | Description                               | How it is calculated                                                                                                                         |
-|---------------------|-------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
-| **admin_hierarchy** | Country, state, county, city at the point | All administrative boundaries (country, state, county, city).Country name is normalized (e.g. "United States" → "United States of America"). |
-| **protected_areas** | Parks, nature reserves, etc. at the point | Up to 5 protected areas (national park, nature reserve, recreation area) that contain the point.                                             |
-| **nearby_lakes**    | Named water bodies on water or near shore | Up to 5 water bodies: on water or with shoreline within `lake-radius-miles`. On-water first, then nearest by shoreline distance.             |
+| Layer               | Description                               | How it is calculated                                                                                                                          |
+|---------------------|-------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
+| **admin_hierarchy** | Country, state, county, city at the point | All administrative boundaries (country, state, county, city). Country name is normalized (e.g. "United States" → "United States of America"). |
+| **protected_areas** | Parks, nature reserves, etc. at the point | Up to 5 protected areas (national park, nature reserve, recreation area) that contain the point.                                              |
+| **nearby_lakes**    | Named water bodies on water or near shore | Up to 5 water bodies: on water or with shoreline within `lake-radius-miles`. On-water first, then nearest by shoreline distance.              |
+| **ocean**           | Ocean name when on or near ocean          | Point inside ocean, or within `ocean-radius-miles` of shoreline.                                                                              |
 
 ## Routes
 
@@ -23,10 +25,12 @@ Each response contains three parts:
 
 Single-point lookup at `lat`, `lon`.
 
-- **Query:** `lat` (required), `lon` (required), `lake-radius-miles` (optional, default `1` — shoreline search radius in
-  miles).
-- **Response:** One object with `admin_hierarchy`, `protected_areas` (up to 5), and `nearby_lakes` (up to 5: on water or
-  shore within `lake-radius-miles`).
+- **Query:** `lat` (required), `lon` (required), `lake-radius-miles` (optional, default `1` — lake shoreline search
+  radius in
+  miles), `ocean-radius-miles` (optional, default `1` — ocean shoreline search radius in miles).
+- **Response:** One object with `admin_hierarchy`, `protected_areas` (up to 5), `nearby_lakes` (up to 5: on water or
+  shore within `lake-radius-miles`), and `ocean` (name when on or within `ocean-radius-miles` of ocean; null if no ocean
+  data or no match).
 
 **Example:** `GET /query?lat=40.34&lon=-105.68`
 
@@ -34,9 +38,11 @@ Single-point lookup at `lat`, `lon`.
 
 Batch lookup for multiple points.
 
-- **Body:** `{"points": [[lat, lon], ...]}`. Optional key: `lake-radius-miles` (default `1`).
+- **Body:** `{"points": [[lat, lon], ...]}`. Optional keys: `lake-radius-miles` (default `1`), `ocean-radius-miles` (
+  default `1`).
 - **Response:** `{"results": [ ... ]}` — one object per point in the same order, each with `admin_hierarchy`,
-  `protected_areas` (up to 5), and `nearby_lakes` (up to 5). More efficient than many GETs (three DB round-trips in
+  `protected_areas` (up to 5), `nearby_lakes` (up to 5), and `ocean`. More efficient than many GETs (four DB round-trips
+  in
   parallel).
 
 ### `GET /health`

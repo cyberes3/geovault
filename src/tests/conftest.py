@@ -417,9 +417,9 @@ def conditional_external_api_mocking():
         from tests.fixtures.geocoding_responses import get_areas_fixture
         areas = get_areas_fixture(latitude, longitude)
         if areas is not None:
-            return (areas['admin_hierarchy'], areas['protected_areas'], None)
+            return (areas['admin_hierarchy'], areas['protected_areas'], areas.get('ocean'), None)
         empty_admin = {'country': None, 'state': None, 'county': None, 'city': None}
-        return (empty_admin, [], None)
+        return (empty_admin, [], None, None)
 
     areas_server_patch = patch(
         'geo_lib.reverse_geocoding.areas_server_client.query_areas_server',

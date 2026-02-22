@@ -5,6 +5,7 @@ GET /query?lat=&lon= (single), POST /query (batch), GET /health, GET /stats (DB 
 import json
 import logging
 import sys
+import traceback
 from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Flask, request, Response
@@ -57,9 +58,9 @@ def get_pool() -> ConnectionPool:
 _CACHE_KEY_PREFIX = "areas:query:"
 
 
-def _cache_key_tuple(lat: float, lon: float, lake_radius_miles: float) -> str:
+def _cache_key_tuple(lat: float, lon: float, lake_radius_miles: float, ocean_radius_miles: float) -> str:
     """Serializable Redis key from query params."""
-    return f"{_CACHE_KEY_PREFIX}{lat}:{lon}:{lake_radius_miles}"
+    return f"{_CACHE_KEY_PREFIX}{lat}:{lon}:{lake_radius_miles}:{ocean_radius_miles}"
 
 
 class _RedisResponseCache:
@@ -72,18 +73,18 @@ class _RedisResponseCache:
         self._ttl = ttl_seconds
 
     def __contains__(self, key: tuple) -> bool:
-        k = _cache_key_tuple(key[0], key[1], key[2])
+        k = _cache_key_tuple(key[0], key[1], key[2], key[3])
         return self._client.exists(k) > 0
 
     def __getitem__(self, key: tuple):
-        k = _cache_key_tuple(key[0], key[1], key[2])
+        k = _cache_key_tuple(key[0], key[1], key[2], key[3])
         raw = self._client.get(k)
         if raw is None:
             raise KeyError(key)
         return json.loads(raw)
 
     def __setitem__(self, key: tuple, value: dict) -> None:
-        k = _cache_key_tuple(key[0], key[1], key[2])
+        k = _cache_key_tuple(key[0], key[1], key[2], key[3])
         self._client.setex(k, self._ttl, json.dumps(value))
 
 
@@ -150,12 +151,25 @@ def _make_response(
         admin_hierarchy: Dict[str, Optional[str]],
         protected_areas: List[Dict[str, str]],
         nearby_lakes: List[Dict[str, Any]],
+        ocean: Optional[str] = None,
 ) -> Dict[str, Any]:
     return {
         "admin_hierarchy": admin_hierarchy,
         "protected_areas": protected_areas,
         "nearby_lakes": nearby_lakes,
+        "ocean": ocean,
     }
+
+
+def _error_response_with_traceback(exc: BaseException, status: int = 500) -> Response:
+    """Print traceback to stderr and return JSON response with error and traceback."""
+    tb_str = traceback.format_exc()
+    traceback.print_exc(file=sys.stderr)
+    return Response(
+        json.dumps({"error": str(exc), "traceback": tb_str}),
+        status=status,
+        mimetype="application/json",
+    )
 
 
 @app.route("/health")
@@ -177,9 +191,10 @@ def health():
             conn.rollback()
             pool.putconn(conn)
     except Exception as e:
-        logger.exception("health check failed")
+        tb_str = traceback.format_exc()
+        traceback.print_exc(file=sys.stderr)
         return Response(
-            json.dumps({"status": "unhealthy", "error": str(e)}),
+            json.dumps({"status": "unhealthy", "error": str(e), "traceback": tb_str}),
             status=503,
             mimetype="application/json",
         )
@@ -197,17 +212,12 @@ def stats():
             conn.rollback()
             pool.putconn(conn)
     except Exception as e:
-        logger.exception("stats failed")
-        return Response(
-            json.dumps({"error": str(e)}),
-            status=500,
-            mimetype="application/json",
-        )
+        return _error_response_with_traceback(e)
 
 
 @app.route("/query", methods=["GET"])
 def get_query():
-    """Single-point query: GET /query?lat=40.34&lon=-105.68. Optional: lake-radius-miles (default 1)."""
+    """Single-point query: GET /query?lat=40.34&lon=-105.68. Optional: lake-radius-miles (default 1), ocean-radius-miles (default 1)."""
     lat = request.args.get("lat")
     lon = request.args.get("lon")
     err = _validate_lat_lon(lat, lon)
@@ -223,35 +233,34 @@ def get_query():
     lake_radius_miles, err = _parse_float_arg(request.args.get("lake-radius-miles"), 1.0, "lake-radius-miles")
     if err:
         return Response(json.dumps({"error": err}), status=400, mimetype="application/json")
+    ocean_radius_miles, err = _parse_float_arg(request.args.get("ocean-radius-miles"), 1.0, "ocean-radius-miles")
+    if err:
+        return Response(json.dumps({"error": err}), status=400, mimetype="application/json")
 
     cache = get_cache()
     if cache is not None:
-        key = (_round_coord(lat_f), _round_coord(lon_f), lake_radius_miles)
+        key = (_round_coord(lat_f), _round_coord(lon_f), lake_radius_miles, ocean_radius_miles)
         if key in cache:
             return cache[key]
 
     try:
         pool = get_pool()
-        admin_hierarchy, protected_areas, nearby_lakes = query_single(
+        admin_hierarchy, protected_areas, nearby_lakes, ocean = query_single(
             pool, lat_f, lon_f,
             lake_radius_miles=lake_radius_miles,
+            ocean_radius_miles=ocean_radius_miles,
         )
-        out = _make_response(admin_hierarchy, protected_areas, nearby_lakes)
+        out = _make_response(admin_hierarchy, protected_areas, nearby_lakes, ocean)
         if cache is not None:
             cache[key] = out
         return out
     except Exception as e:
-        logger.exception("GET /query failed")
-        return Response(
-            json.dumps({"error": str(e)}),
-            status=500,
-            mimetype="application/json",
-        )
+        return _error_response_with_traceback(e)
 
 
 @app.route("/query", methods=["POST"])
 def post_query():
-    """Batch query: POST /query with body {"points": [[lat, lon], ...]}. Optional: lake-radius-miles (default 1)."""
+    """Batch query: POST /query with body {"points": [[lat, lon], ...]}. Optional: lake-radius-miles (default 1), ocean-radius-miles (default 1)."""
     if not request.is_json:
         return Response(
             json.dumps({"error": "Content-Type must be application/json"}),
@@ -303,40 +312,37 @@ def post_query():
     lake_radius_miles, err = _parse_float_arg(lake_radius_arg, 1.0, "lake-radius-miles")
     if err:
         return Response(json.dumps({"error": err}), status=400, mimetype="application/json")
+    ocean_radius_arg = request.args.get("ocean-radius-miles")
+    if ocean_radius_arg is None and data and "ocean-radius-miles" in data:
+        ocean_radius_arg = str(data["ocean-radius-miles"])
+    ocean_radius_miles, err = _parse_float_arg(ocean_radius_arg, 1.0, "ocean-radius-miles")
+    if err:
+        return Response(json.dumps({"error": err}), status=400, mimetype="application/json")
 
     try:
         pool = get_pool()
         results = query_batch(
             pool, points,
             lake_radius_miles=lake_radius_miles,
+            ocean_radius_miles=ocean_radius_miles,
         )
         out = {
             "results": [
-                _make_response(admin_hierarchy, protected_areas, nearby_lakes)
-                for admin_hierarchy, protected_areas, nearby_lakes in results
+                _make_response(admin_hierarchy, protected_areas, nearby_lakes, ocean)
+                for admin_hierarchy, protected_areas, nearby_lakes, ocean in results
             ]
         }
         return out
     except Exception as e:
-        logger.exception("POST /query failed")
-        return Response(
-            json.dumps({"error": str(e)}),
-            status=500,
-            mimetype="application/json",
-        )
+        return _error_response_with_traceback(e)
 
 
 @app.errorhandler(Exception)
 def handle_exception(exc):
-    """Log full traceback for uncaught server errors; pass through 404/405 etc. without logging."""
+    """Print traceback to console and return error + traceback in response for uncaught errors."""
     if isinstance(exc, HTTPException):
         return exc.get_response()
-    logger.exception("uncaught exception")
-    return Response(
-        json.dumps({"error": str(exc)}),
-        status=500,
-        mimetype="application/json",
-    )
+    return _error_response_with_traceback(exc)
 
 
 def create_app() -> Flask:

@@ -3,7 +3,7 @@
 The Areas Server is a standalone Flask service used in the reverse geocoding process. It uses PostGIS and OSM data
 loaded via osm2pgsql. It is a separate service from the main GeoVault stack.
 
-Your Postgres server and `.osm.pbf` files need to be stored on fast SSDs. The host should have at least 4 CPUs and 4GB
+Your Postgres server and `.osm.pbf` files need to be stored on fast SSDs. The host should have at least 6 CPUs and 16GB
 RAM. This python server is pretty lightweight as Postgres does the heavy lifting.
 
 ## Database
@@ -44,7 +44,10 @@ python3 -m venv venv
 
 ## Import OSM data
 
-Download the `.osm.pbf` data from <https://download.geofabrik.de/>. Then, load the data:
+Download the `.osm.pbf` data from <https://download.geofabrik.de/>. You are expected to download data to
+`/srv/downloads`.
+
+To load the OSM data:
 
 ```bash
 ./scripts/import_pbf.sh --database "postgresql://..." /srv/downloads/north-america-latest.osm.pbf
@@ -60,12 +63,26 @@ Optional arguments for faster imports:
 | `--cache MB`    | Node cache size in MB. <br/>Default: 800.          |
 | `--processes N` | Parallel threads. Default: `nproc` (if available). |
 
+After import, remove small lakes so they do not clutter up the nearby-lakes results:
+
+```bash
+./venv/bin/python scripts/delete_small_lakes.py --database "postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
+```
+
+To download and load the ocean data:
+
+```bash
+./venv/bin/python scripts/import_ocean_polygons.py --database "postgresql://is_in_areas:your_password_here@localhost/is_in_areas" --local-path /srv/downloads
+```
+
 ## Running the Server
 
 ```shell
 export AREAS_SERVER_DATABASE="postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
 ./venv/bin/flask --app app run --host 0.0.0.0 --port 5001
 ```
+
+Don't expose the Areas server to the internet as it isn't designed for that.
 
 ## Incremental Updates
 

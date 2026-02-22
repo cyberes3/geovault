@@ -156,6 +156,15 @@ class TestReverseGeocodingService(TestCase):
             any("Rocky Mountain" in n for n in names),
             f"Expected Rocky Mountain area in {names}",
         )
+
+    def test_ocean_tag_from_areas_fixture(self):
+        """When areas fixture includes ocean, get_location_tags returns ocean:<name> tag."""
+        areas_data = get_areas_fixture(43.911, -124.125)
+        self.assertIsNotNone(areas_data, "Load areas_server fixtures with ocean (43.911_-124.125.json)")
+        self.assertIn("ocean", areas_data)
+        self.assertEqual(areas_data["ocean"], "Pacific Ocean")
+        tags, _ = get_location_tags(43.911, -124.125)
+        self.assertIn("ocean:Pacific Ocean", tags, f"Expected ocean tag in {tags}")
     
     def test_protected_areas_misc_parks(self):
         """Test classify_protected_area on areas from cached areas_server fixtures."""
@@ -550,7 +559,7 @@ class TestErrorHandling(TestCase):
         from geo_lib.reverse_geocoding.cache import _REVERSE_GEOCODING_CACHE
         _REVERSE_GEOCODING_CACHE.clear()
         with patch('geo_lib.reverse_geocoding.location_tags.query_areas_server') as mock_areas:
-            mock_areas.return_value = (None, None, "is_in area server returned 503")
+            mock_areas.return_value = (None, None, None, "is_in area server returned 503")
             tags, log_messages = get_location_tags(39.746, -104.844)
         self.assertIsInstance(tags, list)
         errors = [m for m in log_messages if m.level == 'ERROR']

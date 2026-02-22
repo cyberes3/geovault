@@ -61,7 +61,7 @@ def get_location_tags(
 
     try:
         # Admin and protected areas from is_in area server (required)
-        admin_hierarchy, protected_areas, areas_err = query_areas_server(latitude, longitude)
+        admin_hierarchy, protected_areas, ocean, areas_err = query_areas_server(latitude, longitude)
         if areas_err:
             _logger.error(areas_err)
             log_messages.append(ReverseGeocodingLogMessage(
@@ -144,6 +144,10 @@ def get_location_tags(
 
         # Add protected area tags (sorted for consistency)
         tags.extend(sorted(protected_area_tags))
+
+        # Ocean tag from areas server (when present)
+        if ocean and isinstance(ocean, str) and ocean.strip():
+            tags.append(f"ocean:{ocean.strip()}")
 
         # Add lake tags
         lake_tags = set()

@@ -24,6 +24,7 @@ REVERSE_GEOCODING_TAG_PREFIXES = [
     
     # Water bodies
     'lake',
+    'ocean',
     
     # Recreation
     'ski-resort',

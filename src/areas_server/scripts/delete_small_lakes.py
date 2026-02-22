@@ -2,8 +2,9 @@
 """
 Delete water bodies smaller than a minimum area (default 0.25 sq mi).
 Run after import (no need to pre-compute area; uses ST_Area(geography(geom)) in the DELETE).
-Usage: from src/areas_server: python scripts/delete_small_lakes.py [--min-area-sqmi 0.25]
-Env: AREAS_SERVER_DATABASE.
+
+Usage (from src/areas_server):
+  python scripts/delete_small_lakes.py --database "postgresql://..." [--min-area-sqmi 0.25] [--dry-run]
 """
 import argparse
 import sys
@@ -12,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import psycopg
-from config import SCHEMA, get_conninfo
+from config import SCHEMA
 
 # 1 sq mi = 2.589988110336 km²
 SQMI_TO_SQKM = 2.589988110336
@@ -20,6 +21,12 @@ SQMI_TO_SQKM = 2.589988110336
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Delete small lakes from water_bodies.")
+    parser.add_argument(
+        "--database",
+        type=str,
+        required=True,
+        help="PostgreSQL connection string (e.g. postgresql://user:pass@host/dbname)",
+    )
     parser.add_argument(
         "--min-area-sqmi",
         type=float,
@@ -33,11 +40,9 @@ def main() -> None:
     )
     args = parser.parse_args()
     min_sqkm = args.min_area_sqmi * SQMI_TO_SQKM
-
-    try:
-        conninfo = get_conninfo()
-    except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
+    conninfo = args.database.strip()
+    if not conninfo:
+        print("Error: --database must be non-empty", file=sys.stderr)
         sys.exit(1)
 
     with psycopg.connect(conninfo) as conn:

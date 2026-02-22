@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, wait
 from typing import Any, Dict, List, Optional, Tuple
 
 from config import SCHEMA
-from areas_lib import lookup_admin, lookup_water, lookup_protected_areas
+from areas_lib import lookup_admin, lookup_water, lookup_protected_areas, lookup_ocean
 
 
 def query_single(
@@ -14,40 +14,48 @@ def query_single(
         lat: float,
         lon: float,
         lake_radius_miles: float = 1.0,
-) -> Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]]]:
-    """Run admin + protected + water queries in parallel; return (admin_hierarchy, protected_areas, nearby_lakes)."""
+        ocean_radius_miles: float = 1.0,
+) -> Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], Optional[str]]:
+    """Run admin + protected + water + ocean queries in parallel; return (admin_hierarchy, protected_areas, nearby_lakes, ocean)."""
     conn1 = pool.getconn()
     conn2 = pool.getconn()
     conn3 = pool.getconn()
+    conn4 = pool.getconn()
     try:
-        with ThreadPoolExecutor(max_workers=3) as ex:
+        with ThreadPoolExecutor(max_workers=4) as ex:
             f_admin = ex.submit(lookup_admin.run_admin_single, conn1, lat, lon)
             f_protected = ex.submit(lookup_protected_areas.run_protected_single, conn2, lat, lon)
             f_water = ex.submit(lookup_water.run_water_single, conn3, lat, lon, lake_radius_miles)
-            wait([f_admin, f_protected, f_water])
+            f_ocean = ex.submit(lookup_ocean.run_ocean_single, conn4, lat, lon, ocean_radius_miles)
+            wait([f_admin, f_protected, f_water, f_ocean])
             admin_rows = f_admin.result()
             protected_rows = f_protected.result()
             water_rows = f_water.result()
+            ocean_name = f_ocean.result()
         return (
             lookup_admin.build_admin_hierarchy(admin_rows),
             lookup_protected_areas.build_protected_list(protected_rows),
             lookup_water.build_nearby_lakes(water_rows),
+            ocean_name,
         )
     finally:
         conn1.rollback()
         conn2.rollback()
         conn3.rollback()
+        conn4.rollback()
         pool.putconn(conn1)
         pool.putconn(conn2)
         pool.putconn(conn3)
+        pool.putconn(conn4)
 
 
 def query_batch(
         pool: Any,
         points: List[Tuple[float, float]],
         lake_radius_miles: float = 1.0,
-) -> List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]]]]:
-    """Run admin + protected + water batch queries; return list of (admin_hierarchy, protected_areas, nearby_lakes) in order."""
+        ocean_radius_miles: float = 1.0,
+) -> List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], Optional[str]]]:
+    """Run admin + protected + water + ocean batch queries; return list of (admin_hierarchy, protected_areas, nearby_lakes, ocean) in order."""
     if not points:
         return []
     n = len(points)
@@ -58,8 +66,9 @@ def query_batch(
     conn1 = pool.getconn()
     conn2 = pool.getconn()
     conn3 = pool.getconn()
+    conn4 = pool.getconn()
     try:
-        with ThreadPoolExecutor(max_workers=3) as ex:
+        with ThreadPoolExecutor(max_workers=4) as ex:
             f_admin = ex.submit(lookup_admin.run_admin_batch, conn1, indices, lons, lats)
             f_protected = ex.submit(lookup_protected_areas.run_protected_batch, conn2, indices, lons, lats)
             f_water = ex.submit(
@@ -70,17 +79,21 @@ def query_batch(
                 lats,
                 lake_radius_miles,
             )
-            wait([f_admin, f_protected, f_water])
+            f_ocean = ex.submit(lookup_ocean.run_ocean_batch, conn4, indices, lons, lats, ocean_radius_miles)
+            wait([f_admin, f_protected, f_water, f_ocean])
             admin_rows = f_admin.result()
             protected_rows = f_protected.result()
             water_by_idx = f_water.result()
+            ocean_by_idx = f_ocean.result()
     finally:
         conn1.rollback()
         conn2.rollback()
         conn3.rollback()
+        conn4.rollback()
         pool.putconn(conn1)
         pool.putconn(conn2)
         pool.putconn(conn3)
+        pool.putconn(conn4)
 
     admin_by_idx: Dict[int, List[Tuple[Any, ...]]] = {}
     for row in admin_rows:
@@ -92,15 +105,17 @@ def query_batch(
         idx = row[0]
         protected_by_idx.setdefault(idx, []).append(row[1:])
 
-    results: List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]]]] = [None] * n
+    results: List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], Optional[str]]] = [None] * n
     for i in range(n):
         admin_rows_i = admin_by_idx.get(i, [])
         protected_rows_i = protected_by_idx.get(i, [])
         water_rows_i = water_by_idx.get(i, [])
+        ocean_name = ocean_by_idx.get(i)
         results[i] = (
             lookup_admin.build_admin_hierarchy(admin_rows_i),
             lookup_protected_areas.build_protected_list(protected_rows_i),
             lookup_water.build_nearby_lakes(water_rows_i),
+            ocean_name,
         )
     return results
 
@@ -137,8 +152,12 @@ def check_health(conn: Any) -> Tuple[bool, Optional[str]]:
 
 def get_stats(conn: Any) -> Dict[str, Any]:
     """Return database stats: feature counts, extent, and timestamps per layer."""
-    return {
+    out = {
         "admin_areas": lookup_admin.get_admin_stats(conn),
         "protected_areas": lookup_protected_areas.get_protected_stats(conn),
         "water_bodies": lookup_water.get_water_stats(conn),
     }
+    ocean_stats = lookup_ocean.get_ocean_stats(conn)
+    if ocean_stats is not None:
+        out["ocean_polygons"] = ocean_stats
+    return out
