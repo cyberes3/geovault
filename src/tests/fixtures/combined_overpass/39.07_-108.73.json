@@ -1,50 +1,1774 @@
 {
   "version": 0.6,
-  "generator": "test",
-  "osm3s": {},
+  "generator": "Overpass API 0.7.62.8 e802775f",
+  "osm3s": {
+    "timestamp_osm_base": "2026-01-28T00:00:00Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
   "elements": [
     {
-      "type": "area",
-      "id": 3605453168,
+      "type": "way",
+      "id": 119906071,
+      "bounds": {
+        "minlat": 39.0734761,
+        "minlon": -108.5523122,
+        "maxlat": 39.0772879,
+        "maxlon": -108.5385006
+      },
+      "tags": {
+        "addr:city": "Grand Junction",
+        "addr:postcode": "81501",
+        "addr:state": "CO",
+        "addr:street": "12th Street & Gunnison Avenue",
+        "dog": "yes",
+        "ele": "1408",
+        "gnis:feature_id": "174571",
+        "leisure": "park",
+        "name": "Lincoln Park",
+        "opening_hours": "Mo-Su 17:00-24:00",
+        "operator": "Grand Junction",
+        "source": "Personal Knowledge combined with Bing Aerial Imagery"
+      }
+    },
+    {
+      "type": "way",
+      "id": 230627078,
+      "bounds": {
+        "minlat": 39.0644476,
+        "minlon": -108.566019,
+        "maxlat": 39.0653389,
+        "maxlon": -108.5645744
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Whitman Park",
+        "opening_hours": "closed",
+        "opening_hours:url": "http://www.gjcity.org/siteassets/parks-and-rec/pdfs/parks/gjpr-facility-guide.pdf"
+      }
+    },
+    {
+      "type": "way",
+      "id": 230776651,
+      "bounds": {
+        "minlat": 39.1111854,
+        "minlon": -108.5359113,
+        "maxlat": 39.1120206,
+        "maxlon": -108.53419
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "source": "bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 231057063,
+      "bounds": {
+        "minlat": 39.0586072,
+        "minlon": -108.6128079,
+        "maxlat": 39.0589553,
+        "maxlon": -108.6123761
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 231155642,
+      "bounds": {
+        "minlat": 39.0734759,
+        "minlon": -108.5660791,
+        "maxlat": 39.0744225,
+        "maxlon": -108.5645055
+      },
+      "tags": {
+        "addr:housenumber": "400",
+        "addr:state": "CO",
+        "addr:street": "Gunnison Avenue",
+        "leisure": "park",
+        "name": "Hawthorne Park",
+        "opening_hours": "05:00-22:30",
+        "opening_hours:url": "http://www.gjcity.org/siteassets/parks-and-rec/pdfs/parks/gjpr-facility-guide.pdf"
+      }
+    },
+    {
+      "type": "way",
+      "id": 231156474,
+      "bounds": {
+        "minlat": 39.0734772,
+        "minlon": -108.5578104,
+        "maxlat": 39.0744099,
+        "maxlon": -108.5560191
+      },
+      "tags": {
+        "landuse": "grass",
+        "leisure": "park",
+        "name": "Washington Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 231166160,
+      "bounds": {
+        "minlat": 39.0786984,
+        "minlon": -108.5702928,
+        "maxlat": 39.0828001,
+        "maxlon": -108.5655877
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Sherwood Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 231664164,
+      "bounds": {
+        "minlat": 39.0836825,
+        "minlon": -108.5358663,
+        "maxlat": 39.0845395,
+        "maxlon": -108.5344582
+      },
+      "tags": {
+        "alt_name": "Rocket Park",
+        "leisure": "park",
+        "name": "Rocket Park",
+        "source": "bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 231667874,
+      "bounds": {
+        "minlat": 39.0823359,
+        "minlon": -108.5289797,
+        "maxlat": 39.0846058,
+        "maxlon": -108.5267679
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Columbine Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 270610155,
+      "bounds": {
+        "minlat": 39.1857948,
+        "minlon": -108.7402002,
+        "maxlat": 39.1860161,
+        "maxlon": -108.7398033
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 292437047,
+      "bounds": {
+        "minlat": 39.1063973,
+        "minlon": -108.6080788,
+        "maxlat": 39.1136771,
+        "maxlon": -108.5988316
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Canyon View Park",
+        "opening_hours": "05:00-24:00"
+      }
+    },
+    {
+      "type": "way",
+      "id": 292438829,
+      "bounds": {
+        "minlat": 39.1105109,
+        "minlon": -108.6004548,
+        "maxlat": 39.1108521,
+        "maxlon": -108.6000256
+      },
+      "tags": {
+        "barrier": "fence",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 292438830,
+      "bounds": {
+        "minlat": 39.1105065,
+        "minlon": -108.5999465,
+        "maxlat": 39.1108511,
+        "maxlon": -108.5995131
+      },
+      "tags": {
+        "barrier": "fence",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 292438831,
+      "bounds": {
+        "minlat": 39.1105106,
+        "minlon": -108.5994509,
+        "maxlat": 39.110844,
+        "maxlon": -108.59903
+      },
+      "tags": {
+        "barrier": "fence",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 292438832,
+      "bounds": {
+        "minlat": 39.1101003,
+        "minlon": -108.5994519,
+        "maxlat": 39.1104318,
+        "maxlon": -108.5990297
+      },
+      "tags": {
+        "barrier": "fence",
+        "landuse": "recreation_ground",
+        "surface": "concrete"
+      }
+    },
+    {
+      "type": "way",
+      "id": 292438833,
+      "bounds": {
+        "minlat": 39.110099,
+        "minlon": -108.5999539,
+        "maxlat": 39.1104387,
+        "maxlon": -108.5995242
+      },
+      "tags": {
+        "barrier": "fence",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 292438834,
+      "bounds": {
+        "minlat": 39.1100996,
+        "minlon": -108.6004462,
+        "maxlat": 39.1104339,
+        "maxlon": -108.6000132
+      },
+      "tags": {
+        "barrier": "fence",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 337923387,
+      "bounds": {
+        "minlat": 39.1516266,
+        "minlon": -108.7331243,
+        "maxlat": 39.1532421,
+        "maxlon": -108.7300359
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Heritage Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 346765312,
+      "bounds": {
+        "minlat": 39.0518747,
+        "minlon": -108.5479957,
+        "maxlat": 39.0536759,
+        "maxlon": -108.5430498
+      },
+      "tags": {
+        "addr:city": "Grand Junction",
+        "addr:housenumber": "2736",
+        "addr:postcode": "81503",
+        "addr:state": "CO",
+        "addr:street": "Cheyenne Drive",
+        "leisure": "park",
+        "name": "Eagle Rim Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 358929917,
+      "bounds": {
+        "minlat": 39.0655883,
+        "minlon": -108.6074247,
+        "maxlat": 39.0671981,
+        "maxlon": -108.6023506
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Duck Pond Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 376565572,
+      "bounds": {
+        "minlat": 39.0672249,
+        "minlon": -108.5658804,
+        "maxlat": 39.0672994,
+        "maxlon": -108.5657669
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Gorilla Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 385497810,
+      "bounds": {
+        "minlat": 39.0825363,
+        "minlon": -108.5584059,
+        "maxlat": 39.0829643,
+        "maxlon": -108.557999
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 392659500,
+      "bounds": {
+        "minlat": 39.1554924,
+        "minlon": -108.730144,
+        "maxlat": 39.1569258,
+        "maxlon": -108.7290693
+      },
+      "tags": {
+        "access": "yes",
+        "leisure": "park",
+        "name": "Reed Park",
+        "source": "djhernan07"
+      }
+    },
+    {
+      "type": "way",
+      "id": 409599314,
+      "bounds": {
+        "minlat": 39.1661001,
+        "minlon": -108.7246199,
+        "maxlat": 39.1694509,
+        "maxlon": -108.719779
+      },
+      "tags": {
+        "description": "Baseball fields(4)  and playground",
+        "leisure": "park",
+        "name": "Little Salt Wash Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 417352542,
+      "bounds": {
+        "minlat": 39.1589943,
+        "minlon": -108.7312531,
+        "maxlat": 39.1593334,
+        "maxlon": -108.7305887
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Civic Center Memorial Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 417353046,
+      "bounds": {
+        "minlat": 39.158568,
+        "minlon": -108.7340503,
+        "maxlat": 39.1592012,
+        "maxlon": -108.7332336
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Circle Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 417383179,
+      "bounds": {
+        "minlat": 39.1583777,
+        "minlon": -108.7399217,
+        "maxlat": 39.1590391,
+        "maxlon": -108.7383553
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Triangle Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 428336705,
+      "bounds": {
+        "minlat": 39.157696,
+        "minlon": -108.7188182,
+        "maxlat": 39.1584068,
+        "maxlon": -108.7159164
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Windsor Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 428589328,
+      "bounds": {
+        "minlat": 39.0920209,
+        "minlon": -108.5244378,
+        "maxlat": 39.1038526,
+        "maxlon": -108.5192665
+      },
+      "tags": {
+        "description": "Frisbee Golf Course",
+        "leisure": "park",
+        "name": "Matchett Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 436624622,
+      "bounds": {
+        "minlat": 39.0768614,
+        "minlon": -108.5742356,
+        "maxlat": 39.0772882,
+        "maxlon": -108.5709849
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Lilac Park",
+        "opening_hours": "05:00-22:30",
+        "operator": "City of Grand Junction",
+        "operator:type": "government"
+      }
+    },
+    {
+      "type": "way",
+      "id": 436635182,
+      "bounds": {
+        "minlat": 39.1064463,
+        "minlon": -108.5464866,
+        "maxlat": 39.106777,
+        "maxlon": -108.5454659
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 442267565,
+      "bounds": {
+        "minlat": 39.0985177,
+        "minlon": -108.5546546,
+        "maxlat": 39.0988441,
+        "maxlon": -108.5542654
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 448073220,
+      "bounds": {
+        "minlat": 39.091953,
+        "minlon": -108.5707437,
+        "maxlat": 39.0927533,
+        "maxlon": -108.5700087
+      },
+      "tags": {
+        "access": "private",
+        "landuse": "recreation_ground",
+        "name": "Northridge Open Space"
+      }
+    },
+    {
+      "type": "way",
+      "id": 457483415,
+      "bounds": {
+        "minlat": 39.06478,
+        "minlon": -108.5489911,
+        "maxlat": 39.0666279,
+        "maxlon": -108.5435616
+      },
+      "tags": {
+        "addr:city": "Grand Junction",
+        "addr:housenumber": "1401",
+        "addr:postcode": "81501",
+        "addr:state": "CO",
+        "addr:street": "Ute Avenue",
+        "leisure": "park",
+        "name": "Desert Vista Park",
+        "opening_hours": "05:00-22:30"
+      }
+    },
+    {
+      "type": "way",
+      "id": 457488493,
+      "bounds": {
+        "minlat": 39.0486138,
+        "minlon": -108.5665972,
+        "maxlat": 39.0500655,
+        "maxlon": -108.5641514
+      },
+      "tags": {
+        "addr:city": "Grand Junction",
+        "addr:housenumber": "415",
+        "addr:state": "CO",
+        "addr:street": "Santa Clara Avenue",
+        "description": "Acerage: 4.4 park owned by the City of Grand Junction. Amenities: Open Space Picnic Tables Playground Restrooms Shelter Trails",
+        "leisure": "park",
+        "name": "Duck Pond Park (Orchard Mesa)",
+        "opening_hours": "05:00-22:30",
+        "opening_hours:url": "http://www.gjcity.org/siteassets/parks-and-rec/pdfs/parks/gjpr-facility-guide.pdf",
+        "website": "https://www.gjcity.org/residents/parks-recreation/parks/duckpond-park-orchard-mesa/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 457601501,
+      "bounds": {
+        "minlat": 39.092861,
+        "minlon": -108.53882,
+        "maxlat": 39.0942298,
+        "maxlon": -108.53744
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Spring Valley II Park",
+        "operator": "City of Grand Junction",
+        "operator:type": "government"
+      }
+    },
+    {
+      "type": "way",
+      "id": 457601506,
+      "bounds": {
+        "minlat": 39.0919574,
+        "minlon": -108.5429396,
+        "maxlat": 39.0931196,
+        "maxlon": -108.5414486
+      },
+      "tags": {
+        "addr:city": "Grand Junction",
+        "addr:housenumber": "2838",
+        "addr:postcode": "81506",
+        "addr:state": "CO",
+        "addr:street": "Beechwood Street",
+        "leisure": "park",
+        "name": "Spring Valley I Park",
+        "operator": "City of Grand Junction",
+        "operator:type": "government"
+      }
+    },
+    {
+      "type": "way",
+      "id": 461979428,
+      "bounds": {
+        "minlat": 39.0466818,
+        "minlon": -108.5558475,
+        "maxlat": 39.047815,
+        "maxlon": -108.5547318
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Dixson Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 462403330,
+      "bounds": {
+        "minlat": 39.054953,
+        "minlon": -108.5626996,
+        "maxlat": 39.0553633,
+        "maxlon": -108.560777
+      },
+      "tags": {
+        "access": "customers",
+        "leisure": "park",
+        "name": "Western Colorado Botanical Gardens"
+      }
+    },
+    {
+      "type": "way",
+      "id": 462403331,
+      "bounds": {
+        "minlat": 39.0543448,
+        "minlon": -108.565222,
+        "maxlat": 39.0551072,
+        "maxlon": -108.5613604
+      },
+      "tags": {
+        "access": "permissive",
+        "leisure": "park",
+        "name": "Native Arboretum"
+      }
+    },
+    {
+      "type": "way",
+      "id": 462404496,
+      "bounds": {
+        "minlat": 39.0553529,
+        "minlon": -108.5615856,
+        "maxlat": 39.0556758,
+        "maxlon": -108.5612315
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 462405122,
+      "bounds": {
+        "minlat": 39.0652001,
+        "minlon": -108.579544,
+        "maxlat": 39.0662698,
+        "maxlon": -108.5786987
+      },
+      "tags": {
+        "addr:housenumber": "140",
+        "addr:state": "CO",
+        "addr:street": "West Avenue",
+        "leisure": "park",
+        "name": "Riverside Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 462405491,
+      "bounds": {
+        "minlat": 39.0958888,
+        "minlon": -108.5198424,
+        "maxlat": 39.0964661,
+        "maxlon": -108.5187035
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Darla Jean Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 462408679,
+      "bounds": {
+        "minlat": 39.0791366,
+        "minlon": -108.5197308,
+        "maxlat": 39.0809174,
+        "maxlon": -108.5175027
+      },
+      "tags": {
+        "alt_name": "Files Park",
+        "landuse": "recreation_ground",
+        "lit": "yes",
+        "name": "Grand Mesa Little League"
+      }
+    },
+    {
+      "type": "way",
+      "id": 462428279,
+      "bounds": {
+        "minlat": 39.0822643,
+        "minlon": -108.5232362,
+        "maxlat": 39.0830596,
+        "maxlon": -108.5226622
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Cottonwood Meadows Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 468603074,
+      "bounds": {
+        "minlat": 39.0371374,
+        "minlon": -108.5403616,
+        "maxlat": 39.0384871,
+        "maxlon": -108.5390773
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Orchard Mesa Lions Club Park",
+        "opening_hours": "05:00-23:00"
+      }
+    },
+    {
+      "type": "way",
+      "id": 473711139,
+      "bounds": {
+        "minlat": 39.0745775,
+        "minlon": -108.5315376,
+        "maxlat": 39.0748918,
+        "maxlon": -108.5302714
+      },
+      "tags": {
+        "landuse": "grass",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 486681322,
+      "bounds": {
+        "minlat": 39.0339961,
+        "minlon": -108.5427996,
+        "maxlat": 39.0386743,
+        "maxlon": -108.5304778
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "name": "Mesa County Fairgrounds"
+      }
+    },
+    {
+      "type": "way",
+      "id": 486681323,
+      "bounds": {
+        "minlat": 39.0419959,
+        "minlon": -108.5436609,
+        "maxlat": 39.0427045,
+        "maxlon": -108.5430183
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "OMBC Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 489966499,
+      "bounds": {
+        "minlat": 39.0492806,
+        "minlon": -108.608897,
+        "maxlat": 39.0520218,
+        "maxlon": -108.6051741
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "name": "Dynamite Shacks Bouldering Area"
+      }
+    },
+    {
+      "type": "way",
+      "id": 556309697,
+      "bounds": {
+        "minlat": 39.0447549,
+        "minlon": -108.5251105,
+        "maxlat": 39.0465424,
+        "maxlon": -108.5246884
+      },
+      "tags": {
+        "addr:housenumber": "2849 1/2",
+        "addr:state": "CO",
+        "addr:street": "Monroe Lane",
+        "leisure": "park",
+        "name": "Village Nine East Park",
+        "website": "https://www.mesacounty.us/parks/parks-and-other-properties/parks/information/village-nine-park/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 556866181,
+      "bounds": {
+        "minlat": 39.0339942,
+        "minlon": -108.5396575,
+        "maxlat": 39.0347207,
+        "maxlon": -108.5377299
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Mesa County Fairgrounds Arboretum"
+      }
+    },
+    {
+      "type": "way",
+      "id": 607128432,
+      "bounds": {
+        "minlat": 39.1015485,
+        "minlon": -108.5416132,
+        "maxlat": 39.1017303,
+        "maxlon": -108.5413222
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 612005925,
+      "bounds": {
+        "minlat": 39.070228,
+        "minlon": -108.499777,
+        "maxlat": 39.0705148,
+        "maxlon": -108.4994044
+      },
+      "tags": {
+        "addr:city": "Grand Junction",
+        "addr:housenumber": "2990 3/4",
+        "addr:postcode": "81504",
+        "addr:state": "CO",
+        "addr:street": "D 1/2 Road",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 625378815,
+      "bounds": {
+        "minlat": 39.0823839,
+        "minlon": -108.5486402,
+        "maxlat": 39.0827422,
+        "maxlon": -108.5482164
+      },
+      "tags": {
+        "addr:housenumber": "1403",
+        "addr:state": "CO",
+        "addr:street": "Mesa Avenue",
+        "leisure": "park",
+        "name": "William's Park",
+        "opening_hours": "05:00-22:30"
+      }
+    },
+    {
+      "type": "way",
+      "id": 626289903,
+      "bounds": {
+        "minlat": 39.053401,
+        "minlon": -108.5613493,
+        "maxlat": 39.0582062,
+        "maxlon": -108.5430884
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Las Colonias Park",
+        "opening_hours": "05:00-22:00",
+        "opening_hours:url": "http://www.gjcity.org/siteassets/parks-and-rec/pdfs/parks/gjpr-facility-guide.pdf",
+        "operator": "City of Grand Junction",
+        "operator:type": "government"
+      }
+    },
+    {
+      "type": "way",
+      "id": 628855152,
+      "bounds": {
+        "minlat": 39.045893,
+        "minlon": -108.5380166,
+        "maxlat": 39.0471419,
+        "maxlon": -108.5373085
+      },
+      "tags": {
+        "addr:housenumber": "2776",
+        "addr:state": "CO",
+        "addr:street": "Milo Drive",
+        "leisure": "park",
+        "name": "Lynwood Park",
+        "website": "https://www.mesacounty.us/parks/parks-and-other-properties/parks/information/lynwood-parks/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 628855153,
+      "bounds": {
+        "minlat": 39.0433106,
+        "minlon": -108.5336621,
+        "maxlat": 39.0447629,
+        "maxlon": -108.5292229
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Village Nine West Park",
+        "website": "https://www.mesacounty.us/parks/parks-and-other-properties/parks/information/village-nine-park/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 628855155,
+      "bounds": {
+        "minlat": 39.0440038,
+        "minlon": -108.5272969,
+        "maxlat": 39.0443776,
+        "maxlon": -108.5251994
+      },
+      "tags": {
+        "addr:housenumber": "2851",
+        "addr:state": "CO",
+        "addr:street": "Newport Circle",
+        "leisure": "park",
+        "name": "Teardrop Park",
+        "website": "https://www.mesacounty.us/parks/parks-and-other-properties/parks/information/teardrop-park/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 628911530,
+      "bounds": {
+        "minlat": 39.0606069,
+        "minlon": -108.6060166,
+        "maxlat": 39.0629605,
+        "maxlon": -108.6032264
+      },
+      "tags": {
+        "addr:housenumber": "382",
+        "addr:state": "CO",
+        "addr:street": "Hidden Valley Drive",
+        "leisure": "park",
+        "name": "Hidden Valley Park",
+        "website": "https://www.gjcity.org/residents/parks-recreation/parks/hidden-valley-park/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 628926685,
+      "bounds": {
+        "minlat": 39.0663669,
+        "minlon": -108.6093523,
+        "maxlat": 39.0669012,
+        "maxlon": -108.6082388
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Autumn Ridge Park",
+        "website": "https://www.gjcity.org/residents/parks-recreation/parks/autumn-ridge-park/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 630052876,
+      "bounds": {
+        "minlat": 39.0305472,
+        "minlon": -108.5263375,
+        "maxlat": 39.0329075,
+        "maxlon": -108.5246801
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Burkey Park South"
+      }
+    },
+    {
+      "type": "way",
+      "id": 631092343,
+      "bounds": {
+        "minlat": 39.0557991,
+        "minlon": -108.6134494,
+        "maxlat": 39.0575336,
+        "maxlon": -108.6110964
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Shadow Lake Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 662200169,
+      "bounds": {
+        "minlat": 39.0840995,
+        "minlon": -108.5758935,
+        "maxlat": 39.0858757,
+        "maxlon": -108.5723075
+      },
+      "tags": {
+        "addr:city": "Grand Junction",
+        "addr:housenumber": "325",
+        "addr:postcode": "81505",
+        "addr:state": "CO",
+        "addr:street": "West Orchard Avenue",
+        "leisure": "park",
+        "name": "Westlake Park",
+        "operator": "City of Grand Junction",
+        "operator:type": "public"
+      }
+    },
+    {
+      "type": "way",
+      "id": 662204494,
+      "bounds": {
+        "minlat": 39.08644,
+        "minlon": -108.5801172,
+        "maxlat": 39.0917696,
+        "maxlon": -108.5754687
+      },
+      "tags": {
+        "addr:city": "Grand Junction",
+        "addr:housenumber": "588",
+        "addr:postcode": "81505",
+        "addr:state": "CO",
+        "addr:street": "25 1/2 Road",
+        "leisure": "park",
+        "name": "Pomona Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 662207463,
+      "bounds": {
+        "minlat": 39.1095689,
+        "minlon": -108.5920302,
+        "maxlat": 39.1105132,
+        "maxlon": -108.590649
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 662207464,
+      "bounds": {
+        "minlat": 39.1106432,
+        "minlon": -108.5917978,
+        "maxlat": 39.1111387,
+        "maxlon": -108.5912579
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 662484695,
+      "bounds": {
+        "minlat": 39.0885952,
+        "minlon": -108.619911,
+        "maxlat": 39.0900662,
+        "maxlon": -108.6173272
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 662494263,
+      "bounds": {
+        "minlat": 39.1505627,
+        "minlon": -108.7393283,
+        "maxlat": 39.1507473,
+        "maxlon": -108.7383543
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 662496034,
+      "bounds": {
+        "minlat": 39.1527948,
+        "minlon": -108.7380875,
+        "maxlat": 39.1544665,
+        "maxlon": -108.7358108
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 662501995,
+      "bounds": {
+        "minlat": 39.1653924,
+        "minlon": -108.7382771,
+        "maxlat": 39.1658257,
+        "maxlon": -108.7365133
+      },
+      "tags": {
+        "addr:city": "Fruita",
+        "addr:housenumber": "268",
+        "addr:postcode": "81521",
+        "addr:state": "CO",
+        "addr:street": "Roberson Drive",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 686512942,
+      "bounds": {
+        "minlat": 39.0355695,
+        "minlon": -108.5076249,
+        "maxlat": 39.0358873,
+        "maxlon": -108.5072052
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 688759056,
+      "bounds": {
+        "minlat": 39.112823,
+        "minlon": -108.5795253,
+        "maxlat": 39.1135449,
+        "maxlon": -108.5784837
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 769162332,
+      "bounds": {
+        "minlat": 39.1698709,
+        "minlon": -108.7357143,
+        "maxlat": 39.1706267,
+        "maxlon": -108.7347508
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 769173948,
+      "bounds": {
+        "minlat": 39.1675784,
+        "minlon": -108.7420491,
+        "maxlat": 39.1690821,
+        "maxlon": -108.7413599
+      },
+      "tags": {
+        "addr:city": "Fruita",
+        "addr:housenumber": "719",
+        "addr:postcode": "81521",
+        "addr:state": "CO",
+        "addr:street": "Galena Drive",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 770642057,
+      "bounds": {
+        "minlat": 39.0953947,
+        "minlon": -108.4803057,
+        "maxlat": 39.0961009,
+        "maxlon": -108.4780899
+      },
+      "tags": {
+        "addr:city": "Grand Junction",
+        "addr:housenumber": "625",
+        "addr:postcode": "81504",
+        "addr:state": "CO",
+        "addr:street": "Allegheny Drive",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 771048025,
+      "bounds": {
+        "minlat": 39.0606324,
+        "minlon": -108.500637,
+        "maxlat": 39.0608258,
+        "maxlon": -108.4978644
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 772020281,
+      "bounds": {
+        "minlat": 39.0387153,
+        "minlon": -108.5199769,
+        "maxlat": 39.0393504,
+        "maxlon": -108.519128
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 779131671,
+      "bounds": {
+        "minlat": 39.137666,
+        "minlon": -108.7135311,
+        "maxlat": 39.1382584,
+        "maxlon": -108.711349
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 780040272,
+      "bounds": {
+        "minlat": 39.2659006,
+        "minlon": -108.8479443,
+        "maxlat": 39.2865159,
+        "maxlon": -108.8289706
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "ele": "1432",
+        "gnis:feature_id": "174280",
+        "landuse": "recreation_ground",
+        "name": "Highline Lake State Park",
+        "operator": "Colorado Parks and Wildlife",
+        "ownership": "state",
+        "protect_class": "5",
+        "protection_title": "State Park",
+        "website": "https://cpw.state.co.us/placestogo/parks/HighlineLake",
+        "wikidata": "Q14684580",
+        "wikipedia": "en:Highline Lake State Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 782273397,
+      "bounds": {
+        "minlat": 39.0603122,
+        "minlon": -108.5209324,
+        "maxlat": 39.0606822,
+        "maxlon": -108.5204314
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 888787924,
+      "bounds": {
+        "minlat": 39.1444208,
+        "minlon": -108.7379753,
+        "maxlat": 39.1452537,
+        "maxlon": -108.7366574
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 930466317,
+      "bounds": {
+        "minlat": 39.0777667,
+        "minlon": -108.6645803,
+        "maxlat": 39.0824913,
+        "maxlon": -108.65782
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Kindred Reserve",
+        "operator": "City of Grand Junction"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1081955829,
+      "bounds": {
+        "minlat": 39.0704676,
+        "minlon": -108.5720624,
+        "maxlat": 39.0714495,
+        "maxlon": -108.5712375
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1119678828,
+      "bounds": {
+        "minlat": 39.1135065,
+        "minlon": -108.543046,
+        "maxlat": 39.1827868,
+        "maxlon": -108.4454269
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "motor_vehicle": "designated",
+        "name": "Grand Valley Open OHV Area",
+        "ohv": "designated",
+        "operator": "Bureau of Land Management",
+        "operator:wikidata": "Q1010556"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1119681533,
+      "bounds": {
+        "minlat": 39.2496642,
+        "minlon": -108.719474,
+        "maxlat": 39.2607576,
+        "maxlon": -108.7010943
+      },
+      "tags": {
+        "leisure": "park",
+        "motor_vehicle": "designated",
+        "name": "North Fruita Desert Open OHV Area",
+        "ohv": "designated",
+        "operator": "Bureau of Land Management"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1127560821,
+      "bounds": {
+        "minlat": 39.126888,
+        "minlon": -108.5664309,
+        "maxlat": 39.1283815,
+        "maxlon": -108.5641611
+      },
+      "tags": {
+        "addr:city": "Grand Junction",
+        "addr:housenumber": "2636 3/4",
+        "addr:postcode": "81506",
+        "addr:state": "CO",
+        "addr:street": "Moss Agate Lane",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1127916293,
+      "bounds": {
+        "minlat": 39.1244103,
+        "minlon": -108.5665328,
+        "maxlat": 39.1253585,
+        "maxlon": -108.5647719
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1181230228,
+      "bounds": {
+        "minlat": 39.0585405,
+        "minlon": -108.5735912,
+        "maxlat": 39.0597799,
+        "maxlon": -108.5697982
+      },
+      "tags": {
+        "addr:city": "Grand Junction",
+        "addr:housenumber": "901",
+        "addr:postcode": "81501",
+        "addr:state": "CO",
+        "addr:street": "Dos Rios Court",
+        "fixme": "name",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1213418429,
+      "bounds": {
+        "minlat": 39.093808,
+        "minlon": -108.577009,
+        "maxlat": 39.0975063,
+        "maxlon": -108.575503
+      },
+      "tags": {
+        "addr:housenumber": "636",
+        "addr:state": "CO",
+        "addr:street": "Saffron Way",
+        "leisure": "park",
+        "name": "Honeycomb Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1250510270,
+      "bounds": {
+        "minlat": 39.1686539,
+        "minlon": -108.7316827,
+        "maxlat": 39.1692352,
+        "maxlon": -108.7306507
+      },
+      "tags": {
+        "landuse": "grass",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1253352451,
+      "bounds": {
+        "minlat": 39.1719201,
+        "minlon": -108.7323133,
+        "maxlat": 39.1726889,
+        "maxlon": -108.7317788
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1281803763,
+      "bounds": {
+        "minlat": 39.0640445,
+        "minlon": -108.4829107,
+        "maxlat": 39.0651549,
+        "maxlon": -108.4815825
+      },
+      "tags": {
+        "access": "private",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1321635455,
+      "bounds": {
+        "minlat": 39.1126885,
+        "minlon": -108.551853,
+        "maxlat": 39.1130296,
+        "maxlon": -108.5513875
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1442807731,
+      "bounds": {
+        "minlat": 39.1118092,
+        "minlon": -108.5425814,
+        "maxlat": 39.1121434,
+        "maxlon": -108.5423848
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1463976078,
+      "bounds": {
+        "minlat": 39.1662397,
+        "minlon": -108.7080718,
+        "maxlat": 39.1665921,
+        "maxlon": -108.7076097
+      },
+      "tags": {
+        "addr:city": "Fruita",
+        "addr:housenumber": "1602",
+        "addr:postcode": "81521",
+        "addr:state": "CO",
+        "addr:street": "Derby Court",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 112557,
+      "bounds": {
+        "minlat": 39.123842,
+        "minlon": -108.777578,
+        "maxlat": 39.181157,
+        "maxlon": -108.682414
+      },
+      "tags": {
+        "admin_level": "8",
+        "boundary": "administrative",
+        "name": "Fruita",
+        "place": "city",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "tiger:reviewed": "no",
+        "type": "boundary",
+        "wikidata": "Q1191112"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 113215,
+      "bounds": {
+        "minlat": 39.046001,
+        "minlon": -108.531718,
+        "maxlat": 39.0483869,
+        "maxlon": -108.53031
+      },
+      "tags": {
+        "admin_level": "8",
+        "boundary": "administrative",
+        "name": "Orchard Mesa",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 253664,
+      "bounds": {
+        "minlat": 39.018628,
+        "minlon": -108.675724,
+        "maxlat": 39.15274,
+        "maxlon": -108.463718
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "city",
+        "boundary": "administrative",
+        "fixme": "accurate boundary?",
+        "gnis:feature_id": "2410631",
+        "name": "Grand Junction",
+        "place": "city",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q989903",
+        "wikipedia": "en:Grand Junction, Colorado"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1411341,
+      "bounds": {
+        "minlat": 38.499195,
+        "minlon": -109.0601537,
+        "maxlat": 39.3665569,
+        "maxlon": -107.377479
+      },
+      "tags": {
+        "admin_level": "6",
+        "alt_name": "Mesa",
+        "attribution": "USGS 2001 County Boundary",
+        "border_type": "county",
+        "boundary": "administrative",
+        "name": "Mesa County",
+        "nist:fips_code": "08077",
+        "nist:state_fips": "08",
+        "population": "148513",
+        "source:population": "https://www.census.gov/programs-surveys/popest.html",
+        "type": "boundary",
+        "website": "https://www.mesacounty.us/",
+        "wikidata": "Q153251",
+        "wikipedia": "en:Mesa County, Colorado"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 5435635,
+      "bounds": {
+        "minlat": 38.8289898,
+        "minlon": -108.8078196,
+        "maxlat": 39.381121,
+        "maxlon": -107.519028
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "gnis:feature_id": "169573",
+        "name": "Grand Mesa National Forest",
+        "operator": "United States Forest Service",
+        "operator:short": "USFS",
+        "operator:type": "public",
+        "operator:wikidata": "Q1891156",
+        "operator:wikipedia": "en:United States Forest Service",
+        "ownership": "national",
+        "protect_class": "6",
+        "protected": "perpetuity",
+        "protected_area": "forest_reserve",
+        "protection_title": "National Forest",
+        "source": "http://data.fs.usda.gov/geodata/",
+        "type": "boundary",
+        "wikidata": "Q5594805",
+        "wikipedia": "en:Grand Mesa National Forest"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 5453168,
+      "bounds": {
+        "minlat": 38.9775403,
+        "minlon": -108.7569982,
+        "maxlat": 39.1207567,
+        "maxlon": -108.6216209
+      },
       "tags": {
         "boundary": "national_park",
         "leisure": "nature_reserve",
         "name": "Colorado National Monument",
+        "ownership": "national",
+        "protect_class": "3",
+        "protected": "perpetuity",
         "protection_title": "National Monument",
+        "source": "http://science.nature.nps.gov/im/gis/index.cfm;en.wikipedia.org",
+        "type": "boundary",
+        "website": "https://www.nps.gov/colm/index.htm",
+        "wikidata": "Q1111312",
+        "wikipedia": "en:Colorado National Monument"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 5453266,
+      "bounds": {
+        "minlat": 39.0150935,
+        "minlon": -109.0891784,
+        "maxlat": 39.2088099,
+        "maxlon": -108.7460413
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "leisure": "nature_reserve",
+        "name": "Black Ridge Canyons Wilderness",
+        "operator": "Bureau of Land Management",
+        "operator:short": "BLM",
+        "operator:type": "public",
+        "operator:wikidata": "Q1010556",
+        "ownership": "national",
+        "protect_class": "1b",
+        "protected": "perpetuity",
+        "protected_area": "wilderness_preserve",
+        "protection_title": "Wilderness Area",
+        "type": "boundary",
+        "wikidata": "Q4921592",
+        "wikipedia": "en:Black Ridge Canyons Wilderness"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 5468983,
+      "bounds": {
+        "minlat": 38.6554317,
+        "minlon": -108.5562184,
+        "maxlat": 38.8622288,
+        "maxlon": -108.2640071
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "leisure": "nature_reserve",
+        "name": "Dominguez Canyon Wilderness",
+        "operator": "Bureau of Land Management",
+        "operator:short": "BLM",
+        "operator:type": "public",
+        "operator:wikidata": "Q1010556",
+        "ownership": "national",
+        "protect_class": "1b",
+        "protected": "perpetuity",
+        "protected_area": "wilderness_preserve",
+        "protection_title": "Wilderness Area",
+        "type": "boundary",
+        "wikidata": "Q5290436",
+        "wikipedia": "en:Dominguez Canyon Wilderness"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 5900670,
+      "bounds": {
+        "minlat": 39.0146085,
+        "minlon": -109.0524591,
+        "maxlat": 39.2534169,
+        "maxlon": -108.7337179
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "leisure": "nature_reserve",
+        "name": "McInnis Canyons National Conservation Area",
+        "operator": "Bureau of Land Management",
+        "operator:short": "BLM",
+        "operator:type": "public",
+        "operator:wikidata": "Q1010556",
+        "ownership": "national",
+        "protect_class": "5",
+        "protected": "perpetuity",
+        "protection_title": "National Conservation Area",
+        "type": "boundary",
+        "wikidata": "Q6801611",
+        "wikipedia": "en:McInnis Canyons National Conservation Area"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 5900738,
+      "bounds": {
+        "minlat": 38.5326012,
+        "minlon": -108.6299433,
+        "maxlat": 38.974237,
+        "maxlon": -108.1660078
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "leisure": "nature_reserve",
+        "name": "Dominguez-Escalante National Conservation Area",
+        "operator": "Bureau of Land Management",
+        "operator:short": "BLM",
+        "operator:type": "public",
+        "operator:wikidata": "Q1010556",
+        "ownership": "national",
+        "protect_class": "5",
+        "protected": "perpetuity",
+        "protection_title": "National Conservation Area",
+        "type": "boundary",
+        "wikidata": "Q5290435"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 5907889,
+      "bounds": {
+        "minlat": 39.1331555,
+        "minlon": -108.4985357,
+        "maxlat": 39.2858489,
+        "maxlon": -108.3111649
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "leisure": "nature_reserve",
+        "name": "Little Book Cliffs Wilderness Study Area",
+        "operator": "Bureau of Land Management",
+        "operator:short": "BLM",
+        "operator:type": "public",
+        "operator:wikidata": "Q1010556",
+        "ownership": "national",
+        "protect_class": "1b",
+        "protected": "perpetuity",
+        "protection_title": "Wilderness Study Area",
         "type": "boundary"
       }
     },
     {
-      "type": "area",
-      "id": 3600148838,
+      "type": "relation",
+      "id": 10813970,
+      "bounds": {
+        "minlat": 39.0468926,
+        "minlon": -108.747769,
+        "maxlat": 39.1742471,
+        "maxlon": -108.2928486
+      },
       "tags": {
-        "admin_level": "2",
-        "boundary": "administrative",
-        "name": "United States of America",
-        "name:en": "United States of America",
-        "type": "boundary"
-      }
-    },
-    {
-      "type": "area",
-      "id": 3600161993,
-      "tags": {
-        "admin_level": "4",
-        "boundary": "administrative",
-        "name": "Colorado",
-        "name:en": "Colorado",
-        "type": "boundary"
-      }
-    },
-    {
-      "type": "area",
-      "id": 3600112090,
-      "tags": {
-        "admin_level": "6",
-        "boundary": "administrative",
-        "name": "Park County",
-        "name:en": "Park County",
-        "type": "boundary"
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "James M. Robb - Colorado River State Park",
+        "operator": "Colorado Parks and Wildlife",
+        "ownership": "state",
+        "protect_class": "5",
+        "protection_title": "State Park",
+        "type": "multipolygon",
+        "website": "https://cpw.state.co.us/placestogo/parks/JamesMRobbColoradoRiver",
+        "wikidata": "Q6138539",
+        "wikipedia": "en:James M. Robb – Colorado River State Park"
       }
     }
   ]

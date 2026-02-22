@@ -1,0 +1,691 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.10 2d4cfc48",
+  "osm3s": {
+    "timestamp_osm_base": "2026-02-22T04:22:51Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+    {
+      "type": "way",
+      "id": 24168099,
+      "bounds": {
+        "minlat": 44.4590656,
+        "minlon": -110.8328273,
+        "maxlat": 44.460177,
+        "maxlon": -110.8298475
+      },
+      "tags": {
+        "addr:city": "Yellowstone National Park",
+        "addr:housenumber": "3200",
+        "addr:postcode": "82190",
+        "addr:state": "WY",
+        "addr:street": "Old Faithful Inn Road",
+        "air_conditioning": "no",
+        "boundary": "protected_area",
+        "building": "yes",
+        "ele": "2240",
+        "heritage": "2",
+        "heritage:operator": "nrhp",
+        "name": "Old Faithful Inn",
+        "nrhp:criteria": "(A),(C)",
+        "nrhp:inscription_date": "May 28, 1987",
+        "nrhp:nhl": "yes",
+        "operator": "Xanterra Parks and Resorts",
+        "phone": "+1 866 439 7375",
+        "protection_title": "protected_site",
+        "ref:nrhp": "73000226",
+        "smoking": "no",
+        "tourism": "hotel",
+        "website": "https://www.yellowstonenationalparklodges.com/lodgings/hotel/old-faithful-inn/",
+        "wikidata": "Q3027805",
+        "wikipedia": "en:Old Faithful Inn"
+      }
+    },
+    {
+      "type": "way",
+      "id": 316615033,
+      "bounds": {
+        "minlat": 44.7264737,
+        "minlon": -110.7037602,
+        "maxlat": 44.7265772,
+        "maxlon": -110.7033822
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "building": "yes",
+        "fee": "no",
+        "heritage": "2",
+        "heritage:operator": "nrhp",
+        "name": "Norris Geyser Basin Museum",
+        "nrhp:criteria": "(C)",
+        "nrhp:inscription_date": "May 28, 1987",
+        "nrhp:nhl": "yes",
+        "phone": "+1 307 344 2109",
+        "protection_title": "protected_site",
+        "ref:nrhp": "87001445",
+        "seasonal": "yes",
+        "tourism": "museum",
+        "website": "https://www.nps.gov/yell/planyourvisit/norris-geyser-basin-museum.htm",
+        "wikidata": "Q7053299",
+        "wikipedia": "en:Norris Geyser Basin Museum"
+      }
+    },
+    {
+      "type": "way",
+      "id": 336745632,
+      "bounds": {
+        "minlat": 45.0295816,
+        "minlon": -110.7104851,
+        "maxlat": 45.0303153,
+        "maxlon": -110.7088367
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Arch Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 361642615,
+      "bounds": {
+        "minlat": 44.974286,
+        "minlon": -110.6904105,
+        "maxlat": 44.9746851,
+        "maxlon": -110.6898728
+      },
+      "tags": {
+        "barrier": "fence",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 759445358,
+      "bounds": {
+        "minlat": 45.0052962,
+        "minlon": -110.0119273,
+        "maxlat": 45.0054482,
+        "maxlon": -110.0113889
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "building": "yes",
+        "heritage": "2",
+        "heritage:operator": "nrhp",
+        "name": "Northeast Entrance Station",
+        "nrhp:criteria": "(C)",
+        "nrhp:inscription_date": "5/28/1987",
+        "nrhp:nhl": "yes",
+        "protection_title": "protected_site",
+        "ref:nrhp": "87001435",
+        "wikidata": "Q7057887",
+        "wikipedia": "en:Northeast Entrance Station"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1120639835,
+      "bounds": {
+        "minlat": 45.0294233,
+        "minlon": -110.7020458,
+        "maxlat": 45.0302327,
+        "maxlon": -110.7001965
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 161991,
+      "bounds": {
+        "minlat": 40.9948223,
+        "minlon": -111.0552665,
+        "maxlat": 45.0058281,
+        "maxlon": -104.0522528
+      },
+      "tags": {
+        "ISO3166-2": "US-WY",
+        "admin_level": "4",
+        "border_type": "state",
+        "boundary": "administrative",
+        "is_in:country_code": "US",
+        "name": "Wyoming",
+        "name:ar": "\u0648\u0627\u064a\u0648\u0645\u0646\u063a",
+        "name:az": "Vayominq",
+        "name:be": "\u0412\u0430\u0451\u043c\u0456\u043d\u0433",
+        "name:bg": "\u0423\u0430\u0439\u043e\u043c\u0438\u043d\u0433",
+        "name:br": "Wyoming",
+        "name:chr": "\u13e9\u13f2\u13bb",
+        "name:el": "\u039f\u03c5\u03b1\u03ca\u03cc\u03bc\u03b9\u03bd\u03b3\u03ba",
+        "name:en": "Wyoming",
+        "name:eo": "Vajomingo",
+        "name:fa": "\u0648\u0627\u06cc\u0648\u0645\u06cc\u0646\u06af",
+        "name:fr": "Wyoming",
+        "name:ga": "Uaidheoim\u00edn",
+        "name:hak": "Wyoming",
+        "name:haw": "Waiomina",
+        "name:he": "\u05d5\u05d9\u05d5\u05de\u05d9\u05e0\u05d2",
+        "name:hy": "\u054e\u0561\u0575\u0578\u0574\u056b\u0576\u0563",
+        "name:ja": "\u30ef\u30a4\u30aa\u30df\u30f3\u30b0\u5dde\u30ef\u30a4\u30aa\u30df\u30f3\u30b0\u5dde",
+        "name:ka": "\u10d5\u10d0\u10d8\u10dd\u10db\u10d8\u10dc\u10d2\u10d8",
+        "name:ko": "\uc640\uc774\uc624\ubc0d",
+        "name:la": "Vyomina",
+        "name:lt": "Vajomingas",
+        "name:lv": "Vaiominga",
+        "name:nan": "Wyoming",
+        "name:nv": "W\u00e1\u00e1\u02bc\u00f3\u00f3mii Hahoodzo",
+        "name:pl": "Wyoming",
+        "name:ru": "\u0412\u0430\u0439\u043e\u043c\u0438\u043d\u0433",
+        "name:sr": "\u0412\u0430\u0458\u043e\u043c\u0438\u043d\u0433",
+        "name:ta": "\u0bb5\u0baf\u0bcb\u0bae\u0bbf\u0b99\u0bcd",
+        "name:th": "\u0e23\u0e31\u0e10\u0e44\u0e27\u0e42\u0e2d\u0e21\u0e34\u0e07",
+        "name:uk": "\u0412\u0430\u0439\u043e\u043c\u0456\u043d\u0433",
+        "name:yi": "\u05d5\u05d5\u05d9\u05d0\u05de\u05d9\u05e0\u05d2",
+        "name:zh": "\u6000\u4fc4\u660e\u5dde;\u61f7\u4fc4\u660e\u5dde",
+        "name:zh-Hans": "\u6000\u4fc4\u660e\u5dde",
+        "name:zh-Hant": "\u61f7\u4fc4\u660e\u5dde",
+        "nickname": "The Equality State",
+        "population": "587618",
+        "population:date": "2024-07-01",
+        "ref": "WY",
+        "ref:USCG": "WY",
+        "ref:USPS": "WY",
+        "ref:fips": "56",
+        "short_name": "Wyo.",
+        "source:name:br": "ofis publik ar brezhoneg",
+        "source:population": "United States Census Bureau",
+        "source:short_name": "Associated Press",
+        "type": "boundary",
+        "wikidata": "Q1214",
+        "wikipedia": "en:Wyoming"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 162115,
+      "bounds": {
+        "minlat": 44.357915,
+        "minlon": -116.0492317,
+        "maxlat": 49.0011094,
+        "maxlon": -104.039563
+      },
+      "tags": {
+        "ISO3166-2": "US-MT",
+        "admin_level": "4",
+        "border_type": "state",
+        "boundary": "administrative",
+        "name": "Montana",
+        "name:ar": "\u0645\u0648\u0646\u062a\u0627\u0646\u0627",
+        "name:be": "\u041c\u0430\u043d\u0442\u0430\u043d\u0430",
+        "name:br": "Montana",
+        "name:chr": "\u13b9\u13be\u13d6\u13be",
+        "name:el": "\u039c\u03bf\u03bd\u03c4\u03ac\u03bd\u03b1",
+        "name:en": "Montana",
+        "name:eo": "Montano",
+        "name:fr": "Montana",
+        "name:ga": "An Mhont\u00e1in",
+        "name:hak": "Montana",
+        "name:haw": "Monekana",
+        "name:he": "\u05de\u05d5\u05e0\u05d8\u05e0\u05d4",
+        "name:hy": "\u0544\u0578\u0576\u057f\u0561\u0576\u0561",
+        "name:ja": "\u30e2\u30f3\u30bf\u30ca\u5dde",
+        "name:ka": "\u10db\u10dd\u10dc\u10e2\u10d0\u10dc\u10d0",
+        "name:ko": "\ubaac\ud0dc\ub098",
+        "name:nan": "Montana",
+        "name:nv": "M\u00e1\u00e1nteenah Hahoodzo",
+        "name:pl": "Montana",
+        "name:ru": "\u041c\u043e\u043d\u0442\u0430\u043d\u0430",
+        "name:szl": "M\u016fntana",
+        "name:ta": "\u0bae\u0bca\u0ba9\u0bcd\u0b9f\u0bcd\u0b9f\u0bbe\u0ba9\u0bbe",
+        "name:th": "\u0e23\u0e31\u0e10\u0e21\u0e2d\u0e19\u0e41\u0e17\u0e19\u0e32",
+        "name:uk": "\u041c\u043e\u043d\u0442\u0430\u043d\u0430",
+        "name:yi": "\u05de\u05d0\u05e0\u05d8\u05e2\u05e0\u05e2",
+        "name:zh": "\u8499\u5927\u62ff\u5dde",
+        "name:zh-Hans": "\u8499\u5927\u62ff\u5dde",
+        "name:zh-Hant": "\u8499\u5927\u62ff\u5dde",
+        "nickname": "The Treasure State;Big Sky Country;The Big Sky State;The Land of Shining Mountains;The Last Best Place;The Bonanza State;The Headwaters State",
+        "population": "1137233",
+        "population:date": "2024-07-01",
+        "ref": "MT",
+        "ref:USCG": "MT",
+        "ref:USPS": "MT",
+        "ref:fips": "30",
+        "short_name": "Mont.",
+        "source:name:br": "ofis publik ar brezhoneg",
+        "source:population": "United States Census Bureau",
+        "source:short_name": "Associated Press",
+        "type": "boundary",
+        "wikidata": "Q1212",
+        "wikipedia": "en:Montana"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 288537,
+      "bounds": {
+        "minlat": 43.801156,
+        "minlon": -111.0552665,
+        "maxlat": 45.0058281,
+        "maxlon": -108.550562
+      },
+      "tags": {
+        "admin_level": "6",
+        "alt_name": "Park",
+        "border_type": "county",
+        "boundary": "administrative",
+        "name": "Park County",
+        "nist:fips_code": "56029",
+        "nist:state_fips": "56",
+        "population": "29228",
+        "type": "boundary",
+        "website": "https://parkcounty-wy.gov/",
+        "wikidata": "Q156385",
+        "wikipedia": "en:Park County, Wyoming"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 289189,
+      "bounds": {
+        "minlat": 43.2347394,
+        "minlon": -111.053384,
+        "maxlat": 44.666805,
+        "maxlon": -110.051031
+      },
+      "tags": {
+        "admin_level": "6",
+        "alt_name": "Teton",
+        "border_type": "county",
+        "boundary": "administrative",
+        "name": "Teton County",
+        "nist:fips_code": "56039",
+        "nist:state_fips": "56",
+        "population": "23125",
+        "type": "boundary",
+        "website": "https://tetoncountywy.gov/",
+        "wikidata": "Q488912",
+        "wikipedia": "en:Teton County, Wyoming"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1242989,
+      "bounds": {
+        "minlat": 44.9921662,
+        "minlon": -111.0467251,
+        "maxlat": 46.193325,
+        "maxlon": -109.797859
+      },
+      "tags": {
+        "admin_level": "6",
+        "alt_name": "Park",
+        "attribution": "USGS 2001 County Boundary",
+        "border_type": "county",
+        "boundary": "administrative",
+        "name": "Park County",
+        "nist:fips_code": "30067",
+        "nist:state_fips": "30",
+        "population": "15972",
+        "source": "county_import_v0.1_20080508235444",
+        "type": "boundary",
+        "website": "https://www.parkcounty.org/",
+        "wikidata": "Q496644",
+        "wikipedia": "en:Park County, Montana"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1453305,
+      "bounds": {
+        "minlat": 44.043755,
+        "minlon": -110.7952899,
+        "maxlat": 44.132254,
+        "maxlon": -110.6548086
+      },
+      "tags": {
+        "boundary": "national_park",
+        "boundary:type": "protected_area",
+        "gnis:feature_id": "1888935",
+        "leisure": "nature_reserve",
+        "name": "John D. Rockefeller, Jr. Memorial Parkway",
+        "operator": "National Park Service",
+        "operator:short": "NPS",
+        "operator:type": "public",
+        "operator:wikidata": "Q308439",
+        "ownership": "national",
+        "protected": "perpetuity",
+        "protection_title": "Memorial Parkway",
+        "source": "National Park Service",
+        "source:url": "http://nrinfo.nps.gov/Reference.mvc/Profile?Code=2167750",
+        "type": "multipolygon",
+        "wikidata": "Q477536",
+        "wikipedia": "en:John D. Rockefeller Jr. Memorial Parkway"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1453306,
+      "bounds": {
+        "minlat": 44.131575,
+        "minlon": -111.1559859,
+        "maxlat": 45.1089567,
+        "maxlon": -109.825487
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "gnis:feature_id": "1609331",
+        "heritage": "1",
+        "heritage:operator": "whc",
+        "leisure": "nature_reserve",
+        "name": "Yellowstone National Park",
+        "name:ar": "\u0645\u0646\u062a\u0632\u0647 \u064a\u064a\u0644\u0648\u0633\u062a\u0648\u0646 \u0627\u0644\u0648\u0637\u0646\u064a",
+        "name:br": "Park Broadel Yellowstone",
+        "name:de": "Yellowstone-Nationalpark",
+        "name:es": "Parque nacional de Yellowstone",
+        "name:fr": "Parc national de Yellowstone",
+        "name:it": "Parco nazionale di Yellowstone",
+        "name:ja": "\u30a4\u30a8\u30ed\u30fc\u30b9\u30c8\u30fc\u30f3\u56fd\u7acb\u516c\u5712",
+        "name:nl": "Nationaal park Yellowstone",
+        "name:ru": "\u0419\u0435\u043b\u043b\u043e\u0443\u0441\u0442\u043e\u043d\u0441\u043a\u0438\u0439 \u043d\u0430\u0446\u0438\u043e\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u043f\u0430\u0440\u043a",
+        "name:sk": "Yellowstonsk\u00fd n\u00e1rodn\u00fd park",
+        "name:vi": "V\u01b0\u1eddn qu\u1ed1c gia Yellowstone",
+        "name:zh": "\u9ec4\u77f3\u56fd\u5bb6\u516c\u56ed",
+        "network": "National Parks of the United States",
+        "network:wikidata": "Q34918903",
+        "operator": "National Park Service",
+        "operator:short": "NPS",
+        "operator:type": "public",
+        "operator:wikidata": "Q308439",
+        "operator:wikipedia": "en:National Park Service",
+        "ownership": "national",
+        "protect_class": "2",
+        "protected": "perpetuity",
+        "protected_area": "national_park",
+        "protection_title": "National Park",
+        "ref:whc": "28",
+        "short_name": "Yellowstone Park",
+        "source": "National Park Service",
+        "source:url": "http://nrinfo.nps.gov/Reference.mvc/Profile?Code=2167750",
+        "type": "boundary",
+        "website": "https://www.nps.gov/yell/",
+        "whc:criteria": "(vii)(viii)(ix)(x)",
+        "whc:inscription_date": "1978",
+        "wikidata": "Q351",
+        "wikipedia": "en:Yellowstone National Park"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 2146884,
+      "bounds": {
+        "minlat": 44.4861029,
+        "minlon": -111.5934587,
+        "maxlat": 46.2924898,
+        "maxlon": -103.0089259
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "name": "Custer Gallatin National Forest",
+        "operator": "United States Forest Service",
+        "operator:short": "USFS",
+        "operator:type": "public",
+        "operator:wikidata": "Q1891156",
+        "operator:wikipedia": "en:United States Forest Service",
+        "ownership": "national",
+        "protect_class": "6",
+        "protected": "perpetuity",
+        "protected_area": "forest_reserve",
+        "protection_title": "National Forest",
+        "type": "boundary",
+        "website": "https://www.fs.usda.gov/main/custergallatin/home",
+        "wikidata": "Q1751739",
+        "wikipedia": "en:Gallatin National Forest"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 6000669,
+      "bounds": {
+        "minlat": 44.4697584,
+        "minlon": -110.172593,
+        "maxlat": 45.0034185,
+        "maxlon": -109.3724183
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "leisure": "nature_reserve",
+        "name": "North Absaroka Wilderness",
+        "operator": "United States Forest Service",
+        "operator:short": "USFS",
+        "operator:type": "public",
+        "operator:wikidata": "Q1891156",
+        "ownership": "national",
+        "protect_class": "1b",
+        "protected": "perpetuity",
+        "protected_area": "wilderness_preserve",
+        "protection_title": "Wilderness Area",
+        "type": "boundary",
+        "wikidata": "Q7053649",
+        "wikipedia": "en:North Absaroka Wilderness"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 6000755,
+      "bounds": {
+        "minlat": 43.6991046,
+        "minlon": -110.074357,
+        "maxlat": 44.4808521,
+        "maxlon": -109.0637093
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "leisure": "nature_reserve",
+        "name": "Washakie Wilderness",
+        "operator": "United States Forest Service",
+        "operator:short": "USFS",
+        "operator:type": "public",
+        "operator:wikidata": "Q1891156",
+        "ownership": "national",
+        "protect_class": "1b",
+        "protected": "perpetuity",
+        "protected_area": "wilderness_preserve",
+        "protection_title": "Wilderness Area",
+        "type": "boundary",
+        "wikidata": "Q7971431",
+        "wikipedia": "en:Washakie Wilderness"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 6000828,
+      "bounds": {
+        "minlat": 43.7619099,
+        "minlon": -110.6836775,
+        "maxlat": 44.3243675,
+        "maxlon": -109.7226944
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "leisure": "nature_reserve",
+        "name": "Teton Wilderness",
+        "operator": "United States Forest Service",
+        "operator:short": "USFS",
+        "operator:type": "public",
+        "operator:wikidata": "Q1891156",
+        "ownership": "national",
+        "protect_class": "1b",
+        "protected": "perpetuity",
+        "protected_area": "wilderness_preserve",
+        "protection_title": "Wilderness Area",
+        "type": "boundary",
+        "wikidata": "Q14714851",
+        "wikipedia": "en:Teton Wilderness"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 6000994,
+      "bounds": {
+        "minlat": 42.4916937,
+        "minlon": -110.172593,
+        "maxlat": 45.0054062,
+        "maxlon": -108.6984903
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "name": "Shoshone National Forest",
+        "operator": "United States Forest Service",
+        "operator:short": "USFS",
+        "operator:type": "public",
+        "operator:wikidata": "Q1891156",
+        "operator:wikipedia": "en:United States Forest Service",
+        "ownership": "national",
+        "protect_class": "6",
+        "protected": "perpetuity",
+        "protected_area": "forest_reserve",
+        "protection_title": "National Forest",
+        "type": "boundary",
+        "wikidata": "Q427858",
+        "wikipedia": "en:Shoshone National Forest"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 6001390,
+      "bounds": {
+        "minlat": 42.1268737,
+        "minlon": -111.0470008,
+        "maxlat": 44.3243675,
+        "maxlon": -108.880188
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "name": "Bridger-Teton National Forest",
+        "operator": "United States Forest Service",
+        "operator:short": "USFS",
+        "operator:type": "public",
+        "operator:wikidata": "Q1891156",
+        "operator:wikipedia": "en:United States Forest Service",
+        "ownership": "national",
+        "protect_class": "6",
+        "protected": "perpetuity",
+        "protected_area": "forest_reserve",
+        "protection_title": "National Forest",
+        "type": "boundary",
+        "wikidata": "Q913792",
+        "wikipedia": "en:Bridger\u2013Teton National Forest"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 6002275,
+      "bounds": {
+        "minlat": 43.5087572,
+        "minlon": -111.0455021,
+        "maxlat": 44.1163693,
+        "maxlon": -110.7860572
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "leisure": "nature_reserve",
+        "name": "Jedediah Smith Wilderness",
+        "operator": "United States Forest Service",
+        "operator:short": "USFS",
+        "operator:type": "public",
+        "operator:wikidata": "Q1891156",
+        "ownership": "national",
+        "protect_class": "1b",
+        "protected": "perpetuity",
+        "protected_area": "wilderness_preserve",
+        "protection_title": "Wilderness Area",
+        "type": "boundary",
+        "wikidata": "Q1686139",
+        "wikipedia": "en:Jedediah Smith Wilderness"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 6003174,
+      "bounds": {
+        "minlat": 44.0725733,
+        "minlon": -111.0486245,
+        "maxlat": 44.1327383,
+        "maxlon": -110.8955279
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "leisure": "nature_reserve",
+        "name": "Winegar Hole Wilderness",
+        "operator": "United States Forest Service",
+        "operator:short": "USFS",
+        "operator:type": "public",
+        "operator:wikidata": "Q1891156",
+        "ownership": "national",
+        "protect_class": "1b",
+        "protected": "perpetuity",
+        "protected_area": "wilderness_preserve",
+        "protection_title": "Wilderness Area",
+        "type": "boundary",
+        "wikidata": "Q8024960",
+        "wikipedia": "en:Winegar Hole Wilderness"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 6003517,
+      "bounds": {
+        "minlat": 44.9345566,
+        "minlon": -110.7813321,
+        "maxlat": 45.6047181,
+        "maxlon": -109.3957837
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "leisure": "nature_reserve",
+        "name": "Absaroka\u2013Beartooth Wilderness",
+        "operator": "United States Forest Service",
+        "operator:short": "USFS",
+        "operator:type": "public",
+        "operator:wikidata": "Q1891156",
+        "ownership": "national",
+        "protect_class": "1b",
+        "protected": "perpetuity",
+        "protected_area": "wilderness_preserve",
+        "protection_title": "Wilderness Area",
+        "type": "boundary",
+        "wikidata": "Q4669667",
+        "wikipedia": "en:Absaroka\u2013Beartooth Wilderness"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 6017109,
+      "bounds": {
+        "minlat": 41.9014246,
+        "minlon": -113.2778091,
+        "maxlat": 44.754954,
+        "maxlon": -110.764654
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "name": "Caribou-Targhee National Forest",
+        "operator": "United States Forest Service",
+        "operator:short": "USFS",
+        "operator:type": "public",
+        "operator:wikidata": "Q1891156",
+        "operator:wikipedia": "en:United States Forest Service",
+        "ownership": "national",
+        "protect_class": "6",
+        "protected": "perpetuity",
+        "protected_area": "forest_reserve",
+        "protection_title": "National Forest",
+        "type": "boundary",
+        "wikidata": "Q1036127",
+        "wikipedia": "en:Caribou\u2013Targhee National Forest"
+      }
+    }
+  ]
+}

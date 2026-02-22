@@ -1,59 +1,5409 @@
 {
   "version": 0.6,
-  "generator": "test",
-  "osm3s": {},
+  "generator": "Overpass API 0.7.62.8 e802775f",
+  "osm3s": {
+    "timestamp_osm_base": "2026-01-28T00:00:00Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
   "elements": [
     {
-      "type": "area",
-      "id": 3600148838,
+      "type": "way",
+      "id": 41079581,
+      "bounds": {
+        "minlat": 36.0204629,
+        "minlon": -86.8202523,
+        "maxlat": 36.021116,
+        "maxlon": -86.8190379
+      },
       "tags": {
-        "admin_level": "2",
-        "boundary": "administrative",
-        "name": "United States of America",
-        "name:en": "United States of America",
-        "type": "boundary"
+        "landuse": "recreation_ground"
       }
     },
     {
-      "type": "area",
-      "id": 3600161838,
+      "type": "way",
+      "id": 55925116,
+      "bounds": {
+        "minlat": 35.9461986,
+        "minlon": -86.6837789,
+        "maxlat": 35.9485506,
+        "maxlon": -86.6808036
+      },
       "tags": {
-        "admin_level": "4",
-        "boundary": "administrative",
-        "name": "Tennessee",
-        "name:en": "Tennessee",
-        "type": "boundary"
+        "boundary": "protected_area",
+        "name": "Pine Hill Reserve (Forest Area)",
+        "natural": "wood"
       }
     },
     {
-      "type": "area",
-      "id": 3600197472,
+      "type": "way",
+      "id": 85730450,
+      "bounds": {
+        "minlat": 35.9195922,
+        "minlon": -86.865185,
+        "maxlat": 35.9239765,
+        "maxlon": -86.859842
+      },
       "tags": {
-        "admin_level": "8",
-        "boundary": "administrative",
-        "name": "Nashville",
-        "name:en": "Nashville",
-        "type": "boundary"
+        "addr:city": "Franklin",
+        "addr:postcode": "37064",
+        "addr:street": "Murfreesburo Road",
+        "leisure": "park",
+        "name": "Pinkerton Park",
+        "wikidata": "Q55075426"
       }
     },
     {
-      "type": "area",
-      "id": 3601847619,
+      "type": "way",
+      "id": 85845976,
+      "bounds": {
+        "minlat": 35.9226505,
+        "minlon": -86.8637179,
+        "maxlat": 35.9270868,
+        "maxlon": -86.8591796
+      },
       "tags": {
-        "admin_level": "6",
-        "boundary": "administrative",
-        "name": "Davidson County",
-        "name:en": "Davidson County",
-        "type": "boundary"
+        "leisure": "park",
+        "name": "Fort Granger",
+        "wikidata": "Q5471240"
+      }
+    },
+    {
+      "type": "way",
+      "id": 85849919,
+      "bounds": {
+        "minlat": 35.9191703,
+        "minlon": -86.895026,
+        "maxlat": 35.9274258,
+        "maxlon": -86.8843925
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Jim Warren Park",
+        "wikidata": "Q49507770"
+      }
+    },
+    {
+      "type": "way",
+      "id": 86234830,
+      "bounds": {
+        "minlat": 35.9166581,
+        "minlon": -86.9027685,
+        "maxlat": 35.9233993,
+        "maxlon": -86.8951081
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Williamson County Soccer Complex"
+      }
+    },
+    {
+      "type": "way",
+      "id": 96779077,
+      "bounds": {
+        "minlat": 36.1429204,
+        "minlon": -87.1274292,
+        "maxlat": 36.1530727,
+        "maxlon": -87.1096258
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Narrows Of The Harpeth",
+        "source": "http://www.state.tn.us/environment/parks/gis",
+        "wikidata": "Q14709907"
+      }
+    },
+    {
+      "type": "way",
+      "id": 96904839,
+      "bounds": {
+        "minlat": 36.053163,
+        "minlon": -86.8068824,
+        "maxlat": 36.0538658,
+        "maxlon": -86.8044085
+      },
+      "tags": {
+        "leisure": "park",
+        "source": "http://www.state.tn.us/environment/parks/gis"
+      }
+    },
+    {
+      "type": "way",
+      "id": 107438192,
+      "bounds": {
+        "minlat": 36.1950464,
+        "minlon": -86.7296015,
+        "maxlat": 36.1986389,
+        "maxlon": -86.7255844
+      },
+      "tags": {
+        "gnis:feature_id": "1324828",
+        "leisure": "park",
+        "name": "South Inglewood Park",
+        "wikidata": "Q49563362"
+      }
+    },
+    {
+      "type": "way",
+      "id": 107457158,
+      "bounds": {
+        "minlat": 36.017978,
+        "minlon": -86.820756,
+        "maxlat": 36.0213618,
+        "maxlon": -86.8157569
+      },
+      "tags": {
+        "addr:city": "Brentwood",
+        "addr:housenumber": "610",
+        "addr:state": "TN",
+        "addr:street": "Granny White Pike",
+        "leisure": "park",
+        "name": "Granny White Park",
+        "opening_hours": "08:00-22:00",
+        "operator": "City of Brentwood",
+        "website": "https://www.brentwoodtn.gov/departments/parks-recreation/parks-trails-greenways/granny-white-park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 130905906,
+      "bounds": {
+        "minlat": 36.1610054,
+        "minlon": -86.7788318,
+        "maxlat": 36.1614893,
+        "maxlon": -86.7781591
+      },
+      "tags": {
+        "addr:housenumber": "#116",
+        "addr:postcode": "37219",
+        "addr:state": "TN",
+        "addr:street": "5th Avenue North",
+        "amenity": "theatre",
+        "boundary": "protected_area",
+        "building": "yes",
+        "ele": "138",
+        "gnis:feature_id": "1324724",
+        "heritage": "2",
+        "heritage:operator": "nrhp",
+        "name": "Ryman Auditorium",
+        "nrhp:criteria": "(A)",
+        "nrhp:inscription_date": "5/6/1971",
+        "nrhp:nhl": "yes",
+        "protection_title": "protected_site",
+        "ref:nrhp": "71000819",
+        "source": "USGS Geonames",
+        "wikidata": "Q931449",
+        "wikipedia": "en:Ryman Auditorium"
+      }
+    },
+    {
+      "type": "way",
+      "id": 130905926,
+      "bounds": {
+        "minlat": 36.1586352,
+        "minlon": -86.7776222,
+        "maxlat": 36.1598514,
+        "maxlon": -86.7760601
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Music City Walk of Fame Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 130910788,
+      "bounds": {
+        "minlat": 36.1606546,
+        "minlon": -86.7767199,
+        "maxlat": 36.1673167,
+        "maxlon": -86.7711574
+      },
+      "tags": {
+        "addr:city": "Nashville",
+        "addr:housenumber": "100",
+        "addr:postcode": "37201",
+        "addr:state": "TN",
+        "addr:street": "1st Avenue North",
+        "alt_name": "Metro Riverfront Park",
+        "leisure": "park",
+        "name": "Riverfront Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 130910795,
+      "bounds": {
+        "minlat": 36.1623803,
+        "minlon": -86.7822154,
+        "maxlat": 36.1629009,
+        "maxlon": -86.7814813
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Church Street Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 130913024,
+      "bounds": {
+        "minlat": 36.1658256,
+        "minlon": -86.7794033,
+        "maxlat": 36.1680255,
+        "maxlon": -86.7769617
+      },
+      "tags": {
+        "alt_name": "Metro Public Square",
+        "leisure": "park",
+        "name": "Public Square Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 130913027,
+      "bounds": {
+        "minlat": 36.1641471,
+        "minlon": -86.7870629,
+        "maxlat": 36.1684499,
+        "maxlon": -86.7827606
+      },
+      "tags": {
+        "comment": "boundary may not be exact",
+        "ele": "158",
+        "gnis:feature_id": "1646444",
+        "leisure": "park",
+        "name": "Victory Park",
+        "name:de": "Siegespark",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 130913029,
+      "bounds": {
+        "minlat": 36.1636099,
+        "minlon": -86.7838829,
+        "maxlat": 36.1651748,
+        "maxlon": -86.7824749
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Legislative Plaza",
+        "old_name": "Victory Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 130913048,
+      "bounds": {
+        "minlat": 36.1701909,
+        "minlon": -86.7866203,
+        "maxlat": 36.175532,
+        "maxlon": -86.7815209
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Cumberland River Greenway"
+      }
+    },
+    {
+      "type": "way",
+      "id": 130913353,
+      "bounds": {
+        "minlat": 36.1456595,
+        "minlon": -86.8177539,
+        "maxlat": 36.1540414,
+        "maxlon": -86.8086905
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Centennial Park",
+        "source": "Bing",
+        "wheelchair": "yes",
+        "wikidata": "Q4457388",
+        "wikipedia": "en:Centennial Park (Nashville)"
+      }
+    },
+    {
+      "type": "way",
+      "id": 130914047,
+      "bounds": {
+        "minlat": 36.1259378,
+        "minlon": -86.7674815,
+        "maxlat": 36.1355526,
+        "maxlon": -86.7592693
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "name": "Tennessee State Fairgrounds",
+        "source": "Bing",
+        "wikidata": "Q7670811"
+      }
+    },
+    {
+      "type": "way",
+      "id": 130914050,
+      "bounds": {
+        "minlat": 36.1420837,
+        "minlon": -86.7764462,
+        "maxlat": 36.1473237,
+        "maxlon": -86.7714381
+      },
+      "tags": {
+        "ele": "178",
+        "gnis:feature_id": "1284671",
+        "leisure": "park",
+        "name": "Fort Negley",
+        "note": "Parcel Data Viewer: http://maps.nashville.gov/ParcelViewer/?parcelID=105071B10400CO",
+        "source": "Bing",
+        "website": "https://www.nashville.gov/Parks-and-Recreation/Historic-Sites/Fort-Negley.aspx"
+      }
+    },
+    {
+      "type": "way",
+      "id": 192748347,
+      "bounds": {
+        "minlat": 36.1531597,
+        "minlon": -86.8729935,
+        "maxlat": 36.1559711,
+        "maxlon": -86.8683531
+      },
+      "tags": {
+        "ele": "143",
+        "gnis:feature_id": "1280282",
+        "leisure": "park",
+        "name": "Charlotte Park",
+        "wikidata": "Q34884097"
+      }
+    },
+    {
+      "type": "way",
+      "id": 192748486,
+      "bounds": {
+        "minlat": 36.1535984,
+        "minlon": -86.8721842,
+        "maxlat": 36.1539424,
+        "maxlon": -86.8716385
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 208763578,
+      "bounds": {
+        "minlat": 36.233923,
+        "minlon": -86.7728641,
+        "maxlat": 36.2359865,
+        "maxlon": -86.769871
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "leisure": "park",
+        "name": "Parkwood Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 210256445,
+      "bounds": {
+        "minlat": 36.1354611,
+        "minlon": -86.8082648,
+        "maxlat": 36.1381298,
+        "maxlon": -86.8050333
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Fannie Mae Dees Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 213538925,
+      "bounds": {
+        "minlat": 36.050493,
+        "minlon": -86.9044898,
+        "maxlat": 36.0865749,
+        "maxlon": -86.8668932
+      },
+      "tags": {
+        "ele": "239",
+        "forestry": "yes",
+        "gnis:feature_id": "1297178",
+        "leisure": "park",
+        "name": "Percy Warner Park",
+        "wikidata": "Q7969746"
+      }
+    },
+    {
+      "type": "way",
+      "id": 245083051,
+      "bounds": {
+        "minlat": 35.974696,
+        "minlon": -86.7090259,
+        "maxlat": 35.9778365,
+        "maxlon": -86.7055334
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 246237794,
+      "bounds": {
+        "minlat": 35.976555,
+        "minlon": -86.7770152,
+        "maxlat": 35.9858808,
+        "maxlon": -86.7625864
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Crockett Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 249147622,
+      "bounds": {
+        "minlat": 36.1654148,
+        "minlon": -86.784664,
+        "maxlat": 36.1662438,
+        "maxlon": -86.7838141
+      },
+      "tags": {
+        "3dr:type": "flat",
+        "addr:city": "Nashville",
+        "addr:housenumber": "600",
+        "addr:postcode": "37243",
+        "addr:state": "TN",
+        "addr:street": "Dr. Martin L. King, Jr. Boulevard",
+        "boundary": "protected_area",
+        "building": "yes",
+        "building:colour": "beige",
+        "building:levels": "3",
+        "building:material": "plaster",
+        "building:part": "yes",
+        "contact:website": "https://www.capitol.tn.gov",
+        "ele": "170",
+        "gnis:feature_id": "1324788",
+        "height": "2.5",
+        "heritage": "2",
+        "heritage:operator": "nrhp",
+        "layer": "1",
+        "name": "Tennessee State Capitol",
+        "name:en": "Tennessee State Capitol",
+        "nrhp:criteria": "(A),(C)",
+        "nrhp:inscription_date": "7/8/1970",
+        "nrhp:nhl": "yes",
+        "protection_title": "protected_site",
+        "ref:nrhp": "70000894",
+        "roof:colour": "beige",
+        "roof:material": "concrete",
+        "source": "USGS Geonames",
+        "wikidata": "Q2570396"
+      }
+    },
+    {
+      "type": "way",
+      "id": 259811259,
+      "bounds": {
+        "minlat": 36.1469282,
+        "minlon": -86.8045404,
+        "maxlat": 36.1479997,
+        "maxlon": -86.8034306
+      },
+      "tags": {
+        "ele": "168",
+        "gnis:feature_id": "1954508",
+        "leisure": "park",
+        "name": "Alumni Lawn",
+        "wikidata": "Q34811458"
+      }
+    },
+    {
+      "type": "way",
+      "id": 267098487,
+      "bounds": {
+        "minlat": 36.1777026,
+        "minlon": -86.7633536,
+        "maxlat": 36.1807033,
+        "maxlon": -86.7607572
+      },
+      "tags": {
+        "ele": "129",
+        "gnis:feature_id": "1282740",
+        "leisure": "park",
+        "name": "Frederick Douglass Park",
+        "name:etymology:wikidata": "Q215562",
+        "wikidata": "Q49484010"
+      }
+    },
+    {
+      "type": "way",
+      "id": 267404662,
+      "bounds": {
+        "minlat": 36.1628327,
+        "minlon": -86.7800312,
+        "maxlat": 36.1632481,
+        "maxlon": -86.7795849
+      },
+      "tags": {
+        "addr:housenumber": "154",
+        "addr:street": "5th Avenue North",
+        "amenity": "place_of_worship",
+        "boundary": "protected_area",
+        "building": "yes",
+        "check_date": "2024-12-31",
+        "denomination": "protestant",
+        "ele": "7",
+        "heritage": "2",
+        "heritage:operator": "nrhp",
+        "name": "Downtown Presbyterian Church",
+        "nrhp:criteria": "(A),(C)",
+        "nrhp:inscription_date": "7/8/1970",
+        "nrhp:nhl": "yes",
+        "protection_title": "protected_site",
+        "ref:nrhp": "70000608",
+        "religion": "christian",
+        "website": "https://www.dpchurch.com/",
+        "wikidata": "Q5303550",
+        "wikipedia": "en:Downtown Presbyterian Church (Nashville)"
+      }
+    },
+    {
+      "type": "way",
+      "id": 267495130,
+      "bounds": {
+        "minlat": 36.1650634,
+        "minlon": -86.776336,
+        "maxlat": 36.165568,
+        "maxlon": -86.7760104
+      },
+      "tags": {
+        "alt_name": "Metro Riverfront Park",
+        "leisure": "park",
+        "name": "Riverfront Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 269869838,
+      "bounds": {
+        "minlat": 36.0604229,
+        "minlon": -86.9183145,
+        "maxlat": 36.0795622,
+        "maxlon": -86.8994961
+      },
+      "tags": {
+        "ele": "197",
+        "forestry": "yes",
+        "gnis:feature_id": "1283566",
+        "leisure": "park",
+        "name": "Edwin Warner Park - Burch Reserve",
+        "wikidata": "Q49485987"
+      }
+    },
+    {
+      "type": "way",
+      "id": 318440584,
+      "bounds": {
+        "minlat": 36.0555831,
+        "minlon": -86.7084884,
+        "maxlat": 36.0596986,
+        "maxlon": -86.704668
+      },
+      "tags": {
+        "addr:city": "Nashville",
+        "addr:housenumber": "299",
+        "addr:postcode": "37211",
+        "addr:street": "Tusculum Road",
+        "gnis:feature_id": "1324688",
+        "leisure": "park",
+        "name": "William A. Pitts Park",
+        "wikidata": "Q49543681"
+      }
+    },
+    {
+      "type": "way",
+      "id": 318464975,
+      "bounds": {
+        "minlat": 36.1057345,
+        "minlon": -86.7038301,
+        "maxlat": 36.1104735,
+        "maxlon": -86.6945964
+      },
+      "tags": {
+        "gnis:feature_id": "1301098",
+        "leisure": "park",
+        "name": "Seven Oaks Park",
+        "wikidata": "Q49559897"
+      }
+    },
+    {
+      "type": "way",
+      "id": 318565110,
+      "bounds": {
+        "minlat": 36.1907117,
+        "minlon": -86.8092018,
+        "maxlat": 36.1935604,
+        "maxlon": -86.8063607
+      },
+      "tags": {
+        "gnis:feature_id": "1278898",
+        "leisure": "park",
+        "name": "Buena Vista Park",
+        "wikidata": "Q34909407"
+      }
+    },
+    {
+      "type": "way",
+      "id": 320125888,
+      "bounds": {
+        "minlat": 36.1172552,
+        "minlon": -86.8742282,
+        "maxlat": 36.1176791,
+        "maxlon": -86.8736011
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 320125889,
+      "bounds": {
+        "minlat": 36.1171562,
+        "minlon": -86.8724689,
+        "maxlat": 36.1175718,
+        "maxlon": -86.8718618
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 320529844,
+      "bounds": {
+        "minlat": 36.1109598,
+        "minlon": -86.7457167,
+        "maxlat": 36.1129851,
+        "maxlon": -86.7429269
+      },
+      "tags": {
+        "gnis:feature_id": "1280955",
+        "leisure": "park",
+        "name": "Coleman Park",
+        "wikidata": "Q49478984"
+      }
+    },
+    {
+      "type": "way",
+      "id": 320595012,
+      "bounds": {
+        "minlat": 36.1921505,
+        "minlon": -86.740164,
+        "maxlat": 36.193299,
+        "maxlon": -86.7389252
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 324485202,
+      "bounds": {
+        "minlat": 36.1424488,
+        "minlon": -86.7662321,
+        "maxlat": 36.144629,
+        "maxlon": -86.7641623
+      },
+      "tags": {
+        "addr:city": "Nashville",
+        "addr:housenumber": "305",
+        "addr:postcode": "37210",
+        "addr:state": "TN",
+        "addr:street": "Chestnut Street",
+        "gnis:feature_id": "1283068",
+        "leisure": "park",
+        "name": "Dudley Park",
+        "note": "https://www.nashville.gov/Parks-and-Recreation/Athletics/Athletic-Field-Reservations.aspx\n\nhttps://onthegrid.city/nashville/wedgewood-houston/dudley-park\n\nhttps://www.nashvillescene.com/news/pith-in-the-wind/article/13037566/dudley-park-a-review",
+        "operator": "Metropolitan Government of Nashville & Davidson County",
+        "wikidata": "Q49484393"
+      }
+    },
+    {
+      "type": "way",
+      "id": 336250342,
+      "bounds": {
+        "minlat": 36.1647862,
+        "minlon": -86.7371641,
+        "maxlat": 36.1739769,
+        "maxlon": -86.7257157
+      },
+      "tags": {
+        "ele": "117",
+        "leisure": "park",
+        "name": "Shelby Park",
+        "wikidata": "Q4456500"
+      }
+    },
+    {
+      "type": "way",
+      "id": 336953520,
+      "bounds": {
+        "minlat": 36.1826595,
+        "minlon": -86.6922273,
+        "maxlat": 36.1864673,
+        "maxlon": -86.6776505
+      },
+      "tags": {
+        "ele": "152",
+        "leisure": "park",
+        "name": "Two Rivers Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 353179708,
+      "bounds": {
+        "minlat": 36.1587028,
+        "minlon": -86.7732484,
+        "maxlat": 36.1607297,
+        "maxlon": -86.770482
+      },
+      "tags": {
+        "alt_name": "Metro Riverfront Park",
+        "leisure": "park",
+        "name": "Riverfront Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 353179711,
+      "bounds": {
+        "minlat": 36.1614704,
+        "minlon": -86.775057,
+        "maxlat": 36.1679617,
+        "maxlon": -86.7691957
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Cumberland Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 364235414,
+      "bounds": {
+        "minlat": 35.9125486,
+        "minlon": -86.8428539,
+        "maxlat": 35.9137925,
+        "maxlon": -86.841424
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Maplewood Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 370611100,
+      "bounds": {
+        "minlat": 36.1428327,
+        "minlon": -86.7990575,
+        "maxlat": 36.143936,
+        "maxlon": -86.7977768
+      },
+      "tags": {
+        "ele": "167",
+        "leisure": "park",
+        "name": "Magnolia Lawn"
+      }
+    },
+    {
+      "type": "way",
+      "id": 383435352,
+      "bounds": {
+        "minlat": 36.1465689,
+        "minlon": -86.7918928,
+        "maxlat": 36.1467641,
+        "maxlon": -86.7913778
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Flora Wilson Community Plaza",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 383435400,
+      "bounds": {
+        "minlat": 36.1491587,
+        "minlon": -86.7900142,
+        "maxlat": 36.1510548,
+        "maxlon": -86.7890097
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Tony Rose Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 385055200,
+      "bounds": {
+        "minlat": 35.9196386,
+        "minlon": -86.8402694,
+        "maxlat": 35.9199446,
+        "maxlon": -86.8400869
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 385055202,
+      "bounds": {
+        "minlat": 35.9244638,
+        "minlon": -86.8262109,
+        "maxlat": 35.9245834,
+        "maxlon": -86.8260533
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 398080287,
+      "bounds": {
+        "minlat": 35.9619005,
+        "minlon": -87.1569704,
+        "maxlat": 35.9777521,
+        "maxlon": -87.1297755
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Bowie Nature Park",
+        "website": "https://www.bowiepark.org/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 461232635,
+      "bounds": {
+        "minlat": 36.2683304,
+        "minlon": -87.0747593,
+        "maxlat": 36.272125,
+        "maxlon": -87.0693363
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Riverbluff Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 461995022,
+      "bounds": {
+        "minlat": 36.1418525,
+        "minlon": -86.7864569,
+        "maxlat": 36.1450433,
+        "maxlon": -86.7806092
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Rose Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 461996409,
+      "bounds": {
+        "minlat": 36.1620156,
+        "minlon": -86.7762918,
+        "maxlat": 36.1623782,
+        "maxlon": -86.7758642
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Commerce Center Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 464638171,
+      "bounds": {
+        "minlat": 36.1399456,
+        "minlon": -86.7516191,
+        "maxlat": 36.1427441,
+        "maxlon": -86.7496305
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 465282548,
+      "bounds": {
+        "minlat": 36.1634659,
+        "minlon": -86.7827462,
+        "maxlat": 36.1638964,
+        "maxlon": -86.7821729
+      },
+      "tags": {
+        "addr:city": "Nashville",
+        "addr:housenumber": "231",
+        "addr:postcode": "37219",
+        "addr:state": "TN",
+        "addr:street": "6th Avenue North",
+        "boundary": "protected_area",
+        "building": "yes",
+        "building:levels": "11",
+        "height": "39",
+        "heritage": "2",
+        "heritage:operator": "nrhp",
+        "name": "Hermitage Hotel",
+        "nrhp:criteria": "(A),(C)",
+        "nrhp:inscription_date": "8/21/20",
+        "nrhp:nhl": "yes",
+        "protection_title": "protected_site",
+        "ref:nrhp": "100005652",
+        "source": "Bing",
+        "tourism": "hotel",
+        "wikidata": "Q2589991"
+      }
+    },
+    {
+      "type": "way",
+      "id": 467549477,
+      "bounds": {
+        "minlat": 36.1364407,
+        "minlon": -86.7835649,
+        "maxlat": 36.1385274,
+        "maxlon": -86.7786688
+      },
+      "tags": {
+        "ele": "199",
+        "gnis:feature_id": "1299229",
+        "leisure": "park",
+        "name": "Reservoir Park",
+        "note": "https://tclf.org/reservoir-park",
+        "website": "http://maps.nashville.gov/NashvilleParksFinder/default.htm?parkID=33",
+        "wikidata": "Q49549468"
+      }
+    },
+    {
+      "type": "way",
+      "id": 468260976,
+      "bounds": {
+        "minlat": 36.0940295,
+        "minlon": -86.8061902,
+        "maxlat": 36.0966965,
+        "maxlon": -86.8034779
+      },
+      "tags": {
+        "ele": "191",
+        "gnis:feature_id": "1324537",
+        "leisure": "park",
+        "name": "Green Hills Park",
+        "wikidata": "Q49495756"
+      }
+    },
+    {
+      "type": "way",
+      "id": 468569504,
+      "bounds": {
+        "minlat": 36.0399007,
+        "minlon": -86.8583507,
+        "maxlat": 36.0420529,
+        "maxlon": -86.8546006
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 468660872,
+      "bounds": {
+        "minlat": 36.2133326,
+        "minlon": -86.7531473,
+        "maxlat": 36.2171908,
+        "maxlon": -86.7501663
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Oakwood Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 468746221,
+      "bounds": {
+        "minlat": 36.2271352,
+        "minlon": -86.7251793,
+        "maxlat": 36.2291797,
+        "maxlon": -86.7231438
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Isaac Litton School Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 468763954,
+      "bounds": {
+        "minlat": 35.9052126,
+        "minlon": -86.8175252,
+        "maxlat": 35.9062626,
+        "maxlon": -86.8166034
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Carrington Hills Dog Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 469267392,
+      "bounds": {
+        "minlat": 36.0877155,
+        "minlon": -86.8099867,
+        "maxlat": 36.0885789,
+        "maxlon": -86.8081554
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Shy's Hill, Battle of Nashville"
+      }
+    },
+    {
+      "type": "way",
+      "id": 471109532,
+      "bounds": {
+        "minlat": 36.1918641,
+        "minlon": -86.8249156,
+        "maxlat": 36.2017396,
+        "maxlon": -86.7841559
+      },
+      "tags": {
+        "addr:city": "Nashville",
+        "addr:housenumber": "231",
+        "addr:state": "TN",
+        "addr:street": "Great Circle Road",
+        "description": "Paved trail along the Cumberland River featuring public art and a number of river overlooks.",
+        "leisure": "park",
+        "name": "MetroCenter Levee Greenway",
+        "website": "https://www.nashville.gov/Parks-and-Recreation/Greenways-and-Trails/Maps.aspx"
+      }
+    },
+    {
+      "type": "way",
+      "id": 471109533,
+      "bounds": {
+        "minlat": 36.1715935,
+        "minlon": -86.7627873,
+        "maxlat": 36.1741731,
+        "maxlon": -86.7580651
+      },
+      "tags": {
+        "addr:city": "Nashville",
+        "addr:housenumber": "600",
+        "addr:postcode": "37206",
+        "addr:state": "TN",
+        "addr:street": "Woodland Street",
+        "leisure": "park",
+        "name": "East Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 471109536,
+      "bounds": {
+        "minlat": 36.1926692,
+        "minlon": -86.8175466,
+        "maxlat": 36.198996,
+        "maxlon": -86.8096565
+      },
+      "tags": {
+        "addr:city": "Nashville",
+        "addr:housenumber": "720",
+        "addr:postcode": "37228",
+        "addr:state": "TN",
+        "addr:street": "Mainstream Drive",
+        "description": "Soccer fields and recreation area",
+        "leisure": "park",
+        "name": "Ted Rhodes Fields"
+      }
+    },
+    {
+      "type": "way",
+      "id": 471109537,
+      "bounds": {
+        "minlat": 36.1749128,
+        "minlon": -86.7419569,
+        "maxlat": 36.1754151,
+        "maxlon": -86.7413051
+      },
+      "tags": {
+        "addr:city": "Nashville",
+        "addr:housenumber": "1602",
+        "addr:postcode": "37206",
+        "addr:state": "TN",
+        "addr:street": "Holly Street",
+        "description": "Smallest park in the Metro area",
+        "leisure": "park",
+        "name": "Bass Park",
+        "wikidata": "Q47668162"
+      }
+    },
+    {
+      "type": "way",
+      "id": 471109538,
+      "bounds": {
+        "minlat": 36.1754324,
+        "minlon": -86.7385862,
+        "maxlat": 36.1767857,
+        "maxlon": -86.7365314
+      },
+      "tags": {
+        "description": "Historicic natural springs. Entrance on Woodland St",
+        "leisure": "park",
+        "name": "Lockeland Springs Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 471113158,
+      "bounds": {
+        "minlat": 36.1630788,
+        "minlon": -86.7853248,
+        "maxlat": 36.1646659,
+        "maxlon": -86.7840247
+      },
+      "tags": {
+        "addr:city": "Nashville",
+        "addr:housenumber": "312",
+        "addr:postcode": "37243",
+        "addr:state": "TN",
+        "addr:street": "Rosa L Parks Ave",
+        "description": "public greenspace at the Tennessee Tower",
+        "leisure": "park",
+        "name": "Tennessee Tower Plaza"
+      }
+    },
+    {
+      "type": "way",
+      "id": 471241889,
+      "bounds": {
+        "minlat": 36.2668445,
+        "minlon": -86.7555003,
+        "maxlat": 36.2776928,
+        "maxlon": -86.7352499
+      },
+      "tags": {
+        "description": "Cedar Hill Park offers peaceful areas to escape the urban noise, as well active areas such as baseball fields, a duck pond, playground, paths, and covered pavilions with picnic tables. There is also an 18 hole disc golf course located within the park.\n",
+        "leisure": "park",
+        "name": "Cedar Hill Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 471960425,
+      "bounds": {
+        "minlat": 35.943428,
+        "minlon": -86.78569,
+        "maxlat": 35.9555696,
+        "maxlon": -86.7663249
+      },
+      "tags": {
+        "NHD:way_id": "park",
+        "leisure": "park",
+        "name": "Marcella Vivrette Smith Park",
+        "note:relevance": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 473826746,
+      "bounds": {
+        "minlat": 36.2729696,
+        "minlon": -87.0730662,
+        "maxlat": 36.275509,
+        "maxlon": -87.0706525
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "John C. Poole Walking Track"
+      }
+    },
+    {
+      "type": "way",
+      "id": 473907749,
+      "bounds": {
+        "minlat": 36.2743094,
+        "minlon": -87.0681473,
+        "maxlat": 36.2764674,
+        "maxlon": -87.0662725
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "J. W. Johns, Jr. Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 473985786,
+      "bounds": {
+        "minlat": 36.3969148,
+        "minlon": -87.0469964,
+        "maxlat": 36.4045942,
+        "maxlon": -87.0437024
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Pleasant View Community Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 473988603,
+      "bounds": {
+        "minlat": 36.2116341,
+        "minlon": -86.9993428,
+        "maxlat": 36.2185669,
+        "maxlon": -86.9842765
+      },
+      "tags": {
+        "ele": "122",
+        "gnis:feature_id": "1305517",
+        "leisure": "park",
+        "name": "Bull Run Recreation Area",
+        "wikidata": "Q34909831"
+      }
+    },
+    {
+      "type": "way",
+      "id": 474278297,
+      "bounds": {
+        "minlat": 36.1002377,
+        "minlon": -87.1070372,
+        "maxlat": 36.1017131,
+        "maxlon": -87.1036608
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Kingston Springs City Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 474280155,
+      "bounds": {
+        "minlat": 36.1010091,
+        "minlon": -87.1099046,
+        "maxlat": 36.1056748,
+        "maxlon": -87.1055139
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "LL Burns Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 479543049,
+      "bounds": {
+        "minlat": 36.3139704,
+        "minlon": -86.6955336,
+        "maxlat": 36.3143141,
+        "maxlon": -86.6952841
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "leisure": "pitch",
+        "name": "Piccadilly Tennis Courts"
+      }
+    },
+    {
+      "type": "way",
+      "id": 480317505,
+      "bounds": {
+        "minlat": 36.2640561,
+        "minlon": -86.7033825,
+        "maxlat": 36.2677995,
+        "maxlon": -86.6984011
+      },
+      "tags": {
+        "gnis:feature_id": "1292490",
+        "leisure": "park",
+        "name": "Madison Park",
+        "wikidata": "Q49520645"
+      }
+    },
+    {
+      "type": "way",
+      "id": 482747563,
+      "bounds": {
+        "minlat": 36.2740848,
+        "minlon": -87.0697206,
+        "maxlat": 36.2745998,
+        "maxlon": -87.068919
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 484298753,
+      "bounds": {
+        "minlat": 36.3162299,
+        "minlon": -86.6919889,
+        "maxlat": 36.323379,
+        "maxlon": -86.6786416
+      },
+      "tags": {
+        "addr:city": "Goodlettsville",
+        "addr:housenumber": "745",
+        "addr:postcode": "37072",
+        "addr:state": "TN",
+        "addr:street": "Caldwell",
+        "addr:unit": "Drive",
+        "ele": "140",
+        "gnis:feature_id": "1320668",
+        "leisure": "park",
+        "name": "Moss–Wright Park",
+        "opening_hours": "07:00-22:00"
+      }
+    },
+    {
+      "type": "way",
+      "id": 486481368,
+      "bounds": {
+        "minlat": 36.1534166,
+        "minlon": -86.8569454,
+        "maxlat": 36.1584913,
+        "maxlon": -86.8532592
+      },
+      "tags": {
+        "landcover": "trees",
+        "leisure": "park",
+        "name": "England Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 486482498,
+      "bounds": {
+        "minlat": 36.1577027,
+        "minlon": -86.8354723,
+        "maxlat": 36.1634358,
+        "maxlon": -86.8305181
+      },
+      "tags": {
+        "ele": "134",
+        "gnis:feature_id": "1278119",
+        "leisure": "park",
+        "name": "Boyd - Taylor Park",
+        "wikidata": "Q34855935"
+      }
+    },
+    {
+      "type": "way",
+      "id": 486666304,
+      "bounds": {
+        "minlat": 36.1486504,
+        "minlon": -86.7982573,
+        "maxlat": 36.1492906,
+        "maxlon": -86.7974113
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Adelicia Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 486695760,
+      "bounds": {
+        "minlat": 36.1178258,
+        "minlon": -86.791239,
+        "maxlat": 36.1207502,
+        "maxlon": -86.7872136
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Sevier Park",
+        "wikidata": "Q49559965"
+      }
+    },
+    {
+      "type": "way",
+      "id": 486696650,
+      "bounds": {
+        "minlat": 36.1162709,
+        "minlon": -86.7916472,
+        "maxlat": 36.1170564,
+        "maxlon": -86.7870125
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Gale Lane Comunity Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 486696656,
+      "bounds": {
+        "minlat": 36.1140734,
+        "minlon": -86.7930358,
+        "maxlat": 36.1152282,
+        "maxlon": -86.7920591
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Battle of Nashville Monument Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 487116325,
+      "bounds": {
+        "minlat": 36.1509186,
+        "minlon": -86.8472105,
+        "maxlat": 36.1521942,
+        "maxlon": -86.8421645
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Richland Park",
+        "wikidata": "Q49549963"
+      }
+    },
+    {
+      "type": "way",
+      "id": 487549697,
+      "bounds": {
+        "minlat": 36.1808259,
+        "minlon": -86.7688913,
+        "maxlat": 36.1827036,
+        "maxlon": -86.765168
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "McFerrin Park",
+        "wikidata": "Q49523575"
+      }
+    },
+    {
+      "type": "way",
+      "id": 487549726,
+      "bounds": {
+        "minlat": 36.1860408,
+        "minlon": -86.761786,
+        "maxlat": 36.1915071,
+        "maxlon": -86.7566704
+      },
+      "tags": {
+        "ele": "137",
+        "landuse": "grass",
+        "leisure": "park",
+        "name": "Cleveland Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 487553179,
+      "bounds": {
+        "minlat": 36.1703672,
+        "minlon": -86.7468421,
+        "maxlat": 36.1708323,
+        "maxlon": -86.745848
+      },
+      "tags": {
+        "landcover": "trees",
+        "leisure": "park",
+        "name": "Shelby Walk Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 488720958,
+      "bounds": {
+        "minlat": 36.2437051,
+        "minlon": -86.7046368,
+        "maxlat": 36.2449222,
+        "maxlon": -86.7006064
+      },
+      "tags": {
+        "gnis:feature_id": "1291757",
+        "leisure": "park",
+        "name": "Lock Two Park",
+        "wikidata": "Q49518516"
+      }
+    },
+    {
+      "type": "way",
+      "id": 489167381,
+      "bounds": {
+        "minlat": 36.1124771,
+        "minlon": -86.778047,
+        "maxlat": 36.1148952,
+        "maxlon": -86.7738365
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Browns Creek Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 490202037,
+      "bounds": {
+        "minlat": 36.1143136,
+        "minlon": -86.7682448,
+        "maxlat": 36.1157822,
+        "maxlon": -86.767602
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Azalea Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 490439130,
+      "bounds": {
+        "minlat": 36.1509773,
+        "minlon": -86.8551259,
+        "maxlat": 36.1535217,
+        "maxlon": -86.8539341
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Richland Creek Greenway"
+      }
+    },
+    {
+      "type": "way",
+      "id": 490448822,
+      "bounds": {
+        "minlat": 36.1471216,
+        "minlon": -86.8206264,
+        "maxlat": 36.1497497,
+        "maxlon": -86.8164102
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Centennial Dog Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 491464611,
+      "bounds": {
+        "minlat": 36.1513157,
+        "minlon": -86.792328,
+        "maxlat": 36.1520167,
+        "maxlon": -86.791654
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Owen Bradley Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 508440947,
+      "bounds": {
+        "minlat": 35.9334141,
+        "minlon": -86.8153106,
+        "maxlat": 35.9373996,
+        "maxlon": -86.8121084
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 508521860,
+      "bounds": {
+        "minlat": 35.9254834,
+        "minlon": -86.8032538,
+        "maxlat": 35.9317218,
+        "maxlon": -86.7954898
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Liberty Park",
+        "website": "https://www.franklintn.gov/government/parks/facilities-and-parks/park-locations-maps/park-locations/liberty-park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 512060020,
+      "bounds": {
+        "minlat": 36.1492223,
+        "minlon": -86.8209067,
+        "maxlat": 36.1518322,
+        "maxlon": -86.8190369
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 514034508,
+      "bounds": {
+        "minlat": 36.1802858,
+        "minlon": -86.7902361,
+        "maxlat": 36.1820057,
+        "maxlon": -86.7886393
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Morgan Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 514034510,
+      "bounds": {
+        "minlat": 36.179592,
+        "minlon": -86.7913057,
+        "maxlat": 36.1811488,
+        "maxlon": -86.7897436
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Morgan Recreation Center"
+      }
+    },
+    {
+      "type": "way",
+      "id": 516764606,
+      "bounds": {
+        "minlat": 35.9639962,
+        "minlon": -86.7776933,
+        "maxlat": 35.9694624,
+        "maxlon": -86.7742816
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Primm Historic Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 520113557,
+      "bounds": {
+        "minlat": 36.1151993,
+        "minlon": -86.7654697,
+        "maxlat": 36.1165604,
+        "maxlon": -86.7647887
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Columbine Park",
+        "website": "http://www.berryhilltn.org/index.aspx?NID=70"
+      }
+    },
+    {
+      "type": "way",
+      "id": 529502359,
+      "bounds": {
+        "minlat": 36.1330861,
+        "minlon": -86.7670614,
+        "maxlat": 36.1339533,
+        "maxlon": -86.7658798
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 530435744,
+      "bounds": {
+        "minlat": 36.1386247,
+        "minlon": -86.7900496,
+        "maxlat": 36.1395465,
+        "maxlon": -86.7893774
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 531365574,
+      "bounds": {
+        "minlat": 36.1343574,
+        "minlon": -86.7789673,
+        "maxlat": 36.1346824,
+        "maxlon": -86.7766894
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 532002896,
+      "bounds": {
+        "minlat": 36.1515184,
+        "minlon": -86.7592687,
+        "maxlat": 36.1517661,
+        "maxlon": -86.7586709
+      },
+      "tags": {
+        "addr:city": "Nashville",
+        "addr:housenumber": "73",
+        "addr:postcode": "37210",
+        "addr:state": "TN",
+        "addr:street": "Maury Street",
+        "leisure": "park",
+        "name": "Mildred Shute Minipark",
+        "website": "https://data.nashville.gov/Parks/Parks-Metro-Parks-Boundary-Outlines-GIS-/728b-6yiv"
+      }
+    },
+    {
+      "type": "way",
+      "id": 544255899,
+      "bounds": {
+        "minlat": 36.0547509,
+        "minlon": -86.9262784,
+        "maxlat": 36.0556824,
+        "maxlon": -86.9249185
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "name": "Field A",
+        "surface": "grass"
+      }
+    },
+    {
+      "type": "way",
+      "id": 544255900,
+      "bounds": {
+        "minlat": 36.0542645,
+        "minlon": -86.9247919,
+        "maxlat": 36.0552281,
+        "maxlon": -86.9234773
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "name": "Field B",
+        "surface": "grass"
+      }
+    },
+    {
+      "type": "way",
+      "id": 544268925,
+      "bounds": {
+        "minlat": 36.0596831,
+        "minlon": -86.9226397,
+        "maxlat": 36.0602091,
+        "maxlon": -86.9216305
+      },
+      "tags": {
+        "description": "Public Access Park and Green Space",
+        "leisure": "park",
+        "name": "Devon Park Community Greenspace"
+      }
+    },
+    {
+      "type": "way",
+      "id": 544268930,
+      "bounds": {
+        "minlat": 36.1008753,
+        "minlon": -86.8667569,
+        "maxlat": 36.1018772,
+        "maxlon": -86.8657219
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "name": "Kever Field",
+        "sport": "soccer",
+        "sport_1": "football",
+        "sport_2": "lacrosse"
+      }
+    },
+    {
+      "type": "way",
+      "id": 544583188,
+      "bounds": {
+        "minlat": 35.9457815,
+        "minlon": -86.8314754,
+        "maxlat": 35.9481286,
+        "maxlon": -86.8256212
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Aspen Grove Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 544660470,
+      "bounds": {
+        "minlat": 35.9455181,
+        "minlon": -86.8772824,
+        "maxlat": 35.9488014,
+        "maxlon": -86.8718728
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Judge Fulton Greer Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 544663373,
+      "bounds": {
+        "minlat": 35.9324075,
+        "minlon": -86.871369,
+        "maxlat": 35.943202,
+        "maxlon": -86.8566147
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "The Park at Harlinsdale Farm"
+      }
+    },
+    {
+      "type": "way",
+      "id": 544667981,
+      "bounds": {
+        "minlat": 35.9038704,
+        "minlon": -86.8638252,
+        "maxlat": 35.9123236,
+        "maxlon": -86.8553844
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "heritage": "2",
+        "heritage:operator": "nrhp",
+        "leisure": "park",
+        "name": "Eastern Flank Battle Field Park",
+        "nrhp:criteria": "(A)",
+        "nrhp:inscription_date": "10/15/1966",
+        "nrhp:nhl": "yes",
+        "protection_title": "protected_site",
+        "ref:nrhp": "66000734",
+        "wikidata": "Q5491303",
+        "wikipedia": "en:Franklin Battlefield"
+      }
+    },
+    {
+      "type": "way",
+      "id": 544683487,
+      "bounds": {
+        "minlat": 35.974726,
+        "minlon": -86.7879828,
+        "maxlat": 35.9961927,
+        "maxlon": -86.7764969
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "River Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 544688282,
+      "bounds": {
+        "minlat": 35.9929156,
+        "minlon": -86.7929662,
+        "maxlat": 35.9967653,
+        "maxlon": -86.7874683
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Concord Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 549773507,
+      "bounds": {
+        "minlat": 36.0587235,
+        "minlon": -86.7495768,
+        "maxlat": 36.0679042,
+        "maxlon": -86.7406141
+      },
+      "tags": {
+        "addr:city": "Nashville",
+        "addr:housenumber": "440",
+        "addr:postcode": "37220",
+        "addr:state": "TN",
+        "addr:street": "Hogan Road",
+        "leisure": "park",
+        "name": "Ellington Agricultural Center",
+        "website": "https://www.tn.gov/agriculture/eac.html"
+      }
+    },
+    {
+      "type": "way",
+      "id": 549974580,
+      "bounds": {
+        "minlat": 35.9138671,
+        "minlon": -86.8675696,
+        "maxlat": 35.9149489,
+        "maxlon": -86.8653916
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Collins Farm Historic Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 554050040,
+      "bounds": {
+        "minlat": 36.2734711,
+        "minlon": -87.0707443,
+        "maxlat": 36.2753131,
+        "maxlon": -87.0676637
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Ashland City City Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 554050041,
+      "bounds": {
+        "minlat": 36.2698497,
+        "minlon": -87.0657615,
+        "maxlat": 36.2725584,
+        "maxlon": -87.0641743
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Ashland City Ballfields"
+      }
+    },
+    {
+      "type": "way",
+      "id": 554050042,
+      "bounds": {
+        "minlat": 36.3009505,
+        "minlon": -87.1281706,
+        "maxlat": 36.3030359,
+        "maxlon": -87.1253605
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Sycamore Creek Recreation Area"
+      }
+    },
+    {
+      "type": "way",
+      "id": 554050043,
+      "bounds": {
+        "minlat": 36.285231,
+        "minlon": -87.1892265,
+        "maxlat": 36.3162623,
+        "maxlon": -87.0793742
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Cumberland River Bicentennial Trail"
+      }
+    },
+    {
+      "type": "way",
+      "id": 554050044,
+      "bounds": {
+        "minlat": 36.3960095,
+        "minlon": -87.0347846,
+        "maxlat": 36.3973856,
+        "maxlon": -87.0335733
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Balthrop Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 554310099,
+      "bounds": {
+        "minlat": 36.0863707,
+        "minlon": -87.0360614,
+        "maxlat": 36.0971392,
+        "maxlon": -87.0237817
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Hidden Lake Trails | Harpeth River State Park",
+        "website": "https://tnstateparks.com/assets/pdf/additional-content/harpeth-river-trail-map.pdf"
+      }
+    },
+    {
+      "type": "way",
+      "id": 555227474,
+      "bounds": {
+        "minlat": 36.3032145,
+        "minlon": -87.1545894,
+        "maxlat": 36.3042532,
+        "maxlon": -87.1530693
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Pardue Boat Launch and Picnic Area"
+      }
+    },
+    {
+      "type": "way",
+      "id": 555227475,
+      "bounds": {
+        "minlat": 36.2181548,
+        "minlon": -86.9942011,
+        "maxlat": 36.2333562,
+        "maxlon": -86.98276
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "name": "Caldwell Nature Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 555227476,
+      "bounds": {
+        "minlat": 36.2399164,
+        "minlon": -87.0224089,
+        "maxlat": 36.2408315,
+        "maxlon": -87.0211081
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "911 Memorial Playground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 555227477,
+      "bounds": {
+        "minlat": 36.2346192,
+        "minlon": -87.0583977,
+        "maxlat": 36.2393027,
+        "maxlon": -87.0481083
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Brush Creek Recreation Area"
+      }
+    },
+    {
+      "type": "way",
+      "id": 555256621,
+      "bounds": {
+        "minlat": 36.0790071,
+        "minlon": -86.9973741,
+        "maxlat": 36.0807305,
+        "maxlon": -86.995502
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Newsom Station | Harpeth River State Park",
+        "website": "https://tnstateparks.com/assets/pdf/additional-content/harpeth-river-trail-map.pdf"
+      }
+    },
+    {
+      "type": "way",
+      "id": 558351786,
+      "bounds": {
+        "minlat": 36.3221581,
+        "minlon": -86.6834614,
+        "maxlat": 36.3224961,
+        "maxlon": -86.6820679
+      },
+      "tags": {
+        "amenity": "parking",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 558351788,
+      "bounds": {
+        "minlat": 36.321536,
+        "minlon": -86.688902,
+        "maxlat": 36.3228263,
+        "maxlon": -86.6881111
+      },
+      "tags": {
+        "amenity": "parking",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 567560514,
+      "bounds": {
+        "minlat": 36.3355778,
+        "minlon": -86.8623754,
+        "maxlat": 36.339706,
+        "maxlon": -86.857741
+      },
+      "tags": {
+        "addr:city": "Joelton",
+        "addr:housenumber": "3000",
+        "addr:postcode": "37080",
+        "addr:state": "TN",
+        "addr:street": "Morgan Road",
+        "leisure": "park",
+        "name": "Paradise Ridge Park",
+        "website": "https://www.nashville.gov/Parks-and-Recreation/Community-Centers-and-Recreation.aspx"
+      }
+    },
+    {
+      "type": "way",
+      "id": 589705710,
+      "bounds": {
+        "minlat": 36.0307917,
+        "minlon": -86.8432957,
+        "maxlat": 36.0373929,
+        "maxlon": -86.8355219
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Deerwood Arboretum"
+      }
+    },
+    {
+      "type": "way",
+      "id": 589705711,
+      "bounds": {
+        "minlat": 36.0174404,
+        "minlon": -87.1591477,
+        "maxlat": 36.020307,
+        "maxlon": -87.1557488
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Veterans Memorial Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 589904886,
+      "bounds": {
+        "minlat": 36.0327667,
+        "minlon": -86.7946482,
+        "maxlat": 36.0343295,
+        "maxlon": -86.7925859
+      },
+      "tags": {
+        "addr:city": "Brentwood",
+        "addr:housenumber": "5055",
+        "addr:postcode": "37027",
+        "addr:state": "TN",
+        "addr:street": "Maryland Way",
+        "leisure": "park",
+        "name": "Maryland Way Park",
+        "tourism": "picnic_site",
+        "website": "https://www.brentwoodtn.gov/departments/parks-recreation/parks-trails-greenways/maryland-way-park",
+        "wheelchair": "yes",
+        "wikipedia": "en:Brentwood, Tennessee#Maryland Way Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 590474375,
+      "bounds": {
+        "minlat": 35.9854855,
+        "minlon": -87.1195659,
+        "maxlat": 35.9898974,
+        "maxlon": -87.1144937
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Fairview Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 590805430,
+      "bounds": {
+        "minlat": 35.9408369,
+        "minlon": -87.1512203,
+        "maxlat": 35.9422487,
+        "maxlon": -87.148909
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Historic Village"
+      }
+    },
+    {
+      "type": "way",
+      "id": 591661028,
+      "bounds": {
+        "minlat": 36.0348079,
+        "minlon": -86.7992678,
+        "maxlat": 36.0355886,
+        "maxlon": -86.7976896
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Creekside Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 591973496,
+      "bounds": {
+        "minlat": 36.1541418,
+        "minlon": -86.7665308,
+        "maxlat": 36.154766,
+        "maxlon": -86.7659729
+      },
+      "tags": {
+        "ele": "160",
+        "gnis:feature_id": "1270902",
+        "leisure": "park",
+        "name": "South Park",
+        "source": "Mapbox"
+      }
+    },
+    {
+      "type": "way",
+      "id": 592010422,
+      "bounds": {
+        "minlat": 36.161462,
+        "minlon": -86.8009018,
+        "maxlat": 36.1637147,
+        "maxlon": -86.7981396
+      },
+      "tags": {
+        "ele": "142",
+        "gnis:feature_id": "1273910",
+        "leisure": "park",
+        "name": "Watkins Park",
+        "source": "Mapbox",
+        "wikidata": "Q49577676"
+      }
+    },
+    {
+      "type": "way",
+      "id": 592010424,
+      "bounds": {
+        "minlat": 36.1589777,
+        "minlon": -86.7983679,
+        "maxlat": 36.160012,
+        "maxlon": -86.7964325
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "William Edmondson Park",
+        "source": "Mapbox"
+      }
+    },
+    {
+      "type": "way",
+      "id": 592150011,
+      "bounds": {
+        "minlat": 36.1706399,
+        "minlon": -86.7950785,
+        "maxlat": 36.1711149,
+        "maxlon": -86.7944655
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Hope Gardens Park",
+        "source": "Mapbox Satellite"
+      }
+    },
+    {
+      "type": "way",
+      "id": 592150013,
+      "bounds": {
+        "minlat": 36.1727335,
+        "minlon": -86.7991007,
+        "maxlat": 36.1736225,
+        "maxlon": -86.7982065
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Monroe Park",
+        "source": "Mapbox Satellite"
+      }
+    },
+    {
+      "type": "way",
+      "id": 592218220,
+      "bounds": {
+        "minlat": 36.1739669,
+        "minlon": -86.817667,
+        "maxlat": 36.1751662,
+        "maxlon": -86.8153383
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Clinton B. Fisk Park",
+        "source": "Mapbox"
+      }
+    },
+    {
+      "type": "way",
+      "id": 592218286,
+      "bounds": {
+        "minlat": 36.1636431,
+        "minlon": -86.8245303,
+        "maxlat": 36.1677413,
+        "maxlon": -86.820004
+      },
+      "tags": {
+        "ele": "146",
+        "gnis:feature_id": "1286482",
+        "leisure": "park",
+        "name": "Hadley Park",
+        "source": "Mapbox"
+      }
+    },
+    {
+      "type": "way",
+      "id": 592218677,
+      "bounds": {
+        "minlat": 36.1780475,
+        "minlon": -86.804219,
+        "maxlat": 36.1796064,
+        "maxlon": -86.8025579
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Elizabeth Park",
+        "source": "Mapbox"
+      }
+    },
+    {
+      "type": "way",
+      "id": 593910099,
+      "bounds": {
+        "minlat": 36.0652134,
+        "minlon": -86.7411612,
+        "maxlat": 36.0680659,
+        "maxlon": -86.7376866
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Whitfield Park",
+        "source": "Mapbox",
+        "wikidata": "Q49580185"
+      }
+    },
+    {
+      "type": "way",
+      "id": 599981923,
+      "bounds": {
+        "minlat": 36.1382272,
+        "minlon": -86.7903384,
+        "maxlat": 36.1402335,
+        "maxlon": -86.7883908
+      },
+      "tags": {
+        "addr:city": "Nashville",
+        "addr:housenumber": "1299",
+        "addr:postcode": "37203",
+        "addr:state": "TN",
+        "addr:street": "Horton Avenue",
+        "leisure": "park",
+        "name": "Edgehill Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 601923171,
+      "bounds": {
+        "minlat": 35.9998318,
+        "minlon": -87.0818843,
+        "maxlat": 36.0152728,
+        "maxlon": -87.0605087
+      },
+      "tags": {
+        "addr:city": "Fairview",
+        "addr:housenumber": "1318",
+        "addr:postcode": "37062",
+        "addr:state": "TN",
+        "addr:street": "Fairview Blvd",
+        "landuse": "recreation_ground",
+        "name": "Camp Marymount",
+        "phone": "+1-615-799-0410",
+        "website": "https://campmarymount.com/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 605684096,
+      "bounds": {
+        "minlat": 36.1463383,
+        "minlon": -86.7900761,
+        "maxlat": 36.1465696,
+        "maxlon": -86.7890548
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Flora Wilson Community Park",
+        "website": "https://www.nashville.gov/Parks-and-Recreation/Parks.aspx"
+      }
+    },
+    {
+      "type": "way",
+      "id": 609338250,
+      "bounds": {
+        "minlat": 36.1534348,
+        "minlon": -86.9295717,
+        "maxlat": 36.1545779,
+        "maxlon": -86.9273279
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Bells Bend Primitive Camping"
       }
     },
     {
       "type": "way",
       "id": 609338420,
+      "bounds": {
+        "minlat": 36.1377767,
+        "minlon": -86.9397304,
+        "maxlat": 36.1609576,
+        "maxlon": -86.9147814
+      },
       "tags": {
         "boundary": "protected_area",
         "name": "Bells Bend Park",
         "wikidata": "Q47669456"
+      }
+    },
+    {
+      "type": "way",
+      "id": 609339076,
+      "bounds": {
+        "minlat": 36.153844,
+        "minlon": -86.9225554,
+        "maxlat": 36.1549141,
+        "maxlon": -86.9214862
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Bells Bend Outdoor Classroom"
+      }
+    },
+    {
+      "type": "way",
+      "id": 609575742,
+      "bounds": {
+        "minlat": 36.1181227,
+        "minlon": -86.8361377,
+        "maxlat": 36.1191862,
+        "maxlon": -86.8345345
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Woodmont Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 610846617,
+      "bounds": {
+        "minlat": 36.198164,
+        "minlon": -86.788014,
+        "maxlat": 36.2000171,
+        "maxlon": -86.7856479
+      },
+      "tags": {
+        "addr:city": "Nashville",
+        "addr:housenumber": "1530",
+        "addr:postcode": "37207",
+        "addr:state": "TN",
+        "addr:street": "Lock Road",
+        "leisure": "park",
+        "name": "Lock One Park",
+        "notes": "https://www.nashville.gov/Parks-and-Recreation/Parks.aspx",
+        "website": "http://maps.nashville.gov/NashvilleParksFinder/default.htm?parkID=167"
+      }
+    },
+    {
+      "type": "way",
+      "id": 619218783,
+      "bounds": {
+        "minlat": 36.320147,
+        "minlon": -86.7193871,
+        "maxlat": 36.3215156,
+        "maxlon": -86.714978
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Peay Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 624800834,
+      "bounds": {
+        "minlat": 36.0447007,
+        "minlon": -86.7556975,
+        "maxlat": 36.0478409,
+        "maxlon": -86.7527777
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Granbery Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 628368828,
+      "bounds": {
+        "minlat": 36.1728454,
+        "minlon": -86.7889256,
+        "maxlat": 36.1729124,
+        "maxlon": -86.7888374
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 629497355,
+      "bounds": {
+        "minlat": 36.0758297,
+        "minlon": -86.7296968,
+        "maxlat": 36.0784766,
+        "maxlon": -86.7258624
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Wentworth Caldwell Sr Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 637943505,
+      "bounds": {
+        "minlat": 36.1630674,
+        "minlon": -86.7452068,
+        "maxlat": 36.1673257,
+        "maxlon": -86.7401314
+      },
+      "tags": {
+        "addr:city": "Nashville",
+        "addr:postcode": "37206",
+        "addr:state": "TN",
+        "addr:street": "South 17th Street",
+        "landuse": "recreation_ground",
+        "name": "Naval Hill Disc Golf Course",
+        "website": "https://www.nashville.gov/Parks-and-Recreation/Athletics/Disc-Golf.aspx"
+      }
+    },
+    {
+      "type": "way",
+      "id": 641381067,
+      "bounds": {
+        "minlat": 36.1141938,
+        "minlon": -86.7632395,
+        "maxlat": 36.1149268,
+        "maxlon": -86.7625426
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Iris Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 642806881,
+      "bounds": {
+        "minlat": 36.0932559,
+        "minlon": -86.7172135,
+        "maxlat": 36.0973589,
+        "maxlon": -86.7125904
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Paragon Mills Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 643150683,
+      "bounds": {
+        "minlat": 36.3041182,
+        "minlon": -86.7110641,
+        "maxlat": 36.3066191,
+        "maxlon": -86.7074374
+      },
+      "tags": {
+        "addr:city": "Goodlettsville",
+        "addr:housenumber": "360",
+        "addr:postcode": "37072",
+        "addr:state": "TN",
+        "addr:street": "Pleasant Green Drive",
+        "leisure": "park",
+        "name": "Pleasant Green Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 651217274,
+      "bounds": {
+        "minlat": 36.1169818,
+        "minlon": -86.7260295,
+        "maxlat": 36.1234762,
+        "maxlon": -86.7191942
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 651235055,
+      "bounds": {
+        "minlat": 36.0855917,
+        "minlon": -86.6879093,
+        "maxlat": 36.0918633,
+        "maxlon": -86.6736805
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Ezell Soccer Park / Mill Creek Greenway"
+      }
+    },
+    {
+      "type": "way",
+      "id": 651597409,
+      "bounds": {
+        "minlat": 36.0376033,
+        "minlon": -86.6778922,
+        "maxlat": 36.0418832,
+        "maxlon": -86.6730225
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Mill Creek Greenway"
+      }
+    },
+    {
+      "type": "way",
+      "id": 652657522,
+      "bounds": {
+        "minlat": 36.0740839,
+        "minlon": -86.9649227,
+        "maxlat": 36.0796398,
+        "maxlon": -86.9541922
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 654503733,
+      "bounds": {
+        "minlat": 36.1268114,
+        "minlon": -86.7546399,
+        "maxlat": 36.1273536,
+        "maxlon": -86.7534579
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Azafran Park",
+        "website": "https://www.conexionamericas.org/azafran-park/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 658253865,
+      "bounds": {
+        "minlat": 36.0531506,
+        "minlon": -86.9309553,
+        "maxlat": 36.0545955,
+        "maxlon": -86.9287642
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Harpeth River State Park - Highway 100 Access",
+        "operator": "Tennessee State Parks",
+        "operator:type": "public",
+        "operator:wikidata": "Q109328450",
+        "website": "https://tnstateparks.com/parks/harpeth-river"
+      }
+    },
+    {
+      "type": "way",
+      "id": 669519181,
+      "bounds": {
+        "minlat": 36.25913,
+        "minlon": -86.9111047,
+        "maxlat": 36.273816,
+        "maxlon": -86.891481
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "name": "Beaman Park",
+        "wikidata": "Q34834967"
+      }
+    },
+    {
+      "type": "way",
+      "id": 672504924,
+      "bounds": {
+        "minlat": 36.1728699,
+        "minlon": -86.7888221,
+        "maxlat": 36.1729376,
+        "maxlon": -86.78874
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 672504925,
+      "bounds": {
+        "minlat": 36.1727886,
+        "minlon": -86.7888533,
+        "maxlat": 36.1728575,
+        "maxlon": -86.7887733
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 673391327,
+      "bounds": {
+        "minlat": 36.3156736,
+        "minlon": -86.8718331,
+        "maxlat": 36.3184281,
+        "maxlon": -86.868424
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Joelton Community Club Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 675709585,
+      "bounds": {
+        "minlat": 36.3153039,
+        "minlon": -86.6947689,
+        "maxlat": 36.3156668,
+        "maxlon": -86.6943
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "name": "Windsor Green Neighborhood Entrance"
+      }
+    },
+    {
+      "type": "way",
+      "id": 678308437,
+      "bounds": {
+        "minlat": 36.0498856,
+        "minlon": -86.7529857,
+        "maxlat": 36.0655962,
+        "maxlon": -86.7389826
+      },
+      "tags": {
+        "ele": "168",
+        "gnis:feature_id": "1965111",
+        "leisure": "park",
+        "name": "Sevenmile Park",
+        "wikidata": "Q49559900"
+      }
+    },
+    {
+      "type": "way",
+      "id": 678826492,
+      "bounds": {
+        "minlat": 36.0542865,
+        "minlon": -86.6856968,
+        "maxlat": 36.0663085,
+        "maxlon": -86.6702055
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Millcreek Greenway - Blue Hole Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 679514657,
+      "bounds": {
+        "minlat": 36.1080212,
+        "minlon": -86.7460365,
+        "maxlat": 36.1085903,
+        "maxlon": -86.7451293
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Turner School Park",
+        "note": "https://www.nashvillescene.com/news/pith-in-the-wind/article/13042024/turner-school-park-a-review"
+      }
+    },
+    {
+      "type": "way",
+      "id": 679651312,
+      "bounds": {
+        "minlat": 36.0709105,
+        "minlon": -86.7681801,
+        "maxlat": 36.0740215,
+        "maxlon": -86.7661568
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Crieve Hall Baseball CSX Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 680948363,
+      "bounds": {
+        "minlat": 36.1313748,
+        "minlon": -86.803193,
+        "maxlat": 36.1319395,
+        "maxlon": -86.8016217
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "St. Bernard Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 681068755,
+      "bounds": {
+        "minlat": 36.0800845,
+        "minlon": -86.7248608,
+        "maxlat": 36.083125,
+        "maxlon": -86.7238035
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Seven Mile Creek Greenway - Harding Mall Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 681233748,
+      "bounds": {
+        "minlat": 36.1377211,
+        "minlon": -86.8014803,
+        "maxlat": 36.138149,
+        "maxlon": -86.8008306
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 681428367,
+      "bounds": {
+        "minlat": 36.0373586,
+        "minlon": -86.7496803,
+        "maxlat": 36.0415036,
+        "maxlon": -86.7480528
+      },
+      "tags": {
+        "access": "private",
+        "leisure": "park",
+        "name": "Copperfield Park",
+        "operator": "Copperfield HOA"
+      }
+    },
+    {
+      "type": "way",
+      "id": 682343640,
+      "bounds": {
+        "minlat": 36.0167006,
+        "minlon": -86.6875526,
+        "maxlat": 36.0221438,
+        "maxlon": -86.6809107
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Mill Creek Greenway and Mill Run Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 682343641,
+      "bounds": {
+        "minlat": 36.0087885,
+        "minlon": -86.7000586,
+        "maxlat": 36.0174018,
+        "maxlon": -86.683199
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Mill Creek Park & Greenway"
+      }
+    },
+    {
+      "type": "way",
+      "id": 684238885,
+      "bounds": {
+        "minlat": 36.1800461,
+        "minlon": -86.8595086,
+        "maxlat": 36.1810789,
+        "maxlon": -86.8584278
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 684238886,
+      "bounds": {
+        "minlat": 36.1787788,
+        "minlon": -86.8605223,
+        "maxlat": 36.1799151,
+        "maxlon": -86.8593232
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 698016479,
+      "bounds": {
+        "minlat": 36.0796566,
+        "minlon": -86.7680033,
+        "maxlat": 36.0800586,
+        "maxlon": -86.7672725
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 706784141,
+      "bounds": {
+        "minlat": 36.1526334,
+        "minlon": -86.8085648,
+        "maxlat": 36.1535424,
+        "maxlon": -86.8078159
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "TriStar Centennial Medical Center - Centennial Tower",
+        "operator": "TriStar Centennial Medical Center"
+      }
+    },
+    {
+      "type": "way",
+      "id": 706797056,
+      "bounds": {
+        "minlat": 36.1520347,
+        "minlon": -86.8099654,
+        "maxlat": 36.1530919,
+        "maxlon": -86.8085099
+      },
+      "tags": {
+        "addr:city": "Nashville",
+        "addr:housenumber": "2400",
+        "addr:street": "Patterson Street",
+        "leisure": "park",
+        "name": "TriStar Centennial Medical Center - Physicans Park",
+        "operator": "TriStar Centennial Medical Center"
+      }
+    },
+    {
+      "type": "way",
+      "id": 713450272,
+      "bounds": {
+        "minlat": 36.0251218,
+        "minlon": -86.7078783,
+        "maxlat": 36.0259379,
+        "maxlon": -86.7075612
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Novak Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 721718328,
+      "bounds": {
+        "minlat": 36.1101262,
+        "minlon": -86.8092151,
+        "maxlat": 36.11098,
+        "maxlon": -86.8081141
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 721939836,
+      "bounds": {
+        "minlat": 36.010542,
+        "minlon": -86.6881875,
+        "maxlat": 36.0122465,
+        "maxlon": -86.6868078
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Indian Creek Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 721943704,
+      "bounds": {
+        "minlat": 36.0229725,
+        "minlon": -86.6992699,
+        "maxlat": 36.0248718,
+        "maxlon": -86.6980143
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 730882241,
+      "bounds": {
+        "minlat": 36.1638738,
+        "minlon": -86.7905577,
+        "maxlat": 36.1644588,
+        "maxlon": -86.7900413
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 745164897,
+      "bounds": {
+        "minlat": 36.1642595,
+        "minlon": -86.790601,
+        "maxlat": 36.1659276,
+        "maxlon": -86.7891531
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Frankie Pierce Park",
+        "name:etymology": "Juno Frankie Pierce",
+        "name:etymology:wikidata": "Q21070101"
+      }
+    },
+    {
+      "type": "way",
+      "id": 745214289,
+      "bounds": {
+        "minlat": 36.0187065,
+        "minlon": -86.704415,
+        "maxlat": 36.0193492,
+        "maxlon": -86.7038629
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Alteras Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 747415762,
+      "bounds": {
+        "minlat": 35.9563329,
+        "minlon": -86.8898186,
+        "maxlat": 35.9613595,
+        "maxlon": -86.884161
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Fieldstone Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 749659793,
+      "bounds": {
+        "minlat": 36.0228118,
+        "minlon": -86.7520608,
+        "maxlat": 36.0234991,
+        "maxlon": -86.7510102
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 749661861,
+      "bounds": {
+        "minlat": 36.0166567,
+        "minlon": -86.7429668,
+        "maxlat": 36.0178667,
+        "maxlon": -86.7421564
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 749838320,
+      "bounds": {
+        "minlat": 36.0556007,
+        "minlon": -86.9338958,
+        "maxlat": 36.0593756,
+        "maxlon": -86.9308969
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Reese L. Smith Jr. Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 750054140,
+      "bounds": {
+        "minlat": 36.0330858,
+        "minlon": -86.9632842,
+        "maxlat": 36.0346662,
+        "maxlon": -86.9609816
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 753389556,
+      "bounds": {
+        "minlat": 36.1358433,
+        "minlon": -86.8891746,
+        "maxlat": 36.1377414,
+        "maxlon": -86.8868808
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "H.G. Hill Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 754139337,
+      "bounds": {
+        "minlat": 36.0486331,
+        "minlon": -86.9566811,
+        "maxlat": 36.0724621,
+        "maxlon": -86.9168559
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Harpeth River Greenway"
+      }
+    },
+    {
+      "type": "way",
+      "id": 758535602,
+      "bounds": {
+        "minlat": 36.081307,
+        "minlon": -86.7156459,
+        "maxlat": 36.0816063,
+        "maxlon": -86.7151897
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 758535605,
+      "bounds": {
+        "minlat": 36.0852052,
+        "minlon": -86.7153908,
+        "maxlat": 36.085533,
+        "maxlon": -86.7149335
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 759672027,
+      "bounds": {
+        "minlat": 35.9252256,
+        "minlon": -86.8670567,
+        "maxlat": 35.9254151,
+        "maxlon": -86.8667981
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "building": "yes",
+        "heritage": "2",
+        "heritage:operator": "nrhp",
+        "name": "Hiram Masonic Lodge No. 7",
+        "nrhp:criteria": "(A)",
+        "nrhp:inscription_date": "11/7/1973",
+        "nrhp:nhl": "yes",
+        "protection_title": "protected_site",
+        "ref:nrhp": "73001859",
+        "wikidata": "Q5769221"
+      }
+    },
+    {
+      "type": "way",
+      "id": 759701057,
+      "bounds": {
+        "minlat": 36.1687612,
+        "minlon": -86.805219,
+        "maxlat": 36.1692775,
+        "maxlon": -86.8047635
+      },
+      "tags": {
+        "addr:state": "TN",
+        "boundary": "protected_area",
+        "building": "university",
+        "ele": "157",
+        "gnis:feature_id": "1953995",
+        "heritage": "2",
+        "heritage:operator": "nrhp",
+        "name": "Jubilee Hall",
+        "nrhp:criteria": "(A),(C)",
+        "nrhp:inscription_date": "12/9/1971",
+        "nrhp:nhl": "yes",
+        "protection_title": "protected_site",
+        "ref:nrhp": "71000817",
+        "source": "USGS Geonames",
+        "wikidata": "Q6301859"
+      }
+    },
+    {
+      "type": "way",
+      "id": 760538806,
+      "bounds": {
+        "minlat": 36.0908782,
+        "minlon": -86.7093986,
+        "maxlat": 36.0935269,
+        "maxlon": -86.7061512
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Providence Park",
+        "note": "https://data.nashville.gov/Parks/Metro-Parks-Boundaries-GIS-/728b-6yiv\nhttps://www.nashvillescene.com/news/pith-in-the-wind/article/13041283/providence-park-a-review"
+      }
+    },
+    {
+      "type": "way",
+      "id": 762401532,
+      "bounds": {
+        "minlat": 36.1251085,
+        "minlon": -86.7778935,
+        "maxlat": 36.1252212,
+        "maxlon": -86.7777231
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 762936842,
+      "bounds": {
+        "minlat": 36.100276,
+        "minlon": -86.6851679,
+        "maxlat": 36.1063353,
+        "maxlon": -86.6748873
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Metro Soccer Complex",
+        "operator": "Metropolitan Government of Nashville and Davidson County"
+      }
+    },
+    {
+      "type": "way",
+      "id": 764098344,
+      "bounds": {
+        "minlat": 36.1591111,
+        "minlon": -86.866609,
+        "maxlat": 36.1636227,
+        "maxlon": -86.8613512
+      },
+      "tags": {
+        "ele": "126",
+        "gnis:feature_id": "1304482",
+        "leisure": "park",
+        "name": "West Park",
+        "wikidata": "Q49578930"
+      }
+    },
+    {
+      "type": "way",
+      "id": 764156672,
+      "bounds": {
+        "minlat": 36.1302032,
+        "minlon": -86.90725,
+        "maxlat": 36.1349812,
+        "maxlon": -86.903635
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 764160097,
+      "bounds": {
+        "minlat": 36.2048232,
+        "minlon": -86.8314429,
+        "maxlat": 36.2123684,
+        "maxlon": -86.8231109
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Hartman Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 764177388,
+      "bounds": {
+        "minlat": 36.2047094,
+        "minlon": -86.8551216,
+        "maxlat": 36.2099892,
+        "maxlon": -86.839842
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Mullins Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 764180742,
+      "bounds": {
+        "minlat": 36.2124679,
+        "minlon": -86.8446629,
+        "maxlat": 36.2158551,
+        "maxlon": -86.8424867
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Bordeaux - Timothy Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 764191890,
+      "bounds": {
+        "minlat": 36.1768395,
+        "minlon": -86.8414385,
+        "maxlat": 36.1798481,
+        "maxlon": -86.8373339
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Bordeaux Garden Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 764192722,
+      "bounds": {
+        "minlat": 36.1821499,
+        "minlon": -86.8543643,
+        "maxlat": 36.1840626,
+        "maxlon": -86.8521079
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "County Cemetary Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 764329000,
+      "bounds": {
+        "minlat": 35.9982104,
+        "minlon": -86.7178546,
+        "maxlat": 35.9999067,
+        "maxlon": -86.7160823
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 766467157,
+      "bounds": {
+        "minlat": 36.1491483,
+        "minlon": -86.8110764,
+        "maxlat": 36.152238,
+        "maxlon": -86.8067829
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 770103157,
+      "bounds": {
+        "minlat": 36.0199202,
+        "minlon": -86.6809449,
+        "maxlat": 36.0244313,
+        "maxlon": -86.664689
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Mill Creek Greenway"
+      }
+    },
+    {
+      "type": "way",
+      "id": 773789103,
+      "bounds": {
+        "minlat": 36.1573843,
+        "minlon": -86.8186514,
+        "maxlat": 36.1581017,
+        "maxlon": -86.8173994
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 776326956,
+      "bounds": {
+        "minlat": 36.1081458,
+        "minlon": -86.9257161,
+        "maxlat": 36.1096634,
+        "maxlon": -86.9240491
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "name": "Europa Go-Kart and Mini Golf"
+      }
+    },
+    {
+      "type": "way",
+      "id": 776353486,
+      "bounds": {
+        "minlat": 36.0619671,
+        "minlon": -86.9188451,
+        "maxlat": 36.0630096,
+        "maxlon": -86.9167046
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Edwin Warner Park - Bellevue Road Playground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 791712784,
+      "bounds": {
+        "minlat": 36.1014215,
+        "minlon": -86.9274386,
+        "maxlat": 36.1028686,
+        "maxlon": -86.9261911
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 795521253,
+      "bounds": {
+        "minlat": 36.0417524,
+        "minlon": -86.6750004,
+        "maxlat": 36.0425377,
+        "maxlon": -86.6739572
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 795782010,
+      "bounds": {
+        "minlat": 36.0353354,
+        "minlon": -86.6798118,
+        "maxlat": 36.035962,
+        "maxlon": -86.6790905
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 820361461,
+      "bounds": {
+        "minlat": 36.155856,
+        "minlon": -86.7948762,
+        "maxlat": 36.1563925,
+        "maxlon": -86.7942253
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 839557387,
+      "bounds": {
+        "minlat": 36.1402056,
+        "minlon": -86.8497526,
+        "maxlat": 36.1452658,
+        "maxlon": -86.8406977
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "McCabe Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 845315075,
+      "bounds": {
+        "minlat": 36.0337244,
+        "minlon": -86.7549825,
+        "maxlat": 36.0342482,
+        "maxlon": -86.7543763
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Brownstone Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 848425229,
+      "bounds": {
+        "minlat": 36.0268174,
+        "minlon": -86.7554393,
+        "maxlat": 36.0296177,
+        "maxlon": -86.7529088
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 848442126,
+      "bounds": {
+        "minlat": 36.0565393,
+        "minlon": -86.7515474,
+        "maxlat": 36.057106,
+        "maxlon": -86.7509834
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 851907926,
+      "bounds": {
+        "minlat": 36.043391,
+        "minlon": -86.7169598,
+        "maxlat": 36.0437568,
+        "maxlon": -86.7166563
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Knolls Guitar Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 851907927,
+      "bounds": {
+        "minlat": 36.0435217,
+        "minlon": -86.7168561,
+        "maxlat": 36.0435346,
+        "maxlon": -86.7168402
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 852222057,
+      "bounds": {
+        "minlat": 35.9461463,
+        "minlon": -86.8741349,
+        "maxlat": 35.9470441,
+        "maxlon": -86.8733853
+      },
+      "tags": {
+        "access": "yes",
+        "landuse": "recreation_ground",
+        "lit": "yes",
+        "sport": "soccer, american football",
+        "surface": "grass"
+      }
+    },
+    {
+      "type": "way",
+      "id": 852222058,
+      "bounds": {
+        "minlat": 35.9462009,
+        "minlon": -86.8733547,
+        "maxlat": 35.9471466,
+        "maxlon": -86.8725602
+      },
+      "tags": {
+        "access": "yes",
+        "landuse": "recreation_ground",
+        "lit": "yes",
+        "sport": "soccer, american football",
+        "surface": "grass"
+      }
+    },
+    {
+      "type": "way",
+      "id": 852222059,
+      "bounds": {
+        "minlat": 35.9471731,
+        "minlon": -86.8743718,
+        "maxlat": 35.9479105,
+        "maxlon": -86.8731954
+      },
+      "tags": {
+        "access": "yes",
+        "landuse": "recreation_ground",
+        "lit": "yes",
+        "sport": "soccer, american football",
+        "surface": "grass"
+      }
+    },
+    {
+      "type": "way",
+      "id": 852391817,
+      "bounds": {
+        "minlat": 35.957612,
+        "minlon": -86.884156,
+        "maxlat": 35.9587427,
+        "maxlon": -86.8831572
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 857005907,
+      "bounds": {
+        "minlat": 36.023293,
+        "minlon": -86.7489039,
+        "maxlat": 36.0243813,
+        "maxlon": -86.7478485
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 858352683,
+      "bounds": {
+        "minlat": 35.9248034,
+        "minlon": -86.9232661,
+        "maxlat": 35.9252119,
+        "maxlon": -86.9227626
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 858370975,
+      "bounds": {
+        "minlat": 35.9833151,
+        "minlon": -86.8062573,
+        "maxlat": 35.9866204,
+        "maxlon": -86.8030006
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Wikle Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 858374614,
+      "bounds": {
+        "minlat": 35.9813259,
+        "minlon": -86.8046884,
+        "maxlat": 35.9834479,
+        "maxlon": -86.8023059
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Flagpole Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 859231837,
+      "bounds": {
+        "minlat": 36.0221718,
+        "minlon": -86.7055225,
+        "maxlat": 36.0226593,
+        "maxlon": -86.704842
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Loxley Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 859231838,
+      "bounds": {
+        "minlat": 36.0207402,
+        "minlon": -86.7071765,
+        "maxlat": 36.0211796,
+        "maxlon": -86.7066654
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Heaton Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 860875033,
+      "bounds": {
+        "minlat": 36.0581993,
+        "minlon": -86.939264,
+        "maxlat": 36.0608073,
+        "maxlon": -86.9366567
+      },
+      "tags": {
+        "description": "Neighborhood park with open field, backstop, playground, swingset, benches, and picnic tables.",
+        "leisure": "park",
+        "name": "Harpeth Knoll Park",
+        "operator": "Metro Parks and Recreation"
+      }
+    },
+    {
+      "type": "way",
+      "id": 865056650,
+      "bounds": {
+        "minlat": 36.0339086,
+        "minlon": -86.7654666,
+        "maxlat": 36.0357927,
+        "maxlon": -86.764246
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 871111028,
+      "bounds": {
+        "minlat": 36.0160502,
+        "minlon": -86.7133481,
+        "maxlat": 36.0168083,
+        "maxlon": -86.7126252
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 872949784,
+      "bounds": {
+        "minlat": 36.0046276,
+        "minlon": -86.6873556,
+        "maxlat": 36.0054001,
+        "maxlon": -86.6864257
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 875348754,
+      "bounds": {
+        "minlat": 36.1975369,
+        "minlon": -86.7263816,
+        "maxlat": 36.1977591,
+        "maxlon": -86.7261075
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 880491249,
+      "bounds": {
+        "minlat": 36.0172327,
+        "minlon": -86.7397144,
+        "maxlat": 36.0182553,
+        "maxlon": -86.7387619
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 880491253,
+      "bounds": {
+        "minlat": 36.0174554,
+        "minlon": -86.7346357,
+        "maxlat": 36.0180058,
+        "maxlon": -86.7338091
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 885787525,
+      "bounds": {
+        "minlat": 36.0108757,
+        "minlon": -86.7222202,
+        "maxlat": 36.0114833,
+        "maxlon": -86.7214565
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 918354862,
+      "bounds": {
+        "minlat": 36.0264612,
+        "minlon": -86.7901188,
+        "maxlat": 36.0271163,
+        "maxlon": -86.7888479
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 921679662,
+      "bounds": {
+        "minlat": 35.9849296,
+        "minlon": -86.7100725,
+        "maxlat": 35.9886878,
+        "maxlon": -86.7047264
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Owl Creek Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 931534951,
+      "bounds": {
+        "minlat": 36.0462725,
+        "minlon": -86.9190438,
+        "maxlat": 36.0621929,
+        "maxlon": -86.8936516
+      },
+      "tags": {
+        "ele": "197",
+        "forestry": "yes",
+        "gnis:feature_id": "1283566",
+        "leisure": "park",
+        "name": "Edwin Warner Park",
+        "wikidata": "Q49485987"
+      }
+    },
+    {
+      "type": "way",
+      "id": 932963757,
+      "bounds": {
+        "minlat": 36.2181548,
+        "minlon": -86.9942011,
+        "maxlat": 36.2333562,
+        "maxlon": -86.98276
+      },
+      "tags": {
+        "addr:city": "Ashland City",
+        "addr:housenumber": "3251",
+        "addr:postcode": "37015",
+        "addr:state": "TN",
+        "addr:street": "Caldwell Road",
+        "leisure": "park",
+        "name": "Caldwell Nature Park",
+        "note": "https://www.facebook.com/Save-Caldwell-Nature-Park-108407258046833\n\nhttps://www.ashlandcitytn.gov/parksrec",
+        "website": "https://www.ashlandcitytn.gov/parksrec/page/caldwell-park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 933066364,
+      "bounds": {
+        "minlat": 36.0898498,
+        "minlon": -86.8923852,
+        "maxlat": 36.0918443,
+        "maxlon": -86.8903598
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 977386003,
+      "bounds": {
+        "minlat": 36.188104,
+        "minlon": -86.8076317,
+        "maxlat": 36.1886365,
+        "maxlon": -86.8066796
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1019030172,
+      "bounds": {
+        "minlat": 36.0204043,
+        "minlon": -86.7024996,
+        "maxlat": 36.0213081,
+        "maxlon": -86.7019608
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1049095948,
+      "bounds": {
+        "minlat": 36.0605858,
+        "minlon": -86.6797585,
+        "maxlat": 36.0650525,
+        "maxlon": -86.6749957
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1050096525,
+      "bounds": {
+        "minlat": 36.1454017,
+        "minlon": -86.8019534,
+        "maxlat": 36.1462122,
+        "maxlon": -86.8006552
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Library Lawn"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1050096526,
+      "bounds": {
+        "minlat": 36.1483491,
+        "minlon": -86.8015037,
+        "maxlat": 36.1489988,
+        "maxlon": -86.8006838
+      },
+      "tags": {
+        "elevation": "158",
+        "gnis:feature_id": "1954510",
+        "leisure": "park",
+        "name": "Curry Field",
+        "wikidata": "Q49481423"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1081246553,
+      "bounds": {
+        "minlat": 36.1532724,
+        "minlon": -86.7845436,
+        "maxlat": 36.1535376,
+        "maxlon": -86.7840215
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Noble Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1087620311,
+      "bounds": {
+        "minlat": 36.1698436,
+        "minlon": -86.8239547,
+        "maxlat": 36.1702079,
+        "maxlon": -86.8231196
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1087620312,
+      "bounds": {
+        "minlat": 36.169464,
+        "minlon": -86.8239267,
+        "maxlat": 36.1698283,
+        "maxlon": -86.8230917
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1087620313,
+      "bounds": {
+        "minlat": 36.1694687,
+        "minlon": -86.8229875,
+        "maxlat": 36.1698397,
+        "maxlon": -86.8227219
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1106120161,
+      "bounds": {
+        "minlat": 35.9114137,
+        "minlon": -86.7776811,
+        "maxlat": 35.9118151,
+        "maxlon": -86.7766004
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1114739597,
+      "bounds": {
+        "minlat": 35.9230778,
+        "minlon": -86.8724697,
+        "maxlat": 35.9237167,
+        "maxlon": -86.8717811
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1161472822,
+      "bounds": {
+        "minlat": 36.1851534,
+        "minlon": -86.7935187,
+        "maxlat": 36.1873447,
+        "maxlon": -86.7911842
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Metro Water Services 3rd Ave Park",
+        "operator": "Metro Water Services",
+        "operator:type": "government"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1190290356,
+      "bounds": {
+        "minlat": 36.198068,
+        "minlon": -86.7254716,
+        "maxlat": 36.1983596,
+        "maxlon": -86.7249074
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1191857039,
+      "bounds": {
+        "minlat": 36.1902616,
+        "minlon": -86.6786364,
+        "maxlat": 36.1921262,
+        "maxlon": -86.6743782
+      },
+      "tags": {
+        "addr:city": "Nashville",
+        "addr:housenumber": "3150",
+        "addr:postcode": "37214",
+        "addr:state": "TN",
+        "addr:street": "McGavock Pk",
+        "leisure": "park",
+        "name": "Two Rivers Dog Park",
+        "opening_hours": "sunrise-sunset"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1196661663,
+      "bounds": {
+        "minlat": 36.1344348,
+        "minlon": -87.1096163,
+        "maxlat": 36.1385176,
+        "maxlon": -87.1000695
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Harpeth River State Park - Gossett Trails",
+        "website": "https://tnstateparks.com/parks/harpeth-river"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1263944370,
+      "bounds": {
+        "minlat": 36.0709193,
+        "minlon": -86.9513964,
+        "maxlat": 36.0712718,
+        "maxlon": -86.9510076
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1272101830,
+      "bounds": {
+        "minlat": 35.9666423,
+        "minlon": -86.9005627,
+        "maxlat": 35.968591,
+        "maxlon": -86.8984608
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1272101831,
+      "bounds": {
+        "minlat": 35.968138,
+        "minlon": -86.8922249,
+        "maxlat": 35.9687491,
+        "maxlon": -86.8915599
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1272102164,
+      "bounds": {
+        "minlat": 35.9639561,
+        "minlon": -86.8966787,
+        "maxlat": 35.9648105,
+        "maxlon": -86.8957822
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1272105268,
+      "bounds": {
+        "minlat": 36.2423838,
+        "minlon": -86.773341,
+        "maxlat": 36.2440407,
+        "maxlon": -86.7691288
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1312877754,
+      "bounds": {
+        "minlat": 35.9066133,
+        "minlon": -87.033269,
+        "maxlat": 35.9127882,
+        "maxlon": -87.0257571
+      },
+      "tags": {
+        "addr:city": "Franklin",
+        "addr:housenumber": "5664",
+        "addr:postcode": "37064",
+        "addr:state": "TN",
+        "addr:street": "Wilkins Branch Road",
+        "area": "yes",
+        "leisure": "park",
+        "name": "Wilkins Branch Mountain Bike Park",
+        "operator": "Williamson County Parks and Recreation",
+        "operator:type": "government",
+        "website": "https://www.wcparksandrec.com/facilities_and_parks/nature_parks/wilkins_branch_mountain_bike_park.php"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1334983945,
+      "bounds": {
+        "minlat": 36.10286,
+        "minlon": -86.7156143,
+        "maxlat": 36.1032661,
+        "maxlon": -86.7150911
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1347373209,
+      "bounds": {
+        "minlat": 36.1032347,
+        "minlon": -87.1093389,
+        "maxlat": 36.1054668,
+        "maxlon": -87.1081533
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1359784876,
+      "bounds": {
+        "minlat": 35.969148,
+        "minlon": -86.695879,
+        "maxlat": 35.9699429,
+        "maxlon": -86.6941496
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1367621003,
+      "bounds": {
+        "minlat": 36.2770207,
+        "minlon": -86.7240679,
+        "maxlat": 36.277605,
+        "maxlon": -86.7231016
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1369822915,
+      "bounds": {
+        "minlat": 35.9916361,
+        "minlon": -86.7535202,
+        "maxlat": 35.9933579,
+        "maxlon": -86.751833
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1370966338,
+      "bounds": {
+        "minlat": 35.9250541,
+        "minlon": -86.8691435,
+        "maxlat": 35.9253522,
+        "maxlon": -86.8687546
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "The Square"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1374919551,
+      "bounds": {
+        "minlat": 35.9696593,
+        "minlon": -86.8169985,
+        "maxlat": 35.970968,
+        "maxlon": -86.8155702
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1376636995,
+      "bounds": {
+        "minlat": 35.9733192,
+        "minlon": -86.8136405,
+        "maxlat": 35.9740111,
+        "maxlon": -86.8127919
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1384783949,
+      "bounds": {
+        "minlat": 35.9371963,
+        "minlon": -86.8874873,
+        "maxlat": 35.9378198,
+        "maxlon": -86.8870496
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1385490387,
+      "bounds": {
+        "minlat": 36.1310056,
+        "minlon": -86.7671799,
+        "maxlat": 36.1313591,
+        "maxlon": -86.766586
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "North Plaza"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1408650049,
+      "bounds": {
+        "minlat": 36.111529,
+        "minlon": -86.8339412,
+        "maxlat": 36.1126071,
+        "maxlon": -86.8319483
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1416991950,
+      "bounds": {
+        "minlat": 35.9439879,
+        "minlon": -86.8079907,
+        "maxlat": 35.9448446,
+        "maxlon": -86.8067204
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1442425295,
+      "bounds": {
+        "minlat": 35.9665976,
+        "minlon": -86.8262248,
+        "maxlat": 35.9669916,
+        "maxlon": -86.8257354
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1442425487,
+      "bounds": {
+        "minlat": 35.9655667,
+        "minlon": -86.8217243,
+        "maxlat": 35.9658788,
+        "maxlon": -86.8212862
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1443470981,
+      "bounds": {
+        "minlat": 35.9531432,
+        "minlon": -86.8627123,
+        "maxlat": 35.9534482,
+        "maxlon": -86.8625098
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1451349052,
+      "bounds": {
+        "minlat": 36.1556921,
+        "minlon": -86.7713045,
+        "maxlat": 36.1564544,
+        "maxlon": -86.7701337
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1464423823,
+      "bounds": {
+        "minlat": 36.1573715,
+        "minlon": -86.7861157,
+        "maxlat": 36.159089,
+        "maxlon": -86.7846379
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Nashville Yards Asension Park",
+        "opening_hours": "24/7"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 161838,
+      "bounds": {
+        "minlat": 34.982938,
+        "minlon": -90.310298,
+        "maxlat": 36.678118,
+        "maxlon": -81.6472191
+      },
+      "tags": {
+        "ISO3166-2": "US-TN",
+        "admin_level": "4",
+        "border_type": "state",
+        "boundary": "administrative",
+        "name": "Tennessee",
+        "name:ar": "تينيسي",
+        "name:az": "Tennessi",
+        "name:be": "Тэнесі",
+        "name:bg": "Тенеси",
+        "name:bn": "টেনেসী",
+        "name:br": "Tennessee",
+        "name:chr": "ᏔᎾᏏ",
+        "name:el": "Τενεσί",
+        "name:en": "Tennessee",
+        "name:eo": "Tenesio",
+        "name:es": "Tennessee",
+        "name:fa": "تنسی",
+        "name:fr": "Tennessee",
+        "name:ga": "Teineasaí",
+        "name:hak": "테네시",
+        "name:haw": "Kenekī",
+        "name:he": "טנסי",
+        "name:hi": "टेनेसी",
+        "name:ht": "Tenèsi",
+        "name:hy": "Թենեսի",
+        "name:ja": "テネシー州",
+        "name:ka": "ტენესი",
+        "name:ko": "테네시",
+        "name:kw": "Tennessi",
+        "name:lt": "Tenesis",
+        "name:lv": "Tenesī",
+        "name:ml": "ടെന്നസി",
+        "name:mr": "टेनेसी",
+        "name:nan": "Tennessee",
+        "name:nv": "Ténésii Hahoodzo",
+        "name:pl": "Tennessee",
+        "name:pnb": "ٹینیسی",
+        "name:qu": "Tennessee suyu",
+        "name:ru": "Теннесси",
+        "name:sr": "Тенеси",
+        "name:sr-Latn": "Tenesi",
+        "name:ta": "டென்னிசி",
+        "name:th": "รัฐเทนเนสซี",
+        "name:uk": "Теннессі",
+        "name:ur": "ٹینیسی",
+        "name:uz": "Tennessi",
+        "name:yi": "טענעסי",
+        "name:zh": "田纳西州;田納西州",
+        "name:zh-Hans": "田纳西州",
+        "name:zh-Hant": "田納西州",
+        "nickname": "The Volunteer State",
+        "population": "7227750",
+        "population:date": "2024-07-01",
+        "ref": "TN",
+        "ref:USCG": "TN",
+        "ref:USPS": "TN",
+        "ref:fips": "47",
+        "short_name": "Tenn.",
+        "source:name:br": "ofis publik ar brezhoneg",
+        "source:population": "United States Census Bureau",
+        "source:short_name": "Associated Press",
+        "type": "boundary",
+        "wikidata": "Q1509",
+        "wikipedia": "en:Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 195795,
+      "bounds": {
+        "minlat": 36.396352,
+        "minlon": -86.825741,
+        "maxlat": 36.450385,
+        "maxlon": -86.773938
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "town",
+        "boundary": "administrative",
+        "gnis:feature_id": "2406611",
+        "name": "Greenbrier",
+        "place": "town",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q2706425",
+        "wikipedia": "en:Greenbrier, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 195798,
+      "bounds": {
+        "minlat": 36.353309,
+        "minlon": -87.100464,
+        "maxlat": 36.421415,
+        "maxlon": -86.9929818
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "city",
+        "boundary": "administrative",
+        "gnis:feature_id": "2404539",
+        "name": "Pleasant View",
+        "place": "city",
+        "population": "3701",
+        "population:date": "2006",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "source:population": "US Census",
+        "type": "boundary",
+        "wikidata": "Q2800895",
+        "wikipedia": "en:Pleasant View, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 195802,
+      "bounds": {
+        "minlat": 36.366439,
+        "minlon": -87.03816,
+        "maxlat": 36.461135,
+        "maxlon": -86.893018
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "town",
+        "boundary": "administrative",
+        "gnis:feature_id": "2406309",
+        "name": "Coopertown",
+        "place": "town",
+        "population": "3287",
+        "population:date": "2006",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "source:population": "US Census",
+        "type": "boundary",
+        "wikidata": "Q2394167",
+        "wikipedia": "en:Coopertown, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 195987,
+      "bounds": {
+        "minlat": 36.05658,
+        "minlon": -87.145751,
+        "maxlat": 36.114173,
+        "maxlon": -87.070524
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "town",
+        "boundary": "administrative",
+        "gnis:feature_id": "2405950",
+        "name": "Kingston Springs",
+        "place": "town",
+        "population": "2925",
+        "population:date": "2006",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "source:population": "US Census",
+        "type": "boundary",
+        "wikidata": "Q2661439",
+        "wikipedia": "en:Kingston Springs, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 195988,
+      "bounds": {
+        "minlat": 36.0789,
+        "minlon": -87.090388,
+        "maxlat": 36.131727,
+        "maxlon": -87.02041
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "town",
+        "boundary": "administrative",
+        "gnis:feature_id": "2407088",
+        "name": "Pegram",
+        "place": "town",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q3289517",
+        "wikipedia": "en:Pegram, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 195989,
+      "bounds": {
+        "minlat": 36.2108631,
+        "minlon": -87.080482,
+        "maxlat": 36.301687,
+        "maxlon": -86.9837061
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "town",
+        "boundary": "administrative",
+        "gnis:feature_id": "2405175",
+        "name": "Ashland City",
+        "place": "town",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q616259",
+        "wikipedia": "en:Ashland City, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 195994,
+      "bounds": {
+        "minlat": 36.2849359,
+        "minlon": -86.7415134,
+        "maxlat": 36.385087,
+        "maxlon": -86.669987
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "city",
+        "boundary": "administrative",
+        "gnis:feature_id": "2403712",
+        "name": "Goodlettsville",
+        "name:zh": "古德利茨维尔",
+        "place": "city",
+        "population": "16994",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q2273185",
+        "wikipedia": "en:Goodlettsville, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 196052,
+      "bounds": {
+        "minlat": 36.037265,
+        "minlon": -86.812735,
+        "maxlat": 36.111118,
+        "maxlon": -86.762357
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "city",
+        "boundary": "administrative",
+        "gnis:feature_id": "2404407",
+        "name": "Oak Hill",
+        "place": "city",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q3292521",
+        "wikipedia": "en:Oak Hill, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 196053,
+      "bounds": {
+        "minlat": 36.0402399,
+        "minlon": -86.876685,
+        "maxlat": 36.092859,
+        "maxlon": -86.807171
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "city",
+        "boundary": "administrative",
+        "gnis:feature_id": "2403635",
+        "name": "Forest Hills",
+        "place": "city",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q2685093",
+        "wikipedia": "en:Forest Hills, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 196062,
+      "bounds": {
+        "minlat": 35.93256,
+        "minlon": -86.869444,
+        "maxlat": 36.044672,
+        "maxlon": -86.6873
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "city",
+        "boundary": "administrative",
+        "gnis:feature_id": "2403919",
+        "name": "Brentwood",
+        "place": "city",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q3096621",
+        "wikipedia": "en:Brentwood, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 197245,
+      "bounds": {
+        "minlat": 36.348007,
+        "minlon": -86.763745,
+        "maxlat": 36.433993,
+        "maxlon": -86.664894
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "city",
+        "boundary": "administrative",
+        "gnis:feature_id": "2404265",
+        "name": "Millersville",
+        "place": "city",
+        "population": "6299",
+        "population:date": "2020",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q267212",
+        "wikipedia": "en:Millersville, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 197249,
+      "bounds": {
+        "minlat": 36.3846177,
+        "minlon": -86.798295,
+        "maxlat": 36.420645,
+        "maxlon": -86.746539
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "city",
+        "boundary": "administrative",
+        "gnis:feature_id": "2404618",
+        "name": "Ridgetop",
+        "place": "city",
+        "population": "2155",
+        "population:date": "2020",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q2148689",
+        "wikipedia": "en:Ridgetop, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 197294,
+      "bounds": {
+        "minlat": 36.07931,
+        "minlon": -87.253531,
+        "maxlat": 36.131103,
+        "maxlon": -87.172643
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "town",
+        "boundary": "administrative",
+        "gnis:feature_id": "2406875",
+        "name": "White Bluff",
+        "place": "town",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q3287270",
+        "wikipedia": "en:White Bluff, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 197390,
+      "bounds": {
+        "minlat": 36.244204,
+        "minlon": -86.679286,
+        "maxlat": 36.3737428,
+        "maxlon": -86.5167741
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "city",
+        "boundary": "administrative",
+        "gnis:feature_id": "2404684",
+        "name": "Hendersonville",
+        "place": "city",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q335955",
+        "wikipedia": "en:Hendersonville, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 197471,
+      "bounds": {
+        "minlat": 36.111579,
+        "minlon": -86.778704,
+        "maxlat": 36.129182,
+        "maxlon": -86.757028
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "city",
+        "boundary": "administrative",
+        "gnis:feature_id": "2403862",
+        "name": "Berry Hill",
+        "place": "city",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q1960234",
+        "wikipedia": "en:Berry Hill, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 197472,
+      "bounds": {
+        "minlat": 35.967785,
+        "minlon": -87.054766,
+        "maxlat": 36.405496,
+        "maxlon": -86.515588
+      },
+      "tags": {
+        "admin_level": "8",
+        "alt_name": "Nashville-Davidson",
+        "alt_name:zh": "纳什维尔-戴维森县",
+        "border_type": "city",
+        "boundary": "administrative",
+        "gnis:feature_id": "2405092",
+        "name": "Nashville",
+        "name:ar": "ناشفيل-ديفيدسون",
+        "name:chr": "ᏓᎬᎾ ᎤᏪᎶ",
+        "name:zh": "纳什维尔;納許維爾;納士維;納什維爾",
+        "name:zh-Hans": "纳什维尔",
+        "name:zh-Hans-CN": "纳什维尔",
+        "name:zh-Hant": "納許維爾;納士維;納什維爾",
+        "name:zh-Hant-CN": "納什維爾",
+        "name:zh-Hant-HK": "納士維",
+        "name:zh-Hant-TW": "納許維爾",
+        "nickname": "Music City",
+        "population": "654610",
+        "population:date": "2010",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q23197",
+        "wikipedia": "en:Nashville, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 197473,
+      "bounds": {
+        "minlat": 35.938072,
+        "minlon": -87.18969,
+        "maxlat": 36.048098,
+        "maxlon": -87.056483
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "city",
+        "boundary": "administrative",
+        "gnis:feature_id": "2403594",
+        "name": "Fairview",
+        "place": "city",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q2091782",
+        "wikipedia": "en:Fairview, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 197474,
+      "bounds": {
+        "minlat": 35.82938,
+        "minlon": -86.9479479,
+        "maxlat": 35.9815351,
+        "maxlon": -86.749446
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "city",
+        "boundary": "administrative",
+        "gnis:feature_id": "2403658",
+        "name": "Franklin",
+        "place": "city",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q984264",
+        "wikipedia": "en:Franklin, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 197477,
+      "bounds": {
+        "minlat": 35.934904,
+        "minlon": -86.681947,
+        "maxlat": 35.974249,
+        "maxlon": -86.6368
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "town",
+        "boundary": "administrative",
+        "gnis:feature_id": "2406995",
+        "name": "Nolensville",
+        "place": "town",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q2518793",
+        "wikipedia": "en:Nolensville, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1847614,
+      "bounds": {
+        "minlat": 36.041312,
+        "minlon": -87.286501,
+        "maxlat": 36.4557213,
+        "maxlon": -86.9062329
+      },
+      "tags": {
+        "admin_level": "6",
+        "attribution": "USGS 2001 County Boundary",
+        "border_type": "county",
+        "boundary": "administrative",
+        "is_in:state": "Tennessee",
+        "name": "Cheatham County",
+        "nist:fips_code": "47021",
+        "nist:state_fips": "47",
+        "place": "county",
+        "population": "39741",
+        "source": "county_import_v0.1_20080508235502",
+        "type": "boundary",
+        "website": "https://www.cheathamcountytn.gov/",
+        "wikidata": "Q495072",
+        "wikipedia": "en:Cheatham County, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1847619,
+      "bounds": {
+        "minlat": 35.967785,
+        "minlon": -87.054766,
+        "maxlat": 36.405496,
+        "maxlon": -86.515588
+      },
+      "tags": {
+        "admin_level": "6",
+        "attribution": "USGS 2001 County Boundary",
+        "border_type": "county",
+        "boundary": "administrative",
+        "is_in:state": "Tennessee",
+        "name": "Davidson County",
+        "name:ar": "مقاطعة ديفيدسون",
+        "name:zh": "戴维森县",
+        "nist:fips_code": "47037",
+        "nist:state_fips": "47",
+        "place": "county",
+        "population": "678889",
+        "source": "county_import_v0.1_20080508235502",
+        "source:population": "https://www.census.gov/programs-surveys/popest.html",
+        "type": "boundary",
+        "website": "https://www.nashville.gov/",
+        "wikidata": "Q1177705",
+        "wikipedia": "en:Davidson County, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1847621,
+      "bounds": {
+        "minlat": 35.960831,
+        "minlon": -87.566798,
+        "maxlat": 36.334713,
+        "maxlon": -87.149876
+      },
+      "tags": {
+        "admin_level": "6",
+        "attribution": "USGS 2001 County Boundary",
+        "border_type": "county",
+        "boundary": "administrative",
+        "is_in:state": "Tennessee",
+        "name": "Dickson County",
+        "nist:fips_code": "47043",
+        "nist:state_fips": "47",
+        "place": "county",
+        "population": "51487",
+        "source": "county_import_v0.1_20080508235502",
+        "type": "boundary",
+        "website": "https://www.dicksoncountytn.gov/",
+        "wikidata": "Q494815",
+        "wikipedia": "en:Dickson County, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1847641,
+      "bounds": {
+        "minlat": 36.349659,
+        "minlon": -87.150431,
+        "maxlat": 36.652486,
+        "maxlon": -86.56388
+      },
+      "tags": {
+        "admin_level": "6",
+        "attribution": "USGS 2001 County Boundary",
+        "border_type": "county",
+        "boundary": "administrative",
+        "is_in:state": "Tennessee",
+        "name": "Robertson County",
+        "nist:fips_code": "47147",
+        "nist:state_fips": "47",
+        "place": "county",
+        "population": "68570",
+        "source": "county_import_v0.1_20080508235502",
+        "source:population": "https://www.census.gov/programs-surveys/popest.html",
+        "type": "boundary",
+        "website": "https://www.robertsoncountytn.gov/",
+        "wikidata": "Q495043",
+        "wikipedia": "en:Robertson County, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1847645,
+      "bounds": {
+        "minlat": 36.244204,
+        "minlon": -86.754795,
+        "maxlat": 36.652445,
+        "maxlon": -86.2072346
+      },
+      "tags": {
+        "admin_level": "6",
+        "attribution": "USGS 2001 County Boundary",
+        "border_type": "county",
+        "boundary": "administrative",
+        "is_in:state": "Tennessee",
+        "name": "Sumner County",
+        "nist:fips_code": "47165",
+        "nist:state_fips": "47",
+        "place": "county",
+        "population": "175989",
+        "source": "county_import_v0.1_20080508235502",
+        "source:population": "https://www.census.gov/programs-surveys/popest.html",
+        "type": "boundary",
+        "website": "https://sumnercountytn.gov/",
+        "wikidata": "Q506175",
+        "wikipedia": "en:Sumner County, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1847647,
+      "bounds": {
+        "minlat": 35.696447,
+        "minlon": -87.2150777,
+        "maxlat": 36.052722,
+        "maxlon": -86.600032
+      },
+      "tags": {
+        "admin_level": "6",
+        "attribution": "USGS 2001 County Boundary",
+        "border_type": "county",
+        "boundary": "administrative",
+        "name": "Williamson County",
+        "nist:fips_code": "47187",
+        "nist:state_fips": "47",
+        "place": "county",
+        "population": "211672",
+        "source": "county_import_v0.1_20080508235502",
+        "source:population": "https://www.census.gov/programs-surveys/popest.html",
+        "type": "boundary",
+        "website": "https://www.williamsoncounty-tn.gov/",
+        "wikidata": "Q501948",
+        "wikipedia": "en:Williamson County, Tennessee"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 2690112,
+      "bounds": {
+        "minlat": 36.1362347,
+        "minlon": -87.0858235,
+        "maxlat": 36.2821054,
+        "maxlon": -86.9147814
+      },
+      "tags": {
+        "boat": "yes",
+        "canoe": "yes",
+        "motorboat": "yes",
+        "name": "Cheatham Lake",
+        "natural": "water",
+        "ship": "yes",
+        "type": "multipolygon",
+        "water": "reservoir"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 5373297,
+      "bounds": {
+        "minlat": 36.1323644,
+        "minlon": -86.8254954,
+        "maxlat": 36.1351228,
+        "maxlon": -86.8224373
+      },
+      "tags": {
+        "ele": "167",
+        "leisure": "park",
+        "name": "Elmington Park",
+        "type": "multipolygon",
+        "wikidata": "Q49486716"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 5639995,
+      "bounds": {
+        "minlat": 36.071158,
+        "minlon": -86.87026,
+        "maxlat": 36.124174,
+        "maxlon": -86.843056
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "city",
+        "boundary": "administrative",
+        "is_in:country": "USA",
+        "is_in:country_code": "US",
+        "is_in:iso_3166_2": "US:TN",
+        "is_in:state": "Tennessee",
+        "is_in:state_code": "TN",
+        "name": "Belle Meade",
+        "place": "city",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q2195766"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 7165231,
+      "bounds": {
+        "minlat": 36.1587028,
+        "minlon": -86.7767199,
+        "maxlat": 36.1673167,
+        "maxlon": -86.770482
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Riverfront Park",
+        "source": "Bing",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 9079546,
+      "bounds": {
+        "minlat": 36.167987,
+        "minlon": -86.7900734,
+        "maxlat": 36.1738999,
+        "maxlon": -86.7852305
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Bicentennial Capitol Mall State Park",
+        "type": "multipolygon",
+        "website": "https://tnstateparks.com/parks/bicentennial-mall",
+        "wikidata": "Q856742"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 9324722,
+      "bounds": {
+        "minlat": 36.0397251,
+        "minlon": -86.8114746,
+        "maxlat": 36.0714765,
+        "maxlon": -86.7828905
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "leisure": "park",
+        "name": "Radnor Lake State Natural Area",
+        "opening_hours": "06:00-sunset",
+        "type": "multipolygon",
+        "website": "https://tnstateparks.com/parks/about/radnor-lake",
+        "wikidata": "Q7281482",
+        "wikipedia": "en:Radnor Lake State Natural Area"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 9900936,
+      "bounds": {
+        "minlat": 36.1655443,
+        "minlon": -86.7771242,
+        "maxlat": 36.1670349,
+        "maxlon": -86.7762902
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Bicentennial Park",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 10030025,
+      "bounds": {
+        "minlat": 36.1335637,
+        "minlon": -86.7657069,
+        "maxlat": 36.1336136,
+        "maxlon": -86.765645
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 10807775,
+      "bounds": {
+        "minlat": 31.5440827,
+        "minlon": -91.373233,
+        "maxlat": 36.0373683,
+        "maxlon": -86.9579897
+      },
+      "tags": {
+        "access": "yes",
+        "boundary": "protected_area",
+        "fee": "no",
+        "image": "https://upload.wikimedia.org/wikipedia/commons/6/67/Natchez_Trace_Parkway_Logo.gif",
+        "name": "Natchez Trace Parkway",
+        "opening_hours": "24/7",
+        "operator": "National Park Service",
+        "operator:short": "NPS",
+        "operator:type": "public",
+        "operator:wikidata": "Q308439",
+        "ownership": "national",
+        "phone": "+1 800-305-7417",
+        "protect_class": "5",
+        "protected": "perpetuity",
+        "protection_title": "National Parkway",
+        "start_date": "1938",
+        "type": "boundary",
+        "website": "https://www.nps.gov/natr/index.htm",
+        "wikidata": "Q11092129",
+        "wikimedia_commons": "Category:Natchez Trace Parkway",
+        "wikipedia": "en:Natchez Trace Parkway"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 11718935,
+      "bounds": {
+        "minlat": 35.9755057,
+        "minlon": -87.006129,
+        "maxlat": 35.9823559,
+        "maxlon": -87.0001897
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Timberland Park",
+        "type": "multipolygon"
       }
     }
   ]

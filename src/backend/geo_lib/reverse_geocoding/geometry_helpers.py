@@ -2,12 +2,29 @@
 Geometry helpers for reverse geocoding (point-in-polygon for admin/protected areas).
 
 Used when parsing combined Overpass responses: elements may include "geometry"
-(list of {lat, lon}) when using "out geom". Type "area" elements are treated as
-containing the point without geometry (legacy is_in behavior).
+(list of {lat, lon}) when using "out geom", and "bounds" when using "out bb".
+Type "area" elements are treated as containing the point when geometry is absent.
 """
-from typing import List, Dict
+from typing import List, Dict, Any
 
 from django.contrib.gis.geos import Point, Polygon
+
+
+def point_in_bounds(lat: float, lon: float, bounds: Any) -> bool:
+    """
+    True if (lat, lon) is inside bounds.
+
+    Bounds may be minlat/maxlat/minlon/maxlon (Overpass) or south/west/north/east.
+    """
+    if not bounds or not isinstance(bounds, dict):
+        return False
+    minlat = bounds.get("minlat") or bounds.get("south")
+    maxlat = bounds.get("maxlat") or bounds.get("north")
+    minlon = bounds.get("minlon") or bounds.get("west")
+    maxlon = bounds.get("maxlon") or bounds.get("east")
+    if None in (minlat, maxlat, minlon, maxlon):
+        return False
+    return float(minlat) <= lat <= float(maxlat) and float(minlon) <= lon <= float(maxlon)
 
 
 def point_in_polygon(lat: float, lon: float, geometry: List[Dict[str, float]]) -> bool:

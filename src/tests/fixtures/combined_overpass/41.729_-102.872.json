@@ -1,39 +1,183 @@
 {
   "version": 0.6,
-  "generator": "test",
-  "osm3s": {},
+  "generator": "Overpass API 0.7.62.8 e802775f",
+  "osm3s": {
+    "timestamp_osm_base": "2026-01-28T00:00:00Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
   "elements": [
     {
-      "type": "area",
-      "id": 3600148838,
+      "type": "way",
+      "id": 469342330,
+      "bounds": {
+        "minlat": 41.6642379,
+        "minlon": -103.0941227,
+        "maxlat": 41.6652259,
+        "maxlon": -103.0927557
+      },
       "tags": {
-        "admin_level": "2",
-        "boundary": "administrative",
-        "name": "United States",
-        "name:en": "United States",
-        "type": "boundary"
+        "leisure": "park"
       }
     },
     {
-      "type": "area",
-      "id": 3600161991,
+      "type": "way",
+      "id": 469346908,
+      "bounds": {
+        "minlat": 41.6677966,
+        "minlon": -103.1035785,
+        "maxlat": 41.6681025,
+        "maxlon": -103.1032351
+      },
       "tags": {
-        "admin_level": "4",
-        "boundary": "administrative",
-        "name": "Nebraska",
-        "name:en": "Nebraska",
-        "type": "boundary"
+        "leisure": "park"
       }
     },
     {
-      "type": "area",
-      "id": 3600122854,
+      "type": "way",
+      "id": 469346911,
+      "bounds": {
+        "minlat": 41.6676849,
+        "minlon": -103.1022293,
+        "maxlat": 41.6680982,
+        "maxlon": -103.1016739
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 169527,
+      "bounds": {
+        "minlat": 41.6412118,
+        "minlon": -103.1158933,
+        "maxlat": 41.6804647,
+        "maxlon": -103.072025
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "city",
+        "boundary": "administrative",
+        "gnis:feature_id": "2393416",
+        "name": "Bridgeport",
+        "place": "city",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q913756",
+        "wikipedia": "en:Bridgeport, Nebraska"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 169528,
+      "bounds": {
+        "minlat": 41.593437,
+        "minlon": -102.856247,
+        "maxlat": 41.602569,
+        "maxlon": -102.848463
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "village",
+        "boundary": "administrative",
+        "gnis:feature_id": "2397461",
+        "name": "Broadwater",
+        "place": "village",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q2418481",
+        "wikipedia": "en:Broadwater, Nebraska"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1425449,
+      "bounds": {
+        "minlat": 41.436035,
+        "minlon": -103.3708871,
+        "maxlat": 42.005142,
+        "maxlon": -102.636406
+      },
       "tags": {
         "admin_level": "6",
+        "alt_name": "Morrill",
+        "attribution": "USGS 2001 County Boundary",
+        "border_type": "county",
+        "boundary": "administrative",
+        "name": "Morrill County",
+        "nist:fips_code": "31123",
+        "nist:state_fips": "31",
+        "type": "boundary",
+        "website": "https://www.morrillcountyne.gov/",
+        "wikidata": "Q368766",
+        "wikipedia": "en:Morrill County, Nebraska"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1425484,
+      "bounds": {
+        "minlat": 41.221054,
+        "minlon": -102.679214,
+        "maxlat": 42.009472,
+        "maxlon": -101.985336
+      },
+      "tags": {
+        "admin_level": "6",
+        "alt_name": "Garden",
+        "attribution": "USGS 2001 County Boundary",
+        "border_type": "county",
         "boundary": "administrative",
         "name": "Garden County",
-        "name:en": "Garden County",
-        "type": "boundary"
+        "nist:fips_code": "31069",
+        "nist:state_fips": "31",
+        "type": "boundary",
+        "website": "https://gardencounty.ne.gov/",
+        "wikidata": "Q489783",
+        "wikipedia": "en:Garden County, Nebraska"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 11375455,
+      "bounds": {
+        "minlat": 41.6740992,
+        "minlon": -103.1178562,
+        "maxlat": 41.6870363,
+        "maxlon": -103.1005776
+      },
+      "tags": {
+        "boundary": "national_park",
+        "name": "Bridgeport State Recreation Area",
+        "operator": "Nebraska Game and Parks Commission",
+        "operator:short": "NGPC",
+        "operator:type": "public",
+        "operator:wikidata": "Q6984719",
+        "ownership": "state",
+        "protect_class": "2",
+        "protected": "perpetuity",
+        "protection_title": "State Recreation Area",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 12187643,
+      "bounds": {
+        "minlat": 41.6558424,
+        "minlon": -102.712286,
+        "maxlat": 41.9182892,
+        "maxlon": -102.1668171
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "name": "Crescent Lake National Wildlife Refuge",
+        "operator": "US Fish and Wildlife Service",
+        "protect_class": "4",
+        "protected_area": "wildlife_refuge",
+        "protection_title": "National Wildlife Refuge",
+        "source": "USGS",
+        "type": "multipolygon"
       }
     }
   ]

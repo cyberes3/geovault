@@ -488,8 +488,8 @@ LAKE_PROXIMITY_MILES = config.get_float('reverse_geocoding.lake_proximity_miles'
 # Overpass API server URL
 OVERPASS_API_URL = config.get_str('reverse_geocoding.api_url', 'https://overpass.private.coffee/api/interpreter')
 
-# Overpass API timeout settings (in seconds)
-OVERPASS_API_TIMEOUT = config.get_int('reverse_geocoding.request_timeout_seconds', 45)
+# Overpass API timeout settings (in seconds); must be > combined query [timeout:60]
+OVERPASS_API_TIMEOUT = config.get_int('reverse_geocoding.request_timeout_seconds', 75)
 
 # Overpass API SSL verification setting (enabled by default)
 OVERPASS_API_VERIFY_SSL = config.get_bool('reverse_geocoding.verify_ssl', True)

@@ -1,97 +1,11 @@
 {
   "version": 0.6,
-  "generator": "test",
-  "osm3s": {},
+  "generator": "Overpass API 0.7.62.8 e802775f",
+  "osm3s": {
+    "timestamp_osm_base": "2026-01-28T00:00:00Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
   "elements": [
-    {
-      "type": "area",
-      "id": 3600148838,
-      "tags": {
-        "admin_level": "2",
-        "boundary": "administrative",
-        "name": "United States of America",
-        "name:en": "United States of America",
-        "type": "boundary"
-      }
-    },
-    {
-      "type": "area",
-      "id": 3600161993,
-      "tags": {
-        "admin_level": "4",
-        "boundary": "administrative",
-        "name": "Colorado",
-        "name:en": "Colorado",
-        "type": "boundary"
-      }
-    },
-    {
-      "type": "area",
-      "id": 3600112090,
-      "tags": {
-        "admin_level": "6",
-        "boundary": "administrative",
-        "name": "Park County",
-        "name:en": "Park County",
-        "type": "boundary"
-      }
-    },
-    {
-      "type": "area",
-      "id": 3600391173,
-      "tags": {
-        "boundary": "protected_area",
-        "name": "Pike National Forest",
-        "protection_title": "National Forest",
-        "type": "boundary"
-      }
-    },
-    {
-      "type": "way",
-      "id": 39683020,
-      "center": {
-        "lat": 39.0083474,
-        "lon": -104.9930248
-      },
-      "tags": {
-        "ele": "2767",
-        "gnis:feature_id": "193225",
-        "name": "Leo Lake",
-        "natural": "water",
-        "water": "reservoir"
-      }
-    },
-    {
-      "type": "way",
-      "id": 39683085,
-      "center": {
-        "lat": 39.0067846,
-        "lon": -104.9955963
-      },
-      "tags": {
-        "ele": "2768",
-        "gnis:feature_id": "197584",
-        "name": "Sapphire Lake",
-        "natural": "water",
-        "water": "reservoir"
-      }
-    },
-    {
-      "type": "relation",
-      "id": 223995,
-      "center": {
-        "lat": 39.0119952,
-        "lon": -104.9948265
-      },
-      "tags": {
-        "ele": "2759",
-        "gnis:feature_id": "193226",
-        "name": "Grace Lake",
-        "natural": "water",
-        "type": "multipolygon",
-        "water": "reservoir"
-      }
-    },
     {
       "type": "node",
       "id": 151352413,
@@ -120,6 +34,6006 @@
         "source:population": "US Census",
         "wikidata": "Q2009757",
         "wikipedia": "en:Woodland Park, Colorado"
+      }
+    },
+    {
+      "type": "way",
+      "id": 36836393,
+      "bounds": {
+        "minlat": 38.7581915,
+        "minlon": -104.8142942,
+        "maxlat": 38.7593183,
+        "maxlon": -104.8122881
+      },
+      "tags": {
+        "addr:housenumber": "4035",
+        "addr:postcode": "80906",
+        "addr:state": "CO",
+        "addr:street": "Danceglen Drive",
+        "ele": "1827",
+        "leisure": "park",
+        "name": "Broadmoor Glen Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 36864832,
+      "bounds": {
+        "minlat": 38.7589124,
+        "minlon": -104.8315854,
+        "maxlat": 38.7608261,
+        "maxlon": -104.8297218
+      },
+      "tags": {
+        "addr:housenumber": "4960",
+        "addr:state": "CO",
+        "addr:street": "Farthing Drive",
+        "leisure": "park",
+        "name": "Oak Meadows Park",
+        "url": "http://www.springsgov.com/Page.aspx?NavID=1926"
+      }
+    },
+    {
+      "type": "way",
+      "id": 36865303,
+      "bounds": {
+        "minlat": 38.8488698,
+        "minlon": -104.8576853,
+        "maxlat": 38.8506847,
+        "maxlon": -104.8553059
+      },
+      "tags": {
+        "addr:housenumber": "2310",
+        "addr:state": "CO",
+        "addr:street": "West Uintah Street",
+        "leisure": "park",
+        "name": "Thorndale Park",
+        "url": "http://www.springsgov.com/Page.aspx?NavID=1926"
+      }
+    },
+    {
+      "type": "way",
+      "id": 36866297,
+      "bounds": {
+        "minlat": 38.8441323,
+        "minlon": -104.8294014,
+        "maxlat": 38.8448289,
+        "maxlon": -104.8285958
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 36866490,
+      "bounds": {
+        "minlat": 38.8469478,
+        "minlon": -104.8286347,
+        "maxlat": 38.848219,
+        "maxlon": -104.8277822
+      },
+      "tags": {
+        "addr:state": "CO",
+        "landuse": "recreation_ground",
+        "name": "Burghart Tennis Courts",
+        "operator": "Colorado College"
+      }
+    },
+    {
+      "type": "way",
+      "id": 36867191,
+      "bounds": {
+        "minlat": 38.8395831,
+        "minlon": -104.8206486,
+        "maxlat": 38.840238,
+        "maxlon": -104.8200901
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 36889644,
+      "bounds": {
+        "minlat": 38.8505185,
+        "minlon": -104.8282388,
+        "maxlat": 38.8508467,
+        "maxlon": -104.8278746
+      },
+      "tags": {
+        "barrier": "fence",
+        "landuse": "recreation_ground",
+        "operator": "Monument Valley Park",
+        "sport": "tennis"
+      }
+    },
+    {
+      "type": "way",
+      "id": 36891162,
+      "bounds": {
+        "minlat": 38.8393593,
+        "minlon": -104.8154524,
+        "maxlat": 38.8461343,
+        "maxlon": -104.8106722
+      },
+      "tags": {
+        "addr:housenumber": "1990",
+        "addr:state": "CO",
+        "addr:street": "South El Paso Avenue",
+        "alt_name": "Meadows Park",
+        "leisure": "park",
+        "name": "Mid Shooks Run Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 36896071,
+      "bounds": {
+        "minlat": 38.8356873,
+        "minlon": -104.8331402,
+        "maxlat": 38.8658529,
+        "maxlon": -104.825708
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Monument Valley Park",
+        "start_date": "1904",
+        "wikidata": "Q14684967"
+      }
+    },
+    {
+      "type": "way",
+      "id": 36896564,
+      "bounds": {
+        "minlat": 38.8423539,
+        "minlon": -104.7900108,
+        "maxlat": 38.843571,
+        "maxlon": -104.788761
+      },
+      "tags": {
+        "addr:housenumber": "731",
+        "addr:postcode": "80909",
+        "addr:state": "CO",
+        "addr:street": "North Iowa Avenue",
+        "leisure": "park",
+        "name": "Otis Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 36896593,
+      "bounds": {
+        "minlat": 38.8489807,
+        "minlon": -104.7899998,
+        "maxlat": 38.8502054,
+        "maxlon": -104.7887271
+      },
+      "tags": {
+        "addr:housenumber": "2112",
+        "addr:postcode": "80909",
+        "addr:state": "CO",
+        "addr:street": "East Uintah Avenue",
+        "leisure": "park",
+        "name": "Lunar Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 36896775,
+      "bounds": {
+        "minlat": 38.8367027,
+        "minlon": -104.8233144,
+        "maxlat": 38.8380465,
+        "maxlon": -104.8216363
+      },
+      "tags": {
+        "addr:city": "Colorado Springs",
+        "addr:housenumber": "115",
+        "addr:postcode": "80903",
+        "addr:state": "CO",
+        "addr:street": "East Platte Avenue",
+        "ele": "1836",
+        "gnis:feature_id": "193490",
+        "historic": "park",
+        "leisure": "park",
+        "name": "Acacia Park",
+        "old_name": "North Park",
+        "operator": "City of Colorado Springs",
+        "start_date": "1871"
+      }
+    },
+    {
+      "type": "way",
+      "id": 36943392,
+      "bounds": {
+        "minlat": 38.882084,
+        "minlon": -104.7568247,
+        "maxlat": 38.8853161,
+        "maxlon": -104.7512199
+      },
+      "tags": {
+        "addr:housenumber": "3539",
+        "addr:state": "CO",
+        "addr:street": "North Carefree Circle",
+        "leisure": "park",
+        "name": "Village Green Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 36949218,
+      "bounds": {
+        "minlat": 38.8527759,
+        "minlon": -104.8790167,
+        "maxlat": 38.8531916,
+        "maxlon": -104.8785052
+      },
+      "tags": {
+        "bicycle": "designated",
+        "foot": "no",
+        "horse": "no",
+        "landuse": "recreation_ground",
+        "leisure": "track",
+        "motor_vehicle": "no",
+        "name": "Free Ride Area",
+        "opening_hours": "Mo-Su 06:00-20:00; Sa 06:00-20:00; PH open",
+        "sport": "cycling"
+      }
+    },
+    {
+      "type": "way",
+      "id": 37095841,
+      "bounds": {
+        "minlat": 38.9227849,
+        "minlon": -104.7859439,
+        "maxlat": 38.9259058,
+        "maxlon": -104.7822952
+      },
+      "tags": {
+        "addr:housenumber": "2450",
+        "addr:state": "CO",
+        "addr:street": "Roundtop Drive",
+        "leisure": "park",
+        "name": "Dublin Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 37183286,
+      "bounds": {
+        "minlat": 38.8592548,
+        "minlon": -104.9204324,
+        "maxlat": 38.8603426,
+        "maxlon": -104.9181655
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Soda Springs Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 37184748,
+      "bounds": {
+        "minlat": 38.8298111,
+        "minlon": -104.8235737,
+        "maxlat": 38.8309605,
+        "maxlon": -104.8221005
+      },
+      "tags": {
+        "addr:housenumber": "215",
+        "addr:state": "CO",
+        "addr:street": "South Tejon Street",
+        "leisure": "park",
+        "name": "Alamo Square Park",
+        "old_name": "South Park",
+        "wikidata": "Q19871830"
+      }
+    },
+    {
+      "type": "way",
+      "id": 37184782,
+      "bounds": {
+        "minlat": 38.8334282,
+        "minlon": -104.8285252,
+        "maxlat": 38.8346297,
+        "maxlon": -104.8269697
+      },
+      "tags": {
+        "addr:housenumber": "31",
+        "addr:postcode": "80903",
+        "addr:state": "CO",
+        "addr:street": "West Pikes Peak Avenue",
+        "leisure": "park",
+        "name": "Antlers Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 37184868,
+      "bounds": {
+        "minlat": 38.8663022,
+        "minlon": -104.7827238,
+        "maxlat": 38.867724,
+        "maxlon": -104.7807768
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Audubon Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 37185052,
+      "bounds": {
+        "minlat": 38.8462822,
+        "minlon": -104.8619254,
+        "maxlat": 38.8474289,
+        "maxlon": -104.8604916
+      },
+      "tags": {
+        "addr:city": "Colorado Springs",
+        "addr:housenumber": "2408",
+        "addr:postcode": "80904",
+        "addr:state": "CO",
+        "addr:street": "West Colorado Avenue",
+        "leisure": "park",
+        "name": "Bancroft Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 37185157,
+      "bounds": {
+        "minlat": 38.8163037,
+        "minlon": -104.7641565,
+        "maxlat": 38.8187966,
+        "maxlon": -104.7616421
+      },
+      "tags": {
+        "addr:city": "Colorado Springs",
+        "addr:housenumber": "975",
+        "addr:postcode": "80910",
+        "addr:state": "CO",
+        "addr:street": "Afternoon Circle",
+        "leisure": "park",
+        "name": "MSgt. Roy P. Benavidez Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 37185300,
+      "bounds": {
+        "minlat": 38.8436173,
+        "minlon": -104.8633098,
+        "maxlat": 38.8447892,
+        "maxlon": -104.8613634
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Blunt Park",
+        "url": "http://www.springsgov.com/Page.aspx?NavID=1926"
+      }
+    },
+    {
+      "type": "way",
+      "id": 37208797,
+      "bounds": {
+        "minlat": 38.7923118,
+        "minlon": -104.8778869,
+        "maxlat": 38.8045411,
+        "maxlon": -104.8539948
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "dog": "leashed",
+        "landuse": "recreation_ground",
+        "name": "Stratton Open Space",
+        "note": "Bounds are very much approximate. Basically eyeballing what seems to be right.",
+        "operator": "City of Colorado Springs",
+        "ownership": "municipal",
+        "protect_class": "6",
+        "protection_title": "Municipal Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 37272598,
+      "bounds": {
+        "minlat": 38.865251,
+        "minlon": -104.816248,
+        "maxlat": 38.8666441,
+        "maxlon": -104.8131982
+      },
+      "tags": {
+        "addr:housenumber": "2323",
+        "addr:state": "CO",
+        "addr:street": "North Wahsatch Avenue",
+        "alt_name": "Bonny Park",
+        "ele": "1965",
+        "gnis:feature_id": "193479",
+        "leisure": "park",
+        "name": "Bonforte Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 37276619,
+      "bounds": {
+        "minlat": 38.9050749,
+        "minlon": -104.7736774,
+        "maxlat": 38.9071288,
+        "maxlon": -104.7711258
+      },
+      "tags": {
+        "addr:city": "Colorado Springs",
+        "addr:housenumber": "5080",
+        "addr:postcode": "80918",
+        "addr:state": "CO",
+        "addr:street": "El Camino Drive",
+        "ele": "1978",
+        "leisure": "park",
+        "name": "Fremont Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 37276992,
+      "bounds": {
+        "minlat": 38.9119169,
+        "minlon": -104.78231,
+        "maxlat": 38.9143964,
+        "maxlon": -104.7777574
+      },
+      "tags": {
+        "addr:housenumber": "5711",
+        "addr:state": "CO",
+        "addr:street": "Tuckerman Drive",
+        "leisure": "park",
+        "name": "George Follows Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 37320353,
+      "bounds": {
+        "minlat": 38.9311531,
+        "minlon": -104.7597515,
+        "maxlat": 38.932737,
+        "maxlon": -104.7585217
+      },
+      "tags": {
+        "addr:housenumber": "3617",
+        "addr:state": "CO",
+        "addr:street": "Woodland Hills Drive",
+        "leisure": "park",
+        "name": "Woodland Hills Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 37320572,
+      "bounds": {
+        "minlat": 38.9047319,
+        "minlon": -104.786909,
+        "maxlat": 38.9069167,
+        "maxlon": -104.7834679
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Garden Ranch Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 37355715,
+      "bounds": {
+        "minlat": 38.8278783,
+        "minlon": -104.8335795,
+        "maxlat": 38.8314401,
+        "maxlon": -104.8310458
+      },
+      "tags": {
+        "addr:housenumber": "126",
+        "addr:postcode": "80903",
+        "addr:state": "CO",
+        "addr:street": "Cimino Drive",
+        "leisure": "park",
+        "name": "America the Beautiful Park",
+        "old_name": "Confluence Park",
+        "phone": "+1-719-385-5940",
+        "url": "http://www.americathebeautifulpark.com/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 38897734,
+      "bounds": {
+        "minlat": 38.8568782,
+        "minlon": -104.8990521,
+        "maxlat": 38.8586063,
+        "maxlon": -104.8966769
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Schryver Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 39683020,
+      "bounds": {
+        "minlat": 39.0072636,
+        "minlon": -104.9936355,
+        "maxlat": 39.0094312,
+        "maxlon": -104.9924141
+      },
+      "tags": {
+        "ele": "2767",
+        "gnis:feature_id": "193225",
+        "name": "Leo Lake",
+        "natural": "water",
+        "water": "reservoir"
+      }
+    },
+    {
+      "type": "way",
+      "id": 39683085,
+      "bounds": {
+        "minlat": 39.0062077,
+        "minlon": -104.9966734,
+        "maxlat": 39.0073615,
+        "maxlon": -104.9945191
+      },
+      "tags": {
+        "ele": "2768",
+        "gnis:feature_id": "197584",
+        "name": "Sapphire Lake",
+        "natural": "water",
+        "water": "reservoir"
+      }
+    },
+    {
+      "type": "way",
+      "id": 43418113,
+      "bounds": {
+        "minlat": 38.9547294,
+        "minlon": -104.7732531,
+        "maxlat": 38.9561941,
+        "maxlon": -104.7714372
+      },
+      "tags": {
+        "addr:housenumber": "2830",
+        "addr:state": "CO",
+        "addr:street": "Parliament Drive",
+        "leisure": "park",
+        "name": "Wedgewood Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 43678498,
+      "bounds": {
+        "minlat": 38.9475891,
+        "minlon": -104.7829302,
+        "maxlat": 38.9535422,
+        "maxlon": -104.7744413
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Rampart Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 45761644,
+      "bounds": {
+        "minlat": 38.8823556,
+        "minlon": -104.8034137,
+        "maxlat": 38.8847083,
+        "maxlon": -104.8001432
+      },
+      "tags": {
+        "addr:housenumber": "3535",
+        "addr:state": "CO",
+        "addr:street": "North Hancock Avenue",
+        "leisure": "park",
+        "name": "Portal Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 45761657,
+      "bounds": {
+        "minlat": 38.8817602,
+        "minlon": -104.8184574,
+        "maxlat": 38.889458,
+        "maxlon": -104.802171
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 45762060,
+      "bounds": {
+        "minlat": 38.9206403,
+        "minlon": -104.8275153,
+        "maxlat": 38.9220908,
+        "maxlon": -104.8251462
+      },
+      "tags": {
+        "addr:housenumber": "6155",
+        "addr:state": "CO",
+        "addr:street": "Delmonico Drive",
+        "leisure": "park",
+        "name": "Golden Hills Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 45762321,
+      "bounds": {
+        "minlat": 38.9106003,
+        "minlon": -104.8609901,
+        "maxlat": 38.9130661,
+        "maxlon": -104.8584288
+      },
+      "tags": {
+        "addr:housenumber": "5585",
+        "addr:state": "CO",
+        "addr:street": "Mule Deer Drive",
+        "leisure": "park",
+        "name": "Piñon Valley Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 45762996,
+      "bounds": {
+        "minlat": 38.9075255,
+        "minlon": -104.8635107,
+        "maxlat": 38.9284615,
+        "maxlon": -104.826481
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "description": "Ute Valley Park is a popular destination for hiking, mountain biking, dog walking, and running. The park offers vistas, geological features and destination-level trails.",
+        "landuse": "recreation_ground",
+        "name": "Ute Valley Park",
+        "note": "approximate",
+        "operator": "City of Colorado Springs",
+        "ownership": "municipal",
+        "protect_class": "6",
+        "protection_title": "Municipal Park",
+        "website": "https://coloradosprings.gov/parks-recreation-and-cultural-services/page/ute-valley-park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 45763521,
+      "bounds": {
+        "minlat": 38.9339122,
+        "minlon": -104.8764922,
+        "maxlat": 38.9354122,
+        "maxlon": -104.8745433
+      },
+      "tags": {
+        "addr:housenumber": "2325",
+        "addr:state": "CO",
+        "addr:street": "Silent Rain Drive",
+        "leisure": "park",
+        "name": "Oak Valley Ranch Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 45763688,
+      "bounds": {
+        "minlat": 38.8849926,
+        "minlon": -104.830093,
+        "maxlat": 38.8912642,
+        "maxlon": -104.8265793
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 45763777,
+      "bounds": {
+        "minlat": 38.888118,
+        "minlon": -104.8277246,
+        "maxlat": 38.8892621,
+        "maxlon": -104.8266651
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 47472329,
+      "bounds": {
+        "minlat": 38.921076,
+        "minlon": -104.7972824,
+        "maxlat": 38.9242165,
+        "maxlon": -104.7959536
+      },
+      "tags": {
+        "addr:housenumber": "1705",
+        "addr:state": "CO",
+        "addr:street": "Twin Oaks Drive",
+        "leisure": "park",
+        "name": "Erindale Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 47472352,
+      "bounds": {
+        "minlat": 38.8919056,
+        "minlon": -104.7714531,
+        "maxlat": 38.8951015,
+        "maxlon": -104.7680397
+      },
+      "tags": {
+        "addr:housenumber": "2821",
+        "addr:state": "CO",
+        "addr:street": "Shadowglen Drive",
+        "leisure": "park",
+        "name": "Grant Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 47737334,
+      "bounds": {
+        "minlat": 38.8678148,
+        "minlon": -104.7897781,
+        "maxlat": 38.8892944,
+        "maxlon": -104.7573171
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "ele": "1953",
+        "gnis:feature_id": "203677",
+        "landuse": "recreation_ground",
+        "leisure": "park",
+        "name": "Palmer Park",
+        "operator": "City of Colorado Springs",
+        "operator:type": "government",
+        "operator:wikidata": "Q49258",
+        "ownership": "municipal",
+        "phone": "+1-719-385-5940",
+        "protect_class": "6",
+        "protection_title": "Municipal Park",
+        "wikidata": "Q7128254"
+      }
+    },
+    {
+      "type": "way",
+      "id": 50194020,
+      "bounds": {
+        "minlat": 38.9647147,
+        "minlon": -104.7986351,
+        "maxlat": 38.9657456,
+        "maxlon": -104.7970148
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 50194027,
+      "bounds": {
+        "minlat": 38.9618148,
+        "minlon": -104.7553538,
+        "maxlat": 38.9638279,
+        "maxlon": -104.7528063
+      },
+      "tags": {
+        "addr:city": "Colorado Springs",
+        "addr:housenumber": "4017",
+        "addr:postcode": "80920",
+        "addr:state": "CO",
+        "addr:street": "Family Place",
+        "leisure": "park",
+        "name": "John L. Stone Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 50194029,
+      "bounds": {
+        "minlat": 38.9607107,
+        "minlon": -104.7771892,
+        "maxlat": 38.9621164,
+        "maxlon": -104.771057
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 50194030,
+      "bounds": {
+        "minlat": 38.9593202,
+        "minlon": -104.7808554,
+        "maxlat": 38.9634442,
+        "maxlon": -104.7768109
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 50276095,
+      "bounds": {
+        "minlat": 38.9636224,
+        "minlon": -104.7789474,
+        "maxlat": 38.9654861,
+        "maxlon": -104.7773844
+      },
+      "tags": {
+        "addr:housenumber": "2550",
+        "addr:state": "CO",
+        "addr:street": "Dynamic Drive",
+        "leisure": "park",
+        "name": "Lulu Pollard Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 50276640,
+      "bounds": {
+        "minlat": 38.9541091,
+        "minlon": -104.7845009,
+        "maxlat": 38.9546802,
+        "maxlon": -104.7842375
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 50276641,
+      "bounds": {
+        "minlat": 38.9527173,
+        "minlon": -104.7845039,
+        "maxlat": 38.9540709,
+        "maxlon": -104.7842424
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 50276645,
+      "bounds": {
+        "minlat": 38.9546974,
+        "minlon": -104.7845039,
+        "maxlat": 38.9566744,
+        "maxlon": -104.7842395
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 50280016,
+      "bounds": {
+        "minlat": 38.9490156,
+        "minlon": -104.7512041,
+        "maxlat": 38.9525491,
+        "maxlon": -104.7466027
+      },
+      "tags": {
+        "addr:housenumber": "8320",
+        "addr:state": "CO",
+        "addr:street": "Boxelder Drive",
+        "leisure": "park",
+        "name": "Meadowridge Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 50319204,
+      "bounds": {
+        "minlat": 38.9558341,
+        "minlon": -104.7881344,
+        "maxlat": 38.959726,
+        "maxlon": -104.7817169
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 50331451,
+      "bounds": {
+        "minlat": 38.846044,
+        "minlon": -104.8679732,
+        "maxlat": 38.8481618,
+        "maxlon": -104.8656055
+      },
+      "tags": {
+        "addr:housenumber": "2601",
+        "addr:state": "CO",
+        "addr:street": "West Vermijo Avenue",
+        "leisure": "park",
+        "name": "Vermijo Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 50332434,
+      "bounds": {
+        "minlat": 38.8033951,
+        "minlon": -104.849517,
+        "maxlat": 38.8044439,
+        "maxlon": -104.8472089
+      },
+      "tags": {
+        "addr:housenumber": "1019",
+        "addr:state": "CO",
+        "addr:street": "Skyway Boulevard",
+        "leisure": "park",
+        "name": "Jenkins Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 50422897,
+      "bounds": {
+        "minlat": 38.8009434,
+        "minlon": -104.8134763,
+        "maxlat": 38.8028261,
+        "maxlon": -104.8109532
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 50423821,
+      "bounds": {
+        "minlat": 38.7931943,
+        "minlon": -104.7920432,
+        "maxlat": 38.7935277,
+        "maxlon": -104.7914839
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 50426154,
+      "bounds": {
+        "minlat": 38.7830613,
+        "minlon": -104.8136804,
+        "maxlat": 38.7868818,
+        "maxlon": -104.8053861
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 50503885,
+      "bounds": {
+        "minlat": 38.8931171,
+        "minlon": -104.7868766,
+        "maxlat": 38.8947308,
+        "maxlon": -104.7851868
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 51825365,
+      "bounds": {
+        "minlat": 38.85369,
+        "minlon": -104.9074142,
+        "maxlat": 38.8544169,
+        "maxlon": -104.906175
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 55766831,
+      "bounds": {
+        "minlat": 38.8883961,
+        "minlon": -104.8064165,
+        "maxlat": 38.8895054,
+        "maxlon": -104.8039545
+      },
+      "tags": {
+        "addr:housename": "Danville Park",
+        "addr:housenumber": "1147",
+        "addr:state": "CO",
+        "addr:street": "Mount View Lane",
+        "leisure": "park",
+        "name": "Danville Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 56629377,
+      "bounds": {
+        "minlat": 38.8197211,
+        "minlon": -104.8607869,
+        "maxlat": 38.8200526,
+        "maxlon": -104.8599454
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 56629378,
+      "bounds": {
+        "minlat": 38.8192682,
+        "minlon": -104.8603314,
+        "maxlat": 38.8194424,
+        "maxlon": -104.859974
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 58294839,
+      "bounds": {
+        "minlat": 38.8528337,
+        "minlon": -104.8464448,
+        "maxlat": 38.8610715,
+        "maxlon": -104.8368747
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "Sondermann Park",
+        "operator": "City of Colorado Springs",
+        "ownership": "municipal",
+        "protect_class": "6",
+        "protection_title": "Municipal Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 60233938,
+      "bounds": {
+        "minlat": 38.8500153,
+        "minlon": -104.8915911,
+        "maxlat": 38.8507359,
+        "maxlon": -104.8910842
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Bill Bauer's Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 61699596,
+      "bounds": {
+        "minlat": 38.8220713,
+        "minlon": -104.8039307,
+        "maxlat": 38.8331819,
+        "maxlon": -104.794491
+      },
+      "tags": {
+        "ele": "1851",
+        "gnis:feature_id": "193503",
+        "leisure": "park",
+        "name": "Memorial Park",
+        "wikidata": "Q14684953"
+      }
+    },
+    {
+      "type": "way",
+      "id": 72654437,
+      "bounds": {
+        "minlat": 38.9065162,
+        "minlon": -104.7778199,
+        "maxlat": 38.9080262,
+        "maxlon": -104.7755213
+      },
+      "tags": {
+        "addr:housenumber": "5285",
+        "addr:state": "CO",
+        "addr:street": "Tomah Drive",
+        "leisure": "park",
+        "name": "Tomah Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 73106874,
+      "bounds": {
+        "minlat": 38.8675058,
+        "minlon": -104.8553356,
+        "maxlat": 38.8678361,
+        "maxlon": -104.8547894
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 88123092,
+      "bounds": {
+        "minlat": 38.8427975,
+        "minlon": -104.905371,
+        "maxlat": 38.8462011,
+        "maxlon": -104.9031445
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Manitou Mesa",
+        "notes": "This is technically “Open Space”, but I dont' know how to tag that."
+      }
+    },
+    {
+      "type": "way",
+      "id": 88123101,
+      "bounds": {
+        "minlat": 38.8436832,
+        "minlon": -104.8968869,
+        "maxlat": 38.8478466,
+        "maxlon": -104.8949718
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Deer Valley Nature Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 95034309,
+      "bounds": {
+        "minlat": 38.8698556,
+        "minlon": -104.8020555,
+        "maxlat": 38.8721805,
+        "maxlon": -104.7987971
+      },
+      "tags": {
+        "addr:housenumber": "2615",
+        "addr:postcode": "80907",
+        "addr:state": "CO",
+        "addr:street": "Logan Avenue",
+        "leisure": "park",
+        "name": "Nancy E. Lewis Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 118097847,
+      "bounds": {
+        "minlat": 38.8389136,
+        "minlon": -104.8034125,
+        "maxlat": 38.8402864,
+        "maxlon": -104.8003664
+      },
+      "tags": {
+        "addr:housenumber": "1210",
+        "addr:state": "CO",
+        "addr:street": "East Boulder Street",
+        "ele": "1846",
+        "gnis:feature_id": "193494",
+        "leisure": "park",
+        "name": "Boulder Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 130922985,
+      "bounds": {
+        "minlat": 38.8109551,
+        "minlon": -104.7662646,
+        "maxlat": 38.8142492,
+        "maxlon": -104.761466
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "name": "Leon Young Sports Complex"
+      }
+    },
+    {
+      "type": "way",
+      "id": 134718596,
+      "bounds": {
+        "minlat": 38.8712808,
+        "minlon": -104.8312954,
+        "maxlat": 38.8723379,
+        "maxlon": -104.8297004
+      },
+      "tags": {
+        "addr:housenumber": "515",
+        "addr:state": "CO",
+        "addr:street": "West Polk Street",
+        "leisure": "park",
+        "name": "Roswell Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 134718601,
+      "bounds": {
+        "minlat": 38.8654708,
+        "minlon": -104.8152749,
+        "maxlat": 38.8658,
+        "maxlon": -104.8149122
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 155373722,
+      "bounds": {
+        "minlat": 38.968419,
+        "minlon": -104.7613023,
+        "maxlat": 38.9700407,
+        "maxlon": -104.7594613
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Pirate's Cove Splash Park",
+        "source": "local_knowledge"
+      }
+    },
+    {
+      "type": "way",
+      "id": 169537876,
+      "bounds": {
+        "minlat": 38.9074084,
+        "minlon": -104.8739831,
+        "maxlat": 38.909406,
+        "maxlon": -104.8711667
+      },
+      "tags": {
+        "addr:housenumber": "5151",
+        "addr:state": "CO",
+        "addr:street": "Flying W Ranch Road",
+        "leisure": "park",
+        "name": "Mountain Shadows Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 186519661,
+      "bounds": {
+        "minlat": 38.8197758,
+        "minlon": -104.7896443,
+        "maxlat": 38.8214668,
+        "maxlon": -104.7867825
+      },
+      "tags": {
+        "addr:housenumber": "851",
+        "addr:state": "CO",
+        "addr:street": "Boggs Place",
+        "leisure": "park",
+        "name": "Adams Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 186667272,
+      "bounds": {
+        "minlat": 38.8593475,
+        "minlon": -104.7795001,
+        "maxlat": 38.861392,
+        "maxlon": -104.7758281
+      },
+      "tags": {
+        "addr:housenumber": "1910",
+        "addr:state": "CO",
+        "addr:street": "North Circle Drive",
+        "leisure": "park",
+        "name": "Wasson Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 186667346,
+      "bounds": {
+        "minlat": 38.8609345,
+        "minlon": -104.7815705,
+        "maxlat": 38.8616694,
+        "maxlon": -104.7808862
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 187756885,
+      "bounds": {
+        "minlat": 38.8409194,
+        "minlon": -104.8699816,
+        "maxlat": 38.842599,
+        "maxlon": -104.8678883
+      },
+      "tags": {
+        "addr:housenumber": "815",
+        "addr:state": "CO",
+        "addr:street": "South 26th Street",
+        "ele": "1868",
+        "gnis:feature_id": "193472",
+        "leisure": "park",
+        "name": "Bott Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 188301507,
+      "bounds": {
+        "minlat": 38.8382682,
+        "minlon": -104.825774,
+        "maxlat": 38.8389702,
+        "maxlon": -104.8252667
+      },
+      "tags": {
+        "addr:housenumber": "302",
+        "addr:state": "CO",
+        "addr:street": "North Cascade Avenue",
+        "leisure": "park",
+        "name": "Boulder Crescent Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 189674595,
+      "bounds": {
+        "minlat": 38.8930124,
+        "minlon": -104.8028934,
+        "maxlat": 38.8936237,
+        "maxlon": -104.801726
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "name": "West Lawn"
+      }
+    },
+    {
+      "type": "way",
+      "id": 190387161,
+      "bounds": {
+        "minlat": 38.8460308,
+        "minlon": -104.8358773,
+        "maxlat": 38.8474037,
+        "maxlon": -104.8336202
+      },
+      "tags": {
+        "addr:housenumber": "910",
+        "addr:postcode": "80905",
+        "addr:state": "CO",
+        "addr:street": "North Walnut Street",
+        "ele": "1839",
+        "leisure": "park",
+        "name": "Bristol Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 190555496,
+      "bounds": {
+        "minlat": 38.7605464,
+        "minlon": -104.8243896,
+        "maxlat": 38.7621589,
+        "maxlon": -104.8227606
+      },
+      "tags": {
+        "addr:housenumber": "5315",
+        "addr:postcode": "80906",
+        "addr:state": "CO",
+        "addr:street": "Farthing Drive",
+        "ele": "1886",
+        "leisure": "park",
+        "name": "Broadmoor Bluffs Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 190867642,
+      "bounds": {
+        "minlat": 38.7776466,
+        "minlon": -104.8340373,
+        "maxlat": 38.779813,
+        "maxlon": -104.8315296
+      },
+      "tags": {
+        "addr:housenumber": "3750",
+        "addr:state": "CO",
+        "addr:street": "Boradmoor Valley Road",
+        "leisure": "park",
+        "name": "Broadmoor Valley Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 191650861,
+      "bounds": {
+        "minlat": 38.8023035,
+        "minlon": -104.7639753,
+        "maxlat": 38.8039047,
+        "maxlon": -104.7621056
+      },
+      "tags": {
+        "addr:housenumber": "3480",
+        "addr:state": "CO",
+        "addr:street": "El Morro Road",
+        "ele": "1811",
+        "leisure": "park",
+        "name": "Centennial Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 191675732,
+      "bounds": {
+        "minlat": 38.7716036,
+        "minlon": -104.8078214,
+        "maxlat": 38.7768333,
+        "maxlon": -104.8045867
+      },
+      "tags": {
+        "addr:housenumber": "3868",
+        "addr:state": "CO",
+        "addr:street": "Glen Meadow Drive",
+        "leisure": "park",
+        "name": "Cheyenne Meadows Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 191841624,
+      "bounds": {
+        "minlat": 38.8347665,
+        "minlon": -104.845469,
+        "maxlat": 38.835504,
+        "maxlon": -104.8444819
+      },
+      "tags": {
+        "addr:housenumber": "1121",
+        "addr:state": "CO",
+        "addr:street": "West Cucharras Street",
+        "leisure": "park",
+        "name": "Cucharras Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 192012660,
+      "bounds": {
+        "minlat": 38.7838044,
+        "minlon": -104.7515802,
+        "maxlat": 38.7865524,
+        "maxlon": -104.7466511
+      },
+      "tags": {
+        "ele": "1803",
+        "leisure": "park",
+        "name": "Deerfield Hills Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 192390202,
+      "bounds": {
+        "minlat": 38.8163664,
+        "minlon": -104.8243333,
+        "maxlat": 38.8177532,
+        "maxlon": -104.8225362
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Dorchester Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 192890244,
+      "bounds": {
+        "minlat": 38.8766117,
+        "minlon": -104.812296,
+        "maxlat": 38.8786316,
+        "maxlon": -104.8111491
+      },
+      "tags": {
+        "addr:housenumber": "3132",
+        "addr:state": "CO",
+        "addr:street": "North Prospect Street",
+        "leisure": "park",
+        "name": "Flanagan Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 193049907,
+      "bounds": {
+        "minlat": 38.8192119,
+        "minlon": -104.8083446,
+        "maxlat": 38.8211784,
+        "maxlon": -104.8053915
+      },
+      "tags": {
+        "addr:housenumber": "901",
+        "addr:state": "CO",
+        "addr:street": "East Fountain Boulevard",
+        "ele": "1840",
+        "leisure": "park",
+        "name": "Fountain Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 193057456,
+      "bounds": {
+        "minlat": 38.8424044,
+        "minlon": -104.7744689,
+        "maxlat": 38.8434532,
+        "maxlon": -104.773313
+      },
+      "tags": {
+        "addr:housenumber": "2951",
+        "addr:state": "CO",
+        "addr:street": "East Dale Street",
+        "leisure": "park",
+        "name": "Franklin Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 193239966,
+      "bounds": {
+        "minlat": 38.9466976,
+        "minlon": -104.7694955,
+        "maxlat": 38.9497933,
+        "maxlon": -104.766108
+      },
+      "tags": {
+        "addr:housenumber": "8025",
+        "addr:state": "CO",
+        "addr:street": "North Union Boulevard",
+        "leisure": "park",
+        "name": "Ford Frick Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 193254371,
+      "bounds": {
+        "minlat": 38.9455041,
+        "minlon": -104.7583462,
+        "maxlat": 38.9475164,
+        "maxlon": -104.7563835
+      },
+      "tags": {
+        "addr:housenumber": "3725",
+        "addr:postcode": "80920",
+        "addr:state": "CO",
+        "addr:street": "Meadow Ridge Drive",
+        "ele": "2083",
+        "leisure": "park",
+        "name": "Frontier Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 193425784,
+      "bounds": {
+        "minlat": 38.7910242,
+        "minlon": -104.7527665,
+        "maxlat": 38.7931894,
+        "maxlon": -104.7505108
+      },
+      "tags": {
+        "addr:housenumber": "2890",
+        "addr:postcode": "80916",
+        "addr:state": "CO",
+        "addr:street": "Ferber Drive",
+        "ele": "1812",
+        "leisure": "park",
+        "name": "Giberson Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 193596919,
+      "bounds": {
+        "minlat": 38.7513875,
+        "minlon": -104.8332103,
+        "maxlat": 38.7529982,
+        "maxlon": -104.8312622
+      },
+      "tags": {
+        "addr:housenumber": "5445",
+        "addr:state": "CO",
+        "addr:street": "Broadmoor Bluffs Drive",
+        "leisure": "park",
+        "name": "Glen Oaks Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 193622723,
+      "bounds": {
+        "minlat": 38.8265864,
+        "minlon": -104.854382,
+        "maxlat": 38.8282371,
+        "maxlon": -104.8521994
+      },
+      "tags": {
+        "addr:housenumber": "1536",
+        "addr:state": "CO",
+        "addr:street": "Gold Spike Terrace",
+        "leisure": "park",
+        "name": "Gold Camp Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 194063879,
+      "bounds": {
+        "minlat": 38.8259951,
+        "minlon": -104.7515805,
+        "maxlat": 38.8270012,
+        "maxlon": -104.7499529
+      },
+      "tags": {
+        "addr:housenumber": "305",
+        "addr:state": "CO",
+        "addr:street": "Longfellow Drive",
+        "leisure": "park",
+        "name": "Trues Mill Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 194063905,
+      "bounds": {
+        "minlat": 38.8285276,
+        "minlon": -104.7534586,
+        "maxlat": 38.829369,
+        "maxlon": -104.7520504
+      },
+      "tags": {
+        "addr:housenumber": "218",
+        "addr:state": "CO",
+        "addr:street": "Milton Drive",
+        "leisure": "park",
+        "name": "Happy Hollow Playground",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 194063927,
+      "bounds": {
+        "minlat": 38.829167,
+        "minlon": -104.7518206,
+        "maxlat": 38.8291983,
+        "maxlon": -104.7517951
+      },
+      "tags": {
+        "addr:housenumber": "206",
+        "addr:state": "CO",
+        "addr:street": "Longfellow Drive",
+        "leisure": "park",
+        "name": "Mountain View Playground",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 194063938,
+      "bounds": {
+        "minlat": 38.8283166,
+        "minlon": -104.7502206,
+        "maxlat": 38.8298795,
+        "maxlon": -104.7488184
+      },
+      "tags": {
+        "addr:housenumber": "4105",
+        "addr:state": "CO",
+        "addr:street": "Channing Place",
+        "leisure": "park",
+        "name": "Little Britches Playground",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 194063951,
+      "bounds": {
+        "minlat": 38.8278109,
+        "minlon": -104.7516132,
+        "maxlat": 38.8288431,
+        "maxlon": -104.7507061
+      },
+      "tags": {
+        "addr:housenumber": "226",
+        "addr:state": "CO",
+        "addr:street": "Longfellow Drive",
+        "leisure": "park",
+        "name": "Honeybear Playground",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 194428684,
+      "bounds": {
+        "minlat": 38.8362033,
+        "minlon": -104.7508985,
+        "maxlat": 38.8367297,
+        "maxlon": -104.7501389
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 194528302,
+      "bounds": {
+        "minlat": 38.810589,
+        "minlon": -104.8310238,
+        "maxlat": 38.8114123,
+        "maxlon": -104.8294697
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Ivywild Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 194585697,
+      "bounds": {
+        "minlat": 38.8909891,
+        "minlon": -104.843098,
+        "maxlat": 38.8932896,
+        "maxlon": -104.8402696
+      },
+      "tags": {
+        "addr:housenumber": "1111",
+        "addr:state": "CO",
+        "addr:street": "Holland Park Boulevard",
+        "ele": "1914",
+        "leisure": "park",
+        "name": "Jackson Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 195066642,
+      "bounds": {
+        "minlat": 38.9037025,
+        "minlon": -104.7574508,
+        "maxlat": 38.9064331,
+        "maxlon": -104.7532312
+      },
+      "tags": {
+        "addr:housenumber": "4950",
+        "addr:postcode": "80918",
+        "addr:state": "CO",
+        "addr:street": "Meadowland Boulevard",
+        "ele": "1986",
+        "leisure": "park",
+        "name": "Keller Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 195699283,
+      "bounds": {
+        "minlat": 38.9180793,
+        "minlon": -104.7720591,
+        "maxlat": 38.91947,
+        "maxlon": -104.7694561
+      },
+      "tags": {
+        "addr:housenumber": "6050",
+        "addr:postcode": "80918",
+        "addr:state": "CO",
+        "addr:street": "Sapporo Drive",
+        "ele": "2052",
+        "leisure": "park",
+        "name": "Keystone Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 195847562,
+      "bounds": {
+        "minlat": 38.8434335,
+        "minlon": -104.7850714,
+        "maxlat": 38.8448404,
+        "maxlon": -104.7843354
+      },
+      "tags": {
+        "addr:housenumber": "2415",
+        "addr:postcode": "80909",
+        "addr:state": "CO",
+        "addr:street": "East Cache La Poudre Street",
+        "leisure": "park",
+        "name": "Betty Krouse Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 196267381,
+      "bounds": {
+        "minlat": 39.0250935,
+        "minlon": -104.8107237,
+        "maxlat": 39.0262729,
+        "maxlon": -104.8086208
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Grey Hawk Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 196267436,
+      "bounds": {
+        "minlat": 39.0090974,
+        "minlon": -104.8068667,
+        "maxlat": 39.0127917,
+        "maxlon": -104.8036587
+      },
+      "tags": {
+        "addr:city": "Colorado Springs",
+        "addr:housenumber": "1102",
+        "addr:postcode": "80912",
+        "addr:state": "CO",
+        "addr:street": "Middle Creek Parkway",
+        "leisure": "park",
+        "name": "Mary Kyer Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 196623114,
+      "bounds": {
+        "minlat": 38.8569142,
+        "minlon": -104.7808527,
+        "maxlat": 38.8588886,
+        "maxlon": -104.779476
+      },
+      "tags": {
+        "addr:housenumber": "2580",
+        "addr:postcode": "80909",
+        "addr:state": "CO",
+        "addr:street": "Lelaray Street",
+        "ele": "1892",
+        "leisure": "park",
+        "name": "Jefferson Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 196820138,
+      "bounds": {
+        "minlat": 38.8628979,
+        "minlon": -104.750319,
+        "maxlat": 38.8639965,
+        "maxlon": -104.7479762
+      },
+      "tags": {
+        "addr:housenumber": "2112",
+        "addr:postcode": "80909",
+        "addr:state": "CO",
+        "addr:street": "North Murray Boulevard",
+        "leisure": "park",
+        "name": "Madison Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 197102442,
+      "bounds": {
+        "minlat": 38.9766595,
+        "minlon": -104.7841835,
+        "maxlat": 38.9795808,
+        "maxlon": -104.7829619
+      },
+      "tags": {
+        "addr:housenumber": "2320",
+        "addr:postcode": "80920",
+        "addr:state": "CO",
+        "addr:street": "Amberwood Lane",
+        "leisure": "park",
+        "name": "Kathleen Marriage Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 197609489,
+      "bounds": {
+        "minlat": 38.8355314,
+        "minlon": -104.8133587,
+        "maxlat": 38.8391009,
+        "maxlon": -104.8129321
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 197627597,
+      "bounds": {
+        "minlat": 38.7997513,
+        "minlon": -104.7690073,
+        "maxlat": 38.8016479,
+        "maxlon": -104.7667247
+      },
+      "tags": {
+        "addr:housenumber": "2225",
+        "addr:postcode": "80910",
+        "addr:state": "CO",
+        "addr:street": "Monterey Road",
+        "leisure": "park",
+        "name": "Monterey Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 197628256,
+      "bounds": {
+        "minlat": 38.8080537,
+        "minlon": -104.7698079,
+        "maxlat": 38.8105241,
+        "maxlon": -104.7652495
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 199284839,
+      "bounds": {
+        "minlat": 38.8350945,
+        "minlon": -104.8153692,
+        "maxlat": 38.8363711,
+        "maxlon": -104.8135527
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "John O'Byrne \"Prairie Dog\" Park",
+        "old_name": "High Street Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 199769455,
+      "bounds": {
+        "minlat": 38.8023631,
+        "minlon": -104.7537929,
+        "maxlat": 38.8027032,
+        "maxlon": -104.7529362
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 199955261,
+      "bounds": {
+        "minlat": 38.8806687,
+        "minlon": -104.750702,
+        "maxlat": 38.8813992,
+        "maxlon": -104.7500034
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 200249855,
+      "bounds": {
+        "minlat": 38.8688395,
+        "minlon": -104.8391802,
+        "maxlat": 38.8699422,
+        "maxlon": -104.8364434
+      },
+      "tags": {
+        "addr:housenumber": "2610",
+        "addr:state": "CO",
+        "addr:street": "North Chestnut Street",
+        "leisure": "park",
+        "name": "Pike Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 200629799,
+      "bounds": {
+        "minlat": 38.9082144,
+        "minlon": -104.8447524,
+        "maxlat": 38.9098382,
+        "maxlon": -104.8433017
+      },
+      "tags": {
+        "addr:housenumber": "855",
+        "addr:state": "CO",
+        "addr:street": "Popes Valley Drive",
+        "leisure": "park",
+        "name": "Pinecliff Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 200681781,
+      "bounds": {
+        "minlat": 38.9223004,
+        "minlon": -104.8527282,
+        "maxlat": 38.9226286,
+        "maxlon": -104.8523492
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 200702567,
+      "bounds": {
+        "minlat": 38.8644898,
+        "minlon": -104.8611864,
+        "maxlat": 38.8664084,
+        "maxlon": -104.8590514
+      },
+      "tags": {
+        "addr:city": "Colorado Springs",
+        "addr:housenumber": "1101",
+        "addr:postcode": "80904",
+        "addr:state": "CO",
+        "addr:street": "Cenotaph Circle",
+        "leisure": "park",
+        "name": "Pioneer Park",
+        "note": "Dogs must be on leash.",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 202242276,
+      "bounds": {
+        "minlat": 38.8203825,
+        "minlon": -104.7545034,
+        "maxlat": 38.8217063,
+        "maxlon": -104.7521952
+      },
+      "tags": {
+        "addr:housenumber": "710",
+        "addr:state": "CO",
+        "addr:street": "Chapman Drive",
+        "leisure": "park",
+        "name": "Prairie Grass Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 202771398,
+      "bounds": {
+        "minlat": 38.8482922,
+        "minlon": -104.751553,
+        "maxlat": 38.8486191,
+        "maxlon": -104.7508661
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 203300945,
+      "bounds": {
+        "minlat": 38.8092346,
+        "minlon": -104.7866214,
+        "maxlat": 38.8096881,
+        "maxlon": -104.7841512
+      },
+      "tags": {
+        "addr:housenumber": "2197",
+        "addr:postcode": "80910",
+        "addr:state": "CO",
+        "addr:street": "Gilpin Ave",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 203300946,
+      "bounds": {
+        "minlat": 38.8085032,
+        "minlon": -104.7840863,
+        "maxlat": 38.8087541,
+        "maxlon": -104.7832229
+      },
+      "tags": {
+        "addr:housenumber": "1749",
+        "addr:postcode": "80910",
+        "addr:state": "CO",
+        "addr:street": "Flintshire St",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 203300960,
+      "bounds": {
+        "minlat": 38.8101262,
+        "minlon": -104.7843125,
+        "maxlat": 38.8108623,
+        "maxlon": -104.7833769
+      },
+      "tags": {
+        "addr:housenumber": "778",
+        "addr:postcode": "80910",
+        "addr:state": "CO",
+        "addr:street": "Antrim Loop",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 203318040,
+      "bounds": {
+        "minlat": 38.8070191,
+        "minlon": -104.7890434,
+        "maxlat": 38.8076942,
+        "maxlon": -104.7882016
+      },
+      "tags": {
+        "addr:city": "Colorado Springs",
+        "addr:housenumber": "1781",
+        "addr:postcode": "80910",
+        "addr:state": "CO",
+        "addr:street": "Derbyshire Street",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 203436978,
+      "bounds": {
+        "minlat": 38.8067661,
+        "minlon": -104.8532743,
+        "maxlat": 38.8101669,
+        "maxlon": -104.8494801
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Skyway Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 203440672,
+      "bounds": {
+        "minlat": 38.7993101,
+        "minlon": -104.7773569,
+        "maxlat": 38.8009163,
+        "maxlon": -104.7755632
+      },
+      "tags": {
+        "addr:city": "Colorado Springs",
+        "addr:housenumber": "2205",
+        "addr:postcode": "80910",
+        "addr:state": "CO",
+        "addr:street": "Spring Blossom Drive",
+        "leisure": "park",
+        "name": "James H. Smith Park",
+        "opening_hours": "Nov-Apr 05:00-21:00; May-Oct 05:00-22:00"
+      }
+    },
+    {
+      "type": "way",
+      "id": 204342011,
+      "bounds": {
+        "minlat": 38.8195401,
+        "minlon": -104.8180731,
+        "maxlat": 38.8243066,
+        "maxlon": -104.8154713
+      },
+      "tags": {
+        "addr:housenumber": "734",
+        "addr:state": "CO",
+        "addr:street": "South Corona Street",
+        "leisure": "park",
+        "name": "South Shooks Run Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 204468621,
+      "bounds": {
+        "minlat": 38.9530058,
+        "minlon": -104.8821598,
+        "maxlat": 38.9544073,
+        "maxlon": -104.8799353
+      },
+      "tags": {
+        "addr:housenumber": "3492",
+        "addr:state": "CO",
+        "addr:street": "West Woodmen Road",
+        "leisure": "park",
+        "name": "Marshall Sprague Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 205260378,
+      "bounds": {
+        "minlat": 38.8505455,
+        "minlon": -104.7691469,
+        "maxlat": 38.8524964,
+        "maxlon": -104.7670601
+      },
+      "tags": {
+        "addr:housenumber": "3320",
+        "addr:postcode": "80909",
+        "addr:state": "CO",
+        "addr:street": "East San Miguel Street",
+        "ele": "1887",
+        "leisure": "park",
+        "name": "Twain Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 205717350,
+      "bounds": {
+        "minlat": 38.8325748,
+        "minlon": -104.7644664,
+        "maxlat": 38.8356776,
+        "maxlon": -104.7628275
+      },
+      "tags": {
+        "access": "yes",
+        "addr:city": "Colorado Springs",
+        "addr:housenumber": "3637",
+        "addr:state": "CO",
+        "addr:street": "East Bijou Street",
+        "dog": "leashed",
+        "leisure": "park",
+        "name": "Wagner Park",
+        "opening_hours": "Nov-Apr 05:00-21:00; May-Oct 05:00-22:00",
+        "website": "https://coloradosprings.gov/parks/page/neighborhood-parks"
+      }
+    },
+    {
+      "type": "way",
+      "id": 206054650,
+      "bounds": {
+        "minlat": 38.8365362,
+        "minlon": -104.8162679,
+        "maxlat": 38.8377605,
+        "maxlon": -104.815756
+      },
+      "tags": {
+        "addr:city": "Colorado Springs",
+        "addr:housenumber": "501",
+        "addr:postcode": "80903",
+        "addr:state": "CO",
+        "addr:street": "East Platte Avenue",
+        "leisure": "park",
+        "name": "Frank Waters Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 207546676,
+      "bounds": {
+        "minlat": 38.8433409,
+        "minlon": -104.8538242,
+        "maxlat": 38.8451957,
+        "maxlon": -104.8515524
+      },
+      "tags": {
+        "addr:housenumber": "1920",
+        "addr:postcode": "80904",
+        "addr:state": "CO",
+        "addr:street": "West Pikes Peak Avenue",
+        "alt_name": "West Junior High Backyard",
+        "ele": "1848",
+        "leisure": "park",
+        "name": "West Middle School Backyard"
+      }
+    },
+    {
+      "type": "way",
+      "id": 207700111,
+      "bounds": {
+        "minlat": 38.8631121,
+        "minlon": -104.8709796,
+        "maxlat": 38.8635148,
+        "maxlon": -104.8704815
+      },
+      "tags": {
+        "access": "permissive",
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground",
+        "lit": "no"
+      }
+    },
+    {
+      "type": "way",
+      "id": 207700135,
+      "bounds": {
+        "minlat": 38.8627417,
+        "minlon": -104.872348,
+        "maxlat": 38.8650305,
+        "maxlon": -104.8698857
+      },
+      "tags": {
+        "addr:housenumber": "3315",
+        "addr:state": "CO",
+        "addr:street": "Water Street",
+        "leisure": "park",
+        "name": "Westmoor Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 207792010,
+      "bounds": {
+        "minlat": 38.9188878,
+        "minlon": -104.8684663,
+        "maxlat": 38.9199386,
+        "maxlon": -104.8656057
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Wickes Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 208650030,
+      "bounds": {
+        "minlat": 38.9463371,
+        "minlon": -104.8675579,
+        "maxlat": 38.9466931,
+        "maxlon": -104.8671261
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground",
+        "lit": "yes"
+      }
+    },
+    {
+      "type": "way",
+      "id": 208650052,
+      "bounds": {
+        "minlat": 38.9456492,
+        "minlon": -104.8676625,
+        "maxlat": 38.9468222,
+        "maxlon": -104.8641141
+      },
+      "tags": {
+        "addr:housenumber": "2525",
+        "addr:postcode": "80919",
+        "addr:state": "CO",
+        "addr:street": "West Woodmen Road",
+        "leisure": "park",
+        "name": "Woodmen Valley Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 208652081,
+      "bounds": {
+        "minlat": 38.9399871,
+        "minlon": -104.852413,
+        "maxlat": 38.9424168,
+        "maxlon": -104.8495123
+      },
+      "tags": {
+        "addr:housenumber": "1315",
+        "addr:state": "CO",
+        "addr:street": "Carlson Drive",
+        "leisure": "park",
+        "name": "Woodstone Park",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 208707349,
+      "bounds": {
+        "minlat": 38.9315484,
+        "minlon": -104.8331124,
+        "maxlat": 38.9320635,
+        "maxlon": -104.8323927
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground",
+        "lit": "yes"
+      }
+    },
+    {
+      "type": "way",
+      "id": 216870967,
+      "bounds": {
+        "minlat": 38.9017958,
+        "minlon": -104.7908554,
+        "maxlat": 38.9056754,
+        "maxlon": -104.7841014
+      },
+      "tags": {
+        "addr:housenumber": "2002",
+        "addr:state": "CO",
+        "addr:street": "Collegiate Drive",
+        "leisure": "park",
+        "name": "Dr. Frank Houck Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 216870968,
+      "bounds": {
+        "minlat": 38.9057491,
+        "minlon": -104.7897343,
+        "maxlat": 38.9101038,
+        "maxlon": -104.7892197
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 219701283,
+      "bounds": {
+        "minlat": 38.8070961,
+        "minlon": -104.9147473,
+        "maxlat": 38.8245328,
+        "maxlon": -104.8818562
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "Bear Creek Cañon Park",
+        "operator": "City of Colorado Springs",
+        "ownership": "municipal",
+        "protect_class": "6",
+        "protection_title": "Municipal Park",
+        "sorting_name": "Bear Creek Canon Park",
+        "wikidata": "Q14684301"
+      }
+    },
+    {
+      "type": "way",
+      "id": 219701284,
+      "bounds": {
+        "minlat": 38.8242624,
+        "minlon": -104.9049074,
+        "maxlat": 38.8388553,
+        "maxlon": -104.8862924
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "Manitou Section 16 Open Space",
+        "operator": "City of Colorado Springs",
+        "ownership": "municipal",
+        "protect_class": "6",
+        "protection_title": "Municipal Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 219704521,
+      "bounds": {
+        "minlat": 38.8280757,
+        "minlon": -104.8863812,
+        "maxlat": 38.8318712,
+        "maxlon": -104.8806096
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "White Acres"
+      }
+    },
+    {
+      "type": "way",
+      "id": 219716600,
+      "bounds": {
+        "minlat": 38.7775725,
+        "minlon": -104.9105497,
+        "maxlat": 38.8068358,
+        "maxlon": -104.863174
+      },
+      "tags": {
+        "addr:city": "Colorado Springs",
+        "addr:housenumber": "2120",
+        "addr:state": "CO",
+        "addr:street": "South Cheyenne Canon Road",
+        "alt_name": "North Cheyenne Canyon Park",
+        "boundary": "protected_area",
+        "ele": "2279",
+        "gnis:feature_id": "203680",
+        "heritage": "yes",
+        "landuse": "recreation_ground",
+        "name": "North Cheyenne Cañon Park",
+        "opening_hours": "Nov 01-Apr 30 Mo-Su 05:00-21:00; May 01-Oct 31 Mo-Su 05:00-22:00",
+        "operator": "City of Colorado Springs",
+        "ownership": "municipal",
+        "protect_class": "6",
+        "protection_title": "Municipal Park",
+        "sorting_name": "North Cheyenne Canon Park",
+        "website": "https://www.cheyennecanon.org/visitor-centers/",
+        "wikidata": "Q14685025",
+        "wikipedia": "en:North Cheyenne Cañon Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 219847925,
+      "bounds": {
+        "minlat": 38.8982571,
+        "minlon": -104.8033691,
+        "maxlat": 38.9151545,
+        "maxlon": -104.7896686
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "Austin Bluffs Open Space - University Park",
+        "operator": "City of Colorado Springs",
+        "ownership": "municipal",
+        "protect_class": "6",
+        "protection_title": "Municipal Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 219924652,
+      "bounds": {
+        "minlat": 38.9112559,
+        "minlon": -104.8144953,
+        "maxlat": 38.9199917,
+        "maxlon": -104.8032308
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "Austin Bluffs Open Space - Pulpit Rock",
+        "operator": "City of Colorado Springs",
+        "ownership": "municipal",
+        "protect_class": "6",
+        "protection_title": "Municipal Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 220028531,
+      "bounds": {
+        "minlat": 38.8998896,
+        "minlon": -104.7920154,
+        "maxlat": 38.9023053,
+        "maxlon": -104.7904372
+      },
+      "tags": {
+        "access": "private",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 220034932,
+      "bounds": {
+        "minlat": 38.8981402,
+        "minlon": -104.7972387,
+        "maxlat": 38.8989053,
+        "maxlon": -104.7964129
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 220043869,
+      "bounds": {
+        "minlat": 38.891078,
+        "minlon": -104.7975641,
+        "maxlat": 38.9020091,
+        "maxlon": -104.7825703
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "Austin Bluffs Open Space - Austin Bluffs Park",
+        "operator": "City of Colorado Springs",
+        "operator:type": "government",
+        "operator:wikidata": "Q49258",
+        "ownership": "municipal",
+        "protect_class": "6",
+        "protection_title": "Municipal Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 220814250,
+      "bounds": {
+        "minlat": 38.9309246,
+        "minlon": -104.7640857,
+        "maxlat": 38.9313529,
+        "maxlon": -104.7597266
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Woodland Hills Open Space"
+      }
+    },
+    {
+      "type": "way",
+      "id": 221426234,
+      "bounds": {
+        "minlat": 38.8152209,
+        "minlon": -104.8843291,
+        "maxlat": 38.8305679,
+        "maxlon": -104.8404463
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "Bear Creek Regional Park",
+        "operator": "El Paso County, Colorado",
+        "ownership": "county",
+        "protect_class": "6",
+        "protection_title": "County Park",
+        "source": "El Paso County Free Parks Data"
+      }
+    },
+    {
+      "type": "way",
+      "id": 221426235,
+      "bounds": {
+        "minlat": 38.7772389,
+        "minlon": -104.7930905,
+        "maxlat": 38.7781728,
+        "maxlon": -104.791945
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Stratmoor Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 221426236,
+      "bounds": {
+        "minlat": 38.7727575,
+        "minlon": -104.7740605,
+        "maxlat": 38.7742893,
+        "maxlon": -104.7721985
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Stratmoor Valley Trailhead"
+      }
+    },
+    {
+      "type": "way",
+      "id": 224257746,
+      "bounds": {
+        "minlat": 38.8932186,
+        "minlon": -104.8036265,
+        "maxlat": 38.8936104,
+        "maxlon": -104.8031698
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "name": "Telluride-Vail Quad"
+      }
+    },
+    {
+      "type": "way",
+      "id": 224258194,
+      "bounds": {
+        "minlat": 38.8913406,
+        "minlon": -104.7981388,
+        "maxlat": 38.892133,
+        "maxlon": -104.7972207
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "name": "Cragmor Green"
+      }
+    },
+    {
+      "type": "way",
+      "id": 224437861,
+      "bounds": {
+        "minlat": 38.9429072,
+        "minlon": -104.8693932,
+        "maxlat": 38.9463425,
+        "maxlon": -104.8593986
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "leisure": "common",
+        "name": "Woodmen Valley Open Space",
+        "operator": "City of Colorado Springs",
+        "operator:type": "government",
+        "operator:wikidata": "Q49258",
+        "ownership": "municipal",
+        "protect_class": "6",
+        "protection_title": "Municipal Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 224937195,
+      "bounds": {
+        "minlat": 38.9293545,
+        "minlon": -104.8727915,
+        "maxlat": 38.9313245,
+        "maxlon": -104.8692626
+      },
+      "tags": {
+        "addr:postcode": "80919",
+        "addr:street": "Allegheny Drive",
+        "leisure": "park",
+        "name": "Wilson Ranch Park",
+        "start_date": "2001"
+      }
+    },
+    {
+      "type": "way",
+      "id": 225187335,
+      "bounds": {
+        "minlat": 38.8314529,
+        "minlon": -104.8315993,
+        "maxlat": 38.8316938,
+        "maxlon": -104.8313874
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 229852693,
+      "bounds": {
+        "minlat": 38.7889185,
+        "minlon": -104.7873805,
+        "maxlat": 38.7946533,
+        "maxlon": -104.7815976
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "El Pomar Youth Sports Park",
+        "source": "bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 229864612,
+      "bounds": {
+        "minlat": 38.7862501,
+        "minlon": -104.7735474,
+        "maxlat": 38.7869088,
+        "maxlon": -104.773148
+      },
+      "tags": {
+        "barrier": "fence",
+        "landuse": "recreation_ground",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 230920969,
+      "bounds": {
+        "minlat": 38.8602907,
+        "minlon": -104.8116132,
+        "maxlat": 38.8604613,
+        "maxlon": -104.8113772
+      },
+      "tags": {
+        "leisure": "park",
+        "surface": "grass"
+      }
+    },
+    {
+      "type": "way",
+      "id": 230920970,
+      "bounds": {
+        "minlat": 38.8637715,
+        "minlon": -104.8021195,
+        "maxlat": 38.8640973,
+        "maxlon": -104.8014248
+      },
+      "tags": {
+        "leisure": "park",
+        "surface": "grass"
+      }
+    },
+    {
+      "type": "way",
+      "id": 230920971,
+      "bounds": {
+        "minlat": 38.8629549,
+        "minlon": -104.8001346,
+        "maxlat": 38.8632828,
+        "maxlon": -104.7994641
+      },
+      "tags": {
+        "leisure": "park",
+        "surface": "grass"
+      }
+    },
+    {
+      "type": "way",
+      "id": 230920972,
+      "bounds": {
+        "minlat": 38.8638989,
+        "minlon": -104.8063976,
+        "maxlat": 38.864421,
+        "maxlon": -104.8053622
+      },
+      "tags": {
+        "leisure": "park",
+        "surface": "grass"
+      }
+    },
+    {
+      "type": "way",
+      "id": 231407640,
+      "bounds": {
+        "minlat": 38.8556189,
+        "minlon": -104.8296341,
+        "maxlat": 38.8561076,
+        "maxlon": -104.8291906
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 236513684,
+      "bounds": {
+        "minlat": 38.9029814,
+        "minlon": -104.8227534,
+        "maxlat": 38.9036577,
+        "maxlon": -104.8223618
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 237483398,
+      "bounds": {
+        "minlat": 38.9663987,
+        "minlon": -104.8428824,
+        "maxlat": 38.9671134,
+        "maxlon": -104.8422128
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 238156389,
+      "bounds": {
+        "minlat": 39.0293524,
+        "minlon": -104.7830056,
+        "maxlat": 39.0316662,
+        "maxlon": -104.7816679
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Barefoot Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 238156508,
+      "bounds": {
+        "minlat": 39.027126,
+        "minlon": -104.7884753,
+        "maxlat": 39.0280262,
+        "maxlon": -104.7855873
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 238156639,
+      "bounds": {
+        "minlat": 39.0313774,
+        "minlon": -104.7914534,
+        "maxlat": 39.0318138,
+        "maxlon": -104.7905394
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 239841027,
+      "bounds": {
+        "minlat": 38.7891859,
+        "minlon": -104.8394838,
+        "maxlat": 38.7919789,
+        "maxlon": -104.835366
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Boddington Field"
+      }
+    },
+    {
+      "type": "way",
+      "id": 257987962,
+      "bounds": {
+        "minlat": 38.8287722,
+        "minlon": -104.7517956,
+        "maxlat": 38.8299505,
+        "maxlon": -104.7507951
+      },
+      "tags": {
+        "addr:housenumber": "206",
+        "addr:state": "CO",
+        "addr:street": "Longfellow Drive",
+        "leisure": "park",
+        "name": "Mountain View Playground",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 292139727,
+      "bounds": {
+        "minlat": 38.870671,
+        "minlon": -104.7556877,
+        "maxlat": 38.8747054,
+        "maxlon": -104.7536955
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Natural Park",
+        "operator": "Village Seven Home Owners Association Inc."
+      }
+    },
+    {
+      "type": "way",
+      "id": 292139729,
+      "bounds": {
+        "minlat": 38.8715841,
+        "minlon": -104.7549862,
+        "maxlat": 38.8718451,
+        "maxlon": -104.754726
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 292237795,
+      "bounds": {
+        "minlat": 38.8480721,
+        "minlon": -104.8222547,
+        "maxlat": 38.8482603,
+        "maxlon": -104.8220121
+      },
+      "tags": {
+        "addr:housenumber": "1010",
+        "addr:postcode": "80903",
+        "addr:state": "CO",
+        "addr:street": "North Nevada Avenue",
+        "landuse": "recreation_ground",
+        "name": "Labyrinth",
+        "operator": "Colorado College",
+        "website": "https://www.coloradocollege.edu/offices/chaplainsoffice/spaces/the-labyrinth.dot"
+      }
+    },
+    {
+      "type": "way",
+      "id": 303423052,
+      "bounds": {
+        "minlat": 38.8662887,
+        "minlon": -104.8232148,
+        "maxlat": 38.8663911,
+        "maxlon": -104.8230833
+      },
+      "tags": {
+        "addr:housenumber": "2222",
+        "addr:postcode": "80907",
+        "addr:state": "CO",
+        "addr:street": "North Nevada Avenue",
+        "landuse": "recreation_ground",
+        "name": "Labyrinth",
+        "operator": "Penrose-St. Francis Health Services",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 303423056,
+      "bounds": {
+        "minlat": 38.8383996,
+        "minlon": -104.8248135,
+        "maxlat": 38.8385314,
+        "maxlon": -104.824646
+      },
+      "tags": {
+        "addr:housenumber": "16",
+        "addr:postcode": "80903",
+        "addr:state": "CO",
+        "addr:street": "East Platte Avenue",
+        "landuse": "recreation_ground",
+        "name": "Labyrinth",
+        "operator": "First Christian Church",
+        "source": "Bing"
+      }
+    },
+    {
+      "type": "way",
+      "id": 305505024,
+      "bounds": {
+        "minlat": 38.8800548,
+        "minlon": -104.7803712,
+        "maxlat": 38.8874229,
+        "maxlon": -104.7718713
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "leisure": "dog_park",
+        "name": "Dog Run Area"
+      }
+    },
+    {
+      "type": "way",
+      "id": 305662979,
+      "bounds": {
+        "minlat": 38.861048,
+        "minlon": -104.9230647,
+        "maxlat": 38.8613049,
+        "maxlon": -104.9228662
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Mabel Willie Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 307102436,
+      "bounds": {
+        "minlat": 38.8352941,
+        "minlon": -104.826727,
+        "maxlat": 38.8357977,
+        "maxlon": -104.8261839
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Carnegie Public Garden"
+      }
+    },
+    {
+      "type": "way",
+      "id": 310321093,
+      "bounds": {
+        "minlat": 39.0657115,
+        "minlon": -104.835741,
+        "maxlat": 39.0663775,
+        "maxlon": -104.8343758
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 310321096,
+      "bounds": {
+        "minlat": 39.0614743,
+        "minlon": -104.8336808,
+        "maxlat": 39.0619187,
+        "maxlon": -104.8331715
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 310321097,
+      "bounds": {
+        "minlat": 39.0605,
+        "minlon": -104.835505,
+        "maxlat": 39.0609161,
+        "maxlon": -104.8347349
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 310321099,
+      "bounds": {
+        "minlat": 39.0590571,
+        "minlon": -104.8350088,
+        "maxlat": 39.0593695,
+        "maxlon": -104.8343731
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 310321103,
+      "bounds": {
+        "minlat": 39.0634244,
+        "minlon": -104.8357008,
+        "maxlat": 39.0637223,
+        "maxlon": -104.8352743
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 310458156,
+      "bounds": {
+        "minlat": 39.0589647,
+        "minlon": -104.8326212,
+        "maxlat": 39.0595916,
+        "maxlon": -104.8316342
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 377629658,
+      "bounds": {
+        "minlat": 39.065909,
+        "minlon": -104.8396184,
+        "maxlat": 39.066762,
+        "maxlon": -104.8387759
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 399831343,
+      "bounds": {
+        "minlat": 38.9788239,
+        "minlon": -104.8590388,
+        "maxlat": 38.9791515,
+        "maxlon": -104.8586607
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 399831344,
+      "bounds": {
+        "minlat": 38.9792083,
+        "minlon": -104.8590322,
+        "maxlat": 38.9795375,
+        "maxlon": -104.8586501
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 400534178,
+      "bounds": {
+        "minlat": 39.024102,
+        "minlon": -104.8035805,
+        "maxlat": 39.0255372,
+        "maxlon": -104.8010779
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Leap Frog Park",
+        "source": "Mapbox"
+      }
+    },
+    {
+      "type": "way",
+      "id": 416585731,
+      "bounds": {
+        "minlat": 38.8782506,
+        "minlon": -104.8309675,
+        "maxlat": 38.8823451,
+        "maxlon": -104.8273945
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Goose Gossage Youth Sports Complex"
+      }
+    },
+    {
+      "type": "way",
+      "id": 418163995,
+      "bounds": {
+        "minlat": 38.8443311,
+        "minlon": -104.8436559,
+        "maxlat": 38.8481974,
+        "maxlon": -104.8373335
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "leisure": "nature_reserve",
+        "name": "Mesa Open Space"
+      }
+    },
+    {
+      "type": "way",
+      "id": 424303867,
+      "bounds": {
+        "minlat": 38.8776118,
+        "minlon": -104.780288,
+        "maxlat": 38.8799076,
+        "maxlon": -104.7790174
+      },
+      "tags": {
+        "addr:city": "Colorado Springs",
+        "addr:housenumber": "3244-3254",
+        "addr:state": "CO",
+        "addr:street": "Paseo Road",
+        "landuse": "recreation_ground",
+        "name": "Mark Reyner Stables"
+      }
+    },
+    {
+      "type": "way",
+      "id": 424666550,
+      "bounds": {
+        "minlat": 38.8957128,
+        "minlon": -104.9752947,
+        "maxlat": 38.8960833,
+        "maxlon": -104.9745356
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Cascade Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 426045572,
+      "bounds": {
+        "minlat": 38.7991818,
+        "minlon": -104.8437996,
+        "maxlat": 38.8008907,
+        "maxlon": -104.842549
+      },
+      "tags": {
+        "description": "Park on the historic site of the Wolfe farm/homestead.",
+        "leisure": "park",
+        "name": "Harlan Wolfe Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 437094330,
+      "bounds": {
+        "minlat": 39.1697177,
+        "minlon": -104.7668466,
+        "maxlat": 39.1879276,
+        "maxlon": -104.7310783
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "Lincoln Mountain Open Space",
+        "operator": "County of Douglas, Colorado",
+        "ownership": "county",
+        "protect_class": "6",
+        "protection_title": "County Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 446176406,
+      "bounds": {
+        "minlat": 39.0222301,
+        "minlon": -104.9134482,
+        "maxlat": 39.0252869,
+        "maxlon": -104.9110269
+      },
+      "tags": {
+        "description": "Noteworthy hill northwest of Air Force Academy, site of famous 1994 spirit mission.",
+        "leisure": "park",
+        "name": "Flat Iron"
+      }
+    },
+    {
+      "type": "way",
+      "id": 455294528,
+      "bounds": {
+        "minlat": 39.1165332,
+        "minlon": -104.917211,
+        "maxlat": 39.1168668,
+        "maxlon": -104.9167847
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 455757474,
+      "bounds": {
+        "minlat": 38.8210404,
+        "minlon": -104.8203802,
+        "maxlat": 38.8215977,
+        "maxlon": -104.8196828
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Founders Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 479598862,
+      "bounds": {
+        "minlat": 38.844641,
+        "minlon": -104.8449897,
+        "maxlat": 38.8449909,
+        "maxlon": -104.8445747
+      },
+      "tags": {
+        "access": "private",
+        "leisure": "park",
+        "name": "VaM's Nature Reserve"
+      }
+    },
+    {
+      "type": "way",
+      "id": 479599239,
+      "bounds": {
+        "minlat": 38.8427564,
+        "minlon": -104.8481124,
+        "maxlat": 38.8436571,
+        "maxlon": -104.8467318
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Buena Vista Public Park Community Center"
+      }
+    },
+    {
+      "type": "way",
+      "id": 479775740,
+      "bounds": {
+        "minlat": 38.8447179,
+        "minlon": -104.8452764,
+        "maxlat": 38.8449331,
+        "maxlon": -104.845076
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 482127199,
+      "bounds": {
+        "minlat": 38.9778116,
+        "minlon": -104.7526229,
+        "maxlat": 38.9790521,
+        "maxlon": -104.7472693
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 482127200,
+      "bounds": {
+        "minlat": 38.9787157,
+        "minlon": -104.7549417,
+        "maxlat": 38.981536,
+        "maxlon": -104.7478439
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 482338294,
+      "bounds": {
+        "minlat": 38.9636911,
+        "minlon": -104.7668052,
+        "maxlat": 38.9662272,
+        "maxlon": -104.7577876
+      },
+      "tags": {
+        "access": "yes",
+        "addr:city": "Colorado Springs",
+        "addr:housenumber": "3555",
+        "addr:postcode": "80920",
+        "addr:state": "CO",
+        "addr:street": "Briargate Parkway",
+        "leisure": "park",
+        "name": "John Venezia Community Park",
+        "website": "https://coloradosprings.gov/parks/page/john-venezia-park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 482939815,
+      "bounds": {
+        "minlat": 38.9836126,
+        "minlon": -104.7589897,
+        "maxlat": 38.9845676,
+        "maxlon": -104.7567285
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 482939816,
+      "bounds": {
+        "minlat": 38.9893284,
+        "minlon": -104.7656177,
+        "maxlat": 38.9896682,
+        "maxlon": -104.7647594
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 482939817,
+      "bounds": {
+        "minlat": 38.9891782,
+        "minlon": -104.767683,
+        "maxlat": 38.9900163,
+        "maxlon": -104.7657894
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 482939818,
+      "bounds": {
+        "minlat": 38.98932,
+        "minlon": -104.7695189,
+        "maxlat": 38.9901665,
+        "maxlon": -104.7678279
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 482939821,
+      "bounds": {
+        "minlat": 38.9891449,
+        "minlon": -104.7635471,
+        "maxlat": 38.9912922,
+        "maxlon": -104.762442
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 482939823,
+      "bounds": {
+        "minlat": 38.9902297,
+        "minlon": -104.7632359,
+        "maxlat": 38.9922393,
+        "maxlon": -104.760508
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 482939826,
+      "bounds": {
+        "minlat": 38.9923603,
+        "minlon": -104.7628724,
+        "maxlat": 38.9929898,
+        "maxlon": -104.7619324
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 482939828,
+      "bounds": {
+        "minlat": 38.9923394,
+        "minlon": -104.7606771,
+        "maxlat": 38.9929898,
+        "maxlon": -104.7604947
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 482939829,
+      "bounds": {
+        "minlat": 38.9908123,
+        "minlon": -104.7622384,
+        "maxlat": 38.9910416,
+        "maxlon": -104.7613962
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 482939832,
+      "bounds": {
+        "minlat": 38.9910583,
+        "minlon": -104.7596313,
+        "maxlat": 38.9911625,
+        "maxlon": -104.7587784
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 482939833,
+      "bounds": {
+        "minlat": 38.9910791,
+        "minlon": -104.7602643,
+        "maxlat": 38.9911667,
+        "maxlon": -104.7598191
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 482940419,
+      "bounds": {
+        "minlat": 38.9891132,
+        "minlon": -104.7607739,
+        "maxlat": 38.9900925,
+        "maxlon": -104.7605377
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 482940420,
+      "bounds": {
+        "minlat": 38.9852687,
+        "minlon": -104.759693,
+        "maxlat": 38.9856399,
+        "maxlon": -104.7592826
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 486600415,
+      "bounds": {
+        "minlat": 39.0077042,
+        "minlon": -104.8898041,
+        "maxlat": 39.0091723,
+        "maxlon": -104.8876228
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "TZO grass"
+      }
+    },
+    {
+      "type": "way",
+      "id": 486630394,
+      "bounds": {
+        "minlat": 39.017565,
+        "minlon": -104.8863582,
+        "maxlat": 39.0187924,
+        "maxlon": -104.8853615
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "name": "Land of the Zoomies"
+      }
+    },
+    {
+      "type": "way",
+      "id": 518824790,
+      "bounds": {
+        "minlat": 38.9551191,
+        "minlon": -104.7956749,
+        "maxlat": 38.957994,
+        "maxlon": -104.790347
+      },
+      "tags": {
+        "access": "private",
+        "landuse": "recreation_ground",
+        "name": "USAA Recreation Area"
+      }
+    },
+    {
+      "type": "way",
+      "id": 522636602,
+      "bounds": {
+        "minlat": 39.1518436,
+        "minlon": -104.914545,
+        "maxlat": 39.1807338,
+        "maxlon": -104.8726853
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "Spruce Mountain Open Space",
+        "operator": "Douglas County",
+        "operator:type": "government",
+        "operator:wikidata": "Q115556",
+        "ownership": "county",
+        "protect_class": "6",
+        "protection_title": "County Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 522674295,
+      "bounds": {
+        "minlat": 39.0178064,
+        "minlon": -104.7893739,
+        "maxlat": 39.0182138,
+        "maxlon": -104.7888469
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 522674296,
+      "bounds": {
+        "minlat": 39.0179254,
+        "minlon": -104.7898387,
+        "maxlat": 39.0183369,
+        "maxlon": -104.7893096
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 522674297,
+      "bounds": {
+        "minlat": 39.0182937,
+        "minlon": -104.7900715,
+        "maxlat": 39.0186507,
+        "maxlon": -104.7897454
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground",
+        "lit": "yes"
+      }
+    },
+    {
+      "type": "way",
+      "id": 538033534,
+      "bounds": {
+        "minlat": 39.034639,
+        "minlon": -104.8667458,
+        "maxlat": 39.038271,
+        "maxlon": -104.8600432
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 538033812,
+      "bounds": {
+        "minlat": 38.998686,
+        "minlon": -104.8434957,
+        "maxlat": 39.0001889,
+        "maxlon": -104.8413437
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Cadet Tailgate Area"
+      }
+    },
+    {
+      "type": "way",
+      "id": 540080027,
+      "bounds": {
+        "minlat": 38.8313991,
+        "minlon": -104.811071,
+        "maxlat": 38.8319996,
+        "maxlon": -104.8106796
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Freedom Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 552276749,
+      "bounds": {
+        "minlat": 39.0580524,
+        "minlon": -104.825742,
+        "maxlat": 39.0590073,
+        "maxlon": -104.8248301
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 579337107,
+      "bounds": {
+        "minlat": 39.0519864,
+        "minlon": -104.826907,
+        "maxlat": 39.0521402,
+        "maxlon": -104.8266308
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Gleneagle North Playground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 586876437,
+      "bounds": {
+        "minlat": 38.9286281,
+        "minlon": -104.7648463,
+        "maxlat": 38.9304444,
+        "maxlon": -104.7591975
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "name": "Cottonwood Creek Disc Golf",
+        "sport": "disc_golf"
+      }
+    },
+    {
+      "type": "way",
+      "id": 590279069,
+      "bounds": {
+        "minlat": 39.0814063,
+        "minlon": -104.8729682,
+        "maxlat": 39.0838551,
+        "maxlon": -104.8708588
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Dirty Woman Creek Park",
+        "wikidata": "Q49483328"
+      }
+    },
+    {
+      "type": "way",
+      "id": 590521397,
+      "bounds": {
+        "minlat": 39.0894405,
+        "minlon": -104.8747726,
+        "maxlat": 39.0914229,
+        "maxlon": -104.8740389
+      },
+      "tags": {
+        "ele": "2123",
+        "gnis:feature_id": "1990221",
+        "leisure": "park",
+        "name": "Limbach Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 590521547,
+      "bounds": {
+        "minlat": 39.0920719,
+        "minlon": -104.8700266,
+        "maxlat": 39.0931075,
+        "maxlon": -104.8691673
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Monument Trailhead Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 590521627,
+      "bounds": {
+        "minlat": 39.093246,
+        "minlon": -104.8684921,
+        "maxlat": 39.0945095,
+        "maxlon": -104.8681462
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Lavelett Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 590521970,
+      "bounds": {
+        "minlat": 39.094554,
+        "minlon": -104.8685309,
+        "maxlat": 39.0957159,
+        "maxlon": -104.8681274
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Lavelett Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 597928762,
+      "bounds": {
+        "minlat": 39.064173,
+        "minlon": -104.8313225,
+        "maxlat": 39.0654621,
+        "maxlon": -104.8295737
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Neighborhood Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 597928763,
+      "bounds": {
+        "minlat": 39.0624611,
+        "minlon": -104.8254645,
+        "maxlat": 39.063442,
+        "maxlon": -104.822203
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Promontory Pointe Park and Common Area"
+      }
+    },
+    {
+      "type": "way",
+      "id": 597929276,
+      "bounds": {
+        "minlat": 39.0568107,
+        "minlon": -104.8309315,
+        "maxlat": 39.0573293,
+        "maxlon": -104.8298425
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 609028355,
+      "bounds": {
+        "minlat": 39.0589673,
+        "minlon": -104.8248677,
+        "maxlat": 39.0596136,
+        "maxlon": -104.8244276
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 609036519,
+      "bounds": {
+        "minlat": 39.0911443,
+        "minlon": -104.8711463,
+        "maxlat": 39.0914883,
+        "maxlon": -104.8699546
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Monument Sculpture Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 609036637,
+      "bounds": {
+        "minlat": 39.0859861,
+        "minlon": -104.8695724,
+        "maxlat": 39.0871646,
+        "maxlon": -104.8682452
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Tri-Lakes Baseball Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 609176320,
+      "bounds": {
+        "minlat": 38.9373516,
+        "minlon": -105.1575816,
+        "maxlat": 38.9403036,
+        "maxlon": -105.1548001
+      },
+      "tags": {
+        "addr:housenumber": "211",
+        "addr:state": "CO",
+        "addr:street": "Rhyolite Road",
+        "leisure": "park",
+        "name": "Divide Regional Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 628364188,
+      "bounds": {
+        "minlat": 38.8332367,
+        "minlon": -104.8261962,
+        "maxlat": 38.8339659,
+        "maxlon": -104.8255371
+      },
+      "tags": {
+        "description": "Grassy area with seating.",
+        "leisure": "park",
+        "name": "Palmer Center Plaza"
+      }
+    },
+    {
+      "type": "way",
+      "id": 628364190,
+      "bounds": {
+        "minlat": 38.8299173,
+        "minlon": -104.8266856,
+        "maxlat": 38.8312139,
+        "maxlon": -104.8257314
+      },
+      "tags": {
+        "description": "Public area with seating, public art, grassy areas, and trees.",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 628428031,
+      "bounds": {
+        "minlat": 38.8299152,
+        "minlon": -104.8540045,
+        "maxlat": 38.8307674,
+        "maxlon": -104.8527558
+      },
+      "tags": {
+        "description": "Common community park area.",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 629141219,
+      "bounds": {
+        "minlat": 38.8315268,
+        "minlon": -104.8252136,
+        "maxlat": 38.8316801,
+        "maxlon": -104.824773
+      },
+      "tags": {
+        "description": "Public Plaza",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 641691880,
+      "bounds": {
+        "minlat": 38.8589061,
+        "minlon": -104.83291,
+        "maxlat": 38.8604444,
+        "maxlon": -104.8317813
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Legacy Plaza Trailhead"
+      }
+    },
+    {
+      "type": "way",
+      "id": 686490360,
+      "bounds": {
+        "minlat": 39.0024665,
+        "minlon": -104.7963698,
+        "maxlat": 39.0030418,
+        "maxlon": -104.7952046
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 691346398,
+      "bounds": {
+        "minlat": 39.2303012,
+        "minlon": -104.8841455,
+        "maxlat": 39.2344107,
+        "maxlon": -104.8796286
+      },
+      "tags": {
+        "addr:city": "Larkspur",
+        "addr:housenumber": "8820",
+        "addr:postcode": "80118",
+        "addr:state": "CO",
+        "addr:street": "Spruce Mountain Road",
+        "leisure": "park",
+        "name": "Larkspur Park",
+        "operator": "Town of Larkspur"
+      }
+    },
+    {
+      "type": "way",
+      "id": 769175575,
+      "bounds": {
+        "minlat": 39.1296911,
+        "minlon": -104.901644,
+        "maxlat": 39.1811874,
+        "maxlon": -104.8506446
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "Greenland Open Space",
+        "operator": "Douglas County",
+        "operator:type": "government",
+        "operator:wikidata": "Q115556",
+        "ownership": "county",
+        "protect_class": "6",
+        "protection_title": "County Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 769467987,
+      "bounds": {
+        "minlat": 38.9313399,
+        "minlon": -104.7801705,
+        "maxlat": 38.9317545,
+        "maxlon": -104.7796378
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 772015316,
+      "bounds": {
+        "minlat": 38.8824339,
+        "minlon": -104.8342959,
+        "maxlat": 38.8847404,
+        "maxlon": -104.8307521
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Sinton Pond Open Space"
+      }
+    },
+    {
+      "type": "way",
+      "id": 773028786,
+      "bounds": {
+        "minlat": 38.8664729,
+        "minlon": -105.21464,
+        "maxlat": 38.9239741,
+        "maxlon": -105.157527
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "name": "Mueller State Park",
+        "operator": "Colorado Parks and Wildlife",
+        "protect_class": "5",
+        "protection_title": "State Park",
+        "website": "https://cpw.state.co.us/placestogo/parks/Muller"
+      }
+    },
+    {
+      "type": "way",
+      "id": 776798219,
+      "bounds": {
+        "minlat": 39.1103392,
+        "minlon": -104.8603188,
+        "maxlat": 39.1106548,
+        "maxlon": -104.8596233
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 778868121,
+      "bounds": {
+        "minlat": 39.1161039,
+        "minlon": -104.9198994,
+        "maxlat": 39.1177509,
+        "maxlon": -104.9152929
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Glen Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 787682557,
+      "bounds": {
+        "minlat": 39.0760628,
+        "minlon": -104.7936744,
+        "maxlat": 39.0763812,
+        "maxlon": -104.7932024
+      },
+      "tags": {
+        "access": "private",
+        "barrier": "fence",
+        "description": "Riding Arena",
+        "fence_type": "split_rail",
+        "landuse": "recreation_ground",
+        "leisure": "pitch",
+        "lit": "no",
+        "source": "local knowledge",
+        "sport": "equestrian",
+        "surface": "dirt"
+      }
+    },
+    {
+      "type": "way",
+      "id": 814436308,
+      "bounds": {
+        "minlat": 38.8193649,
+        "minlon": -104.8064777,
+        "maxlat": 38.8211286,
+        "maxlon": -104.8053915
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "El Pomar Youth Bike Park",
+        "sport": "cycling"
+      }
+    },
+    {
+      "type": "way",
+      "id": 815089556,
+      "bounds": {
+        "minlat": 38.9070421,
+        "minlon": -104.804124,
+        "maxlat": 38.9074409,
+        "maxlon": -104.8037564
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "UCCS Campus Garden"
+      }
+    },
+    {
+      "type": "way",
+      "id": 832067346,
+      "bounds": {
+        "minlat": 39.0784657,
+        "minlon": -104.7940745,
+        "maxlat": 39.0855976,
+        "maxlon": -104.787412
+      },
+      "tags": {
+        "description": "Jackson Ranch community open space, drainage and recreational area",
+        "landuse": "recreation_ground",
+        "loc_name": "Open Space",
+        "natural": "grassland",
+        "source": "survey;aerial imagery;local knowledge"
+      }
+    },
+    {
+      "type": "way",
+      "id": 834287084,
+      "bounds": {
+        "minlat": 38.9246415,
+        "minlon": -104.80775,
+        "maxlat": 38.9250988,
+        "maxlon": -104.8070558
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 844841605,
+      "bounds": {
+        "minlat": 38.9704743,
+        "minlon": -104.8502026,
+        "maxlat": 38.9707005,
+        "maxlon": -104.8498346
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 844841606,
+      "bounds": {
+        "minlat": 38.9703468,
+        "minlon": -104.8502318,
+        "maxlat": 38.9705142,
+        "maxlon": -104.8500892
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 845519028,
+      "bounds": {
+        "minlat": 39.0841655,
+        "minlon": -104.787119,
+        "maxlat": 39.0855931,
+        "maxlon": -104.784911
+      },
+      "tags": {
+        "area": "yes",
+        "description": "Jackson Ranch community open space, drainage and   recreational area. Known as Tract B, Size: 3+ Acres",
+        "landuse": "recreation_ground",
+        "loc_name": "Tract B",
+        "source": "survey;local knowledge"
+      }
+    },
+    {
+      "type": "way",
+      "id": 857275863,
+      "bounds": {
+        "minlat": 39.1993296,
+        "minlon": -104.9793919,
+        "maxlat": 39.2391364,
+        "maxlon": -104.9236642
+      },
+      "tags": {
+        "addr:city": "Larkspur",
+        "addr:housenumber": "9604",
+        "addr:postcode": "80118",
+        "addr:state": "CO",
+        "addr:street": "South Perry Park Road",
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "Sandstone Ranch Open Space",
+        "operator": "County of Douglas, Colorado",
+        "ownership": "county",
+        "phone": "+1 303 660 7495",
+        "protect_class": "6",
+        "protection_title": "County Park",
+        "source": "Douglas County Open Space Master Plan"
+      }
+    },
+    {
+      "type": "way",
+      "id": 858333424,
+      "bounds": {
+        "minlat": 38.9549375,
+        "minlon": -105.0606299,
+        "maxlat": 38.9552546,
+        "maxlon": -105.0601364
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Community Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 893396447,
+      "bounds": {
+        "minlat": 38.8836202,
+        "minlon": -104.8444469,
+        "maxlat": 38.8906967,
+        "maxlon": -104.8369481
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Douglas Creek Open space"
+      }
+    },
+    {
+      "type": "way",
+      "id": 903577480,
+      "bounds": {
+        "minlat": 39.0045059,
+        "minlon": -104.8080219,
+        "maxlat": 39.0060427,
+        "maxlon": -104.8061055
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Overlook Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 961860259,
+      "bounds": {
+        "minlat": 38.8829468,
+        "minlon": -104.8011482,
+        "maxlat": 38.883711,
+        "maxlon": -104.8002765
+      },
+      "tags": {
+        "leisure": "park",
+        "surface": "dirt"
+      }
+    },
+    {
+      "type": "way",
+      "id": 963831844,
+      "bounds": {
+        "minlat": 39.0638487,
+        "minlon": -104.8672477,
+        "maxlat": 39.0649449,
+        "maxlon": -104.8657054
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 963831845,
+      "bounds": {
+        "minlat": 39.0669116,
+        "minlon": -104.8689716,
+        "maxlat": 39.0675134,
+        "maxlon": -104.8680389
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 963831846,
+      "bounds": {
+        "minlat": 39.0567334,
+        "minlon": -104.8676909,
+        "maxlat": 39.0690787,
+        "maxlon": -104.8616931
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Protected Habitat Open Space"
+      }
+    },
+    {
+      "type": "way",
+      "id": 965042681,
+      "bounds": {
+        "minlat": 38.9935927,
+        "minlon": -105.0556601,
+        "maxlat": 38.9941765,
+        "maxlon": -105.0542957
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Bergstrom Park",
+        "opening_hours": "24/7"
+      }
+    },
+    {
+      "type": "way",
+      "id": 965042682,
+      "bounds": {
+        "minlat": 38.9953919,
+        "minlon": -105.0547221,
+        "maxlat": 38.996863,
+        "maxlon": -105.0531904
+      },
+      "tags": {
+        "addr:city": "Woodland Park",
+        "addr:housenumber": "200",
+        "addr:postcode": "80863",
+        "addr:state": "CO",
+        "addr:street": "North Park Street",
+        "leisure": "park",
+        "name": "Memorial Park",
+        "opening_hours": "24/7"
+      }
+    },
+    {
+      "type": "way",
+      "id": 965042683,
+      "bounds": {
+        "minlat": 39.0229302,
+        "minlon": -105.0651806,
+        "maxlat": 39.0234295,
+        "maxlon": -105.0632779
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Tamarac Neighborhood Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 967717936,
+      "bounds": {
+        "minlat": 38.7907679,
+        "minlon": -104.8442391,
+        "maxlat": 38.7911603,
+        "maxlon": -104.8437288
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 970229607,
+      "bounds": {
+        "minlat": 38.9882004,
+        "minlon": -105.0511372,
+        "maxlat": 38.9900301,
+        "maxlon": -105.0497292
+      },
+      "tags": {
+        "addr:city": "Woodland Park",
+        "addr:housenumber": "522",
+        "addr:postcode": "80863",
+        "addr:state": "CO",
+        "addr:street": "Woodland Ave",
+        "leisure": "park",
+        "name": "Cavalier Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1005698534,
+      "bounds": {
+        "minlat": 39.0904623,
+        "minlon": -104.8451548,
+        "maxlat": 39.0908833,
+        "maxlon": -104.8441281
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1007406993,
+      "bounds": {
+        "minlat": 39.0914236,
+        "minlon": -104.8480222,
+        "maxlat": 39.0927037,
+        "maxlon": -104.8467944
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1044376654,
+      "bounds": {
+        "minlat": 38.9928155,
+        "minlon": -105.0604701,
+        "maxlat": 38.9933882,
+        "maxlon": -105.0592778
+      },
+      "tags": {
+        "addr:city": "Woodland Park",
+        "addr:state": "CO",
+        "leisure": "park",
+        "name": "Lions Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1055477392,
+      "bounds": {
+        "minlat": 39.1138743,
+        "minlon": -104.9059519,
+        "maxlat": 39.118376,
+        "maxlon": -104.8950798
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Santa Fe Open Space",
+        "operator": "El Paso County Parks"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1085456540,
+      "bounds": {
+        "minlat": 38.786735,
+        "minlon": -104.8613479,
+        "maxlat": 38.7890649,
+        "maxlon": -104.8588118
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1108844847,
+      "bounds": {
+        "minlat": 39.009495,
+        "minlon": -104.7914077,
+        "maxlat": 39.0116169,
+        "maxlon": -104.7871507
+      },
+      "tags": {
+        "addr:postcode": "80912",
+        "leisure": "park",
+        "name": "Lizard Leap Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1120007925,
+      "bounds": {
+        "minlat": 38.8389744,
+        "minlon": -104.8415878,
+        "maxlat": 38.8398452,
+        "maxlon": -104.8411081
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Promontory Pointe Open Space"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1120477068,
+      "bounds": {
+        "minlat": 38.7808582,
+        "minlon": -104.8804651,
+        "maxlat": 38.7860701,
+        "maxlon": -104.869513
+      },
+      "tags": {
+        "contact:website": "https://www.broadmoor.com/adventures/seven-falls",
+        "fee": "yes",
+        "leisure": "park",
+        "name": "Seven Falls Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1143805863,
+      "bounds": {
+        "minlat": 39.0894405,
+        "minlon": -104.8747511,
+        "maxlat": 39.0914229,
+        "maxlon": -104.8740389
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Limbach Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1144332225,
+      "bounds": {
+        "minlat": 39.0682581,
+        "minlon": -104.8200528,
+        "maxlat": 39.0709442,
+        "maxlon": -104.8152033
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Sanctuary Pointe Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1159258790,
+      "bounds": {
+        "minlat": 38.858008,
+        "minlon": -104.9136669,
+        "maxlat": 38.8584155,
+        "maxlon": -104.9123021
+      },
+      "tags": {
+        "addr:city": "Manitou Springs",
+        "addr:housenumber": "606",
+        "addr:postcode": "80829",
+        "addr:state": "CO",
+        "addr:street": "Lovers Lane",
+        "leisure": "park",
+        "name": "Mansions Park",
+        "opening_hours": "24/7"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1159259384,
+      "bounds": {
+        "minlat": 38.858263,
+        "minlon": -104.9122031,
+        "maxlat": 38.8588652,
+        "maxlon": -104.9112957
+      },
+      "tags": {
+        "addr:city": "Manitou Springs",
+        "addr:housenumber": "590",
+        "addr:postcode": "80829",
+        "addr:state": "CO",
+        "addr:street": "El Paso Boulevard",
+        "leisure": "park",
+        "name": "Seven Minute Spring Park",
+        "opening_hours": "24/7"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1160558855,
+      "bounds": {
+        "minlat": 38.8063172,
+        "minlon": -104.7860547,
+        "maxlat": 38.8074697,
+        "maxlon": -104.7850749
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1192213143,
+      "bounds": {
+        "minlat": 39.0613269,
+        "minlon": -104.8853497,
+        "maxlat": 39.0617718,
+        "maxlon": -104.8843766
+      },
+      "tags": {
+        "leisure": "park",
+        "operator": "Forest Lakes HOA"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1200009422,
+      "bounds": {
+        "minlat": 39.0726381,
+        "minlon": -104.847128,
+        "maxlat": 39.0736343,
+        "maxlon": -104.8460246
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1213100769,
+      "bounds": {
+        "minlat": 38.7985574,
+        "minlon": -104.756632,
+        "maxlat": 38.7991338,
+        "maxlon": -104.7560272
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1222695793,
+      "bounds": {
+        "minlat": 38.9476024,
+        "minlon": -104.7593779,
+        "maxlat": 38.9565913,
+        "maxlon": -104.7556185
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1236220782,
+      "bounds": {
+        "minlat": 38.8869328,
+        "minlon": -104.7619907,
+        "maxlat": 38.8870537,
+        "maxlon": -104.7617409
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1242850301,
+      "bounds": {
+        "minlat": 38.9911234,
+        "minlon": -104.7670542,
+        "maxlat": 38.9912258,
+        "maxlon": -104.7668997
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1243574538,
+      "bounds": {
+        "minlat": 39.0310246,
+        "minlon": -104.7909681,
+        "maxlat": 39.0313944,
+        "maxlon": -104.7905303
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1255959267,
+      "bounds": {
+        "minlat": 38.7886762,
+        "minlon": -104.9038605,
+        "maxlat": 38.7947896,
+        "maxlon": -104.8648108
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Columbine Trail"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1280902977,
+      "bounds": {
+        "minlat": 38.8084167,
+        "minlon": -104.7897157,
+        "maxlat": 38.8088359,
+        "maxlon": -104.7893586
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1280902982,
+      "bounds": {
+        "minlat": 38.809154,
+        "minlon": -104.7899157,
+        "maxlat": 38.8094387,
+        "maxlon": -104.7895715
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1280902983,
+      "bounds": {
+        "minlat": 38.8094776,
+        "minlon": -104.7917523,
+        "maxlat": 38.8097387,
+        "maxlon": -104.7908265
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1280909635,
+      "bounds": {
+        "minlat": 38.8070419,
+        "minlon": -104.7897625,
+        "maxlat": 38.807337,
+        "maxlon": -104.7894448
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1281212097,
+      "bounds": {
+        "minlat": 38.8034385,
+        "minlon": -104.7880414,
+        "maxlat": 38.8038842,
+        "maxlon": -104.7875673
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1281222340,
+      "bounds": {
+        "minlat": 38.8109486,
+        "minlon": -104.7842992,
+        "maxlat": 38.8115882,
+        "maxlon": -104.7837087
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1287968922,
+      "bounds": {
+        "minlat": 38.9505567,
+        "minlon": -104.7866182,
+        "maxlat": 38.9526477,
+        "maxlon": -104.7827103
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1290424705,
+      "bounds": {
+        "minlat": 38.8872265,
+        "minlon": -104.8563101,
+        "maxlat": 38.8875555,
+        "maxlon": -104.8558905
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "surface": "tartan"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1324221000,
+      "bounds": {
+        "minlat": 38.7988536,
+        "minlon": -104.7565782,
+        "maxlat": 38.799118,
+        "maxlon": -104.7560798
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "surface": "gravel"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1329481069,
+      "bounds": {
+        "minlat": 39.0093748,
+        "minlon": -104.7828301,
+        "maxlat": 39.0102388,
+        "maxlon": -104.7818591
+      },
+      "tags": {
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1341695177,
+      "bounds": {
+        "minlat": 38.9866678,
+        "minlon": -104.8058995,
+        "maxlat": 38.9871501,
+        "maxlon": -104.8051024
+      },
+      "tags": {
+        "access": "private",
+        "leisure": "park",
+        "operator": "FalconView"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1344477460,
+      "bounds": {
+        "minlat": 39.0100694,
+        "minlon": -104.8129565,
+        "maxlat": 39.0103033,
+        "maxlon": -104.812189
+      },
+      "tags": {
+        "access": "private",
+        "dog": "yes",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1344663078,
+      "bounds": {
+        "minlat": 38.7708823,
+        "minlon": -104.8542663,
+        "maxlat": 38.7711533,
+        "maxlon": -104.8540068
+      },
+      "tags": {
+        "landuse": "recreation_ground",
+        "name": "Play Hills",
+        "surface": "artificial_turf"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1352670684,
+      "bounds": {
+        "minlat": 39.1041624,
+        "minlon": -104.8538595,
+        "maxlat": 39.1062066,
+        "maxlon": -104.8505658
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Toboggan Hill Common Area",
+        "operator": "Woodmoor Improvement Association",
+        "operator:type": "community"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1352670685,
+      "bounds": {
+        "minlat": 39.1113936,
+        "minlon": -104.8485823,
+        "maxlat": 39.1139787,
+        "maxlon": -104.8443768
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "The Marsh Common Area",
+        "operator": "Woodmoor Improvement Association",
+        "operator:type": "community"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1352670687,
+      "bounds": {
+        "minlat": 39.0929734,
+        "minlon": -104.8400756,
+        "maxlat": 39.0973322,
+        "maxlon": -104.8309424
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "The Meadows Open Space",
+        "operator": "Woodmoor Improvement Association",
+        "operator:type": "community"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1352670688,
+      "bounds": {
+        "minlat": 39.1160139,
+        "minlon": -104.8503065,
+        "maxlat": 39.1201716,
+        "maxlon": -104.8469633
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Twin Ponds Common Area",
+        "operator": "Woodmoor Improvement Association",
+        "operator:type": "community"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1352670691,
+      "bounds": {
+        "minlat": 39.1197879,
+        "minlon": -104.8341081,
+        "maxlat": 39.1221176,
+        "maxlon": -104.8307601
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "North Park",
+        "operator": "Woodmoor Improvement Association",
+        "operator:type": "community"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1412501487,
+      "bounds": {
+        "minlat": 39.1128871,
+        "minlon": -104.8982106,
+        "maxlat": 39.1132566,
+        "maxlon": -104.8976599
+      },
+      "tags": {
+        "barrier": "fence",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1421454419,
+      "bounds": {
+        "minlat": 38.9853958,
+        "minlon": -104.7930624,
+        "maxlat": 38.9874736,
+        "maxlon": -104.790334
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Victory Ridge Park"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1460908548,
+      "bounds": {
+        "minlat": 38.8853542,
+        "minlon": -104.8061209,
+        "maxlat": 38.8855886,
+        "maxlon": -104.8056313
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Apple Orchard",
+        "operator": "Local HOA"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1470266627,
+      "bounds": {
+        "minlat": 38.819466,
+        "minlon": -104.8603295,
+        "maxlat": 38.8196401,
+        "maxlon": -104.8599721
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1470266628,
+      "bounds": {
+        "minlat": 38.8194689,
+        "minlon": -104.8607173,
+        "maxlat": 38.819643,
+        "maxlon": -104.8603599
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1470266629,
+      "bounds": {
+        "minlat": 38.8192707,
+        "minlon": -104.8607191,
+        "maxlat": 38.8194448,
+        "maxlon": -104.8603617
+      },
+      "tags": {
+        "barrier": "fence",
+        "fence_type": "chain_link",
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1470369023,
+      "bounds": {
+        "minlat": 39.0299427,
+        "minlon": -104.7934087,
+        "maxlat": 39.0307522,
+        "maxlon": -104.7919332
+      },
+      "tags": {
+        "landuse": "recreation_ground"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 78661,
+      "bounds": {
+        "minlat": 38.8575462,
+        "minlon": -104.9123292,
+        "maxlat": 38.8585162,
+        "maxlon": -104.9102767
+      },
+      "tags": {
+        "leisure": "park",
+        "loc_name": "Train Park",
+        "name": "Memorial Park",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 112374,
+      "bounds": {
+        "minlat": 38.9601369,
+        "minlon": -105.09297,
+        "maxlat": 39.0359338,
+        "maxlon": -105.0270547
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "city",
+        "boundary": "administrative",
+        "name": "Woodland Park",
+        "place": "town",
+        "type": "boundary",
+        "wikidata": "Q2009757",
+        "wikipedia": "en:Woodland Park, Colorado"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 112377,
+      "bounds": {
+        "minlat": 38.730495,
+        "minlon": -105.208308,
+        "maxlat": 38.759809,
+        "maxlon": -105.1677616
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "city",
+        "boundary": "administrative",
+        "gnis:feature_id": "204769",
+        "name": "Cripple Creek",
+        "type": "boundary",
+        "wikidata": "Q117605",
+        "wikipedia": "en:Cripple Creek, Colorado"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 112991,
+      "bounds": {
+        "minlat": 39.098662,
+        "minlon": -104.923801,
+        "maxlat": 39.129876,
+        "maxlon": -104.8737109
+      },
+      "tags": {
+        "admin_level": "8",
+        "boundary": "administrative",
+        "name": "Palmer Lake",
+        "place": "village",
+        "tiger:reviewed": "no",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 113141,
+      "bounds": {
+        "minlat": 38.7154517,
+        "minlon": -104.9170862,
+        "maxlat": 39.0351247,
+        "maxlon": -104.5999135
+      },
+      "tags": {
+        "admin_level": "8",
+        "boundary": "administrative",
+        "name": "Colorado Springs",
+        "place": "city",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q49258"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 223995,
+      "bounds": {
+        "minlat": 39.0108784,
+        "minlon": -104.9960557,
+        "maxlat": 39.0131121,
+        "maxlon": -104.9935973
+      },
+      "tags": {
+        "ele": "2759",
+        "gnis:feature_id": "193226",
+        "name": "Grace Lake",
+        "natural": "water",
+        "type": "multipolygon",
+        "water": "reservoir"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 393066,
+      "bounds": {
+        "minlat": 38.6941034,
+        "minlon": -106.2102128,
+        "maxlat": 39.6172379,
+        "maxlon": -104.8674105
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "gnis:feature_id": "169584",
+        "name": "Pike National Forest",
+        "operator": "United States Forest Service",
+        "operator:short": "USFS",
+        "operator:type": "public",
+        "operator:wikidata": "Q1891156",
+        "operator:wikipedia": "en:United States Forest Service",
+        "ownership": "national",
+        "protect_class": "6",
+        "protected": "perpetuity",
+        "protected_area": "forest_reserve",
+        "protection_title": "National Forest",
+        "type": "boundary",
+        "wikidata": "Q7193594",
+        "wikipedia": "en:Pike National Forest"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1210029,
+      "bounds": {
+        "minlat": 38.8576973,
+        "minlon": -104.8953047,
+        "maxlat": 38.8598211,
+        "maxlon": -104.8887172
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "The Fields Community Park",
+        "note": "Bounds are approximate",
+        "source": "Yahoo",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1411327,
+      "bounds": {
+        "minlat": 39.129474,
+        "minlon": -105.39915,
+        "maxlat": 39.9177868,
+        "maxlon": -105.04874
+      },
+      "tags": {
+        "admin_level": "6",
+        "alt_name": "Jefferson",
+        "attribution": "USGS 2001 County Boundary",
+        "border_type": "county",
+        "boundary": "administrative",
+        "name": "Jefferson County",
+        "nist:fips_code": "08059",
+        "nist:state_fips": "08",
+        "place": "county",
+        "population": "565524",
+        "source:population": "https://www.census.gov/programs-surveys/popest.html",
+        "type": "boundary",
+        "website": "https://jeffco.us",
+        "wikidata": "Q127978",
+        "wikipedia": "en:Jefferson County, Colorado"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1411331,
+      "bounds": {
+        "minlat": 38.6472187,
+        "minlon": -105.33188,
+        "maxlat": 39.1297543,
+        "maxlon": -104.938961
+      },
+      "tags": {
+        "admin_level": "6",
+        "alt_name": "Teller",
+        "attribution": "USGS 2001 County Boundary",
+        "border_type": "county",
+        "boundary": "administrative",
+        "name": "Teller County",
+        "nist:fips_code": "08119",
+        "nist:state_fips": "08",
+        "population": "23385",
+        "type": "boundary",
+        "website": "https://www.tellercounty.gov/",
+        "wikidata": "Q312746",
+        "wikipedia": "en:Teller County, Colorado"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1411335,
+      "bounds": {
+        "minlat": 38.5190195,
+        "minlon": -105.072529,
+        "maxlat": 39.129876,
+        "maxlon": -104.0516212
+      },
+      "tags": {
+        "admin_level": "6",
+        "alt_name": "El Paso",
+        "attribution": "USGS 2001 County Boundary",
+        "border_type": "county",
+        "boundary": "administrative",
+        "name": "El Paso County",
+        "nist:fips_code": "08041",
+        "nist:state_fips": "08",
+        "population": "674471",
+        "source:population": "https://www.census.gov/programs-surveys/popest.html",
+        "type": "boundary",
+        "website": "https://www.elpasoco.com/",
+        "wikidata": "Q111774",
+        "wikipedia": "en:El Paso County, Colorado"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1411338,
+      "bounds": {
+        "minlat": 39.129487,
+        "minlon": -105.329445,
+        "maxlat": 39.5664774,
+        "maxlon": -104.6606117
+      },
+      "tags": {
+        "admin_level": "6",
+        "alt_name": "Douglas",
+        "attribution": "USGS 2001 County Boundary",
+        "border_type": "county",
+        "boundary": "administrative",
+        "name": "Douglas County",
+        "nist:fips_code": "08035",
+        "nist:state_fips": "08",
+        "population": "322387",
+        "source:population": "https://www.census.gov/programs-surveys/popest.html",
+        "type": "boundary",
+        "website": "https://www.douglas.co.us/",
+        "wikidata": "Q115556",
+        "wikipedia": "en:Douglas County, Colorado"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 2902993,
+      "bounds": {
+        "minlat": 38.9438321,
+        "minlon": -104.9005144,
+        "maxlat": 38.9511047,
+        "maxlon": -104.8792045
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "Blodgett Peak Open Space",
+        "operator": "City of Colorado Springs",
+        "ownership": "municipal",
+        "protect_class": "6",
+        "protection_title": "Municipal Park",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 2907014,
+      "bounds": {
+        "minlat": 38.8607632,
+        "minlon": -104.9048366,
+        "maxlat": 38.8870459,
+        "maxlon": -104.8683626
+      },
+      "tags": {
+        "alt_name": "Garden of the Gods",
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "Garden of the Gods Park",
+        "operator": "City of Colorado Springs",
+        "protect_class": "6",
+        "protection_title": "Open Space",
+        "source": "El Paso County plat map",
+        "type": "multipolygon",
+        "website": "https://www.gardenofgods.com/",
+        "wikidata": "Q937606",
+        "wikipedia": "en:Garden of the Gods"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 2927733,
+      "bounds": {
+        "minlat": 38.8676836,
+        "minlon": -104.9261623,
+        "maxlat": 38.8703821,
+        "maxlon": -104.9235732
+      },
+      "tags": {
+        "access": "yes",
+        "leisure": "park",
+        "name": "Rainbow Falls",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 3301913,
+      "bounds": {
+        "minlat": 38.7528961,
+        "minlon": -104.799049,
+        "maxlat": 38.7887888,
+        "maxlon": -104.7572774
+      },
+      "tags": {
+        "admin_level": "8",
+        "boundary": "administrative",
+        "is_in:country": "USA",
+        "is_in:country_code": "US",
+        "is_in:iso_3166_2": "US:CO",
+        "is_in:state": "Colorado",
+        "is_in:state_code": "CO",
+        "name": "Stratmoor",
+        "place": "locality",
+        "type": "boundary",
+        "wikidata": "Q2511472",
+        "wikipedia": "en:Stratmoor, Colorado"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 4716997,
+      "bounds": {
+        "minlat": 38.9324027,
+        "minlon": -104.8332595,
+        "maxlat": 38.9345858,
+        "maxlon": -104.8290833
+      },
+      "tags": {
+        "addr:housenumber": "155",
+        "addr:postcode": "80919",
+        "addr:street": "Buckeye Drive",
+        "ele": "1954",
+        "leisure": "park",
+        "name": "Discovery Park",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 4716999,
+      "bounds": {
+        "minlat": 38.9297448,
+        "minlon": -104.8456368,
+        "maxlat": 38.9318081,
+        "maxlon": -104.8434627
+      },
+      "tags": {
+        "ele": "1984",
+        "leisure": "park",
+        "name": "Foothills Park",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 4717000,
+      "bounds": {
+        "minlat": 38.9299387,
+        "minlon": -104.8429238,
+        "maxlat": 38.9303367,
+        "maxlon": -104.8422109
+      },
+      "tags": {
+        "ele": "1984",
+        "leisure": "park",
+        "name": "Foothills Park",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 5749060,
+      "bounds": {
+        "minlat": 38.884128,
+        "minlon": -105.311863,
+        "maxlat": 38.94097,
+        "maxlon": -105.245828
+      },
+      "tags": {
+        "boundary": "national_park",
+        "leisure": "nature_reserve",
+        "name": "Florissant Fossil Beds National Monument",
+        "operator": "National Park Service",
+        "operator:short": "NPS",
+        "operator:type": "public",
+        "operator:wikidata": "Q308439",
+        "ownership": "national",
+        "protect_class": "5",
+        "protected": "perpetuity",
+        "protection_title": "National Monument",
+        "type": "boundary",
+        "website": "https://www.nps.gov/flfo/index.htm",
+        "wikidata": "Q1430179",
+        "wikipedia": "en:Florissant Formation"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 6905260,
+      "bounds": {
+        "minlat": 38.9260519,
+        "minlon": -104.7662987,
+        "maxlat": 38.9306194,
+        "maxlon": -104.7521757
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Cottonwood Creek Park",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 7102206,
+      "bounds": {
+        "minlat": 38.9620845,
+        "minlon": -104.7757446,
+        "maxlat": 38.9678407,
+        "maxlon": -104.7577876
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "leisure": "nature_reserve",
+        "name": "Prebles Meadow Jumping Mouse",
+        "natural": "grassland",
+        "protect_class": "4",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 9239483,
+      "bounds": {
+        "minlat": 37.0099944,
+        "minlon": -106.4034497,
+        "maxlat": 40.9028934,
+        "maxlon": -102.0445912
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "name": "BLM - Royal Gorge Field Office",
+        "operator": "Bureau of Land Management",
+        "operator:short": "BLM",
+        "operator:type": "public",
+        "operator:wikidata": "Q1010556",
+        "operator:wikipedia": "en:Bureau of Land Management",
+        "owner": "United States Department of Interior, Bureau of Land Management",
+        "ownership": "national",
+        "protect_class": "5",
+        "protected": "perpetuity",
+        "source": "US BLM",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 9607305,
+      "bounds": {
+        "minlat": 39.2169658,
+        "minlon": -104.908888,
+        "maxlat": 39.2675321,
+        "maxlon": -104.877433
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "village",
+        "boundary": "administrative",
+        "gnis:feature_id": "2412878",
+        "name": "Larkspur",
+        "name:es": "Larkspur (Colorado)",
+        "name:fa": "لرکسپور، کلرادو",
+        "name:ht": "Larkspur, Kolorado",
+        "name:it": "Larkspur (Colorado)",
+        "name:kk": "Ларкспур (Колорадо)",
+        "name:nl": "Larkspur (Colorado)",
+        "name:pt": "Larkspur (Colorado)",
+        "name:sr": "Ларкспер (Колорадо)",
+        "name:vo": "Larkspur (Colorado)",
+        "name:zh": "拉克斯珀 (科罗拉多州)",
+        "place": "village",
+        "population": "206",
+        "population:date": "2020",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "source:population": "US Census",
+        "type": "boundary",
+        "wikidata": "Q2456193",
+        "wikipedia": "en:Larkspur, Colorado"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 10664883,
+      "bounds": {
+        "minlat": 39.1518658,
+        "minlon": -104.88626,
+        "maxlat": 39.2169288,
+        "maxlon": -104.8509988
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "Spruce Meadows Open Space",
+        "operator": "Douglas County",
+        "operator:type": "government",
+        "operator:wikidata": "Q115556",
+        "ownership": "county",
+        "protect_class": "6",
+        "protection_title": "County Park",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 10668544,
+      "bounds": {
+        "minlat": 39.1182588,
+        "minlon": -104.9146303,
+        "maxlat": 39.1262236,
+        "maxlon": -104.9083361
+      },
+      "tags": {
+        "addr:city": "Palmer Lake",
+        "addr:housenumber": "199",
+        "addr:postcode": "80133",
+        "addr:state": "CO",
+        "addr:street": "County Line Road",
+        "leisure": "park",
+        "name": "Palmer Lake Regional Recreation Area",
+        "opening_hours": "sunrise-sunset",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 10705838,
+      "bounds": {
+        "minlat": 38.9043853,
+        "minlon": -105.1026386,
+        "maxlat": 38.9350051,
+        "maxlon": -105.0139814
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "North Slope Recreation Area",
+        "operator": "City of Colorado Springs",
+        "ownership": "municipal",
+        "protect_class": "6",
+        "protection_title": "Municipal Park",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 11135003,
+      "bounds": {
+        "minlat": 39.0566073,
+        "minlon": -104.7989626,
+        "maxlat": 39.0708983,
+        "maxlon": -104.7850319
+      },
+      "tags": {
+        "leisure": "park",
+        "name": "Fox Run Regional Park",
+        "source": "El Paso County Free Parks Data (no license or copyright restriction)",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 11384568,
+      "bounds": {
+        "minlat": 38.888192,
+        "minlon": -104.8752554,
+        "maxlat": 38.8966273,
+        "maxlon": -104.8716196
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "Blair Bridge Open Space",
+        "protect_class": "6",
+        "protection_title": "Open Space",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 12296021,
+      "bounds": {
+        "minlat": 38.8607291,
+        "minlon": -104.8539211,
+        "maxlat": 38.8697044,
+        "maxlon": -104.8400501
+      },
+      "tags": {
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "Mesa Valley Open Space",
+        "operator": "City of Colorado Springs",
+        "ownership": "municipal",
+        "protect_class": "6",
+        "protection_title": "Municipal Park",
+        "type": "multipolygon"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 13578473,
+      "bounds": {
+        "minlat": 38.831852,
+        "minlon": -104.8957475,
+        "maxlat": 38.8542187,
+        "maxlon": -104.8728825
+      },
+      "tags": {
+        "addr:city": "Colorado Springs",
+        "addr:housenumber": "3550",
+        "addr:postcode": "80904",
+        "addr:state": "CO",
+        "addr:street": "West High Street",
+        "boundary": "protected_area",
+        "landuse": "recreation_ground",
+        "name": "Red Rock Canyon Open Space",
+        "opening_hours": "Mo-Su 09:00-17:00",
+        "operator": "City of Colorado Springs",
+        "ownership": "municipal",
+        "protect_class": "6",
+        "protection_title": "Municipal Park",
+        "start_date": "2003",
+        "type": "multipolygon",
+        "website": "https://redrockcanyonopenspace.org/",
+        "wikidata": "Q7304901",
+        "wikipedia": "en:Red Rock Canyon Open Space"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 13578474,
+      "bounds": {
+        "minlat": 38.842304,
+        "minlon": -104.9408185,
+        "maxlat": 38.8679441,
+        "maxlon": -104.8867755
+      },
+      "tags": {
+        "admin_level": "8",
+        "boundary": "administrative",
+        "name": "Manitou Springs",
+        "type": "boundary",
+        "wikidata": "Q2086787",
+        "wikipedia": "en:Manitou Springs, Colorado"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 15448750,
+      "bounds": {
+        "minlat": 39.0277141,
+        "minlon": -104.84741,
+        "maxlat": 39.0566848,
+        "maxlon": -104.812251
+      },
+      "tags": {
+        "admin_level": "8",
+        "boundary": "administrative",
+        "gnis:feature_id": "2408300",
+        "name": "Gleneagle",
+        "type": "boundary",
+        "wikidata": "Q580646",
+        "wikipedia": "en:Gleneagle, Colorado"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 15887506,
+      "bounds": {
+        "minlat": 39.0783411,
+        "minlon": -104.8657881,
+        "maxlat": 39.1298937,
+        "maxlon": -104.8225091
+      },
+      "tags": {
+        "admin_level": "8",
+        "boundary": "administrative",
+        "name": "Woodmoor",
+        "type": "boundary"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 17935754,
+      "bounds": {
+        "minlat": 38.926874,
+        "minlon": -105.0413375,
+        "maxlat": 38.940971,
+        "maxlon": -105.006731
+      },
+      "tags": {
+        "admin_level": "8",
+        "border_type": "village",
+        "boundary": "administrative",
+        "gnis:feature_id": "2412708",
+        "name": "Green Mountain Falls",
+        "place": "village",
+        "population": "622",
+        "source": "TIGER/Line® 2008 Place Shapefiles (http://www.census.gov/geo/www/tiger/)",
+        "type": "boundary",
+        "wikidata": "Q2320444",
+        "wikipedia": "en:Green Mountain Falls, Colorado"
       }
     }
   ]

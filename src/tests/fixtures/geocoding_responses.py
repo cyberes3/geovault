@@ -112,9 +112,8 @@ def get_mock_overpass_response(query: str) -> dict:
     """
     Return mock Overpass response for tests.
 
-    For the combined reverse-geocoding query: extracts (lat, lon) from the query
-    and loads fixtures/combined_overpass/{lat}_{lon}.json. For any other query
-    (e.g. retry tests use their own mocks), returns EMPTY_RESPONSE.
+    For the combined query: loads fixtures/combined_overpass/{lat}_{lon}.json.
+    Otherwise returns EMPTY_RESPONSE.
     """
     if _is_combined_query(query):
         coord_match = re.search(r'around:(\d+),([-\d.]+),([-\d.]+)', query)
@@ -126,5 +125,4 @@ def get_mock_overpass_response(query: str) -> dict:
         except ValueError:
             return EMPTY_RESPONSE
         return _load_combined_response_from_file(lat, lon)
-
     return EMPTY_RESPONSE

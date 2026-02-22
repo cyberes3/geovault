@@ -1,39 +1,135 @@
 {
   "version": 0.6,
-  "generator": "test",
-  "osm3s": {},
+  "generator": "Overpass API 0.7.62.8 e802775f",
+  "osm3s": {
+    "timestamp_osm_base": "2026-01-28T00:00:00Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
   "elements": [
     {
-      "type": "area",
-      "id": 3600148838,
+      "type": "way",
+      "id": 801689283,
+      "bounds": {
+        "minlat": 41.6810991,
+        "minlon": -101.3821418,
+        "maxlat": 41.6894801,
+        "maxlon": -101.3654906
+      },
       "tags": {
-        "admin_level": "2",
-        "boundary": "administrative",
-        "name": "United States",
-        "name:en": "United States",
-        "type": "boundary"
+        "name": "Stickney Lake",
+        "natural": "water",
+        "water": "lake"
       }
     },
     {
-      "type": "area",
-      "id": 3600161991,
+      "type": "way",
+      "id": 801689284,
+      "bounds": {
+        "minlat": 41.6738711,
+        "minlon": -101.4237697,
+        "maxlat": 41.7000869,
+        "maxlon": -101.3913686
+      },
       "tags": {
-        "admin_level": "4",
-        "boundary": "administrative",
-        "name": "Nebraska",
-        "name:en": "Nebraska",
-        "type": "boundary"
+        "name": "Brown Lake",
+        "natural": "water",
+        "water": "lake"
       }
     },
     {
-      "type": "area",
-      "id": 3600122906,
+      "type": "relation",
+      "id": 1425394,
+      "bounds": {
+        "minlat": 41.393902,
+        "minlon": -101.405487,
+        "maxlat": 41.744228,
+        "maxlon": -100.709778
+      },
       "tags": {
         "admin_level": "6",
+        "alt_name": "McPherson",
+        "attribution": "USGS 2001 County Boundary",
+        "border_type": "county",
         "boundary": "administrative",
         "name": "McPherson County",
-        "name:en": "McPherson County",
-        "type": "boundary"
+        "nist:fips_code": "31117",
+        "nist:state_fips": "31",
+        "type": "boundary",
+        "website": "https://mcphersoncounty.ne.gov/",
+        "wikidata": "Q485620",
+        "wikipedia": "en:McPherson County, Nebraska"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1425446,
+      "bounds": {
+        "minlat": 41.395439,
+        "minlon": -101.986542,
+        "maxlat": 41.74353,
+        "maxlon": -101.404457
+      },
+      "tags": {
+        "admin_level": "6",
+        "alt_name": "Arthur",
+        "attribution": "USGS 2001 County Boundary",
+        "border_type": "county",
+        "boundary": "administrative",
+        "name": "Arthur County",
+        "nist:fips_code": "31005",
+        "nist:state_fips": "31",
+        "type": "boundary",
+        "website": "https://arthurcounty.nebraska.gov/",
+        "wikidata": "Q485058",
+        "wikipedia": "en:Arthur County, Nebraska"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1425452,
+      "bounds": {
+        "minlat": 41.741631,
+        "minlon": -102.06842,
+        "maxlat": 42.096233,
+        "maxlon": -101.424767
+      },
+      "tags": {
+        "admin_level": "6",
+        "alt_name": "Grant",
+        "attribution": "USGS 2001 County Boundary",
+        "border_type": "county",
+        "boundary": "administrative",
+        "name": "Grant County",
+        "nist:fips_code": "31075",
+        "nist:state_fips": "31",
+        "type": "boundary",
+        "website": "https://grantcountyne.gov/",
+        "wikidata": "Q339175",
+        "wikipedia": "en:Grant County, Nebraska"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 1425480,
+      "bounds": {
+        "minlat": 41.740372,
+        "minlon": -101.425102,
+        "maxlat": 42.094189,
+        "maxlon": -100.841652
+      },
+      "tags": {
+        "admin_level": "6",
+        "alt_name": "Hooker",
+        "attribution": "USGS 2001 County Boundary",
+        "border_type": "county",
+        "boundary": "administrative",
+        "name": "Hooker County",
+        "nist:fips_code": "31091",
+        "nist:state_fips": "31",
+        "type": "boundary",
+        "website": "https://hookercountyne.gov/",
+        "wikidata": "Q489702",
+        "wikipedia": "en:Hooker County, Nebraska"
       }
     }
   ]

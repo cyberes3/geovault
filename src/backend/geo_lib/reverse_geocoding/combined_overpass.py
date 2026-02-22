@@ -1,9 +1,10 @@
 """
 Single combined Overpass query for reverse geocoding.
 
-Builds one Overpass QL query that fetches admin boundaries, protected areas,
-lakes, and cities in a single request. The union must be assigned to a set
-and output in a separate statement (validated syntax).
+Builds one Overpass QL query that fetches admin boundaries (with bounds), protected
+areas, lakes, and cities in a single request (bbox + around only). Country and state
+come from the combined response; admin parsing uses geometry or bounds to pick the
+correct state when multiple are in the bbox.
 """
 from typing import Tuple, Optional, Dict, Any, List
 
@@ -12,7 +13,9 @@ from django.conf import settings
 from geo_lib.reverse_geocoding.overpass_api import query_overpass
 from geo_lib.spatial.coordinates import round_coordinate
 
-_BBOX_HALF_DEGREES = 0.05
+# Bbox half-side in degrees. Large enough that big parks (RMNP, Yellowstone) have
+# at least one boundary member in the box; we still filter by point-in-polygon.
+_BBOX_HALF_DEGREES = 0.5  # 0.25 misses large parks (e.g. Yellowstone) – Overpass indexes by member nodes
 
 
 def build_combined_query(
@@ -24,9 +27,10 @@ def build_combined_query(
     """
     Build the combined Overpass QL query for one coordinate.
 
-    Uses bbox (lat ± 0.05, lon ± 0.05) for admin and protected;
-    around(lake_radius_m) for lakes and around(city_radius_m) for cities.
-    Union is assigned to .all and then output with geom center.
+    Uses bbox (lat ± 0.5°, lon ± 0.5°) for admin and protected so large
+    relations (e.g. national parks) are returned when any member is in the box;
+    point-in-polygon filtering keeps only areas containing the point.
+    Lakes and cities use around(radius). Union is .all, output with geom center.
     """
     if lake_radius_m is None:
         lake_radius_m = int(settings.LAKE_PROXIMITY_MILES * 1609.34)
@@ -38,7 +42,8 @@ def build_combined_query(
     west = longitude - _BBOX_HALF_DEGREES
     east = longitude + _BBOX_HALF_DEGREES
 
-    return f"""[out:json][timeout:15];
+    # 60s timeout; larger bbox (0.15°) can be slow on busy Overpass instances
+    return f"""[out:json][timeout:60];
 (
   relation["boundary"="administrative"]["admin_level"~"2|4|6|8"]({south},{west},{north},{east});
   relation["boundary"="protected_area"]({south},{west},{north},{east});
@@ -55,7 +60,7 @@ def build_combined_query(
   relation["water"="lake"]["name"](around:{lake_radius_m},{latitude},{longitude});
   node["place"~"town|city|village"](around:{city_radius_m},{latitude},{longitude});
 )->.all;
-.all out geom center;
+.all out tags geom center bb;
 """
 
 

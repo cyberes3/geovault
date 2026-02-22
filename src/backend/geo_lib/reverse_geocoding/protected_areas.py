@@ -6,7 +6,7 @@ the same list of protected area dicts. The combined query is executed by combine
 """
 from typing import List, Dict, Tuple, Any, Optional
 
-from geo_lib.reverse_geocoding.geometry_helpers import point_in_polygon
+from geo_lib.reverse_geocoding.geometry_helpers import point_in_polygon, point_in_bounds
 from geo_lib.reverse_geocoding.osm_tags import get_name_from_tags
 
 
@@ -18,8 +18,9 @@ def get_protected_areas(
     """
     Parse protected areas containing the point from combined Overpass response.
 
-    Elements of type "area" (legacy is_in result) are treated as containing the point.
-    Elements of type "relation" or "way" with "geometry" use point-in-polygon.
+    Elements of type "area" are treated as containing the point.
+    Elements of type "relation" or "way" must have "geometry" (point-in-polygon) or "bounds" (point-in-bounds)
+    to be considered containing the point; otherwise they are skipped.
 
     Returns information about national parks, state parks, wilderness areas,
     national forests, and other protected lands.
@@ -59,12 +60,11 @@ def get_protected_areas(
             contains = True
         elif elem_type in ('relation', 'way'):
             geometry = element.get('geometry')
+            bounds = element.get('bounds')
             if geometry and isinstance(geometry, list):
                 contains = point_in_polygon(latitude, longitude, geometry)
-            else:
-                # No geometry (e.g. fixture or server omitted it): assume contains
-                # since combined query already filters by bbox
-                contains = True
+            elif bounds:
+                contains = point_in_bounds(latitude, longitude, bounds)
 
         if not contains:
             continue

@@ -3,11 +3,45 @@ Administrative boundary lookup (country, state, county, city).
 
 Parser-only: accepts a pre-fetched combined Overpass response and returns
 the same hierarchy dict. The combined query is executed by combined_overpass.fetch_combined.
+
+When no admin_level 2 (country) relation contains the point, country is derived from
+is_in:country_code on a containing state/county relation (resolved via pycountry).
 """
 from typing import Dict, Optional, Tuple, List, Any
 
-from geo_lib.reverse_geocoding.geometry_helpers import point_in_polygon
+import pycountry
+
+from geo_lib.reverse_geocoding.geometry_helpers import point_in_polygon, point_in_bounds
 from geo_lib.reverse_geocoding.osm_tags import get_name_from_tags
+
+# Prefer official names so we get "United States of America" not "United States"
+_COUNTRY_NAME_ALIASES: Dict[str, str] = {
+    "United States": "United States of America",
+}
+
+
+def _country_code_to_name(code: str) -> Optional[str]:
+    """Resolve ISO 3166-1 alpha-2 country code to canonical full name (official_name when available)."""
+    if not code or not isinstance(code, str):
+        return None
+    code = code.strip().upper()
+    if len(code) != 2:
+        return None
+    try:
+        c = pycountry.countries.get(alpha_2=code)
+        if not c:
+            return None
+        name = getattr(c, "official_name", None) or c.name
+        return _COUNTRY_NAME_ALIASES.get(name, name) if name else None
+    except (KeyError, AttributeError):
+        return None
+
+
+def normalize_country_name(name: Optional[str]) -> Optional[str]:
+    """Return a canonical country name so OSM and code-derived names match (e.g. United States → United States of America)."""
+    if not name or not name.strip():
+        return None
+    return _COUNTRY_NAME_ALIASES.get(name.strip(), name.strip())
 
 
 def get_admin_hierarchy(
@@ -24,8 +58,9 @@ def get_admin_hierarchy(
     - Level 6: County
     - Level 8: City/Municipality
 
-    Elements of type "area" (legacy is_in result) are treated as containing the point.
-    Elements of type "relation" or "way" with "geometry" use point-in-polygon.
+    Elements of type "area" are treated as containing the point.
+    Elements of type "relation" or "way" must have "geometry" (point-in-polygon) or "bounds" (point-in-bounds)
+    to be considered containing the point; otherwise they are skipped.
 
     Args:
         response: Combined Overpass response dict (with "elements") or None
@@ -63,21 +98,31 @@ def get_admin_hierarchy(
             contains = True
         elif elem_type in ('relation', 'way'):
             geometry = element.get('geometry')
+            bounds = element.get('bounds')
             if geometry and isinstance(geometry, list):
                 contains = point_in_polygon(latitude, longitude, geometry)
-            else:
-                # No geometry: assume contains (combined query already filters by bbox)
-                contains = True
+            elif bounds:
+                contains = point_in_bounds(latitude, longitude, bounds)
 
         if not contains:
             continue
 
         if admin_level == '2':
-            result['country'] = name
+            result['country'] = normalize_country_name(name) or name
         elif admin_level == '4':
             result['state'] = name
+            if result['country'] is None:
+                country_name = _country_code_to_name(tags.get('is_in:country_code') or '')
+                if country_name:
+                    result['country'] = country_name
         elif admin_level == '6':
             result['county'] = name
+            if result['country'] is None:
+                country_name = _country_code_to_name(tags.get('is_in:country_code') or '')
+                if country_name:
+                    result['country'] = country_name
+            if result['state'] is None and tags.get('is_in:state'):
+                result['state'] = tags.get('is_in:state')
         elif admin_level == '8':
             result['city'] = name
 
