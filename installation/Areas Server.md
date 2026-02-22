@@ -51,7 +51,7 @@ Download the `.osm.pbf` data from <https://download.geofabrik.de/>. Then, load t
 ./scripts/import_pbf.sh --append --database "postgresql://..." /srv/downloads/europe-latest.osm.pbf
 ```
 
-(Run the first `.osm.pbf` import then add the `--append` for subsequent ones.)
+Run the first `.osm.pbf` import then add the `--append` for subsequent ones.
 
 Optional arguments for faster imports:
 
@@ -90,7 +90,7 @@ It will output something like this:
 2026-02-22 10:02:14 [INFO]: Starting at sequence 4683 (2026-01-30T21:21:29Z).
 ```
 
-Later runs are typically done via the systemd timer (daily).
+Later runs are typically done via the daily systemd timer.
 
 ## Systemd
 

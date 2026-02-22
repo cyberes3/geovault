@@ -51,7 +51,7 @@ breakdown by `admin_level`.
 
 ## Installation and Setup
 
-See `installation/Areas Server.md`
+See `installation/Areas Server.md`. Requires Redis.
 
 ## Run the server
 
@@ -62,9 +62,11 @@ flask --app app run --host 0.0.0.0 --port 5001
 
 ## Server Environment Variables
 
-| Variable                            | Description                                                                  |
-|-------------------------------------|------------------------------------------------------------------------------|
-| `AREAS_SERVER_DATABASE`             | PostgreSQL connection string (required).                                     |
-| `AREAS_SERVER_MAX_BATCH_SIZE`       | Max points per batch request (default: 500).                                 |
-| `AREAS_SERVER_CACHE_TTL`            | Response cache TTL in seconds for single-point GET (default: 86400 = 1 day). |
-| `AREAS_SERVER_CACHE_COORD_DECIMALS` | Decimal places for cache key (default: 4).                                   |
+| Variable                            | Description                                                                                                                                                                     |
+|-------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `AREAS_SERVER_DATABASE`             | PostgreSQL connection string (required).                                                                                                                                        |
+| `AREAS_SERVER_MAX_BATCH_SIZE`       | Max points per batch request (default: 500).                                                                                                                                    |
+| `AREAS_SERVER_CACHE_TTL`            | Response cache TTL in seconds for single-point GET (default: 86400 = 1 day). 0 = cache off.                                                                                     |
+| `AREAS_SERVER_CACHE_COORD_DECIMALS` | Decimal places for cache key (default: 4).                                                                                                                                      |
+| `AREAS_SERVER_REDIS_URL`            | Redis URL for response cache, shared across Gunicorn workers (default: `redis://127.0.0.1:6379/3`). Use a separate DB from the core server (e.g. core uses 1, 2; areas uses 3). |
+| `AREAS_SERVER_POOL_MAX_SIZE`        | PostgreSQL connection pool max size (default: 10).                                                                                                                              |

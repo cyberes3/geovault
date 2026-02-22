@@ -27,6 +27,7 @@ from config import (
     get_conninfo,
     MAX_BATCH_SIZE,
     POOL_MAX_SIZE,
+    REDIS_URL,
 )
 
 app = Flask(__name__)
@@ -53,13 +54,46 @@ def get_pool() -> ConnectionPool:
     return _pool
 
 
+_CACHE_KEY_PREFIX = "areas:query:"
+
+
+def _cache_key_tuple(lat: float, lon: float, lake_radius_miles: float) -> str:
+    """Serializable Redis key from query params."""
+    return f"{_CACHE_KEY_PREFIX}{lat}:{lon}:{lake_radius_miles}"
+
+
+class _RedisResponseCache:
+    """Redis-backed cache for GET /query responses; shared across Gunicorn workers."""
+
+    def __init__(self, redis_url: str, ttl_seconds: int):
+        import redis
+        self._client = redis.Redis.from_url(redis_url, decode_responses=True)
+        self._client.ping()
+        self._ttl = ttl_seconds
+
+    def __contains__(self, key: tuple) -> bool:
+        k = _cache_key_tuple(key[0], key[1], key[2])
+        return self._client.exists(k) > 0
+
+    def __getitem__(self, key: tuple):
+        k = _cache_key_tuple(key[0], key[1], key[2])
+        raw = self._client.get(k)
+        if raw is None:
+            raise KeyError(key)
+        return json.loads(raw)
+
+    def __setitem__(self, key: tuple, value: dict) -> None:
+        k = _cache_key_tuple(key[0], key[1], key[2])
+        self._client.setex(k, self._ttl, json.dumps(value))
+
+
 def get_cache():
     global _cache
     if _cache is None and CACHE_TTL_SECONDS > 0:
         try:
-            from cachetools import TTLCache
-            _cache = TTLCache(maxsize=10000, ttl=CACHE_TTL_SECONDS)
-        except ImportError:
+            _cache = _RedisResponseCache(REDIS_URL, CACHE_TTL_SECONDS)
+        except Exception as e:
+            logger.warning("Areas server Redis cache disabled: %s", e)
             _cache = None
     return _cache
 

@@ -23,6 +23,9 @@ CACHE_COORD_DECIMALS: int = int(os.environ.get("AREAS_SERVER_CACHE_COORD_DECIMAL
 # Connection pool max size (3 conns per request; default 10 allows 2–3 concurrent requests)
 POOL_MAX_SIZE: int = int(os.environ.get("AREAS_SERVER_POOL_MAX_SIZE", "10"))
 
+# Redis for response cache (shared across Gunicorn workers). Use a separate DB from core server (core uses 1, 2).
+REDIS_URL: str = os.environ.get("AREAS_SERVER_REDIS_URL", "redis://127.0.0.1:6379/3")
+
 
 def get_conninfo() -> str:
     if not DATABASE_URL or not DATABASE_URL.strip():
