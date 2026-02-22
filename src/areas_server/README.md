@@ -7,17 +7,16 @@ This server is a replacement for the Overpass API server. Overpass is just too l
 case. Specifically, the `is_in()` query consumes dozens of GBs of memory for a single query. This standalone server also
 allows us to load alternative data sources beyond OSM.
 
-## Data served
+## Data Served
 
-Data comes from OSM (imported via osm2pgsql flex config in `flex_config/areas.lua`) and from Natural Earth (marine
-polygons via `scripts/import_ocean_polygons.py`).
+Data comes from OSM and from Natural Earth.
 
-| Layer               | Description                               | How it is calculated                                                                                                                          |
-|---------------------|-------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
-| **admin_hierarchy** | Country, state, county, city at the point | All administrative boundaries (country, state, county, city). Country name is normalized (e.g. "United States" → "United States of America"). |
-| **protected_areas** | Parks, nature reserves, etc. at the point | Up to 5 protected areas (national park, nature reserve, recreation area) that contain the point.                                              |
-| **nearby_lakes**    | Named water bodies on water or near shore | Up to 5 water bodies: on water or with shoreline within `lake-radius-miles`. On-water first, then nearest by shoreline distance.              |
-| **ocean**           | Ocean name when on or near ocean          | Point inside ocean, or within `ocean-radius-miles` of shoreline.                                                                              |
+| Layer               | Description                               | How it is calculated                                                                                                                                                                                                                                                                  |
+|---------------------|-------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **admin_hierarchy** | Country, state, county, city at the point | Administrative boundaries (country, state, county, city). Country name normalized (e.g. "United States" → "United States of America"). When admin has no city, the closest OSM place node (place=city, town, village) within `city-radius-miles` (default 3) is used as the city tag. |
+| **protected_areas** | Parks, nature reserves, etc. at the point | Up to 5 protected areas (national park, nature reserve, recreation area) that contain the point.                                                                                                                                                                                      |
+| **nearby_lakes**    | Named water bodies on water or near shore | Up to 5 water bodies: on water or with shoreline within `lake-radius-miles`. On-water first, then nearest by shoreline distance.                                                                                                                                                      |
+| **ocean**           | Ocean name when on or near ocean          | Point inside ocean, or within `ocean-radius-miles` of shoreline.                                                                                                                                                                                                                      |
 
 ## Routes
 
@@ -26,8 +25,9 @@ polygons via `scripts/import_ocean_polygons.py`).
 Single-point lookup at `lat`, `lon`.
 
 - **Query:** `lat` (required), `lon` (required), `lake-radius-miles` (optional, default `1` — lake shoreline search
-  radius in
-  miles), `ocean-radius-miles` (optional, default `1` — ocean shoreline search radius in miles).
+  radius in miles), `ocean-radius-miles` (optional, default `1` — ocean shoreline search radius in miles),
+  `city-radius-miles` (optional, default `3` — search radius in miles for nearest place node when admin has no city; use
+  `0` to disable).
 - **Response:** One object with `admin_hierarchy`, `protected_areas` (up to 5), `nearby_lakes` (up to 5: on water or
   shore within `lake-radius-miles`), and `ocean` (name when on or within `ocean-radius-miles` of ocean; null if no ocean
   data or no match).
@@ -39,11 +39,10 @@ Single-point lookup at `lat`, `lon`.
 Batch lookup for multiple points.
 
 - **Body:** `{"points": [[lat, lon], ...]}`. Optional keys: `lake-radius-miles` (default `1`), `ocean-radius-miles` (
-  default `1`).
+  default `1`), `city-radius-miles` (default `3`; use `0` to disable nearest-place city lookup).
 - **Response:** `{"results": [ ... ]}` — one object per point in the same order, each with `admin_hierarchy`,
-  `protected_areas` (up to 5), `nearby_lakes` (up to 5), and `ocean`. More efficient than many GETs (four DB round-trips
-  in
-  parallel).
+  `protected_areas` (up to 5), `nearby_lakes` (up to 5), and `ocean`. More efficient than many GETs (up to five DB
+  round-trips in parallel).
 
 ### `GET /health`
 
@@ -58,6 +57,8 @@ breakdown by `admin_level`.
 ## Installation and Setup
 
 See `installation/Areas Server.md`. Requires Redis.
+
+Don't expose the Areas server to the internet as it isn't designed for that.
 
 ## Run the server
 

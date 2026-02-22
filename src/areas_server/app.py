@@ -58,9 +58,9 @@ def get_pool() -> ConnectionPool:
 _CACHE_KEY_PREFIX = "areas:query:"
 
 
-def _cache_key_tuple(lat: float, lon: float, lake_radius_miles: float, ocean_radius_miles: float) -> str:
+def _cache_key_tuple(lat: float, lon: float, lake_radius_miles: float, ocean_radius_miles: float, city_radius_miles: float) -> str:
     """Serializable Redis key from query params."""
-    return f"{_CACHE_KEY_PREFIX}{lat}:{lon}:{lake_radius_miles}:{ocean_radius_miles}"
+    return f"{_CACHE_KEY_PREFIX}{lat}:{lon}:{lake_radius_miles}:{ocean_radius_miles}:{city_radius_miles}"
 
 
 class _RedisResponseCache:
@@ -73,18 +73,18 @@ class _RedisResponseCache:
         self._ttl = ttl_seconds
 
     def __contains__(self, key: tuple) -> bool:
-        k = _cache_key_tuple(key[0], key[1], key[2], key[3])
+        k = _cache_key_tuple(key[0], key[1], key[2], key[3], key[4])
         return self._client.exists(k) > 0
 
     def __getitem__(self, key: tuple):
-        k = _cache_key_tuple(key[0], key[1], key[2], key[3])
+        k = _cache_key_tuple(key[0], key[1], key[2], key[3], key[4])
         raw = self._client.get(k)
         if raw is None:
             raise KeyError(key)
         return json.loads(raw)
 
     def __setitem__(self, key: tuple, value: dict) -> None:
-        k = _cache_key_tuple(key[0], key[1], key[2], key[3])
+        k = _cache_key_tuple(key[0], key[1], key[2], key[3], key[4])
         self._client.setex(k, self._ttl, json.dumps(value))
 
 
@@ -217,7 +217,7 @@ def stats():
 
 @app.route("/query", methods=["GET"])
 def get_query():
-    """Single-point query: GET /query?lat=40.34&lon=-105.68. Optional: lake-radius-miles (default 1), ocean-radius-miles (default 1)."""
+    """Single-point query: GET /query?lat=40.34&lon=-105.68. Optional: lake-radius-miles (default 1), ocean-radius-miles (default 1), city-radius-miles (default 3)."""
     lat = request.args.get("lat")
     lon = request.args.get("lon")
     err = _validate_lat_lon(lat, lon)
@@ -236,10 +236,13 @@ def get_query():
     ocean_radius_miles, err = _parse_float_arg(request.args.get("ocean-radius-miles"), 1.0, "ocean-radius-miles")
     if err:
         return Response(json.dumps({"error": err}), status=400, mimetype="application/json")
+    city_radius_miles, err = _parse_float_arg(request.args.get("city-radius-miles"), 3.0, "city-radius-miles")
+    if err:
+        return Response(json.dumps({"error": err}), status=400, mimetype="application/json")
 
     cache = get_cache()
     if cache is not None:
-        key = (_round_coord(lat_f), _round_coord(lon_f), lake_radius_miles, ocean_radius_miles)
+        key = (_round_coord(lat_f), _round_coord(lon_f), lake_radius_miles, ocean_radius_miles, city_radius_miles)
         if key in cache:
             return cache[key]
 
@@ -249,6 +252,7 @@ def get_query():
             pool, lat_f, lon_f,
             lake_radius_miles=lake_radius_miles,
             ocean_radius_miles=ocean_radius_miles,
+            city_radius_miles=city_radius_miles,
         )
         out = _make_response(admin_hierarchy, protected_areas, nearby_lakes, ocean)
         if cache is not None:
@@ -260,7 +264,7 @@ def get_query():
 
 @app.route("/query", methods=["POST"])
 def post_query():
-    """Batch query: POST /query with body {"points": [[lat, lon], ...]}. Optional: lake-radius-miles (default 1), ocean-radius-miles (default 1)."""
+    """Batch query: POST /query with body {"points": [[lat, lon], ...]}. Optional: lake-radius-miles (default 1), ocean-radius-miles (default 1), city-radius-miles (default 3)."""
     if not request.is_json:
         return Response(
             json.dumps({"error": "Content-Type must be application/json"}),
@@ -318,6 +322,12 @@ def post_query():
     ocean_radius_miles, err = _parse_float_arg(ocean_radius_arg, 1.0, "ocean-radius-miles")
     if err:
         return Response(json.dumps({"error": err}), status=400, mimetype="application/json")
+    city_radius_arg = request.args.get("city-radius-miles")
+    if city_radius_arg is None and data and "city-radius-miles" in data:
+        city_radius_arg = str(data["city-radius-miles"])
+    city_radius_miles, err = _parse_float_arg(city_radius_arg, 3.0, "city-radius-miles")
+    if err:
+        return Response(json.dumps({"error": err}), status=400, mimetype="application/json")
 
     try:
         pool = get_pool()
@@ -325,6 +335,7 @@ def post_query():
             pool, points,
             lake_radius_miles=lake_radius_miles,
             ocean_radius_miles=ocean_radius_miles,
+            city_radius_miles=city_radius_miles,
         )
         out = {
             "results": [

@@ -96,6 +96,18 @@ local water_bodies = osm2pgsql.define_area_table('water_bodies', {
     { column = 'geom', method = 'gist' },
 }})
 
+-- Place nodes: OSM nodes with place=city|town|village for "nearest city" when admin has no city.
+local PLACE_TYPES = { ['city'] = true, ['town'] = true, ['village'] = true }
+local place_nodes = osm2pgsql.define_node_table('place_nodes', {
+    { column = 'osm_id', type = 'int8', not_null = true },
+    { column = 'name', type = 'text' },
+    { column = 'place_type', type = 'text' },
+    { column = 'geom', type = 'point', not_null = true, projection = 4326 },
+    { column = 'created', sql_type = 'timestamptz' },
+}, { indexes = {
+    { column = 'geom', method = 'gist' },
+}})
+
 function osm2pgsql.process_relation(object)
     local t = object.tags
 
@@ -177,4 +189,18 @@ function osm2pgsql.process_way(object)
             })
         end
     end
+end
+
+function osm2pgsql.process_node(object)
+    local t = object.tags
+    if not t or not PLACE_TYPES[t.place] then return end
+    local name = get_name(t)
+    if not name or not name:match('%S') then return end
+    place_nodes:insert({
+        osm_id = object.id,
+        name = name,
+        place_type = t.place,
+        geom = object:as_point(),
+        created = format_timestamp(object.timestamp),
+    })
 end

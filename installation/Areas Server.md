@@ -82,8 +82,6 @@ export AREAS_SERVER_DATABASE="postgresql://is_in_areas:your_password_here@localh
 ./venv/bin/flask --app app run --host 0.0.0.0 --port 5001
 ```
 
-Don't expose the Areas server to the internet as it isn't designed for that.
-
 ## Incremental Updates
 
 `osm2pgsql` supports easily importing update diffs from the OSM server.

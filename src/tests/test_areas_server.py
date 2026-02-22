@@ -19,7 +19,7 @@ _areas_server_dir = Path(__file__).resolve().parent.parent / "areas_server"
 if str(_areas_server_dir) not in sys.path:
     sys.path.insert(0, str(_areas_server_dir))
 
-from areas_lib import lookup_protected_areas, lookup_water
+from areas_lib import lookup_places, lookup_protected_areas, lookup_water
 
 
 def _areas_server_base_url():
@@ -222,11 +222,69 @@ class TestQueryPost:
             assert "ocean" in item
 
 
+# Park County, CO: admin has no city; nearest place node is Fairplay (town). Closer point than ~3 mi.
+PARK_COUNTY_LAT, PARK_COUNTY_LON = 39.22337887866515, -105.94799963185382
+
+
+class TestNearbyCityPlaceNodes:
+    """Test that when admin has no city, the closest place node within city-radius-miles is used as city."""
+
+    def test_park_county_point_city_fairplay_with_city_radius(self, require_areas_server):
+        """Park County point gets city=Fairplay when city-radius-miles >= 3 (nearest place node)."""
+        url = require_areas_server
+        status, _, data = _http_get(
+            url + "/query?lat={}&lon={}&city-radius-miles=3".format(PARK_COUNTY_LAT, PARK_COUNTY_LON)
+        )
+        assert status == 200, (data or {})
+        assert data and "admin_hierarchy" in data
+        admin = data["admin_hierarchy"]
+        assert admin.get("county") == "Park County"
+        assert admin.get("city") == "Fairplay", (
+            "Expected city=Fairplay from nearest place node; ensure place_nodes table is populated (re-import with flex config)."
+        )
+
+    def test_park_county_point_city_fairplay_with_default_city_radius(self, require_areas_server):
+        """Park County point with default city-radius-miles (3) gets city=Fairplay."""
+        url = require_areas_server
+        status, _, data = _http_get(
+            url + "/query?lat={}&lon={}".format(PARK_COUNTY_LAT, PARK_COUNTY_LON)
+        )
+        assert status == 200
+        assert data and data["admin_hierarchy"].get("county") == "Park County"
+        assert data["admin_hierarchy"].get("city") == "Fairplay"
+
+    def test_park_county_point_city_null_when_city_radius_zero(self, require_areas_server):
+        """Park County point with city-radius-miles=0 has no city (place lookup disabled)."""
+        url = require_areas_server
+        status, _, data = _http_get(
+            url + "/query?lat={}&lon={}&city-radius-miles=0".format(PARK_COUNTY_LAT, PARK_COUNTY_LON)
+        )
+        assert status == 200
+        assert data and data["admin_hierarchy"].get("county") == "Park County"
+        assert data["admin_hierarchy"].get("city") is None
+
+    def test_park_county_point_batch_city_fairplay(self, require_areas_server):
+        """POST /query with Park County point and city-radius-miles=3 returns city=Fairplay."""
+        url = require_areas_server
+        status, _, data = _http_post(
+            url + "/query",
+            data_bytes=json.dumps({
+                "points": [[PARK_COUNTY_LAT, PARK_COUNTY_LON]],
+                "city-radius-miles": 3,
+            }).encode(),
+        )
+        assert status == 200
+        assert data and "results" in data and len(data["results"]) == 1
+        admin = data["results"][0]["admin_hierarchy"]
+        assert admin.get("county") == "Park County"
+        assert admin.get("city") == "Fairplay"
+
+
 class TestQueryArgs:
     """Test query arg parsing and forwarding (in-process client, mocked pool/query)."""
 
-    def test_get_query_passes_lake_and_ocean_radius_to_query_single(self, client, mock_pool):
-        """GET /query with lake-radius-miles and ocean-radius-miles forwards them to query_single."""
+    def test_get_query_passes_lake_ocean_and_city_radius_to_query_single(self, client, mock_pool):
+        """GET /query with lake-radius-miles, ocean-radius-miles, city-radius-miles forwards them to query_single."""
         with patch("app.get_pool", return_value=mock_pool), \
              patch("app.query_single") as mock_query:
             mock_query.return_value = (
@@ -236,16 +294,17 @@ class TestQueryArgs:
                 None,
             )
             r = client.get(
-                "/query?lat=40.34&lon=-105.68&lake-radius-miles=2.5&ocean-radius-miles=0.5"
+                "/query?lat=40.34&lon=-105.68&lake-radius-miles=2.5&ocean-radius-miles=0.5&city-radius-miles=5"
             )
         assert r.status_code == 200
         mock_query.assert_called_once()
         call_kw = mock_query.call_args[1]
         assert call_kw["lake_radius_miles"] == 2.5
         assert call_kw["ocean_radius_miles"] == 0.5
+        assert call_kw["city_radius_miles"] == 5.0
 
-    def test_get_query_defaults_lake_and_ocean_radius(self, client, mock_pool):
-        """GET /query without optional args uses default 1.0 for both radii."""
+    def test_get_query_defaults_lake_ocean_and_city_radius(self, client, mock_pool):
+        """GET /query without optional args uses default 1.0 for lake/ocean, 3.0 for city radius."""
         with patch("app.get_pool", return_value=mock_pool), \
              patch("app.query_single") as mock_query:
             mock_query.return_value = (
@@ -259,6 +318,7 @@ class TestQueryArgs:
         call_kw = mock_query.call_args[1]
         assert call_kw["lake_radius_miles"] == 1.0
         assert call_kw["ocean_radius_miles"] == 1.0
+        assert call_kw["city_radius_miles"] == 3.0
 
     def test_get_query_invalid_lake_radius_miles_returns_400(self, client):
         """GET /query with negative lake-radius-miles returns 400."""
@@ -283,6 +343,39 @@ class TestQueryArgs:
         r = client.get("/query?lat=40&lon=-105&ocean-radius-miles=xyz")
         assert r.status_code == 400
         assert "number" in (r.json or {}).get("error", "").lower()
+
+    def test_get_query_invalid_city_radius_miles_returns_400(self, client):
+        """GET /query with negative city-radius-miles returns 400."""
+        r = client.get("/query?lat=40&lon=-105&city-radius-miles=-1")
+        assert r.status_code == 400
+        assert "non-negative" in (r.json or {}).get("error", "").lower()
+
+    def test_get_query_non_numeric_city_radius_returns_400(self, client):
+        """GET /query with non-numeric city-radius-miles returns 400."""
+        r = client.get("/query?lat=40&lon=-105&city-radius-miles=abc")
+        assert r.status_code == 400
+        assert "number" in (r.json or {}).get("error", "").lower()
+
+    def test_post_query_passes_city_radius_miles_from_body(self, client, mock_pool):
+        """POST /query with city-radius-miles in body forwards to query_batch."""
+        with patch("app.get_pool", return_value=mock_pool), \
+             patch("app.query_batch") as mock_batch:
+            mock_batch.return_value = [
+                (
+                    {"country": "US", "state": None, "county": None, "city": None},
+                    [],
+                    [],
+                    None,
+                ),
+            ]
+            r = client.post(
+                "/query",
+                data=json.dumps({"points": [[40.34, -105.68]], "city-radius-miles": 4.0}),
+                content_type="application/json",
+            )
+        assert r.status_code == 200
+        call_kw = mock_batch.call_args[1]
+        assert call_kw["city_radius_miles"] == 4.0
 
     def test_post_query_passes_lake_and_ocean_radius_from_body(self, client, mock_pool):
         """POST /query with lake-radius-miles and ocean-radius-miles in body forwards to query_batch."""
@@ -359,6 +452,26 @@ class TestQueryArgs:
         assert call_kw["lake_radius_miles"] == 10.0
         assert call_kw["ocean_radius_miles"] == 5.0
 
+    def test_post_query_default_city_radius_miles(self, client, mock_pool):
+        """POST /query without city-radius-miles uses default 3.0."""
+        with patch("app.get_pool", return_value=mock_pool), \
+             patch("app.query_batch") as mock_batch:
+            mock_batch.return_value = [
+                (
+                    {"country": "US", "state": None, "county": None, "city": None},
+                    [],
+                    [],
+                    None,
+                ),
+            ]
+            r = client.post(
+                "/query",
+                data=json.dumps({"points": [[40.34, -105.68]]}),
+                content_type="application/json",
+            )
+        assert r.status_code == 200
+        assert mock_batch.call_args[1]["city_radius_miles"] == 3.0
+
     def test_post_query_invalid_ocean_radius_in_body_returns_400(self, client):
         """POST /query with invalid ocean-radius-miles in body returns 400."""
         r = client.post(
@@ -368,6 +481,144 @@ class TestQueryArgs:
         )
         assert r.status_code == 400
         assert "non-negative" in (r.json or {}).get("error", "").lower()
+
+    def test_post_query_invalid_city_radius_in_body_returns_400(self, client):
+        """POST /query with invalid city-radius-miles in body returns 400."""
+        r = client.post(
+            "/query",
+            data=json.dumps({"points": [[40, -105]], "city-radius-miles": -1}),
+            content_type="application/json",
+        )
+        assert r.status_code == 400
+        assert "non-negative" in (r.json or {}).get("error", "").lower()
+
+
+# --- Unit tests: place lookup and query_single/query_batch filling city from nearest place. ---
+
+
+class TestNearbyPlaceLookup:
+    """Unit tests for lookup_places and query layer filling city when admin has none."""
+
+    def test_run_place_single_returns_none_when_radius_zero(self):
+        """run_place_single returns None when radius_miles is 0 (no DB call)."""
+        conn = MagicMock()
+        assert lookup_places.run_place_single(conn, 40.0, -105.0, 0.0) is None
+        conn.cursor.assert_not_called()
+
+    def test_run_place_single_returns_closest_name_when_in_radius(self):
+        """run_place_single returns closest place name when within radius."""
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchone.return_value = ("Fairplay",)
+        name = lookup_places.run_place_single(conn, PARK_COUNTY_LAT, PARK_COUNTY_LON, 3.0)
+        assert name == "Fairplay"
+
+    def test_run_place_single_returns_none_when_no_row(self):
+        """run_place_single returns None when no place in radius."""
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchone.return_value = None
+        assert lookup_places.run_place_single(conn, 40.0, -105.0, 3.0) is None
+
+    def test_run_place_batch_returns_empty_dict_when_radius_zero(self):
+        """run_place_batch returns all None when radius_miles is 0."""
+        conn = MagicMock()
+        out = lookup_places.run_place_batch(conn, [0, 1], [-105.0, -106.0], [40.0, 41.0], 0.0)
+        assert out == {0: None, 1: None}
+        conn.cursor.assert_not_called()
+
+    def test_run_place_batch_returns_names_by_index(self):
+        """run_place_batch returns dict point_idx -> place name."""
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchall.return_value = [(0, "Fairplay"), (1, "Leadville")]
+        out = lookup_places.run_place_batch(conn, [0, 1], [-105.0, -106.0], [39.2, 39.25], 3.0)
+        assert out == {0: "Fairplay", 1: "Leadville"}
+
+    def test_query_single_fills_city_from_place_when_admin_has_no_city(self, mock_pool):
+        """query_single sets admin_hierarchy['city'] from place lookup when admin city is None."""
+        from areas_lib.query import query_single
+        conn1, conn2, conn3, conn4, conn5 = [MagicMock() for _ in range(5)]
+        mock_pool.getconn.side_effect = [conn1, conn2, conn3, conn4, conn5]
+        for c in (conn1, conn2, conn3, conn4, conn5):
+            cur = MagicMock()
+            c.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+            c.cursor.return_value.__exit__ = MagicMock(return_value=None)
+            cur.fetchall.return_value = []
+            cur.fetchone.return_value = None
+        with patch("areas_lib.query.lookup_admin.run_admin_single", return_value=[]), \
+             patch("areas_lib.query.lookup_protected_areas.run_protected_single", return_value=[]), \
+             patch("areas_lib.query.lookup_water.run_water_single", return_value=[]), \
+             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=None), \
+             patch("areas_lib.query.lookup_places.run_place_single", return_value="Fairplay"):
+            admin, _, _, _ = query_single(mock_pool, PARK_COUNTY_LAT, PARK_COUNTY_LON, city_radius_miles=3.0)
+        assert admin["city"] == "Fairplay"
+
+    def test_query_single_does_not_override_admin_city(self, mock_pool):
+        """query_single keeps admin city when admin already has a city (place lookup not used for override)."""
+        from areas_lib.query import query_single
+        conn1, conn2, conn3, conn4, conn5 = [MagicMock() for _ in range(5)]
+        mock_pool.getconn.side_effect = [conn1, conn2, conn3, conn4, conn5]
+        for c in (conn1, conn2, conn3, conn4, conn5):
+            cur = MagicMock()
+            c.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+            c.cursor.return_value.__exit__ = MagicMock(return_value=None)
+            cur.fetchall.return_value = []
+            cur.fetchone.return_value = None
+        admin_rows = [(1, 8, "Denver", {"name": "Denver"})]
+        with patch("areas_lib.query.lookup_admin.run_admin_single", return_value=admin_rows), \
+             patch("areas_lib.query.lookup_protected_areas.run_protected_single", return_value=[]), \
+             patch("areas_lib.query.lookup_water.run_water_single", return_value=[]), \
+             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=None), \
+             patch("areas_lib.query.lookup_places.run_place_single", return_value="Fairplay"):
+            admin, _, _, _ = query_single(mock_pool, 39.7, -105.0, city_radius_miles=3.0)
+        assert admin["city"] == "Denver"
+
+    def test_query_single_no_place_lookup_when_city_radius_zero(self, mock_pool):
+        """query_single does not call place lookup when city_radius_miles is 0 (only 4 conns)."""
+        from areas_lib.query import query_single
+        conn1, conn2, conn3, conn4 = [MagicMock() for _ in range(4)]
+        mock_pool.getconn.side_effect = [conn1, conn2, conn3, conn4]
+        for c in (conn1, conn2, conn3, conn4):
+            cur = MagicMock()
+            c.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+            c.cursor.return_value.__exit__ = MagicMock(return_value=None)
+            cur.fetchall.return_value = []
+            cur.fetchone.return_value = None
+        with patch("areas_lib.query.lookup_admin.run_admin_single", return_value=[]), \
+             patch("areas_lib.query.lookup_protected_areas.run_protected_single", return_value=[]), \
+             patch("areas_lib.query.lookup_water.run_water_single", return_value=[]), \
+             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=None), \
+             patch("areas_lib.query.lookup_places.run_place_single") as mock_place:
+            admin, _, _, _ = query_single(mock_pool, PARK_COUNTY_LAT, PARK_COUNTY_LON, city_radius_miles=0.0)
+        mock_place.assert_not_called()
+        assert admin["city"] is None
+
+    def test_query_batch_fills_city_from_place_when_admin_has_no_city(self, mock_pool):
+        """query_batch sets city from place_by_idx when admin has no city for that point."""
+        from areas_lib.query import query_batch
+        conn1, conn2, conn3, conn4, conn5 = [MagicMock() for _ in range(5)]
+        mock_pool.getconn.side_effect = [conn1, conn2, conn3, conn4, conn5]
+        for c in (conn1, conn2, conn3, conn4, conn5):
+            cur = MagicMock()
+            c.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+            c.cursor.return_value.__exit__ = MagicMock(return_value=cur)
+            cur.fetchall.return_value = []
+        admin_rows = [(0, 2, "United States", {}), (0, 4, "Colorado", {}), (0, 6, "Park County", {})]
+        with patch("areas_lib.query.lookup_admin.run_admin_batch", return_value=admin_rows), \
+             patch("areas_lib.query.lookup_protected_areas.run_protected_batch", return_value=[]), \
+             patch("areas_lib.query.lookup_water.run_water_batch", return_value={0: []}), \
+             patch("areas_lib.query.lookup_ocean.run_ocean_batch", return_value={0: None}), \
+             patch("areas_lib.query.lookup_places.run_place_batch", return_value={0: "Fairplay"}):
+            results = query_batch(mock_pool, [(PARK_COUNTY_LAT, PARK_COUNTY_LON)], city_radius_miles=3.0)
+        assert len(results) == 1
+        assert results[0][0]["city"] == "Fairplay"
 
 
 # --- Fake feature data for top-5 limit tests (no real DB). ---
@@ -495,11 +746,8 @@ class TestProtectedAreasTop5:
     def test_query_single_protected_at_most_five(self, mock_pool):
         """End-to-end: query_single returns at most 5 protected areas when run_protected_single returns 5."""
         from areas_lib.query import query_single
-        conn1 = MagicMock()
-        conn2 = MagicMock()
-        conn3 = MagicMock()
-        conn4 = MagicMock()
-        mock_pool.getconn.side_effect = [conn1, conn2, conn3, conn4]
+        conn1, conn2, conn3, conn4, conn5 = [MagicMock() for _ in range(5)]
+        mock_pool.getconn.side_effect = [conn1, conn2, conn3, conn4, conn5]
         cur2 = MagicMock()
         conn2.cursor.return_value.__enter__ = MagicMock(return_value=cur2)
         conn2.cursor.return_value.__exit__ = MagicMock(return_value=None)
@@ -517,7 +765,8 @@ class TestProtectedAreasTop5:
         with patch("areas_lib.query.lookup_admin.run_admin_single", return_value=[]), \
              patch("areas_lib.query.lookup_protected_areas.run_protected_single", return_value=cur2.fetchall.return_value), \
              patch("areas_lib.query.lookup_water.run_water_single", return_value=[]), \
-             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=None):
+             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=None), \
+             patch("areas_lib.query.lookup_places.run_place_single", return_value=None):
             admin, protected, lakes, ocean = query_single(mock_pool, 40.0, -105.0)
         assert len(protected) == 5
         assert protected[0]["name"] == "Park 1"
@@ -681,12 +930,13 @@ class TestNearbyLakesTop5:
     def test_query_single_nearby_lakes_at_most_five_plus_five(self, mock_pool):
         """query_single returns at most 5 on-water + 5 near-shore (current contract)."""
         from areas_lib.query import query_single
-        mock_pool.getconn.side_effect = [MagicMock(), MagicMock(), MagicMock(), MagicMock()]
+        mock_pool.getconn.side_effect = [MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()]
         lakes = [_fake_lake_row(f"Lake {i}") for i in range(1, 6)]
         with patch("areas_lib.query.lookup_admin.run_admin_single", return_value=[]), \
              patch("areas_lib.query.lookup_protected_areas.run_protected_single", return_value=[]), \
              patch("areas_lib.query.lookup_water.run_water_single", return_value=lakes), \
-             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=None):
+             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=None), \
+             patch("areas_lib.query.lookup_places.run_place_single", return_value=None):
             admin, protected, water, ocean = query_single(mock_pool, 40.0, -105.0)
         assert len(water) == 5
         assert water[0]["name"] == "Lake 1"
@@ -763,9 +1013,9 @@ class TestNearbyLakesTop5:
     def test_query_batch_protected_and_lakes_five_per_point(self, mock_pool):
         """query_batch: each result has at most 5 protected and at most 5 lakes (mocked)."""
         from areas_lib.query import query_batch
-        conn1, conn2, conn3, conn4 = MagicMock(), MagicMock(), MagicMock(), MagicMock()
-        mock_pool.getconn.side_effect = [conn1, conn2, conn3, conn4]
-        for c in (conn1, conn2, conn3, conn4):
+        conn1, conn2, conn3, conn4, conn5 = [MagicMock() for _ in range(5)]
+        mock_pool.getconn.side_effect = [conn1, conn2, conn3, conn4, conn5]
+        for c in (conn1, conn2, conn3, conn4, conn5):
             cur = MagicMock()
             c.cursor.return_value.__enter__ = MagicMock(return_value=cur)
             c.cursor.return_value.__exit__ = MagicMock(return_value=None)
@@ -778,10 +1028,12 @@ class TestNearbyLakesTop5:
             1: [_fake_lake_row(f"Lake P1 {i}") for i in range(1, 6)],
         }
         ocean_by_idx = {0: None, 1: None}
+        place_by_idx = {0: None, 1: None}
         with patch("areas_lib.query.lookup_admin.run_admin_batch", return_value=[]), \
              patch("areas_lib.query.lookup_protected_areas.run_protected_batch", return_value=protected_rows), \
              patch("areas_lib.query.lookup_water.run_water_batch", return_value=water_by_idx), \
-             patch("areas_lib.query.lookup_ocean.run_ocean_batch", return_value=ocean_by_idx):
+             patch("areas_lib.query.lookup_ocean.run_ocean_batch", return_value=ocean_by_idx), \
+             patch("areas_lib.query.lookup_places.run_place_batch", return_value=place_by_idx):
             results = query_batch(mock_pool, [(40.0, -105.0), (41.0, -106.0)])
         assert len(results) == 2
         for i, (admin, protected, lakes, ocean) in enumerate(results):

@@ -126,8 +126,8 @@ class TestReverseGeocodingService(TestCase):
     
     def test_admin_hierarchy_query(self):
         """Test admin hierarchy from cached areas_server fixture (load fixtures with fetch script)."""
-        # Use a precise coordinate so the fixture unambiguously maps to one county (39.222, -105.933 -> Park County)
-        areas = get_areas_fixture(39.222, -105.933)
+        # Use a precise coordinate so the fixture unambiguously maps to one county (Park County, CO).
+        areas = get_areas_fixture(39.22337887866515, -105.94799963185382)
         self.assertIsNotNone(areas, "Load areas_server fixtures (e.g. fetch_combined_overpass_fixtures.py --areas-url)")
         admin = areas["admin_hierarchy"]
         self.assertEqual(admin["country"], "United States of America")
@@ -136,8 +136,8 @@ class TestReverseGeocodingService(TestCase):
     
     def test_find_nearby_cities(self):
         """Test nearby city search from cached combined_overpass fixture."""
-        response = get_combined_fixture(39.222, -105.933)
-        cities, errors = find_nearby_cities(response, 39.2216, -105.9327, 5.0)
+        response = get_combined_fixture(39.22337887866515, -105.94799963185382)
+        cities, errors = find_nearby_cities(response, 39.22337887866515, -105.94799963185382, 5.0)
         self.assertIsInstance(cities, list)
         if response.get("elements"):
             self.assertFalse(errors)

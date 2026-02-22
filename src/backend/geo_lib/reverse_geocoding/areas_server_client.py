@@ -31,10 +31,15 @@ def query_areas_server(
     url = base_url.rstrip("/") + "/query"
     timeout = get_setting("AREAS_SERVER_TIMEOUT", 10)
     verify_ssl = get_setting("AREAS_SERVER_VERIFY_SSL", True)
+    city_radius_miles = get_setting("AREAS_SERVER_CITY_RADIUS_MILES", 3.0)
     try:
         response = requests.get(
             url,
-            params={"lat": latitude, "lon": longitude},
+            params={
+                "lat": latitude,
+                "lon": longitude,
+                "city-radius-miles": city_radius_miles,
+            },
             timeout=timeout,
             verify=verify_ssl,
         )
