@@ -7,8 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Flask, request, Response
 
-import psycopg
-from psycopg.pool import ThreadedConnectionPool
+from psycopg_pool import ConnectionPool
 
 from config import (
     CACHE_COORD_DECIMALS,
@@ -20,17 +19,17 @@ from query import check_health, query_batch, query_single
 
 app = Flask(__name__)
 
-_pool: Optional[ThreadedConnectionPool] = None
+_pool: Optional[ConnectionPool] = None
 _cache: Optional[Any] = None
 
 
-def get_pool() -> ThreadedConnectionPool:
+def get_pool() -> ConnectionPool:
     global _pool
     if _pool is None:
-        _pool = ThreadedConnectionPool(
+        _pool = ConnectionPool(
+            get_conninfo(),
             min_size=1,
             max_size=4,
-            kwargs={"conninfo": get_conninfo()},
         )
     return _pool
 

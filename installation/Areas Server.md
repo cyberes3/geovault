@@ -44,8 +44,6 @@ export IS_IN_DATABASE="postgresql://is_in_areas:your_password_here@localhost/is_
 ./venv/bin/flask --app app run --host 0.0.0.0 --port 5000
 ```
 
-Or run with gunicorn: `./venv/bin/gunicorn -w 4 -b 0.0.0.0:5000 app:app`.
-
 ## Import OSM data
 
 Before the server can answer queries, load area data from an OSM PBF (e.g. planet or regional extract):
@@ -62,3 +60,27 @@ After the first import, to enable incremental updates:
 ```
 
 Then run `./scripts/update.sh` periodically (e.g. via cron).
+
+## Systemd
+
+To run the Areas Server as a systemd service (same host and user as main GeoVault).
+
+1. Create an environment file with the database URL under `/etc/secrets` (so the password is not in the unit file):
+
+   ```shell
+   sudo mkdir -p /etc/secrets
+   sudo chmod 600 /etc/secrets
+   echo 'IS_IN_DATABASE=postgresql://is_in_areas:your_password_here@localhost/is_in_areas' | sudo tee /etc/secrets/is_in_areas.env
+   ```
+
+2. Copy the service file and adjust paths if your repo is not at `/srv/geovault/geovault`:
+
+   ```shell
+   sudo cp installation/is_in_areas.service /etc/systemd/system/
+   # If needed, edit WorkingDirectory and ExecStart paths
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now is_in_areas
+   sudo systemctl status is_in_areas
+   ```
+
+The service listens on port 5000 by default.

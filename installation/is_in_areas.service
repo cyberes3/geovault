@@ -1,0 +1,15 @@
+[Unit]
+Description=GeoVault is_in Areas Server
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=geovault
+WorkingDirectory=/srv/geovault/geovault/src/is_in_area_server
+EnvironmentFile=-/etc/secrets/is_in_areas.env
+ExecStart=/srv/geovault/geovault/src/is_in_area_server/venv/bin/gunicorn -w 4 -b 0.0.0.0:5000 app:app
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
