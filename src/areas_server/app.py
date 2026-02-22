@@ -191,13 +191,7 @@ def health():
             conn.rollback()
             pool.putconn(conn)
     except Exception as e:
-        tb_str = traceback.format_exc()
-        traceback.print_exc(file=sys.stderr)
-        return Response(
-            json.dumps({"status": "unhealthy", "error": str(e), "traceback": tb_str}),
-            status=503,
-            mimetype="application/json",
-        )
+        return _error_response_with_traceback(e, status=503)
 
 
 @app.route("/stats")

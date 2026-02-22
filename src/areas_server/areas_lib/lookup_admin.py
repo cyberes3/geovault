@@ -163,12 +163,9 @@ def get_admin_stats(conn: Any) -> Dict[str, Any]:
             if row and len(row) >= 2:
                 out["by_admin_level"][int(row[0])] = row[1]
 
-        try:
-            cur.execute(f"SELECT MIN(created), MAX(created) FROM {SCHEMA}.{TABLE_NAME}")
-            row = cur.fetchone()
-            if row:
-                out["oldest_feature"] = _ts_str(row[0])
-                out["newest_feature"] = _ts_str(row[1])
-        except Exception:
-            pass
+        cur.execute(f"SELECT MIN(created), MAX(created) FROM {SCHEMA}.{TABLE_NAME}")
+        row = cur.fetchone()
+        if row:
+            out["oldest_feature"] = _ts_str(row[0])
+            out["newest_feature"] = _ts_str(row[1])
     return out

@@ -172,8 +172,8 @@ def check_health(conn: Any) -> Tuple[bool, Optional[str]]:
                     f"or {SCHEMA}.{lookup_water.TABLE_NAME} not found"
                 )
         return True, None
-    except Exception as e:
-        return False, str(e)
+    except Exception:
+        raise
 
 
 def get_stats(conn: Any) -> Dict[str, Any]:

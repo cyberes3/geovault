@@ -144,14 +144,11 @@ def get_water_stats(conn: Any) -> Dict[str, Any]:
         if row and row[0] is not None:
             out["extent"] = extent_from_row(tuple(row))
 
-        try:
-            cur.execute(f"SELECT MIN(created), MAX(created) FROM {SCHEMA}.{TABLE_NAME}")
-            row = cur.fetchone()
-            if row:
-                out["oldest_feature"] = _ts_str(row[0])
-                out["newest_feature"] = _ts_str(row[1])
-        except Exception:
-            pass
+        cur.execute(f"SELECT MIN(created), MAX(created) FROM {SCHEMA}.{TABLE_NAME}")
+        row = cur.fetchone()
+        if row:
+            out["oldest_feature"] = _ts_str(row[0])
+            out["newest_feature"] = _ts_str(row[1])
     return out
 
 
