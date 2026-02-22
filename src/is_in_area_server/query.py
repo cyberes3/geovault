@@ -106,29 +106,32 @@ def _build_protected_list(rows: List[Tuple[Any, ...]]) -> List[Dict[str, str]]:
 
 
 def _run_admin_single(conn: Any, lat: float, lon: float) -> List[Tuple[Any, ...]]:
+    # Schema-qualify PostGIS (public.) so it resolves when search_path is is_in only
+    point_wkt = f"POINT({lon} {lat})"
     with conn.cursor() as cur:
         cur.execute(
             f"""
             SELECT osm_id, admin_level, name, tags
             FROM {SCHEMA}.admin_areas
-            WHERE ST_Contains(geom, ST_SetSRID(ST_MakePoint(%s, %s), 4326))
+            WHERE public.ST_Contains(geom, public.ST_SetSRID(public.ST_GeomFromText(%s::text), 4326))
             ORDER BY admin_level ASC
             """,
-            (lon, lat),
+            (point_wkt,),
         )
         return cur.fetchall()
 
 
 def _run_protected_single(conn: Any, lat: float, lon: float) -> List[Tuple[Any, ...]]:
+    point_wkt = f"POINT({lon} {lat})"
     with conn.cursor() as cur:
         cur.execute(
             f"""
             SELECT osm_id, name, tags
             FROM {SCHEMA}.protected_areas
-            WHERE ST_Contains(geom, ST_SetSRID(ST_MakePoint(%s, %s), 4326))
+            WHERE public.ST_Contains(geom, public.ST_SetSRID(public.ST_GeomFromText(%s::text), 4326))
             LIMIT 100
             """,
-            (lon, lat),
+            (point_wkt,),
         )
         return cur.fetchall()
 
@@ -176,7 +179,7 @@ def _run_admin_batch(
             SELECT p.point_idx, a.osm_id, a.admin_level, a.name, a.tags
             FROM p
             JOIN {SCHEMA}.admin_areas a
-                ON ST_Contains(a.geom, ST_SetSRID(ST_MakePoint(p.lon, p.lat), 4326))
+                ON public.ST_Contains(a.geom, public.ST_SetSRID(public.ST_GeomFromText(('POINT(' || p.lon::text || ' ' || p.lat::text || ')')::text), 4326))
             ORDER BY p.point_idx, a.admin_level
             """,
             (indices, lons, lats),
@@ -201,7 +204,7 @@ def _run_protected_batch(
             SELECT p.point_idx, a.osm_id, a.name, a.tags
             FROM p
             JOIN {SCHEMA}.protected_areas a
-                ON ST_Contains(a.geom, ST_SetSRID(ST_MakePoint(p.lon, p.lat), 4326))
+                ON public.ST_Contains(a.geom, public.ST_SetSRID(public.ST_GeomFromText(('POINT(' || p.lon::text || ' ' || p.lat::text || ')')::text), 4326))
             ORDER BY p.point_idx
             """,
             (indices, lons, lats),
@@ -309,8 +312,8 @@ def get_stats(conn: Any) -> Dict[str, Any]:
 
         cur.execute(
             f"""
-            SELECT ST_XMin(e), ST_YMin(e), ST_XMax(e), ST_YMax(e)
-            FROM (SELECT ST_Extent(geom) AS e FROM {SCHEMA}.admin_areas) _t
+            SELECT public.ST_XMin(e), public.ST_YMin(e), public.ST_XMax(e), public.ST_YMax(e)
+            FROM (SELECT public.ST_Extent(geom) AS e FROM {SCHEMA}.admin_areas) _t
             """,
         )
         row = cur.fetchone()
@@ -336,8 +339,8 @@ def get_stats(conn: Any) -> Dict[str, Any]:
 
         cur.execute(
             f"""
-            SELECT ST_XMin(e), ST_YMin(e), ST_XMax(e), ST_YMax(e)
-            FROM (SELECT ST_Extent(geom) AS e FROM {SCHEMA}.protected_areas) _t
+            SELECT public.ST_XMin(e), public.ST_YMin(e), public.ST_XMax(e), public.ST_YMax(e)
+            FROM (SELECT public.ST_Extent(geom) AS e FROM {SCHEMA}.protected_areas) _t
             """,
         )
         row = cur.fetchone()

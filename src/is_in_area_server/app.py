@@ -3,9 +3,19 @@ Flask app for is_in area server.
 GET /query?lat=&lon= (single), POST /query (batch), GET /health, GET /stats (DB stats).
 """
 import json
+import logging
+import sys
 from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Flask, request, Response
+from werkzeug.exceptions import HTTPException
+
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    _h = logging.StreamHandler(sys.stderr)
+    _h.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+    logger.addHandler(_h)
+    logger.setLevel(logging.DEBUG)
 
 from psycopg_pool import ConnectionPool
 
@@ -103,6 +113,7 @@ def health():
             conn.rollback()
             pool.putconn(conn)
     except Exception as e:
+        logger.exception("health check failed")
         return Response(
             json.dumps({"status": "unhealthy", "error": str(e)}),
             status=503,
@@ -122,6 +133,7 @@ def stats():
             conn.rollback()
             pool.putconn(conn)
     except Exception as e:
+        logger.exception("stats failed")
         return Response(
             json.dumps({"error": str(e)}),
             status=500,
@@ -158,6 +170,7 @@ def get_query():
             cache[key] = out
         return out
     except Exception as e:
+        logger.exception("GET /query failed")
         return Response(
             json.dumps({"error": str(e)}),
             status=500,
@@ -223,11 +236,25 @@ def post_query():
         }
         return out
     except Exception as e:
+        logger.exception("POST /query failed")
         return Response(
             json.dumps({"error": str(e)}),
             status=500,
             mimetype="application/json",
         )
+
+
+@app.errorhandler(Exception)
+def handle_exception(exc):
+    """Log full traceback for uncaught server errors; pass through 404/405 etc. without logging."""
+    if isinstance(exc, HTTPException):
+        return exc.get_response()
+    logger.exception("uncaught exception")
+    return Response(
+        json.dumps({"error": str(exc)}),
+        status=500,
+        mimetype="application/json",
+    )
 
 
 def create_app() -> Flask:

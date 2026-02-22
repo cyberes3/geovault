@@ -23,6 +23,7 @@ touch the main GeoVault schema.
    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA is_in TO is_in_areas;
    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA is_in TO is_in_areas;
    ALTER DEFAULT PRIVILEGES IN SCHEMA is_in GRANT ALL ON TABLES TO is_in_areas;
+   ALTER ROLE is_in_areas SET search_path TO is_in;
    ```
 
 Exit with `\q`.
