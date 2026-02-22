@@ -4,7 +4,8 @@ Provides a centralized way to get Redis connections from Django Channels configu
 """
 
 import redis
-from django.conf import settings
+
+from website.settings_utils import get_required_setting
 
 
 def get_redis_connection():
@@ -17,6 +18,7 @@ def get_redis_connection():
     Raises:
         KeyError: If CHANNEL_LAYERS config is not properly configured
     """
-    config = settings.CHANNEL_LAYERS['default']['CONFIG']
+    channel_layers = get_required_setting('CHANNEL_LAYERS')
+    config = channel_layers['default']['CONFIG']
     host, port = config['hosts'][0]
     return redis.Redis(host=host, port=port, decode_responses=True)

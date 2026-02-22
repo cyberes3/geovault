@@ -8,9 +8,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
-from django.conf import settings
-
 from geo_lib.logging.console import get_tagged_logger
+from website.settings_utils import get_required_setting
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.security.ssrf import is_url_safe_for_fetch
 
@@ -80,7 +79,7 @@ def _get_storage_path(icon_hash: str, extension: str) -> Path:
     Returns:
         Path object for icon storage location
     """
-    storage_dir = Path(settings.ICON_STORAGE_DIR)
+    storage_dir = Path(get_required_setting('ICON_STORAGE_DIR'))
     # Create subdirectory structure: {hash[0:2]}/{hash[2:4]}/
     subdir = storage_dir / icon_hash[0:2] / icon_hash[2:4]
     subdir.mkdir(parents=True, exist_ok=True)
@@ -204,7 +203,7 @@ def fetch_remote_icon(url: str, timeout: float, import_log: ImportLog) -> Option
             content_length = response.headers.get('Content-Length')
             if content_length:
                 size = int(content_length)
-                if size > settings.ICON_MAX_SIZE_BYTES:
+                if size > get_required_setting('ICON_MAX_SIZE_BYTES'):
                     _logger.warning(f"Icon exceeds size limit: {url} ({size} bytes)")
                     import_log.add(
                         f"Icon exceeds size limit ({size} bytes): {url}",
@@ -215,7 +214,7 @@ def fetch_remote_icon(url: str, timeout: float, import_log: ImportLog) -> Option
 
             # Read data with size limit
             icon_data = b''
-            max_size = settings.ICON_MAX_SIZE_BYTES
+            max_size = get_required_setting('ICON_MAX_SIZE_BYTES')
             chunk_size = min(8192, max_size)
 
             while True:

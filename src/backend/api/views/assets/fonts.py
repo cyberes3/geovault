@@ -7,11 +7,11 @@ Views for serving MapLibre GL JS font glyphs (PBF files).
 from pathlib import Path
 from urllib.parse import unquote
 
-from django.conf import settings
 from django.http import HttpResponse, Http404
 from django.views.decorators.http import require_http_methods
 
 from geo_lib.logging.console import get_tagged_logger
+from website.settings_utils import get_required_setting
 from geo_lib.utils.secure_path import is_path_under_base, secure_filename
 
 _logger = get_tagged_logger()
@@ -59,7 +59,7 @@ def serve_font_glyph(request, fontstack, range_str):
         raise Http404("Invalid range")
 
     # Get assets fonts directory path
-    assets_fonts_dir = Path(settings.BASE_DIR) / 'assets' / 'fonts'
+    assets_fonts_dir = Path(get_required_setting('BASE_DIR')) / 'assets' / 'fonts'
 
     # Handle font stacks (comma-separated font names for fallback)
     # MapLibre uses font stacks like "Noto Sans Regular,Arial Unicode MS Regular"

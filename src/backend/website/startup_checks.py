@@ -33,7 +33,6 @@ from pathlib import Path
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
-from django.conf import settings
 from django.contrib.sites.models import Site
 from django.core.cache import cache
 from django.db import connection
@@ -276,7 +275,7 @@ def check_writable_directories():
         all_ok = True
 
         # Get the root data directory
-        data_dir = settings.BASE_DIR / 'data'
+        data_dir = Path(get_required_setting('BASE_DIR')) / 'data'
 
         # Get current user and group names
         try:
@@ -330,7 +329,7 @@ def check_frontend_files():
     """
     try:
         # Frontend dist directory is relative to BASE_DIR (backend directory)
-        frontend_dist = settings.BASE_DIR.parent / 'frontend' / 'dist'
+        frontend_dist = Path(get_required_setting('BASE_DIR')).parent / 'frontend' / 'dist'
 
         # Check if dist directory exists
         if not frontend_dist.exists():
@@ -375,7 +374,7 @@ def check_font_glyphs():
     """
     try:
         # Get assets fonts directory path
-        assets_fonts_dir = Path(settings.BASE_DIR) / 'assets' / 'fonts'
+        assets_fonts_dir = Path(get_required_setting('BASE_DIR')) / 'assets' / 'fonts'
 
         # Check if fonts directory exists
         if not assets_fonts_dir.exists():
@@ -443,7 +442,7 @@ def check_togeojson_installation():
     """
     try:
         # Path to togeojson directory relative to BASE_DIR
-        togeojson_dir = settings.BASE_DIR / 'geo_lib' / 'processing' / 'togeojson'
+        togeojson_dir = Path(get_required_setting('BASE_DIR')) / 'geo_lib' / 'processing' / 'togeojson'
 
         # Check if togeojson directory exists
         if not togeojson_dir.exists():
@@ -657,9 +656,9 @@ def check_site_configuration():
             _logger.error("  Example: site.domain: mydomain.com")
             return False
 
-        site_domain = settings.SITE_DOMAIN
-        site_name = settings.SITE_NAME
-        site_id = settings.SITE_ID
+        site_domain = get_required_setting('SITE_DOMAIN')
+        site_name = get_required_setting('SITE_NAME')
+        site_id = get_required_setting('SITE_ID')
 
         # Verify we can create/update the Site object
         # This is the same logic used in NoUsernameAccountAdapter.get_email_confirmation_url()

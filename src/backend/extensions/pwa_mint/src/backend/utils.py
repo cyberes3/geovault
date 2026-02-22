@@ -13,12 +13,12 @@ import secrets
 import string
 import base64
 
-from django.conf import settings
+from website.settings_utils import get_required_setting
 
 logger = logging.getLogger("website.pwa_mint")
 
 # Use BASE_DIR so path is correct whether running from repo root or Docker (working_dir backend)
-DATA_DIR = settings.BASE_DIR / "data" / "pwa_mint"
+DATA_DIR = Path(get_required_setting("BASE_DIR")) / "data" / "pwa_mint"
 KEYSTORE_PATH = DATA_DIR / "keystore.p12"
 INFO_PATH = DATA_DIR / "info.json"
 

@@ -21,8 +21,8 @@ if str(_areas_server_dir) not in sys.path:
 
 
 def _areas_server_base_url():
-    from django.conf import settings
-    url = (getattr(settings, "AREAS_SERVER_URL", None) or "").strip()
+    from website.settings_utils import get_setting
+    url = (get_setting("AREAS_SERVER_URL") or "").strip()
     return url.rstrip("/") if url else ""
 
 

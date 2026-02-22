@@ -6,7 +6,8 @@ import json
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
-from django.conf import settings
+
+from website.settings_utils import get_setting
 
 
 def query_areas_server(
@@ -19,7 +20,7 @@ def query_areas_server(
     Returns (admin_hierarchy, protected_areas, error). On success error is None.
     On failure returns (None, None, error_message).
     """
-    base_url = (getattr(settings, "AREAS_SERVER_URL", None) or "").strip()
+    base_url = (get_setting("AREAS_SERVER_URL") or "").strip()
     if not base_url:
         return (
             None,
@@ -27,8 +28,8 @@ def query_areas_server(
             "AREAS_SERVER_URL is not set; required for reverse geocoding.",
         )
     url = base_url.rstrip("/") + "/query"
-    timeout = getattr(settings, "AREAS_SERVER_TIMEOUT", 10)
-    verify_ssl = getattr(settings, "AREAS_SERVER_VERIFY_SSL", True)
+    timeout = get_setting("AREAS_SERVER_TIMEOUT", 10)
+    verify_ssl = get_setting("AREAS_SERVER_VERIFY_SSL", True)
     try:
         response = requests.get(
             url,

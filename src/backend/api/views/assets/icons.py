@@ -6,7 +6,6 @@ from pathlib import Path
 
 from PIL import Image
 from django import forms
-from django.conf import settings
 from django.http import HttpResponse, Http404, JsonResponse
 from django.views.decorators.http import require_http_methods
 
@@ -16,6 +15,7 @@ from geo_lib.processing.icons.icon_manager import store_icon
 from geo_lib.processing.logging import ImportLog
 from geo_lib.utils.secure_path import is_path_under_base, secure_filename, secure_path
 from geo_lib.website.auth import api_or_login_required_401
+from website.settings_utils import get_required_setting
 
 _logger = get_tagged_logger()
 
@@ -66,9 +66,10 @@ def upload_icon(request):
 
     # Validate file extension (only PNG, JPG, ICO allowed for uploads)
     file_ext = os.path.splitext(file_name)[1].lower()
-    if file_ext not in settings.ICON_UPLOAD_ALLOWED_EXTENSIONS:
+    allowed_extensions = get_required_setting('ICON_UPLOAD_ALLOWED_EXTENSIONS')
+    if file_ext not in allowed_extensions:
         return JsonResponse({
-            'error': f'Invalid file extension. Allowed extensions: {", ".join(sorted(settings.ICON_UPLOAD_ALLOWED_EXTENSIONS))}',
+            'error': f'Invalid file extension. Allowed extensions: {", ".join(sorted(allowed_extensions))}',
             'code': 400
         }, status=400)
 
@@ -83,8 +84,9 @@ def upload_icon(request):
         }, status=500)
 
     # Validate file size (500KB limit for uploads)
-    if len(icon_data) > settings.ICON_UPLOAD_MAX_SIZE_BYTES:
-        max_size_mb = settings.ICON_UPLOAD_MAX_SIZE_BYTES / 1024
+    max_upload_bytes = get_required_setting('ICON_UPLOAD_MAX_SIZE_BYTES')
+    if len(icon_data) > max_upload_bytes:
+        max_size_mb = max_upload_bytes / 1024
         return JsonResponse({
             'error': f'File size exceeds maximum allowed size of {max_size_mb:.0f}KB',
             'code': 400
@@ -120,7 +122,7 @@ def serve_user_icon(request, icon_hash):
         raise Http404("Invalid icon hash")
     hash_part, extension = parsed
 
-    storage_dir = Path(settings.ICON_STORAGE_DIR)
+    storage_dir = Path(get_required_setting('ICON_STORAGE_DIR'))
     icon_path = storage_dir / hash_part[0:2] / hash_part[2:4] / icon_hash
     resolved = icon_path.resolve()
 
@@ -156,7 +158,7 @@ def serve_system_icon(request, path):
     path = secure_path(path)
 
     # Get assets icons directory path
-    assets_icons_dir = Path(settings.BASE_DIR) / 'assets' / 'icons'
+    assets_icons_dir = Path(get_required_setting('BASE_DIR')) / 'assets' / 'icons'
 
     file_path = (assets_icons_dir / path).resolve()
 
@@ -218,7 +220,7 @@ def recolor_icon(request):
 
     icon_path_param = secure_path(icon_path_param)
 
-    assets_icons_dir = Path(settings.BASE_DIR) / 'assets' / 'icons'
+    assets_icons_dir = Path(get_required_setting('BASE_DIR')) / 'assets' / 'icons'
     icon_path = (assets_icons_dir / icon_path_param).resolve()
 
     if not is_path_under_base(icon_path, assets_icons_dir):
@@ -297,7 +299,7 @@ def serve_icon_registry(request):
     Returns: JSON file containing icon registry with all available system icons
     """
     # Get path to icon registry file
-    registry_path = Path(settings.BASE_DIR) / 'assets' / 'icons' / 'icon-registry.json'
+    registry_path = Path(get_required_setting('BASE_DIR')) / 'assets' / 'icons' / 'icon-registry.json'
 
     # Check if file exists
     if not registry_path.exists() or not registry_path.is_file():

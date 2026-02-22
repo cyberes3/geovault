@@ -12,12 +12,12 @@ from typing import Optional, Dict, Any, Tuple
 
 import requests
 import urllib3
-from django.conf import settings
 
 from geo_lib.reverse_geocoding.cache import _REVERSE_GEOCODING_CACHE
 from geo_lib.reverse_geocoding.constants import REVERSE_GEOCODING_CACHE_TTL
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.spatial.coordinates import round_coordinate
+from website.settings_utils import get_required_setting
 
 _logger = get_tagged_logger()
 
@@ -108,7 +108,7 @@ def _log_overpass_failure(
         f"Status={status_code}",
         f"Content-Type={content_type}",
         f"Length={content_length}bytes",
-        f"URL={settings.OVERPASS_API_URL}"
+        f"URL={get_required_setting('OVERPASS_API_URL')}"
     ]
 
     # Add query if available
@@ -180,13 +180,13 @@ def query_overpass(
             time.sleep(retry_wait_time)
 
         try:
-            verify_ssl = settings.OVERPASS_API_VERIFY_SSL
+            verify_ssl = get_required_setting('OVERPASS_API_VERIFY_SSL')
             if not verify_ssl:
                 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
             response = requests.post(
-                settings.OVERPASS_API_URL,
+                get_required_setting('OVERPASS_API_URL'),
                 data=query,
-                timeout=settings.OVERPASS_API_TIMEOUT,
+                timeout=get_required_setting('OVERPASS_API_TIMEOUT'),
                 headers={'Content-Type': 'text/plain; charset=utf-8'},
                 verify=verify_ssl
             )

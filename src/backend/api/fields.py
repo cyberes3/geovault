@@ -2,12 +2,12 @@
 Custom Django model fields with encryption support.
 """
 import base64
-from django.conf import settings
 from django.db import models
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from geo_lib.logging.console import get_tagged_logger
+from website.settings_utils import get_required_setting
 
 _logger = get_tagged_logger('EncryptedField')
 
@@ -30,7 +30,7 @@ def _get_fernet_instance():
     global _fernet_instance
 
     if _fernet_instance is None:
-        secret_key = settings.SECRET_KEY
+        secret_key = get_required_setting('SECRET_KEY')
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,

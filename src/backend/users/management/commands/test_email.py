@@ -3,9 +3,9 @@ Django management command to test email configuration.
 """
 from django.core.management.base import BaseCommand
 from django.core.mail import send_mail
-from django.conf import settings
 
 from geo_lib.logging.console import get_tagged_logger
+from website.settings_utils import get_required_setting, get_setting
 
 logger = get_tagged_logger(__name__)
 
@@ -26,14 +26,14 @@ class Command(BaseCommand):
         
         # Display email configuration
         self.stdout.write('\nEmail Configuration:')
-        self.stdout.write(f"  Backend: {settings.EMAIL_BACKEND}")
-        self.stdout.write(f"  Host: {settings.EMAIL_HOST}")
-        self.stdout.write(f"  Port: {settings.EMAIL_PORT}")
-        self.stdout.write(f"  Use TLS: {settings.EMAIL_USE_TLS}")
-        self.stdout.write(f"  Use SSL: {settings.EMAIL_USE_SSL}")
-        self.stdout.write(f"  Username: {settings.EMAIL_HOST_USER}")
-        self.stdout.write(f"  Password Set: {'Yes' if settings.EMAIL_HOST_PASSWORD else 'No'}")
-        self.stdout.write(f"  From Email: {settings.DEFAULT_FROM_EMAIL}")
+        self.stdout.write(f"  Backend: {get_setting('EMAIL_BACKEND', '')}")
+        self.stdout.write(f"  Host: {get_setting('EMAIL_HOST', '')}")
+        self.stdout.write(f"  Port: {get_setting('EMAIL_PORT', '')}")
+        self.stdout.write(f"  Use TLS: {get_setting('EMAIL_USE_TLS', '')}")
+        self.stdout.write(f"  Use SSL: {get_setting('EMAIL_USE_SSL', '')}")
+        self.stdout.write(f"  Username: {get_setting('EMAIL_HOST_USER', '')}")
+        self.stdout.write(f"  Password Set: {'Yes' if get_setting('EMAIL_HOST_PASSWORD') else 'No'}")
+        self.stdout.write(f"  From Email: {get_setting('DEFAULT_FROM_EMAIL', '')}")
         self.stdout.write('')
         
         try:
@@ -41,7 +41,7 @@ class Command(BaseCommand):
             send_mail(
                 subject='Test Email from GeoVault',
                 message='This is a test email from GeoVault. If you receive this, email is working correctly!',
-                from_email=settings.DEFAULT_FROM_EMAIL,
+                from_email=get_required_setting('DEFAULT_FROM_EMAIL'),
                 recipient_list=[test_email_address],
                 fail_silently=False,
             )

@@ -9,8 +9,7 @@ from django.views.decorators.http import require_http_methods
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
 from website.config_loader import get_config_loader
-from website.settings_utils import get_required_setting
-from django.conf import settings
+from website.settings_utils import get_required_setting, get_setting
 from website.startup_checks import (
     check_database_connection,
     check_redis_connection,
@@ -55,7 +54,7 @@ def health_check(request):
         reverse_geocoding_enabled = config.get_bool('reverse_geocoding.enabled', True)
         if reverse_geocoding_enabled:
             checks_to_run.append(("overpass_api", check_overpass_api))
-            base_url = (getattr(settings, "AREAS_SERVER_URL", None) or "").strip()
+            base_url = (get_setting("AREAS_SERVER_URL") or "").strip()
             if base_url:
                 checks_to_run.append(("areas_server", check_areas_server))
             else:
@@ -133,11 +132,11 @@ def check_areas_server() -> bool:
         True if the server returns 200 and status "ok", False otherwise.
     """
     try:
-        base_url = (getattr(settings, "AREAS_SERVER_URL", None) or "").strip()
+        base_url = (get_setting("AREAS_SERVER_URL") or "").strip()
         if not base_url:
             return False
         url = base_url.rstrip("/") + "/health"
-        verify_ssl = getattr(settings, "AREAS_SERVER_VERIFY_SSL", True)
+        verify_ssl = get_setting("AREAS_SERVER_VERIFY_SSL", True)
         if not verify_ssl:
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         response = requests.get(

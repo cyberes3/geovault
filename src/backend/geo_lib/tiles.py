@@ -6,10 +6,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import requests
-from django.conf import settings
 from django.http import HttpResponse, JsonResponse
 
 from geo_lib.logging.console import get_tagged_logger
+from website.settings_utils import get_required_setting, get_setting
 from geo_lib.tile_sources.registry import get_tile_source, get_tile_sources_for_client
 from geo_lib.utils.secure_path import is_path_under_base, secure_filename
 from website.config_loader import get_config_loader
@@ -45,7 +45,7 @@ def tile_proxy(request, service, z, x, y):
         return HttpResponse('Service configuration error: missing url_template', status=500)
 
     # Calculate HTTP cache max-age from cache_expiry_days (convert days to seconds)
-    cache_max_age_seconds = settings.TILE_CACHE_EXPIRY_DAYS * 24 * 60 * 60
+    cache_max_age_seconds = get_required_setting('TILE_CACHE_EXPIRY_DAYS') * 24 * 60 * 60
 
     # Determine file extension from URL template (fallback, will be updated from response if needed)
     url_extension = 'tile'
@@ -62,7 +62,7 @@ def tile_proxy(request, service, z, x, y):
 
     tile_data = None
 
-    if settings.TILE_CACHE_ENABLED:
+    if get_setting('TILE_CACHE_ENABLED', False):
         # Only check for the extension from URL template (no fallback)
         if url_extension != 'tile':
             cache_path = get_tile_cache_path(service, z, x, y, url_extension)
@@ -130,7 +130,7 @@ def tile_proxy(request, service, z, x, y):
         tile_data = response.content
 
         # Save to cache if enabled (use correct extension based on Content-Type)
-        if settings.TILE_CACHE_ENABLED:
+        if get_setting('TILE_CACHE_ENABLED', False):
             try:
                 cache_path = get_tile_cache_path(service, z, x, y, url_extension)
                 if cache_path is not None:
@@ -280,7 +280,7 @@ def get_tile_cache_path(service, z, x, y, extension='tile'):
         return None
     if extension not in _TILE_CACHE_EXTENSIONS:
         return None
-    cache_dir = Path(settings.TILE_CACHE_DIR)
+    cache_dir = Path(get_required_setting('TILE_CACHE_DIR'))
     service = secure_filename(service)
     if not service:
         service = "tile_service"
@@ -305,7 +305,7 @@ def is_tile_cached(cache_path):
     Returns:
         True if cached and valid, False otherwise
     """
-    cache_dir = Path(settings.TILE_CACHE_DIR)
+    cache_dir = Path(get_required_setting('TILE_CACHE_DIR'))
     try:
         resolved = cache_path.resolve()
     except (OSError, RuntimeError):
@@ -320,7 +320,7 @@ def is_tile_cached(cache_path):
 
     try:
         file_mtime = datetime.fromtimestamp(resolved.stat().st_mtime)
-        expiry_time = timedelta(days=settings.TILE_CACHE_EXPIRY_DAYS)
+        expiry_time = timedelta(days=get_required_setting('TILE_CACHE_EXPIRY_DAYS'))
 
         if datetime.now() - file_mtime > expiry_time:
             try:
@@ -345,7 +345,7 @@ def ensure_cache_directory(cache_path):
     Returns:
         True if successful, False otherwise
     """
-    cache_base = Path(settings.TILE_CACHE_DIR)
+    cache_base = Path(get_required_setting('TILE_CACHE_DIR'))
     try:
         resolved = cache_path.resolve()
     except (OSError, RuntimeError):
@@ -378,7 +378,7 @@ def save_tile_to_cache(cache_path, tile_data):
     Returns:
         True if successful, False otherwise
     """
-    cache_dir = Path(settings.TILE_CACHE_DIR)
+    cache_dir = Path(get_required_setting('TILE_CACHE_DIR'))
     try:
         resolved = cache_path.resolve()
     except (OSError, RuntimeError):
@@ -413,7 +413,7 @@ def read_tile_from_cache(cache_path):
     Returns:
         Binary tile data, or None if read fails or path invalid
     """
-    cache_dir = Path(settings.TILE_CACHE_DIR)
+    cache_dir = Path(get_required_setting('TILE_CACHE_DIR'))
     try:
         resolved = cache_path.resolve()
     except (OSError, RuntimeError):

@@ -2,7 +2,6 @@ import logging
 import uuid
 
 from allauth.account.adapter import DefaultAccountAdapter
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.core.cache import cache
@@ -13,6 +12,7 @@ from users.constants import (
     EMAIL_VERIFICATION_CACHE_KEY,
     EMAIL_VERIFICATION_COOLDOWN_SECONDS,
 )
+from website.settings_utils import get_required_setting
 
 logger = logging.getLogger('users')
 
@@ -108,7 +108,7 @@ class NoUsernameAccountAdapter(DefaultAccountAdapter):
         Override to ensure URLs use the correct domain from config settings.
         """
         # Use Site model domain for URL
-        site = Site.objects.get(id=settings.SITE_ID)
+        site = Site.objects.get(id=get_required_setting('SITE_ID'))
         protocol = 'https' if request.is_secure() or request.META.get('HTTP_X_FORWARDED_PROTO') == 'https' else 'http'
         path = reverse('account_confirm_email', args=[emailconfirmation.key])
         return f"{protocol}://{site.domain}{path}"

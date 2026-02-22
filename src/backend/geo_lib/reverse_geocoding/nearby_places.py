@@ -6,7 +6,7 @@ and returns the same list shapes. Query: combined_overpass.fetch_lakes_and_citie
 """
 from typing import List, Dict, Any, Tuple, Optional
 
-from django.conf import settings
+from website.settings_utils import get_required_setting
 
 from geo_lib.reverse_geocoding.osm_tags import get_name_from_tags
 from geo_lib.spatial.haversine import haversine_distance_miles
@@ -31,7 +31,7 @@ def find_nearby_cities(
         Tuple of (list_of_city_dicts, list_of_error_messages)
     """
     if threshold_miles is None:
-        threshold_miles = settings.CITY_PROXIMITY_MILES
+        threshold_miles = get_required_setting('CITY_PROXIMITY_MILES')
 
     cities = []
     errors = []
@@ -81,7 +81,7 @@ def search_nearby_lakes(
         Tuple of (list_of_lake_dicts, list_of_error_messages)
     """
     if proximity_miles is None:
-        proximity_miles = settings.LAKE_PROXIMITY_MILES
+        proximity_miles = get_required_setting('LAKE_PROXIMITY_MILES')
 
     lakes = []
     errors = []

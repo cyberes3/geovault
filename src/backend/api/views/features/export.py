@@ -1,7 +1,6 @@
 import uuid
 from typing import Optional, Union
 
-from django.conf import settings
 from django.db.models import Q, QuerySet
 from django.http import HttpResponse, JsonResponse
 from django.utils.text import slugify
@@ -18,6 +17,7 @@ from geo_lib.export.share_export import build_share_feature_collection, prepare_
 from geo_lib.export.single_feature_export import prepare_kmz_options_for_feature
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.utils.secure_path import secure_filename
+from website.settings_utils import get_required_setting
 
 _logger = get_tagged_logger()
 
@@ -173,7 +173,7 @@ def _queryset_to_kmz_response(features: QuerySet, name: str) -> HttpResponse:
             geojson_data['properties']['database_id'] = feature.id
 
             # Pre-process GeoJSON (fix icon paths)
-            prepared_geojson = prepare_geojson_for_kmz(geojson_data, str(settings.BASE_DIR), settings.ICON_STORAGE_DIR)
+            prepared_geojson = prepare_geojson_for_kmz(geojson_data, str(get_required_setting('BASE_DIR')), get_required_setting('ICON_STORAGE_DIR'))
             geojson_features.append(prepared_geojson)
 
     if not geojson_features:
@@ -188,7 +188,7 @@ def _queryset_to_kmz_response(features: QuerySet, name: str) -> HttpResponse:
     }
 
     # Convert to KMZ
-    options = prepare_kmz_options_for_share(name, str(settings.BASE_DIR))
+    options = prepare_kmz_options_for_share(name, str(get_required_setting('BASE_DIR')))
     kmz_bytes = geojson_to_kmz_bytes(feature_collection, options=options)
 
     # Build filename
@@ -227,8 +227,8 @@ def _handle_bulk_share_download(share_id: str) -> Union[HttpResponse, JsonRespon
         share=share,
         build_base_query_func=_build_base_query,
         build_collection_query_func=_build_collection_query,
-        base_dir=str(settings.BASE_DIR),
-        icon_storage_dir=settings.ICON_STORAGE_DIR,
+        base_dir=str(get_required_setting('BASE_DIR')),
+        icon_storage_dir=get_required_setting('ICON_STORAGE_DIR'),
     )
 
     if not feature_collection.get("features"):
@@ -239,7 +239,7 @@ def _handle_bulk_share_download(share_id: str) -> Union[HttpResponse, JsonRespon
         )
 
     # Convert to KMZ
-    options = prepare_kmz_options_for_share(share_name, str(settings.BASE_DIR))
+    options = prepare_kmz_options_for_share(share_name, str(get_required_setting('BASE_DIR')))
     kmz_bytes = geojson_to_kmz_bytes(feature_collection, options=options)
 
     # Build filename
@@ -372,10 +372,10 @@ def _handle_single_feature_download(request, feature_id: int, share_id: Optional
     name = props.get("name") or f"feature-{feature.id}"
 
     # Pre-process GeoJSON to convert icon API URLs to filesystem paths
-    geojson_for_kmz = prepare_geojson_for_kmz(geojson, str(settings.BASE_DIR), settings.ICON_STORAGE_DIR)
+    geojson_for_kmz = prepare_geojson_for_kmz(geojson, str(get_required_setting('BASE_DIR')), get_required_setting('ICON_STORAGE_DIR'))
 
     # Enable icon embedding with BASE_DIR as the base path
-    options = prepare_kmz_options_for_feature(name, str(settings.BASE_DIR))
+    options = prepare_kmz_options_for_feature(name, str(get_required_setting('BASE_DIR')))
     kmz_bytes = geojson_to_kmz_bytes(geojson_for_kmz, options=options)
 
     # Build a reasonably safe filename

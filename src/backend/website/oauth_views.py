@@ -12,13 +12,14 @@ When the user authorizes an app that uses a custom redirect scheme (e.g. native 
 com.geovault.uploader://), we return an HTML handoff page instead of a 302 so that PWAs
 and in-app browsers can open the redirect URL (e.g. in a new tab) and hand off to the app.
 """
-from django.conf import settings
 from django.forms.models import modelform_factory
 from django.http import JsonResponse
 from django.shortcuts import render
 from oauth2_provider import views as dot_views
 from oauth2_provider.exceptions import OAuthToolkitError
 from oauth2_provider.models import get_application_model
+
+from website.settings_utils import get_setting
 
 
 class SessionOnlyMixin:
@@ -82,7 +83,8 @@ class AuthorizationView(dot_views.AuthorizationView):
 
 
 def _protected_client_ids():
-    ids = settings.OAUTH2_PROVIDER.get("PROTECTED_CLIENT_IDS") or []
+    oauth2_provider = get_setting("OAUTH2_PROVIDER", {})
+    ids = oauth2_provider.get("PROTECTED_CLIENT_IDS") or []
     return [c.strip() for c in ids if c]
 
 

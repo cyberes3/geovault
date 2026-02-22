@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List, Dict, Union
 
-from django.conf import settings
+from website.settings_utils import get_required_setting
 
 
 class FileType(Enum):
@@ -55,7 +55,7 @@ FILE_TYPE_CONFIGS: Dict[FileType, FileTypeConfig] = {
             # passes, so allow text/html here.
             'text/html'
         ],
-        max_size=settings.FILE_UPLOAD_MAX_MEMORY_SIZE,
+        max_size=get_required_setting('FILE_UPLOAD_MAX_MEMORY_SIZE'),
         xml_root_elements=['kml'],
         allowed_elements=[
             'style', 'iconstyle', 'linestyle', 'polystyle', 'labelstyle', 'balloonstyle',
@@ -77,7 +77,7 @@ FILE_TYPE_CONFIGS: Dict[FileType, FileTypeConfig] = {
             'application/vnd.google-earth.kmz',
             'application/vnd.google-earth.kmz+xml'
         ],
-        max_size=settings.FILE_UPLOAD_MAX_MEMORY_SIZE,
+        max_size=get_required_setting('FILE_UPLOAD_MAX_MEMORY_SIZE'),
         xml_root_elements=['kml'],
         allowed_elements=[
             'style', 'iconstyle', 'linestyle', 'polystyle', 'labelstyle', 'balloonstyle',
@@ -102,7 +102,7 @@ FILE_TYPE_CONFIGS: Dict[FileType, FileTypeConfig] = {
             'application/gpx+xml',
             'application/gpx'
         ],
-        max_size=settings.FILE_UPLOAD_MAX_MEMORY_SIZE,
+        max_size=get_required_setting('FILE_UPLOAD_MAX_MEMORY_SIZE'),
         xml_root_elements=['gpx'],
         allowed_elements=['trk', 'rte', 'wpt', 'name', 'desc', 'time', 'ele']
     ),
@@ -120,7 +120,7 @@ FILE_TYPE_CONFIGS: Dict[FileType, FileTypeConfig] = {
             'application/vnd.geo+json',
             'text/json'
         ],
-        max_size=settings.FILE_UPLOAD_MAX_MEMORY_SIZE,
+        max_size=get_required_setting('FILE_UPLOAD_MAX_MEMORY_SIZE'),
         xml_root_elements=[],  # Not XML
         allowed_elements=[]  # Not XML
     )

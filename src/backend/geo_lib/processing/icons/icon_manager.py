@@ -8,9 +8,8 @@ import traceback
 from typing import Dict, Optional, Tuple
 from urllib.parse import urlparse
 
-from django.conf import settings
-
 from geo_lib.logging.console import get_tagged_logger
+from website.settings_utils import get_required_setting, get_setting
 from geo_lib.processing.icons.caltopo import _fix_nested_caltopo_url, _is_caltopo_url, _is_caltopo_point_icon, _extract_color_from_caltopo_url
 from geo_lib.processing.icons.get import _get_icon_extension, _get_storage_path, extract_icon_from_kmz, fetch_remote_icon
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
@@ -50,7 +49,7 @@ def store_icon(icon_data: bytes, original_path: str, import_log: ImportLog, stat
     """
     try:
         # Validate size
-        if len(icon_data) > settings.ICON_MAX_SIZE_BYTES:
+        if len(icon_data) > get_required_setting('ICON_MAX_SIZE_BYTES'):
             _logger.warning(f"Icon exceeds size limit: {len(icon_data)} bytes")
             import_log.add(
                 f"Icon exceeds size limit ({len(icon_data)} bytes): {original_path}",
@@ -116,7 +115,7 @@ def process_icon_href(href: str, file_type: str, import_log: ImportLog, stats: D
     Returns:
         Local URL path for icon, or None if processing fails
     """
-    if not settings.ICON_PROCESSING_ENABLED:
+    if not get_setting('ICON_PROCESSING_ENABLED', False):
         return None
 
     if not href or not isinstance(href, str):
@@ -140,11 +139,11 @@ def process_icon_href(href: str, file_type: str, import_log: ImportLog, stats: D
             icon_data = extract_icon_from_kmz(file_data, href, import_log)
         elif is_remote:
             # Remote URL in KMZ - fetch it
-            icon_data = fetch_remote_icon(href, settings.ICON_FETCH_TIMEOUT, import_log)
+            icon_data = fetch_remote_icon(href, get_setting('ICON_FETCH_TIMEOUT', 10), import_log)
     elif file_type.lower() == 'kml':
         # For KML, fetch remote icons
         if is_remote:
-            icon_data = fetch_remote_icon(href, settings.ICON_FETCH_TIMEOUT, import_log)
+            icon_data = fetch_remote_icon(href, get_setting('ICON_FETCH_TIMEOUT', 10), import_log)
         else:
             # Local path in KML - not supported (would need file system access)
             return None
@@ -179,7 +178,7 @@ def process_geojson_icons(
     Returns:
         Modified GeoJSON data with replaced icon hrefs
     """
-    if not settings.ICON_PROCESSING_ENABLED:
+    if not get_setting('ICON_PROCESSING_ENABLED', False):
         return geojson_data
 
     if not isinstance(geojson_data, dict):

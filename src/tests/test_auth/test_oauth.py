@@ -15,6 +15,8 @@ from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
+from website.settings_utils import get_setting
+
 from oauth2_provider.models import Application, AccessToken, Grant, get_access_token_model
 
 User = get_user_model()
@@ -592,7 +594,6 @@ class TestProtectedOAuthApplications(TestCase):
     """Tests that protected (shared) OAuth applications are excluded from list and return 404 for detail/update/delete."""
 
     def setUp(self):
-        from django.conf import settings
         from django.test import override_settings
 
         self.user = User.objects.create_user(
@@ -610,7 +611,7 @@ class TestProtectedOAuthApplications(TestCase):
             client_id="my-custom-app",
             redirect_uri="https://myapp.example/cb",
         )
-        oauth2_settings = getattr(settings, "OAUTH2_PROVIDER", {})
+        oauth2_settings = get_setting("OAUTH2_PROVIDER", {})
         self.overrides = {
             **oauth2_settings,
             "PROTECTED_CLIENT_IDS": ["geovault-android"],

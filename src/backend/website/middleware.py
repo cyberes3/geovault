@@ -4,7 +4,6 @@ import time
 import traceback
 from urllib.parse import urlparse
 
-from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.middleware import SessionMiddleware
 
@@ -13,6 +12,7 @@ from geo_lib.tile_sources.registry import get_all_tile_sources
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 from users.api_keys import validate_api_key
 from users.models import UserProfile
+from website.settings_utils import get_required_setting, get_setting
 
 _logger = get_tagged_logger()
 
@@ -37,12 +37,14 @@ class CustomSessionMiddleware(SessionMiddleware):
         if request.path.startswith('/api/tiles/'):
             # Delete the session cookie from response.cookies
             # This prevents Set-Cookie header from being set
-            if settings.SESSION_COOKIE_NAME in response.cookies:
-                del response.cookies[settings.SESSION_COOKIE_NAME]
+            session_cookie = get_setting('SESSION_COOKIE_NAME', 'sessionid')
+            if session_cookie in response.cookies:
+                del response.cookies[session_cookie]
             
             # Also remove CSRF cookie if present
-            if settings.CSRF_COOKIE_NAME in response.cookies:
-                del response.cookies[settings.CSRF_COOKIE_NAME]
+            csrf_cookie = get_setting('CSRF_COOKIE_NAME', 'csrftoken')
+            if csrf_cookie in response.cookies:
+                del response.cookies[csrf_cookie]
             
             # Remove Vary: Cookie header which also prevents caching
             # Django's SessionMiddleware sets this when cookies are present
@@ -339,7 +341,7 @@ class FixRequestHostMiddleware:
         if (request.path.startswith('/accounts/password/reset/') or 
             request.path.startswith('/accounts/email/') or
             request.path.startswith('/api/user/email/')):
-            site_domain = settings.SITE_DOMAIN
+            site_domain = get_required_setting('SITE_DOMAIN')
             # Always override HTTP_HOST to use Site domain
             request.META['HTTP_HOST'] = site_domain
             # Also override get_host() method
@@ -352,7 +354,7 @@ class FixRequestHostMiddleware:
                     location = request.get_full_path()
                 if not location.startswith('/'):
                     return location
-                protocol = 'https' if not settings.DEBUG else 'http'
+                protocol = 'https' if not get_setting('DEBUG', False) else 'http'
                 return f"{protocol}://{site_domain}{location}"
             request.build_absolute_uri = fixed_build_absolute_uri
         
@@ -374,8 +376,8 @@ class CustomHeaderMiddleware:
             origins = set()
 
             # Add site's own domain
-            protocol = 'https' if not settings.DEBUG else 'http'
-            site_origin = f"{protocol}://{settings.SITE_DOMAIN}"
+            protocol = 'https' if not get_setting('DEBUG', False) else 'http'
+            site_origin = f"{protocol}://{get_required_setting('SITE_DOMAIN')}"
             origins.add(site_origin)
 
             # Add external tile source origins
@@ -387,7 +389,7 @@ class CustomHeaderMiddleware:
                 _logger.debug(f"Could not load tile source origins: {e}")
 
             # Add user-configured additional origins
-            additional_origins = getattr(settings, 'ADDITIONAL_CORS_ORIGINS', [])
+            additional_origins = get_setting('ADDITIONAL_CORS_ORIGINS', [])
             origins.update(additional_origins)
 
             self._cors_origins = list(origins)
@@ -429,8 +431,8 @@ class CustomHeaderMiddleware:
             response['Access-Control-Allow-Credentials'] = 'true'
         else:
             # For requests without Origin header or from same origin, allow the site domain
-            protocol = 'https' if not settings.DEBUG else 'http'
-            response['Access-Control-Allow-Origin'] = f"{protocol}://{settings.SITE_DOMAIN}"
+            protocol = 'https' if not get_setting('DEBUG', False) else 'http'
+            response['Access-Control-Allow-Origin'] = f"{protocol}://{get_required_setting('SITE_DOMAIN')}"
 
         # Set other CORS headers for preflight requests
         if request.method == 'OPTIONS':

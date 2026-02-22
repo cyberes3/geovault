@@ -26,3 +26,11 @@ def get_required_setting(attr_name: str) -> Any:
     value = getattr(settings, attr_name, None)
     assert value is not None, f"Required setting '{attr_name}' is None or not set"
     return value
+
+
+def get_setting(attr_name: str, default: Any = None) -> Any:
+    """
+    Get an optional setting from Django settings.
+    Use this instead of getattr(settings, attr_name, default).
+    """
+    return getattr(settings, attr_name, default)

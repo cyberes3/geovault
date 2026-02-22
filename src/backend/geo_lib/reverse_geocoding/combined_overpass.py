@@ -5,7 +5,7 @@ Admin and protected areas are provided by the is_in area server.
 """
 from typing import Any, Dict, List, Optional, Tuple
 
-from django.conf import settings
+from website.settings_utils import get_required_setting
 
 from geo_lib.reverse_geocoding.overpass_api import query_overpass
 from geo_lib.spatial.coordinates import round_coordinate
@@ -23,9 +23,9 @@ def build_lakes_and_cities_query(
     Used for proximity tags; admin and protected areas come from the areas server.
     """
     if lake_radius_m is None:
-        lake_radius_m = int(settings.LAKE_PROXIMITY_MILES * 1609.34)
+        lake_radius_m = int(get_required_setting('LAKE_PROXIMITY_MILES') * 1609.34)
     if city_radius_m is None:
-        city_radius_m = int(settings.CITY_PROXIMITY_MILES * 1609.34)
+        city_radius_m = int(get_required_setting('CITY_PROXIMITY_MILES') * 1609.34)
 
     return f"""[out:json][timeout:60];
 (
