@@ -14,7 +14,9 @@ SCHEMA="is_in"
 DB=""
 CACHE_MB=""
 PROCESSES=""
+POSITIONALS=()
 
+# Parse options and positionals (options can appear in any order)
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --database)  DB="$2"; shift 2 ;;
@@ -22,6 +24,7 @@ while [[ $# -gt 0 ]]; do
     --processes) PROCESSES="$2"; shift 2 ;;
     -h|--help)
       echo "Usage: $0 [--database URL] [--cache MB] [--processes N] init|update [init args...]" >&2
+      echo "  Options can appear before or after the subcommand." >&2
       echo "  init    - initialise replication (run once after first PBF import)" >&2
       echo "  update  - download and apply incremental diffs (default)" >&2
       echo "  --database   connection URL (required)" >&2
@@ -29,9 +32,9 @@ while [[ $# -gt 0 ]]; do
       echo "  --processes  parallel threads" >&2
       exit 0
       ;;
-    --) shift; break ;;
+    --) shift; POSITIONALS+=( "$@" ); break ;;
     -*) echo "Unknown option: $1" >&2; exit 1 ;;
-    *)  break ;;
+    *)  POSITIONALS+=( "$1" ); shift ;;
   esac
 done
 
@@ -39,6 +42,9 @@ if [[ -z "$DB" ]]; then
   echo "Database not set. Use --database URL." >&2
   exit 1
 fi
+
+SUBCOMMAND="${POSITIONALS[0]:-update}"
+INIT_ARGS=( "${POSITIONALS[@]:1}" )
 
 FLEX_CONFIG="${AREAS_SERVER_FLEX_CONFIG:-${SERVER_DIR}/flex_config/areas.lua}"
 if [[ ! -f "$FLEX_CONFIG" ]]; then
@@ -56,12 +62,9 @@ run_replication() {
   "${cmd[@]}"
 }
 
-SUBCOMMAND="${1:-update}"
-shift || true
-
 case "$SUBCOMMAND" in
   init)
-    run_replication init "$@"
+    run_replication init "${INIT_ARGS[@]}"
     echo "Replication initialised. Run ./update.sh update periodically (e.g. via cron)." >&2
     ;;
   update)

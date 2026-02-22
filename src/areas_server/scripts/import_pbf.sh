@@ -16,7 +16,9 @@ APPEND=false
 CACHE_MB=""
 PROCESSES=""
 DB=""
+POSITIONALS=()
 
+# Parse options and positionals (options can appear in any order)
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --append)    APPEND=true; shift ;;
@@ -25,30 +27,31 @@ while [[ $# -gt 0 ]]; do
     --database)  DB="$2"; shift 2 ;;
     -h|--help)
       echo "Usage: $0 [--append] [--cache MB] [--processes N] [--database URL] <path-to.osm.pbf> [database_url]" >&2
+      echo "  Options can appear before or after the PBF path." >&2
       echo "  --append     add this PBF to existing data (first import without --append)" >&2
       echo "  --cache      node cache size in MB (passed to osm2pgsql -C)" >&2
       echo "  --processes  parallel threads (default: nproc)" >&2
       echo "  --database   connection URL (or pass as second positional argument)" >&2
       exit 0
       ;;
-    --) shift; break ;;
+    --) shift; POSITIONALS+=( "$@" ); break ;;
     -*) echo "Unknown option: $1" >&2; exit 1 ;;
-    *)  break ;;
+    *)  POSITIONALS+=( "$1" ); shift ;;
   esac
 done
 
-if [[ $# -lt 1 ]]; then
+if [[ ${#POSITIONALS[@]} -lt 1 ]]; then
   echo "Usage: $0 [--append] [--cache MB] [--processes N] [--database URL] <path-to.osm.pbf> [database_url]" >&2
   exit 1
 fi
 
-PBF_PATH="$1"
+PBF_PATH="${POSITIONALS[0]}"
 if [[ ! -f "$PBF_PATH" ]]; then
   echo "PBF file not found: $PBF_PATH" >&2
   exit 1
 fi
 
-DB="${DB:-${2:-}}"
+DB="${DB:-${POSITIONALS[1]:-}}"
 if [[ -z "$DB" ]]; then
   echo "Database not set. Use --database or pass database_url as second argument." >&2
   exit 1

@@ -56,10 +56,10 @@ Download the `.osm.pbf` data from <https://download.geofabrik.de/>. Then, load t
 
 Optional arguments for faster imports:
 
-| Argument        | Effect                                                                |
-|-----------------|-----------------------------------------------------------------------|
-| `--cache MB`    | Node cache size in MB. Rule of thumb: ~50% of free RAM. Default: 800. |
-| `--processes N` | Parallel threads. Default: `nproc` (if available).                    |
+| Argument        | Effect                                             |
+|-----------------|----------------------------------------------------|
+| `--cache MB`    | Node cache size in MB. <br/>Default: 800.          |
+| `--processes N` | Parallel threads. Default: `nproc` (if available). |
 
 ## Running the Server
 
