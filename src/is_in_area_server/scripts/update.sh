@@ -27,9 +27,11 @@ fi
 
 REPLICATION_SCRIPT="${OSM2PGSQL_REPLICATION:-osm2pgsql-replication}"
 
-# Run osm2pgsql-replication with our DB, schema, and pass -O flex -S style to osm2pgsql
+# Run osm2pgsql-replication: subcommand must come first (argparse subparsers).
 run_replication() {
-  local cmd=("$REPLICATION_SCRIPT" -d "$DB" --schema "$SCHEMA" "$@")
+  local subcmd="$1"
+  shift
+  local cmd=("$REPLICATION_SCRIPT" "$subcmd" -d "$DB" --schema "$SCHEMA" "$@")
   echo "Running: ${cmd[*]}" >&2
   "${cmd[@]}"
 }
