@@ -38,7 +38,7 @@ sudo apt install osm2pgsql
 Then, set up the Python server:
 
 ```shell
-cd src/is_in_area_server
+cd src/areas_server
 python3 -m venv venv
 ./venv/bin/pip install -r requirements.txt
 ```

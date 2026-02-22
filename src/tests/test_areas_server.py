@@ -14,10 +14,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Server runs as a script from its own dir; add it to path so "config" and "query" resolve
-_server_dir = Path(__file__).resolve().parent.parent / "is_in_area_server"
-if str(_server_dir) not in sys.path:
-    sys.path.insert(0, str(_server_dir))
+# Areas server uses bare imports (config, query); add its dir to path so we can import/patch app
+_areas_server_dir = Path(__file__).resolve().parent.parent / "areas_server"
+if str(_areas_server_dir) not in sys.path:
+    sys.path.insert(0, str(_areas_server_dir))
 
 
 def _areas_server_base_url():

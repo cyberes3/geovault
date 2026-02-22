@@ -5,9 +5,9 @@ After=network.target postgresql.service
 [Service]
 Type=simple
 User=geovault
-WorkingDirectory=/srv/geovault/geovault/src/is_in_area_server
+WorkingDirectory=/srv/geovault/geovault/src/areas_server
 EnvironmentFile=-/etc/secrets/is_in_areas.env
-ExecStart=/srv/geovault/geovault/src/is_in_area_server/venv/bin/gunicorn -w 4 -b 0.0.0.0:5001 app:app
+ExecStart=/srv/geovault/geovault/src/areas_server/venv/bin/gunicorn -w 4 -b 0.0.0.0:5001 app:app
 Restart=always
 RestartSec=5s
 

@@ -5,9 +5,9 @@ After=network.target postgresql.service
 [Service]
 Type=oneshot
 User=geovault
-WorkingDirectory=/srv/geovault/geovault/src/is_in_area_server
+WorkingDirectory=/srv/geovault/geovault/src/areas_server
 EnvironmentFile=-/etc/secrets/is_in_areas.env
-ExecStart=/srv/geovault/geovault/src/is_in_area_server/scripts/update.sh
+ExecStart=/srv/geovault/geovault/src/areas_server/scripts/update.sh
 
 [Install]
 WantedBy=multi-user.target
