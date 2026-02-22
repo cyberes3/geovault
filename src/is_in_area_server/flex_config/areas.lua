@@ -29,6 +29,22 @@ local function is_protected_area_tag(tags)
     return false
 end
 
+-- Water bodies: name required; natural=water or water=lake/reservoir/pond. No tags column.
+local function is_water_tag(tags)
+    if not get_name(tags) then return false end
+    local natural = tags.natural or ''
+    local water = tags.water or ''
+    if natural == 'water' then return true end
+    if water == 'lake' or water == 'reservoir' or water == 'pond' then return true end
+    return false
+end
+
+local function water_type_from_tags(tags)
+    local w = tags and tags.water or ''
+    if w == 'lake' or w == 'reservoir' or w == 'pond' then return w end
+    return 'water'
+end
+
 -- Admin areas: administrative boundaries levels 2,4,6,8 (country, state, county, city).
 -- One row per polygon part; geom in 4326 for ST_Contains.
 local admin_areas = osm2pgsql.define_relation_table('admin_areas', {
@@ -49,6 +65,17 @@ local protected_areas = osm2pgsql.define_area_table('protected_areas', {
     { column = 'osm_id', type = 'int8', not_null = true },
     { column = 'name', type = 'text' },
     { column = 'tags', type = 'jsonb' },
+    { column = 'geom', type = 'geometry', not_null = true, projection = 4326 },
+    { column = 'created', sql_type = 'timestamptz' },
+}, { indexes = {
+    { column = 'geom', method = 'gist' },
+}})
+
+-- Water bodies: lakes, reservoirs, ponds (polygon for shoreline + on-water). No tags column.
+local water_bodies = osm2pgsql.define_area_table('water_bodies', {
+    { column = 'osm_id', type = 'int8', not_null = true },
+    { column = 'name', type = 'text' },
+    { column = 'water_type', type = 'text' },
     { column = 'geom', type = 'geometry', not_null = true, projection = 4326 },
     { column = 'created', sql_type = 'timestamptz' },
 }, { indexes = {
@@ -89,21 +116,51 @@ function osm2pgsql.process_relation(object)
                 created = format_timestamp(object.timestamp),
             })
         end
+        return
+    end
+
+    -- Water bodies (multipolygon relations)
+    if (t.type == 'multipolygon' or t.type == 'boundary') and is_water_tag(t) then
+        local geom = object:as_multipolygon()
+        if geom then
+            water_bodies:insert({
+                osm_id = object.id,
+                name = get_name(t),
+                water_type = water_type_from_tags(t),
+                geom = geom,
+                created = format_timestamp(object.timestamp),
+            })
+        end
     end
 end
 
 function osm2pgsql.process_way(object)
     if not object.is_closed then return end
-    if not is_protected_area_tag(object.tags) then return end
 
-    local geom = object:as_polygon()
-    if not geom then return end
+    if is_protected_area_tag(object.tags) then
+        local geom = object:as_polygon()
+        if geom then
+            protected_areas:insert({
+                osm_id = object.id,
+                name = get_name(object.tags),
+                tags = object.tags,
+                geom = geom,
+                created = format_timestamp(object.timestamp),
+            })
+        end
+        return
+    end
 
-    protected_areas:insert({
-        osm_id = object.id,
-        name = get_name(object.tags),
-        tags = object.tags,
-        geom = geom,
-        created = format_timestamp(object.timestamp),
-    })
+    if is_water_tag(object.tags) then
+        local geom = object:as_polygon()
+        if geom then
+            water_bodies:insert({
+                osm_id = object.id,
+                name = get_name(object.tags),
+                water_type = water_type_from_tags(object.tags),
+                geom = geom,
+                created = format_timestamp(object.timestamp),
+            })
+        end
+    end
 end

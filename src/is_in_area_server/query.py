@@ -105,6 +105,24 @@ def _build_protected_list(rows: List[Tuple[Any, ...]]) -> List[Dict[str, str]]:
     return out
 
 
+def _build_nearby_lakes(rows: List[Tuple[Any, ...]]) -> List[Dict[str, Any]]:
+    """Build nearby_lakes list from query rows (name, water_type, distance_miles, on_water)."""
+    out: List[Dict[str, Any]] = []
+    for row in rows:
+        if len(row) < 4:
+            continue
+        name, water_type, distance_miles, on_water = row[0], row[1], row[2], row[3]
+        if not name:
+            continue
+        out.append({
+            "name": str(name).strip(),
+            "water_type": str(water_type or "water").strip(),
+            "distance_miles": float(distance_miles) if distance_miles is not None else 0.0,
+            "on_water": bool(on_water),
+        })
+    return out
+
+
 def _run_admin_single(conn: Any, lat: float, lon: float) -> List[Tuple[Any, ...]]:
     # Schema-qualify PostGIS (public.) so it resolves when search_path is is_in only
     point_wkt = f"POINT({lon} {lat})"
@@ -136,30 +154,86 @@ def _run_protected_single(conn: Any, lat: float, lon: float) -> List[Tuple[Any, 
         return cur.fetchall()
 
 
+# 1 mile ≈ 1609.34 m
+_MILES_TO_M = 1609.34
+
+
+def _run_water_single(
+    conn: Any,
+    lat: float,
+    lon: float,
+    lake_radius_miles: float,
+    nearby_lakes_limit: int,
+) -> List[Tuple[Any, ...]]:
+    """Return rows (name, water_type, distance_miles, on_water): on-water first (distance 0), then near shore by distance."""
+    point_wkt = f"POINT({lon} {lat})"
+    radius_m = lake_radius_miles * _MILES_TO_M
+    with conn.cursor() as cur:
+        # On water: ST_Contains (indexed). Limit to avoid huge result sets for overlapping water bodies.
+        cur.execute(
+            f"""
+            SELECT name, water_type, 0::float, true
+            FROM {SCHEMA}.water_bodies
+            WHERE public.ST_Contains(geom, public.ST_SetSRID(public.ST_GeomFromText(%s::text), 4326))
+            LIMIT 100
+            """,
+            (point_wkt,),
+        )
+        on_water_rows = list(cur.fetchall())
+
+        # Near shoreline: exclude containing, use ST_DWithin for index-friendly filter, then distance + limit
+        cur.execute(
+            f"""
+            SELECT name, water_type,
+                   (public.ST_Distance(public.geography(w.geom), public.geography(public.ST_SetSRID(public.ST_GeomFromText(%s::text), 4326))) / %s AS distance_miles,
+                   false
+            FROM {SCHEMA}.water_bodies w
+            WHERE NOT public.ST_Contains(w.geom, public.ST_SetSRID(public.ST_GeomFromText(%s::text), 4326))
+              AND public.ST_DWithin(public.geography(w.geom), public.geography(public.ST_SetSRID(public.ST_GeomFromText(%s::text), 4326)), %s)
+            ORDER BY distance_miles
+            LIMIT %s
+            """,
+            (point_wkt, _MILES_TO_M, point_wkt, point_wkt, radius_m, nearby_lakes_limit),
+        )
+        near_rows = cur.fetchall()
+
+    return on_water_rows + list(near_rows)
+
+
 def query_single(
     pool: Any,
     lat: float,
     lon: float,
-) -> Tuple[Dict[str, Optional[str]], List[Dict[str, str]]]:
-    """Run admin + protected queries in parallel; return (admin_hierarchy, protected_areas)."""
+    lake_radius_miles: float = 1.0,
+    nearby_lakes_limit: int = 10,
+) -> Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]]]:
+    """Run admin + protected + water queries in parallel; return (admin_hierarchy, protected_areas, nearby_lakes)."""
     conn1 = pool.getconn()
     conn2 = pool.getconn()
+    conn3 = pool.getconn()
     try:
-        with ThreadPoolExecutor(max_workers=2) as ex:
+        with ThreadPoolExecutor(max_workers=3) as ex:
             f_admin = ex.submit(_run_admin_single, conn1, lat, lon)
             f_protected = ex.submit(_run_protected_single, conn2, lat, lon)
-            wait([f_admin, f_protected])
+            f_water = ex.submit(
+                _run_water_single, conn3, lat, lon, lake_radius_miles, nearby_lakes_limit
+            )
+            wait([f_admin, f_protected, f_water])
             admin_rows = f_admin.result()
             protected_rows = f_protected.result()
+            water_rows = f_water.result()
         return (
             _build_admin_hierarchy(admin_rows),
             _build_protected_list(protected_rows),
+            _build_nearby_lakes(water_rows),
         )
     finally:
         conn1.rollback()
         conn2.rollback()
+        conn3.rollback()
         pool.putconn(conn1)
         pool.putconn(conn2)
+        pool.putconn(conn3)
 
 
 def _run_admin_batch(
@@ -187,36 +261,106 @@ def _run_admin_batch(
         return cur.fetchall()
 
 
+# Max protected areas returned per point in batch (avoids unbounded result sets in dense areas)
+_PROTECTED_BATCH_LIMIT_PER_POINT = 100
+
+
 def _run_protected_batch(
     conn: Any,
     indices: List[int],
     lons: List[float],
     lats: List[float],
 ) -> List[Tuple[int, Any, Any, Any]]:
-    """Returns (point_idx, osm_id, name, tags)."""
+    """Returns (point_idx, osm_id, name, tags). Limited per point for scale."""
     with conn.cursor() as cur:
         cur.execute(
             f"""
             WITH p AS (
                 SELECT * FROM unnest(%s::bigint[], %s::double precision[], %s::double precision[])
                 AS t(point_idx, lon, lat)
+            ),
+            ranked AS (
+                SELECT p.point_idx, a.osm_id, a.name, a.tags,
+                       ROW_NUMBER() OVER (PARTITION BY p.point_idx ORDER BY a.osm_id) AS rn
+                FROM p
+                JOIN {SCHEMA}.protected_areas a
+                    ON public.ST_Contains(a.geom, public.ST_SetSRID(public.ST_GeomFromText(('POINT(' || p.lon::text || ' ' || p.lat::text || ')')::text), 4326))
             )
-            SELECT p.point_idx, a.osm_id, a.name, a.tags
-            FROM p
-            JOIN {SCHEMA}.protected_areas a
-                ON public.ST_Contains(a.geom, public.ST_SetSRID(public.ST_GeomFromText(('POINT(' || p.lon::text || ' ' || p.lat::text || ')')::text), 4326))
-            ORDER BY p.point_idx
+            SELECT point_idx, osm_id, name, tags
+            FROM ranked
+            WHERE rn <= %s
+            ORDER BY point_idx, rn
             """,
-            (indices, lons, lats),
+            (indices, lons, lats, _PROTECTED_BATCH_LIMIT_PER_POINT),
         )
         return cur.fetchall()
+
+
+def _run_water_batch(
+    conn: Any,
+    indices: List[int],
+    lons: List[float],
+    lats: List[float],
+    lake_radius_miles: float,
+    nearby_lakes_limit: int,
+) -> Dict[int, List[Tuple[Any, ...]]]:
+    """Returns dict point_idx -> list of (name, water_type, distance_miles, on_water). Limits per point in SQL to avoid huge result sets."""
+    radius_m = lake_radius_miles * _MILES_TO_M
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            WITH p AS (
+                SELECT * FROM unnest(%s::bigint[], %s::double precision[], %s::double precision[])
+                AS t(point_idx, lon, lat)
+            ),
+            pt AS (
+                SELECT point_idx, lon, lat,
+                       public.ST_SetSRID(public.ST_MakePoint(lon, lat), 4326) AS geom
+                FROM p
+            ),
+            matches AS (
+                SELECT pt.point_idx, w.name, w.water_type,
+                       CASE WHEN public.ST_Contains(w.geom, pt.geom) THEN 0.0
+                            ELSE public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)) / %s END AS distance_miles,
+                       public.ST_Contains(w.geom, pt.geom) AS on_water,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY pt.point_idx
+                           ORDER BY public.ST_Contains(w.geom, pt.geom) DESC NULLS LAST,
+                                    (CASE WHEN public.ST_Contains(w.geom, pt.geom) THEN 0.0
+                                          ELSE public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)) / %s END)
+                       ) AS rn
+                FROM pt
+                JOIN {SCHEMA}.water_bodies w
+                     ON public.ST_Contains(w.geom, pt.geom)
+                     OR (NOT public.ST_Contains(w.geom, pt.geom)
+                         AND public.ST_DWithin(public.geography(w.geom), public.geography(pt.geom), %s))
+            )
+            SELECT point_idx, name, water_type, distance_miles, on_water
+            FROM matches
+            WHERE rn <= %s
+            ORDER BY point_idx, rn
+            """,
+            (indices, lons, lats, _MILES_TO_M, _MILES_TO_M, radius_m, nearby_lakes_limit),
+        )
+        rows = cur.fetchall()
+
+    # ROW_NUMBER in SQL already limited to nearby_lakes_limit per point; preserve order per point
+    by_idx: Dict[int, List[Tuple[Any, ...]]] = {}
+    for row in rows:
+        idx = row[0]
+        if idx not in by_idx:
+            by_idx[idx] = []
+        by_idx[idx].append(row[1:])  # (name, water_type, distance_miles, on_water)
+    return by_idx
 
 
 def query_batch(
     pool: Any,
     points: List[Tuple[float, float]],
-) -> List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]]]]:
-    """Run two batch queries in parallel; return list of (admin_hierarchy, protected_areas) in order."""
+    lake_radius_miles: float = 1.0,
+    nearby_lakes_limit: int = 10,
+) -> List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]]]]:
+    """Run admin + protected + water batch queries; return list of (admin_hierarchy, protected_areas, nearby_lakes) in order."""
     if not points:
         return []
     n = len(points)
@@ -226,18 +370,31 @@ def query_batch(
 
     conn1 = pool.getconn()
     conn2 = pool.getconn()
+    conn3 = pool.getconn()
     try:
-        with ThreadPoolExecutor(max_workers=2) as ex:
+        with ThreadPoolExecutor(max_workers=3) as ex:
             f_admin = ex.submit(_run_admin_batch, conn1, indices, lons, lats)
             f_protected = ex.submit(_run_protected_batch, conn2, indices, lons, lats)
-            wait([f_admin, f_protected])
+            f_water = ex.submit(
+                _run_water_batch,
+                conn3,
+                indices,
+                lons,
+                lats,
+                lake_radius_miles,
+                nearby_lakes_limit,
+            )
+            wait([f_admin, f_protected, f_water])
             admin_rows = f_admin.result()
             protected_rows = f_protected.result()
+            water_by_idx = f_water.result()
     finally:
         conn1.rollback()
         conn2.rollback()
+        conn3.rollback()
         pool.putconn(conn1)
         pool.putconn(conn2)
+        pool.putconn(conn3)
 
     # Group by point_idx
     admin_by_idx: Dict[int, List[Tuple[Any, ...]]] = {}
@@ -250,13 +407,15 @@ def query_batch(
         idx = row[0]
         protected_by_idx.setdefault(idx, []).append(row[1:])
 
-    results: List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]]]] = []
+    results: List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]]]] = []
     for i in range(n):
         admin_rows_i = admin_by_idx.get(i, [])
         protected_rows_i = protected_by_idx.get(i, [])
+        water_rows_i = water_by_idx.get(i, [])
         results.append((
             _build_admin_hierarchy(admin_rows_i),
             _build_protected_list(protected_rows_i),
+            _build_nearby_lakes(water_rows_i),
         ))
     return results
 
@@ -273,13 +432,16 @@ def check_health(conn: Any) -> Tuple[bool, Optional[str]]:
                 ) AND EXISTS (
                     SELECT 1 FROM information_schema.tables
                     WHERE table_schema = %s AND table_name = 'protected_areas'
+                ) AND EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = %s AND table_name = 'water_bodies'
                 )
                 """,
-                (SCHEMA, SCHEMA),
+                (SCHEMA, SCHEMA, SCHEMA),
             )
             row = cur.fetchone()
             if not row or not row[0]:
-                return False, f"Tables {SCHEMA}.admin_areas or {SCHEMA}.protected_areas not found"
+                return False, f"Tables {SCHEMA}.admin_areas, {SCHEMA}.protected_areas or {SCHEMA}.water_bodies not found"
         return True, None
     except Exception as e:
         return False, str(e)
@@ -303,6 +465,7 @@ def get_stats(conn: Any) -> Dict[str, Any]:
     stats: Dict[str, Any] = {
         "admin_areas": {"count": 0, "extent": None, "by_admin_level": {}, "oldest_feature": None, "newest_feature": None},
         "protected_areas": {"count": 0, "extent": None, "oldest_feature": None, "newest_feature": None},
+        "water_bodies": {"count": 0, "extent": None, "oldest_feature": None, "newest_feature": None},
     }
     with conn.cursor() as cur:
         cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.admin_areas")
@@ -370,6 +533,26 @@ def get_stats(conn: Any) -> Dict[str, Any]:
             if row:
                 stats["protected_areas"]["oldest_feature"] = _ts_str(row[0])
                 stats["protected_areas"]["newest_feature"] = _ts_str(row[1])
+            cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.water_bodies")
+            row = cur.fetchone()
+            if row and row[0] is not None:
+                stats["water_bodies"]["count"] = row[0]
+            cur.execute(
+                f"""
+                SELECT public.ST_XMin(e), public.ST_YMin(e), public.ST_XMax(e), public.ST_YMax(e)
+                FROM (SELECT public.ST_Extent(geom) AS e FROM {SCHEMA}.water_bodies) _t
+                """,
+            )
+            row = cur.fetchone()
+            if row and row[0] is not None:
+                stats["water_bodies"]["extent"] = _extent_from_row(tuple(row))
+            cur.execute(
+                f"SELECT MIN(created), MAX(created) FROM {SCHEMA}.water_bodies",
+            )
+            row = cur.fetchone()
+            if row:
+                stats["water_bodies"]["oldest_feature"] = _ts_str(row[0])
+                stats["water_bodies"]["newest_feature"] = _ts_str(row[1])
         except Exception:
             pass
     return stats

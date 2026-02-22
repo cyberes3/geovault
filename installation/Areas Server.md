@@ -1,9 +1,7 @@
 # Areas Server
 
-The Areas Server is a standalone Flask service that answers “which admin and protected areas contain this point?” using
-PostGIS and OSM data loaded via osm2pgsql. It is separate service from the main GeoVault stack.
-
-
+The Areas Server is a standalone Flask service used in the reverse geocoding process. It uses PostGIS and OSM data
+loaded via osm2pgsql. It is a separate service from the main GeoVault stack.
 
 ## Database
 
@@ -28,14 +26,11 @@ touch the main GeoVault schema.
 
 Exit with `\q`.
 
-
-
 ## Installation
 
 ```shell
 sudo apt install osm2pgsql
 ```
-
 
 Then, set up the Python server:
 
@@ -44,8 +39,6 @@ cd src/is_in_area_server
 python3 -m venv venv
 ./venv/bin/pip install -r requirements.txt
 ```
-
-
 
 ## Import OSM data
 
@@ -63,16 +56,12 @@ To import multiple regions:
 ./scripts/import_pbf.sh --append europe-latest.pbf
 ```
 
-
-
 ## Running the Server
 
 ```shell
 export IS_IN_DATABASE="postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
 ./venv/bin/flask --app app run --host 0.0.0.0 --port 5001
 ```
-
-
 
 ## Incremental Updates
 
@@ -91,7 +80,6 @@ It will output something like this:
 ```
 
 Then run `./update.sh` to tell it to fetch the data. Later runs will be run via Systemd.
-
 
 ## Systemd
 
