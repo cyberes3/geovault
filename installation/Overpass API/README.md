@@ -7,7 +7,7 @@ The Overpass API server is a beast and public instances tend to be slow and can 
 If you serve a lot of users or are uploading large files, you should consider running your own server.
 
 Setting up an Overpass API server is a very involved and complicated process. This guide tries to
-walk you through the process.
+walk you through the process. Expect to spend a month setting this all up.
 
 This guide has the following minimum system requirements:
 
@@ -73,7 +73,7 @@ Wait a few hours. Then verify:
 md5sum -c /srv/overpass/downloads/north-america-latest.osm.pbf.md5 /srv/overpass/downloads/europe-latest.osm.pbf.md5
 ```
 
-Wait 10 minutes. Should see `OK` for both files. If not, you're SOL.
+Wait 10 minutes. Should see `OK` for both files. If not, you're fucked.
 
 ### Convert PBF to OSM XML Format
 
