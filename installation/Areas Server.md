@@ -1,4 +1,4 @@
-# Areas Server (is_in)
+# Areas Server
 
 The Areas Server is a standalone Flask service that answers “which admin and protected areas contain this point?” using
 PostGIS and OSM data loaded via osm2pgsql. It is separate service from the main GeoVault stack.

@@ -156,22 +156,36 @@ systemctl enable --now geovault
 systemctl status geovault
 ```
 
-## Reverse Geocoding
+## Overpass Server
 
-We use someone else's [Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API) to perform reverse geocoding but
-you could always try hosting it yourself,
-see the [Overpass API](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation/Overpass%20API) directory for installation instructions.
+You can use a third party [Overpass API server](https://wiki.openstreetmap.org/wiki/Overpass_API) to perform reverse
+geocoding butyou should really host your own. See
+the [Overpass API](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation/Overpass%20API) directory
+for installation instructions.
+
+## Areas Server
+
+A standalone server is nessesary to compute and query an "areas" database as part of the reverse geocoding process when
+importing features.
+See [Areas Server.md](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation/Areas%20Server.md)
+for installation instructions.
 
 ## MapTiler
 
-MapTiler API services are used in the platform for reverse geocoding, 3D height maps, and additional basemaps. The
-company has a pretty solid lineup of products with very generous free tier usage limits.
+MapTiler API services are used in the platform for reverse geocoding, 3D height maps, and additional basemaps.
 
 Create an account on <https://www.maptiler.com> and then generate a new API key
 at <https://cloud.maptiler.com/account/keys/>.
 
 DO NOT use the default API key that your account comes with! Instead, generate a new one and set the "Allowed HTTP
 Origins" to your domain or else someone can steal your key.
+
+## Google
+
+We use Google's geocoding API for searching for places. Setup instructions are
+in [Google APIs.md](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation/Google%20APIs.md).
+
+To use Google for geocoding, set `geocoding_search_mode: google`
 
 ## Done!
 

@@ -1,10 +1,10 @@
 # is_in Area Server
 
-A standalone Flask server that answers point-in-area queries for the OSM dataset. Backed by PostGIS.
+A standalone Flask server that answers point-in-area queries for the OSM dataset. Backed by PostGIS with data is
+imported from OSM PBF files via osm2pgsql.
 
-Data is imported from OSM PBF files via osm2pgsql with a custom flex config. This server is supplemental to the main
-Overpass-based reverse geocoding as areplacement for `is_in()` query since it requires dozens of GBs of
-memory per call.
+This server is supplemental to the main Overpass-based reverse geocoding as a replacement for `is_in()` query since that
+requires dozens of GBs of memory per call.
 
 ## Environment
 
