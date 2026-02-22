@@ -11,11 +11,11 @@ case. Specifically, the `is_in()` query consumes dozens of GBs of memory for a s
 All data comes from OSM, imported into the `is_in` schema via osm2pgsql (flex config in `flex_config/areas.lua`).
 Each response contains three parts:
 
-| Layer               | Description                               | How it is calculated                                                                                                                                                                          |
-|---------------------|-------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **admin_hierarchy** | Country, state, county, city at the point | All administrative boundaries (country, state, county, city). Name is taken from `name`, `name:en`, or `int_name`. Country is normalized (e.g. "United States" → "United States of America"). |
-| **protected_areas** | Parks, nature reserves, etc. at the point | Up to 5 protected areas (national park, nature reserve, recreation area) that contain the point.                                                                                              |
-| **nearby_lakes**    | Named water bodies on water or near shore | Up to 5 water bodies: on water or with shoreline within `lake-radius-miles`. On-water first, then nearest by shoreline distance.                                                              |
+| Layer               | Description                               | How it is calculated                                                                                                                         |
+|---------------------|-------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
+| **admin_hierarchy** | Country, state, county, city at the point | All administrative boundaries (country, state, county, city).Country name is normalized (e.g. "United States" → "United States of America"). |
+| **protected_areas** | Parks, nature reserves, etc. at the point | Up to 5 protected areas (national park, nature reserve, recreation area) that contain the point.                                             |
+| **nearby_lakes**    | Named water bodies on water or near shore | Up to 5 water bodies: on water or with shoreline within `lake-radius-miles`. On-water first, then nearest by shoreline distance.             |
 
 ## Routes
 
@@ -56,7 +56,6 @@ See `installation/Areas Server.md`
 ## Run the server
 
 ```bash
-pip install -r requirements.txt
 export AREAS_SERVER_DATABASE="postgresql://user:pass@localhost/dbname"
 flask --app app run --host 0.0.0.0 --port 5001
 ```
