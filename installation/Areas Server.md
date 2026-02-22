@@ -3,6 +3,9 @@
 The Areas Server is a standalone Flask service used in the reverse geocoding process. It uses PostGIS and OSM data
 loaded via osm2pgsql. It is a separate service from the main GeoVault stack.
 
+Your Postgres server and `.osm.pbf` files need to be stored on fast SSDs. The host should have at least 4 CPUs and 4GB
+RAM.
+
 ## Database
 
 Use a dedicated database (or an existing one with a dedicated schema). The server uses the schema `is_in` and does not
@@ -42,7 +45,7 @@ python3 -m venv venv
 
 ## Import OSM data
 
-Before the server can answer queries, load area data from an OSM PBF:
+Download the `.osm.pbf` data from <https://download.geofabrik.de/>. Then, load the data:
 
 ```shell
 export IS_IN_DATABASE="postgresql://is_in_areas:your_password_here@localhost/is_in_areas"

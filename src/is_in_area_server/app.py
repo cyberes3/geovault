@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from flask import Flask, request, Response
 from werkzeug.exceptions import HTTPException
 
+from areas_lib.query import check_health, get_stats, query_single, query_batch
+
 logger = logging.getLogger(__name__)
 if not logger.handlers:
     _h = logging.StreamHandler(sys.stderr)
@@ -25,7 +27,6 @@ from config import (
     get_conninfo,
     MAX_BATCH_SIZE,
 )
-from query import check_health, get_stats, query_batch, query_single
 
 app = Flask(__name__)
 
@@ -111,9 +112,9 @@ def _parse_int_arg(value: Optional[str], default: int, name: str) -> Tuple[int, 
 
 
 def _make_response(
-    admin_hierarchy: Dict[str, Optional[str]],
-    protected_areas: List[Dict[str, str]],
-    nearby_lakes: List[Dict[str, Any]],
+        admin_hierarchy: Dict[str, Optional[str]],
+        protected_areas: List[Dict[str, str]],
+        nearby_lakes: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     return {
         "admin_hierarchy": admin_hierarchy,
