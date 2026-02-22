@@ -50,17 +50,15 @@ def health_check(request):
             ("postgis", lambda: check_postgis_installation(suppress_logging=True))
         ]
 
-        # Check Overpass API and areas server only if reverse geocoding is enabled
+        # Check areas server only if reverse geocoding is enabled
         reverse_geocoding_enabled = config.get_bool('reverse_geocoding.enabled', True)
         if reverse_geocoding_enabled:
-            checks_to_run.append(("overpass_api", check_overpass_api))
             base_url = (get_setting("AREAS_SERVER_URL") or "").strip()
             if base_url:
                 checks_to_run.append(("areas_server", check_areas_server))
             else:
                 components["areas_server"] = "not_configured"
         else:
-            components["overpass_api"] = "disabled"
             components["areas_server"] = "disabled"
 
         # Always check Elevation API (it will return True if disabled)
@@ -153,32 +151,6 @@ def check_areas_server() -> bool:
             _logger.warning(
                 f"Areas server health check failed with unexpected exception:\n{traceback.format_exc()}"
             )
-        return False
-
-
-def check_overpass_api() -> bool:
-    """
-    Check Overpass API health with an empty query (fastest possible check).
-    
-    Returns:
-        True if API is healthy, False otherwise
-    """
-    try:
-        verify_ssl = get_required_setting('OVERPASS_API_VERIFY_SSL')
-        if not verify_ssl:
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        response = requests.post(
-            get_required_setting('OVERPASS_API_URL'),
-            data="[out:json];out;",
-            timeout=HEALTH_CHECK_EXTERNAL_API_TIMEOUT,
-            headers={'Content-Type': 'text/plain; charset=utf-8'},
-            verify=verify_ssl
-        )
-        return response.status_code == 200
-    except Exception as e:
-        # Log unexpected exceptions (network errors are expected, but bugs are not)
-        if not isinstance(e, (requests.exceptions.RequestException, requests.exceptions.Timeout)):
-            _logger.warning(f"Overpass API health check failed with unexpected exception:\n{traceback.format_exc()}")
         return False
 
 

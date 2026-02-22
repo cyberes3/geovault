@@ -72,7 +72,7 @@ After import, remove small lakes so they do not clutter up the nearby-lakes resu
 To download and load the ocean data:
 
 ```bash
-./venv/bin/python scripts/import_ocean_polygons.py --database "postgresql://is_in_areas:your_password_here@localhost/is_in_areas" --local-path /srv/downloads
+./venv/bin/python scripts/import_ocean_polygons.py --local-path /srv/downloads --database "postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
 ```
 
 ## Running the Server

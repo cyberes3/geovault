@@ -17,8 +17,6 @@ from datetime import datetime
 from typing import List, Tuple, Dict
 
 from geo_lib.reverse_geocoding.areas_server_client import query_areas_server
-from geo_lib.reverse_geocoding.combined_overpass import fetch_lakes_and_cities
-from geo_lib.reverse_geocoding.nearby_places import find_nearby_cities, search_nearby_lakes
 from geo_lib.reverse_geocoding.protected_areas import classify_protected_area
 from geo_lib.reverse_geocoding.ski_resorts import search_nearby_ski_resorts
 from geo_lib.logging.console import get_tagged_logger
@@ -60,8 +58,8 @@ def get_location_tags(
     log_messages = []
 
     try:
-        # Admin and protected areas from is_in area server (required)
-        admin_hierarchy, protected_areas, ocean, areas_err = query_areas_server(latitude, longitude)
+        # Single source: areas server (admin, protected areas, nearby lakes, ocean; city filled from place nodes when admin has none)
+        admin_hierarchy, protected_areas, nearby_lakes, ocean, areas_err = query_areas_server(latitude, longitude)
         if areas_err:
             _logger.error(areas_err)
             log_messages.append(ReverseGeocodingLogMessage(
@@ -72,30 +70,16 @@ def get_location_tags(
             ))
             admin_info = {'country': None, 'state': None, 'county': None, 'city': None}
             protected_areas = []
+            nearby_lakes = []
         else:
             admin_info = admin_hierarchy
-
-        # Lakes and cities from Overpass
-        response, fetch_errors = fetch_lakes_and_cities(latitude, longitude)
-        nearby_lakes, lake_errors = search_nearby_lakes(response, latitude, longitude)
-        nearby_cities_parsed, city_errors = find_nearby_cities(response, latitude, longitude)
-        all_errors = fetch_errors + lake_errors + city_errors
-
-        for error in all_errors:
-            _logger.warning(error)
-            log_messages.append(ReverseGeocodingLogMessage(
-                timestamp=datetime.now(),
-                message=error,
-                level='WARNING',
-                source='Reverse Geocoding',
-            ))
 
         has_any_data = (
             admin_info.get('country') or admin_info.get('state') or
             admin_info.get('county') or admin_info.get('city') or
             protected_areas or nearby_lakes
         )
-        if not has_any_data and not all_errors and not areas_err:
+        if not has_any_data and not areas_err:
             warning_msg = (
                 f"Reverse geocoding returned no data for coordinates "
                 f"({latitude}, {longitude}) - no matching features found"
@@ -109,26 +93,8 @@ def get_location_tags(
             tags.append(f"state:{admin_info['state']}")
         if admin_info['county']:
             tags.append(f"county:{admin_info['county']}")
-
-        city_found = False
         if admin_info['city']:
             tags.append(f"city:{admin_info['city']}")
-            city_found = True
-
-        # If no city found in admin boundaries, use closest city from Overpass
-        if not city_found:
-            for error in city_errors:
-                _logger.warning(error)
-                log_messages.append(ReverseGeocodingLogMessage(
-                    timestamp=datetime.now(),
-                    message=error,
-                    level='WARNING',
-                    source='Reverse Geocoding'
-                ))
-            if nearby_cities_parsed:
-                closest_city = nearby_cities_parsed[0]
-                tags.append(f"city:{closest_city['name']}")
-                city_found = True
 
         # Process protected areas
         protected_area_tags = set()  # Use set to prevent duplicates
@@ -191,7 +157,7 @@ def _get_from_cache_or_fetch(
     Returns:
         Tuple of (tags list, log messages list)
     """
-    # Fetch from API (caching is handled at the query_overpass level)
+    # Fetch from API (caching is handled at the areas server level)
     tags, log_messages = get_location_tags(latitude, longitude)
 
     return tags, log_messages

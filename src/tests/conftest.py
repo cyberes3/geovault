@@ -44,8 +44,6 @@ from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
 from users.api_keys import create_user_api_key
-from fixtures.geocoding_responses import get_mock_overpass_response
-
 User = get_user_model()
 
 
@@ -351,75 +349,20 @@ def conditional_external_api_mocking():
     logger = get_tagged_logger(__name__)
     patches = []
     
-    # Always mock reverse_geocoding services with realistic data from real Overpass API responses
-    # We need to mock query_overpass in all modules that import it
-    
-    # Import cache here to avoid circular imports
-    from geo_lib.reverse_geocoding.cache import _REVERSE_GEOCODING_CACHE
-    from geo_lib.reverse_geocoding.constants import REVERSE_GEOCODING_CACHE_TTL
-    from geo_lib.reverse_geocoding.overpass_api import round_coordinate
-    import hashlib
-    
-    # Custom mock class that only increments call_count on cache misses
-    class CacheAwareMock:
-        """Mock that respects cache and only counts cache misses."""
-        def __init__(self):
-            self.call_count = 0
-        
-        def __call__(self, query, max_retries=3, latitude=None, longitude=None):
-            """Mock implementation that returns fixture data based on query, with cache support."""
-            # Normalize query string for cache key generation (same as real function)
-            from geo_lib.reverse_geocoding.overpass_api import _normalize_query_for_cache
-            normalized_query = _normalize_query_for_cache(query, latitude, longitude)
-            
-            # Generate cache key same way as real query_overpass function
-            query_hash = hashlib.sha256(normalized_query.encode('utf-8')).hexdigest()[:16]
-            if latitude is not None and longitude is not None:
-                lat_rounded, lon_rounded = round_coordinate(latitude, longitude)
-                cache_key = f"overpass:query:{query_hash}:{lat_rounded},{lon_rounded}"
-            else:
-                cache_key = f"overpass:query:{query_hash}"
-            
-            # Check cache first
-            cached_response = _REVERSE_GEOCODING_CACHE.get(cache_key)
-            if cached_response is not None:
-                return cached_response, None
-            
-            # Cache miss - increment call count and get mock response
-            self.call_count += 1
-            mock_response = get_mock_overpass_response(query)
-            
-            # Cache the response if it has elements (same logic as real function)
-            elements = mock_response.get('elements', [])
-            if elements:
-                _REVERSE_GEOCODING_CACHE.set(cache_key, mock_response, REVERSE_GEOCODING_CACHE_TTL)
-            
-            return mock_response, None
-        
-        def reset_mock(self):
-            """Reset call count (cache remains intact)."""
-            self.call_count = 0
-    
-    # Patch query_overpass in all modules that import it
-    # We need to patch where it's used, not where it's defined
-    # We patch the original module first so tests can access it
-    modules_to_patch = [
-        'geo_lib.reverse_geocoding.overpass_api.query_overpass',
-        'geo_lib.reverse_geocoding.combined_overpass.query_overpass',  # Used by fetch_lakes_and_cities
-    ]
-    primary_mock = CacheAwareMock()
-    for module_path in modules_to_patch:
-        geocoding_patch = patch(module_path, primary_mock)
-        geocoding_patch.start()
-        patches.append(geocoding_patch)
-
+    # Mock reverse geocoding: areas server only (admin, protected areas, nearby_lakes, ocean from fixtures)
     def mock_query_areas_server(latitude: float, longitude: float):
         from tests.fixtures.geocoding_responses import get_areas_fixture
         areas = get_areas_fixture(latitude, longitude)
         if areas is not None:
-            return (areas['admin_hierarchy'], areas['protected_areas'], areas.get('ocean'), None)
+            return (
+                areas['admin_hierarchy'],
+                areas['protected_areas'],
+                areas.get('nearby_lakes') or [],
+                areas.get('ocean'),
+                None,
+            )
         empty_admin = {'country': None, 'state': None, 'county': None, 'city': None}
-        return (empty_admin, [], None, None)
+        return (empty_admin, [], [], None, None)
 
     areas_server_patch = patch(
         'geo_lib.reverse_geocoding.areas_server_client.query_areas_server',
@@ -450,9 +393,8 @@ def conditional_external_api_mocking():
         
         Elevation data format: array of [lat, lon] pairs -> array of elevation values in meters
         
-        Note: Accepts both 'json' (for elevation API) and 'data' (for Overpass API) parameters.
         """
-        # Use json parameter if available, ignore data (for Overpass compatibility)
+        # Use json parameter if available
         if not json or not isinstance(json, list):
             # Return empty list for invalid requests
             response = MagicMock()

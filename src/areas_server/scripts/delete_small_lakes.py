@@ -49,6 +49,7 @@ def main() -> None:
 
     with psycopg.connect(conninfo) as conn:
         with conn.cursor() as cur:
+            print('Reading database...')
             # Area from geometry (m²) / 1e6 = km²; no pre-computed column needed
             area_expr = "public.ST_Area(public.geography(geom)) / 1e6"
             cur.execute(

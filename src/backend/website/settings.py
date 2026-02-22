@@ -484,12 +484,7 @@ REVERSE_GEOCODING_ENABLED = config.get_bool('reverse_geocoding.enabled', True)
 CITY_PROXIMITY_MILES = config.get_float('reverse_geocoding.city_proximity_miles', 5.0)
 LAKE_PROXIMITY_MILES = config.get_float('reverse_geocoding.lake_proximity_miles', 1.0)
 
-# Overpass API (lakes, cities)
-OVERPASS_API_URL = config.get_str('reverse_geocoding.overpass.api_url', 'https://overpass.private.coffee/api/interpreter')
-OVERPASS_API_TIMEOUT = config.get_int('reverse_geocoding.overpass.request_timeout_seconds', 75)
-OVERPASS_API_VERIFY_SSL = config.get_bool('reverse_geocoding.overpass.verify_ssl', True)
-
-# Areas server (admin + protected areas). Required when reverse geocoding is used.
+# Areas server (admin, protected areas, nearby lakes, ocean). Required when reverse geocoding is used.
 AREAS_SERVER_URL = config.get_str('reverse_geocoding.areas_server.api_url', 'http://127.0.0.1:5001')
 AREAS_SERVER_TIMEOUT = config.get_int('reverse_geocoding.areas_server.request_timeout_seconds', 10)
 AREAS_SERVER_VERIFY_SSL = config.get_bool('reverse_geocoding.areas_server.verify_ssl', True)
