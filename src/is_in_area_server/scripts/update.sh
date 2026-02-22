@@ -50,9 +50,9 @@ case "$SUBCOMMAND" in
       POST_SCRIPT="$SCRIPT_DIR/post_analyze.sh"
     fi
     if [[ -n "$POST_SCRIPT" ]]; then
-      run_replication update --post-processing "$POST_SCRIPT" -- -O flex -S "$FLEX_CONFIG" -x
+      run_replication update --post-processing "$POST_SCRIPT" -- -O flex -S "$FLEX_CONFIG" --schema "$SCHEMA" -x
     else
-      run_replication update -- -O flex -S "$FLEX_CONFIG" -x
+      run_replication update -- -O flex -S "$FLEX_CONFIG" --schema "$SCHEMA" -x
     fi
     ;;
   *)
