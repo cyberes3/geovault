@@ -106,9 +106,9 @@ echo 'AREAS_SERVER_DATABASE=postgresql://is_in_areas:your_password_here@localhos
 Copy the service and timer files:
 
 ```shell
-sudo cp installation/areas_server.service /etc/systemd/system/
-sudo cp installation/areas_server_update.service installation/areas_server_update.timer /etc/systemd/system/
+sudo cp installation/areas-server.service /etc/systemd/system/
+sudo cp installation/areas-server-update.service installation/areas-server-update.timer /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now areas_server areas_server_update.timer
-sudo systemctl status areas_server areas_server_update.timer
+sudo systemctl enable --now areas-server areas-server-update.timer
+sudo systemctl status areas-server areas-server-update.timer
 ```

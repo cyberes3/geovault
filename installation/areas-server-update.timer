@@ -1,6 +1,6 @@
 [Unit]
 Description=Run GeoVault areas server incremental update daily
-Requires=areas_server_update.service
+Requires=areas-server-update.service
 
 [Timer]
 OnCalendar=daily
