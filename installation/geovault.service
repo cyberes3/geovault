@@ -5,6 +5,7 @@ After=network.target
 [Service]
 Type=simple
 User=geovault
+SyslogIdentifier=geovault
 ExecStart=/srv/geovault/geovault/src/backend/server-prod.sh
 Restart=always
 RestartSec=5s
