@@ -26,7 +26,15 @@ def _query_single_unified_sql(include_place: bool) -> Tuple[str, List[Any]]:
         f"""
         (SELECT 'protected' AS layer, jsonb_build_object('osm_id', p.osm_id, 'name', p.name, 'tags', p.tags) AS payload
         FROM {SCHEMA}.{lookup_protected_areas.TABLE_NAME} p, pt
-        WHERE public.ST_Contains(p.geom, pt.geom)
+        WHERE (public.ST_IsValid(p.geom) AND (
+               public.ST_Contains(p.geom, pt.geom)
+               OR (EXISTS (
+                     SELECT 1 FROM {SCHEMA}.{lookup_water.TABLE_NAME} w
+                     WHERE public.ST_Contains(w.geom, pt.geom)
+                       AND public.ST_IsValid(w.geom)
+                       AND public.ST_Touches(p.geom, w.geom)
+                   )
+                   AND public.ST_Contains(public.ST_ConvexHull(p.geom), pt.geom))))
         LIMIT {_PROTECTED_LIMIT})
         """,
         f"""
@@ -106,7 +114,16 @@ def _query_batch_unified_sql(include_place: bool) -> str:
             SELECT pt.point_idx, jsonb_build_object('osm_id', a.osm_id, 'name', a.name, 'tags', a.tags) AS payload,
                    ROW_NUMBER() OVER (PARTITION BY pt.point_idx ORDER BY a.osm_id) AS rn
             FROM pt
-            JOIN {SCHEMA}.{lookup_protected_areas.TABLE_NAME} a ON public.ST_Contains(a.geom, pt.geom)
+            JOIN {SCHEMA}.{lookup_protected_areas.TABLE_NAME} a
+                 ON public.ST_IsValid(a.geom) AND (
+                    public.ST_Contains(a.geom, pt.geom)
+                    OR (EXISTS (
+                          SELECT 1 FROM {SCHEMA}.{lookup_water.TABLE_NAME} w
+                          WHERE public.ST_Contains(w.geom, pt.geom)
+                            AND public.ST_IsValid(w.geom)
+                            AND public.ST_Touches(a.geom, w.geom)
+                        )
+                        AND public.ST_Contains(public.ST_ConvexHull(a.geom), pt.geom)))
         ) sub WHERE rn <= {_PROTECTED_LIMIT}
         """,
         f"""
@@ -215,23 +232,23 @@ def _parse_batch_unified_rows(
         elif layer == "ocean_region":
             p = payload if isinstance(payload, dict) else {}
             if idx not in ocean_region_by_idx:
-                n = p.get("name")
-                ocean_region_by_idx[idx] = str(n).strip() if n else None
+                name_val = p.get("name")
+                ocean_region_by_idx[idx] = str(name_val).strip() if name_val else None
         elif layer == "ocean_main":
             p = payload if isinstance(payload, dict) else {}
             if idx not in ocean_main_by_idx:
-                n = p.get("name")
-                ocean_main_by_idx[idx] = str(n).strip() if n else None
+                name_val = p.get("name")
+                ocean_main_by_idx[idx] = str(name_val).strip() if name_val else None
         elif layer == "ski":
             p = payload if isinstance(payload, dict) else {}
             if idx not in ski_by_idx:
-                n = p.get("name")
-                ski_by_idx[idx] = str(n).strip() if n else None
+                name_val = p.get("name")
+                ski_by_idx[idx] = str(name_val).strip() if name_val else None
         elif layer == "place" and include_place:
             p = payload if isinstance(payload, dict) else {}
             if idx not in place_by_idx:
-                n = p.get("name")
-                place_by_idx[idx] = str(n).strip() if n else None
+                name_val = p.get("name")
+                place_by_idx[idx] = str(name_val).strip() if name_val else None
 
     results: List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str], Optional[str]]] = [None] * n
     for i in range(n):
