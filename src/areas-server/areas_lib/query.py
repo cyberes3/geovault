@@ -32,11 +32,12 @@ def _query_single_unified_sql(include_place: bool) -> Tuple[str, List[Any]]:
              LIMIT {_PROTECTED_LIMIT})
             UNION
             (SELECT a.osm_id, a.name, a.tags
-             FROM {SCHEMA}.{lookup_water.TABLE_NAME} w, pt
+             FROM pt
+             JOIN {SCHEMA}.{lookup_water.TABLE_NAME} w
+                  ON w.geom && pt.geom AND public.ST_Contains(w.geom, pt.geom)
              JOIN {SCHEMA}.{lookup_protected_areas.TABLE_NAME} a
                   ON a.geom && w.geom AND public.ST_Touches(a.geom, w.geom)
                   AND public.ST_Contains(public.ST_ConvexHull(a.geom), pt.geom)
-             WHERE w.geom && pt.geom AND public.ST_Contains(w.geom, pt.geom)
              LIMIT {_PROTECTED_LIMIT})
         ) p
         LIMIT {_PROTECTED_LIMIT})
