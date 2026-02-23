@@ -95,6 +95,13 @@ class _RedisResponseCache:
         k = _cache_key_tuple(key[0], key[1], key[2], key[3], key[4])
         self._client.setex(k, self._ttl, json.dumps(value))
 
+    def clear(self) -> int:
+        """Delete all keys with the areas query prefix. Returns number of keys removed."""
+        keys = self._client.keys(_CACHE_KEY_PREFIX + "*")
+        if not keys:
+            return 0
+        return self._client.delete(*keys)
+
 
 def get_cache():
     global _cache
@@ -216,6 +223,16 @@ def stats():
     finally:
         conn.rollback()
         pool.putconn(conn)
+
+
+@app.route("/cache-clear", methods=["GET"])
+def cache_clear():
+    """Clear all cached GET /query responses. Returns number of entries cleared (or 0 if cache disabled)."""
+    cache = get_cache()
+    if cache is None:
+        return {"status": "ok", "cleared": 0, "message": "cache disabled"}
+    cleared = cache.clear()
+    return {"status": "ok", "cleared": cleared}
 
 
 @app.route("/query", methods=["GET"])
