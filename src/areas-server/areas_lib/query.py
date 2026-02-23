@@ -337,7 +337,10 @@ def query_single_unified(
             rows = cur.fetchall()
         return _parse_single_unified_rows(rows, include_place)
     finally:
-        conn.rollback()
+        try:
+            conn.rollback()
+        except Exception:
+            pass  # e.g. "another command is already in progress" when worker was killed during execute
         pool.putconn(conn)
 
 
@@ -387,7 +390,10 @@ def query_batch_unified(
             rows = cur.fetchall()
         return _parse_batch_unified_rows(rows, n, include_place)
     finally:
-        conn.rollback()
+        try:
+            conn.rollback()
+        except Exception:
+            pass  # e.g. "another command is already in progress" when worker was killed during execute
         pool.putconn(conn)
 
 

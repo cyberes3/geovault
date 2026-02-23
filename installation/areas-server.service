@@ -8,9 +8,10 @@ User=geovault
 SyslogIdentifier=areas-server
 WorkingDirectory=/srv/geovault/geovault/src/areas-server
 EnvironmentFile=-/etc/secrets/areas_server.env
-ExecStart=/srv/geovault/geovault/src/areas-server/venv/bin/gunicorn -w 4 -b 0.0.0.0:5001 app:app
+ExecStart=/srv/geovault/geovault/src/areas-server/venv/bin/gunicorn -w 4 -b 0.0.0.0:5001 --timeout 120 app:app
 Restart=always
 RestartSec=5s
+TimeoutStartSec=60
 
 [Install]
 WantedBy=multi-user.target
