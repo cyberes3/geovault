@@ -9,7 +9,7 @@ import sys
 import traceback
 from typing import Any, Dict, List, Optional, Tuple
 
-from flask import Flask, has_request_context, request, Response
+from flask import Flask, request, Response
 from werkzeug.exceptions import HTTPException
 
 from areas_lib.query import check_health, get_stats, query_single, query_batch
@@ -178,21 +178,9 @@ def _make_response(
     }
 
 
-def _request_path_and_query() -> str:
-    """Path and query string for current request, e.g. /query?lat=40&lon=-105."""
-    if not has_request_context():
-        return ""
-    path = request.full_path.rstrip("?")
-    return path
-
-
-def _error_response_with_traceback(exc: BaseException, status: int = 500, _from_handler: bool = False) -> Response:
-    """Return JSON response with error and traceback. When _from_handler is True, do not log (Flask's log_exception already did)."""
-    tb_str = traceback.format_exc()
-    if not _from_handler and has_request_context():
-        logger.error("Request failed: %s", _request_path_and_query())
-    elif not has_request_context():
-        traceback.print_exc(file=sys.stderr)
+def _error_response_with_traceback(exc: BaseException, status: int = 500) -> Response:
+    """Return JSON response with error and traceback. Flask logs the exception and traceback before calling the error handler."""
+    tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
     return Response(
         json.dumps({"error": str(exc), "traceback": tb_str}),
         status=status,
@@ -203,38 +191,32 @@ def _error_response_with_traceback(exc: BaseException, status: int = 500, _from_
 @app.route("/health")
 def health():
     """Check DB connectivity and that is_in tables exist."""
+    pool = get_pool()
+    conn = pool.getconn()
     try:
-        pool = get_pool()
-        conn = pool.getconn()
-        try:
-            ok, err = check_health(conn)
-            if not ok:
-                return Response(
-                    json.dumps({"status": "unhealthy", "error": err}),
-                    status=503,
-                    mimetype="application/json",
-                )
-            return {"status": "ok"}
-        finally:
-            conn.rollback()
-            pool.putconn(conn)
-    except Exception as e:
-        return _error_response_with_traceback(e, status=503)
+        ok, err = check_health(conn)
+        if not ok:
+            return Response(
+                json.dumps({"status": "unhealthy", "error": err}),
+                status=503,
+                mimetype="application/json",
+            )
+        return {"status": "ok"}
+    finally:
+        conn.rollback()
+        pool.putconn(conn)
 
 
 @app.route("/stats")
 def stats():
     """Return database stats: feature counts, geographic extent, admin level breakdown."""
+    pool = get_pool()
+    conn = pool.getconn()
     try:
-        pool = get_pool()
-        conn = pool.getconn()
-        try:
-            return get_stats(conn)
-        finally:
-            conn.rollback()
-            pool.putconn(conn)
-    except Exception as e:
-        return _error_response_with_traceback(e)
+        return get_stats(conn)
+    finally:
+        conn.rollback()
+        pool.putconn(conn)
 
 
 @app.route("/query", methods=["GET"])
@@ -268,20 +250,17 @@ def get_query():
         if key in cache:
             return cache[key]
 
-    try:
-        pool = get_pool()
-        admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort = query_single(
-            pool, lat_f, lon_f,
-            lake_radius_miles=lake_radius_miles,
-            ocean_radius_miles=ocean_radius_miles,
-            city_radius_miles=city_radius_miles,
-        )
-        out = _make_response(admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort)
-        if cache is not None:
-            cache[key] = out
-        return out
-    except Exception as e:
-        return _error_response_with_traceback(e)
+    pool = get_pool()
+    admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort = query_single(
+        pool, lat_f, lon_f,
+        lake_radius_miles=lake_radius_miles,
+        ocean_radius_miles=ocean_radius_miles,
+        city_radius_miles=city_radius_miles,
+    )
+    out = _make_response(admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort)
+    if cache is not None:
+        cache[key] = out
+    return out
 
 
 @app.route("/query", methods=["POST"])
@@ -351,44 +330,31 @@ def post_query():
     if err:
         return Response(json.dumps({"error": err}), status=400, mimetype="application/json")
 
-    try:
-        pool = get_pool()
-        results = query_batch(
-            pool, points,
-            lake_radius_miles=lake_radius_miles,
-            ocean_radius_miles=ocean_radius_miles,
-            city_radius_miles=city_radius_miles,
-        )
-        out = {
-            "results": [
-                _make_response(admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort)
-                for admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort in results
-            ]
-        }
-        return out
-    except Exception as e:
-        return _error_response_with_traceback(e)
+    pool = get_pool()
+    results = query_batch(
+        pool, points,
+        lake_radius_miles=lake_radius_miles,
+        ocean_radius_miles=ocean_radius_miles,
+        city_radius_miles=city_radius_miles,
+    )
+    out = {
+        "results": [
+            _make_response(admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort)
+            for admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort in results
+        ]
+    }
+    return out
 
 
 @app.errorhandler(Exception)
 def handle_exception(exc):
-    """Return error + traceback in response for uncaught errors. Logging already done by log_exception."""
+    """Return error + traceback in response. Flask logs the exception and full traceback before calling this."""
     if isinstance(exc, HTTPException):
         return exc.get_response()
-    return _error_response_with_traceback(exc, _from_handler=True)
+    return _error_response_with_traceback(exc)
 
 
 def create_app() -> Flask:
-    # Use only our log format for exceptions to avoid duplicate lines (Flask's default + ours).
-    def log_exception(exc_info):
-        if has_request_context():
-            path_query = _request_path_and_query()
-            tb = "".join(traceback.format_exception(*exc_info)) if exc_info else ""
-            app.logger.error("Request failed: %s\n%s", path_query, tb.rstrip())
-        elif exc_info:
-            app.logger.exception("Exception occurred", exc_info=exc_info)
-
-    app.log_exception = log_exception
     return app
 
 
