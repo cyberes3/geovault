@@ -18,16 +18,16 @@ def _query_single_unified_sql(include_place: bool) -> Tuple[str, List[Any]]:
     pt_cte = f"WITH pt AS (SELECT public.ST_SetSRID(public.ST_MakePoint(%s, %s), 4326) AS geom)"
     parts = [
         f"""
-        SELECT 'admin' AS layer, jsonb_build_object('osm_id', a.osm_id, 'admin_level', a.admin_level, 'name', a.name, 'tags', a.tags) AS payload
+        (SELECT 'admin' AS layer, jsonb_build_object('osm_id', a.osm_id, 'admin_level', a.admin_level, 'name', a.name, 'tags', a.tags) AS payload
         FROM {SCHEMA}.{lookup_admin.TABLE_NAME} a, pt
         WHERE public.ST_Contains(a.geom, pt.geom)
-        ORDER BY a.admin_level
+        ORDER BY a.admin_level)
         """,
         f"""
-        SELECT 'protected' AS layer, jsonb_build_object('osm_id', p.osm_id, 'name', p.name, 'tags', p.tags) AS payload
+        (SELECT 'protected' AS layer, jsonb_build_object('osm_id', p.osm_id, 'name', p.name, 'tags', p.tags) AS payload
         FROM {SCHEMA}.{lookup_protected_areas.TABLE_NAME} p, pt
         WHERE public.ST_Contains(p.geom, pt.geom)
-        LIMIT {_PROTECTED_LIMIT}
+        LIMIT {_PROTECTED_LIMIT})
         """,
         f"""
         (SELECT 'water' AS layer, jsonb_build_object('name', w.name, 'water_type', w.water_type, 'distance_miles', 0, 'on_water', true) AS payload
@@ -45,7 +45,7 @@ def _query_single_unified_sql(include_place: bool) -> Tuple[str, List[Any]]:
          LIMIT {_NEARBY_LAKES_LIMIT})
         """,
         f"""
-        SELECT 'ocean_region' AS layer, jsonb_build_object('name', sub.name) AS payload
+        (SELECT 'ocean_region' AS layer, jsonb_build_object('name', sub.name) AS payload
         FROM (
             SELECT o.name FROM {SCHEMA}.{lookup_ocean.TABLE_OCEAN_REGIONS} o, pt
             WHERE public.ST_Contains(o.geom, pt.geom)
@@ -53,29 +53,29 @@ def _query_single_unified_sql(include_place: bool) -> Tuple[str, List[Any]]:
             ORDER BY public.ST_Contains(o.geom, pt.geom) DESC NULLS LAST,
                      public.ST_Distance(public.geography(o.geom), public.geography(pt.geom))
             LIMIT 1
-        ) sub
+        ) sub)
         """,
         f"""
-        SELECT 'ocean_main' AS layer, jsonb_build_object('name', o.name) AS payload
+        (SELECT 'ocean_main' AS layer, jsonb_build_object('name', o.name) AS payload
         FROM {SCHEMA}.{lookup_ocean.TABLE_OCEANS} o, pt
         WHERE public.ST_Contains(o.geom, pt.geom)
-        LIMIT 1
+        LIMIT 1)
         """,
         f"""
-        SELECT 'ski' AS layer, jsonb_build_object('name', s.name) AS payload
+        (SELECT 'ski' AS layer, jsonb_build_object('name', s.name) AS payload
         FROM {SCHEMA}.{lookup_ski_resort.TABLE_NAME} s, pt
         WHERE public.ST_Contains(s.geom, pt.geom)
-        LIMIT 1
+        LIMIT 1)
         """,
     ]
     if include_place:
         parts.append(
             f"""
-            SELECT 'place' AS layer, jsonb_build_object('name', n.name) AS payload
+            (SELECT 'place' AS layer, jsonb_build_object('name', n.name) AS payload
             FROM {SCHEMA}.{lookup_places.TABLE_NAME} n, pt
             WHERE public.ST_DWithin(public.geography(n.geom), public.geography(pt.geom), %s)
             ORDER BY public.ST_Distance(public.geography(n.geom), public.geography(pt.geom))
-            LIMIT 1
+            LIMIT 1)
             """
         )
     sql = pt_cte + "\n" + "\nUNION ALL\n".join(parts)
@@ -96,10 +96,10 @@ def _query_batch_unified_sql(include_place: bool) -> str:
     )"""
     parts = [
         f"""
-        SELECT pt.point_idx, 'admin' AS layer, jsonb_build_object('osm_id', a.osm_id, 'admin_level', a.admin_level, 'name', a.name, 'tags', a.tags) AS payload
+        (SELECT pt.point_idx, 'admin' AS layer, jsonb_build_object('osm_id', a.osm_id, 'admin_level', a.admin_level, 'name', a.name, 'tags', a.tags) AS payload
         FROM pt
         JOIN {SCHEMA}.{lookup_admin.TABLE_NAME} a ON public.ST_Contains(a.geom, pt.geom)
-        ORDER BY pt.point_idx, a.admin_level
+        ORDER BY pt.point_idx, a.admin_level)
         """,
         f"""
         SELECT point_idx, 'protected' AS layer, payload FROM (
