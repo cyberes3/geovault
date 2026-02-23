@@ -33,14 +33,14 @@ Exit with `\q`.
 
 You will likely need to tune your Postgres server.
 
-| Parameter                    | Suggested                         | Purpose                                                             |
-|------------------------------|-----------------------------------|---------------------------------------------------------------------|
-| **random_page_cost**         | `1.1`                             | Planner prefers index scans (default 4.0 assumes HDD).              |
-| **effective_cache_size**     | ~75% of RAM, e.g. `12GB` for 16GB | Planner favors index use.                                           |
-| **effective_io_concurrency** | `200` (SSD/NVMe)                  | Lets bitmap heap scans issue more concurrent I/O.                   |
-| **shared_buffers**           | e.g. `4GB` for 16GB RAM           | If not already set.                                                 |
-| **work_mem**                 | Session only (see below)          | More memory for sorts/hash before spilling to disk.                 |
-| **statement_timeout**        | Optional, e.g. `15000` (ms)       | Cap per-query runtime so one slow request does not tie up a worker. |
+| Parameter                    | Suggested                         | Purpose                                                |
+|------------------------------|-----------------------------------|--------------------------------------------------------|
+| **random_page_cost**         | `1.1`                             | Planner prefers index scans (default 4.0 assumes HDD). |
+| **effective_cache_size**     | ~75% of RAM, e.g. `12GB` for 16GB | Planner favors index use.                              |
+| **effective_io_concurrency** | `200` (SSD/NVMe)                  | Lets bitmap heap scans issue more concurrent I/O.      |
+| **shared_buffers**           | e.g. `4GB` for 16GB RAM           | If not already set.                                    |
+| **work_mem**                 | Session only (see below)          | More memory for sorts/hash before spilling to disk.    |
+| **statement_timeout**        | `0` (no timeout)                  | Disable timeout for long-running imports.              |
 
 The areas server sets **work_mem** per connection (default 128MB) via `AREAS_SERVER_WORK_MEM`; raise it if
 `EXPLAIN` shows heavy sorts or hash joins.
@@ -87,7 +87,8 @@ To load the OSM data:
 ./scripts/import_pbf.sh --database "postgresql://..." /srv/downloads/europe-latest.osm.pbf --append
 ```
 
-Run the first `.osm.pbf` import then add the `--append` for subsequent ones.
+Run the first `.osm.pbf` import then add the `--append` for subsequent ones. If an `import_pbf.sh` run is canceled, you
+have to start the entire run over and start at the first file.
 
 Optional arguments for faster imports:
 
@@ -124,6 +125,8 @@ refreshes if older than 1 day):
 ```bash
 ./venv/bin/python scripts/import_ski_areas.py --local-path /srv/downloads --database "postgresql://..."
 ```
+
+The standalone Python import scripts drop their table and re-import fresh data on every run.
 
 ## Running the Server
 

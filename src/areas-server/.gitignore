@@ -1,1 +1,5 @@
 areas_server_performance.md
+*.kml
+*.kmz
+*.geojson
+*.json

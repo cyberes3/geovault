@@ -27,7 +27,9 @@ from config import SCHEMA
 SKI_AREAS_URL = "https://tiles.openskimap.org/geojson/ski_areas.geojson"
 CACHE_FILENAME = "ski_areas.geojson"
 TABLE_NAME = "ski_resorts"
-POINT_BUFFER_METERS = 500
+BUFFER_FEET = 800
+# PostGIS ST_Buffer(geography, ...) uses meters
+BUFFER_METERS = BUFFER_FEET * 0.3048
 CACHE_MAX_AGE_SECONDS = 86400  # 1 day
 USER_AGENT = "GeoVault-Import-SkiAreas/1.0"
 DOWNLOAD_TIMEOUT = 300
@@ -43,41 +45,30 @@ def download_geojson_to_memory(url: str) -> bytes | None:
         return None
 
 
-def _name_from_feature(prop: dict) -> str | None:
+def _name_from_feature(prop: dict) -> str:
     name = prop.get("name")
     if name and isinstance(name, str) and name.strip():
         return name.strip()
-    places = prop.get("places") or []
-    if places and isinstance(places, list):
-        first = places[0]
-        if isinstance(first, dict):
-            localized = (first.get("localized") or {}).get("en")
-            if isinstance(localized, dict):
-                for key in ("locality", "region", "country"):
-                    val = localized.get(key)
-                    if val and isinstance(val, str) and val.strip():
-                        return val.strip()
-    oid = prop.get("id")
-    if oid is not None:
-        return str(oid)
-    return None
+    return "Unnamed"
 
 
 def iter_ski_area_rows(fc: dict):
-    """Yield (name, geometry_dict, is_point) for each feature with valid geometry."""
+    """Yield (name, geometry_dict) for each feature with Polygon/MultiPolygon. Only includes operating resorts (or missing status). Skips Point-only features."""
     for feat in fc.get("features") or []:
         if feat.get("type") != "Feature":
             continue
         prop = feat.get("properties") or {}
+        status = prop.get("status")
+        if status is not None and status != "operating":
+            continue
         name = _name_from_feature(prop)
         geom = feat.get("geometry")
         if not geom or not name:
             continue
         gtype = (geom.get("type") or "").strip()
-        if gtype == "Point":
-            yield (name, geom, True)
-        elif gtype in ("Polygon", "MultiPolygon"):
-            yield (name, geom, False)
+        if gtype not in ("Polygon", "MultiPolygon"):
+            continue
+        yield (name, geom)
 
 
 def main() -> None:
@@ -156,19 +147,13 @@ def main() -> None:
                 )
                 '''
             )
-            for name, geom, is_point in tqdm.tqdm(rows, desc=f"Inserting {TABLE_NAME}", unit="row"):
+            for name, geom in tqdm.tqdm(rows, desc=f"Inserting {TABLE_NAME}", unit="row"):
                 geom_json = json.dumps(geom)
-                if is_point:
-                    cur.execute(
-                        f'INSERT INTO "{SCHEMA}"."{TABLE_NAME}" (name, geom) VALUES ('
-                        f'%s, ST_Buffer(ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)::geography, %s)::geometry)',
-                        (name, geom_json, POINT_BUFFER_METERS),
-                    )
-                else:
-                    cur.execute(
-                        f'INSERT INTO "{SCHEMA}"."{TABLE_NAME}" (name, geom) VALUES (%s, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))',
-                        (name, geom_json),
-                    )
+                cur.execute(
+                    f'INSERT INTO "{SCHEMA}"."{TABLE_NAME}" (name, geom) VALUES (%s, '
+                    f'ST_Buffer(ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)::geography, %s)::geometry)',
+                    (name, geom_json, BUFFER_METERS),
+                )
             cur.execute(
                 f'CREATE INDEX IF NOT EXISTS "{TABLE_NAME}_geom_geog_gist" '
                 f'ON "{SCHEMA}"."{TABLE_NAME}" USING GIST ((geom::geography))'
