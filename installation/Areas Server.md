@@ -64,7 +64,15 @@ Optional arguments for faster imports:
 | `--cache MB`    | Node cache size in MB. <br/>Default: 800.          |
 | `--processes N` | Parallel threads. Default: `nproc` (if available). |
 
-After import, remove small lakes so they do not clutter up the nearby-lakes results:
+After the initial import, run the post-processing script to create geography indexes on the tables and refresh
+statistics:
+
+```bash
+export AREAS_SERVER_DATABASE="postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
+./scripts/post_analyze.sh
+```
+
+Remove small lakes so they do not clutter up the nearby-lakes results:
 
 ```bash
 ./venv/bin/python scripts/delete_small_lakes.py --database "postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
@@ -81,6 +89,8 @@ Download and import the ski resort dataset:
 ```bash
 ./venv/bin/python scripts/import_ski_resorts.py --local-path /srv/downloads --database "postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
 ```
+
+If your computer crashes, try adding the `--no-parallel` arg to disable parallelization.
 
 ## Running the Server
 

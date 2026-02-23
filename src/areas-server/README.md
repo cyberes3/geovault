@@ -76,7 +76,7 @@ flask --app app run --host 0.0.0.0 --port 5001
 | `AREAS_SERVER_CACHE_TTL`            | Response cache TTL in seconds for single-point GET (default: 86400 = 1 day). 0 = cache off.                                                                                     |
 | `AREAS_SERVER_CACHE_COORD_DECIMALS` | Decimal places for cache key (default: 4).                                                                                                                                      |
 | `AREAS_SERVER_REDIS_URL`            | Redis URL for response cache, shared across Gunicorn workers (default: `redis://127.0.0.1:6379/3`). Use a separate DB from the core server (e.g. core uses 1, 2; areas uses 3). |
-| `AREAS_SERVER_POOL_MAX_SIZE`        | PostgreSQL connection pool max size (default: 10).                                                                                                                              |
+| `AREAS_SERVER_POOL_MAX_SIZE`        | PostgreSQL connection pool max size. Default 10 allows about 2–3 concurrent requests (default: 10).                                                                               |
 
 ## Development Notes
 

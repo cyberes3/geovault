@@ -14,8 +14,10 @@ import gzip
 import io
 import json
 import os
+import struct
 import sys
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from multiprocessing import shared_memory
 from pathlib import Path
 from urllib.request import urlopen, Request
 
@@ -246,33 +248,124 @@ def find_resort_for_point(lat: float, lon: float, resorts_json: list) -> tuple[s
     return (best_name, best_dist)
 
 
-def _process_orphan_chunk(args: tuple) -> tuple:
-    """Process a chunk of orphan ways (for ProcessPoolExecutor). Must be top-level for pickling.
-    Returns (list of (resort_name, geoms_list, report_or_none), processed_count) so progress bar can advance by chunk size."""
-    chunk, nodes, ways, resorts_json = args
-    results = []
-    for item in chunk:
-        wid, (nd_refs, tags) = item
-        ls = way_to_linestring(nd_refs, nodes)
-        if ls is None or ls.is_empty:
-            continue
-        centroid = ls.centroid
-        lat, lon = centroid.y, centroid.x
-        resort_name, dist_miles = find_resort_for_point(lat, lon, resorts_json)
-        if resort_name is not None:
-            orphan_geom = build_resort_geometry([wid], ways, nodes)
-            if orphan_geom and not orphan_geom.is_empty:
-                if orphan_geom.geom_type == "Polygon":
-                    geoms = [orphan_geom]
-                else:
-                    geoms = list(orphan_geom.geoms) if hasattr(orphan_geom, "geoms") else [orphan_geom]
-                report = (lat, lon, wid, resort_name, dist_miles) if dist_miles != 0 else None
-                results.append((resort_name, geoms, report))
+# --- Shared memory for nodes (so process workers don't copy the full nodes dict) ---
+_ENTRY_SIZE = 24  # 8 (id int64) + 8 (lat float64) + 8 (lon float64)
+_COUNT_SIZE = 4   # count as uint32
+
+
+class _NodesFromSharedMemory:
+    """Read-only node lookup from a shared-memory buffer. Supports __getitem__(node_id) and __contains__(node_id)."""
+
+    def __init__(self, shm_name: str):
+        self._shm = shared_memory.SharedMemory(name=shm_name)
+        self._buf = self._shm.buf
+        self._n = struct.unpack_from("I", self._buf, 0)[0]
+
+    def close(self):
+        self._shm.close()
+
+    def _offset(self, i: int) -> int:
+        return _COUNT_SIZE + i * _ENTRY_SIZE
+
+    def _id_at(self, i: int) -> int:
+        return struct.unpack_from("q", self._buf, self._offset(i))[0]
+
+    def _latlon_at(self, i: int) -> tuple:
+        off = self._offset(i) + 8
+        return struct.unpack_from("dd", self._buf, off)
+
+    def __contains__(self, node_id: int) -> bool:
+        lo, hi = 0, self._n - 1
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            k = self._id_at(mid)
+            if k == node_id:
+                return True
+            if k < node_id:
+                lo = mid + 1
             else:
-                results.append((resort_name, [], (lat, lon, wid, resort_name, dist_miles) if dist_miles != 0 else None))
-        else:
-            results.append(("N/A", [], (lat, lon, wid, "N/A", float("nan"))))
-    return (results, len(chunk))
+                hi = mid - 1
+        return False
+
+    def __getitem__(self, node_id: int) -> tuple:
+        lo, hi = 0, self._n - 1
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            k = self._id_at(mid)
+            if k == node_id:
+                return self._latlon_at(mid)
+            if k < node_id:
+                lo = mid + 1
+            else:
+                hi = mid - 1
+        raise KeyError(node_id)
+
+
+def _create_nodes_shared_memory(nodes_int: dict) -> shared_memory.SharedMemory:
+    """Write nodes_int (id -> (lat, lon), ids int) to a new SharedMemory. Caller must unlink when done."""
+    n = len(nodes_int)
+    size = _COUNT_SIZE + n * _ENTRY_SIZE
+    shm = shared_memory.SharedMemory(create=True, size=size)
+    try:
+        struct.pack_into("I", shm.buf, 0, n)
+        for i, (nid, (lat, lon)) in enumerate(sorted(nodes_int.items())):
+            struct.pack_into("qdd", shm.buf, _COUNT_SIZE + i * _ENTRY_SIZE, nid, lat, lon)
+    except Exception:
+        shm.close()
+        shm.unlink()
+        raise
+    return shm
+
+
+def _merge_orphan_result(resort_name, geoms, report, name_to_geoms: dict, orphan_reports: list) -> None:
+    """Merge one orphan result into name_to_geoms and orphan_reports (shared by parallel and serial paths)."""
+    if resort_name and geoms:
+        name_to_geoms.setdefault(resort_name, []).extend(geoms)
+    if report is not None:
+        orphan_reports.append(report)
+
+
+def _process_one_orphan(item, nodes, ways, resorts_json) -> tuple | None:
+    """Process a single orphan way. nodes can be dict or _NodesFromSharedMemory.
+    Returns (resort_name, geoms_list, report_or_none) or None if way skipped (no valid line)."""
+    wid, (nd_refs, tags) = item
+    ls = way_to_linestring(nd_refs, nodes)
+    if ls is None or ls.is_empty:
+        return None
+    centroid = ls.centroid
+    lat, lon = centroid.y, centroid.x
+    resort_name, dist_miles = find_resort_for_point(lat, lon, resorts_json)
+    if resort_name is not None:
+        ways_single = {wid: (nd_refs, tags)}
+        orphan_geom = build_resort_geometry([wid], ways_single, nodes)
+        if orphan_geom and not orphan_geom.is_empty:
+            if orphan_geom.geom_type == "Polygon":
+                geoms = [orphan_geom]
+            else:
+                geoms = list(orphan_geom.geoms) if hasattr(orphan_geom, "geoms") else [orphan_geom]
+            report = (lat, lon, wid, resort_name, dist_miles) if dist_miles != 0 else None
+            return (resort_name, geoms, report)
+        return (resort_name, [], (lat, lon, wid, resort_name, dist_miles) if dist_miles != 0 else None)
+    return ("N/A", [], (lat, lon, wid, "N/A", float("nan")))
+
+
+def _process_orphan_chunk_shm(args: tuple) -> tuple:
+    """Process one chunk of orphan ways using shared-memory nodes. Top-level for pickling.
+    args = (chunk, shm_name, resorts_json). chunk = [(wid, (nd_refs_int, tags)), ...].
+    Returns (list of (resort_name, geoms, report_or_none), processed_count)."""
+    chunk, shm_name, resorts_json = args
+    nodes_shm = _NodesFromSharedMemory(shm_name)
+    try:
+        results = []
+        for item in chunk:
+            r = _process_one_orphan(item, nodes_shm, None, resorts_json)
+            if r is None:
+                continue
+            resort_name, geoms, report = r
+            results.append((resort_name, geoms, report))
+        return (results, len(chunk))
+    finally:
+        nodes_shm.close()
 
 
 def main() -> None:
@@ -286,7 +379,14 @@ def main() -> None:
         default=None,
         help="Directory to cache downloaded file; if present, load from here",
     )
+    parser.add_argument(
+        "--no-parallel",
+        action="store_true",
+        help="Disable parallelization; run with a single worker (for low-memory or low-CPU machines)",
+    )
     args = parser.parse_args()
+    use_parallel = not args.no_parallel
+
     conninfo = args.database.strip()
     if not conninfo:
         print("Error: --database must be non-empty", file=sys.stderr)
@@ -331,7 +431,7 @@ def main() -> None:
             if mtype == "way" and ref:
                 way_ids_in_relations.add(ref)
 
-    # Build (name, geom) from relations (parallelized)
+    # Build (name, geom) from relations
     name_to_geoms: dict[str, list] = {}
 
     def process_one_relation(rel):
@@ -347,38 +447,66 @@ def main() -> None:
             geoms = list(geom.geoms) if hasattr(geom, "geoms") else [geom]
         return (name, geoms)
 
-    max_workers = min(32, (os.cpu_count() or 4) + 4)
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(process_one_relation, rel): rel for rel in relations}
-        for future in tqdm.tqdm(as_completed(futures), total=len(futures), desc="Building resort boundaries", unit="resort"):
-            name, geoms = future.result()
+    if use_parallel:
+        max_workers = min(32, (os.cpu_count() or 4) + 4)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(process_one_relation, rel): rel for rel in relations}
+            for future in tqdm.tqdm(as_completed(futures), total=len(futures), desc="Building resort boundaries", unit="resort"):
+                name, geoms = future.result()
+                if geoms:
+                    name_to_geoms.setdefault(name, []).extend(geoms)
+    else:
+        for rel in tqdm.tqdm(relations, desc="Building resort boundaries", unit="resort"):
+            name, geoms = process_one_relation(rel)
             if geoms:
                 name_to_geoms.setdefault(name, []).extend(geoms)
 
-    # Orphans: ways with piste:type or aerialway not in any relation (process-parallel for real CPU use)
+    # Orphans: parallel (shared-memory nodes + process pool) or single-threaded
     orphan_ways = [(wid, (nd_refs, tags)) for wid, (nd_refs, tags) in ways.items() if wid not in way_ids_in_relations and is_piste_or_lift(tags)]
 
     orphan_reports = []
     if orphan_ways:
-        base_workers = min(32, (os.cpu_count() or 4) + 4)
-        orphan_workers = min(56, int(base_workers * 1.75))
-        # Chunk so we pass (chunk, nodes, ways, resorts_json) once per process; fewer pickles, true parallelism
-        n_chunks = max(1, orphan_workers)
-        chunk_size = (len(orphan_ways) + n_chunks - 1) // n_chunks
-        chunks = [orphan_ways[i : i + chunk_size] for i in range(0, len(orphan_ways), chunk_size)]
-        chunk_args = [(c, nodes, ways, resorts_json) for c in chunks]
+        if use_parallel:
+            nodes_int = {}
+            for k, v in nodes.items():
+                try:
+                    nodes_int[int(k)] = v
+                except (ValueError, TypeError):
+                    pass
+            nodes_shm = _create_nodes_shared_memory(nodes_int)
+            try:
+                base_workers = min(32, (os.cpu_count() or 4) + 4)
+                orphan_workers = min(56, int(base_workers * 1.75))
+                target_chunk_size = 400
+                chunk_size = max(1, min(target_chunk_size, len(orphan_ways)))
+                chunks = [orphan_ways[i : i + chunk_size] for i in range(0, len(orphan_ways), chunk_size)]
+                chunk_args = []
+                for c in chunks:
+                    c_int = []
+                    for (wid, (nd_refs, tags)) in c:
+                        try:
+                            c_int.append((wid, ([int(r) for r in nd_refs], tags)))
+                        except (ValueError, TypeError):
+                            pass
+                    if c_int:
+                        chunk_args.append((c_int, nodes_shm.name, resorts_json))
 
-        with ProcessPoolExecutor(max_workers=orphan_workers) as executor:
-            futures = [executor.submit(_process_orphan_chunk, a) for a in chunk_args]
-            with tqdm.tqdm(total=len(orphan_ways), desc="Processing orphan ways", unit="way") as pbar:
-                for future in as_completed(futures):
-                    chunk_results, processed_count = future.result()
-                    pbar.update(processed_count)
-                    for resort_name, geoms, report in chunk_results:
-                        if resort_name and geoms:
-                            name_to_geoms.setdefault(resort_name, []).extend(geoms)
-                        if report is not None:
-                            orphan_reports.append(report)
+                with ProcessPoolExecutor(max_workers=orphan_workers) as executor:
+                    futures = [executor.submit(_process_orphan_chunk_shm, a) for a in chunk_args]
+                    with tqdm.tqdm(total=len(orphan_ways), desc="Processing orphan ways", unit="way") as pbar:
+                        for future in as_completed(futures):
+                            chunk_results, processed_count = future.result()
+                            pbar.update(processed_count)
+                            for resort_name, geoms, report in chunk_results:
+                                _merge_orphan_result(resort_name, geoms, report, name_to_geoms, orphan_reports)
+            finally:
+                nodes_shm.close()
+                nodes_shm.unlink()
+        else:
+            for item in tqdm.tqdm(orphan_ways, desc="Processing orphan ways", unit="way"):
+                r = _process_one_orphan(item, nodes, ways, resorts_json)
+                if r is not None:
+                    _merge_orphan_result(*r, name_to_geoms, orphan_reports)
 
     # Orphan report: list unmatched (no bbox match) with closest resort
     if orphan_reports:
