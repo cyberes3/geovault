@@ -17,6 +17,8 @@ import sys
 from pathlib import Path
 from urllib.request import urlopen, Request
 
+import tqdm
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import psycopg
@@ -160,7 +162,10 @@ def main() -> None:
         print("Error: --database must be non-empty", file=sys.stderr)
         sys.exit(1)
 
+    print("Starting ocean polygons import (ocean_regions + oceans).", file=sys.stderr)
+
     # --- Natural Earth 10m (ocean_regions) ---
+    print("Step 1/3: Natural Earth 10m (ocean_regions) ...", file=sys.stderr)
     zip_bytes = None
     if args.local_path is not None:
         cache_file = args.local_path / MARINE_CACHE_FILENAME
@@ -182,12 +187,13 @@ def main() -> None:
         sys.exit(1)
 
     try:
+        print("Opening shapefile from zip ...", file=sys.stderr)
         sf = open_shapefile_from_zip(zip_bytes)
     except Exception as e:
         print(f"Failed to open shapefile from zip: {e}", file=sys.stderr)
         sys.exit(1)
 
-    rows_regions = list(iter_shape_name_geom(sf))
+    rows_regions = list(tqdm.tqdm(iter_shape_name_geom(sf), desc="Parsing ocean regions", unit="poly"))
     sf.close()
     if not rows_regions:
         print("No valid (name, geometry) rows from Natural Earth shapefile.", file=sys.stderr)
@@ -195,6 +201,7 @@ def main() -> None:
     print(f"Loaded {len(rows_regions)} ocean region polygons.", file=sys.stderr)
 
     # --- GOaS (oceans) ---
+    print("Step 2/3: GOaS (oceans) ...", file=sys.stderr)
     goas_bytes = None
     if args.local_path is not None:
         goas_file = args.local_path / GOAS_CACHE_FILENAME
@@ -213,7 +220,7 @@ def main() -> None:
     if goas_bytes is not None:
         try:
             sf_goas = open_shapefile_from_zip(goas_bytes)
-            rows_oceans = list(iter_goas_name_geom(sf_goas))
+            rows_oceans = list(tqdm.tqdm(iter_goas_name_geom(sf_goas), desc="Parsing GOaS", unit="poly"))
             sf_goas.close()
             print(f"Loaded {len(rows_oceans)} ocean (GOaS) polygons.", file=sys.stderr)
         except Exception as e:
@@ -222,8 +229,10 @@ def main() -> None:
         print("GOaS not available (download failed, no local file). Skipping oceans table.", file=sys.stderr)
 
     # --- Write to DB: drop old and current ocean tables, then create and fill ---
+    print("Step 3/3: Writing to database ...", file=sys.stderr)
     with psycopg.connect(conninfo) as conn:
         with conn.cursor() as cur:
+            print("Dropping existing ocean tables ...", file=sys.stderr)
             cur.execute(f'DROP TABLE IF EXISTS "{SCHEMA}"."ocean_polygons"')
             cur.execute(f'DROP TABLE IF EXISTS "{SCHEMA}"."{TABLE_OCEAN_REGIONS}"')
             cur.execute(f'DROP TABLE IF EXISTS "{SCHEMA}"."{TABLE_OCEANS}"')
@@ -235,7 +244,7 @@ def main() -> None:
                 )
                 '''
             )
-            for name, geom in rows_regions:
+            for name, geom in tqdm.tqdm(rows_regions, desc=f"Inserting {TABLE_OCEAN_REGIONS}", unit="row"):
                 cur.execute(
                     f'INSERT INTO "{SCHEMA}"."{TABLE_OCEAN_REGIONS}" (name, geom) VALUES (%s, ST_GeomFromText(%s, 4326))',
                     (name, geom.wkt),
@@ -245,6 +254,7 @@ def main() -> None:
                 f'ON "{SCHEMA}"."{TABLE_OCEAN_REGIONS}" USING GIST ((geom::geography))'
             )
             cur.execute(f'ANALYZE "{SCHEMA}"."{TABLE_OCEAN_REGIONS}"')
+            print(f"Indexed and analyzed {TABLE_OCEAN_REGIONS}.", file=sys.stderr)
 
             if rows_oceans:
                 cur.execute(
@@ -255,7 +265,7 @@ def main() -> None:
                     )
                     '''
                 )
-                for name, geom in rows_oceans:
+                for name, geom in tqdm.tqdm(rows_oceans, desc=f"Inserting {TABLE_OCEANS}", unit="row"):
                     cur.execute(
                         f'INSERT INTO "{SCHEMA}"."{TABLE_OCEANS}" (name, geom) VALUES (%s, ST_GeomFromText(%s, 4326))',
                         (name, geom.wkt),
@@ -265,6 +275,7 @@ def main() -> None:
                     f'ON "{SCHEMA}"."{TABLE_OCEANS}" USING GIST ((geom::geography))'
                 )
                 cur.execute(f'ANALYZE "{SCHEMA}"."{TABLE_OCEANS}"')
+                print(f"Indexed and analyzed {TABLE_OCEANS}.", file=sys.stderr)
         conn.commit()
         with conn.cursor() as cur:
             cur.execute(f'SELECT COUNT(*) FROM "{SCHEMA}"."{TABLE_OCEAN_REGIONS}"')
@@ -272,6 +283,7 @@ def main() -> None:
             n_oceans = len(rows_oceans)
     print(f"Created {SCHEMA}.{TABLE_OCEAN_REGIONS} with {n_regions} rows.")
     print(f"Created {SCHEMA}.{TABLE_OCEANS} with {n_oceans} rows.")
+    print("Import complete.", file=sys.stderr)
 
 
 if __name__ == "__main__":
