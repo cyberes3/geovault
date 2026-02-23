@@ -7,6 +7,7 @@ failures.txt
 .gradle
 *.apk
 .kotlin
+ski_resort_*.csv
 
 # ---> Python
 # Byte-compiled / optimized / DLL files

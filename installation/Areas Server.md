@@ -52,7 +52,7 @@ To load the OSM data:
 
 ```bash
 ./scripts/import_pbf.sh --database "postgresql://..." /srv/downloads/north-america-latest.osm.pbf
-./scripts/import_pbf.sh --append --database "postgresql://..." /srv/downloads/europe-latest.osm.pbf
+./scripts/import_pbf.sh --database "postgresql://..." /srv/downloads/europe-latest.osm.pbf --append
 ```
 
 Run the first `.osm.pbf` import then add the `--append` for subsequent ones.
@@ -61,7 +61,7 @@ Optional arguments for faster imports:
 
 | Argument        | Effect                                             |
 |-----------------|----------------------------------------------------|
-| `--cache MB`    | Node cache size in MB. <br/>Default: 800.          |
+| `--cache MB`    | Node cache size in MB. Default: 800.               |
 | `--processes N` | Parallel threads. Default: `nproc` (if available). |
 
 After the initial import, run the post-processing script to create geography indexes on the tables and refresh

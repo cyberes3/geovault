@@ -10,6 +10,7 @@ Usage (from src/areas-server):
   python scripts/import_ski_resorts.py --database "postgresql://..." [--local-path /path/to/cache]
 """
 import argparse
+import csv
 import gzip
 import io
 import json
@@ -384,6 +385,12 @@ def main() -> None:
         action="store_true",
         help="Disable parallelization; run with a single worker (for low-memory or low-CPU machines)",
     )
+    parser.add_argument(
+        "--orphan-report",
+        type=Path,
+        default=None,
+        help="Write orphans with no bbox match to this CSV file (default: ski_resort_orphans.csv in cwd when there are any)",
+    )
     args = parser.parse_args()
     use_parallel = not args.no_parallel
 
@@ -508,12 +515,16 @@ def main() -> None:
                 if r is not None:
                     _merge_orphan_result(*r, name_to_geoms, orphan_reports)
 
-    # Orphan report: list unmatched (no bbox match) with closest resort
+    # Orphan report: write unmatched (no bbox match) with closest resort to a CSV file
     if orphan_reports:
-        print("Orphans with no bbox match (closest resort in ski_resorts.json):", file=sys.stderr)
-        for lat, lon, wid, closest_name, dist in orphan_reports:
-            dist_str = f"{dist:.2f}" if dist == dist else "N/A"
-            print(f"  lon={lon:.6f} lat={lat:.6f} way_id={wid} closest={closest_name!r} distance_miles={dist_str}", file=sys.stderr)
+        report_path = args.orphan_report or Path("ski_resort_orphans.csv")
+        with open(report_path, "w", encoding="utf-8", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["lon", "lat", "way_id", "closest_resort", "distance_miles"])
+            for lat, lon, wid, closest_name, dist in orphan_reports:
+                dist_str = f"{dist:.2f}" if dist == dist else ""
+                writer.writerow([f"{lon:.6f}", f"{lat:.6f}", wid, closest_name, dist_str])
+        print(f"Wrote {len(orphan_reports)} orphan report row(s) to {report_path}", file=sys.stderr)
 
     # Merge per-name geoms (each geom is already buffered in build_resort_geometry)
     from shapely.ops import unary_union
