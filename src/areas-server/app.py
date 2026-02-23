@@ -172,12 +172,20 @@ def _make_response(
     }
 
 
-def _error_response_with_traceback(exc: BaseException, status: int = 500) -> Response:
-    """Print traceback to stderr and return JSON response with error and traceback."""
+def _request_path_and_query() -> str:
+    """Path and query string for current request, e.g. /query?lat=40&lon=-105."""
+    if not has_request_context():
+        return ""
+    path = request.full_path.rstrip("?")
+    return path
+
+
+def _error_response_with_traceback(exc: BaseException, status: int = 500, _from_handler: bool = False) -> Response:
+    """Return JSON response with error and traceback. When _from_handler is True, do not log (Flask's log_exception already did)."""
     tb_str = traceback.format_exc()
-    if has_request_context():
-        logger.exception("Request failed: %s", request.url)
-    else:
+    if not _from_handler and has_request_context():
+        logger.error("Request failed: %s", _request_path_and_query())
+    elif not has_request_context():
         traceback.print_exc(file=sys.stderr)
     return Response(
         json.dumps({"error": str(exc), "traceback": tb_str}),
@@ -358,13 +366,23 @@ def post_query():
 
 @app.errorhandler(Exception)
 def handle_exception(exc):
-    """Print traceback to console and return error + traceback in response for uncaught errors."""
+    """Return error + traceback in response for uncaught errors. Logging already done by log_exception."""
     if isinstance(exc, HTTPException):
         return exc.get_response()
-    return _error_response_with_traceback(exc)
+    return _error_response_with_traceback(exc, _from_handler=True)
 
 
 def create_app() -> Flask:
+    # Use only our log format for exceptions to avoid duplicate lines (Flask's default + ours).
+    def log_exception(exc_info):
+        if has_request_context():
+            path_query = _request_path_and_query()
+            tb = "".join(traceback.format_exception(*exc_info)) if exc_info else ""
+            app.logger.error("Request failed: %s\n%s", path_query, tb.rstrip())
+        elif exc_info:
+            app.logger.exception("Exception occurred", exc_info=exc_info)
+
+    app.log_exception = log_exception
     return app
 
 

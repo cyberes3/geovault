@@ -12,7 +12,7 @@ DATABASE_URL: Optional[str] = os.environ.get("AREAS_SERVER_DATABASE")
 SCHEMA: str = "is_in"
 
 # Max points in a batch request
-MAX_BATCH_SIZE: int = int(os.environ.get("AREAS_SERVER_MAX_BATCH_SIZE", "500"))
+MAX_BATCH_SIZE: int = int(os.environ.get("AREAS_SERVER_MAX_BATCH_SIZE", "100"))
 
 # Response cache TTL for single-point GET (seconds); 0 = disabled. Default 1 day.
 CACHE_TTL_SECONDS: int = int(os.environ.get("AREAS_SERVER_CACHE_TTL", "86400"))
