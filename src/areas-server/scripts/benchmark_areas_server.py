@@ -92,9 +92,11 @@ def _random_points(n: int, seed: int | None = None) -> list[tuple[float, float]]
 def run_benchmark(
     base_url: str,
     num_points: int = 10,
-    seed: int | None = 42,
+    seed: int | None = None,
 ) -> dict:
     """Run GET per point and one POST batch; return stats and per-point results."""
+    if seed is None:
+        seed = random.randint(0, 2**31 - 1)
     points = _random_points(num_points, seed=seed)
     get_times: list[float] = []
     get_errors = 0
@@ -180,12 +182,13 @@ def main() -> int:
     import argparse
     parser = argparse.ArgumentParser(description="Benchmark areas server with random points")
     parser.add_argument("--points", type=int, default=10, help="Number of random points (default 10)")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed (default 42)")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed (default: random per run)")
     parser.add_argument("--out", type=str, default="areas_server_performance.md", help="Output markdown file")
     args = parser.parse_args()
 
     base_url = _base_url()
-    print(f"Benchmarking {base_url} with {args.points} random points (seed={args.seed}) ...")
+    seed = args.seed if args.seed is not None else None
+    print(f"Benchmarking {base_url} with {args.points} random points (seed={'random' if seed is None else seed}) ...")
 
     # Quick health check
     status, data, _ = _http_get(f"{base_url}/health")
@@ -193,7 +196,7 @@ def main() -> int:
         print(f"Error: server unhealthy or unreachable (GET /health -> {status})", file=sys.stderr)
         return 1
 
-    results = run_benchmark(base_url, num_points=args.points, seed=args.seed)
+    results = run_benchmark(base_url, num_points=args.points, seed=seed)
     out_path = Path(args.out)
     if not out_path.is_absolute():
         out_path = Path(__file__).resolve().parent.parent / out_path
