@@ -85,6 +85,10 @@ def _max_batch_size() -> int:
     return int(os.environ.get("AREAS_SERVER_MAX_BATCH_SIZE", "100"))
 
 
+# Standley Lake (on-water) test point: must return a protected area (e.g. Standley Lake Regional Park).
+STANDLEY_LAKE_POINT = (39.86161999885882, -105.12065936657157)
+
+
 def _random_points(n: int, seed: int | None = None) -> list[tuple[float, float]]:
     if seed is not None:
         random.seed(seed)
@@ -99,13 +103,15 @@ def run_benchmark(
     num_points: int = 10,
     seed: int | None = None,
 ) -> dict:
-    """Run GET per point and one POST batch; return stats and per-point results."""
+    """Run GET per point and one POST batch; return stats and per-point results.
+    Always includes Standley Lake test point first and verifies it returns a protected area."""
     if seed is None:
         seed = random.randint(0, 2**31 - 1)
-    points = _random_points(num_points, seed=seed)
+    points = [STANDLEY_LAKE_POINT] + _random_points(num_points, seed=seed)
     get_times: list[float] = []
     get_errors = 0
     get_status_codes: list[int] = []
+    standley_lake_ok: bool | None = None
 
     n = len(points)
     for i, (lat, lon) in enumerate(points, 1):
@@ -115,6 +121,16 @@ def run_benchmark(
         get_status_codes.append(status)
         if status != 200:
             get_errors += 1
+        if i == 1:
+            # First point is always Standley Lake: must return at least one protected area
+            pas = (data or {}).get("protected_areas") or []
+            standley_lake_ok = len(pas) > 0 and any(
+                (p.get("name") or "").strip() == "Standley Lake Regional Park" for p in pas
+            )
+            if not standley_lake_ok:
+                print(f"Standley Lake check FAIL: expected protected_areas with 'Standley Lake Regional Park', got {pas!r}", file=sys.stderr)
+            else:
+                print("Standley Lake check: OK (protected_areas includes Standley Lake Regional Park)", flush=True)
         ms = elapsed * 1000
         status_str = "" if status == 200 else f" status={status}"
         print(f"GET {i}/{n}: {ms:.2f} ms{status_str}", flush=True)
@@ -132,13 +148,14 @@ def run_benchmark(
 
     return {
         "base_url": base_url,
-        "num_points": num_points,
+        "num_points": len(points),
         "batch_points": len(batch_points),
         "seed": seed,
         "points": points,
         "get_times_ms": [t * 1000 for t in get_times],
         "get_errors": get_errors,
         "get_status_codes": get_status_codes,
+        "standley_lake_ok": standley_lake_ok,
         "batch_elapsed_ms": batch_elapsed * 1000,
         "batch_status": batch_status,
         "batch_ok": batch_status == 200 and batch_data and "results" in batch_data and len(batch_data["results"]) == len(batch_points),
@@ -155,7 +172,7 @@ def write_md(results: dict, out_path: Path) -> None:
         "# Areas server performance",
         "",
         f"**Base URL:** `{results['base_url']}`  ",
-        f"**Points:** {n} (random, seed={results['seed']}); batch POST used {results.get('batch_points', n)} (max {_max_batch_size()})  ",
+        f"**Points:** {n} (1 Standley Lake test + {n - 1} random, seed={results['seed']}); batch POST used {results.get('batch_points', n)} (max {_max_batch_size()})  ",
         f"**Date:** {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime())}",
         "",
         "## Single-point (GET /query)",
@@ -214,6 +231,19 @@ def main() -> int:
         return 1
     print("Health: OK", flush=True)
 
+    # Clear response cache so benchmarks measure cold/cached consistently
+    print("Cache clear ...", flush=True)
+    status, data, _ = _http_get(f"{base_url}/cache-clear")
+    if status == 200 and data:
+        cleared = data.get("cleared", 0)
+        msg = data.get("message", "")
+        if msg:
+            print(f"Cache: {msg}", flush=True)
+        else:
+            print(f"Cache cleared: {cleared} entries", flush=True)
+    else:
+        print(f"Cache clear returned {status}", flush=True)
+
     results = run_benchmark(base_url, num_points=args.points, seed=seed)
     out_path = Path(args.out)
     if not out_path.is_absolute():
@@ -223,6 +253,8 @@ def main() -> int:
 
     if results["get_errors"]:
         print(f"Warning: {results['get_errors']} GET request(s) failed", file=sys.stderr)
+    if not results.get("standley_lake_ok"):
+        print("Warning: Standley Lake test point did not return expected protected area", file=sys.stderr)
     if not results["batch_ok"]:
         print("Warning: batch POST did not return OK or expected result count", file=sys.stderr)
 
