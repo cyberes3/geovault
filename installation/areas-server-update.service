@@ -6,9 +6,9 @@ After=network.target postgresql.service
 Type=oneshot
 User=geovault
 SyslogIdentifier=areas-server-update
-WorkingDirectory=/srv/geovault/geovault/src/areas_server
+WorkingDirectory=/srv/geovault/geovault/src/areas-server
 EnvironmentFile=-/etc/secrets/areas_server.env
-ExecStart=/bin/bash -c 'exec /srv/geovault/geovault/src/areas_server/scripts/update.sh --database "$AREAS_SERVER_DATABASE" update'
+ExecStart=/bin/bash -c 'exec /srv/geovault/geovault/src/areas-server/scripts/update.sh --database "$AREAS_SERVER_DATABASE" update'
 
 [Install]
 WantedBy=multi-user.target

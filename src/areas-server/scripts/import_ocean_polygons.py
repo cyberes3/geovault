@@ -8,7 +8,7 @@ Imports both datasets in one run; drops existing ocean_regions and oceans tables
 2. oceans: GOaS (Global Oceans and Seas v1) — 10 main ocean basins.
    Download from geovault-data or load GOaS_v1_20211214.zip from --local-path.
 
-Usage (from src/areas_server):
+Usage (from src/areas-server):
   python scripts/import_ocean_polygons.py --database "postgresql://..." [--local-path /path/to/cache]
 """
 import argparse

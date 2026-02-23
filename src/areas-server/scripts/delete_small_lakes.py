@@ -3,7 +3,7 @@
 Delete water bodies smaller than a minimum area (default 0.25 sq mi).
 Run after import (no need to pre-compute area; uses ST_Area(geography(geom)) in the DELETE).
 
-Usage (from src/areas_server):
+Usage (from src/areas-server):
   python scripts/delete_small_lakes.py --database "postgresql://..." [--min-area-sqmi 0.25] [--dry-run]
 """
 import argparse

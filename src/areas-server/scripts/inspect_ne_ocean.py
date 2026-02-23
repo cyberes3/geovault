@@ -10,8 +10,8 @@ Datasets:
   ocean  – ne_50m_ocean: single ocean polygon, no names (point-in-ocean only).
   marine – ne_10m_geography_marine_polys: named seas/oceans (Pacific, Atlantic, etc.).
 
-Usage (from repo root or src/areas_server):
-  python src/areas_server/scripts/inspect_ne_ocean.py [--dataset ocean|marine] [--local PATH]
+Usage (from repo root or src/areas-server):
+  python src/areas-server/scripts/inspect_ne_ocean.py [--dataset ocean|marine] [--local PATH]
   python scripts/inspect_ne_ocean.py --dataset marine
   python scripts/inspect_ne_ocean.py --compare          # download and inspect both, print comparison
 
