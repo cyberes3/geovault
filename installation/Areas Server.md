@@ -42,7 +42,7 @@ You will likely need to tune your Postgres server.
 | **work_mem**                 | Session only (see below)          | More memory for sorts/hash before spilling to disk.                 |
 | **statement_timeout**        | Optional, e.g. `15000` (ms)       | Cap per-query runtime so one slow request does not tie up a worker. |
 
-The areas server sets **work_mem** per connection (default 64MB) via `AREAS_SERVER_WORK_MEM`; raise it (e.g. `128MB`) if
+The areas server sets **work_mem** per connection (default 128MB) via `AREAS_SERVER_WORK_MEM`; raise it if
 `EXPLAIN` shows heavy sorts or hash joins.
 
 Example (in `postgresql.conf`):
@@ -98,6 +98,8 @@ export AREAS_SERVER_DATABASE="postgresql://is_in_areas:your_password_here@localh
 ./scripts/post_analyze.sh
 ```
 
+If you do not run `post_analyze.sh` the queries will be incredibly slow.
+
 Remove small lakes so they do not clutter up the nearby-lakes results:
 
 ```bash
@@ -110,13 +112,11 @@ Download and import the ocean dataset:
 ./venv/bin/python scripts/import_ocean_polygons.py --local-path /srv/downloads --database "postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
 ```
 
-Download and import the ski resort dataset:
+Download and import the ski resort dataset (OpenSkiMap; script uses `ski_areas.geojson` in the download directory, refreshes if older than 1 day):
 
 ```bash
-./venv/bin/python scripts/import_ski_resorts.py --local-path /srv/downloads --database "postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
+./venv/bin/python scripts/import_ski_areas.py --local-path /srv/downloads --database "postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
 ```
-
-If your computer crashes, try adding the `--no-parallel` arg to disable parallelization.
 
 ## Running the Server
 

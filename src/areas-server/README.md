@@ -7,9 +7,19 @@ This server is a replacement for the Overpass API server. Overpass is just too l
 case. Specifically, the `is_in()` query consumes dozens of GBs of memory for a single query. This standalone server also
 allows us to load alternative data sources beyond OSM.
 
+### Expected performance benchmarks:
+
+**Single-point:**
+
+- Min: 117.31 ms
+- Max: 568.54 ms
+- Mean: 196.51 ms
+
+**Batch of 15 points:** 3370.37 ms
+
 ## Data Served
 
-Data comes from OSM and from Natural Earth.
+Data comes from OSM and other sources. See [ATTRIBUTION.md](ATTRIBUTION.md) for data attribution and license text.
 
 | Layer               | Description                               | How it is calculated                                                                                                                                                                                                                                                                  |
 |---------------------|-------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|

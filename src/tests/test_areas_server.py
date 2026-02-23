@@ -176,6 +176,19 @@ class TestQueryGet:
         assert isinstance(data["admin_hierarchy"], dict)
         assert isinstance(data["protected_areas"], list)
 
+    def test_query_get_standley_lake_returns_protected_area(self, require_areas_server):
+        """Point on Standley Lake (on-water) must return Standley Lake Regional Park in protected_areas."""
+        url = require_areas_server
+        lat, lon = 39.86161999885882, -105.12065936657157
+        status, _, data = _http_get(url + f"/query?lat={lat}&lon={lon}")
+        assert status == 200, data
+        assert data, "response body missing"
+        pas = data.get("protected_areas")
+        assert isinstance(pas, list), "protected_areas must be a list"
+        assert len(pas) >= 1, f"expected at least one protected area for Standley Lake point, got {pas!r}"
+        names = [str(p.get("name") or "").strip() for p in pas]
+        assert "Standley Lake Regional Park" in names, f"expected 'Standley Lake Regional Park' in protected_areas, got {names!r}"
+
 
 class TestQueryPost:
     def test_query_post_not_json(self, require_areas_server):
