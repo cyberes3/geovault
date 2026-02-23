@@ -355,6 +355,12 @@ def handle_exception(exc):
 
 
 def create_app() -> Flask:
+    # Ensure exceptions are visible in the server console (e.g. under gunicorn).
+    if not app.logger.handlers:
+        h = logging.StreamHandler(sys.stderr)
+        h.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+        app.logger.addHandler(h)
+    app.logger.setLevel(logging.DEBUG)
     return app
 
 
