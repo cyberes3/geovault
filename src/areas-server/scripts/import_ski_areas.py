@@ -52,8 +52,30 @@ def _name_from_feature(prop: dict) -> str:
     return "Unnamed"
 
 
+def _fix_invalid_geom(geom: dict) -> dict | None:
+    """Return valid GeoJSON geometry dict, or None if unfixable. Uses buffer(0) and make_valid."""
+    from shapely.geometry import shape, mapping
+    from shapely import make_valid
+    try:
+        shp = shape(geom)
+    except Exception:
+        return None
+    if shp.is_empty:
+        return None
+    if not shp.is_valid and hasattr(shp, "buffer"):
+        shp = shp.buffer(0)
+    if not shp.is_valid:
+        try:
+            shp = make_valid(shp)
+        except Exception:
+            pass
+    if shp.is_empty or not shp.is_valid:
+        return None
+    return mapping(shp)
+
+
 def iter_ski_area_rows(fc: dict):
-    """Yield (name, geometry_dict) for each feature with Polygon/MultiPolygon. Only includes operating resorts (or missing status). Skips Point-only features."""
+    """Yield (name, geometry_dict) for each feature with Polygon/MultiPolygon. Only includes operating resorts (or missing status). Skips Point-only features. Invalid geoms are fixed with buffer(0)/make_valid."""
     for feat in fc.get("features") or []:
         if feat.get("type") != "Feature":
             continue
@@ -67,6 +89,9 @@ def iter_ski_area_rows(fc: dict):
             continue
         gtype = (geom.get("type") or "").strip()
         if gtype not in ("Polygon", "MultiPolygon"):
+            continue
+        geom = _fix_invalid_geom(geom)
+        if geom is None:
             continue
         yield (name, geom)
 

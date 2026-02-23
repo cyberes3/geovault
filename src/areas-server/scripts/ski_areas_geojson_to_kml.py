@@ -15,6 +15,7 @@ from urllib.request import Request, urlopen
 
 import tqdm
 from pyproj import CRS, Transformer
+from shapely import make_valid
 from shapely.geometry import mapping, shape
 from shapely.ops import transform
 
@@ -44,6 +45,11 @@ def _buffer_geometry(geom: dict) -> dict | None:
         return None
     if shp.is_empty or not shp.is_valid:
         shp = shp.buffer(0) if hasattr(shp, "buffer") else shp
+        if not shp.is_valid:
+            try:
+                shp = make_valid(shp)
+            except Exception:
+                pass
         if shp.is_empty:
             return None
     try:

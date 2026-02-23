@@ -102,8 +102,9 @@ def iter_shape_name_geom(sf):
 
 
 def iter_goas_name_geom(sf):
-    """Yield (name, shapely_geom) for each GOaS record. Applies buffer(0) when geom is invalid (e.g. North Pacific)."""
+    """Yield (name, shapely_geom) for each GOaS record. Applies buffer(0) and make_valid when geom is invalid."""
     from shapely.geometry import Polygon, MultiPolygon
+    from shapely import make_valid
     fields = [f[0] for f in sf.fields[1:]]
     name_idx = fields.index("name") if "name" in fields else 0
     for i in range(len(sf)):
@@ -135,6 +136,11 @@ def iter_goas_name_geom(sf):
             continue
         if not geom.is_valid and hasattr(geom, "buffer"):
             geom = geom.buffer(0)
+        if not geom.is_valid:
+            try:
+                geom = make_valid(geom)
+            except Exception:
+                pass
         if geom.is_empty or not geom.is_valid:
             continue
         yield (name, geom)
