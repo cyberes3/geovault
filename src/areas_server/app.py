@@ -8,7 +8,7 @@ import sys
 import traceback
 from typing import Any, Dict, List, Optional, Tuple
 
-from flask import Flask, request, Response
+from flask import Flask, has_request_context, request, Response
 from werkzeug.exceptions import HTTPException
 
 from areas_lib.query import check_health, get_stats, query_single, query_batch
@@ -170,7 +170,10 @@ def _make_response(
 def _error_response_with_traceback(exc: BaseException, status: int = 500) -> Response:
     """Print traceback to stderr and return JSON response with error and traceback."""
     tb_str = traceback.format_exc()
-    traceback.print_exc(file=sys.stderr)
+    if has_request_context():
+        logger.exception("Request failed: %s", request.url)
+    else:
+        traceback.print_exc(file=sys.stderr)
     return Response(
         json.dumps({"error": str(exc), "traceback": tb_str}),
         status=status,
