@@ -10,7 +10,6 @@ import traceback
 from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Flask, request, Response
-from werkzeug.exceptions import HTTPException
 
 from areas_lib.query import check_health, get_stats, query_single, query_batch
 
@@ -346,21 +345,16 @@ def post_query():
     return out
 
 
-@app.errorhandler(Exception)
-def handle_exception(exc):
-    """Return error + traceback in response. Flask logs the exception and full traceback before calling this."""
-    if isinstance(exc, HTTPException):
-        return exc.get_response()
-    return _error_response_with_traceback(exc)
+@app.errorhandler(500)
+def server_error(e):
+    """Log exception (with traceback to stderr for gunicorn) and return error + traceback in response."""
+    tb_str = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+    print(tb_str, file=sys.stderr, flush=True)
+    app.logger.error(e)
+    return _error_response_with_traceback(e)
 
 
 def create_app() -> Flask:
-    # Ensure exceptions are visible in the server console (e.g. under gunicorn).
-    if not app.logger.handlers:
-        h = logging.StreamHandler(sys.stderr)
-        h.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
-        app.logger.addHandler(h)
-    app.logger.setLevel(logging.DEBUG)
     return app
 
 
