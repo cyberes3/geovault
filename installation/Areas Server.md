@@ -74,6 +74,12 @@ python3 -m venv venv
 Download the `.osm.pbf` data from <https://download.geofabrik.de/>. You are expected to download data to
 `/srv/downloads`.
 
+Scripts use a connection string in this format:
+
+```
+"postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
+```
+
 To load the OSM data:
 
 ```bash
@@ -94,7 +100,7 @@ After the initial import, run the post-processing script to create geography ind
 statistics:
 
 ```bash
-export AREAS_SERVER_DATABASE="postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
+export AREAS_SERVER_DATABASE="postgresql://..."
 ./scripts/post_analyze.sh
 ```
 
@@ -103,25 +109,26 @@ If you do not run `post_analyze.sh` the queries will be incredibly slow.
 Remove small lakes so they do not clutter up the nearby-lakes results:
 
 ```bash
-./venv/bin/python scripts/delete_small_lakes.py --database "postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
+./venv/bin/python scripts/delete_small_lakes.py --database "postgresql://..."
 ```
 
 Download and import the ocean dataset:
 
 ```bash
-./venv/bin/python scripts/import_ocean_polygons.py --local-path /srv/downloads --database "postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
+./venv/bin/python scripts/import_ocean_polygons.py --local-path /srv/downloads --database "postgresql://..."
 ```
 
-Download and import the ski resort dataset (OpenSkiMap; script uses `ski_areas.geojson` in the download directory, refreshes if older than 1 day):
+Download and import the ski resort dataset (OpenSkiMap; script uses `ski_areas.geojson` in the download directory,
+refreshes if older than 1 day):
 
 ```bash
-./venv/bin/python scripts/import_ski_areas.py --local-path /srv/downloads --database "postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
+./venv/bin/python scripts/import_ski_areas.py --local-path /srv/downloads --database "postgresql://..."
 ```
 
 ## Running the Server
 
 ```shell
-export AREAS_SERVER_DATABASE="postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
+export AREAS_SERVER_DATABASE="postgresql://..."
 ./venv/bin/flask --app app run --host 0.0.0.0 --port 5001
 ```
 
@@ -132,7 +139,7 @@ export AREAS_SERVER_DATABASE="postgresql://is_in_areas:your_password_here@localh
 First, initalize the diffs:
 
 ```shell
-./scripts/update.sh --database "postgresql://is_in_areas:your_password_here@localhost/is_in_areas" init
+./scripts/update.sh --database "postgresql://..." init
 ```
 
 To run the update:
