@@ -80,6 +80,11 @@ def _http_post(url: str, data_bytes: bytes, timeout: int = 120) -> tuple[int, di
         return -1, None, elapsed
 
 
+def _max_batch_size() -> int:
+    """Server max batch size (same env as areas server)."""
+    return int(os.environ.get("AREAS_SERVER_MAX_BATCH_SIZE", "100"))
+
+
 def _random_points(n: int, seed: int | None = None) -> list[tuple[float, float]]:
     if seed is not None:
         random.seed(seed)
@@ -102,22 +107,33 @@ def run_benchmark(
     get_errors = 0
     get_status_codes: list[int] = []
 
-    for lat, lon in points:
+    n = len(points)
+    for i, (lat, lon) in enumerate(points, 1):
         url = f"{base_url}/query?lat={lat}&lon={lon}"
         status, data, elapsed = _http_get(url)
         get_times.append(elapsed)
         get_status_codes.append(status)
         if status != 200:
             get_errors += 1
+        ms = elapsed * 1000
+        status_str = "" if status == 200 else f" status={status}"
+        print(f"GET {i}/{n}: {ms:.2f} ms{status_str}", flush=True)
 
+    batch_cap = _max_batch_size()
+    batch_points = points[:batch_cap]
+    print(f"POST /query (batch of {len(batch_points)} points) ...", flush=True)
     batch_status, batch_data, batch_elapsed = _http_post(
         f"{base_url}/query",
-        json.dumps({"points": [[lat, lon] for lat, lon in points]}).encode(),
+        json.dumps({"points": [[lat, lon] for lat, lon in batch_points]}).encode(),
     )
+    batch_ms = batch_elapsed * 1000
+    ok_str = "OK" if (batch_status == 200 and batch_data and "results" in batch_data and len(batch_data["results"]) == len(batch_points)) else f"status={batch_status}"
+    print(f"POST /query: {batch_ms:.2f} ms ({ok_str})", flush=True)
 
     return {
         "base_url": base_url,
         "num_points": num_points,
+        "batch_points": len(batch_points),
         "seed": seed,
         "points": points,
         "get_times_ms": [t * 1000 for t in get_times],
@@ -125,7 +141,7 @@ def run_benchmark(
         "get_status_codes": get_status_codes,
         "batch_elapsed_ms": batch_elapsed * 1000,
         "batch_status": batch_status,
-        "batch_ok": batch_status == 200 and batch_data and "results" in batch_data and len(batch_data["results"]) == num_points,
+        "batch_ok": batch_status == 200 and batch_data and "results" in batch_data and len(batch_data["results"]) == len(batch_points),
     }
 
 
@@ -139,7 +155,7 @@ def write_md(results: dict, out_path: Path) -> None:
         "# Areas server performance",
         "",
         f"**Base URL:** `{results['base_url']}`  ",
-        f"**Points:** {n} (random, seed={results['seed']})  ",
+        f"**Points:** {n} (random, seed={results['seed']}); batch POST used {results.get('batch_points', n)} (max {_max_batch_size()})  ",
         f"**Date:** {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime())}",
         "",
         "## Single-point (GET /query)",
@@ -191,10 +207,12 @@ def main() -> int:
     print(f"Benchmarking {base_url} with {args.points} random points (seed={'random' if seed is None else seed}) ...")
 
     # Quick health check
+    print("Health check ...", flush=True)
     status, data, _ = _http_get(f"{base_url}/health")
     if status != 200 or (data and data.get("status") != "ok"):
         print(f"Error: server unhealthy or unreachable (GET /health -> {status})", file=sys.stderr)
         return 1
+    print("Health: OK", flush=True)
 
     results = run_benchmark(base_url, num_points=args.points, seed=seed)
     out_path = Path(args.out)
