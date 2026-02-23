@@ -15,7 +15,7 @@ import io
 import json
 import os
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.request import urlopen, Request
 
@@ -246,6 +246,35 @@ def find_resort_for_point(lat: float, lon: float, resorts_json: list) -> tuple[s
     return (best_name, best_dist)
 
 
+def _process_orphan_chunk(args: tuple) -> tuple:
+    """Process a chunk of orphan ways (for ProcessPoolExecutor). Must be top-level for pickling.
+    Returns (list of (resort_name, geoms_list, report_or_none), processed_count) so progress bar can advance by chunk size."""
+    chunk, nodes, ways, resorts_json = args
+    results = []
+    for item in chunk:
+        wid, (nd_refs, tags) = item
+        ls = way_to_linestring(nd_refs, nodes)
+        if ls is None or ls.is_empty:
+            continue
+        centroid = ls.centroid
+        lat, lon = centroid.y, centroid.x
+        resort_name, dist_miles = find_resort_for_point(lat, lon, resorts_json)
+        if resort_name is not None:
+            orphan_geom = build_resort_geometry([wid], ways, nodes)
+            if orphan_geom and not orphan_geom.is_empty:
+                if orphan_geom.geom_type == "Polygon":
+                    geoms = [orphan_geom]
+                else:
+                    geoms = list(orphan_geom.geoms) if hasattr(orphan_geom, "geoms") else [orphan_geom]
+                report = (lat, lon, wid, resort_name, dist_miles) if dist_miles != 0 else None
+                results.append((resort_name, geoms, report))
+            else:
+                results.append((resort_name, [], (lat, lon, wid, resort_name, dist_miles) if dist_miles != 0 else None))
+        else:
+            results.append(("N/A", [], (lat, lon, wid, "N/A", float("nan"))))
+    return (results, len(chunk))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Import ski_resorts into is_in schema from planet_pistes.osm.gz. Drops existing table."
@@ -302,52 +331,54 @@ def main() -> None:
             if mtype == "way" and ref:
                 way_ids_in_relations.add(ref)
 
-    # Build (name, geom) from relations
+    # Build (name, geom) from relations (parallelized)
     name_to_geoms: dict[str, list] = {}
-    for rid, tags, members in tqdm.tqdm(relations, desc="Building resort boundaries", unit="resort"):
+
+    def process_one_relation(rel):
+        rid, tags, members = rel
         name = resort_name_from_relation(rid, tags)
         way_refs = [ref for mtype, ref, _ in members if mtype == "way" and ref]
         geom = build_resort_geometry(way_refs, ways, nodes)
-        if geom is not None and not geom.is_empty:
-            if geom.geom_type == "Polygon":
-                geom = [geom]
-            else:
-                geom = list(geom.geoms) if hasattr(geom, "geoms") else [geom]
-            name_to_geoms.setdefault(name, []).extend(geom)
-
-    # Orphans: ways with piste:type or aerialway not in any relation (parallelized)
-    orphan_ways = [(wid, (nd_refs, tags)) for wid, (nd_refs, tags) in ways.items() if wid not in way_ids_in_relations and is_piste_or_lift(tags)]
-
-    def process_one_orphan(item):
-        wid, (nd_refs, tags) = item
-        ls = way_to_linestring(nd_refs, nodes)
-        if ls is None or ls.is_empty:
-            return (None, [], None)
-        centroid = ls.centroid
-        lat, lon = centroid.y, centroid.x
-        resort_name, dist_miles = find_resort_for_point(lat, lon, resorts_json)
-        if resort_name is not None:
-            orphan_geom = build_resort_geometry([wid], ways, nodes)
-            if orphan_geom and not orphan_geom.is_empty:
-                if orphan_geom.geom_type == "Polygon":
-                    geoms = [orphan_geom]
-                else:
-                    geoms = list(orphan_geom.geoms) if hasattr(orphan_geom, "geoms") else [orphan_geom]
-                report = (lat, lon, wid, resort_name, dist_miles) if dist_miles != 0 else None
-                return (resort_name, geoms, report)
-            return (resort_name, [], (lat, lon, wid, resort_name, dist_miles) if dist_miles != 0 else None)
-        return ("N/A", [], (lat, lon, wid, "N/A", float("nan")))
+        if geom is None or geom.is_empty:
+            return (name, [])
+        if geom.geom_type == "Polygon":
+            geoms = [geom]
+        else:
+            geoms = list(geom.geoms) if hasattr(geom, "geoms") else [geom]
+        return (name, geoms)
 
     max_workers = min(32, (os.cpu_count() or 4) + 4)
-    orphan_reports = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(process_one_orphan, item): item for item in orphan_ways}
-        for future in tqdm.tqdm(as_completed(futures), total=len(futures), desc="Processing orphan ways", unit="way"):
-            resort_name, geoms, report = future.result()
-            if resort_name and geoms:
-                name_to_geoms.setdefault(resort_name, []).extend(geoms)
-            if report is not None:
-                orphan_reports.append(report)
+        futures = {executor.submit(process_one_relation, rel): rel for rel in relations}
+        for future in tqdm.tqdm(as_completed(futures), total=len(futures), desc="Building resort boundaries", unit="resort"):
+            name, geoms = future.result()
+            if geoms:
+                name_to_geoms.setdefault(name, []).extend(geoms)
+
+    # Orphans: ways with piste:type or aerialway not in any relation (process-parallel for real CPU use)
+    orphan_ways = [(wid, (nd_refs, tags)) for wid, (nd_refs, tags) in ways.items() if wid not in way_ids_in_relations and is_piste_or_lift(tags)]
+
+    orphan_reports = []
+    if orphan_ways:
+        base_workers = min(32, (os.cpu_count() or 4) + 4)
+        orphan_workers = min(56, int(base_workers * 1.75))
+        # Chunk so we pass (chunk, nodes, ways, resorts_json) once per process; fewer pickles, true parallelism
+        n_chunks = max(1, orphan_workers)
+        chunk_size = (len(orphan_ways) + n_chunks - 1) // n_chunks
+        chunks = [orphan_ways[i : i + chunk_size] for i in range(0, len(orphan_ways), chunk_size)]
+        chunk_args = [(c, nodes, ways, resorts_json) for c in chunks]
+
+        with ProcessPoolExecutor(max_workers=orphan_workers) as executor:
+            futures = [executor.submit(_process_orphan_chunk, a) for a in chunk_args]
+            with tqdm.tqdm(total=len(orphan_ways), desc="Processing orphan ways", unit="way") as pbar:
+                for future in as_completed(futures):
+                    chunk_results, processed_count = future.result()
+                    pbar.update(processed_count)
+                    for resort_name, geoms, report in chunk_results:
+                        if resort_name and geoms:
+                            name_to_geoms.setdefault(resort_name, []).extend(geoms)
+                        if report is not None:
+                            orphan_reports.append(report)
 
     # Orphan report: list unmatched (no bbox match) with closest resort
     if orphan_reports:

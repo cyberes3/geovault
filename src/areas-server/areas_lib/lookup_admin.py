@@ -136,20 +136,25 @@ def get_admin_stats(conn: Any) -> Dict[str, Any]:
         "newest_feature": None,
     }
     with conn.cursor() as cur:
-        cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.{TABLE_NAME}")
-        row = cur.fetchone()
-        if row and row[0] is not None:
-            out["count"] = row[0]
-
         cur.execute(
             f"""
-            SELECT public.ST_XMin(e), public.ST_YMin(e), public.ST_XMax(e), public.ST_YMax(e)
-            FROM (SELECT public.ST_Extent(geom) AS e FROM {SCHEMA}.{TABLE_NAME}) _t
-            """,
+            SELECT COUNT(*),
+                   public.ST_XMin(public.ST_Extent(geom)),
+                   public.ST_YMin(public.ST_Extent(geom)),
+                   public.ST_XMax(public.ST_Extent(geom)),
+                   public.ST_YMax(public.ST_Extent(geom)),
+                   MIN(created), MAX(created)
+            FROM {SCHEMA}.{TABLE_NAME}
+            """
         )
         row = cur.fetchone()
         if row and row[0] is not None:
-            out["extent"] = extent_from_row(tuple(row))
+            out["count"] = row[0]
+        if row and row[1] is not None:
+            out["extent"] = extent_from_row((row[1], row[2], row[3], row[4]))
+        if row and len(row) >= 7:
+            out["oldest_feature"] = _ts_str(row[5])
+            out["newest_feature"] = _ts_str(row[6])
 
         cur.execute(
             f"""
@@ -162,10 +167,4 @@ def get_admin_stats(conn: Any) -> Dict[str, Any]:
         for row in cur.fetchall():
             if row and len(row) >= 2:
                 out["by_admin_level"][int(row[0])] = row[1]
-
-        cur.execute(f"SELECT MIN(created), MAX(created) FROM {SCHEMA}.{TABLE_NAME}")
-        row = cur.fetchone()
-        if row:
-            out["oldest_feature"] = _ts_str(row[0])
-            out["newest_feature"] = _ts_str(row[1])
     return out
