@@ -4,10 +4,9 @@ Public API for reverse geocoding.
 Re-exports from location_tags. Other modules:
 
 - location_tags.py: Main public API (batch_reverse_geocode_coordinates, get_location_tags)
-- areas_server_client.py: HTTP client for areas server (admin, protected areas, nearby lakes, ocean)
+- areas_server_client.py: HTTP client for areas server (admin, protected areas, nearby lakes, ocean, ski_resort)
 - admin_boundaries.py: Administrative hierarchy parser (tests only; production uses areas server)
 - protected_areas.py: Protected area classification and parser (tests only; production uses areas server)
-- ski_resorts.py: Ski resort detection
 - cache.py: Caching utilities
 - osm_tags.py: OSM tag utilities
 

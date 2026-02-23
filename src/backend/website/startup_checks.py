@@ -13,8 +13,7 @@ This module performs essential checks when the server starts up:
 9. Site configuration (for email confirmation URLs)
 10. Clean up stale Redis queues and job status data
 11. Clear Redis cache (ensures fresh data on startup)
-12. Preload ski resorts database (for reverse geocoding)
-13. Recover interrupted jobs (re-enqueue jobs that were processing when server stopped)
+12. Recover interrupted jobs (re-enqueue jobs that were processing when server stopped)
 
 Warning checks (don't fail startup):
 - Configuration file exists
@@ -38,7 +37,6 @@ from django.contrib.sites.models import Site
 from django.core.cache import cache
 from django.db import connection
 
-from geo_lib.reverse_geocoding.ski_resorts import load_ski_resorts
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.file_types import FILE_TYPE_CONFIGS
 from geo_lib.processing.job_recovery import recover_interrupted_jobs as do_job_recovery
@@ -779,25 +777,6 @@ def clear_redis_cache():
         return True
 
 
-def preload_ski_resorts():
-    """
-    Preload the ski resorts database during startup.
-    
-    This ensures the ski resorts are loaded once during startup rather than
-    during the first reverse geocoding operation. This avoids race conditions
-    in multi-threaded processing and provides better startup diagnostics.
-    
-    Returns:
-        bool: True if ski resorts loaded successfully, False otherwise
-    """
-    ski_resorts = load_ski_resorts()
-
-    if ski_resorts:
-        _logger.info(f"✓ Preloaded {len(ski_resorts)} ski resorts for reverse geocoding")
-    else:
-        _logger.warning("⚠ Ski resorts database is empty or failed to load")
-
-
 def recover_interrupted_jobs():
     """
     Recover and re-enqueue jobs that were interrupted during processing.
@@ -914,9 +893,8 @@ def run_startup_checks():
     11. Verify Site configuration (for email confirmation URLs)
     12. Clean up stale Redis processing queues and job status data
     13. Clear Redis cache (ensures fresh data on startup)
-    14. Preload ski resorts database (for reverse geocoding)
-    15. Recover interrupted jobs (re-enqueue jobs that were processing when server stopped)
-    16. Check for duplicate extension names
+    14. Recover interrupted jobs (re-enqueue jobs that were processing when server stopped)
+    15. Check for duplicate extension names
     
     Warning checks (don't fail startup):
     - Configuration file
@@ -967,10 +945,6 @@ def run_startup_checks():
     # Clear Redis cache on startup (non-critical)
     _logger.info("Clearing Redis cache...")
     clear_redis_cache()
-
-    # Preload ski resorts database (non-critical, improves first-time performance)
-    _logger.info("Preloading ski resorts database...")
-    preload_ski_resorts()
 
     # Recover interrupted jobs (non-critical, re-enqueues jobs that were processing when server stopped)
     _logger.info("Recovering interrupted jobs...")

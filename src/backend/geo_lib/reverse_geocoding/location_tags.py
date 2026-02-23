@@ -18,7 +18,6 @@ from typing import List, Tuple, Dict
 
 from geo_lib.reverse_geocoding.areas_server_client import query_areas_server
 from geo_lib.reverse_geocoding.protected_areas import classify_protected_area
-from geo_lib.reverse_geocoding.ski_resorts import search_nearby_ski_resorts
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.spatial.coordinates import round_coordinate
 
@@ -58,8 +57,8 @@ def get_location_tags(
     log_messages = []
 
     try:
-        # Single source: areas server (admin, protected areas, nearby lakes, ocean; city filled from place nodes when admin has none)
-        admin_hierarchy, protected_areas, nearby_lakes, ocean, areas_err = query_areas_server(latitude, longitude)
+        # Single source: areas server (admin, protected areas, nearby lakes, ocean, ski_resort; city filled from place nodes when admin has none)
+        admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort, areas_err = query_areas_server(latitude, longitude)
         if areas_err:
             _logger.error(areas_err)
             log_messages.append(ReverseGeocodingLogMessage(
@@ -128,13 +127,9 @@ def get_location_tags(
             lake_tags.add(f"lake:{lake['name']}")
         tags.extend(sorted(lake_tags))
 
-        # Search for nearby ski resorts (within 1 mile)
-        # Note: Ski resort detection is limited in OSM - many resorts lack proper tagging
-        nearby_ski_resorts = search_nearby_ski_resorts(latitude, longitude, 1.0)
-        ski_tags = set()
-        for resort in nearby_ski_resorts[:2]:  # Limit to 2 closest resorts
-            ski_tags.add(f"ski-resort:{resort['name']}")
-        tags.extend(sorted(ski_tags))
+        # Ski resort from areas server (single tag when point is inside a resort)
+        if ski_resort and isinstance(ski_resort, str) and ski_resort.strip():
+            tags.append(f"ski-resort:{ski_resort.strip()}")
 
         return tags, log_messages
 

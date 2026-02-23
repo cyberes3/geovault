@@ -3,10 +3,11 @@
 The Areas Server is a standalone Flask service used in the reverse geocoding process. It uses PostGIS and OSM data
 loaded via osm2pgsql. It is a separate service from the main GeoVault stack.
 
-Your Postgres server and `.osm.pbf` files need to be stored on fast SSDs. The host should have at least 6 CPUs and 16GB
-RAM. This python server is pretty lightweight as Postgres does the heavy lifting.
+Your Postgres server and `.osm.pbf` files need to be stored on fast SSDs (Samsung 990 Pros work very well and the OSM
+import only takes a few hours). The host should have at least 6 CPUs and 16GB RAM. The python server is pretty
+lightweight as Postgres does the heavy lifting.
 
-## Database
+## Database Setup
 
 Use a dedicated database seperate from the main GeoVault one.
 
@@ -69,10 +70,16 @@ After import, remove small lakes so they do not clutter up the nearby-lakes resu
 ./venv/bin/python scripts/delete_small_lakes.py --database "postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
 ```
 
-To download and load the ocean data:
+Download and import the ocean dataset:
 
 ```bash
 ./venv/bin/python scripts/import_ocean_polygons.py --local-path /srv/downloads --database "postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
+```
+
+Download and import the ski resort dataset:
+
+```bash
+./venv/bin/python scripts/import_ski_resorts.py --local-path /srv/downloads --database "postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
 ```
 
 ## Running the Server

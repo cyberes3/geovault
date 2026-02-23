@@ -11,7 +11,6 @@ from django.core.cache import cache, caches
 
 from geo_lib.reverse_geocoding.location_tags import get_location_tags, batch_reverse_geocode_coordinates
 from geo_lib.reverse_geocoding.cache import _get_cache_key, _REVERSE_GEOCODING_CACHE
-from geo_lib.reverse_geocoding.ski_resorts import load_ski_resorts, search_nearby_ski_resorts
 from geo_lib.spatial.haversine import haversine_distance_miles
 
 from tests.fixtures.geocoding_responses import get_areas_fixture
@@ -69,38 +68,6 @@ class TestCacheKey(TestCase):
         """Test cache key uses custom prefix."""
         key = _get_cache_key(40.0, -105.0, prefix="test")
         self.assertTrue(key.startswith("test:"))
-
-
-@pytest.mark.django_db
-class TestSkiResortDatabase(TestCase):
-    """Test ski resort database loading."""
-    
-    def test_ski_resorts_load(self):
-        """Test that ski resorts database loads successfully."""
-        resorts = load_ski_resorts()
-        self.assertIsInstance(resorts, list)
-        self.assertGreater(len(resorts), 50)  # Should have at least 50 resorts
-    
-    def test_ski_resort_structure(self):
-        """Test that ski resorts have required fields."""
-        resorts = load_ski_resorts()
-        for resort in resorts[:5]:  # Check first 5
-            self.assertIn('name', resort)
-            self.assertIn('country', resort)
-            self.assertIn('bbox', resort)
-            bbox = resort['bbox']
-            self.assertIn('min_lat', bbox)
-            self.assertIn('max_lat', bbox)
-            self.assertIn('min_lon', bbox)
-            self.assertIn('max_lon', bbox)
-    
-    def test_ski_resort_bbox_valid(self):
-        """Test that bounding boxes are valid."""
-        resorts = load_ski_resorts()
-        for resort in resorts:
-            bbox = resort['bbox']
-            self.assertLess(bbox['min_lat'], bbox['max_lat'])
-            self.assertLess(bbox['min_lon'], bbox['max_lon'])
 
 
 @pytest.mark.django_db
@@ -240,24 +207,21 @@ class TestReverseGeocodingService(TestCase):
                 return
         self.skipTest("Load areas_server fixtures with protected_areas (fetch_areas_server_fixtures.py)")
     
-    def test_ski_resort_inside_bbox(self):
-        """Test ski resort detection when point is inside resort bbox."""
-        # Vail coordinates (inside Vail resort bbox)
-        resorts = search_nearby_ski_resorts(39.6403, -106.3742, 2.0)
-        
-        self.assertGreater(len(resorts), 0)
-        self.assertEqual(resorts[0]['name'], 'Vail')
-        self.assertEqual(resorts[0]['distance_miles'], 0.0)
-    
-    def test_ski_resort_nearby(self):
-        """Test ski resort detection when point is near resort."""
-        # Point slightly outside Vail bbox but within 5 miles
-        resorts = search_nearby_ski_resorts(39.65, -106.30, 5.0)
-        
-        # Should find Vail nearby
-        resort_names = [r['name'] for r in resorts]
-        self.assertIn('Vail', resort_names)
-    
+    def test_ski_resort_tag_from_areas_server(self):
+        """When query_areas_server returns ski_resort, get_location_tags includes ski-resort:<name>."""
+        _REVERSE_GEOCODING_CACHE.clear()
+        with patch('geo_lib.reverse_geocoding.location_tags.query_areas_server') as mock_areas:
+            mock_areas.return_value = (
+                {'country': 'USA', 'state': 'Colorado', 'county': 'Eagle', 'city': 'Vail'},
+                [],
+                [],
+                [],
+                'Vail',
+                None,
+            )
+            tags, _ = get_location_tags(39.64, -106.37)
+        self.assertIn('ski-resort:Vail', tags, f'Expected ski-resort:Vail in {tags}')
+
     def test_nearby_lakes_from_areas_fixture(self):
         """When areas fixture has nearby_lakes, get_location_tags returns lake tags."""
         areas_data = get_areas_fixture(40.2514, -105.8239)
@@ -295,16 +259,6 @@ class TestCaching(TestCase):
     def tearDown(self):
         """Clean up after tests."""
         cache.clear()
-    
-    def test_ski_resort_caching(self):
-        """Test that ski resort results are cached."""
-        # First call
-        resorts1 = search_nearby_ski_resorts(39.64, -106.37, 2.0)
-        
-        # Second call should use cache (same rounded coordinates)
-        resorts2 = search_nearby_ski_resorts(39.6401, -106.3701, 2.0)
-        
-        self.assertEqual(resorts1, resorts2)
     
     def test_batch_reverse_geocode_deduplication(self):
         """Test that batch_reverse_geocode_coordinates deduplicates nearby coordinates (same rounded coord -> same result)."""
@@ -356,7 +310,7 @@ class TestErrorHandling(TestCase):
         """Test that areas server error is logged to console and import log (log_messages)."""
         _REVERSE_GEOCODING_CACHE.clear()
         with patch('geo_lib.reverse_geocoding.location_tags.query_areas_server') as mock_areas:
-            mock_areas.return_value = (None, None, [], None, "is_in area server returned 503")
+            mock_areas.return_value = (None, None, [], [], None, "is_in area server returned 503")
             tags, log_messages = get_location_tags(39.746, -104.844)
         self.assertIsInstance(tags, list)
         errors = [m for m in log_messages if m.level == 'ERROR']
@@ -416,34 +370,3 @@ class TestTagGeneration(TestCase):
         )
 
 
-@pytest.mark.django_db
-class TestIntegration(TestCase):
-    """Integration tests for ski resort detection."""
-    
-    def test_ski_resort_detection_vail(self):
-        """Integration test: Vail ski resort detection."""
-        resorts = search_nearby_ski_resorts(39.6403, -106.3742, 2.0)
-        
-        self.assertGreater(len(resorts), 0)
-        self.assertEqual(resorts[0]['name'], 'Vail')
-    
-    def test_ski_resort_detection_breckenridge(self):
-        """Integration test: Breckenridge ski resort detection."""
-        resorts = search_nearby_ski_resorts(39.4817, -106.0384, 2.0)
-        
-        self.assertGreater(len(resorts), 0)
-        resort_names = [r['name'] for r in resorts]
-        self.assertIn('Breckenridge', resort_names)
-    
-    def test_major_epic_ikon_resorts(self):
-        """Integration test: Major Epic and Ikon resorts."""
-        test_resorts = [
-            ('Vail', 39.6403, -106.3742),
-            ('Park City', 40.66, -111.50),
-            ('Jackson Hole', 43.60, -110.84),
-        ]
-        
-        for name, lat, lon in test_resorts:
-            resorts = search_nearby_ski_resorts(lat, lon, 2.0)
-            resort_names = [r['name'] for r in resorts]
-            self.assertIn(name, resort_names, f"Failed to detect {name}")

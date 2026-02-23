@@ -152,6 +152,7 @@ def _make_response(
         protected_areas: List[Dict[str, str]],
         nearby_lakes: List[Dict[str, Any]],
         ocean: Optional[List[str]] = None,
+        ski_resort: Optional[str] = None,
 ) -> Dict[str, Any]:
     if ocean is None:
         ocean_list: List[str] = []
@@ -164,6 +165,7 @@ def _make_response(
         "protected_areas": protected_areas,
         "nearby_lakes": nearby_lakes,
         "ocean": ocean_list,
+        "ski_resort": ski_resort,
     }
 
 
@@ -251,13 +253,13 @@ def get_query():
 
     try:
         pool = get_pool()
-        admin_hierarchy, protected_areas, nearby_lakes, ocean = query_single(
+        admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort = query_single(
             pool, lat_f, lon_f,
             lake_radius_miles=lake_radius_miles,
             ocean_radius_miles=ocean_radius_miles,
             city_radius_miles=city_radius_miles,
         )
-        out = _make_response(admin_hierarchy, protected_areas, nearby_lakes, ocean)
+        out = _make_response(admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort)
         if cache is not None:
             cache[key] = out
         return out
@@ -342,8 +344,8 @@ def post_query():
         )
         out = {
             "results": [
-                _make_response(admin_hierarchy, protected_areas, nearby_lakes, ocean)
-                for admin_hierarchy, protected_areas, nearby_lakes, ocean in results
+                _make_response(admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort)
+                for admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort in results
             ]
         }
         return out
