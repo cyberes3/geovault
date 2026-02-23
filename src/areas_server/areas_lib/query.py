@@ -16,8 +16,8 @@ def query_single(
         lake_radius_miles: float = 1.0,
         ocean_radius_miles: float = 1.0,
         city_radius_miles: float = 3.0,
-) -> Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], Optional[str]]:
-    """Run admin + protected + water + ocean (+ optional place) queries in parallel; return (admin_hierarchy, protected_areas, nearby_lakes, ocean)."""
+) -> Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str]]:
+    """Run admin + protected + water + ocean (+ optional place) queries in parallel; return (admin_hierarchy, protected_areas, nearby_lakes, oceans)."""
     conn1 = pool.getconn()
     conn2 = pool.getconn()
     conn3 = pool.getconn()
@@ -37,7 +37,7 @@ def query_single(
             admin_rows = f_admin.result()
             protected_rows = f_protected.result()
             water_rows = f_water.result()
-            ocean_name = f_ocean.result()
+            oceans = f_ocean.result()
             place_name = f_place.result() if f_place is not None else None
         admin_hierarchy = lookup_admin.build_admin_hierarchy(admin_rows)
         if admin_hierarchy.get("city") is None and place_name:
@@ -46,7 +46,7 @@ def query_single(
             admin_hierarchy,
             lookup_protected_areas.build_protected_list(protected_rows),
             lookup_water.build_nearby_lakes(water_rows),
-            ocean_name,
+            oceans if oceans is not None else [],
         )
     finally:
         conn1.rollback()
@@ -68,8 +68,8 @@ def query_batch(
         lake_radius_miles: float = 1.0,
         ocean_radius_miles: float = 1.0,
         city_radius_miles: float = 3.0,
-) -> List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], Optional[str]]]:
-    """Run admin + protected + water + ocean (+ optional place) batch queries; return list of (admin_hierarchy, protected_areas, nearby_lakes, ocean) in order."""
+) -> List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str]]]:
+    """Run admin + protected + water + ocean (+ optional place) batch queries; return list of (admin_hierarchy, protected_areas, nearby_lakes, oceans) in order."""
     if not points:
         return []
     n = len(points)
@@ -128,12 +128,12 @@ def query_batch(
         idx = row[0]
         protected_by_idx.setdefault(idx, []).append(row[1:])
 
-    results: List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], Optional[str]]] = [None] * n
+    results: List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str]]] = [None] * n
     for i in range(n):
         admin_rows_i = admin_by_idx.get(i, [])
         protected_rows_i = protected_by_idx.get(i, [])
         water_rows_i = water_by_idx.get(i, [])
-        ocean_name = ocean_by_idx.get(i)
+        oceans = ocean_by_idx.get(i) or []
         admin_hierarchy = lookup_admin.build_admin_hierarchy(admin_rows_i)
         if admin_hierarchy.get("city") is None and place_by_idx.get(i):
             admin_hierarchy["city"] = place_by_idx[i]
@@ -141,7 +141,7 @@ def query_batch(
             admin_hierarchy,
             lookup_protected_areas.build_protected_list(protected_rows_i),
             lookup_water.build_nearby_lakes(water_rows_i),
-            ocean_name,
+            oceans,
         )
     return results
 
@@ -183,9 +183,12 @@ def get_stats(conn: Any) -> Dict[str, Any]:
         "protected_areas": lookup_protected_areas.get_protected_stats(conn),
         "water_bodies": lookup_water.get_water_stats(conn),
     }
-    ocean_stats = lookup_ocean.get_ocean_stats(conn)
-    if ocean_stats is not None:
-        out["ocean_polygons"] = ocean_stats
+    ocean_regions_stats = lookup_ocean.get_ocean_regions_stats(conn)
+    if ocean_regions_stats is not None:
+        out["ocean_regions"] = ocean_regions_stats
+    oceans_stats = lookup_ocean.get_oceans_stats(conn)
+    if oceans_stats is not None:
+        out["oceans"] = oceans_stats
     place_stats = lookup_places.get_place_stats(conn)
     if place_stats is not None:
         out["place_nodes"] = place_stats

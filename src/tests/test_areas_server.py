@@ -172,6 +172,7 @@ class TestQueryGet:
         assert "admin_hierarchy" in data
         assert "protected_areas" in data
         assert "ocean" in data
+        assert isinstance(data["ocean"], list)
         assert isinstance(data["admin_hierarchy"], dict)
         assert isinstance(data["protected_areas"], list)
 
@@ -220,6 +221,7 @@ class TestQueryPost:
             assert "admin_hierarchy" in item
             assert "protected_areas" in item
             assert "ocean" in item
+            assert isinstance(item["ocean"], list)
 
 
 # Park County, CO: admin has no city; nearest place node is Fairplay (town). Closer point than ~3 mi.
@@ -555,7 +557,7 @@ class TestNearbyPlaceLookup:
         with patch("areas_lib.query.lookup_admin.run_admin_single", return_value=[]), \
              patch("areas_lib.query.lookup_protected_areas.run_protected_single", return_value=[]), \
              patch("areas_lib.query.lookup_water.run_water_single", return_value=[]), \
-             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=None), \
+             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=[]), \
              patch("areas_lib.query.lookup_places.run_place_single", return_value="Fairplay"):
             admin, _, _, _ = query_single(mock_pool, PARK_COUNTY_LAT, PARK_COUNTY_LON, city_radius_miles=3.0)
         assert admin["city"] == "Fairplay"
@@ -575,7 +577,7 @@ class TestNearbyPlaceLookup:
         with patch("areas_lib.query.lookup_admin.run_admin_single", return_value=admin_rows), \
              patch("areas_lib.query.lookup_protected_areas.run_protected_single", return_value=[]), \
              patch("areas_lib.query.lookup_water.run_water_single", return_value=[]), \
-             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=None), \
+             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=[]), \
              patch("areas_lib.query.lookup_places.run_place_single", return_value="Fairplay"):
             admin, _, _, _ = query_single(mock_pool, 39.7, -105.0, city_radius_miles=3.0)
         assert admin["city"] == "Denver"
@@ -594,7 +596,7 @@ class TestNearbyPlaceLookup:
         with patch("areas_lib.query.lookup_admin.run_admin_single", return_value=[]), \
              patch("areas_lib.query.lookup_protected_areas.run_protected_single", return_value=[]), \
              patch("areas_lib.query.lookup_water.run_water_single", return_value=[]), \
-             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=None), \
+             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=[]), \
              patch("areas_lib.query.lookup_places.run_place_single") as mock_place:
             admin, _, _, _ = query_single(mock_pool, PARK_COUNTY_LAT, PARK_COUNTY_LON, city_radius_miles=0.0)
         mock_place.assert_not_called()
@@ -614,7 +616,7 @@ class TestNearbyPlaceLookup:
         with patch("areas_lib.query.lookup_admin.run_admin_batch", return_value=admin_rows), \
              patch("areas_lib.query.lookup_protected_areas.run_protected_batch", return_value=[]), \
              patch("areas_lib.query.lookup_water.run_water_batch", return_value={0: []}), \
-             patch("areas_lib.query.lookup_ocean.run_ocean_batch", return_value={0: None}), \
+             patch("areas_lib.query.lookup_ocean.run_ocean_batch", return_value={0: []}), \
              patch("areas_lib.query.lookup_places.run_place_batch", return_value={0: "Fairplay"}):
             results = query_batch(mock_pool, [(PARK_COUNTY_LAT, PARK_COUNTY_LON)], city_radius_miles=3.0)
         assert len(results) == 1
@@ -765,9 +767,9 @@ class TestProtectedAreasTop5:
         with patch("areas_lib.query.lookup_admin.run_admin_single", return_value=[]), \
              patch("areas_lib.query.lookup_protected_areas.run_protected_single", return_value=cur2.fetchall.return_value), \
              patch("areas_lib.query.lookup_water.run_water_single", return_value=[]), \
-             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=None), \
+             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=[]), \
              patch("areas_lib.query.lookup_places.run_place_single", return_value=None):
-            admin, protected, lakes, ocean = query_single(mock_pool, 40.0, -105.0)
+            admin, protected, lakes, oceans = query_single(mock_pool, 40.0, -105.0)
         assert len(protected) == 5
         assert protected[0]["name"] == "Park 1"
 
@@ -935,9 +937,9 @@ class TestNearbyLakesTop5:
         with patch("areas_lib.query.lookup_admin.run_admin_single", return_value=[]), \
              patch("areas_lib.query.lookup_protected_areas.run_protected_single", return_value=[]), \
              patch("areas_lib.query.lookup_water.run_water_single", return_value=lakes), \
-             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=None), \
+             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=[]), \
              patch("areas_lib.query.lookup_places.run_place_single", return_value=None):
-            admin, protected, water, ocean = query_single(mock_pool, 40.0, -105.0)
+            admin, protected, water, oceans = query_single(mock_pool, 40.0, -105.0)
         assert len(water) == 5
         assert water[0]["name"] == "Lake 1"
 
@@ -1027,7 +1029,7 @@ class TestNearbyLakesTop5:
             0: [_fake_lake_row(f"Lake P0 {i}") for i in range(1, 6)],
             1: [_fake_lake_row(f"Lake P1 {i}") for i in range(1, 6)],
         }
-        ocean_by_idx = {0: None, 1: None}
+        ocean_by_idx = {0: [], 1: []}
         place_by_idx = {0: None, 1: None}
         with patch("areas_lib.query.lookup_admin.run_admin_batch", return_value=[]), \
              patch("areas_lib.query.lookup_protected_areas.run_protected_batch", return_value=protected_rows), \
@@ -1036,6 +1038,6 @@ class TestNearbyLakesTop5:
              patch("areas_lib.query.lookup_places.run_place_batch", return_value=place_by_idx):
             results = query_batch(mock_pool, [(40.0, -105.0), (41.0, -106.0)])
         assert len(results) == 2
-        for i, (admin, protected, lakes, ocean) in enumerate(results):
+        for i, (admin, protected, lakes, oceans) in enumerate(results):
             assert len(protected) == 5, f"point {i} protected"
             assert len(lakes) == 5, f"point {i} lakes"

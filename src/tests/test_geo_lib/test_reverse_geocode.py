@@ -142,13 +142,49 @@ class TestReverseGeocodingService(TestCase):
         )
 
     def test_ocean_tag_from_areas_fixture(self):
-        """When areas fixture includes ocean, get_location_tags returns ocean:<name> tag."""
+        """When areas fixture includes ocean (string or list), get_location_tags returns ocean:<name> tag(s)."""
         areas_data = get_areas_fixture(43.911, -124.125)
         self.assertIsNotNone(areas_data, "Load areas_server fixtures with ocean (43.911_-124.125.json)")
         self.assertIn("ocean", areas_data)
-        self.assertEqual(areas_data["ocean"], "Pacific Ocean")
+        ocean = areas_data["ocean"]
+        if isinstance(ocean, list):
+            self.assertIn("Pacific Ocean", ocean)
+        else:
+            self.assertEqual(ocean, "Pacific Ocean")
         tags, _ = get_location_tags(43.911, -124.125)
         self.assertIn("ocean:Pacific Ocean", tags, f"Expected ocean tag in {tags}")
+
+    def test_two_ocean_tags_from_areas_fixture(self):
+        """When areas fixture has two oceans (e.g. sub-region + main), get_location_tags returns two ocean:* tags."""
+        # Gulf of Maine / North Atlantic: use coordinate that rounds to fixture 43.8_-69.0.json
+        lat, lon = 43.8, -69.0
+        areas_data = get_areas_fixture(lat, lon)
+        if areas_data is None:
+            self.skipTest(
+                "Add areas_server fixture 43.8_-69.0.json with \"ocean\": [\"Gulf of Maine\", \"North Atlantic Ocean\"]"
+            )
+        ocean = areas_data.get("ocean") or []
+        ocean_list = ocean if isinstance(ocean, list) else [ocean]
+        self.assertGreaterEqual(len(ocean_list), 2, "Fixture should have two ocean names")
+        tags, _ = get_location_tags(lat, lon)
+        self.assertIn("ocean:Gulf of Maine", tags, f"Expected ocean:Gulf of Maine in {tags}")
+        self.assertIn("ocean:North Atlantic Ocean", tags, f"Expected ocean:North Atlantic Ocean in {tags}")
+
+    def test_open_pacific_ocean_from_fixture(self):
+        """Open North Pacific coordinate (41.41, -134.30) returns ocean containing North Pacific Ocean (GOaS)."""
+        lat, lon = 41.41037324278657, -134.2993241551787
+        areas_data = get_areas_fixture(lat, lon)
+        if areas_data is None:
+            self.skipTest(
+                "Add areas_server fixture for 41.41_-134.299.json with \"ocean\": [\"North Pacific Ocean\"]"
+            )
+        self.assertIn("ocean", areas_data)
+        ocean = areas_data["ocean"]
+        ocean_list = ocean if isinstance(ocean, list) else [ocean]
+        self.assertGreater(len(ocean_list), 0, "Fixture should have at least one ocean name")
+        self.assertIn("North Pacific Ocean", ocean_list, f"Expected North Pacific Ocean in {ocean_list}")
+        tags, _ = get_location_tags(lat, lon)
+        self.assertIn("ocean:North Pacific Ocean", tags, f"Expected ocean:North Pacific Ocean in {tags}")
     
     def test_protected_areas_misc_parks(self):
         """Test classify_protected_area on areas from cached areas_server fixtures."""

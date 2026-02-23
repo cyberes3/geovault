@@ -111,9 +111,16 @@ def get_location_tags(
         # Add protected area tags (sorted for consistency)
         tags.extend(sorted(protected_area_tags))
 
-        # Ocean tag from areas server (when present)
-        if ocean and isinstance(ocean, str) and ocean.strip():
-            tags.append(f"ocean:{ocean.strip()}")
+        # Ocean tags from areas server (up to 2: sub-region then main ocean)
+        ocean_list = ocean if isinstance(ocean, list) else ([ocean] if ocean and isinstance(ocean, str) else [])
+        seen_ocean = set()
+        for name in ocean_list[:2]:
+            if not name or not isinstance(name, str):
+                continue
+            n = name.strip()
+            if n and n not in seen_ocean:
+                seen_ocean.add(n)
+                tags.append(f"ocean:{n}")
 
         # Add lake tags
         lake_tags = set()

@@ -151,13 +151,19 @@ def _make_response(
         admin_hierarchy: Dict[str, Optional[str]],
         protected_areas: List[Dict[str, str]],
         nearby_lakes: List[Dict[str, Any]],
-        ocean: Optional[str] = None,
+        ocean: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
+    if ocean is None:
+        ocean_list: List[str] = []
+    elif isinstance(ocean, list):
+        ocean_list = ocean
+    else:
+        ocean_list = [ocean] if ocean else []
     return {
         "admin_hierarchy": admin_hierarchy,
         "protected_areas": protected_areas,
         "nearby_lakes": nearby_lakes,
-        "ocean": ocean,
+        "ocean": ocean_list,
     }
 
 

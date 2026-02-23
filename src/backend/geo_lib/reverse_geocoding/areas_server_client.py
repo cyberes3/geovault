@@ -17,15 +17,14 @@ def query_areas_server(
     Optional[Dict[str, Optional[str]]],
     Optional[List[Dict[str, str]]],
     List[Dict[str, Any]],
-    Optional[str],
+    List[str],
     Optional[str],
 ]:
     """
     Query the areas server for admin hierarchy, protected areas, nearby lakes, and ocean at a point.
 
-    Returns (admin_hierarchy, protected_areas, nearby_lakes, ocean, error). On success error is None.
-    On failure returns (None, None, None, None, error_message). nearby_lakes is always a list
-    (possibly empty). ocean may be null if the areas server has no ocean_polygons table or the point is not in/near an ocean.
+    Returns (admin_hierarchy, protected_areas, nearby_lakes, oceans, error). On success error is None.
+    oceans is a list of 0–2 names (sub-region first, then main ocean). On failure returns (None, None, [], [], error_message).
     """
     base_url = (get_setting("AREAS_SERVER_URL") or "").strip()
     if not base_url:
@@ -33,7 +32,7 @@ def query_areas_server(
             None,
             None,
             [],
-            None,
+            [],
             "AREAS_SERVER_URL is not set; required for reverse geocoding.",
         )
     url = base_url.rstrip("/") + "/query"
@@ -54,23 +53,23 @@ def query_areas_server(
             verify=verify_ssl,
         )
     except requests.exceptions.Timeout as e:
-        return (None, None, [], None, f"areas server request timed out after {timeout}s: {e}")
+        return (None, None, [], [], f"areas server request timed out after {timeout}s: {e}")
     except requests.exceptions.RequestException as e:
-        return (None, None, [], None, f"areas server request failed: {e}")
+        return (None, None, [], [], f"areas server request failed: {e}")
 
     if response.status_code != 200:
         return (
             None,
             None,
             [],
-            None,
+            [],
             f"areas server returned {response.status_code}: {response.text[:200]!r}",
         )
 
     try:
         data = response.json()
     except json.JSONDecodeError as e:
-        return (None, None, [], None, f"areas server returned invalid JSON: {e}")
+        return (None, None, [], [], f"areas server returned invalid JSON: {e}")
 
     admin = data.get("admin_hierarchy")
     protected = data.get("protected_areas")
@@ -79,11 +78,17 @@ def query_areas_server(
             None,
             None,
             [],
-            None,
+            [],
             "areas server response missing admin_hierarchy or protected_areas",
         )
     nearby_lakes = data.get("nearby_lakes")
     if not isinstance(nearby_lakes, list):
         nearby_lakes = []
-    ocean = data.get("ocean") if data.get("ocean") else None
-    return (admin, protected, nearby_lakes, ocean, None)
+    raw_ocean = data.get("ocean")
+    if isinstance(raw_ocean, list):
+        oceans = raw_ocean
+    elif raw_ocean and isinstance(raw_ocean, str):
+        oceans = [raw_ocean]
+    else:
+        oceans = []
+    return (admin, protected, nearby_lakes, oceans, None)
