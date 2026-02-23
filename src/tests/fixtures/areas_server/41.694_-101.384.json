@@ -1,0 +1,25 @@
+{
+  "admin_hierarchy": {
+    "city": null,
+    "country": "United States of America",
+    "county": "McPherson County",
+    "state": "Nebraska"
+  },
+  "nearby_lakes": [
+    {
+      "distance_miles": 0.42,
+      "name": "Stickney Lake",
+      "on_water": false,
+      "water_type": "lake"
+    },
+    {
+      "distance_miles": 0.58,
+      "name": "Brown Lake",
+      "on_water": false,
+      "water_type": "lake"
+    }
+  ],
+  "ocean": [],
+  "protected_areas": [],
+  "ski_resort": null
+}

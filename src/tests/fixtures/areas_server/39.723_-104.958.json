@@ -1,0 +1,48 @@
+{
+  "admin_hierarchy": {
+    "city": "Glendale",
+    "country": "United States of America",
+    "county": "Denver",
+    "state": "Colorado"
+  },
+  "nearby_lakes": [
+    {
+      "distance_miles": 0.6,
+      "name": "Four Towers Pool",
+      "on_water": false,
+      "water_type": "pond"
+    },
+    {
+      "distance_miles": 0.6,
+      "name": "El Pomar Waterway",
+      "on_water": false,
+      "water_type": "water"
+    },
+    {
+      "distance_miles": 0.63,
+      "name": "Steppe Garden Waterway",
+      "on_water": false,
+      "water_type": "water"
+    },
+    {
+      "distance_miles": 0.68,
+      "name": "Monet Pool",
+      "on_water": false,
+      "water_type": "pond"
+    }
+  ],
+  "ocean": [],
+  "protected_areas": [
+    {
+      "boundary": "",
+      "designation": "",
+      "landuse": "",
+      "leisure": "park",
+      "name": "James N. Manley Park",
+      "operator": "",
+      "protect_class": "",
+      "protection_title": ""
+    }
+  ],
+  "ski_resort": null
+}

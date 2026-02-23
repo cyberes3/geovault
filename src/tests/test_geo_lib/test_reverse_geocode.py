@@ -90,7 +90,7 @@ class TestReverseGeocodingService(TestCase):
         """Test admin hierarchy from cached areas_server fixture (load fixtures with fetch script)."""
         # Use a precise coordinate so the fixture unambiguously maps to one county (Park County, CO).
         areas = get_areas_fixture(39.22337887866515, -105.94799963185382)
-        self.assertIsNotNone(areas, "Load areas_server fixtures (e.g. fetch_areas_server_fixtures.py --areas-url)")
+        self.assertIsNotNone(areas, "Load areas_server fixtures (e.g. fetch_areas_fixtures.py <url>)")
         admin = areas["admin_hierarchy"]
         self.assertEqual(admin["country"], "United States of America")
         self.assertEqual(admin["state"], "Colorado")
@@ -99,7 +99,7 @@ class TestReverseGeocodingService(TestCase):
     def test_protected_areas_query(self):
         """Test protected areas from cached areas_server fixture."""
         areas_data = get_areas_fixture(40.34, -105.68)
-        self.assertIsNotNone(areas_data, "Load areas_server fixtures (e.g. fetch_areas_server_fixtures.py --areas-url)")
+        self.assertIsNotNone(areas_data, "Load areas_server fixtures (e.g. fetch_areas_fixtures.py <url>)")
         protected = areas_data["protected_areas"]
         self.assertGreaterEqual(len(protected), 1)
         names = [a["name"] for a in protected]
@@ -175,7 +175,7 @@ class TestReverseGeocodingService(TestCase):
         self.assertEqual(found.get("wilderness"), True, "Fixture should have at least one wilderness area")
         self.assertEqual(found.get("national-monument"), True, "Fixture should have at least one national-monument area")
         if len(found) < 3:
-            self.skipTest("Load areas_server fixtures (fetch_areas_server_fixtures.py --areas-url)")
+            self.skipTest("Load areas_server fixtures (fetch_areas_fixtures.py <url>)")
     
     def test_city_park_classification(self):
         """Test classify_protected_area on areas from cached areas_server fixtures (park vs protected-area)."""
@@ -205,7 +205,7 @@ class TestReverseGeocodingService(TestCase):
             if area.get("boundary") == "protected_area":
                 self.assertIn(classify_protected_area(area), ("national-park", "wilderness", "protected-area"))
                 return
-        self.skipTest("Load areas_server fixtures with protected_areas (fetch_areas_server_fixtures.py)")
+        self.skipTest("Load areas_server fixtures with protected_areas (fetch_areas_fixtures.py)")
     
     def test_ski_resort_tag_from_areas_server(self):
         """When query_areas_server returns ski_resort, get_location_tags includes ski-resort:<name>."""
@@ -226,7 +226,7 @@ class TestReverseGeocodingService(TestCase):
         """When areas fixture has nearby_lakes, get_location_tags returns lake tags."""
         areas_data = get_areas_fixture(40.2514, -105.8239)
         if not areas_data or not areas_data.get("nearby_lakes"):
-            self.skipTest("Load areas_server fixtures with nearby_lakes (fetch_areas_server_fixtures.py --areas-url)")
+            self.skipTest("Load areas_server fixtures with nearby_lakes (fetch_areas_fixtures.py <url>)")
         tags, _ = get_location_tags(40.2514, -105.8239)
         lake_tags = [t for t in tags if t.startswith("lake:")]
         self.assertGreater(len(lake_tags), 0, f"Expected at least one lake tag from fixture in {tags}")

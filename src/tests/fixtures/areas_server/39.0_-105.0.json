@@ -1,0 +1,42 @@
+{
+  "admin_hierarchy": {
+    "city": null,
+    "country": "United States of America",
+    "county": "El Paso County",
+    "state": "Colorado"
+  },
+  "nearby_lakes": [
+    {
+      "distance_miles": 0.47,
+      "name": "Sapphire Lake",
+      "on_water": false,
+      "water_type": "reservoir"
+    },
+    {
+      "distance_miles": 0.61,
+      "name": "Leo Lake",
+      "on_water": false,
+      "water_type": "reservoir"
+    },
+    {
+      "distance_miles": 0.8,
+      "name": "Grace Lake",
+      "on_water": false,
+      "water_type": "reservoir"
+    }
+  ],
+  "ocean": [],
+  "protected_areas": [
+    {
+      "boundary": "protected_area",
+      "designation": "",
+      "landuse": "",
+      "leisure": "",
+      "name": "Pike National Forest",
+      "operator": "United States Forest Service",
+      "protect_class": "6",
+      "protection_title": "National Forest"
+    }
+  ],
+  "ski_resort": null
+}

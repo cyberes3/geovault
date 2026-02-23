@@ -1,0 +1,12 @@
+{
+  "admin_hierarchy": {
+    "city": "San Francisco",
+    "country": "United States of America",
+    "county": "San Francisco",
+    "state": "California"
+  },
+  "nearby_lakes": [],
+  "ocean": [],
+  "protected_areas": [],
+  "ski_resort": null
+}

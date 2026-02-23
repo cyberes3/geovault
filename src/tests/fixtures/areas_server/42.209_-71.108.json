@@ -1,0 +1,36 @@
+{
+  "admin_hierarchy": {
+    "city": "Milton",
+    "country": "United States of America",
+    "county": "Norfolk County",
+    "state": "Massachusetts"
+  },
+  "nearby_lakes": [
+    {
+      "distance_miles": 0.47,
+      "name": "Houghton's Pond",
+      "on_water": false,
+      "water_type": "pond"
+    },
+    {
+      "distance_miles": 0.77,
+      "name": "Ponkapoag Pond",
+      "on_water": false,
+      "water_type": "water"
+    }
+  ],
+  "ocean": [],
+  "protected_areas": [
+    {
+      "boundary": "protected_area",
+      "designation": "",
+      "landuse": "",
+      "leisure": "nature_reserve",
+      "name": "Blue Hills Reservation",
+      "operator": "Division of State Parks and Recreation",
+      "protect_class": "5",
+      "protection_title": ""
+    }
+  ],
+  "ski_resort": null
+}

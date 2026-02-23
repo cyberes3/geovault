@@ -1,0 +1,30 @@
+{
+  "admin_hierarchy": {
+    "city": "Nashville",
+    "country": "United States of America",
+    "county": "Davidson County",
+    "state": "Tennessee"
+  },
+  "nearby_lakes": [
+    {
+      "distance_miles": 0.65,
+      "name": "Cheatham Lake",
+      "on_water": false,
+      "water_type": "reservoir"
+    }
+  ],
+  "ocean": [],
+  "protected_areas": [
+    {
+      "boundary": "protected_area",
+      "designation": "",
+      "landuse": "",
+      "leisure": "",
+      "name": "Bells Bend Park",
+      "operator": "",
+      "protect_class": "",
+      "protection_title": ""
+    }
+  ],
+  "ski_resort": null
+}

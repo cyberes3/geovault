@@ -1,0 +1,33 @@
+{
+  "admin_hierarchy": {
+    "city": null,
+    "country": "United States of America",
+    "county": "Park County",
+    "state": "Colorado"
+  },
+  "nearby_lakes": [],
+  "ocean": [],
+  "protected_areas": [
+    {
+      "boundary": "protected_area",
+      "designation": "",
+      "landuse": "",
+      "leisure": "",
+      "name": "Pike National Forest",
+      "operator": "United States Forest Service",
+      "protect_class": "6",
+      "protection_title": "National Forest"
+    },
+    {
+      "boundary": "protected_area",
+      "designation": "",
+      "landuse": "",
+      "leisure": "nature_reserve",
+      "name": "Lost Creek Wilderness",
+      "operator": "United States Forest Service",
+      "protect_class": "1b",
+      "protection_title": "Wilderness Area"
+    }
+  ],
+  "ski_resort": null
+}

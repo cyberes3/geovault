@@ -1,0 +1,23 @@
+{
+  "admin_hierarchy": {
+    "city": "Teton Village",
+    "country": "United States of America",
+    "county": "Teton County",
+    "state": "Wyoming"
+  },
+  "nearby_lakes": [],
+  "ocean": [],
+  "protected_areas": [
+    {
+      "boundary": "protected_area",
+      "designation": "",
+      "landuse": "",
+      "leisure": "",
+      "name": "Bridger-Teton National Forest",
+      "operator": "United States Forest Service",
+      "protect_class": "6",
+      "protection_title": "National Forest"
+    }
+  ],
+  "ski_resort": "Jackson Hole Mountain Resort"
+}

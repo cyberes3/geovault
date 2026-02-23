@@ -1,0 +1,40 @@
+{
+  "admin_hierarchy": {
+    "city": "Dunes City",
+    "country": "United States of America",
+    "county": "Lane County",
+    "state": "Oregon"
+  },
+  "nearby_lakes": [
+    {
+      "distance_miles": 0.69,
+      "name": "Woahink Lake",
+      "on_water": false,
+      "water_type": "lake"
+    }
+  ],
+  "ocean": [],
+  "protected_areas": [
+    {
+      "boundary": "protected_area",
+      "designation": "",
+      "landuse": "",
+      "leisure": "nature_reserve",
+      "name": "Siuslaw National Forest",
+      "operator": "United States Forest Service",
+      "protect_class": "6",
+      "protection_title": "National Forest"
+    },
+    {
+      "boundary": "national_park",
+      "designation": "",
+      "landuse": "",
+      "leisure": "nature_reserve",
+      "name": "Oregon Dunes National Recreation Area",
+      "operator": "United States Forest Service",
+      "protect_class": "5",
+      "protection_title": "National Recreation Area"
+    }
+  ],
+  "ski_resort": null
+}

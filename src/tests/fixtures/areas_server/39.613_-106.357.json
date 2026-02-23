@@ -1,0 +1,23 @@
+{
+  "admin_hierarchy": {
+    "city": "Vail",
+    "country": "United States of America",
+    "county": "Eagle County",
+    "state": "Colorado"
+  },
+  "nearby_lakes": [],
+  "ocean": [],
+  "protected_areas": [
+    {
+      "boundary": "protected_area",
+      "designation": "",
+      "landuse": "",
+      "leisure": "",
+      "name": "White River National Forest",
+      "operator": "United States Forest Service",
+      "protect_class": "6",
+      "protection_title": "National Forest"
+    }
+  ],
+  "ski_resort": "Vail"
+}

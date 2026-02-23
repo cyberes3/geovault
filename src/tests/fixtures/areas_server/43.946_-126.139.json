@@ -1,0 +1,14 @@
+{
+  "admin_hierarchy": {
+    "city": null,
+    "country": null,
+    "county": null,
+    "state": null
+  },
+  "nearby_lakes": [],
+  "ocean": [
+    "North Pacific Ocean"
+  ],
+  "protected_areas": [],
+  "ski_resort": null
+}

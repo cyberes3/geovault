@@ -1,0 +1,25 @@
+{
+  "admin_hierarchy": {
+    "city": "Grand Lake",
+    "country": "United States of America",
+    "county": "Grand County",
+    "state": "Colorado"
+  },
+  "nearby_lakes": [
+    {
+      "distance_miles": 0.04,
+      "name": "Grand Lake",
+      "on_water": false,
+      "water_type": "lake"
+    },
+    {
+      "distance_miles": 0.43,
+      "name": "Shadow Mountain Lake",
+      "on_water": false,
+      "water_type": "reservoir"
+    }
+  ],
+  "ocean": [],
+  "protected_areas": [],
+  "ski_resort": null
+}

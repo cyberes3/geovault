@@ -1,0 +1,36 @@
+{
+  "admin_hierarchy": {
+    "city": null,
+    "country": "United States of America",
+    "county": "Jefferson County",
+    "state": "Colorado"
+  },
+  "nearby_lakes": [
+    {
+      "distance_miles": 0.11,
+      "name": "Mann Reservoir",
+      "on_water": false,
+      "water_type": "reservoir"
+    },
+    {
+      "distance_miles": 0.95,
+      "name": "Ken Caryl Reservoir",
+      "on_water": false,
+      "water_type": "reservoir"
+    }
+  ],
+  "ocean": [],
+  "protected_areas": [
+    {
+      "boundary": "protected_area",
+      "designation": "",
+      "landuse": "recreation_ground",
+      "leisure": "",
+      "name": "South Valley Park",
+      "operator": "Jefferson County Open Space",
+      "protect_class": "5",
+      "protection_title": "Open Space"
+    }
+  ],
+  "ski_resort": null
+}
