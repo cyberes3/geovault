@@ -2,16 +2,20 @@
 # Post-processing for replication update: create geography GIST indexes for water_bodies and
 # place_nodes (flex tables) and run ANALYZE on all is_in tables used by the server:
 # admin_areas, protected_areas, water_bodies, place_nodes, ocean_regions, oceans, ski_resorts.
-# Usage: called by osm2pgsql-replication --post-processing (gets sequence and timestamp args).
-# Also run once after initial PBF import (see installation/Areas Server.md). Env: AREAS_SERVER_DATABASE.
+# Usage: ./post_analyze.sh DATABASE_URL [sequence] [timestamp]
+#   DATABASE_URL - required connection URL (e.g. postgresql://...).
+#   When called by osm2pgsql-replication --post-processing, sequence and timestamp may be passed.
+# Also run once after initial PBF import (see installation/Areas Server.md).
 
 set -euo pipefail
 
-DB="${AREAS_SERVER_DATABASE:-}"
+DB="${1:-}"
 if [[ -z "$DB" ]]; then
-  echo "AREAS_SERVER_DATABASE not set" >&2
+  echo "Usage: $0 DATABASE_URL [sequence] [timestamp]" >&2
+  echo "  DATABASE_URL - required (e.g. postgresql://...)" >&2
   exit 1
 fi
+shift || true
 
 SCHEMA="is_in"
 

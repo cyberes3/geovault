@@ -88,7 +88,8 @@ To load the OSM data:
 ```
 
 Run the first `.osm.pbf` import then add the `--append` for subsequent ones. If an `import_pbf.sh` run is canceled, you
-have to start the entire run over and start at the first file.
+have to start the entire run over and start at the first file. It is recommended to snapshot your VM or whatever between
+PBF imports.
 
 Optional arguments for faster imports:
 
@@ -96,16 +97,6 @@ Optional arguments for faster imports:
 |-----------------|----------------------------------------------------|
 | `--cache MB`    | Node cache size in MB. Default: 800.               |
 | `--processes N` | Parallel threads. Default: `nproc` (if available). |
-
-After the initial import, run the post-processing script to create geography indexes on the tables and refresh
-statistics:
-
-```bash
-export AREAS_SERVER_DATABASE="postgresql://..."
-./scripts/post_analyze.sh
-```
-
-If you do not run `post_analyze.sh` the queries will be incredibly slow.
 
 Remove small lakes so they do not clutter up the nearby-lakes results:
 
@@ -127,6 +118,15 @@ refreshes if older than 1 day):
 ```
 
 The standalone Python import scripts drop their table and re-import fresh data on every run.
+
+After the imports, run the post-processing script to create geography indexes on the tables and refresh
+statistics:
+
+```bash
+./scripts/post_analyze.sh "postgresql://..."
+```
+
+If you do not run `post_analyze.sh` the queries will be incredibly slow.
 
 ## Running the Server
 
