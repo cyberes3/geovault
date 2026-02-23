@@ -127,10 +127,11 @@ def run_benchmark(
             standley_lake_ok = len(pas) > 0 and any(
                 (p.get("name") or "").strip() == "Standley Lake Regional Park" for p in pas
             )
+            standley_lake_ms = elapsed * 1000
             if not standley_lake_ok:
-                print(f"Standley Lake check FAIL: expected protected_areas with 'Standley Lake Regional Park', got {pas!r}", file=sys.stderr)
+                print(f"Standley Lake check FAIL: expected protected_areas with 'Standley Lake Regional Park', got {pas!r} ({standley_lake_ms:.2f} ms)", file=sys.stderr)
             else:
-                print("Standley Lake check: OK (protected_areas includes Standley Lake Regional Park)", flush=True)
+                print(f"Standley Lake check: OK (protected_areas includes Standley Lake Regional Park) — {standley_lake_ms:.2f} ms", flush=True)
         ms = elapsed * 1000
         status_str = "" if status == 200 else f" status={status}"
         print(f"GET {i}/{n}: {ms:.2f} ms{status_str}", flush=True)
@@ -146,16 +147,18 @@ def run_benchmark(
     ok_str = "OK" if (batch_status == 200 and batch_data and "results" in batch_data and len(batch_data["results"]) == len(batch_points)) else f"status={batch_status}"
     print(f"POST /query: {batch_ms:.2f} ms ({ok_str})", flush=True)
 
+    get_times_ms = [t * 1000 for t in get_times]
     return {
         "base_url": base_url,
         "num_points": len(points),
         "batch_points": len(batch_points),
         "seed": seed,
         "points": points,
-        "get_times_ms": [t * 1000 for t in get_times],
+        "get_times_ms": get_times_ms,
         "get_errors": get_errors,
         "get_status_codes": get_status_codes,
         "standley_lake_ok": standley_lake_ok,
+        "standley_lake_ms": get_times_ms[0] if get_times_ms else None,
         "batch_elapsed_ms": batch_elapsed * 1000,
         "batch_status": batch_status,
         "batch_ok": batch_status == 200 and batch_data and "results" in batch_data and len(batch_data["results"]) == len(batch_points),
@@ -180,6 +183,7 @@ def write_md(results: dict, out_path: Path) -> None:
     ]
     if get_times:
         lines.extend([
+            f"- **Standley Lake (test point):** {results.get('standley_lake_ms') or get_times[0]:.2f} ms",
             f"- **Min:** {min(get_times):.2f} ms",
             f"- **Max:** {max(get_times):.2f} ms",
             f"- **Mean:** {sum(get_times) / len(get_times):.2f} ms",
