@@ -26,6 +26,9 @@ POOL_MAX_SIZE: int = int(os.environ.get("AREAS_SERVER_POOL_MAX_SIZE", "10"))
 # Redis for response cache (shared across Gunicorn workers). Use a separate DB from core server (core uses 1, 2).
 REDIS_URL: str = os.environ.get("AREAS_SERVER_REDIS_URL", "redis://127.0.0.1:6379/3")
 
+# Session work_mem for PostGIS queries (sorts, distance ops). Default 128MB; increase if queries are slow.
+WORK_MEM: str = os.environ.get("AREAS_SERVER_WORK_MEM", "128MB")
+
 
 def get_conninfo() -> str:
     if not DATABASE_URL or not DATABASE_URL.strip():

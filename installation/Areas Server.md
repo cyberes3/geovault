@@ -29,6 +29,32 @@ Use a dedicated database seperate from the main GeoVault one.
 
 Exit with `\q`.
 
+### Postgre Tuning
+
+You will likely need to tune your Postgres server.
+
+| Parameter                    | Suggested                         | Purpose                                                             |
+|------------------------------|-----------------------------------|---------------------------------------------------------------------|
+| **random_page_cost**         | `1.1`                             | Planner prefers index scans (default 4.0 assumes HDD).              |
+| **effective_cache_size**     | ~75% of RAM, e.g. `12GB` for 16GB | Planner favors index use.                                           |
+| **effective_io_concurrency** | `200` (SSD/NVMe)                  | Lets bitmap heap scans issue more concurrent I/O.                   |
+| **shared_buffers**           | e.g. `4GB` for 16GB RAM           | If not already set.                                                 |
+| **work_mem**                 | Session only (see below)          | More memory for sorts/hash before spilling to disk.                 |
+| **statement_timeout**        | Optional, e.g. `15000` (ms)       | Cap per-query runtime so one slow request does not tie up a worker. |
+
+The areas server sets **work_mem** per connection (default 64MB) via `AREAS_SERVER_WORK_MEM`; raise it (e.g. `128MB`) if
+`EXPLAIN` shows heavy sorts or hash joins.
+
+Example (in `postgresql.conf`):
+
+```
+random_page_cost = 1.1
+effective_cache_size = 12GB
+effective_io_concurrency = 200
+```
+
+For full parameter reference see [PostgreSQL Tuning Guide](https://postgresqlco.nf/tuning-guide).
+
 ## Installation
 
 ```shell

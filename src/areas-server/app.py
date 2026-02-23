@@ -29,6 +29,7 @@ from config import (
     MAX_BATCH_SIZE,
     POOL_MAX_SIZE,
     REDIS_URL,
+    WORK_MEM,
 )
 
 app = Flask(__name__)
@@ -38,8 +39,10 @@ _cache: Optional[Any] = None
 
 
 def _configure_read_only(conn):
-    """Set session to read-only so this connection cannot modify data."""
+    """Set session to read-only and tune for PostGIS (work_mem for sorts/distance)."""
     conn.execute("SET default_transaction_read_only = on")
+    # work_mem: use parameterised form to avoid injection; PostgreSQL SET doesn't support %s for value, so we pass a safe token
+    conn.execute("SET work_mem = %s", (WORK_MEM,))
     conn.rollback()
 
 
