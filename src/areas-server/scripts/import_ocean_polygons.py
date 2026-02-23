@@ -101,9 +101,33 @@ def iter_shape_name_geom(sf):
         yield (name, geom)
 
 
+def _signed_ring_area(ring):
+    """Signed area of a ring (planar). Positive = CCW, negative = CW. ESRI spec: CW = exterior, CCW = hole."""
+    if len(ring) < 3:
+        return 0
+    a = 0.0
+    for k in range(len(ring)):
+        nxt = (k + 1) % len(ring)
+        a += ring[k][0] * ring[nxt][1] - ring[nxt][0] * ring[k][1]
+    return a / 2.0
+
+
+def _rings_from_shapefile_shape(s):
+    """Yield (ring, signed_area) for each part of a shapefile polygon shape."""
+    pts = s.points
+    parts = getattr(s, "parts", None) or [0]
+    for j in range(len(parts)):
+        start = parts[j]
+        end = parts[j + 1] if j + 1 < len(parts) else len(pts)
+        ring = list(pts[start:end])
+        if len(ring) >= 3:
+            area = _signed_ring_area(ring)
+            yield (ring, area)
+
+
 def iter_goas_name_geom(sf):
-    """Yield (name, shapely_geom) for each GOaS record. Applies buffer(0) and make_valid when geom is invalid."""
-    from shapely.geometry import Polygon, MultiPolygon
+    """Yield (name, shapely_geom) for each GOaS record. Parses polygons per ESRI shapefile spec: CW = exterior, CCW = hole (see scripts/SHAPEFILE_POLYGON_SPEC.md). Supports multiple outer rings. Applies buffer(0)/make_valid only when needed."""
+    from shapely.geometry import Polygon, MultiPolygon, Point
     from shapely import make_valid
     fields = [f[0] for f in sf.fields[1:]]
     name_idx = fields.index("name") if "name" in fields else 0
@@ -115,23 +139,48 @@ def iter_goas_name_geom(sf):
         s = sf.shape(i)
         if not getattr(s, "points", None):
             continue
-        pts = s.points
-        parts = getattr(s, "parts", None) or [0]
-        polygons = []
-        for j in range(len(parts)):
-            start = parts[j]
-            end = parts[j + 1] if j + 1 < len(parts) else len(pts)
-            ring = pts[start:end]
-            if len(ring) >= 3:
+        rings_with_area = list(_rings_from_shapefile_shape(s))
+        if not rings_with_area:
+            continue
+        # ESRI spec: negative area = clockwise = exterior; positive = counterclockwise = hole.
+        exteriors = [(r, a) for (r, a) in rings_with_area if a < 0]
+        hole_rings = [(r, a) for (r, a) in rings_with_area if a > 0]
+        if not exteriors:
+            continue
+        # Shapely: shell CCW, holes CW — so reverse ESRI exterior (CW→CCW) and holes (CCW→CW).
+        def to_shell(ring, area: float):
+            return ring if area > 0 else list(reversed(ring))
+        def to_hole(ring, area: float):
+            return ring if area < 0 else list(reversed(ring))
+        if len(exteriors) == 1:
+            (ext_ring, ext_area) = exteriors[0]
+            shell = to_shell(ext_ring, ext_area)
+            holes = [to_hole(r, a) for (r, a) in hole_rings]
+            try:
+                geom = Polygon(shell, holes if holes else None)
+            except Exception:
+                continue
+        else:
+            # Multiple outer rings: assign each hole to the exterior that contains it.
+            ext_polys = [Polygon(to_shell(r, a)) for (r, a) in exteriors]
+            holes_per_ext = [[] for _ in exteriors]
+            for (hole_ring, hole_area) in hole_rings:
+                pt = Point(hole_ring[0])
+                for idx, ep in enumerate(ext_polys):
+                    if ep.contains(pt):
+                        holes_per_ext[idx].append(to_hole(hole_ring, hole_area))
+                        break
+            polys = []
+            for (ext_ring, ext_area), holes in zip(exteriors, holes_per_ext):
                 try:
-                    poly = Polygon(ring)
-                    if not poly.is_empty and poly.is_valid:
-                        polygons.append(poly)
+                    p = Polygon(to_shell(ext_ring, ext_area), holes if holes else None)
+                    if not p.is_empty:
+                        polys.append(p)
                 except Exception:
                     pass
-        if not polygons:
-            continue
-        geom = polygons[0] if len(polygons) == 1 else MultiPolygon(polygons)
+            if not polys:
+                continue
+            geom = MultiPolygon(polys) if len(polys) > 1 else polys[0]
         if geom.is_empty:
             continue
         if not geom.is_valid and hasattr(geom, "buffer"):

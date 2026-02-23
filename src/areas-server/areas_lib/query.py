@@ -14,7 +14,7 @@ _MILES_TO_M = 1609.34
 
 
 def _query_single_unified_sql(include_place: bool) -> Tuple[str, List[Any]]:
-    """Build one UNION ALL query for single point and return (sql, params). Params: lon, lat, lake_radius_m, ocean_radius_m[, city_radius_m]."""
+    """Build one UNION ALL query for single point and return (sql, params). Params: lon, lat, lake_radius_m, ocean_radius_m (region), ocean_radius_m (main)[, city_radius_m]."""
     pt_cte = f"WITH pt AS (SELECT public.ST_SetSRID(public.ST_MakePoint(%s, %s), 4326) AS geom)"
     parts = [
         f"""
@@ -69,10 +69,15 @@ def _query_single_unified_sql(include_place: bool) -> Tuple[str, List[Any]]:
         ) sub)
         """,
         f"""
-        (SELECT 'ocean_main' AS layer, jsonb_build_object('name', o.name) AS payload
-        FROM {SCHEMA}.{lookup_ocean.TABLE_OCEANS} o, pt
-        WHERE public.ST_Contains(o.geom, pt.geom)
-        LIMIT 1)
+        (SELECT 'ocean_main' AS layer, jsonb_build_object('name', sub.name) AS payload
+        FROM (
+            SELECT o.name FROM {SCHEMA}.{lookup_ocean.TABLE_OCEANS} o, pt
+            WHERE public.ST_Contains(o.geom, pt.geom)
+               OR public.ST_DWithin(public.geography(o.geom), public.geography(pt.geom), %s)
+            ORDER BY public.ST_Contains(o.geom, pt.geom) DESC NULLS LAST,
+                     public.ST_Distance(public.geography(o.geom), public.geography(pt.geom))
+            LIMIT 1
+        ) sub)
         """,
         f"""
         (SELECT 'ski' AS layer, jsonb_build_object('name', s.name) AS payload
@@ -174,6 +179,9 @@ def _query_batch_unified_sql(include_place: bool) -> str:
             SELECT jsonb_build_object('name', o.name) AS payload
             FROM {SCHEMA}.{lookup_ocean.TABLE_OCEANS} o
             WHERE public.ST_Contains(o.geom, pt.geom)
+               OR public.ST_DWithin(public.geography(o.geom), public.geography(pt.geom), %s)
+            ORDER BY public.ST_Contains(o.geom, pt.geom) DESC NULLS LAST,
+                     public.ST_Distance(public.geography(o.geom), public.geography(pt.geom))
             LIMIT 1
         ) sub ON true
         WHERE sub.payload IS NOT NULL
@@ -353,7 +361,7 @@ def query_single_unified(
     city_radius_m = city_radius_miles * _MILES_TO_M
     include_place = city_radius_miles > 0
     sql, _ = _query_single_unified_sql(include_place)
-    params: List[Any] = [lon, lat, lake_radius_m, ocean_radius_m]
+    params: List[Any] = [lon, lat, lake_radius_m, ocean_radius_m, ocean_radius_m]
     if include_place:
         params.append(city_radius_m)
     conn = pool.getconn()
@@ -406,7 +414,7 @@ def query_batch_unified(
     city_radius_m = city_radius_miles * _MILES_TO_M
     include_place = city_radius_miles > 0
     sql = _query_batch_unified_sql(include_place)
-    params: List[Any] = [indices, lons, lats, lake_radius_m, ocean_radius_m]
+    params: List[Any] = [indices, lons, lats, lake_radius_m, ocean_radius_m, ocean_radius_m]
     if include_place:
         params.append(city_radius_m)
     conn = pool.getconn()

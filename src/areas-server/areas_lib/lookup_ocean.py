@@ -44,10 +44,13 @@ def run_ocean_single(
                  LIMIT 1),
                 (SELECT o.name FROM {SCHEMA}.{TABLE_OCEANS} o, pt
                  WHERE public.ST_Contains(o.geom, pt.geom)
+                    OR public.ST_DWithin(public.geography(o.geom), public.geography(pt.geom), %s)
+                 ORDER BY public.ST_Contains(o.geom, pt.geom) DESC NULLS LAST,
+                          public.ST_Distance(public.geography(o.geom), public.geography(pt.geom))
                  LIMIT 1)
             FROM pt
             """,
-            (lon, lat, radius_m),
+            (lon, lat, radius_m, radius_m),
         )
         row = cur.fetchone()
         region = str(row[0]).strip() if row and row[0] else None
@@ -94,10 +97,13 @@ def run_ocean_batch(
                 SELECT o.name
                 FROM {SCHEMA}.{TABLE_OCEANS} o
                 WHERE public.ST_Contains(o.geom, pt.geom)
+                   OR public.ST_DWithin(public.geography(o.geom), public.geography(pt.geom), %s)
+                ORDER BY public.ST_Contains(o.geom, pt.geom) DESC NULLS LAST,
+                         public.ST_Distance(public.geography(o.geom), public.geography(pt.geom))
                 LIMIT 1
             ) oc ON true
             """,
-            (indices, lons, lats, radius_m),
+            (indices, lons, lats, radius_m, radius_m),
         )
         for row in cur.fetchall():
             if row and row[0] is not None:
