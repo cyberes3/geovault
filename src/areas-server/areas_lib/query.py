@@ -21,7 +21,9 @@ def _query_single_unified_sql(include_place: bool) -> Tuple[str, List[Any]]:
         (SELECT 'admin' AS layer, jsonb_build_object('osm_id', a.osm_id, 'admin_level', a.admin_level, 'name', a.name, 'tags', a.tags) AS payload
         FROM {SCHEMA}.{lookup_admin.TABLE_NAME} a, pt
         WHERE public.ST_Contains(a.geom, pt.geom)
-        ORDER BY a.admin_level)
+        ORDER BY a.admin_level,
+                 public.ST_Distance(public.ST_PointOnSurface(a.geom)::geography, public.geography(pt.geom)),
+                 a.osm_id)
         """,
         f"""
         (SELECT 'protected' AS layer, jsonb_build_object('osm_id', p.osm_id, 'name', p.name, 'tags', p.tags) AS payload
@@ -117,7 +119,9 @@ def _query_batch_unified_sql(include_place: bool) -> str:
         (SELECT pt.point_idx, 'admin' AS layer, jsonb_build_object('osm_id', a.osm_id, 'admin_level', a.admin_level, 'name', a.name, 'tags', a.tags) AS payload
         FROM pt
         JOIN {SCHEMA}.{lookup_admin.TABLE_NAME} a ON public.ST_Contains(a.geom, pt.geom)
-        ORDER BY pt.point_idx, a.admin_level)
+        ORDER BY pt.point_idx, a.admin_level,
+                 public.ST_Distance(public.ST_PointOnSurface(a.geom)::geography, public.geography(pt.geom)),
+                 a.osm_id)
         """,
         f"""
         SELECT point_idx, 'protected' AS layer, payload FROM (

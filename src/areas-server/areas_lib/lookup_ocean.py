@@ -2,7 +2,7 @@
 from typing import Any, Dict, List, Optional
 
 from config import SCHEMA
-from .lookup_common import extent_from_row
+from .lookup_common import get_table_stats
 
 TABLE_OCEAN_REGIONS = "ocean_regions"
 TABLE_OCEANS = "oceans"
@@ -114,33 +114,11 @@ def run_ocean_batch(
     return out
 
 
-def _stats_for_table(conn: Any, table: str) -> Dict[str, Any]:
-    """Return count and extent for table. Fails hard if table is missing."""
-    out: Dict[str, Any] = {"count": 0, "extent": None}
-    with conn.cursor() as cur:
-        cur.execute(
-            f"""
-            SELECT COUNT(*),
-                   public.ST_XMin(public.ST_Extent(geom)),
-                   public.ST_YMin(public.ST_Extent(geom)),
-                   public.ST_XMax(public.ST_Extent(geom)),
-                   public.ST_YMax(public.ST_Extent(geom))
-            FROM {SCHEMA}.{table}
-            """
-        )
-        row = cur.fetchone()
-        if row and row[0] is not None:
-            out["count"] = row[0]
-        if row and row[1] is not None:
-            out["extent"] = extent_from_row((row[1], row[2], row[3], row[4]))
-    return out
-
-
 def get_ocean_regions_stats(conn: Any) -> Dict[str, Any]:
     """Return stats for ocean_regions: count, extent. Fails hard if table is missing."""
-    return _stats_for_table(conn, TABLE_OCEAN_REGIONS)
+    return get_table_stats(conn, SCHEMA, TABLE_OCEAN_REGIONS, include_created=False)
 
 
 def get_oceans_stats(conn: Any) -> Dict[str, Any]:
     """Return stats for oceans: count, extent. Fails hard if table is missing."""
-    return _stats_for_table(conn, TABLE_OCEANS)
+    return get_table_stats(conn, SCHEMA, TABLE_OCEANS, include_created=False)

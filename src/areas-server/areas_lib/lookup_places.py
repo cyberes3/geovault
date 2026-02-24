@@ -2,7 +2,7 @@
 from typing import Any, Dict, List, Optional
 
 from config import SCHEMA
-from .lookup_common import extent_from_row
+from .lookup_common import get_table_stats
 
 TABLE_NAME = "place_nodes"
 
@@ -92,38 +92,4 @@ def run_place_batch(
 
 def get_place_stats(conn: Any) -> Dict[str, Any]:
     """Return stats for place_nodes: count, extent, timestamps. Fails hard if table is missing."""
-    out: Dict[str, Any] = {
-        "count": 0,
-        "extent": None,
-        "oldest_feature": None,
-        "newest_feature": None,
-    }
-    with conn.cursor() as cur:
-        cur.execute(
-            f"""
-            SELECT COUNT(*),
-                   public.ST_XMin(public.ST_Extent(geom)),
-                   public.ST_YMin(public.ST_Extent(geom)),
-                   public.ST_XMax(public.ST_Extent(geom)),
-                   public.ST_YMax(public.ST_Extent(geom)),
-                   MIN(created), MAX(created)
-            FROM {SCHEMA}.{TABLE_NAME}
-            """
-        )
-        row = cur.fetchone()
-        if row and row[0] is not None:
-            out["count"] = row[0]
-        if row and row[1] is not None:
-            out["extent"] = extent_from_row((row[1], row[2], row[3], row[4]))
-        if row and len(row) >= 7:
-            out["oldest_feature"] = _ts_str(row[5])
-            out["newest_feature"] = _ts_str(row[6])
-    return out
-
-
-def _ts_str(val: Any) -> Optional[str]:
-    if val is None:
-        return None
-    if hasattr(val, "isoformat"):
-        return val.isoformat()
-    return str(val)
+    return get_table_stats(conn, SCHEMA, TABLE_NAME, include_created=True)

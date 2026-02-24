@@ -2,7 +2,8 @@
 from typing import Any, Dict, List, Optional
 
 from config import SCHEMA
-from .lookup_common import extent_from_row
+
+from .lookup_common import get_table_stats
 
 TABLE_NAME = "ski_resorts"
 
@@ -59,21 +60,4 @@ def run_ski_resort_batch(
 
 def get_ski_resort_stats(conn: Any) -> Dict[str, Any]:
     """Return stats for ski_resorts: count, extent. Fails hard if table is missing."""
-    out: Dict[str, Any] = {"count": 0, "extent": None}
-    with conn.cursor() as cur:
-        cur.execute(
-            f"""
-            SELECT COUNT(*),
-                   public.ST_XMin(public.ST_Extent(geom)),
-                   public.ST_YMin(public.ST_Extent(geom)),
-                   public.ST_XMax(public.ST_Extent(geom)),
-                   public.ST_YMax(public.ST_Extent(geom))
-            FROM {SCHEMA}.{TABLE_NAME}
-            """
-        )
-        row = cur.fetchone()
-        if row and row[0] is not None:
-            out["count"] = row[0]
-        if row and row[1] is not None:
-            out["extent"] = extent_from_row((row[1], row[2], row[3], row[4]))
-    return out
+    return get_table_stats(conn, SCHEMA, TABLE_NAME, include_created=False)
