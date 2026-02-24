@@ -349,34 +349,18 @@ def conditional_external_api_mocking():
     logger = get_tagged_logger(__name__)
     patches = []
     
-    # Mock reverse geocoding: areas server returns (response_dict, error) from fixtures
+    # Mock reverse geocoding: areas server returns (AreasQueryResponse, error) from fixtures.
+    # Must return AreasQueryResponse so get_location_tags can call .has_any_location_data().
     def mock_query_areas_server(latitude: float, longitude: float):
         from tests.fixtures.geocoding_responses import get_areas_fixture
+        from geo_lib.reverse_geocoding.areas_server_models import AreasQueryResponse
         areas = get_areas_fixture(latitude, longitude)
         if areas is not None:
-            raw_ocean = areas.get('ocean')
-            ocean = raw_ocean if isinstance(raw_ocean, list) else ([raw_ocean] if raw_ocean and isinstance(raw_ocean, str) else [])
-            return (
-                {
-                    "admin_hierarchy": areas["admin_hierarchy"],
-                    "protected_areas": areas["protected_areas"],
-                    "nearby_lakes": areas.get("nearby_lakes") or [],
-                    "ocean": ocean,
-                    "ski_resort": areas.get("ski_resort"),
-                },
-                None,
-            )
-        empty = {
-            "admin_hierarchy": {"country": None, "state": None, "county": None, "city": None},
-            "protected_areas": [],
-            "nearby_lakes": [],
-            "ocean": [],
-            "ski_resort": None,
-        }
-        return (empty, None)
+            return (AreasQueryResponse.model_validate(areas), None)
+        return (AreasQueryResponse.empty(), None)
 
     areas_server_patch = patch(
-        'geo_lib.reverse_geocoding.areas_server_client.query_areas_server',
+        'geo_lib.reverse_geocoding.location_tags.query_areas_server',
         side_effect=mock_query_areas_server,
     )
     areas_server_patch.start()

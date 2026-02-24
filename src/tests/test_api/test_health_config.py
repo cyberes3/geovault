@@ -26,11 +26,10 @@ class TestHealthConfigAPI(TestCase):
         with patch('api.views.health.check_database_connection', return_value=True), \
              patch('api.views.health.check_redis_connection', return_value=True), \
              patch('api.views.health.check_postgis_installation', return_value=True), \
-             patch('api.views.health.check_overpass_api', return_value=True), \
              patch('api.views.health.check_elevation_api', return_value=True), \
              patch('api.views.health.check_maptiler_geocoding_api', return_value=True), \
              patch('website.settings_utils.get_required_setting') as mock_get_setting, \
-             patch('website.config_loader.get_config_loader') as mock_get_config:
+             patch('api.views.health.get_config_loader') as mock_get_config:
             # Mock get_required_setting to return False for ELEVATION_API_ENABLED (disabled)
             def get_setting_side_effect(attr_name):
                 if attr_name == 'ELEVATION_API_ENABLED':
@@ -55,11 +54,10 @@ class TestHealthConfigAPI(TestCase):
         with patch('api.views.health.check_database_connection', return_value=False), \
              patch('api.views.health.check_redis_connection', return_value=True), \
              patch('api.views.health.check_postgis_installation', return_value=True), \
-             patch('api.views.health.check_overpass_api', return_value=True), \
              patch('api.views.health.check_elevation_api', return_value=True), \
              patch('api.views.health.check_maptiler_geocoding_api', return_value=True), \
              patch('website.settings_utils.get_required_setting') as mock_get_setting, \
-             patch('website.config_loader.get_config_loader') as mock_get_config:
+             patch('api.views.health.get_config_loader') as mock_get_config:
             # Mock get_required_setting to return False for ELEVATION_API_ENABLED (disabled)
             def get_setting_side_effect(attr_name):
                 if attr_name == 'ELEVATION_API_ENABLED':
@@ -84,11 +82,10 @@ class TestHealthConfigAPI(TestCase):
         with patch('api.views.health.check_database_connection', side_effect=Exception('Error')), \
              patch('api.views.health.check_redis_connection', return_value=True), \
              patch('api.views.health.check_postgis_installation', return_value=True), \
-             patch('api.views.health.check_overpass_api', return_value=True), \
              patch('api.views.health.check_elevation_api', return_value=True), \
              patch('api.views.health.check_maptiler_geocoding_api', return_value=True), \
              patch('website.settings_utils.get_required_setting') as mock_get_setting, \
-             patch('website.config_loader.get_config_loader') as mock_get_config:
+             patch('api.views.health.get_config_loader') as mock_get_config:
             # Mock get_required_setting to return False for ELEVATION_API_ENABLED (disabled)
             def get_setting_side_effect(attr_name):
                 if attr_name == 'ELEVATION_API_ENABLED':
@@ -141,11 +138,10 @@ class TestHealthConfigAPI(TestCase):
         with patch('api.views.health.check_database_connection', return_value=True), \
              patch('api.views.health.check_redis_connection', return_value=True), \
              patch('api.views.health.check_postgis_installation', return_value=True), \
-             patch('api.views.health.check_overpass_api', return_value=True), \
              patch('api.views.health.check_elevation_api', return_value=True), \
              patch('api.views.health.check_maptiler_geocoding_api', return_value=True), \
              patch('website.settings_utils.get_required_setting') as mock_get_setting, \
-             patch('website.config_loader.get_config_loader') as mock_get_config:
+             patch('api.views.health.get_config_loader') as mock_get_config:
             # Mock get_required_setting to return False for ELEVATION_API_ENABLED (disabled)
             def get_setting_side_effect(attr_name):
                 if attr_name == 'ELEVATION_API_ENABLED':
@@ -233,7 +229,6 @@ class TestHealthConfigAPI(TestCase):
         with patch('api.views.health.check_database_connection', return_value=True), \
              patch('api.views.health.check_redis_connection', return_value=True), \
              patch('api.views.health.check_postgis_installation', return_value=True), \
-             patch('api.views.health.check_overpass_api', return_value=True), \
              patch('api.views.health.check_elevation_api', return_value=True), \
              patch('website.settings_utils.get_required_setting') as mock_get_setting, \
              patch('api.views.health.get_config_loader') as mock_get_config:
@@ -259,7 +254,6 @@ class TestHealthConfigAPI(TestCase):
         with patch('api.views.health.check_database_connection', return_value=True), \
              patch('api.views.health.check_redis_connection', return_value=True), \
              patch('api.views.health.check_postgis_installation', return_value=True), \
-             patch('api.views.health.check_overpass_api', return_value=True), \
              patch('api.views.health.check_elevation_api', return_value=True), \
              patch('api.views.health.check_google_geocoding_api', return_value=True), \
              patch('website.settings_utils.get_required_setting') as mock_get_setting, \
