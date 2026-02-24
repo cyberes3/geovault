@@ -16,4 +16,4 @@ the repo and naming below.
 | Places   | Name must **start with** `GeoVault Places ` and **end with** `.apk`. Example: `GeoVault Places 2026-02-12 abc123def.apk` |
 
 Only the **latest** release (by Gitea’s order) is used. After publishing a new release, the dashboard will show the new
-APK links within the cache window (1 hour) or on the next request after cache expiry.
+APK links within the cache window (30 minutes) or on the next request after cache expiry.

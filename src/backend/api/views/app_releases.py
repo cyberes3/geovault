@@ -1,9 +1,13 @@
 """
 API view to expose latest Android app release download URLs from Gitea.
 Fetches the latest release and matches Uploader / Places APK assets by name.
+Response is cached server-side for 30 minutes so the Gitea API is not hit on every request.
 """
 
+import os
+
 import requests
+from django.core.cache import cache
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from pydantic import BaseModel, Field
@@ -14,12 +18,22 @@ from geo_lib.website.auth import api_or_login_required_401
 
 _logger = get_tagged_logger()
 
-# Hardcoded: always git.evulid.cc (not configurable)
-RELEASES_API_URL = "https://git.evulid.cc/api/v1/repos/cyberes/geovault-app-release/releases"
-RELEASES_PAGE_URL = "https://git.evulid.cc/cyberes/geovault-app-release/releases"
+# Default: git.evulid.cc. Overridable via APP_RELEASES_API_URL (undocumented).
+DEFAULT_RELEASES_API_URL = "https://git.evulid.cc/api/v1/repos/cyberes/geovault-app-release/releases"
 RELEASES_REQUEST_TIMEOUT = 10
-# 1 hour cache for server and browser
-CACHE_MAX_AGE_SECONDS = 3600
+# 30 minutes server and browser cache
+CACHE_MAX_AGE_SECONDS = 30 * 60
+APP_RELEASES_CACHE_KEY_PREFIX = "api:app_releases"
+
+
+def _get_releases_api_url() -> str:
+    return (os.environ.get("APP_RELEASES_API_URL") or "").strip() or DEFAULT_RELEASES_API_URL
+
+
+def _get_releases_page_url(api_url: str) -> str:
+    if "/api/v1/repos/" in api_url:
+        return api_url.replace("/api/v1/repos/", "/", 1)
+    return "https://git.evulid.cc/cyberes/geovault-app-release/releases"
 
 
 class AppReleasesResponse(BaseModel):
@@ -52,47 +66,33 @@ def _find_places_asset(assets: list) -> str | None:
     return None
 
 
-@api_or_login_required_401()
-@require_http_methods(["GET"])
-def get_app_releases(request):
-    """
-    Return the latest Uploader and Places APK download URLs from the Gitea releases API (git.evulid.cc).
-    Requires authentication (session or API key). If the API is unreachable or returns no matching
-    assets, URLs are null and clients should use releases_page_url.
-    """
-    if not is_url_safe_for_fetch(RELEASES_API_URL):
+def _fetch_app_releases_data(api_url: str, page_url: str) -> dict:
+    """Fetch release URLs from Gitea and return AppReleasesResponse as a dict. Used for cache miss."""
+    if not is_url_safe_for_fetch(api_url):
         _logger.warning("app_releases: releases API URL failed SSRF check, returning fallback only")
-        body = AppReleasesResponse(uploader_url=None, places_url=None, releases_page_url=RELEASES_PAGE_URL)
-        response = JsonResponse(body.model_dump())
-        response["Cache-Control"] = f"public, max-age={CACHE_MAX_AGE_SECONDS}"
-        return response
+        return AppReleasesResponse(
+            uploader_url=None, places_url=None, releases_page_url=page_url
+        ).model_dump()
 
     uploader_url = None
     places_url = None
 
     try:
-        # Fetch multiple releases: Uploader and Places are separate releases on git.evulid.cc
         resp = requests.get(
-            RELEASES_API_URL, params={"limit": 20}, timeout=RELEASES_REQUEST_TIMEOUT
+            api_url, params={"limit": 20}, timeout=RELEASES_REQUEST_TIMEOUT
         )
         resp.raise_for_status()
         releases = resp.json()
     except requests.RequestException as e:
         _logger.warning("app_releases: failed to fetch releases: %s", e)
-        body = AppReleasesResponse(
-            uploader_url=None, places_url=None, releases_page_url=RELEASES_PAGE_URL
-        )
-        response = JsonResponse(body.model_dump())
-        response["Cache-Control"] = f"public, max-age={CACHE_MAX_AGE_SECONDS}"
-        return response
+        return AppReleasesResponse(
+            uploader_url=None, places_url=None, releases_page_url=page_url
+        ).model_dump()
     except (ValueError, TypeError) as e:
         _logger.warning("app_releases: invalid JSON from releases API: %s", e)
-        body = AppReleasesResponse(
-            uploader_url=None, places_url=None, releases_page_url=RELEASES_PAGE_URL
-        )
-        response = JsonResponse(body.model_dump())
-        response["Cache-Control"] = f"public, max-age={CACHE_MAX_AGE_SECONDS}"
-        return response
+        return AppReleasesResponse(
+            uploader_url=None, places_url=None, releases_page_url=page_url
+        ).model_dump()
 
     if isinstance(releases, list):
         for release in releases:
@@ -104,11 +104,34 @@ def get_app_releases(request):
             if uploader_url and places_url:
                 break
 
-    body = AppReleasesResponse(
+    return AppReleasesResponse(
         uploader_url=uploader_url,
         places_url=places_url,
-        releases_page_url=RELEASES_PAGE_URL,
-    )
-    response = JsonResponse(body.model_dump())
-    response["Cache-Control"] = f"public, max-age={CACHE_MAX_AGE_SECONDS}"
+        releases_page_url=page_url,
+    ).model_dump()
+
+
+@api_or_login_required_401()
+@require_http_methods(["GET"])
+def get_app_releases(request):
+    """
+    Return the latest Uploader and Places APK download URLs from the Gitea releases API (git.evulid.cc).
+    Requires authentication (session or API key). If the API is unreachable or returns no matching
+    assets, URLs are null and clients should use releases_page_url.
+    Response is cached server-side for 30 minutes.
+    """
+    api_url = _get_releases_api_url()
+    page_url = _get_releases_page_url(api_url)
+    cache_key = f"{APP_RELEASES_CACHE_KEY_PREFIX}:{api_url}"
+
+    cached = cache.get(cache_key)
+    if cached is not None:
+        response = JsonResponse(cached)
+        response["Cache-Control"] = "private, no-store"
+        return response
+
+    data = _fetch_app_releases_data(api_url, page_url)
+    cache.set(cache_key, data, timeout=CACHE_MAX_AGE_SECONDS)
+    response = JsonResponse(data)
+    response["Cache-Control"] = "private, no-store"
     return response
