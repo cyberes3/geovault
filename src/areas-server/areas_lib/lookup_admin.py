@@ -37,6 +37,13 @@ def _normalize_country_name(name: Optional[str]) -> Optional[str]:
     return _COUNTRY_NAME_ALIASES.get(name.strip(), name.strip())
 
 
+def _level6_is_city(tags: Dict[str, Any]) -> bool:
+    """True if this admin_level=6 boundary is tagged as city (e.g. consolidated city-county).
+    Nominatim uses extratags.place; OSM uses border_type=city or border_type=county;city."""
+    bt = (tags.get("border_type") or "").strip()
+    return any(p.strip() == "city" for p in bt.split(";"))
+
+
 def build_admin_hierarchy(rows: List[Tuple[Any, ...]]) -> Dict[str, Optional[str]]:
     """Build admin_hierarchy dict from query rows (osm_id, admin_level, name, tags)."""
     result: Dict[str, Optional[str]] = {
@@ -55,7 +62,15 @@ def build_admin_hierarchy(rows: List[Tuple[Any, ...]]) -> Dict[str, Optional[str
             continue
         name = str(name).strip()
         if admin_level == 2:
-            result["country"] = _normalize_country_name(name) or name
+            # Prefer canonical name from country code (Nominatim uses country_name table).
+            code = tags.get("ISO3166-1-alpha-2") or tags.get("ISO3166-1")
+            if isinstance(code, str) and len(code) >= 2:
+                code = code[:2].upper()
+            result["country"] = (
+                _country_code_to_name(code)
+                or _normalize_country_name(name)
+                or name
+            )
         elif admin_level == 4:
             result["state"] = name
             if result["country"] is None:
@@ -70,6 +85,9 @@ def build_admin_hierarchy(rows: List[Tuple[Any, ...]]) -> Dict[str, Optional[str
                     result["country"] = code_name
             if result["state"] is None and tags.get("is_in:state"):
                 result["state"] = str(tags.get("is_in:state", "")).strip()
+            # Level-6 as city when boundary is tagged (Nominatim uses extratags.place; OSM uses border_type).
+            if result["city"] is None and _level6_is_city(tags):
+                result["city"] = name
         elif admin_level == 8:
             result["city"] = name
     return result
