@@ -18,9 +18,11 @@ import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class SettingsActivity : AppCompatActivity() {
+    private val executor = Executors.newSingleThreadExecutor()
     private lateinit var serverUrlEdit: EditText
     private lateinit var connectButton: MaterialButton
     private lateinit var disconnectButton: MaterialButton
@@ -101,34 +103,44 @@ class SettingsActivity : AppCompatActivity() {
     /**
      * If we think we're logged in, verify the token with the server.
      * /api/user/status/ returns 401 when the token is invalid or revoked; then we clear local tokens.
+     * Token fetch runs off the main thread (getValidAccessToken can do network I/O for refresh).
      */
     private fun checkTokenStillValid() {
         if (!GeovaultAuthManager.isLoggedIn(this)) return
         val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
         if (serverUrl.isBlank()) return
-        val token = GeovaultAuthManager.getValidAccessToken(this) ?: return
-        val request = Request.Builder()
-            .url("$serverUrl/api/user/status/")
-            .addHeader("Authorization", "Bearer $token")
-            .build()
-        OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .build()
-            .newCall(request)
-            .enqueue(object : Callback {
-                override fun onFailure(call: Call, e: java.io.IOException) {}
-                override fun onResponse(call: Call, response: Response) {
-                    val code = response.code
-                    response.close()
-                    if (code == 401) {
-                        runOnUiThread {
-                            GeovaultAuthManager.clearTokens(this@SettingsActivity)
-                            updateConnectDisconnectVisibility()
+        executor.execute {
+            val token = GeovaultAuthManager.getValidAccessToken(this@SettingsActivity) ?: return@execute
+            runOnUiThread {
+                val request = Request.Builder()
+                    .url("$serverUrl/api/user/status/")
+                    .addHeader("Authorization", "Bearer $token")
+                    .build()
+                OkHttpClient.Builder()
+                    .connectTimeout(10, TimeUnit.SECONDS)
+                    .readTimeout(10, TimeUnit.SECONDS)
+                    .build()
+                    .newCall(request)
+                    .enqueue(object : Callback {
+                        override fun onFailure(call: Call, e: java.io.IOException) {}
+                        override fun onResponse(call: Call, response: Response) {
+                            val code = response.code
+                            response.close()
+                            if (code == 401) {
+                                runOnUiThread {
+                                    GeovaultAuthManager.clearTokens(this@SettingsActivity)
+                                    updateConnectDisconnectVisibility()
+                                }
+                            }
                         }
-                    }
-                }
-            })
+                    })
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        executor.shutdown()
+        super.onDestroy()
     }
 
     private fun updateConnectDisconnectVisibility() {

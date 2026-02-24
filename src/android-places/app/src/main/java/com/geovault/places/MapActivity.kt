@@ -10,6 +10,7 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.util.BoundingBox
 import java.util.ArrayList
+import java.util.concurrent.Executors
 
 import android.os.Build
 
@@ -24,6 +25,7 @@ class MapActivity : AppCompatActivity() {
     private lateinit var map: MapView
     private lateinit var features: ArrayList<Feature>
     private var lastSelectedMarker: Marker? = null
+    private val executor = Executors.newSingleThreadExecutor()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,13 +38,20 @@ class MapActivity : AppCompatActivity() {
         // Set internal cache directory to avoid permission issues
         Configuration.getInstance().osmdroidTileCache = java.io.File(ctx.cacheDir, "osmdroid")
 
-        // Set Authorization header for tile requests (OAuth access token)
-        val accessToken = GeovaultAuthManager.getValidAccessToken(this)
-        if (!accessToken.isNullOrBlank()) {
-            Configuration.getInstance().additionalHttpRequestProperties["Authorization"] = "Bearer $accessToken"
+        // Fetch token off the main thread (getValidAccessToken can do network I/O for refresh)
+        executor.execute {
+            val accessToken = GeovaultAuthManager.getValidAccessToken(this@MapActivity)
+            runOnUiThread {
+                if (!accessToken.isNullOrBlank()) {
+                    Configuration.getInstance().additionalHttpRequestProperties["Authorization"] = "Bearer $accessToken"
+                }
+                setContentView(R.layout.activity_map)
+                initMapContent()
+            }
         }
+    }
 
-        setContentView(R.layout.activity_map)
+    private fun initMapContent() {
 
         // Handle window insets
         // Handle window insets
@@ -268,6 +277,11 @@ class MapActivity : AppCompatActivity() {
                 map.controller.setCenter(GeoPoint(0.0, 0.0))
             }
         }
+    }
+
+    override fun onDestroy() {
+        executor.shutdown()
+        super.onDestroy()
     }
 
     override fun onResume() {

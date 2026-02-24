@@ -28,17 +28,21 @@ object RetrofitClient {
                 var retried = false
                 if (!refreshToken.isNullOrBlank() && serverUrl.isNotBlank()) {
                     var newAccess: String? = null
+                    var newRefresh: String? = null
                     var newExpires: Long = 0L
                     GeovaultAuthManager.refreshAccessToken(
                         serverUrl, refreshToken,
-                        onSuccess = { access, expires ->
+                        onSuccess = { access, newRt, expires ->
                             newAccess = access
+                            newRefresh = newRt
                             newExpires = expires
                         },
                         onError = { }
                     )
                     if (newAccess != null && newExpires > 0) {
-                        GeovaultAuthManager.saveTokens(context, newAccess!!, refreshToken, newExpires)
+                        GeovaultAuthManager.saveTokens(
+                            context, newAccess!!, newRefresh ?: refreshToken, newExpires
+                        )
                         response.close()
                         retried = true
                         return@Interceptor chain.proceed(

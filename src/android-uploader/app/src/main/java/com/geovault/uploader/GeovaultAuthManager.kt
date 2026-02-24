@@ -67,9 +67,14 @@ object GeovaultAuthManager {
         plainPrefs(context).edit().putString(PREF_SERVER_URL, url).apply()
     }
 
+    /**
+     * True if the user has a valid session: either a non-expired access token or a refresh token
+     * (so we can obtain a new access token). After access token expiry (~12h), we still consider
+     * the user logged in if a refresh token exists.
+     */
     fun isLoggedIn(context: Context): Boolean {
-        val token = getAccessToken(context)
-        return !token.isNullOrBlank()
+        if (!getAccessToken(context).isNullOrBlank()) return true
+        return !getRefreshToken(context).isNullOrBlank()
     }
 
     fun getAccessToken(context: Context): String? {
@@ -180,10 +185,15 @@ object GeovaultAuthManager {
         }
     }
 
+    /**
+     * Exchange refresh_token for a new access token. If the server uses refresh token rotation,
+     * it returns a new refresh_token in the response; that value is passed to onSuccess and must
+     * be saved so the next refresh uses it (the old token is revoked).
+     */
     fun refreshAccessToken(
         serverUrl: String,
         refreshToken: String,
-        onSuccess: (accessToken: String, expiresIn: Long) -> Unit,
+        onSuccess: (accessToken: String, newRefreshToken: String?, expiresIn: Long) -> Unit,
         onError: () -> Unit
     ): Boolean {
         val url = serverUrl.trimEnd('/') + TOKEN_ENDPOINT_PATH
@@ -209,12 +219,13 @@ object GeovaultAuthManager {
         }
         val json = JSONObject(responseBody)
         val accessToken = json.optString("access_token")
+        val newRefreshToken = json.optString("refresh_token").takeIf { it.isNotBlank() }
         val expiresIn = json.optLong("expires_in", 43200L)
         if (accessToken.isBlank()) {
             onError()
             return false
         }
-        onSuccess(accessToken, expiresIn)
+        onSuccess(accessToken, newRefreshToken, expiresIn)
         return true
     }
 
@@ -228,16 +239,18 @@ object GeovaultAuthManager {
         val serverUrl = getServerUrl(context)
         if (serverUrl.isBlank()) return null
         var newAccess: String? = null
+        var newRefresh: String? = null
         var newExpires: Long = 0L
         refreshAccessToken(serverUrl, refreshToken,
-            onSuccess = { access, expires ->
+            onSuccess = { access, newRt, expires ->
                 newAccess = access
+                newRefresh = newRt
                 newExpires = expires
             },
             onError = { }
         )
         if (newAccess != null && newExpires > 0) {
-            saveTokens(context, newAccess!!, refreshToken, newExpires)
+            saveTokens(context, newAccess!!, newRefresh ?: refreshToken, newExpires)
             return newAccess
         }
         return null
