@@ -84,7 +84,7 @@ To load the OSM data:
 
 ```bash
 ./scripts/import_pbf.sh --database "postgresql://..." /srv/downloads/north-america-latest.osm.pbf
-./scripts/import_pbf.sh --database "postgresql://..." /srv/downloads/europe-latest.osm.pbf --append
+./scripts/import_pbf.sh --database "postgresql://..." /srv/downloads/europe-latest.osm.pbf --append --processes 4
 ```
 
 Run the first `.osm.pbf` import then add the `--append` for subsequent ones. If an `import_pbf.sh` run is canceled, you

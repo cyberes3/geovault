@@ -513,6 +513,136 @@ class TestOAuthRefreshToken(TestCase):
         return quote(s, safe="")
 
 
+class TestOAuthRegistrationThenRefreshAfterClockForward(TestCase):
+    """
+    E2E: Register an OAuth application, complete auth code flow to get tokens,
+    simulate 2 days passing (expire access token), then use refresh_token to get
+    a new access token and call the API.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="regrefresh@example.com",
+            password="testpass123",
+            username="regrefreshuser",
+        )
+        self.redirect_uri = "https://app.example/oauth/callback"
+        self.client_id = "regrefresh-test-client"
+
+    def test_registration_then_refresh_after_clock_forward(self):
+        # 1. Register OAuth application via the registration form
+        self.client.force_login(self.user)
+        reg_response = self.client.post(
+            "/api/oauth/applications/register/",
+            data={
+                "name": "Reg Then Refresh App",
+                "client_id": self.client_id,
+                "client_secret": "",
+                "client_type": Application.CLIENT_PUBLIC,
+                "authorization_grant_type": Application.GRANT_AUTHORIZATION_CODE,
+                "redirect_uris": self.redirect_uri,
+            },
+        )
+        self.assertEqual(reg_response.status_code, 302, reg_response.content.decode()[:500])
+        self.assertTrue(
+            Application.objects.filter(user=self.user, client_id=self.client_id).exists(),
+            "Application should be created",
+        )
+
+        # 2. Auth code flow: authorize -> code -> token (get access_token + refresh_token)
+        code_verifier = "d" * 43
+        code_challenge = _pkce_code_challenge(code_verifier)
+        state = "regrefresh_state"
+        authorize_url = (
+            "/api/oauth/authorize/"
+            f"?response_type=code&client_id={self.client_id}"
+            f"&redirect_uri={self._url_quote(self.redirect_uri)}"
+            "&scope=api"
+            f"&state={state}"
+            f"&code_challenge={self._url_quote(code_challenge)}"
+            "&code_challenge_method=S256"
+        )
+        auth_response = self.client.get(authorize_url)
+        # Registered apps do not skip authorization: we get the consent page (200)
+        if auth_response.status_code == 200:
+            # Submit consent form (allow=1) to get redirect with code
+            consent_data = {
+                "client_id": self.client_id,
+                "redirect_uri": self.redirect_uri,
+                "scope": "api",
+                "state": state,
+                "response_type": "code",
+                "code_challenge": code_challenge,
+                "code_challenge_method": "S256",
+                "allow": "1",
+            }
+            auth_response = self.client.post("/api/oauth/authorize/", data=consent_data)
+        self.assertEqual(auth_response.status_code, 302, auth_response.content)
+        parsed = urlparse(auth_response.get("Location", ""))
+        params = parse_qs(parsed.query)
+        self.assertIn("code", params)
+        code = params["code"][0]
+
+        self.client.logout()
+        token_response = self.client.post(
+            "/api/oauth/token/",
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": self.redirect_uri,
+                "client_id": self.client_id,
+                "code_verifier": code_verifier,
+            },
+        )
+        self.assertEqual(token_response.status_code, 200, token_response.content)
+        token_data = json.loads(token_response.content)
+        access_token = token_data["access_token"]
+        refresh_token = token_data.get("refresh_token")
+        self.assertTrue(refresh_token, "Token response must include refresh_token")
+
+        # 3. Simulate clock forward 2 days: expire the access token in the DB
+        AccessToken.objects.filter(token=access_token).update(
+            expires=timezone.now() - timedelta(days=2),
+        )
+
+        # 4. Old access token must be rejected
+        api_old = self.client.get(
+            "/api/features/all/",
+            HTTP_AUTHORIZATION=f"Bearer {access_token}",
+        )
+        self.assertEqual(api_old.status_code, 401)
+
+        # 5. Refresh: exchange refresh_token for new access_token
+        refresh_response = self.client.post(
+            "/api/oauth/token/",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+                "client_id": self.client_id,
+            },
+        )
+        self.assertEqual(
+            refresh_response.status_code,
+            200,
+            f"Refresh should succeed: {refresh_response.status_code} {refresh_response.content}",
+        )
+        new_data = json.loads(refresh_response.content)
+        self.assertIn("access_token", new_data)
+        new_access = new_data["access_token"]
+        self.assertTrue(len(new_access) > 0)
+
+        # 6. New access token works for API
+        api_new = self.client.get(
+            "/api/features/all/",
+            HTTP_AUTHORIZATION=f"Bearer {new_access}",
+        )
+        self.assertEqual(api_new.status_code, 200)
+
+    def _url_quote(self, s):
+        from urllib.parse import quote
+        return quote(s, safe="")
+
+
 class TestEnsureOAuth2AppCommand(TestCase):
     """Tests for the ensure_oauth2_app management command."""
 

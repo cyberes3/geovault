@@ -160,7 +160,7 @@ class TestTilesAPI(TestCase):
         self.assertEqual(user_agent, get_user_agent(), "User-Agent should match get_user_agent()")
 
     @patch('geo_lib.tiles.requests.get')
-    @patch('geo_lib.tiles.settings.TILE_CACHE_ENABLED', False)
+    @override_settings(TILE_CACHE_ENABLED=False)
     def test_tile_proxy_uses_custom_user_agent(self, mock_requests_get):
         """Test that tile proxy uses custom User-Agent header from proxy_config when proxying is enabled."""
         # Create a mock response

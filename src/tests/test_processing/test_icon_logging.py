@@ -38,8 +38,8 @@ class TestIconLoggingBehavior:
         # Create icon data that exceeds size limit
         large_icon_data = b'x' * (10 * 1024 * 1024)  # 10MB
         
-        with patch('geo_lib.processing.icons.icon_manager.settings') as mock_settings:
-            mock_settings.ICON_MAX_SIZE_BYTES = 1024 * 1024  # 1MB limit
+        with patch('geo_lib.processing.icons.icon_manager.get_required_setting') as mock_get_setting:
+            mock_get_setting.return_value = 1024 * 1024  # 1MB limit
             
             result = store_icon(large_icon_data, 'test.png', import_log, stats)
         
@@ -165,8 +165,8 @@ class TestIconLoggingBehavior:
         mock_response.read.side_effect = [b'\x89PNG\r\n\x1a\n', b'']
         mock_opener = _mock_opener_for_fetch(open_return_value=mock_response)
         with patch('geo_lib.processing.icons.get.build_opener', return_value=mock_opener):
-            with patch('geo_lib.processing.icons.get.settings') as mock_settings:
-                mock_settings.ICON_MAX_SIZE_BYTES = 1024 * 1024  # 1MB limit
+            with patch('geo_lib.processing.icons.get.get_required_setting') as mock_get_setting:
+                mock_get_setting.return_value = 1024 * 1024  # 1MB limit
                 result = fetch_remote_icon('http://example.com/icon.png', 5.0, import_log)
         assert result is None
         logs = import_log.get()
@@ -326,9 +326,13 @@ class TestIconLoggingBehavior:
             ]
         }
         
-        with patch('geo_lib.processing.icons.icon_manager.settings') as mock_settings:
-            mock_settings.ICON_PROCESSING_ENABLED = True
-            
+        with patch('geo_lib.processing.icons.icon_manager.get_setting') as mock_get_setting:
+            def _get_setting(key, default=None):
+                if key == 'ICON_PROCESSING_ENABLED':
+                    return True
+                return default
+            mock_get_setting.side_effect = _get_setting
+
             def mock_process_icon_href(href, file_type, import_log, stats, file_data=None):
                 """Mock that properly increments stats when returning a value."""
                 if 'example.com' in href:
@@ -365,9 +369,13 @@ class TestIconLoggingBehavior:
             ]
         }
         
-        with patch('geo_lib.processing.icons.icon_manager.settings') as mock_settings:
-            mock_settings.ICON_PROCESSING_ENABLED = True
-            
+        with patch('geo_lib.processing.icons.icon_manager.get_setting') as mock_get_setting:
+            def _get_setting(key, default=None):
+                if key == 'ICON_PROCESSING_ENABLED':
+                    return True
+                return default
+            mock_get_setting.side_effect = _get_setting
+
             result = process_geojson_icons(geojson_data, 'kml', import_log)
         
         # Check that no summary was logged (no icons processed)
@@ -544,9 +552,13 @@ class TestIconStatisticsTracking:
             ]
         }
         
-        with patch('geo_lib.processing.icons.icon_manager.settings') as mock_settings:
-            mock_settings.ICON_PROCESSING_ENABLED = True
-            
+        with patch('geo_lib.processing.icons.icon_manager.get_setting') as mock_get_setting:
+            def _get_setting(key, default=None):
+                if key == 'ICON_PROCESSING_ENABLED':
+                    return True
+                return default
+            mock_get_setting.side_effect = _get_setting
+
             process_geojson_icons(geojson_data, 'kml', import_log)
         
         logs = import_log.get()
@@ -574,8 +586,8 @@ class TestFailureMessageContent:
         
         large_data = b'x' * (5 * 1024 * 1024)  # 5MB
         
-        with patch('geo_lib.processing.icons.icon_manager.settings') as mock_settings:
-            mock_settings.ICON_MAX_SIZE_BYTES = 1024 * 1024  # 1MB
+        with patch('geo_lib.processing.icons.icon_manager.get_required_setting') as mock_get_setting:
+            mock_get_setting.return_value = 1024 * 1024  # 1MB
             
             store_icon(large_data, 'large.png', import_log, stats)
         
@@ -713,8 +725,8 @@ class TestFailureMessageContent:
         stats = {'successful': 0, 'failed': 0}
         
         # WARNING: Size limit
-        with patch('geo_lib.processing.icons.icon_manager.settings') as mock_settings:
-            mock_settings.ICON_MAX_SIZE_BYTES = 1024
+        with patch('geo_lib.processing.icons.icon_manager.get_required_setting') as mock_get_setting:
+            mock_get_setting.return_value = 1024
             store_icon(b'x' * 10000, 'large.png', import_log, stats)
         
         # WARNING: HTTP error
