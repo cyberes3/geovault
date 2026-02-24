@@ -8,7 +8,7 @@ from users.views.oauth_authorized import list_authorized_oauth_tokens, revoke_oa
 urlpatterns = [
     re_path(r"^user/dashboard/", dashboard, name="dashboard"),
     re_path(r"^api/user/status/", check_auth),
-    path("api/user/storage/", get_user_storage, name="api_user_storage"),
+    path("api/user/storage/usage/", get_user_storage, name="api_user_storage_usage"),
     path("api/user/password/change/", change_password_api, name="api_password_change"),
     path("api/user/email/status/", get_email_status_api, name="api_email_status"),
     path("api/user/email/resend-verification/", resend_verification_api, name="api_resend_verification"),

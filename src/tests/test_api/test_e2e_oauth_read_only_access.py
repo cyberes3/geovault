@@ -111,11 +111,13 @@ class TestE2EOAuthReadOnlyAccess(TestCase):
         self.assertIn("authorized", data)
         self.assertTrue(data["authorized"])
 
-        r = self._get("/api/user/storage/")
+        r = self._get("/api/user/storage/usage/")
         self.assertEqual(r.status_code, 200, r.content)
         data = json.loads(r.content)
-        self.assertIn("storage_bytes", data)
-        self.assertIsInstance(data["storage_bytes"], (int, float))
+        self.assertIn("total_storage_bytes", data)
+        self.assertIn("by_type", data)
+        self.assertIn("feature", data["by_type"])
+        self.assertIsInstance(data["total_storage_bytes"], (int, float))
 
     def test_read_only_access_collections_and_extensions(self):
         """API key can read collections list and extensions list."""
@@ -161,7 +163,7 @@ class TestE2EOAuthReadOnlyAccess(TestCase):
             "/api/item/import/jobs",
             "/api/user/settings/",
             "/api/config/",
-            "/api/user/storage/",
+            "/api/user/storage/usage/",
             "/api/collections/",
             "/api/extensions/",
         ]

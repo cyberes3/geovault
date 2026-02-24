@@ -220,6 +220,9 @@
 </template>
 
 <script>
+/**
+ * @typedef {{ by_type: Record<string, number>, total_storage_bytes: number }} StorageUsageResponse
+ */
 import {mapState} from "vuex";
 import BaseButton from "../parts/BaseButton.vue";
 import {
@@ -299,7 +302,7 @@ export default {
       const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
       try {
-        const response = await fetch('/api/user/storage/', {
+        const response = await fetch('/api/user/storage/usage/', {
           signal: controller.signal
         })
 
@@ -309,8 +312,9 @@ export default {
           throw new Error(`HTTP error! status: ${response.status}`)
         }
 
+        /** @type {StorageUsageResponse} */
         const data = await response.json()
-        this.storageBytes = data.storage_bytes || 0
+        this.storageBytes = data.total_storage_bytes ?? 0
         this.storageError = false
       } catch (error) {
         clearTimeout(timeoutId)

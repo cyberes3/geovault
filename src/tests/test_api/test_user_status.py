@@ -247,7 +247,7 @@ class TestEmailAddress(TestCase):
 
 
 class TestUserStorageEndpoint(TestCase):
-    """Test /api/user/storage/ endpoint."""
+    """Test /api/user/storage/usage/ endpoint."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -261,25 +261,23 @@ class TestUserStorageEndpoint(TestCase):
 
     def test_storage_endpoint_authenticated(self):
         """Test storage endpoint for authenticated user."""
-        response = self.client.get('/api/user/storage/')
-        
+        response = self.client.get('/api/user/storage/usage/')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        
-        self.assertIn('storage_bytes', data)
-        self.assertIsInstance(data['storage_bytes'], int)
-        self.assertGreaterEqual(data['storage_bytes'], 0)
+        self.assertIn('by_type', data)
+        self.assertIn('feature', data['by_type'])
+        self.assertIn('total_storage_bytes', data)
+        self.assertIsInstance(data['total_storage_bytes'], int)
+        self.assertGreaterEqual(data['total_storage_bytes'], 0)
 
     def test_storage_endpoint_unauthenticated(self):
         """Test that unauthenticated users cannot access storage endpoint."""
         self.client.logout()
-        response = self.client.get('/api/user/storage/')
-        
+        response = self.client.get('/api/user/storage/usage/')
         self.assertEqual(response.status_code, 401)
 
     def test_storage_with_features(self):
         """Test storage calculation with features."""
-        # Create feature with some data
         feature_data = {
             'type': 'Feature',
             'geometry': {
@@ -297,16 +295,13 @@ class TestUserStorageEndpoint(TestCase):
             geometry=Point(-122.4194, 37.7749, 0.0),
             geojson_hash=generate_geojson_hash(feature_data)
         )
-        
-        response = self.client.get('/api/user/storage/')
+        response = self.client.get('/api/user/storage/usage/')
         data = json.loads(response.content)
-        
-        # Should have some storage usage
-        self.assertGreater(data['storage_bytes'], 0)
+        self.assertGreater(data['total_storage_bytes'], 0)
+        self.assertGreater(data['by_type']['feature'], 0)
 
     def test_storage_with_import_queue(self):
         """Test storage calculation with import queue items."""
-        # Create import queue item
         kml_content = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
@@ -318,19 +313,16 @@ class TestUserStorageEndpoint(TestCase):
     </Placemark>
   </Document>
 </kml>"""
-        
         ImportQueue.objects.create(
             user=self.user,
             original_filename='test.kml',
             raw_file=kml_content,
             geofeatures=[]
         )
-        
-        response = self.client.get('/api/user/storage/')
+        response = self.client.get('/api/user/storage/usage/')
         data = json.loads(response.content)
-        
-        # Should have some storage usage
-        self.assertGreater(data['storage_bytes'], 0)
+        self.assertGreater(data['total_storage_bytes'], 0)
+        self.assertGreater(data['by_type']['feature'], 0)
 
     def test_storage_only_own_data(self):
         """Test that storage only includes user's own data."""
@@ -340,8 +332,6 @@ class TestUserStorageEndpoint(TestCase):
             password='pass',
             username='other'
         )
-        
-        # Create feature for current user
         my_feature_data = {
             'type': 'Feature',
             'geometry': {
@@ -358,8 +348,6 @@ class TestUserStorageEndpoint(TestCase):
             geometry=Point(-122.4194, 37.7749, 0.0),
             geojson_hash=generate_geojson_hash(my_feature_data)
         )
-        
-        # Create feature for other user
         other_feature_data = {
             'type': 'Feature',
             'geometry': {
@@ -368,7 +356,7 @@ class TestUserStorageEndpoint(TestCase):
             },
             'properties': {
                 'name': 'Other Point',
-                'description': 'This is a very long description' * 100  # Large data
+                'description': 'This is a very long description' * 100
             }
         }
         FeatureStore.objects.create(
@@ -377,26 +365,39 @@ class TestUserStorageEndpoint(TestCase):
             geometry=Point(-122.4094, 37.7849, 0.0),
             geojson_hash=generate_geojson_hash(other_feature_data)
         )
-        
-        response = self.client.get('/api/user/storage/')
+        response = self.client.get('/api/user/storage/usage/')
         data = json.loads(response.content)
-        
-        # Storage should only reflect own data (much smaller)
-        my_storage = data['storage_bytes']
-        
-        # Login as other user and check their storage
+        my_storage = data['total_storage_bytes']
         self.client.force_login(other_user)
-        response = self.client.get('/api/user/storage/')
+        response = self.client.get('/api/user/storage/usage/')
         other_data = json.loads(response.content)
-        other_storage = other_data['storage_bytes']
-        
-        # Other user should have much more storage
+        other_storage = other_data['total_storage_bytes']
         self.assertGreater(other_storage, my_storage)
 
     def test_storage_empty_user(self):
         """Test storage for user with no data."""
-        response = self.client.get('/api/user/storage/')
+        response = self.client.get('/api/user/storage/usage/')
         data = json.loads(response.content)
-        
-        # Should be zero or very small
-        self.assertGreaterEqual(data['storage_bytes'], 0)
+        self.assertGreaterEqual(data['total_storage_bytes'], 0)
+        self.assertIn('feature', data['by_type'])
+        self.assertGreaterEqual(data['by_type']['feature'], 0)
+
+    def test_storage_type_feature(self):
+        """Test ?type=feature returns same structure with only feature in by_type."""
+        response = self.client.get('/api/user/storage/usage/?type=feature')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('by_type', data)
+        self.assertIn('feature', data['by_type'])
+        self.assertIn('total_storage_bytes', data)
+        self.assertEqual(data['by_type']['feature'], data['total_storage_bytes'])
+        self.assertEqual(len(data['by_type']), 1)
+
+    def test_storage_type_invalid(self):
+        """Test invalid type returns 400."""
+        response = self.client.get('/api/user/storage/usage/?type=invalid')
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+        self.assertIn('supported', data)
+        self.assertIn('feature', data['supported'])
