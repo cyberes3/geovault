@@ -17,6 +17,8 @@ allows us to load alternative data sources beyond OSM.
 
 **Batch of 15 points:** 3370.37 ms
 
+If you aren't meeting these you're doing something wrong.
+
 ## Data Served
 
 Data comes from OSM and other sources. See [ATTRIBUTION.md](ATTRIBUTION.md) for data attribution and license text.

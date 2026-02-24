@@ -1,19 +1,38 @@
 """
 Comprehensive tests for reverse geocoding service.
 
-The autouse fixture in conftest.py mocks query_areas_server (admin, protected_areas,
-nearby_lakes, ocean from fixtures) automatically.
+Responses come from real cached fixtures under tests/fixtures/areas_server/ (loaded via
+get_areas_fixture). The autouse fixture in conftest.py wires query_areas_server to return
+those fixture responses so tests do not hit the network.
 """
 import pytest
 from unittest.mock import patch
 from django.test import TestCase
 from django.core.cache import cache, caches
 
-from geo_lib.reverse_geocoding.location_tags import get_location_tags, batch_reverse_geocode_coordinates
+from geo_lib.reverse_geocoding.location_tags import get_location_tags, batch_reverse_geocode_coordinates, tags_from_areas_data
 from geo_lib.reverse_geocoding.cache import _get_cache_key, _REVERSE_GEOCODING_CACHE
 from geo_lib.spatial.haversine import haversine_distance_miles
 
 from tests.fixtures.geocoding_responses import get_areas_fixture
+
+
+class ReverseGeocodingTagTestMixin:
+    """Mixin for tests that assert on location tags; provides assert_tags_exact and expected-from-fixture helper."""
+
+    def assert_tags_exact(self, actual_tags, expected_tags):
+        """Assert tag sets are exactly equal: no missing tags, no unexpected extra tags."""
+        self.assertEqual(
+            sorted(actual_tags),
+            sorted(expected_tags),
+            "Tags must match exactly (no missing, no unexpected extra). "
+            f"Extra: {sorted(set(actual_tags) - set(expected_tags))!r}. "
+            f"Missing: {sorted(set(expected_tags) - set(actual_tags))!r}.",
+        )
+
+    def _expected_tags_from_fixture(self, areas_data):
+        """Build expected tag list from fixture using real tag generation."""
+        return tags_from_areas_data(areas_data)
 
 
 @pytest.mark.django_db
@@ -71,8 +90,8 @@ class TestCacheKey(TestCase):
 
 
 @pytest.mark.django_db
-class TestReverseGeocodingService(TestCase):
-    """Test reverse geocoding service with mocked areas server."""
+class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
+    """Test reverse geocoding service using real cached fixtures (tests/fixtures/areas_server/)."""
     
     def setUp(self):
         """Set up test fixtures."""
@@ -108,51 +127,51 @@ class TestReverseGeocodingService(TestCase):
             f"Expected Rocky Mountain area in {names}",
         )
 
-    def test_ocean_tag_from_areas_fixture(self):
-        """When areas fixture includes ocean (string or list), get_location_tags returns ocean:<name> tag(s)."""
-        areas_data = get_areas_fixture(43.911, -124.125)
-        self.assertIsNotNone(areas_data, "Load areas_server fixtures with ocean (43.911_-124.125.json)")
-        self.assertIn("ocean", areas_data)
-        ocean = areas_data["ocean"]
-        if isinstance(ocean, list):
-            self.assertIn("Pacific Ocean", ocean)
-        else:
-            self.assertEqual(ocean, "Pacific Ocean")
-        tags, _ = get_location_tags(43.911, -124.125)
-        self.assertIn("ocean:Pacific Ocean", tags, f"Expected ocean tag in {tags}")
+    def test_ocean_main_only_from_fixture(self):
+        """Main ocean only (43.946, -126.139): exact tag set, North Pacific only."""
+        lat, lon = 43.946, -126.139
+        areas_data = get_areas_fixture(lat, lon)
+        self.assertIsNotNone(areas_data, "Fixture 43.946_-126.139.json")
+        expected = self._expected_tags_from_fixture(areas_data)
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
 
-    def test_two_ocean_tags_from_areas_fixture(self):
-        """When areas fixture has two oceans (e.g. sub-region + main), get_location_tags returns two ocean:* tags."""
-        # Gulf of Maine / North Atlantic: use coordinate that rounds to fixture 43.8_-69.0.json
+    def test_ocean_regional_and_main_from_fixture(self):
+        """Regional + main ocean (43.8, -69.0): exact tag set, Gulf of Maine and North Atlantic."""
         lat, lon = 43.8, -69.0
         areas_data = get_areas_fixture(lat, lon)
-        if areas_data is None:
-            self.skipTest(
-                "Add areas_server fixture 43.8_-69.0.json with \"ocean\": [\"Gulf of Maine\", \"North Atlantic Ocean\"]"
-            )
-        ocean = areas_data.get("ocean") or []
-        ocean_list = ocean if isinstance(ocean, list) else [ocean]
-        self.assertGreaterEqual(len(ocean_list), 2, "Fixture should have two ocean names")
+        self.assertIsNotNone(areas_data, "Fixture 43.8_-69.0.json")
+        expected = self._expected_tags_from_fixture(areas_data)
         tags, _ = get_location_tags(lat, lon)
-        self.assertIn("ocean:Gulf of Maine", tags, f"Expected ocean:Gulf of Maine in {tags}")
-        self.assertIn("ocean:North Atlantic Ocean", tags, f"Expected ocean:North Atlantic Ocean in {tags}")
+        self.assert_tags_exact(tags, expected)
 
-    def test_open_pacific_ocean_from_fixture(self):
-        """Open North Pacific coordinate (41.41, -134.30) returns ocean containing North Pacific Ocean (GOaS)."""
-        lat, lon = 41.41037324278657, -134.2993241551787
+    def test_ocean_open_pacific_from_fixture(self):
+        """Open North Pacific (41.41, -134.299): exact tag set, North Pacific Ocean only."""
+        lat, lon = 41.41, -134.299
         areas_data = get_areas_fixture(lat, lon)
-        if areas_data is None:
-            self.skipTest(
-                "Add areas_server fixture for 41.41_-134.299.json with \"ocean\": [\"North Pacific Ocean\"]"
-            )
-        self.assertIn("ocean", areas_data)
-        ocean = areas_data["ocean"]
-        ocean_list = ocean if isinstance(ocean, list) else [ocean]
-        self.assertGreater(len(ocean_list), 0, "Fixture should have at least one ocean name")
-        self.assertIn("North Pacific Ocean", ocean_list, f"Expected North Pacific Ocean in {ocean_list}")
+        self.assertIsNotNone(areas_data, "Fixture 41.41_-134.299.json")
+        expected = self._expected_tags_from_fixture(areas_data)
         tags, _ = get_location_tags(lat, lon)
-        self.assertIn("ocean:North Pacific Ocean", tags, f"Expected ocean:North Pacific Ocean in {tags}")
-    
+        self.assert_tags_exact(tags, expected)
+
+    def test_ocean_shore_tagged_ocean(self):
+        """Point on/near shore (43.65, -70.25): exact tag set and at least one ocean tag."""
+        lat, lon = 43.65, -70.25
+        areas_data = get_areas_fixture(lat, lon)
+        self.assertIsNotNone(areas_data, "Fixture 43.65_-70.25.json (shore)")
+        expected = self._expected_tags_from_fixture(areas_data)
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_ocean_state_park_from_fixture(self):
+        """Oregon coast (45.84810, -123.96116): exact tag set, North Pacific (not North Atlantic), state park."""
+        lat, lon = 45.84810, -123.96116
+        areas_data = get_areas_fixture(lat, lon)
+        self.assertIsNotNone(areas_data, "Fixture 45.848_-123.961.json (state park + ocean)")
+        expected = self._expected_tags_from_fixture(areas_data)
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
     def test_protected_areas_misc_parks(self):
         """Test classify_protected_area on areas from cached areas_server fixtures."""
         from geo_lib.reverse_geocoding.protected_areas import classify_protected_area
@@ -178,74 +197,50 @@ class TestReverseGeocodingService(TestCase):
             self.skipTest("Load areas_server fixtures (fetch_areas_fixtures.py <url>)")
     
     def test_city_park_classification(self):
-        """Test classify_protected_area on areas from cached areas_server fixtures (park vs protected-area)."""
+        """Test classify_protected_area: leisure=park without boundary -> 'park'; boundary=protected_area -> not 'park'."""
         from geo_lib.reverse_geocoding.protected_areas import classify_protected_area
 
-        # Find an area with leisure=park and no boundary (classified as 'park')
-        for lat, lon in [(39.722, -104.957), (39.0, -105.0), (40.34, -105.68)]:
-            areas_data = get_areas_fixture(lat, lon)
-            if not areas_data:
-                continue
-            for area in areas_data.get("protected_areas", []):
-                if area.get("leisure") == "park" and not area.get("boundary"):
-                    self.assertEqual(classify_protected_area(area), "park")
-                    break
-            else:
-                continue
-            break
-        else:
-            self.skipTest("Load areas_server fixture with leisure=park, no boundary (e.g. city park)")
+        # leisure=park and no boundary (or boundary != protected_area) -> "park"
+        self.assertEqual(classify_protected_area({"leisure": "park"}), "park")
+        self.assertEqual(classify_protected_area({"leisure": "park", "boundary": ""}), "park")
+        self.assertEqual(classify_protected_area({"leisure": "park", "name": "City Park"}), "park")
 
-        # Any area with boundary=protected_area from fixture should not classify as plain 'park'
-        for lat, lon in [(40.34, -105.68), (39.42, -105.65)]:
-            areas_data = get_areas_fixture(lat, lon)
-            if not areas_data or not areas_data.get("protected_areas"):
-                continue
-            area = areas_data["protected_areas"][0]
-            if area.get("boundary") == "protected_area":
-                self.assertIn(classify_protected_area(area), ("national-park", "wilderness", "protected-area"))
-                return
-        self.skipTest("Load areas_server fixtures with protected_areas (fetch_areas_fixtures.py)")
+        # boundary=protected_area -> must not classify as "park" (falls through to national-park/wilderness/protected-area)
+        area_protected = {"boundary": "protected_area", "protection_title": "Wilderness"}
+        self.assertIn(classify_protected_area(area_protected), ("national-park", "wilderness", "protected-area"))
+        area_protected_only = {"boundary": "protected_area"}
+        self.assertEqual(classify_protected_area(area_protected_only), "protected-area")
     
     def test_ski_resort_tag_from_areas_server(self):
-        """When query_areas_server returns ski_resort, get_location_tags includes ski-resort:<name>."""
-        _REVERSE_GEOCODING_CACHE.clear()
-        with patch('geo_lib.reverse_geocoding.location_tags.query_areas_server') as mock_areas:
-            mock_areas.return_value = (
-                {'country': 'USA', 'state': 'Colorado', 'county': 'Eagle', 'city': 'Vail'},
-                [],
-                [],
-                [],
-                'Vail',
-                None,
-            )
-            tags, _ = get_location_tags(39.64, -106.37)
-        self.assertIn('ski-resort:Vail', tags, f'Expected ski-resort:Vail in {tags}')
+        """When areas fixture has ski_resort (e.g. Vail), get_location_tags returns exact tags from fixture."""
+        lat, lon = 39.613, -106.357  # Vail; fixture 39.613_-106.357.json
+        areas_data = get_areas_fixture(lat, lon)
+        self.assertIsNotNone(areas_data, "Fixture 39.613_-106.357.json (Vail ski resort)")
+        self.assertIsNotNone(areas_data.get("ski_resort"), "Fixture must include ski_resort")
+        expected = self._expected_tags_from_fixture(areas_data)
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
 
     def test_nearby_lakes_from_areas_fixture(self):
-        """When areas fixture has nearby_lakes, get_location_tags returns lake tags."""
+        """When areas fixture has nearby_lakes, get_location_tags returns exact tags from fixture."""
         areas_data = get_areas_fixture(40.2514, -105.8239)
         if not areas_data or not areas_data.get("nearby_lakes"):
             self.skipTest("Load areas_server fixtures with nearby_lakes (fetch_areas_fixtures.py <url>)")
+        expected = self._expected_tags_from_fixture(areas_data)
         tags, _ = get_location_tags(40.2514, -105.8239)
-        lake_tags = [t for t in tags if t.startswith("lake:")]
-        self.assertGreater(len(lake_tags), 0, f"Expected at least one lake tag from fixture in {tags}")
+        self.assert_tags_exact(tags, expected)
 
     def test_get_location_tags_comprehensive(self):
-        """Test comprehensive location tag generation."""
-        # Generic Colorado coordinates - fixture in conftest.py
-        tags, log_messages = get_location_tags(39.0, -105.0)
-        
-        # Should have at least one admin-level tag (country, state, or county)
-        tag_strings = [t for t in tags]
-        self.assertTrue(
-            any('country:' in t or 'state:' in t or 'county:' in t for t in tag_strings),
-            f'Expected at least one of country/state/county in {tag_strings}'
-        )
+        """Test comprehensive location tag generation matches fixture-derived expected set."""
+        areas_data = get_areas_fixture(39.0, -105.0)
+        self.assertIsNotNone(areas_data, "Load areas_server fixtures (e.g. fetch_areas_fixtures.py <url>)")
+        expected = self._expected_tags_from_fixture(areas_data)
+        tags, _ = get_location_tags(39.0, -105.0)
+        self.assert_tags_exact(tags, expected)
 
 
 @pytest.mark.django_db
-class TestCaching(TestCase):
+class TestCaching(ReverseGeocodingTagTestMixin, TestCase):
     """Test caching functionality."""
     
     def setUp(self):
@@ -272,10 +267,10 @@ class TestCaching(TestCase):
         self.assertEqual(len(results), 4)
         tags_1 = results[(40.1231, -105.79)][0]
         tags_3 = results[(40.1231, -105.7901)][0]
-        self.assertEqual(tags_1, tags_3)
+        self.assert_tags_exact(tags_1, tags_3)
         tags_2 = results[(40.1232, -105.789)][0]
         tags_4 = results[(40.1232, -105.7891)][0]
-        self.assertEqual(tags_2, tags_4)
+        self.assert_tags_exact(tags_2, tags_4)
 
     def test_batch_reverse_geocode_empty_list(self):
         """Test that batch_reverse_geocode_coordinates handles empty list."""
@@ -284,7 +279,7 @@ class TestCaching(TestCase):
 
 
 @pytest.mark.django_db
-class TestErrorHandling(TestCase):
+class TestErrorHandling(ReverseGeocodingTagTestMixin, TestCase):
     """Test error handling in reverse geocoding."""
     
     def setUp(self):
@@ -300,29 +295,27 @@ class TestErrorHandling(TestCase):
         cache.clear()
     
     def test_get_location_tags_exception_handling(self):
-        """Test that get_location_tags handles exceptions gracefully."""
-        # Invalid coordinates shouldn't crash
+        """Test that get_location_tags handles invalid coordinates: no fixture -> empty tags."""
         tags, log_messages = get_location_tags(999.0, 999.0)
-        self.assertIsInstance(tags, list)
+        self.assert_tags_exact(tags, [])
         self.assertIsInstance(log_messages, list)
 
     def test_areas_server_error_logged(self):
-        """Test that areas server error is logged to console and import log (log_messages)."""
+        """When areas client returns an error, error is logged and tags are empty. No fixture for errors, so we simulate the same (response, error) the real client returns when e.g. AREAS_SERVER_URL is unset."""
         _REVERSE_GEOCODING_CACHE.clear()
+        real_client_error = "AREAS_SERVER_URL is not set; required for reverse geocoding."
         with patch('geo_lib.reverse_geocoding.location_tags.query_areas_server') as mock_areas:
-            mock_areas.return_value = (None, None, [], [], None, "is_in area server returned 503")
+            mock_areas.return_value = (None, real_client_error)
             tags, log_messages = get_location_tags(39.746, -104.844)
-        self.assertIsInstance(tags, list)
+        self.assert_tags_exact(tags, [])
         errors = [m for m in log_messages if m.level == 'ERROR']
         self.assertEqual(len(errors), 1)
-        self.assertIn("503", errors[0].message)
+        self.assertIn("AREAS_SERVER_URL", errors[0].message)
         self.assertEqual(errors[0].source, 'Reverse Geocoding')
-        # Admin/protected should be empty when areas server fails
-        self.assertFalse(any(t.startswith('country:') or t.startswith('state:') for t in tags))
 
 
 @pytest.mark.django_db
-class TestTagGeneration(TestCase):
+class TestTagGeneration(ReverseGeocodingTagTestMixin, TestCase):
     """Test tag generation from location data."""
     
     def setUp(self):
@@ -338,35 +331,39 @@ class TestTagGeneration(TestCase):
         cache.clear()
     
     def test_national_park_tag(self):
-        """Test protected-area tag generation (wilderness/national park area)."""
-        # Rocky Mountain area - fixture has Rocky Mountain Wilderness with bounds
-        tags, log_messages = get_location_tags(40.34, -105.68)
-        # Fixture may have national-park or wilderness tag depending on what contains the point
-        self.assertTrue(
-            any('national-park:' in t or 'wilderness:' in t for t in tags),
-            f'Expected a protected-area tag in {list(tags)}'
-        )
-    
+        """Test protected-area tag generation (wilderness/national park area) matches fixture exactly."""
+        areas_data = get_areas_fixture(40.34, -105.68)
+        if not areas_data:
+            self.skipTest("Load areas_server fixtures (fetch_areas_fixtures.py <url>)")
+        expected = self._expected_tags_from_fixture(areas_data)
+        tags, _ = get_location_tags(40.34, -105.68)
+        self.assert_tags_exact(tags, expected)
+
     def test_national_monument_tag(self):
-        """Test national monument tag generation."""
-        # Colorado National Monument area - fixture in conftest.py
-        tags, log_messages = get_location_tags(39.07, -108.73)
-        
-        self.assertTrue(any('national-monument:' in t for t in tags))
-    
+        """Test national monument tag generation matches fixture exactly."""
+        areas_data = get_areas_fixture(39.07, -108.73)
+        if not areas_data:
+            self.skipTest("Load areas_server fixtures (fetch_areas_fixtures.py <url>)")
+        expected = self._expected_tags_from_fixture(areas_data)
+        tags, _ = get_location_tags(39.07, -108.73)
+        self.assert_tags_exact(tags, expected)
+
     def test_wilderness_tag(self):
-        """Test wilderness area tag generation."""
-        # Mt Evans Wilderness area - fixture in conftest.py
-        tags, log_messages = get_location_tags(39.42, -105.65)
-        
-        self.assertTrue(any('wilderness:' in t for t in tags))
+        """Test wilderness area tag generation matches fixture exactly."""
+        areas_data = get_areas_fixture(39.42, -105.65)
+        if not areas_data:
+            self.skipTest("Load areas_server fixtures (fetch_areas_fixtures.py <url>)")
+        expected = self._expected_tags_from_fixture(areas_data)
+        tags, _ = get_location_tags(39.42, -105.65)
+        self.assert_tags_exact(tags, expected)
 
     def test_yellowstone_national_park_tag(self):
-        """Test that a point inside Yellowstone NP is tagged as national-park:Yellowstone National Park."""
-        tags, log_messages = get_location_tags(44.60384, -110.47567)
-        self.assertTrue(
-            any('national-park:' in t and 'Yellowstone' in t for t in tags),
-            f'Expected national-park tag for Yellowstone in {list(tags)}'
-        )
+        """Test that a point inside Yellowstone NP has exact tags from fixture."""
+        areas_data = get_areas_fixture(44.60384, -110.47567)
+        if not areas_data:
+            self.skipTest("Load areas_server fixtures (fetch_areas_fixtures.py <url>)")
+        expected = self._expected_tags_from_fixture(areas_data)
+        tags, _ = get_location_tags(44.60384, -110.47567)
+        self.assert_tags_exact(tags, expected)
 
 

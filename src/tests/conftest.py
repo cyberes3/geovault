@@ -349,23 +349,31 @@ def conditional_external_api_mocking():
     logger = get_tagged_logger(__name__)
     patches = []
     
-    # Mock reverse geocoding: areas server only (admin, protected areas, nearby_lakes, ocean, ski_resort from fixtures)
+    # Mock reverse geocoding: areas server returns (response_dict, error) from fixtures
     def mock_query_areas_server(latitude: float, longitude: float):
         from tests.fixtures.geocoding_responses import get_areas_fixture
         areas = get_areas_fixture(latitude, longitude)
         if areas is not None:
-            raw_ski = areas.get('ski_resort')
-            ski_resort = raw_ski if isinstance(raw_ski, str) and raw_ski.strip() else None
+            raw_ocean = areas.get('ocean')
+            ocean = raw_ocean if isinstance(raw_ocean, list) else ([raw_ocean] if raw_ocean and isinstance(raw_ocean, str) else [])
             return (
-                areas['admin_hierarchy'],
-                areas['protected_areas'],
-                areas.get('nearby_lakes') or [],
-                areas.get('ocean'),
-                ski_resort,
+                {
+                    "admin_hierarchy": areas["admin_hierarchy"],
+                    "protected_areas": areas["protected_areas"],
+                    "nearby_lakes": areas.get("nearby_lakes") or [],
+                    "ocean": ocean,
+                    "ski_resort": areas.get("ski_resort"),
+                },
                 None,
             )
-        empty_admin = {'country': None, 'state': None, 'county': None, 'city': None}
-        return (empty_admin, [], [], [], None, None)
+        empty = {
+            "admin_hierarchy": {"country": None, "state": None, "county": None, "city": None},
+            "protected_areas": [],
+            "nearby_lakes": [],
+            "ocean": [],
+            "ski_resort": None,
+        }
+        return (empty, None)
 
     areas_server_patch = patch(
         'geo_lib.reverse_geocoding.areas_server_client.query_areas_server',

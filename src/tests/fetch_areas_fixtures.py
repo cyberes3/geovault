@@ -62,7 +62,11 @@ DEFAULT_FIXTURE_COORDINATES = [
     (43.591287434883135, -110.85327582346859),   # Jackson Hole (ski resort)
     (43.911, -124.125),
     (43.946, -126.139),
+    (43.8, -69.0),       # Gulf of Maine / North Atlantic (regional + main ocean)
+    (41.41, -134.299),   # Open North Pacific
+    (43.65, -70.25),     # Maine coast shore (point on/near shore tagged ocean)
     (44.604, -110.476),
+    (45.84810, -123.96116),  # Oregon coast: state park + ocean (~300 ft from shore)
 ]
 
 
@@ -146,6 +150,19 @@ def main():
     os.makedirs(areas_dir, exist_ok=True)
     if not verify_ssl:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+    # Clear areas server cache so fixtures reflect current DB state
+    cache_clear_url = areas_url.rstrip('/') + '/cache-clear'
+    try:
+        r = requests.get(cache_clear_url, timeout=30, verify=verify_ssl)
+        r.raise_for_status()
+        data = r.json()
+        cleared = data.get('cleared', 0)
+        print(f'Cleared areas server cache ({cleared} entries).', file=sys.stderr)
+    except requests.RequestException as e:
+        print(f'Warning: could not clear areas server cache: {e}', file=sys.stderr)
+    except (json.JSONDecodeError, KeyError):
+        pass
 
     print_lock = threading.Lock()
     ok = 0

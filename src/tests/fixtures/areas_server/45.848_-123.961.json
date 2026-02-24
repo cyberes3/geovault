@@ -1,0 +1,25 @@
+{
+  "admin_hierarchy": {
+    "city": "Cannon Beach",
+    "country": "United States of America",
+    "county": "Clatsop County",
+    "state": "Oregon"
+  },
+  "nearby_lakes": [],
+  "ocean": [
+    "North Pacific Ocean"
+  ],
+  "protected_areas": [
+    {
+      "boundary": "",
+      "designation": "",
+      "landuse": "",
+      "leisure": "nature_reserve",
+      "name": "Arcadia Beach State Recreation Site",
+      "operator": "",
+      "protect_class": "",
+      "protection_title": ""
+    }
+  ],
+  "ski_resort": null
+}

@@ -14,7 +14,7 @@ Tags are generated from multiple sources:
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Tuple, Dict
+from typing import Any, Dict, List, Optional, Tuple
 
 from geo_lib.reverse_geocoding.areas_server_client import query_areas_server
 from geo_lib.reverse_geocoding.protected_areas import classify_protected_area
@@ -31,6 +31,57 @@ class ReverseGeocodingLogMessage:
     message: str
     level: str  # 'INFO', 'WARNING', 'ERROR'
     source: str  # 'Reverse Geocoding'
+
+
+def tags_from_areas_data(response: Dict[str, Any]) -> List[str]:
+    """
+    Build tag list from areas server raw response (pure function, no I/O).
+    response: dict with admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort.
+    """
+    admin_hierarchy = response.get("admin_hierarchy") or {}
+    protected_areas = response.get("protected_areas") or []
+    nearby_lakes = response.get("nearby_lakes") or []
+    raw_ocean = response.get("ocean")
+    ocean_list = raw_ocean if isinstance(raw_ocean, list) else ([raw_ocean] if raw_ocean and isinstance(raw_ocean, str) else [])
+    ski_resort = response.get("ski_resort")
+
+    tags: List[str] = []
+    if admin_hierarchy.get("country"):
+        tags.append(f"country:{admin_hierarchy['country']}")
+    if admin_hierarchy.get("state"):
+        tags.append(f"state:{admin_hierarchy['state']}")
+    if admin_hierarchy.get("county"):
+        tags.append(f"county:{admin_hierarchy['county']}")
+    if admin_hierarchy.get("city"):
+        tags.append(f"city:{admin_hierarchy['city']}")
+
+    protected_area_tags: set = set()
+    for area in protected_areas:
+        name = area.get("name")
+        if not name:
+            continue
+        area_type = classify_protected_area(area)
+        protected_area_tags.add(f"{area_type}:{name}")
+    tags.extend(sorted(protected_area_tags))
+
+    seen_ocean: set = set()
+    for name in ocean_list[:2]:
+        if not name or not isinstance(name, str):
+            continue
+        n = name.strip()
+        if n and n not in seen_ocean:
+            seen_ocean.add(n)
+            tags.append(f"ocean:{n}")
+
+    lake_tags: set = set()
+    for lake in nearby_lakes[:3]:
+        lake_tags.add(f"lake:{lake['name']}")
+    tags.extend(sorted(lake_tags))
+
+    if ski_resort and isinstance(ski_resort, str) and ski_resort.strip():
+        tags.append(f"ski-resort:{ski_resort.strip()}")
+
+    return tags
 
 
 def get_location_tags(
@@ -57,8 +108,7 @@ def get_location_tags(
     log_messages = []
 
     try:
-        # Single source: areas server (admin, protected areas, nearby lakes, ocean, ski_resort; city filled from place nodes when admin has none)
-        admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort, areas_err = query_areas_server(latitude, longitude)
+        response, areas_err = query_areas_server(latitude, longitude)
         if areas_err:
             _logger.error(areas_err)
             log_messages.append(ReverseGeocodingLogMessage(
@@ -67,16 +117,18 @@ def get_location_tags(
                 level='ERROR',
                 source='Reverse Geocoding',
             ))
-            admin_info = {'country': None, 'state': None, 'county': None, 'city': None}
-            protected_areas = []
-            nearby_lakes = []
-        else:
-            admin_info = admin_hierarchy
+            response = {
+                "admin_hierarchy": {"country": None, "state": None, "county": None, "city": None},
+                "protected_areas": [],
+                "nearby_lakes": [],
+                "ocean": [],
+                "ski_resort": None,
+            }
 
         has_any_data = (
-            admin_info.get('country') or admin_info.get('state') or
-            admin_info.get('county') or admin_info.get('city') or
-            protected_areas or nearby_lakes
+            response["admin_hierarchy"].get("country") or response["admin_hierarchy"].get("state") or
+            response["admin_hierarchy"].get("county") or response["admin_hierarchy"].get("city") or
+            response["protected_areas"] or response["nearby_lakes"]
         )
         if not has_any_data and not areas_err:
             warning_msg = (
@@ -85,52 +137,7 @@ def get_location_tags(
             )
             _logger.info(warning_msg)
 
-        # Add administrative tags
-        if admin_info['country']:
-            tags.append(f"country:{admin_info['country']}")
-        if admin_info['state']:
-            tags.append(f"state:{admin_info['state']}")
-        if admin_info['county']:
-            tags.append(f"county:{admin_info['county']}")
-        if admin_info['city']:
-            tags.append(f"city:{admin_info['city']}")
-
-        # Process protected areas
-        protected_area_tags = set()  # Use set to prevent duplicates
-
-        for area in protected_areas:
-            name = area.get('name')
-            if not name:
-                continue
-
-            # Classify the area and create appropriate tag
-            area_type = classify_protected_area(area)
-            protected_area_tags.add(f"{area_type}:{name}")
-
-        # Add protected area tags (sorted for consistency)
-        tags.extend(sorted(protected_area_tags))
-
-        # Ocean tags from areas server (up to 2: sub-region then main ocean)
-        ocean_list = ocean if isinstance(ocean, list) else ([ocean] if ocean and isinstance(ocean, str) else [])
-        seen_ocean = set()
-        for name in ocean_list[:2]:
-            if not name or not isinstance(name, str):
-                continue
-            n = name.strip()
-            if n and n not in seen_ocean:
-                seen_ocean.add(n)
-                tags.append(f"ocean:{n}")
-
-        # Add lake tags
-        lake_tags = set()
-        for lake in nearby_lakes[:3]:  # Limit to 3 closest lakes
-            lake_tags.add(f"lake:{lake['name']}")
-        tags.extend(sorted(lake_tags))
-
-        # Ski resort from areas server (single tag when point is inside a resort)
-        if ski_resort and isinstance(ski_resort, str) and ski_resort.strip():
-            tags.append(f"ski-resort:{ski_resort.strip()}")
-
+        tags = tags_from_areas_data(response)
         return tags, log_messages
 
     except Exception as e:

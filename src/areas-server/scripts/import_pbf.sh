@@ -4,6 +4,10 @@
 #   ./import_pbf.sh [options] <path-to.pbf> [database_url]
 #   ./import_pbf.sh --append [options] <path-to.pbf> [database_url]
 # Options: --cache MB, --processes N, --database URL. Schema is hard-coded as is_in.
+#
+# When --cache is not provided we default to 800 MB and pass -C to osm2pgsql. If we did
+# not pass -C, osm2pgsql would use its own default (often RAM-based), which can cause
+# OOM in containers. Node cache is per process; use --processes to limit parallelism.
 
 set -euo pipefail
 
@@ -29,7 +33,7 @@ while [[ $# -gt 0 ]]; do
       echo "Usage: $0 [--append] [--cache MB] [--processes N] [--database URL] <path-to.osm.pbf> [database_url]" >&2
       echo "  Options can appear before or after the PBF path." >&2
       echo "  --append     add this PBF to existing data (first import without --append)" >&2
-      echo "  --cache      node cache size in MB (passed to osm2pgsql -C)" >&2
+      echo "  --cache      node cache size in MB (default: 800; passed to osm2pgsql -C)" >&2
       echo "  --processes  parallel threads (default: nproc)" >&2
       echo "  --database   connection URL (or pass as second positional argument)" >&2
       exit 0
@@ -57,10 +61,14 @@ if [[ -z "$DB" ]]; then
   exit 1
 fi
 
+# Default node cache for all operations (create and append). Without this, osm2pgsql
+# would use its own default when -C is omitted, which can be very large and cause OOM.
+[[ -z "$CACHE_MB" ]] && CACHE_MB=800
+
 OSM2PGSQL="${OSM2PGSQL:-osm2pgsql}"
 
 EXTRA_OSM2PGSQL=()
-[[ -n "$CACHE_MB" ]] && EXTRA_OSM2PGSQL+=(-C "$CACHE_MB")
+EXTRA_OSM2PGSQL+=(-C "$CACHE_MB")
 if [[ -n "$PROCESSES" ]]; then
   EXTRA_OSM2PGSQL+=(--number-processes "$PROCESSES")
 elif command -v nproc >/dev/null 2>&1; then

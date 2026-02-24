@@ -18,6 +18,9 @@ class PWARegenerationWorker:
     Background worker that automatically regenerates the PWA APK:
     - On startup if missing or older than 1 day
     - Every 24 hours thereafter
+
+    Runs in a daemon thread only; start() returns immediately. Never blocks the
+    server process or request handling. Not started during tests.
     """
 
     def __init__(self):
@@ -26,7 +29,7 @@ class PWARegenerationWorker:
         self.regeneration_interval = 24 * 60 * 60  # 24 hours in seconds
 
     def start(self):
-        """Start the background worker thread."""
+        """Start the background worker thread. Returns immediately; does not block."""
         if self.running:
             logger.warning("PWA regeneration worker already running")
             return
