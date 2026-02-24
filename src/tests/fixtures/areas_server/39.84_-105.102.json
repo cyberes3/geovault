@@ -1,20 +1,20 @@
 {
   "admin_hierarchy": {
-    "city": null,
+    "city": "Arvada",
     "country": "United States",
     "county": "Jefferson County",
     "state": "Colorado"
   },
   "nearby_lakes": [
     {
-      "distance_miles": 0.11,
-      "name": "Mann Reservoir",
+      "distance_miles": 0.38,
+      "name": "Pomona Lake Number 2",
       "on_water": false,
       "water_type": "reservoir"
     },
     {
-      "distance_miles": 0.95,
-      "name": "Ken Caryl Reservoir",
+      "distance_miles": 0.62,
+      "name": "Pomona Lake",
       "on_water": false,
       "water_type": "reservoir"
     }
@@ -24,12 +24,12 @@
     {
       "boundary": "protected_area",
       "designation": "",
-      "landuse": "recreation_ground",
-      "leisure": "",
-      "name": "South Valley Park",
-      "operator": "Jefferson County Open Space",
-      "protect_class": "5",
-      "protection_title": "Open Space"
+      "landuse": "",
+      "leisure": "nature_reserve",
+      "name": "Two Ponds National Wildlife Refuge",
+      "operator": "United States Fish and Wildlife Service",
+      "protect_class": "4",
+      "protection_title": "National Wildlife Refuge"
     }
   ],
   "ski_resort": null

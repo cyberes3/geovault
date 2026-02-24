@@ -7,28 +7,34 @@
   },
   "nearby_lakes": [
     {
-      "distance_miles": 0.6,
-      "name": "Four Towers Pool",
+      "distance_miles": 0.04,
+      "name": "Ferril Lake",
       "on_water": false,
-      "water_type": "pond"
+      "water_type": "lake"
     },
     {
-      "distance_miles": 0.6,
-      "name": "El Pomar Waterway",
+      "distance_miles": 0.19,
+      "name": "Duck Lake",
       "on_water": false,
       "water_type": "water"
     },
     {
-      "distance_miles": 0.63,
-      "name": "Steppe Garden Waterway",
+      "distance_miles": 0.23,
+      "name": "Lily Pond",
+      "on_water": false,
+      "water_type": "pond"
+    },
+    {
+      "distance_miles": 0.35,
+      "name": "Harbor Seal",
       "on_water": false,
       "water_type": "water"
     },
     {
-      "distance_miles": 0.68,
-      "name": "Monet Pool",
+      "distance_miles": 0.35,
+      "name": "Sea Lions",
       "on_water": false,
-      "water_type": "pond"
+      "water_type": "water"
     }
   ],
   "ocean": [],
@@ -38,7 +44,7 @@
       "designation": "",
       "landuse": "",
       "leisure": "park",
-      "name": "James N. Manley Park",
+      "name": "City Park",
       "operator": "",
       "protect_class": "",
       "protection_title": ""

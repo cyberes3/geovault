@@ -1,20 +1,20 @@
 {
   "admin_hierarchy": {
     "city": null,
-    "country": "United States of America",
+    "country": "United States",
     "county": "McPherson County",
     "state": "Nebraska"
   },
   "nearby_lakes": [
     {
-      "distance_miles": 0.42,
+      "distance_miles": 0.1,
       "name": "Stickney Lake",
       "on_water": false,
       "water_type": "lake"
     },
     {
-      "distance_miles": 0.58,
-      "name": "Brown Lake",
+      "distance_miles": 0.28,
+      "name": "Sand Beach Lake",
       "on_water": false,
       "water_type": "lake"
     }

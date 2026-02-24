@@ -1,8 +1,8 @@
 {
   "admin_hierarchy": {
-    "city": "Breckenridge",
-    "country": "United States of America",
-    "county": "Summit County",
+    "city": null,
+    "country": "United States",
+    "county": "Fremont County",
     "state": "Colorado"
   },
   "nearby_lakes": [],
@@ -13,11 +13,11 @@
       "designation": "",
       "landuse": "",
       "leisure": "",
-      "name": "White River National Forest",
+      "name": "San Isabel National Forest",
       "operator": "United States Forest Service",
       "protect_class": "6",
       "protection_title": "National Forest"
     }
   ],
-  "ski_resort": "Breckenridge"
+  "ski_resort": null
 }

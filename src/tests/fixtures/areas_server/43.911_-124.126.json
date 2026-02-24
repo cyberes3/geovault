@@ -1,13 +1,13 @@
 {
   "admin_hierarchy": {
     "city": "Dunes City",
-    "country": "United States of America",
+    "country": "United States",
     "county": "Lane County",
     "state": "Oregon"
   },
   "nearby_lakes": [
     {
-      "distance_miles": 0.69,
+      "distance_miles": 0.73,
       "name": "Woahink Lake",
       "on_water": false,
       "water_type": "lake"

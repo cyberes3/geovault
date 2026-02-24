@@ -2,7 +2,7 @@
   "admin_hierarchy": {
     "city": null,
     "country": "United States",
-    "county": "Park County",
+    "county": "Grand County",
     "state": "Colorado"
   },
   "nearby_lakes": [],
@@ -13,20 +13,10 @@
       "designation": "",
       "landuse": "",
       "leisure": "",
-      "name": "Pike National Forest",
+      "name": "Medicine Bow-Routt National Forest",
       "operator": "United States Forest Service",
       "protect_class": "6",
       "protection_title": "National Forest"
-    },
-    {
-      "boundary": "protected_area",
-      "designation": "",
-      "landuse": "",
-      "leisure": "nature_reserve",
-      "name": "Lost Creek Wilderness",
-      "operator": "United States Forest Service",
-      "protect_class": "1b",
-      "protection_title": "Wilderness Area"
     }
   ],
   "ski_resort": null

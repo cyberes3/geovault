@@ -1,0 +1,21 @@
+{
+  "admin_hierarchy": {
+    "city": "San Francisco",
+    "country": "United States",
+    "county": "San Francisco",
+    "state": "California"
+  },
+  "nearby_lakes": [
+    {
+      "distance_miles": 0.9,
+      "name": "South Lake",
+      "on_water": false,
+      "water_type": "water"
+    }
+  ],
+  "ocean": [
+    "North Pacific Ocean"
+  ],
+  "protected_areas": [],
+  "ski_resort": null
+}

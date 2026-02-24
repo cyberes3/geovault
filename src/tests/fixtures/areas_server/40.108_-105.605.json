@@ -2,28 +2,31 @@
   "admin_hierarchy": {
     "city": null,
     "country": "United States",
-    "county": "Park County",
+    "county": "Boulder County",
     "state": "Colorado"
   },
-  "nearby_lakes": [],
+  "nearby_lakes": [
+    {
+      "distance_miles": 0.61,
+      "name": "Coney Lake",
+      "on_water": false,
+      "water_type": "lake"
+    },
+    {
+      "distance_miles": 0.99,
+      "name": "Upper Coney Lake",
+      "on_water": false,
+      "water_type": "lake"
+    }
+  ],
   "ocean": [],
   "protected_areas": [
     {
       "boundary": "protected_area",
       "designation": "",
       "landuse": "",
-      "leisure": "",
-      "name": "Pike National Forest",
-      "operator": "United States Forest Service",
-      "protect_class": "6",
-      "protection_title": "National Forest"
-    },
-    {
-      "boundary": "protected_area",
-      "designation": "",
-      "landuse": "",
       "leisure": "nature_reserve",
-      "name": "Lost Creek Wilderness",
+      "name": "Indian Peaks Wilderness",
       "operator": "United States Forest Service",
       "protect_class": "1b",
       "protection_title": "Wilderness Area"

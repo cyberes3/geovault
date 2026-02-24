@@ -1,21 +1,19 @@
 {
   "admin_hierarchy": {
-    "city": "Cannon Beach",
+    "city": null,
     "country": "United States",
-    "county": "Clatsop County",
-    "state": "Oregon"
+    "county": "Otero County",
+    "state": "Colorado"
   },
   "nearby_lakes": [],
-  "ocean": [
-    "North Pacific Ocean"
-  ],
+  "ocean": [],
   "protected_areas": [
     {
-      "boundary": "",
+      "boundary": "national_park",
       "designation": "",
       "landuse": "",
-      "leisure": "nature_reserve",
-      "name": "Arcadia Beach State Recreation Site",
+      "leisure": "park",
+      "name": "Bent's Old Fort National Historic Site",
       "operator": "",
       "protect_class": "",
       "protection_title": ""

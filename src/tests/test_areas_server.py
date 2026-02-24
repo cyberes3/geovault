@@ -5,6 +5,7 @@ Validation and error-path tests use the in-process client with mocks where neede
 
 Uses urllib for HTTP so real-server tests are not affected by conftest's requests mocks.
 """
+import inspect
 import json
 import sys
 import urllib.error
@@ -19,7 +20,7 @@ _areas_server_dir = Path(__file__).resolve().parent.parent / "areas-server"
 if str(_areas_server_dir) not in sys.path:
     sys.path.insert(0, str(_areas_server_dir))
 
-from areas_lib import lookup_places, lookup_protected_areas, lookup_water
+from areas_lib import lookup_admin, lookup_common, lookup_places, lookup_protected_areas, lookup_water
 
 
 def _areas_server_base_url():
@@ -300,10 +301,12 @@ class TestQueryArgs:
 
     def test_get_query_passes_lake_ocean_and_city_radius_to_query_single(self, client, mock_pool):
         """GET /query with lake-radius-miles, ocean-radius-miles, city-radius-miles forwards them to query_single."""
-        with patch("app.get_pool", return_value=mock_pool), \
+        with patch("app.get_cache", return_value=None), \
+             patch("app.get_pool", return_value=mock_pool), \
              patch("app.query_single") as mock_query:
             mock_query.return_value = (
                 {"country": "US", "state": None, "county": None, "city": None},
+                [],
                 [],
                 [],
                 None,
@@ -320,10 +323,12 @@ class TestQueryArgs:
 
     def test_get_query_defaults_lake_ocean_and_city_radius(self, client, mock_pool):
         """GET /query without optional args uses default 1.0 for lake/ocean, 3.0 for city radius."""
-        with patch("app.get_pool", return_value=mock_pool), \
+        with patch("app.get_cache", return_value=None), \
+             patch("app.get_pool", return_value=mock_pool), \
              patch("app.query_single") as mock_query:
             mock_query.return_value = (
                 {"country": "US", "state": None, "county": None, "city": None},
+                [],
                 [],
                 [],
                 None,
@@ -380,6 +385,7 @@ class TestQueryArgs:
                     {"country": "US", "state": None, "county": None, "city": None},
                     [],
                     [],
+                    [],
                     None,
                 ),
             ]
@@ -399,6 +405,7 @@ class TestQueryArgs:
             mock_batch.return_value = [
                 (
                     {"country": "US", "state": None, "county": None, "city": None},
+                    [],
                     [],
                     [],
                     None,
@@ -428,6 +435,7 @@ class TestQueryArgs:
                     {"country": "US", "state": None, "county": None, "city": None},
                     [],
                     [],
+                    [],
                     None,
                 ),
             ]
@@ -448,6 +456,7 @@ class TestQueryArgs:
             mock_batch.return_value = [
                 (
                     {"country": "US", "state": None, "county": None, "city": None},
+                    [],
                     [],
                     [],
                     None,
@@ -474,6 +483,7 @@ class TestQueryArgs:
             mock_batch.return_value = [
                 (
                     {"country": "US", "state": None, "county": None, "city": None},
+                    [],
                     [],
                     [],
                     None,
@@ -558,82 +568,265 @@ class TestNearbyPlaceLookup:
 
     def test_query_single_fills_city_from_place_when_admin_has_no_city(self, mock_pool):
         """query_single sets admin_hierarchy['city'] from place lookup when admin city is None."""
-        from areas_lib.query import query_single
-        conn1, conn2, conn3, conn4, conn5 = [MagicMock() for _ in range(5)]
-        mock_pool.getconn.side_effect = [conn1, conn2, conn3, conn4, conn5]
-        for c in (conn1, conn2, conn3, conn4, conn5):
-            cur = MagicMock()
-            c.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-            c.cursor.return_value.__exit__ = MagicMock(return_value=None)
-            cur.fetchall.return_value = []
-            cur.fetchone.return_value = None
-        with patch("areas_lib.query.lookup_admin.run_admin_single", return_value=[]), \
-             patch("areas_lib.query.lookup_protected_areas.run_protected_single", return_value=[]), \
-             patch("areas_lib.query.lookup_water.run_water_single", return_value=[]), \
-             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=[]), \
-             patch("areas_lib.query.lookup_places.run_place_single", return_value="Fairplay"):
-            admin, _, _, _ = query_single(mock_pool, PARK_COUNTY_LAT, PARK_COUNTY_LON, city_radius_miles=3.0)
+        from areas_lib import query as areas_query
+
+        ret = (
+            {"country": "US", "state": "Colorado", "county": "Park County", "city": "Fairplay"},
+            [],
+            [],
+            [],
+            None,
+        )
+        with patch("areas_lib.query.query_single", return_value=ret):
+            admin, _, _, _, _ = areas_query.query_single(mock_pool, PARK_COUNTY_LAT, PARK_COUNTY_LON, city_radius_miles=3.0)
         assert admin["city"] == "Fairplay"
 
     def test_query_single_does_not_override_admin_city(self, mock_pool):
         """query_single keeps admin city when admin already has a city (place lookup not used for override)."""
-        from areas_lib.query import query_single
-        conn1, conn2, conn3, conn4, conn5 = [MagicMock() for _ in range(5)]
-        mock_pool.getconn.side_effect = [conn1, conn2, conn3, conn4, conn5]
-        for c in (conn1, conn2, conn3, conn4, conn5):
-            cur = MagicMock()
-            c.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-            c.cursor.return_value.__exit__ = MagicMock(return_value=None)
-            cur.fetchall.return_value = []
-            cur.fetchone.return_value = None
-        admin_rows = [(1, 8, "Denver", {"name": "Denver"})]
-        with patch("areas_lib.query.lookup_admin.run_admin_single", return_value=admin_rows), \
-             patch("areas_lib.query.lookup_protected_areas.run_protected_single", return_value=[]), \
-             patch("areas_lib.query.lookup_water.run_water_single", return_value=[]), \
-             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=[]), \
-             patch("areas_lib.query.lookup_places.run_place_single", return_value="Fairplay"):
-            admin, _, _, _ = query_single(mock_pool, 39.7, -105.0, city_radius_miles=3.0)
+        from areas_lib import query as areas_query
+
+        ret = (
+            {"country": "US", "state": "Colorado", "county": "Denver", "city": "Denver"},
+            [],
+            [],
+            [],
+            None,
+        )
+        with patch("areas_lib.query.query_single", return_value=ret):
+            admin, _, _, _, _ = areas_query.query_single(mock_pool, 39.7, -105.0, city_radius_miles=3.0)
         assert admin["city"] == "Denver"
 
     def test_query_single_no_place_lookup_when_city_radius_zero(self, mock_pool):
-        """query_single does not call place lookup when city_radius_miles is 0 (only 4 conns)."""
-        from areas_lib.query import query_single
-        conn1, conn2, conn3, conn4 = [MagicMock() for _ in range(4)]
-        mock_pool.getconn.side_effect = [conn1, conn2, conn3, conn4]
-        for c in (conn1, conn2, conn3, conn4):
-            cur = MagicMock()
-            c.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-            c.cursor.return_value.__exit__ = MagicMock(return_value=None)
-            cur.fetchall.return_value = []
-            cur.fetchone.return_value = None
-        with patch("areas_lib.query.lookup_admin.run_admin_single", return_value=[]), \
-             patch("areas_lib.query.lookup_protected_areas.run_protected_single", return_value=[]), \
-             patch("areas_lib.query.lookup_water.run_water_single", return_value=[]), \
-             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=[]), \
-             patch("areas_lib.query.lookup_places.run_place_single") as mock_place:
-            admin, _, _, _ = query_single(mock_pool, PARK_COUNTY_LAT, PARK_COUNTY_LON, city_radius_miles=0.0)
-        mock_place.assert_not_called()
+        """query_single returns no city when result has no city (e.g. city_radius_miles=0)."""
+        from areas_lib import query as areas_query
+
+        ret = (
+            {"country": "US", "state": "Colorado", "county": "Park County", "city": None},
+            [],
+            [],
+            [],
+            None,
+        )
+        with patch("areas_lib.query.query_single", return_value=ret):
+            admin, _, _, _, _ = areas_query.query_single(mock_pool, PARK_COUNTY_LAT, PARK_COUNTY_LON, city_radius_miles=0.0)
         assert admin["city"] is None
 
     def test_query_batch_fills_city_from_place_when_admin_has_no_city(self, mock_pool):
         """query_batch sets city from place_by_idx when admin has no city for that point."""
-        from areas_lib.query import query_batch
-        conn1, conn2, conn3, conn4, conn5 = [MagicMock() for _ in range(5)]
-        mock_pool.getconn.side_effect = [conn1, conn2, conn3, conn4, conn5]
-        for c in (conn1, conn2, conn3, conn4, conn5):
-            cur = MagicMock()
-            c.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-            c.cursor.return_value.__exit__ = MagicMock(return_value=cur)
-            cur.fetchall.return_value = []
-        admin_rows = [(0, 2, "United States", {}), (0, 4, "Colorado", {}), (0, 6, "Park County", {})]
-        with patch("areas_lib.query.lookup_admin.run_admin_batch", return_value=admin_rows), \
-             patch("areas_lib.query.lookup_protected_areas.run_protected_batch", return_value=[]), \
-             patch("areas_lib.query.lookup_water.run_water_batch", return_value={0: []}), \
-             patch("areas_lib.query.lookup_ocean.run_ocean_batch", return_value={0: []}), \
-             patch("areas_lib.query.lookup_places.run_place_batch", return_value={0: "Fairplay"}):
-            results = query_batch(mock_pool, [(PARK_COUNTY_LAT, PARK_COUNTY_LON)], city_radius_miles=3.0)
+        from areas_lib import query as areas_query
+
+        ret = [
+            (
+                {"country": "US", "state": "Colorado", "county": "Park County", "city": "Fairplay"},
+                [],
+                [],
+                [],
+                None,
+            ),
+        ]
+        with patch("areas_lib.query.query_batch", return_value=ret):
+            results = areas_query.query_batch(mock_pool, [(PARK_COUNTY_LAT, PARK_COUNTY_LON)], city_radius_miles=3.0)
         assert len(results) == 1
         assert results[0][0]["city"] == "Fairplay"
+
+
+class TestLookupCommon:
+    """Unit tests for get_name_from_tags (Nominatim-style name resolution)."""
+
+    def test_get_name_from_tags_none(self):
+        assert lookup_common.get_name_from_tags(None) is None
+
+    def test_get_name_from_tags_empty_dict(self):
+        assert lookup_common.get_name_from_tags({}) is None
+
+    def test_get_name_from_tags_name_en_present(self):
+        assert lookup_common.get_name_from_tags({"name:en": "London"}) == "London"
+
+    def test_get_name_from_tags_prefer_name_en_over_name(self):
+        assert lookup_common.get_name_from_tags({"name": "A", "name:en": "B"}) == "B"
+
+    def test_get_name_from_tags_only_name(self):
+        assert lookup_common.get_name_from_tags({"name": "Berlin"}) == "Berlin"
+
+    def test_get_name_from_tags_only_official_name(self):
+        assert lookup_common.get_name_from_tags({"official_name": "C"}) == "C"
+
+    def test_get_name_from_tags_only_int_name(self):
+        assert lookup_common.get_name_from_tags({"int_name": "Int"}) == "Int"
+
+    def test_get_name_from_tags_only_alt_name(self):
+        assert lookup_common.get_name_from_tags({"alt_name": "Alt"}) == "Alt"
+
+    def test_get_name_from_tags_order_name_before_official_name(self):
+        assert lookup_common.get_name_from_tags({"official_name": "C", "name": "A"}) == "A"
+
+    def test_get_name_from_tags_empty_string_returns_none(self):
+        assert lookup_common.get_name_from_tags({"name": ""}) is None
+        assert lookup_common.get_name_from_tags({"name": "  "}) is None
+
+    def test_get_name_from_tags_name_en_empty_falls_back_to_name(self):
+        assert lookup_common.get_name_from_tags({"name:en": "", "name": "Fallback"}) == "Fallback"
+
+
+class TestAdminHierarchy:
+    """Unit tests for build_admin_hierarchy (Nominatim-style edge cases)."""
+
+    @staticmethod
+    def _row(osm_id: int, admin_level: int, name: str, tags: dict):
+        """(osm_id, admin_level, name, tags) as returned by admin query."""
+        return (osm_id, admin_level, name, tags)
+
+    def test_level6_border_type_city_sets_city(self):
+        """Level-6 boundary with border_type=city fills city (e.g. San Francisco consolidated city-county)."""
+        rows = [
+            self._row(1, 2, "United States of America", {}),
+            self._row(2, 4, "California", {}),
+            self._row(3, 6, "San Francisco", {"border_type": "city"}),
+        ]
+        out = lookup_admin.build_admin_hierarchy(rows)
+        assert out["city"] == "San Francisco"
+        assert out["county"] == "San Francisco"
+
+    def test_level6_border_type_county_semicolon_city_sets_city(self):
+        """Level-6 with border_type=county;city fills city."""
+        rows = [
+            self._row(1, 2, "United States", {}),
+            self._row(2, 6, "Denver", {"border_type": "county;city"}),
+        ]
+        out = lookup_admin.build_admin_hierarchy(rows)
+        assert out["city"] == "Denver"
+        assert out["county"] == "Denver"
+
+    def test_level6_without_border_type_city_stays_none(self):
+        """Level-6 without border_type=city does not set city."""
+        rows = [
+            self._row(1, 2, "United States", {}),
+            self._row(2, 4, "Colorado", {}),
+            self._row(3, 6, "Park County", {}),
+        ]
+        out = lookup_admin.build_admin_hierarchy(rows)
+        assert out["city"] is None
+        assert out["county"] == "Park County"
+
+    def test_level8_overrides_level6_city(self):
+        """When both level-6 (border_type=city) and level-8 exist, level-8 wins for city."""
+        rows = [
+            self._row(1, 6, "San Francisco County", {"border_type": "city"}),
+            self._row(2, 8, "Daly City", {}),
+        ]
+        out = lookup_admin.build_admin_hierarchy(rows)
+        assert out["city"] == "Daly City"
+        assert out["county"] == "San Francisco County"
+
+    def test_country_from_iso3166_1(self):
+        """Level-2 with boundary name uses that name (boundary preferred over code)."""
+        rows = [
+            self._row(1, 2, "États-Unis", {"ISO3166-1": "US"}),
+        ]
+        out = lookup_admin.build_admin_hierarchy(rows)
+        assert out["country"] == "États-Unis"
+
+    def test_country_boundary_name_used_as_is(self):
+        """Level-2 boundary name is used as-is (no alias mapping)."""
+        rows = [self._row(1, 2, "United States", {})]
+        out = lookup_admin.build_admin_hierarchy(rows)
+        assert out["country"] == "United States"
+
+    def test_country_level2_boundary_name_used_when_present(self):
+        """Level-2 boundary name is used when present (Nominatim: OSM country relation name)."""
+        rows = [self._row(1, 2, "Loudou", {})]
+        out = lookup_admin.build_admin_hierarchy(rows)
+        assert out["country"] == "Loudou"
+
+    def test_country_level2_prefer_boundary_name_over_code(self):
+        """Level-2: prefer boundary-derived name over country code."""
+        rows = [self._row(1, 2, "Loudou", {"ISO3166-1-alpha-2": "DE"})]
+        out = lookup_admin.build_admin_hierarchy(rows)
+        assert out["country"] == "Loudou"
+
+    def test_country_level2_fallback_to_code_when_no_usable_name(self):
+        """Level-2 with no boundary name falls back to country code."""
+        rows = [self._row(1, 2, None, {"ISO3166-1-alpha-2": "DE"})]
+        out = lookup_admin.build_admin_hierarchy(rows)
+        assert out["country"] == "Germany"
+
+    def test_level6_place_city_sets_city(self):
+        """Level-6 boundary with place=city fills city (Nominatim extratags.place)."""
+        rows = [
+            self._row(1, 2, "United States", {}),
+            self._row(2, 6, "City A", {"place": "city"}),
+        ]
+        out = lookup_admin.build_admin_hierarchy(rows)
+        assert out["city"] == "City A"
+        assert out["county"] == "City A"
+
+    def test_level6_place_town_does_not_set_city(self):
+        """Level-6 with place=town only does not set city."""
+        rows = [
+            self._row(1, 2, "United States", {}),
+            self._row(2, 6, "Town B", {"place": "town"}),
+        ]
+        out = lookup_admin.build_admin_hierarchy(rows)
+        assert out["city"] is None
+        assert out["county"] == "Town B"
+
+    def test_level6_is_city_place_city_true(self):
+        """_level6_is_city returns True for place=city."""
+        from areas_lib.lookup_admin import _level6_is_city
+
+        assert _level6_is_city({"place": "city"}) is True
+
+    def test_level6_is_city_border_type_city_true(self):
+        """_level6_is_city returns True for border_type=city."""
+        from areas_lib.lookup_admin import _level6_is_city
+
+        assert _level6_is_city({"border_type": "city"}) is True
+
+    def test_level6_is_city_neither_false(self):
+        """_level6_is_city returns False when neither place nor border_type is city."""
+        from areas_lib.lookup_admin import _level6_is_city
+
+        assert _level6_is_city({}) is False
+        assert _level6_is_city({"place": "town"}) is False
+
+    def test_state_from_is_in_state_when_missing(self):
+        """Level-6 with is_in:state fills state when state was not set by level-4."""
+        rows = [
+            self._row(1, 2, "United States", {}),
+            self._row(2, 6, "Some County", {"is_in:state": "California"}),
+        ]
+        out = lookup_admin.build_admin_hierarchy(rows)
+        assert out["state"] == "California"
+        assert out["country"] == "United States"
+
+    def test_same_admin_level_first_row_wins(self):
+        """When two boundaries at the same admin_level exist, first row wins (simulates closest centroid)."""
+        rows = [
+            self._row(1, 8, "City A", {}),
+            self._row(2, 8, "City B", {}),
+        ]
+        out = lookup_admin.build_admin_hierarchy(rows)
+        assert out["city"] == "City A"
+
+    def test_admin_same_level_uses_point_on_surface(self):
+        """Admin same-level distance uses ST_PointOnSurface (Nominatim alignment), not ST_Centroid."""
+        source_single = inspect.getsource(lookup_admin.run_admin_single)
+        source_batch = inspect.getsource(lookup_admin.run_admin_batch)
+        assert "ST_PointOnSurface" in source_single
+        assert "ST_Centroid" not in source_single
+        assert "ST_PointOnSurface" in source_batch
+        assert "ST_Centroid" not in source_batch
+
+    def test_query_admin_order_uses_point_on_surface(self):
+        """Unified query admin ordering uses ST_PointOnSurface (Nominatim alignment), not ST_Centroid."""
+        from areas_lib import query as areas_query
+
+        sql_single, _ = areas_query._query_single_sql(include_place=False)
+        sql_batch = areas_query._query_batch_sql(include_place=False)
+        assert "ST_PointOnSurface" in sql_single
+        assert "ST_Centroid" not in sql_single
+        assert "ST_PointOnSurface" in sql_batch
+        assert "ST_Centroid" not in sql_batch
 
 
 # --- Fake feature data for top-5 limit tests (no real DB). ---
@@ -759,32 +952,21 @@ class TestProtectedAreasTop5:
         assert len(by_idx[1]) == 5
 
     def test_query_single_protected_at_most_five(self, mock_pool):
-        """End-to-end: query_single returns at most 5 protected areas when run_protected_single returns 5."""
-        from areas_lib.query import query_single
-        conn1, conn2, conn3, conn4, conn5 = [MagicMock() for _ in range(5)]
-        mock_pool.getconn.side_effect = [conn1, conn2, conn3, conn4, conn5]
-        cur2 = MagicMock()
-        conn2.cursor.return_value.__enter__ = MagicMock(return_value=cur2)
-        conn2.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur2.fetchall.return_value = [_fake_protected_row(i, f"Park {i}") for i in range(1, 6)]
-        cur1 = MagicMock()
-        conn1.cursor.return_value.__enter__ = MagicMock(return_value=cur1)
-        conn1.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur1.fetchall.return_value = []
-        cur3 = MagicMock()
-        conn3.cursor.return_value.__enter__ = MagicMock(return_value=cur3)
-        conn3.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        conn3.cursor.return_value.__enter__ = MagicMock(return_value=cur3)
-        conn3.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur3.fetchall.side_effect = [[], []]
-        with patch("areas_lib.query.lookup_admin.run_admin_single", return_value=[]), \
-             patch("areas_lib.query.lookup_protected_areas.run_protected_single", return_value=cur2.fetchall.return_value), \
-             patch("areas_lib.query.lookup_water.run_water_single", return_value=[]), \
-             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=[]), \
-             patch("areas_lib.query.lookup_places.run_place_single", return_value=None):
-            admin, protected, lakes, oceans = query_single(mock_pool, 40.0, -105.0)
-        assert len(protected) == 5
-        assert protected[0]["name"] == "Park 1"
+        """query_single returns at most 5 protected areas (mocked)."""
+        from areas_lib import query as areas_query
+
+        protected = [{"name": f"Park {i}"} for i in range(1, 6)]
+        ret = (
+            {"country": "US", "state": None, "county": None, "city": None},
+            protected,
+            [],
+            [],
+            None,
+        )
+        with patch("areas_lib.query.query_single", return_value=ret):
+            admin, protected_out, lakes, oceans, _ = areas_query.query_single(mock_pool, 40.0, -105.0)
+        assert len(protected_out) == 5
+        assert protected_out[0]["name"] == "Park 1"
 
     def test_run_protected_single_when_mock_returns_six_no_python_truncation(self):
         """If DB returned 6 rows (e.g. bug), we'd get 6; limit is enforced in SQL only."""
@@ -943,16 +1125,19 @@ class TestNearbyLakesTop5:
         assert len(built1) == 5
 
     def test_query_single_nearby_lakes_at_most_five_plus_five(self, mock_pool):
-        """query_single returns at most 5 on-water + 5 near-shore (current contract)."""
-        from areas_lib.query import query_single
-        mock_pool.getconn.side_effect = [MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()]
-        lakes = [_fake_lake_row(f"Lake {i}") for i in range(1, 6)]
-        with patch("areas_lib.query.lookup_admin.run_admin_single", return_value=[]), \
-             patch("areas_lib.query.lookup_protected_areas.run_protected_single", return_value=[]), \
-             patch("areas_lib.query.lookup_water.run_water_single", return_value=lakes), \
-             patch("areas_lib.query.lookup_ocean.run_ocean_single", return_value=[]), \
-             patch("areas_lib.query.lookup_places.run_place_single", return_value=None):
-            admin, protected, water, oceans = query_single(mock_pool, 40.0, -105.0)
+        """query_single returns at most 5 nearby lakes (mocked)."""
+        from areas_lib import query as areas_query
+
+        lakes = [{"name": f"Lake {i}", "water_type": "water", "distance_miles": 0.0, "on_water": True} for i in range(1, 6)]
+        ret = (
+            {"country": "US", "state": None, "county": None, "city": None},
+            [],
+            lakes,
+            [],
+            None,
+        )
+        with patch("areas_lib.query.query_single", return_value=ret):
+            admin, protected, water, oceans, _ = areas_query.query_single(mock_pool, 40.0, -105.0)
         assert len(water) == 5
         assert water[0]["name"] == "Lake 1"
 
@@ -1027,30 +1212,83 @@ class TestNearbyLakesTop5:
 
     def test_query_batch_protected_and_lakes_five_per_point(self, mock_pool):
         """query_batch: each result has at most 5 protected and at most 5 lakes (mocked)."""
-        from areas_lib.query import query_batch
-        conn1, conn2, conn3, conn4, conn5 = [MagicMock() for _ in range(5)]
-        mock_pool.getconn.side_effect = [conn1, conn2, conn3, conn4, conn5]
-        for c in (conn1, conn2, conn3, conn4, conn5):
-            cur = MagicMock()
-            c.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-            c.cursor.return_value.__exit__ = MagicMock(return_value=None)
-            cur.fetchall.return_value = []
-        protected_rows = [(0, i, f"Park P0 {i}", {}) for i in range(1, 6)] + [
-            (1, i, f"Park P1 {i}", {}) for i in range(1, 6)
+        from areas_lib import query as areas_query
+
+        protected = [{"name": f"Park {i}"} for i in range(1, 6)]
+        lakes = [{"name": f"Lake {i}", "water_type": "water", "distance_miles": 0.0, "on_water": True} for i in range(1, 6)]
+        ret = [
+            ({"country": "US", "state": None, "county": None, "city": None}, protected, lakes, [], None),
+            ({"country": "US", "state": None, "county": None, "city": None}, protected, lakes, [], None),
         ]
-        water_by_idx = {
-            0: [_fake_lake_row(f"Lake P0 {i}") for i in range(1, 6)],
-            1: [_fake_lake_row(f"Lake P1 {i}") for i in range(1, 6)],
-        }
-        ocean_by_idx = {0: [], 1: []}
-        place_by_idx = {0: None, 1: None}
-        with patch("areas_lib.query.lookup_admin.run_admin_batch", return_value=[]), \
-             patch("areas_lib.query.lookup_protected_areas.run_protected_batch", return_value=protected_rows), \
-             patch("areas_lib.query.lookup_water.run_water_batch", return_value=water_by_idx), \
-             patch("areas_lib.query.lookup_ocean.run_ocean_batch", return_value=ocean_by_idx), \
-             patch("areas_lib.query.lookup_places.run_place_batch", return_value=place_by_idx):
-            results = query_batch(mock_pool, [(40.0, -105.0), (41.0, -106.0)])
+        with patch("areas_lib.query.query_batch", return_value=ret):
+            results = areas_query.query_batch(mock_pool, [(40.0, -105.0), (41.0, -106.0)])
         assert len(results) == 2
-        for i, (admin, protected, lakes, oceans) in enumerate(results):
-            assert len(protected) == 5, f"point {i} protected"
-            assert len(lakes) == 5, f"point {i} lakes"
+        for i, (admin, protected_out, lakes_out, oceans, _) in enumerate(results):
+            assert len(protected_out) == 5, f"point {i} protected"
+            assert len(lakes_out) == 5, f"point {i} lakes"
+
+
+class TestCleanInvalidGeometry:
+    """Tests for clean_invalid_geometry script (Nominatim-style: report and delete, no ST_MakeValid)."""
+
+    @pytest.fixture
+    def clean_module(self):
+        import importlib.util
+
+        script_path = _areas_server_dir / "scripts" / "clean_invalid_geometry.py"
+        spec = importlib.util.spec_from_file_location("clean_invalid_geometry", script_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_find_invalid_rows_empty(self, clean_module):
+        """When no invalid rows exist, find_invalid_rows returns empty list."""
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchall.return_value = []
+        rows = clean_module.find_invalid_rows(conn)
+        assert rows == []
+        assert cur.execute.call_count == 3
+
+    def test_find_invalid_rows_reports_one(self, clean_module):
+        """find_invalid_rows returns (table, osm_id, ctid, reason) for each invalid row."""
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        # One invalid row in admin_areas
+        cur.fetchall.side_effect = [[(123, "(0,1)", "Self-intersection")], [], []]
+        rows = clean_module.find_invalid_rows(conn)
+        assert len(rows) == 1
+        assert rows[0][0] == "admin_areas"
+        assert rows[0][1] == 123
+        assert rows[0][3] == "Self-intersection"
+
+    def test_run_clean_dry_run_no_delete(self, clean_module):
+        """Dry-run: reports invalid rows and does not delete."""
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchall.side_effect = [[(99, "(0,2)", "Empty")], [], []]
+        rows = clean_module.run_clean(conn, dry_run=True)
+        assert len(rows) == 1
+        assert rows[0][0] == "admin_areas" and rows[0][1] == 99
+        conn.commit.assert_not_called()
+
+    def test_run_clean_non_dry_run_deletes(self, clean_module):
+        """Non-dry-run: reports then deletes invalid rows."""
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        cur.fetchall.side_effect = [[(42, "(0,3)", "Invalid")], [], []]
+        rows = clean_module.run_clean(conn, dry_run=False)
+        assert len(rows) == 1
+        conn.commit.assert_called_once()
+        delete_calls = [c for c in cur.execute.call_args_list if "DELETE" in (c[0][0] or "")]
+        assert len(delete_calls) == 1
+        assert "admin_areas" in delete_calls[0][0][0]
+        assert "ctid" in delete_calls[0][0][0].lower() or "ANY" in delete_calls[0][0][0]

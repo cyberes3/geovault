@@ -7,13 +7,13 @@ from typing import Any, Dict, List, Optional, Tuple
 from config import SCHEMA
 from areas_lib import lookup_admin, lookup_water, lookup_protected_areas, lookup_ocean, lookup_places, lookup_ski_resort
 
-# Limits for unified single-point query (must match lookup module constants)
+# Limits for single-point query (must match lookup module constants)
 _PROTECTED_LIMIT = 5
 _NEARBY_LAKES_LIMIT = 5
 _MILES_TO_M = 1609.34
 
 
-def _query_single_unified_sql(include_place: bool) -> Tuple[str, List[Any]]:
+def _query_single_sql(include_place: bool) -> Tuple[str, List[Any]]:
     """Build one UNION ALL query for single point and return (sql, params). Params: lon, lat, lake_radius_m, ocean_radius_m (region), ocean_radius_m (main)[, city_radius_m]."""
     pt_cte = f"WITH pt AS (SELECT public.ST_SetSRID(public.ST_MakePoint(%s, %s), 4326) AS geom)"
     parts = [
@@ -102,7 +102,7 @@ def _query_single_unified_sql(include_place: bool) -> Tuple[str, List[Any]]:
     return sql, []
 
 
-def _query_batch_unified_sql(include_place: bool) -> str:
+def _query_batch_sql(include_place: bool) -> str:
     """Build one UNION ALL query for batch (all points, all layers). Params: indices, lons, lats, lake_radius_m, ocean_radius_m[, city_radius_m]."""
     cte = f"""
     WITH p AS (
@@ -220,7 +220,7 @@ def _query_batch_unified_sql(include_place: bool) -> str:
     return cte + "\n" + "\nUNION ALL\n".join(parts)
 
 
-def _parse_batch_unified_rows(
+def _parse_batch_rows(
     rows: List[Tuple[Any, ...]],
     n: int,
     include_place: bool,
@@ -293,11 +293,11 @@ def _parse_batch_unified_rows(
     return results
 
 
-def _parse_single_unified_rows(
+def _parse_single_rows(
     rows: List[Tuple[Any, ...]],
     include_place: bool,
 ) -> Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str], Optional[str]]:
-    """Partition (layer, payload) rows and build same return shape as query_single."""
+    """Partition (layer, payload) rows and build single-point result tuple."""
     admin_rows: List[Tuple[Any, ...]] = []
     protected_rows: List[Tuple[Any, ...]] = []
     water_rows: List[Tuple[Any, ...]] = []
@@ -351,7 +351,7 @@ def _parse_single_unified_rows(
     )
 
 
-def query_single_unified(
+def query_single(
     pool: Any,
     lat: float,
     lon: float,
@@ -359,12 +359,12 @@ def query_single_unified(
     ocean_radius_miles: float = 1.0,
     city_radius_miles: float = 3.0,
 ) -> Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str], Optional[str]]:
-    """Single-point query in one SQL round-trip. Same return shape as query_single. Raises on DB/table errors."""
+    """Run admin + protected + water + ocean + ski_resort (+ optional place). One SQL query. Fails hard if any table is missing."""
     lake_radius_m = lake_radius_miles * _MILES_TO_M
     ocean_radius_m = ocean_radius_miles * _MILES_TO_M
     city_radius_m = city_radius_miles * _MILES_TO_M
     include_place = city_radius_miles > 0
-    sql, _ = _query_single_unified_sql(include_place)
+    sql, _ = _query_single_sql(include_place)
     params: List[Any] = [lon, lat, lake_radius_m, ocean_radius_m, ocean_radius_m]
     if include_place:
         params.append(city_radius_m)
@@ -373,7 +373,7 @@ def query_single_unified(
         with conn.cursor() as cur:
             cur.execute(sql, params)
             rows = cur.fetchall()
-        return _parse_single_unified_rows(rows, include_place)
+        return _parse_single_rows(rows, include_place)
     finally:
         try:
             conn.rollback()
@@ -382,31 +382,14 @@ def query_single_unified(
         pool.putconn(conn)
 
 
-def query_single(
-        pool: Any,
-        lat: float,
-        lon: float,
-        lake_radius_miles: float = 1.0,
-        ocean_radius_miles: float = 1.0,
-        city_radius_miles: float = 3.0,
-) -> Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str], Optional[str]]:
-    """Run admin + protected + water + ocean + ski_resort (+ optional place). One SQL query. Fails hard if any table is missing."""
-    return query_single_unified(
-        pool, lat, lon,
-        lake_radius_miles=lake_radius_miles,
-        ocean_radius_miles=ocean_radius_miles,
-        city_radius_miles=city_radius_miles,
-    )
-
-
-def query_batch_unified(
+def query_batch(
     pool: Any,
     points: List[Tuple[float, float]],
     lake_radius_miles: float = 1.0,
     ocean_radius_miles: float = 1.0,
     city_radius_miles: float = 3.0,
 ) -> List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str], Optional[str]]]:
-    """Batch query in one SQL round-trip. Same return shape as query_batch. Fails hard if any table is missing."""
+    """Run admin + protected + water + ocean + ski_resort (+ optional place) batch. One SQL query. Fails hard if any table is missing."""
     if not points:
         return []
     n = len(points)
@@ -417,7 +400,7 @@ def query_batch_unified(
     ocean_radius_m = ocean_radius_miles * _MILES_TO_M
     city_radius_m = city_radius_miles * _MILES_TO_M
     include_place = city_radius_miles > 0
-    sql = _query_batch_unified_sql(include_place)
+    sql = _query_batch_sql(include_place)
     params: List[Any] = [indices, lons, lats, lake_radius_m, ocean_radius_m, ocean_radius_m]
     if include_place:
         params.append(city_radius_m)
@@ -426,29 +409,13 @@ def query_batch_unified(
         with conn.cursor() as cur:
             cur.execute(sql, params)
             rows = cur.fetchall()
-        return _parse_batch_unified_rows(rows, n, include_place)
+        return _parse_batch_rows(rows, n, include_place)
     finally:
         try:
             conn.rollback()
         except Exception:
             pass  # e.g. "another command is already in progress" when worker was killed during execute
         pool.putconn(conn)
-
-
-def query_batch(
-        pool: Any,
-        points: List[Tuple[float, float]],
-        lake_radius_miles: float = 1.0,
-        ocean_radius_miles: float = 1.0,
-        city_radius_miles: float = 3.0,
-) -> List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str], Optional[str]]]:
-    """Run admin + protected + water + ocean + ski_resort (+ optional place) batch. One SQL query. Fails hard if any table is missing."""
-    return query_batch_unified(
-        pool, points,
-        lake_radius_miles=lake_radius_miles,
-        ocean_radius_miles=ocean_radius_miles,
-        city_radius_miles=city_radius_miles,
-    )
 
 
 def check_health(conn: Any) -> Tuple[bool, Optional[str]]:

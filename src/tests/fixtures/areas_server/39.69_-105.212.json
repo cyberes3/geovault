@@ -1,24 +1,11 @@
 {
   "admin_hierarchy": {
-    "city": null,
+    "city": "Morrison",
     "country": "United States",
     "county": "Jefferson County",
     "state": "Colorado"
   },
-  "nearby_lakes": [
-    {
-      "distance_miles": 0.11,
-      "name": "Mann Reservoir",
-      "on_water": false,
-      "water_type": "reservoir"
-    },
-    {
-      "distance_miles": 0.95,
-      "name": "Ken Caryl Reservoir",
-      "on_water": false,
-      "water_type": "reservoir"
-    }
-  ],
+  "nearby_lakes": [],
   "ocean": [],
   "protected_areas": [
     {
@@ -26,9 +13,9 @@
       "designation": "",
       "landuse": "recreation_ground",
       "leisure": "",
-      "name": "South Valley Park",
+      "name": "Matthews/Winters Park",
       "operator": "Jefferson County Open Space",
-      "protect_class": "5",
+      "protect_class": "6",
       "protection_title": "Open Space"
     }
   ],

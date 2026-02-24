@@ -1,0 +1,30 @@
+{
+  "admin_hierarchy": {
+    "city": "Westminster",
+    "country": "United States",
+    "county": "Jefferson County",
+    "state": "Colorado"
+  },
+  "nearby_lakes": [
+    {
+      "distance_miles": 0.0,
+      "name": "Standley Lake",
+      "on_water": true,
+      "water_type": "lake"
+    }
+  ],
+  "ocean": [],
+  "protected_areas": [
+    {
+      "boundary": "",
+      "designation": "",
+      "landuse": "recreation_ground",
+      "leisure": "",
+      "name": "Standley Lake Regional Park",
+      "operator": "",
+      "protect_class": "",
+      "protection_title": ""
+    }
+  ],
+  "ski_resort": null
+}

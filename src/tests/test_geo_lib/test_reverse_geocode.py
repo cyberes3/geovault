@@ -10,15 +10,13 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.core.cache import cache, caches
 
-from geo_lib.reverse_geocoding.location_tags import get_location_tags, batch_reverse_geocode_coordinates, tags_from_areas_data
+from geo_lib.reverse_geocoding.location_tags import get_location_tags, batch_reverse_geocode_coordinates
 from geo_lib.reverse_geocoding.cache import _get_cache_key, _REVERSE_GEOCODING_CACHE
 from geo_lib.spatial.haversine import haversine_distance_miles
 
-from tests.fixtures.geocoding_responses import get_areas_fixture
-
 
 class ReverseGeocodingTagTestMixin:
-    """Mixin for tests that assert on location tags; provides assert_tags_exact and expected-from-fixture helper."""
+    """Mixin for tests that assert on location tags."""
 
     def assert_tags_exact(self, actual_tags, expected_tags):
         """Assert tag sets are exactly equal: no missing tags, no unexpected extra tags."""
@@ -30,26 +28,22 @@ class ReverseGeocodingTagTestMixin:
             f"Missing: {sorted(set(expected_tags) - set(actual_tags))!r}.",
         )
 
-    def _expected_tags_from_fixture(self, areas_data):
-        """Build expected tag list from fixture using real tag generation."""
-        return tags_from_areas_data(areas_data)
-
 
 @pytest.mark.django_db
 class TestHaversineDistance(TestCase):
     """Test haversine distance calculation."""
-    
+
     def test_haversine_distance_zero(self):
         """Test distance between same point is zero."""
         distance = haversine_distance_miles(40.0, -105.0, 40.0, -105.0)
         self.assertAlmostEqual(distance, 0.0, places=2)
-    
+
     def test_haversine_distance_known(self):
         """Test known distance calculation."""
         # Denver to Colorado Springs (approx 63 miles)
         distance = haversine_distance_miles(39.7392, -104.9903, 38.8339, -104.8214)
         self.assertAlmostEqual(distance, 63, delta=2)
-    
+
     def test_haversine_distance_international(self):
         """Test international distance calculation."""
         # London to Paris (approx 213 miles)
@@ -60,14 +54,14 @@ class TestHaversineDistance(TestCase):
 @pytest.mark.django_db
 class TestCacheKey(TestCase):
     """Test cache key generation."""
-    
+
     def test_cache_key_format(self):
         """Test cache key has correct format."""
         key = _get_cache_key(40.123456, -105.789012)
         self.assertTrue(key.startswith("reverse_geocode:"))
         self.assertIn("40.123", key)
         self.assertIn("-105.789", key)
-    
+
     def test_cache_key_rounding(self):
         """Test cache key rounds coordinates to 3 decimal places."""
         key1 = _get_cache_key(40.1234, -105.7899)
@@ -76,13 +70,13 @@ class TestCacheKey(TestCase):
         self.assertEqual(key1, "reverse_geocode:40.123,-105.79")
         # Second rounds to 40.123, -105.789 (different longitude)
         self.assertEqual(key2, "reverse_geocode:40.123,-105.789")
-        
+
         # Test that similar coords get same key
         key3 = _get_cache_key(40.12299, -105.78999)
         key4 = _get_cache_key(40.12301, -105.79001)
         # Both should round to 40.123, -105.79
         self.assertEqual(key3, key4)
-    
+
     def test_cache_key_prefix(self):
         """Test cache key uses custom prefix."""
         key = _get_cache_key(40.0, -105.0, prefix="test")
@@ -91,158 +85,572 @@ class TestCacheKey(TestCase):
 
 @pytest.mark.django_db
 class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
-    """Test reverse geocoding service using real cached fixtures (tests/fixtures/areas_server/)."""
-    
+    """One test per fixture coordinate; expected tags hardcoded in each test."""
+
     def setUp(self):
-        """Set up test fixtures."""
         cache.clear()
         try:
             caches['reverse_geocoding'].clear()
         except Exception:
             pass
-    
+
     def tearDown(self):
-        """Clean up after tests."""
         cache.clear()
-    
-    def test_admin_hierarchy_query(self):
-        """Test admin hierarchy from cached areas_server fixture (load fixtures with fetch script)."""
-        # Use a precise coordinate so the fixture unambiguously maps to one county (Park County, CO).
-        areas = get_areas_fixture(39.22337887866515, -105.94799963185382)
-        self.assertIsNotNone(areas, "Load areas_server fixtures (e.g. fetch_areas_fixtures.py <url>)")
-        admin = areas["admin_hierarchy"]
-        self.assertEqual(admin["country"], "United States of America")
-        self.assertEqual(admin["state"], "Colorado")
-        self.assertEqual(admin["county"], "Park County")
-    
-    def test_protected_areas_query(self):
-        """Test protected areas from cached areas_server fixture."""
-        areas_data = get_areas_fixture(40.34, -105.68)
-        self.assertIsNotNone(areas_data, "Load areas_server fixtures (e.g. fetch_areas_fixtures.py <url>)")
-        protected = areas_data["protected_areas"]
-        self.assertGreaterEqual(len(protected), 1)
-        names = [a["name"] for a in protected]
-        self.assertTrue(
-            any("Rocky Mountain" in n for n in names),
-            f"Expected Rocky Mountain area in {names}",
-        )
 
-    def test_ocean_main_only_from_fixture(self):
-        """Main ocean only (43.946, -126.139): exact tag set, North Pacific only."""
-        lat, lon = 43.946, -126.139
-        areas_data = get_areas_fixture(lat, lon)
-        self.assertIsNotNone(areas_data, "Fixture 43.946_-126.139.json")
-        expected = self._expected_tags_from_fixture(areas_data)
+    def test_crossville(self):
+        lat, lon = 35.89684, -85.00500
+        expected = [
+            'city:Crossville',
+            'country:United States of America',
+            'county:Cumberland County',
+            'lake:Byrd Lake',
+            'protected-area:Cumberland Mountain State Park',
+            'state:Tennessee',
+        ]
         tags, _ = get_location_tags(lat, lon)
         self.assert_tags_exact(tags, expected)
 
-    def test_ocean_regional_and_main_from_fixture(self):
-        """Regional + main ocean (43.8, -69.0): exact tag set, Gulf of Maine and North Atlantic."""
-        lat, lon = 43.8, -69.0
-        areas_data = get_areas_fixture(lat, lon)
-        self.assertIsNotNone(areas_data, "Fixture 43.8_-69.0.json")
-        expected = self._expected_tags_from_fixture(areas_data)
+    def test_nashville_bells_bend(self):
+        lat, lon = 36.156, -86.925
+        expected = [
+            'city:Nashville',
+            'country:United States of America',
+            'county:Davidson County',
+            'lake:Cheatham Lake',
+            'protected-area:Bells Bend Park',
+            'state:Tennessee',
+        ]
         tags, _ = get_location_tags(lat, lon)
         self.assert_tags_exact(tags, expected)
 
-    def test_ocean_open_pacific_from_fixture(self):
-        """Open North Pacific (41.41, -134.299): exact tag set, North Pacific Ocean only."""
+    def test_san_francisco_ocean_city(self):
+        lat, lon = 37.75214, -122.50269
+        expected = [
+            'city:San Francisco',
+            'country:United States of America',
+            'county:San Francisco',
+            'ocean:North Pacific Ocean',
+            'state:California',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+        self.assertLessEqual(sum(1 for t in tags if t.startswith('ocean:')), 2)
+
+    def test_bents_old_fort_national_historic_site(self):
+        lat, lon = 38.03982, -103.42472
+        expected = [
+            'country:United States of America',
+            'county:Otero County',
+            "park:Bent's Old Fort National Historic Site",
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_point_reyes_national_seashore(self):
+        lat, lon = 38.05677, -122.87860
+        expected = [
+            'country:United States of America',
+            'county:Marin County',
+            'protected-area:Point Reyes National Seashore',
+            'state:California',
+            'wilderness:Phillip Burton Wilderness',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_curecanti_national_recreation_area(self):
+        lat, lon = 38.4627240263864, -107.17141673546334
+        expected = [
+            'country:United States of America',
+            'county:Gunnison County',
+            'lake:Blue Mesa Reservoir',
+            'national-recreation-area:Curecanti National Recreation Area',
+            'protected-area:BLM - Gunnison Field Office',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_san_isabel_national_forest(self):
+        lat, lon = 38.62375, -105.83993
+        expected = [
+            'country:United States of America',
+            'county:Fremont County',
+            'national-forest:San Isabel National Forest',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_mueller_state_park(self):
+        lat, lon = 38.89178, -105.17907
+        expected = [
+            'country:United States of America',
+            'county:Teller County',
+            'lake:Dragonfly',
+            'lake:Lost Pond',
+            'lake:Peak View Pond',
+            'state-park:Mueller State Park',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_colorado_national_monument(self):
+        lat, lon = 39.05548, -108.69338
+        expected = [
+            'country:United States of America',
+            'county:Mesa County',
+            'national-monument:Colorado National Monument',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_pike_national_forest(self):
+        lat, lon = 39.0, -105.0
+        expected = [
+            'country:United States of America',
+            'county:El Paso County',
+            'lake:Grace Lake',
+            'lake:Leo Lake',
+            'lake:Sapphire Lake',
+            'national-forest:Pike National Forest',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_fairplay(self):
+        lat, lon = 39.22337887866515, -105.94799963185382
+        expected = [
+            'city:Fairplay',
+            'country:United States of America',
+            'county:Park County',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_lost_creek_wilderness_shawnee(self):
+        lat, lon = 39.38965, -105.58278
+        expected = [
+            'city:Shawnee',
+            'country:United States of America',
+            'county:Park County',
+            'national-forest:Pike National Forest',
+            'state:Colorado',
+            'wilderness:Lost Creek Wilderness',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_lost_creek_wilderness_park_county(self):
+        lat, lon = 39.42, -105.65
+        expected = [
+            'country:United States of America',
+            'county:Park County',
+            'national-forest:Pike National Forest',
+            'state:Colorado',
+            'wilderness:Lost Creek Wilderness',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_south_valley_park_open_space(self):
+        lat, lon = 39.563, -105.15
+        expected = [
+            'country:United States of America',
+            'county:Jefferson County',
+            'lake:Ken Caryl Reservoir',
+            'lake:Mann Reservoir',
+            'protected-area:South Valley Park',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_vail_ski_resort(self):
+        lat, lon = 39.613, -106.357
+        expected = [
+            'city:Vail',
+            'country:United States of America',
+            'county:Eagle County',
+            'national-forest:White River National Forest',
+            'ski-resort:Vail',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_matthews_winters_park(self):
+        lat, lon = 39.68960, -105.21190
+        expected = [
+            'city:Morrison',
+            'country:United States of America',
+            'county:Jefferson County',
+            'protected-area:Matthews/Winters Park',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_william_frederick_hayden_park(self):
+        lat, lon = 39.70073, -105.17302
+        expected = [
+            'city:Lakewood',
+            'country:United States of America',
+            'county:Jefferson County',
+            'protected-area:William Frederick Hayden Park',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_glendale_james_manley_park(self):
+        lat, lon = 39.72296, -104.95785
+        expected = [
+            'city:Glendale',
+            'country:United States of America',
+            'county:Denver',
+            'lake:El Pomar Waterway',
+            'lake:Four Towers Pool',
+            'lake:Steppe Garden Waterway',
+            'park:James N. Manley Park',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_denver_city_park(self):
+        lat, lon = 39.74498318354445, -104.95147156373426
+        expected = [
+            'city:Denver',
+            'country:United States of America',
+            'county:Denver',
+            'lake:Duck Lake',
+            'lake:Ferril Lake',
+            'lake:Lily Pond',
+            'park:City Park',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_denver_admin(self):
+        lat, lon = 39.75832221022334, -104.92042641825462
+        expected = [
+            'country:United States of America',
+            'county:Denver',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_standley_lake_on_lake_and_park(self):
+        lat, lon = 39.86543015343607, -105.12295898204981
+        expected = [
+            'city:Westminster',
+            'country:United States of America',
+            'county:Jefferson County',
+            'lake:Standley Lake',
+            'protected-area:Standley Lake Regional Park',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_two_ponds_national_wildlife_refuge(self):
+        lat, lon = 39.84041664204802, -105.10241566871551
+        expected = [
+            'city:Arvada',
+            'country:United States of America',
+            'county:Jefferson County',
+            'lake:Pomona Lake',
+            'lake:Pomona Lake Number 2',
+            'national-wildlife-refuge:Two Ponds National Wildlife Refuge',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_breckenridge_ski_resort(self):
+        lat, lon = 39.47371, -106.07716
+        expected = [
+            'city:Breckenridge',
+            'country:United States of America',
+            'county:Summit County',
+            'lake:Sawmill Reservoir',
+            'national-forest:White River National Forest',
+            'ski-resort:Breckenridge',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_broomfield(self):
+        lat, lon = 40.0, -105.0
+        expected = [
+            'country:United States of America',
+            'county:Broomfield',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_indian_peaks_wilderness(self):
+        lat, lon = 40.10763, -105.60469
+        expected = [
+            'country:United States of America',
+            'county:Boulder County',
+            'lake:Coney Lake',
+            'lake:Upper Coney Lake',
+            'state:Colorado',
+            'wilderness:Indian Peaks Wilderness',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_medicine_bow_routt_national_forest(self):
+        lat, lon = 40.16692, -106.19653
+        expected = [
+            'country:United States of America',
+            'county:Grand County',
+            'national-forest:Medicine Bow-Routt National Forest',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_rocky_mountain_national_park(self):
+        lat, lon = 40.211, -105.769
+        expected = [
+            'country:United States of America',
+            'county:Grand County',
+            'national-park:Rocky Mountain National Park',
+            'state:Colorado',
+            'wilderness:Rocky Mountain Wilderness',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_grand_lake_nearby_lakes(self):
+        lat, lon = 40.24301, -105.82766
+        expected = [
+            'city:Grand Lake',
+            'country:United States of America',
+            'county:Grand County',
+            'lake:Grand Lake',
+            'lake:Shadow Mountain Lake',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_arapaho_national_forest(self):
+        lat, lon = 40.26762, -106.03746
+        expected = [
+            'country:United States of America',
+            'county:Grand County',
+            'national-forest:Arapaho National Forest',
+            'state:Colorado',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_rocky_mountain_np_larimer_lakes(self):
+        lat, lon = 40.34303, -105.68435
+        expected = [
+            'country:United States of America',
+            'county:Larimer County',
+            'lake:Fern Lake',
+            'lake:Primrose Pond',
+            'lake:Spruce Lake',
+            'national-park:Rocky Mountain National Park',
+            'state:Colorado',
+            'wilderness:Rocky Mountain Wilderness',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_ocean_north_pacific_open(self):
         lat, lon = 41.41, -134.299
-        areas_data = get_areas_fixture(lat, lon)
-        self.assertIsNotNone(areas_data, "Fixture 41.41_-134.299.json")
-        expected = self._expected_tags_from_fixture(areas_data)
+        expected = [
+            'ocean:North Pacific Ocean',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+        self.assertLessEqual(sum(1 for t in tags if t.startswith('ocean:')), 2)
+
+    def test_mcpherson_nebraska(self):
+        lat, lon = 41.68187473276889, -101.36391746047425
+        expected = [
+            'country:United States of America',
+            'county:McPherson County',
+            'lake:Sand Beach Lake',
+            'lake:Stickney Lake',
+            'state:Nebraska',
+        ]
         tags, _ = get_location_tags(lat, lon)
         self.assert_tags_exact(tags, expected)
 
-    def test_ocean_shore_tagged_ocean(self):
-        """Point on/near shore (43.65, -70.25): exact tag set and at least one ocean tag."""
+    def test_crescent_lake_national_wildlife_refuge(self):
+        lat, lon = 41.72390, -102.31360
+        expected = [
+            'country:United States of America',
+            'county:Garden County',
+            'lake:Deer Lake',
+            'lake:Swede Lake',
+            'national-wildlife-refuge:Crescent Lake National Wildlife Refuge',
+            'state:Nebraska',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_morrill_nebraska(self):
+        lat, lon = 41.729, -102.872
+        expected = [
+            'country:United States of America',
+            'county:Morrill County',
+            'state:Nebraska',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_blue_hills_reservation_state_park(self):
+        lat, lon = 42.209, -71.108
+        expected = [
+            'city:Milton',
+            'country:United States of America',
+            'county:Norfolk County',
+            "lake:Houghton's Pond",
+            'lake:Ponkapoag Pond',
+            'state-park:Blue Hills Reservation',
+            'state:Massachusetts',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_rushville_nebraska(self):
+        lat, lon = 42.729, -102.417
+        expected = [
+            'city:Rushville',
+            'country:United States of America',
+            'county:Sheridan County',
+            'state:Nebraska',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_jackson_hole_ski_resort(self):
+        lat, lon = 43.591287434883135, -110.85327582346859
+        expected = [
+            'city:Teton Village',
+            'country:United States of America',
+            'county:Teton County',
+            'national-forest:Bridger-Teton National Forest',
+            'ski-resort:Jackson Hole Mountain Resort',
+            'state:Wyoming',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_south_portland_ocean_shore(self):
         lat, lon = 43.65, -70.25
-        areas_data = get_areas_fixture(lat, lon)
-        self.assertIsNotNone(areas_data, "Fixture 43.65_-70.25.json (shore)")
-        expected = self._expected_tags_from_fixture(areas_data)
+        expected = [
+            'city:South Portland',
+            'country:United States of America',
+            'county:Cumberland County',
+            'ocean:Gulf of Maine',
+            'ocean:North Atlantic Ocean',
+            'state:Maine',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+        self.assertLessEqual(sum(1 for t in tags if t.startswith('ocean:')), 2)
+
+    def test_matinicus_ocean_regional_main(self):
+        lat, lon = 43.8, -69.0
+        expected = [
+            'city:Matinicus Isle Plantation',
+            'country:United States of America',
+            'county:Knox County',
+            'ocean:Gulf of Maine',
+            'ocean:North Atlantic Ocean',
+            'state:Maine',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+        self.assertLessEqual(sum(1 for t in tags if t.startswith('ocean:')), 2)
+
+    def test_oregon_dunes_nra_state_park_ocean(self):
+        lat, lon = 43.91095153533744, -124.1260278900942
+        expected = [
+            'city:Dunes City',
+            'country:United States of America',
+            'county:Lane County',
+            'lake:Woahink Lake',
+            'national-forest:Siuslaw National Forest',
+            'national-recreation-area:Oregon Dunes National Recreation Area',
+            'state:Oregon',
+        ]
         tags, _ = get_location_tags(lat, lon)
         self.assert_tags_exact(tags, expected)
 
-    def test_ocean_state_park_from_fixture(self):
-        """Oregon coast (45.84810, -123.96116): exact tag set, North Pacific (not North Atlantic), state park."""
+    def test_ocean_main_only_north_pacific(self):
+        lat, lon = 43.946, -126.139
+        expected = [
+            'ocean:North Pacific Ocean',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+        self.assertLessEqual(sum(1 for t in tags if t.startswith('ocean:')), 2)
+
+    def test_yellowstone_national_park(self):
+        lat, lon = 44.604, -110.476
+        expected = [
+            'country:United States of America',
+            'county:Park County',
+            'national-park:Yellowstone National Park',
+            'state:Wyoming',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_cannon_beach_ocean(self):
         lat, lon = 45.84810, -123.96116
-        areas_data = get_areas_fixture(lat, lon)
-        self.assertIsNotNone(areas_data, "Fixture 45.848_-123.961.json (state park + ocean)")
-        expected = self._expected_tags_from_fixture(areas_data)
+        expected = [
+            'city:Cannon Beach',
+            'country:United States of America',
+            'county:Clatsop County',
+            'ocean:North Pacific Ocean',
+            'protected-area:Arcadia Beach State Recreation Site',
+            'state:Oregon',
+        ]
         tags, _ = get_location_tags(lat, lon)
         self.assert_tags_exact(tags, expected)
+        self.assertLessEqual(sum(1 for t in tags if t.startswith('ocean:')), 2)
 
-    def test_protected_areas_misc_parks(self):
-        """Test classify_protected_area on areas from cached areas_server fixtures."""
-        from geo_lib.reverse_geocoding.protected_areas import classify_protected_area
-
-        # Cached fixtures: (40.34, -105.68) has national-park; (39.42, -105.65) has wilderness + national-forest; (39.07, -108.73) has national-monument
-        found = {}
-        for lat, lon, expected_prefix in [
-            (40.34, -105.68, "national-park"),
-            (39.42, -105.65, "wilderness"),
-            (39.07, -108.73, "national-monument"),
-        ]:
-            areas_data = get_areas_fixture(lat, lon)
-            if not areas_data or not areas_data.get("protected_areas"):
-                continue
-            for area in areas_data["protected_areas"]:
-                if classify_protected_area(area) == expected_prefix:
-                    found[expected_prefix] = True
-                    break
-        self.assertEqual(found.get("national-park"), True, "Fixture should have at least one national-park area")
-        self.assertEqual(found.get("wilderness"), True, "Fixture should have at least one wilderness area")
-        self.assertEqual(found.get("national-monument"), True, "Fixture should have at least one national-monument area")
-        if len(found) < 3:
-            self.skipTest("Load areas_server fixtures (fetch_areas_fixtures.py <url>)")
-    
-    def test_city_park_classification(self):
-        """Test classify_protected_area: leisure=park without boundary -> 'park'; boundary=protected_area -> not 'park'."""
-        from geo_lib.reverse_geocoding.protected_areas import classify_protected_area
-
-        # leisure=park and no boundary (or boundary != protected_area) -> "park"
-        self.assertEqual(classify_protected_area({"leisure": "park"}), "park")
-        self.assertEqual(classify_protected_area({"leisure": "park", "boundary": ""}), "park")
-        self.assertEqual(classify_protected_area({"leisure": "park", "name": "City Park"}), "park")
-
-        # boundary=protected_area -> must not classify as "park" (falls through to national-park/wilderness/protected-area)
-        area_protected = {"boundary": "protected_area", "protection_title": "Wilderness"}
-        self.assertIn(classify_protected_area(area_protected), ("national-park", "wilderness", "protected-area"))
-        area_protected_only = {"boundary": "protected_area"}
-        self.assertEqual(classify_protected_area(area_protected_only), "protected-area")
-    
-    def test_ski_resort_tag_from_areas_server(self):
-        """When areas fixture has ski_resort (e.g. Vail), get_location_tags returns exact tags from fixture."""
-        lat, lon = 39.613, -106.357  # Vail; fixture 39.613_-106.357.json
-        areas_data = get_areas_fixture(lat, lon)
-        self.assertIsNotNone(areas_data, "Fixture 39.613_-106.357.json (Vail ski resort)")
-        self.assertIsNotNone(areas_data.get("ski_resort"), "Fixture must include ski_resort")
-        expected = self._expected_tags_from_fixture(areas_data)
+    def test_pictured_rocks_national_lakeshore(self):
+        lat, lon = 46.56804, -86.31349
+        expected = [
+            'city:Burt Township',
+            'country:United States of America',
+            'county:Alger County',
+            'lake:Beaver Lake',
+            'national-lakeshore:Pictured Rocks National Lakeshore (Federal Unit)',
+            'state:Michigan',
+            'wilderness:Beaver Basin Wilderness',
+        ]
         tags, _ = get_location_tags(lat, lon)
-        self.assert_tags_exact(tags, expected)
-
-    def test_nearby_lakes_from_areas_fixture(self):
-        """When areas fixture has nearby_lakes, get_location_tags returns exact tags from fixture."""
-        areas_data = get_areas_fixture(40.2514, -105.8239)
-        if not areas_data or not areas_data.get("nearby_lakes"):
-            self.skipTest("Load areas_server fixtures with nearby_lakes (fetch_areas_fixtures.py <url>)")
-        expected = self._expected_tags_from_fixture(areas_data)
-        tags, _ = get_location_tags(40.2514, -105.8239)
-        self.assert_tags_exact(tags, expected)
-
-    def test_get_location_tags_comprehensive(self):
-        """Test comprehensive location tag generation matches fixture-derived expected set."""
-        areas_data = get_areas_fixture(39.0, -105.0)
-        self.assertIsNotNone(areas_data, "Load areas_server fixtures (e.g. fetch_areas_fixtures.py <url>)")
-        expected = self._expected_tags_from_fixture(areas_data)
-        tags, _ = get_location_tags(39.0, -105.0)
         self.assert_tags_exact(tags, expected)
 
 
 @pytest.mark.django_db
 class TestCaching(ReverseGeocodingTagTestMixin, TestCase):
     """Test caching functionality."""
-    
+
     def setUp(self):
         """Set up test fixtures."""
         cache.clear()
@@ -250,27 +658,23 @@ class TestCaching(ReverseGeocodingTagTestMixin, TestCase):
             caches['reverse_geocoding'].clear()
         except Exception:
             pass
-    
+
     def tearDown(self):
         """Clean up after tests."""
         cache.clear()
-    
+
     def test_batch_reverse_geocode_deduplication(self):
-        """Test that batch_reverse_geocode_coordinates deduplicates nearby coordinates (same rounded coord -> same result)."""
+        """Same rounded coord yields same tags (two pairs that round to same fixture key)."""
         coordinates = [
-            (40.1231, -105.79),
-            (40.1232, -105.789),
-            (40.1231, -105.7901),  # Same rounded as first
-            (40.1232, -105.7891),  # Same rounded as second
+            (39.72296, -104.95785),  # rounds to 39.723, -104.958
+            (39.723, -104.958),
+            (39.74498318354445, -104.95147156373426),  # rounds to 39.745, -104.951
+            (39.745, -104.951),
         ]
         results = batch_reverse_geocode_coordinates(coordinates)
         self.assertEqual(len(results), 4)
-        tags_1 = results[(40.1231, -105.79)][0]
-        tags_3 = results[(40.1231, -105.7901)][0]
-        self.assert_tags_exact(tags_1, tags_3)
-        tags_2 = results[(40.1232, -105.789)][0]
-        tags_4 = results[(40.1232, -105.7891)][0]
-        self.assert_tags_exact(tags_2, tags_4)
+        self.assert_tags_exact(results[(39.72296, -104.95785)][0], results[(39.723, -104.958)][0])
+        self.assert_tags_exact(results[(39.74498318354445, -104.95147156373426)][0], results[(39.745, -104.951)][0])
 
     def test_batch_reverse_geocode_empty_list(self):
         """Test that batch_reverse_geocode_coordinates handles empty list."""
@@ -281,7 +685,7 @@ class TestCaching(ReverseGeocodingTagTestMixin, TestCase):
 @pytest.mark.django_db
 class TestErrorHandling(ReverseGeocodingTagTestMixin, TestCase):
     """Test error handling in reverse geocoding."""
-    
+
     def setUp(self):
         """Set up test fixtures."""
         cache.clear()
@@ -289,11 +693,11 @@ class TestErrorHandling(ReverseGeocodingTagTestMixin, TestCase):
             caches['reverse_geocoding'].clear()
         except Exception:
             pass
-    
+
     def tearDown(self):
         """Clean up after tests."""
         cache.clear()
-    
+
     def test_get_location_tags_exception_handling(self):
         """Test that get_location_tags handles invalid coordinates: no fixture -> empty tags."""
         tags, log_messages = get_location_tags(999.0, 999.0)
@@ -312,58 +716,3 @@ class TestErrorHandling(ReverseGeocodingTagTestMixin, TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("AREAS_SERVER_URL", errors[0].message)
         self.assertEqual(errors[0].source, 'Reverse Geocoding')
-
-
-@pytest.mark.django_db
-class TestTagGeneration(ReverseGeocodingTagTestMixin, TestCase):
-    """Test tag generation from location data."""
-    
-    def setUp(self):
-        """Set up test fixtures."""
-        cache.clear()
-        try:
-            caches['reverse_geocoding'].clear()
-        except Exception:
-            pass
-    
-    def tearDown(self):
-        """Clean up after tests."""
-        cache.clear()
-    
-    def test_national_park_tag(self):
-        """Test protected-area tag generation (wilderness/national park area) matches fixture exactly."""
-        areas_data = get_areas_fixture(40.34, -105.68)
-        if not areas_data:
-            self.skipTest("Load areas_server fixtures (fetch_areas_fixtures.py <url>)")
-        expected = self._expected_tags_from_fixture(areas_data)
-        tags, _ = get_location_tags(40.34, -105.68)
-        self.assert_tags_exact(tags, expected)
-
-    def test_national_monument_tag(self):
-        """Test national monument tag generation matches fixture exactly."""
-        areas_data = get_areas_fixture(39.07, -108.73)
-        if not areas_data:
-            self.skipTest("Load areas_server fixtures (fetch_areas_fixtures.py <url>)")
-        expected = self._expected_tags_from_fixture(areas_data)
-        tags, _ = get_location_tags(39.07, -108.73)
-        self.assert_tags_exact(tags, expected)
-
-    def test_wilderness_tag(self):
-        """Test wilderness area tag generation matches fixture exactly."""
-        areas_data = get_areas_fixture(39.42, -105.65)
-        if not areas_data:
-            self.skipTest("Load areas_server fixtures (fetch_areas_fixtures.py <url>)")
-        expected = self._expected_tags_from_fixture(areas_data)
-        tags, _ = get_location_tags(39.42, -105.65)
-        self.assert_tags_exact(tags, expected)
-
-    def test_yellowstone_national_park_tag(self):
-        """Test that a point inside Yellowstone NP has exact tags from fixture."""
-        areas_data = get_areas_fixture(44.60384, -110.47567)
-        if not areas_data:
-            self.skipTest("Load areas_server fixtures (fetch_areas_fixtures.py <url>)")
-        expected = self._expected_tags_from_fixture(areas_data)
-        tags, _ = get_location_tags(44.60384, -110.47567)
-        self.assert_tags_exact(tags, expected)
-
-

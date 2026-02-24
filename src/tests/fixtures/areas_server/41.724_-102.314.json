@@ -1,0 +1,36 @@
+{
+  "admin_hierarchy": {
+    "city": null,
+    "country": "United States",
+    "county": "Garden County",
+    "state": "Nebraska"
+  },
+  "nearby_lakes": [
+    {
+      "distance_miles": 0.4,
+      "name": "Swede Lake",
+      "on_water": false,
+      "water_type": "lake"
+    },
+    {
+      "distance_miles": 0.93,
+      "name": "Deer Lake",
+      "on_water": false,
+      "water_type": "lake"
+    }
+  ],
+  "ocean": [],
+  "protected_areas": [
+    {
+      "boundary": "protected_area",
+      "designation": "",
+      "landuse": "",
+      "leisure": "",
+      "name": "Crescent Lake National Wildlife Refuge",
+      "operator": "US Fish and Wildlife Service",
+      "protect_class": "4",
+      "protection_title": "National Wildlife Refuge"
+    }
+  ],
+  "ski_resort": null
+}

@@ -14,9 +14,10 @@ Tags are generated from multiple sources:
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 from geo_lib.reverse_geocoding.areas_server_client import query_areas_server
+from geo_lib.reverse_geocoding.areas_server_models import AreasQueryResponse
 from geo_lib.reverse_geocoding.protected_areas import classify_protected_area
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.spatial.coordinates import round_coordinate
@@ -33,53 +34,47 @@ class ReverseGeocodingLogMessage:
     source: str  # 'Reverse Geocoding'
 
 
-def tags_from_areas_data(response: Dict[str, Any]) -> List[str]:
+def tags_from_areas_data(response: Union[AreasQueryResponse, dict]) -> List[str]:
     """
-    Build tag list from areas server raw response (pure function, no I/O).
-    response: dict with admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort.
+    Build tag list from areas server response (pure function, no I/O).
+    response: AreasQueryResponse or legacy dict with admin_hierarchy, protected_areas, etc.
     """
-    admin_hierarchy = response.get("admin_hierarchy") or {}
-    protected_areas = response.get("protected_areas") or []
-    nearby_lakes = response.get("nearby_lakes") or []
-    raw_ocean = response.get("ocean")
-    ocean_list = raw_ocean if isinstance(raw_ocean, list) else ([raw_ocean] if raw_ocean and isinstance(raw_ocean, str) else [])
-    ski_resort = response.get("ski_resort")
+    if isinstance(response, dict):
+        response = AreasQueryResponse.model_validate(response)
 
     tags: List[str] = []
-    if admin_hierarchy.get("country"):
-        tags.append(f"country:{admin_hierarchy['country']}")
-    if admin_hierarchy.get("state"):
-        tags.append(f"state:{admin_hierarchy['state']}")
-    if admin_hierarchy.get("county"):
-        tags.append(f"county:{admin_hierarchy['county']}")
-    if admin_hierarchy.get("city"):
-        tags.append(f"city:{admin_hierarchy['city']}")
+    ah = response.admin_hierarchy
+    if ah.country:
+        tags.append(f"country:{ah.country}")
+    if ah.state:
+        tags.append(f"state:{ah.state}")
+    if ah.county:
+        tags.append(f"county:{ah.county}")
+    if ah.city:
+        tags.append(f"city:{ah.city}")
 
     protected_area_tags: set = set()
-    for area in protected_areas:
-        name = area.get("name")
-        if not name:
+    for area in response.protected_areas:
+        if not area.name:
             continue
-        area_type = classify_protected_area(area)
-        protected_area_tags.add(f"{area_type}:{name}")
+        area_type = classify_protected_area(area.model_dump())
+        protected_area_tags.add(f"{area_type}:{area.name}")
     tags.extend(sorted(protected_area_tags))
 
     seen_ocean: set = set()
-    for name in ocean_list[:2]:
-        if not name or not isinstance(name, str):
-            continue
-        n = name.strip()
+    for name in response.ocean[:2]:
+        n = (name or "").strip()
         if n and n not in seen_ocean:
             seen_ocean.add(n)
             tags.append(f"ocean:{n}")
 
     lake_tags: set = set()
-    for lake in nearby_lakes[:3]:
-        lake_tags.add(f"lake:{lake['name']}")
+    for lake in response.nearby_lakes[:3]:
+        lake_tags.add(f"lake:{lake.name}")
     tags.extend(sorted(lake_tags))
 
-    if ski_resort and isinstance(ski_resort, str) and ski_resort.strip():
-        tags.append(f"ski-resort:{ski_resort.strip()}")
+    if response.ski_resort and response.ski_resort.strip():
+        tags.append(f"ski-resort:{response.ski_resort.strip()}")
 
     return tags
 
@@ -117,19 +112,9 @@ def get_location_tags(
                 level='ERROR',
                 source='Reverse Geocoding',
             ))
-            response = {
-                "admin_hierarchy": {"country": None, "state": None, "county": None, "city": None},
-                "protected_areas": [],
-                "nearby_lakes": [],
-                "ocean": [],
-                "ski_resort": None,
-            }
+            response = AreasQueryResponse.empty()
 
-        has_any_data = (
-            response["admin_hierarchy"].get("country") or response["admin_hierarchy"].get("state") or
-            response["admin_hierarchy"].get("county") or response["admin_hierarchy"].get("city") or
-            response["protected_areas"] or response["nearby_lakes"]
-        )
+        has_any_data = response.has_any_location_data()
         if not has_any_data and not areas_err:
             warning_msg = (
                 f"Reverse geocoding returned no data for coordinates "

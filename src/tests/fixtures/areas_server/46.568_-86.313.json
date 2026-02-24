@@ -1,29 +1,36 @@
 {
   "admin_hierarchy": {
-    "city": null,
+    "city": "Burt Township",
     "country": "United States",
-    "county": "Grand County",
-    "state": "Colorado"
+    "county": "Alger County",
+    "state": "Michigan"
   },
-  "nearby_lakes": [],
+  "nearby_lakes": [
+    {
+      "distance_miles": 0.73,
+      "name": "Beaver Lake",
+      "on_water": false,
+      "water_type": "lake"
+    }
+  ],
   "ocean": [],
   "protected_areas": [
     {
       "boundary": "protected_area",
       "designation": "",
       "landuse": "",
-      "leisure": "",
-      "name": "Rocky Mountain National Park",
+      "leisure": "nature_reserve",
+      "name": "Pictured Rocks National Lakeshore (Federal Unit)",
       "operator": "National Park Service",
-      "protect_class": "2",
-      "protection_title": "National Park"
+      "protect_class": "5",
+      "protection_title": "National Lakeshore"
     },
     {
       "boundary": "protected_area",
       "designation": "",
       "landuse": "",
       "leisure": "nature_reserve",
-      "name": "Rocky Mountain Wilderness",
+      "name": "Beaver Basin Wilderness",
       "operator": "National Park Service",
       "protect_class": "1a",
       "protection_title": "Wilderness Area"

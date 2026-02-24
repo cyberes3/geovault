@@ -1,14 +1,14 @@
 {
   "admin_hierarchy": {
-    "city": "Nashville",
+    "city": "Crossville",
     "country": "United States",
-    "county": "Davidson County",
+    "county": "Cumberland County",
     "state": "Tennessee"
   },
   "nearby_lakes": [
     {
-      "distance_miles": 0.65,
-      "name": "Cheatham Lake",
+      "distance_miles": 0.08,
+      "name": "Byrd Lake",
       "on_water": false,
       "water_type": "reservoir"
     }
@@ -16,11 +16,11 @@
   "ocean": [],
   "protected_areas": [
     {
-      "boundary": "protected_area",
+      "boundary": "national_park",
       "designation": "",
       "landuse": "",
       "leisure": "",
-      "name": "Bells Bend Park",
+      "name": "Cumberland Mountain State Park",
       "operator": "",
       "protect_class": "",
       "protection_title": ""

@@ -1,0 +1,40 @@
+{
+  "admin_hierarchy": {
+    "city": null,
+    "country": "United States",
+    "county": "Gunnison County",
+    "state": "Colorado"
+  },
+  "nearby_lakes": [
+    {
+      "distance_miles": 0.17,
+      "name": "Blue Mesa Reservoir",
+      "on_water": false,
+      "water_type": "reservoir"
+    }
+  ],
+  "ocean": [],
+  "protected_areas": [
+    {
+      "boundary": "national_park",
+      "designation": "",
+      "landuse": "",
+      "leisure": "nature_reserve",
+      "name": "Curecanti National Recreation Area",
+      "operator": "National Park Service",
+      "protect_class": "5",
+      "protection_title": "National Recreation Area"
+    },
+    {
+      "boundary": "protected_area",
+      "designation": "",
+      "landuse": "",
+      "leisure": "",
+      "name": "BLM - Gunnison Field Office",
+      "operator": "Bureau of Land Management",
+      "protect_class": "5",
+      "protection_title": ""
+    }
+  ],
+  "ski_resort": null
+}

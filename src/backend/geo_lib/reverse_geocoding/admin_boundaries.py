@@ -11,13 +11,9 @@ import pycountry
 from geo_lib.reverse_geocoding.geometry_helpers import point_in_polygon, point_in_bounds
 from geo_lib.reverse_geocoding.osm_tags import get_name_from_tags
 
-_COUNTRY_NAME_ALIASES: Dict[str, str] = {
-    "United States": "United States of America",
-}
-
 
 def _country_code_to_name(code: str) -> Optional[str]:
-    """Resolve ISO 3166-1 alpha-2 country code to canonical full name."""
+    """Resolve ISO 3166-1 alpha-2 country code to pycountry common name (e.g. DE -> Germany)."""
     if not code or not isinstance(code, str):
         return None
     code = code.strip().upper()
@@ -25,19 +21,16 @@ def _country_code_to_name(code: str) -> Optional[str]:
         return None
     try:
         c = pycountry.countries.get(alpha_2=code)
-        if not c:
-            return None
-        name = getattr(c, "official_name", None) or c.name
-        return _COUNTRY_NAME_ALIASES.get(name, name) if name else None
+        return c.name if c else None
     except (KeyError, AttributeError):
         return None
 
 
 def normalize_country_name(name: Optional[str]) -> Optional[str]:
-    """Return a canonical country name (e.g. United States → United States of America)."""
+    """Return stripped boundary name as-is (no alias mapping)."""
     if not name or not name.strip():
         return None
-    return _COUNTRY_NAME_ALIASES.get(name.strip(), name.strip())
+    return name.strip()
 
 
 def get_admin_hierarchy(

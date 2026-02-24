@@ -1,26 +1,14 @@
 {
   "admin_hierarchy": {
-    "city": null,
+    "city": "Breckenridge",
     "country": "United States",
-    "county": "El Paso County",
+    "county": "Summit County",
     "state": "Colorado"
   },
   "nearby_lakes": [
     {
-      "distance_miles": 0.47,
-      "name": "Sapphire Lake",
-      "on_water": false,
-      "water_type": "reservoir"
-    },
-    {
-      "distance_miles": 0.61,
-      "name": "Leo Lake",
-      "on_water": false,
-      "water_type": "reservoir"
-    },
-    {
-      "distance_miles": 0.8,
-      "name": "Grace Lake",
+      "distance_miles": 0.94,
+      "name": "Sawmill Reservoir",
       "on_water": false,
       "water_type": "reservoir"
     }
@@ -32,11 +20,11 @@
       "designation": "",
       "landuse": "",
       "leisure": "",
-      "name": "Pike National Forest",
+      "name": "White River National Forest",
       "operator": "United States Forest Service",
       "protect_class": "6",
       "protection_title": "National Forest"
     }
   ],
-  "ski_resort": null
+  "ski_resort": "Breckenridge"
 }

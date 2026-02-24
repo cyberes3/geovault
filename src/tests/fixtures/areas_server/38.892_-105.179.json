@@ -1,0 +1,42 @@
+{
+  "admin_hierarchy": {
+    "city": null,
+    "country": "United States",
+    "county": "Teller County",
+    "state": "Colorado"
+  },
+  "nearby_lakes": [
+    {
+      "distance_miles": 0.13,
+      "name": "Peak View Pond",
+      "on_water": false,
+      "water_type": "pond"
+    },
+    {
+      "distance_miles": 0.71,
+      "name": "Lost Pond",
+      "on_water": false,
+      "water_type": "pond"
+    },
+    {
+      "distance_miles": 0.79,
+      "name": "Dragonfly",
+      "on_water": false,
+      "water_type": "pond"
+    }
+  ],
+  "ocean": [],
+  "protected_areas": [
+    {
+      "boundary": "protected_area",
+      "designation": "",
+      "landuse": "",
+      "leisure": "",
+      "name": "Mueller State Park",
+      "operator": "Colorado Parks and Wildlife",
+      "protect_class": "5",
+      "protection_title": "State Park"
+    }
+  ],
+  "ski_resort": null
+}

@@ -1,8 +1,8 @@
 {
   "admin_hierarchy": {
-    "city": "Vail",
+    "city": "Lakewood",
     "country": "United States",
-    "county": "Eagle County",
+    "county": "Jefferson County",
     "state": "Colorado"
   },
   "nearby_lakes": [],
@@ -12,12 +12,12 @@
       "boundary": "protected_area",
       "designation": "",
       "landuse": "",
-      "leisure": "",
-      "name": "White River National Forest",
-      "operator": "United States Forest Service",
+      "leisure": "park",
+      "name": "William Frederick Hayden Park",
+      "operator": "City of Lakewood",
       "protect_class": "6",
-      "protection_title": "National Forest"
+      "protection_title": "Mountain Park"
     }
   ],
-  "ski_resort": "Vail"
+  "ski_resort": null
 }

@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import psycopg
-from areas_lib.query import _query_single_unified_sql
+from areas_lib.query import _query_single_sql
 
 _MILES_TO_M = 1609.34
 
@@ -47,7 +47,7 @@ def main() -> int:
         return 1
 
     include_place = True  # default city_radius_miles=3
-    sql, _ = _query_single_unified_sql(include_place)
+    sql, _ = _query_single_sql(include_place)
     params = [
         lon,
         lat,
