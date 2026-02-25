@@ -838,7 +838,7 @@ class PlaceEditActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        map.onResume()
+        if (::map.isInitialized) map.onResume()
     }
 
     override fun onPause() {
@@ -854,7 +854,7 @@ class PlaceEditActivity : AppCompatActivity() {
         searchPlaceRotationHelper.stop()
         locationRotationHelper.stop()
         savingRotationHelper.stop()
-        map.onPause()
+        if (::map.isInitialized) map.onPause()
     }
     private fun setLocationLoading(loading: Boolean) {
         if (loading) {

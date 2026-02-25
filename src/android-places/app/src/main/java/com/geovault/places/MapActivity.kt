@@ -38,15 +38,16 @@ class MapActivity : AppCompatActivity() {
         // Set internal cache directory to avoid permission issues
         Configuration.getInstance().osmdroidTileCache = java.io.File(ctx.cacheDir, "osmdroid")
 
-        // Fetch token off the main thread (getValidAccessToken can do network I/O for refresh)
+        setContentView(R.layout.activity_map)
+        initMapContent()
+
+        // Set auth header when token is ready (off main thread to avoid ANR if refresh runs)
         executor.execute {
             val accessToken = GeovaultAuthManager.getValidAccessToken(this@MapActivity)
             runOnUiThread {
-                if (!accessToken.isNullOrBlank()) {
+                if (!isDestroyed && !accessToken.isNullOrBlank()) {
                     Configuration.getInstance().additionalHttpRequestProperties["Authorization"] = "Bearer $accessToken"
                 }
-                setContentView(R.layout.activity_map)
-                initMapContent()
             }
         }
     }

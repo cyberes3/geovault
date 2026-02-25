@@ -110,6 +110,7 @@ class SettingsActivity : AppCompatActivity() {
         executor.execute {
             val token = GeovaultAuthManager.getValidAccessToken(this@SettingsActivity) ?: return@execute
             runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
                 val request = Request.Builder()
                     .url("$serverUrl/api/user/status/")
                     .addHeader("Authorization", "Bearer $token")
@@ -126,8 +127,10 @@ class SettingsActivity : AppCompatActivity() {
                             response.close()
                             if (code == 401) {
                                 runOnUiThread {
-                                    GeovaultAuthManager.clearTokens(this@SettingsActivity)
-                                    updateConnectDisconnectVisibility()
+                                    if (!isDestroyed) {
+                                        GeovaultAuthManager.clearTokens(this@SettingsActivity)
+                                        updateConnectDisconnectVisibility()
+                                    }
                                 }
                             }
                         }

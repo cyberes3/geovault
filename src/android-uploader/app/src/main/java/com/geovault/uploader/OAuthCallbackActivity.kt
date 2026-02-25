@@ -52,6 +52,7 @@ class OAuthCallbackActivity : AppCompatActivity() {
                 pkce.first,
                 onSuccess = { accessToken, refreshToken, expiresIn ->
                     runOnUiThread {
+                        if (isDestroyed) return@runOnUiThread
                         GeovaultAuthManager.saveTokens(this@OAuthCallbackActivity, accessToken, refreshToken, expiresIn)
                         setResult(RESULT_OK)
                         Toast.makeText(this@OAuthCallbackActivity, getString(R.string.oauth_connected), Toast.LENGTH_SHORT).show()
@@ -60,6 +61,7 @@ class OAuthCallbackActivity : AppCompatActivity() {
                 },
                 onError = { msg ->
                     runOnUiThread {
+                        if (isDestroyed) return@runOnUiThread
                         Toast.makeText(this@OAuthCallbackActivity, msg, Toast.LENGTH_LONG).show()
                         setResult(RESULT_CANCELED)
                         finish()

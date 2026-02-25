@@ -464,6 +464,7 @@ class MultiUploadActivity : AppCompatActivity() {
             call.enqueue(object : Callback {
                 override fun onFailure(call: Call, e: java.io.IOException) {
                     runOnUiThread {
+                        if (isDestroyed) return@runOnUiThread
                         if (isCancelled) {
                             adapter.updateFileStatus(index, FileStatus.PENDING)
                         } else {
@@ -493,6 +494,7 @@ class MultiUploadActivity : AppCompatActivity() {
                         }
                     } else null
                     runOnUiThread {
+                        if (isDestroyed) return@runOnUiThread
                         if (statusCode == 401) {
                             GeovaultAuthManager.clearTokens(this@MultiUploadActivity)
                         }
@@ -515,6 +517,7 @@ class MultiUploadActivity : AppCompatActivity() {
             })
         } catch (e: Exception) {
             runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
                 if (isCancelled) {
                     adapter.updateFileStatus(index, FileStatus.PENDING)
                 } else {

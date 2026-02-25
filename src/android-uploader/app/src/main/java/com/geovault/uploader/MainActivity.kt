@@ -319,6 +319,7 @@ class MainActivity : AppCompatActivity() {
             client.newCall(request).enqueue(object : Callback {
                 override fun onFailure(call: Call, e: java.io.IOException) {
                     runOnUiThread {
+                        if (isDestroyed) return@runOnUiThread
                         uploadRotationHelper.stop()
                         uploadSpinner.visibility = View.GONE
                         uploadButton.isEnabled = true
@@ -341,6 +342,7 @@ class MainActivity : AppCompatActivity() {
                     val statusCode = response.code
                     
                     runOnUiThread {
+                        if (isDestroyed) return@runOnUiThread
                         uploadRotationHelper.stop()
                         uploadSpinner.visibility = View.GONE
                         uploadButton.isEnabled = true
@@ -438,6 +440,7 @@ class MainActivity : AppCompatActivity() {
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: java.io.IOException) {
                 runOnUiThread {
+                    if (isDestroyed) return@runOnUiThread
                     validationTitleText.text = getString(R.string.validation_failed)
                     validationRotationHelper.stop()
                     validationSpinner.visibility = android.view.View.GONE
@@ -456,6 +459,7 @@ class MainActivity : AppCompatActivity() {
                 val responseBody = try { response.body?.string() ?: "" } catch (e: Exception) { "" }
                 val statusCode = response.code
                 runOnUiThread {
+                    if (isDestroyed) return@runOnUiThread
                     validationRotationHelper.stop()
                     validationSpinner.visibility = android.view.View.GONE
                     if (response.isSuccessful) {
