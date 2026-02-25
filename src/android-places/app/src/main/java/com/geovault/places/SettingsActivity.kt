@@ -6,6 +6,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -74,9 +75,16 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         disconnectButton.setOnClickListener {
-            GeovaultAuthManager.clearTokens(this)
-            updateConnectDisconnectVisibility()
-            Toast.makeText(this, getString(R.string.disconnect), Toast.LENGTH_SHORT).show()
+            AlertDialog.Builder(this)
+                .setTitle(getString(R.string.disconnect_confirm_title))
+                .setMessage(getString(R.string.disconnect_confirm_message))
+                .setPositiveButton(getString(R.string.disconnect)) { _, _ ->
+                    GeovaultAuthManager.clearTokens(this)
+                    updateConnectDisconnectVisibility()
+                    Toast.makeText(this, getString(R.string.disconnect), Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton(getString(R.string.cancel_button), null)
+                .show()
         }
 
         saveButton.setOnClickListener {
