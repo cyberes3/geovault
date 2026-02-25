@@ -37,6 +37,7 @@ object GeovaultAuthManager {
     private const val TOKEN_BUFFER_SECONDS = 60L
 
     private var encryptedPrefs: android.content.SharedPreferences? = null
+    private val refreshLock = Object()
 
     fun init(context: Context) {
         if (encryptedPrefs != null) return
@@ -243,26 +244,36 @@ object GeovaultAuthManager {
     fun getRefreshToken(context: Context): String? =
         requirePrefs(context).getString(PREF_REFRESH_TOKEN, null)?.takeIf { it.isNotBlank() }
 
+    /**
+     * Returns current access token, or refreshes using refresh_token and returns the new one.
+     * Must be called from a background thread if refresh might run.
+     * Refresh is serialized so only one thread refreshes at a time (server rotates refresh token;
+     * a second concurrent refresh with the old token would fail and cause 401).
+     */
     fun getValidAccessToken(context: Context): String? {
         var token = getAccessToken(context)
         if (!token.isNullOrBlank()) return token
-        val refreshToken = getRefreshToken(context) ?: return null
-        val serverUrl = getServerUrl(context)
-        if (serverUrl.isBlank()) return null
-        var newAccess: String? = null
-        var newRefresh: String? = null
-        var newExpires: Long = 0L
-        refreshAccessToken(serverUrl, refreshToken,
-            onSuccess = { access, newRt, expires ->
-                newAccess = access
-                newRefresh = newRt
-                newExpires = expires
-            },
-            onError = { }
-        )
-        if (newAccess != null && newExpires > 0) {
-            saveTokens(context, newAccess!!, newRefresh ?: refreshToken, newExpires)
-            return newAccess
+        synchronized(refreshLock) {
+            token = getAccessToken(context)
+            if (!token.isNullOrBlank()) return token
+            val refreshToken = getRefreshToken(context) ?: return null
+            val serverUrl = getServerUrl(context)
+            if (serverUrl.isBlank()) return null
+            var newAccess: String? = null
+            var newRefresh: String? = null
+            var newExpires: Long = 0L
+            refreshAccessToken(serverUrl, refreshToken,
+                onSuccess = { access, newRt, expires ->
+                    newAccess = access
+                    newRefresh = newRt
+                    newExpires = expires
+                },
+                onError = { }
+            )
+            if (newAccess != null && newExpires > 0) {
+                saveTokens(context, newAccess!!, newRefresh ?: refreshToken, newExpires)
+                return newAccess
+            }
         }
         return null
     }

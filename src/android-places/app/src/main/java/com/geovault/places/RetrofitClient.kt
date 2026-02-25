@@ -23,38 +23,16 @@ object RetrofitClient {
             }
             val response = chain.proceed(request)
             if (response.code == 401) {
-                val refreshToken = GeovaultAuthManager.getRefreshToken(context)
-                val serverUrl = GeovaultAuthManager.getServerUrl(context)
-                var retried = false
-                if (!refreshToken.isNullOrBlank() && serverUrl.isNotBlank()) {
-                    var newAccess: String? = null
-                    var newRefresh: String? = null
-                    var newExpires: Long = 0L
-                    GeovaultAuthManager.refreshAccessToken(
-                        serverUrl, refreshToken,
-                        onSuccess = { access, newRt, expires ->
-                            newAccess = access
-                            newRefresh = newRt
-                            newExpires = expires
-                        },
-                        onError = { }
+                val newToken = GeovaultAuthManager.getValidAccessToken(context)
+                if (!newToken.isNullOrBlank()) {
+                    response.close()
+                    return@Interceptor chain.proceed(
+                        chain.request().newBuilder()
+                            .addHeader("Authorization", "Bearer $newToken")
+                            .build()
                     )
-                    if (newAccess != null && newExpires > 0) {
-                        GeovaultAuthManager.saveTokens(
-                            context, newAccess!!, newRefresh ?: refreshToken, newExpires
-                        )
-                        response.close()
-                        retried = true
-                        return@Interceptor chain.proceed(
-                            chain.request().newBuilder()
-                                .addHeader("Authorization", "Bearer $newAccess")
-                                .build()
-                        )
-                    }
                 }
-                if (!retried) {
-                    GeovaultAuthManager.clearTokens(context)
-                }
+                GeovaultAuthManager.clearTokens(context)
             }
             response
         }
