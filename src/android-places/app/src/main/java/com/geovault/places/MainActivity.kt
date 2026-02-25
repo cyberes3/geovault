@@ -228,6 +228,18 @@ class MainActivity : AppCompatActivity() {
         checkConfigAndLoad()
     }
 
+    override fun onPause() {
+        super.onPause()
+        clearSelection()
+    }
+
+    private fun clearSelection() {
+        if (adapter.selectedId != null) {
+            adapter.selectedId = null
+            adapter.notifyDataSetChanged()
+        }
+    }
+
     private fun checkConfigAndLoad() {
         val serverUrl = GeovaultAuthManager.getServerUrl(this)
         if (serverUrl.isEmpty() || !GeovaultAuthManager.isLoggedIn(this)) {
@@ -384,6 +396,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadPlaces() {
+        clearSelection()
         val serverUrl = GeovaultAuthManager.getServerUrl(this)
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
 
