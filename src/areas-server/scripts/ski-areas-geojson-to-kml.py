@@ -4,7 +4,7 @@ Download OpenSkiMap ski_areas.geojson and convert it to KML.
 Always downloads the GeoJSON (no cache). Applies a 500 ft buffer to each geometry. Writes a single KML file with one Placemark per feature.
 
 Usage (from src/areas-server):
-  python scripts/ski_areas_geojson_to_kml.py --output ski_areas.kml
+  python scripts/ski-areas-geojson-to-kml.py --output ski_areas.kml
 """
 import argparse
 import json

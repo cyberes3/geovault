@@ -4,7 +4,8 @@ The Areas Server is a standalone Flask service used in the reverse geocoding pro
 loaded via osm2pgsql. It is a separate service from the main GeoVault stack.
 
 Your Postgres server and `.osm.pbf` files need to be stored on fast SSDs (Samsung 990 Pros work very well and the OSM
-import only takes a few hours). The host should have at least 6 CPUs and 16GB RAM. The python server is pretty
+import only takes a few hours). The host should have at least 6 CPUs and 16GB (32?????????) RAM. The python server is
+pretty
 lightweight as Postgres does the heavy lifting.
 
 ## Database Setup
@@ -72,7 +73,7 @@ python3 -m venv venv
 ## Import OSM data
 
 Download the `.osm.pbf` data from <https://download.geofabrik.de/>. You are expected to download data to
-`/srv/downloads`.
+`/srv/downloads` (or `/srv/downloads/europe` for the western Europe script below).
 
 Scripts use a connection string in this format:
 
@@ -83,31 +84,55 @@ Scripts use a connection string in this format:
 To load the OSM data:
 
 ```bash
-./scripts/import_pbf.sh --database "postgresql://..." /srv/downloads/north-america-latest.osm.pbf
-./scripts/import_pbf.sh --database "postgresql://..." /srv/downloads/europe-latest.osm.pbf --append
+./scripts/import-pbf.sh --database "postgresql://..." /srv/downloads/north-america-latest.osm.pbf
+./scripts/import-pbf.sh --database "postgresql://..." /srv/downloads/europe-latest.osm.pbf --append
 ```
 
-Run the first `.osm.pbf` import then add the `--append` for subsequent ones. If an `import_pbf.sh` run is canceled, you
+Run the first `.osm.pbf` import then add the `--append` for subsequent ones. If an `import-pbf.sh` run is canceled, you
 have to start the entire run over and start at the first file. It is recommended to snapshot your VM or whatever between
 PBF imports.
 
-Remove small lakes so they do not clutter up the nearby-lakes results:
+If you are having issues with the import being killed, try merging your files into one mega file and then import:
+
+```shell
+osmium merge \
+  /srv/downloads/europe-latest.osm.pbf \
+  /srv/downloads/north-america-latest.osm.pbf \
+  -o /srv/downloads/europe_north-america-combined.osm.pbf \
+  --overwrite
+```
+
+A full NA + EU database requires 1TB of space for the final database. For a smaller Europe database, run the download
+script to fetch regions into `/srv/downloads/europe`:
 
 ```bash
-./venv/bin/python scripts/delete_small_lakes.py --database "postgresql://..."
+./scripts/download-osm-minimal-europe.sh
+```
+
+Then merge all PBFs in that directory and import the result:
+
+```bash
+osmium merge /srv/downloads/europe/*-latest.osm.pbf -o /srv/downloads/western-europe.osm.pbf --overwrite
+./scripts/import-pbf.sh --database "postgresql://..." /srv/downloads/western-europe.osm.pbf
+```
+
+After import, remove small lakes so they do not clutter up the nearby-lakes results:
+
+```bash
+./venv/bin/python scripts/delete-small-lakes.py --database "postgresql://..."
 ```
 
 Download and import the ocean dataset:
 
 ```bash
-./venv/bin/python scripts/import_ocean_polygons.py --local-path /srv/downloads --database "postgresql://..."
+./venv/bin/python scripts/import-ocean-polygons.py --local-path /srv/downloads --database "postgresql://..."
 ```
 
 Download and import the ski resort dataset (OpenSkiMap; script uses `ski_areas.geojson` in the download directory,
 refreshes if older than 1 day):
 
 ```bash
-./venv/bin/python scripts/import_ski_areas.py --local-path /srv/downloads --database "postgresql://..."
+./venv/bin/python scripts/import-ski-areas.py --local-path /srv/downloads --database "postgresql://..."
 ```
 
 The standalone Python import scripts drop their table and re-import fresh data on every run.
@@ -116,10 +141,10 @@ After the imports, run the post-processing script to create geography indexes on
 statistics:
 
 ```bash
-./scripts/post_analyze.sh "postgresql://..."
+./scripts/post-analyze.sh "postgresql://..."
 ```
 
-If you do not run `post_analyze.sh` the queries will be incredibly slow.
+If you do not run `post-analyze.sh` the queries will be incredibly slow.
 
 ## Running the Server
 
@@ -151,7 +176,14 @@ It will output something like this:
 2026-02-22 10:02:14 [INFO]: Starting at sequence 4683 (2026-01-30T21:21:29Z).
 ```
 
-Later runs are typically done via the daily systemd timer.
+Start the `areas-server-update.timer` service to automatically run the updater daily.
+
+If you have already run `./scripts/update.sh init` and later import another region with `--append`, you must re-run init
+with the arg `--osm-file [path to new PBF]`:
+
+```shell
+./scripts/update.sh --database "postgresql://..." init --osm-file /path/to/second.osm.pbf
+```
 
 ## Systemd
 

@@ -8,7 +8,7 @@ With --local-path (download directory): use cache if fresh (< 1 day); if stale o
 download and save; on download failure use cached file if present.
 
 Usage (from src/areas-server):
-  python scripts/import_ski_areas.py --database "postgresql://..." [--local-path /path/to/download/dir]
+  python scripts/import-ski-areas.py --database "postgresql://..." [--local-path /path/to/download/dir]
 """
 import argparse
 import json

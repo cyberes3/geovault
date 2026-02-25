@@ -4,8 +4,8 @@ GET /query for each point (single-point latency) and one POST /query (batch).
 Writes results to a markdown file. Requires the areas server to be running.
 
 Usage:
-  AREAS_SERVER_URL=http://127.0.0.1:5001 python -m scripts.benchmark_areas_server
-  python -m scripts.benchmark_areas_server --points 20 --out docs/areas_performance.md
+  AREAS_SERVER_URL=http://127.0.0.1:5001 python scripts/benchmark-areas-server.py --points 20
+  python scripts/benchmark-areas-server.py --points 20 --out docs/areas_performance.md
 """
 import json
 import os

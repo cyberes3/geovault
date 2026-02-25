@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # PBF import for areas server.
 # Usage:
-#   ./import_pbf.sh [options] <path-to.pbf> [database_url]
-#   ./import_pbf.sh --append [options] <path-to.pbf> [database_url]
+#   ./import-pbf.sh [options] <path-to.pbf> [database_url]
+#   ./import-pbf.sh --append [options] <path-to.pbf> [database_url]
 # Options: --database URL. Schema is hard-coded as is_in.
 
 set -euo pipefail

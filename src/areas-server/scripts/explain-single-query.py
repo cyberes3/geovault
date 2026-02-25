@@ -4,8 +4,8 @@ Run EXPLAIN (ANALYZE) on the single-point areas query for a given lat/lon.
 Use this to see which parts of the query are slow and whether indexes are used.
 
 Usage (from src/areas-server):
-  AREAS_SERVER_DATABASE="postgresql://..." ./venv/bin/python scripts/explain_single_query.py 40.34 -105.68
-  ./venv/bin/python scripts/explain_single_query.py --lat 40.34 --lon -105.68
+  AREAS_SERVER_DATABASE="postgresql://..." ./venv/bin/python scripts/explain-single-query.py 40.34 -105.68
+  ./venv/bin/python scripts/explain-single-query.py --lat 40.34 --lon -105.68
 """
 import argparse
 import sys

@@ -4,7 +4,7 @@ Find and delete rows with invalid or empty geometry in admin_areas, protected_ar
 Nominatim-style: report and delete; no ST_MakeValid.
 
 Usage (from src/areas-server):
-  python scripts/clean_invalid_geometry.py --database "postgresql://..." [--dry-run]
+  python scripts/clean-invalid-geometry.py --database "postgresql://..." [--dry-run]
 """
 import argparse
 import sys

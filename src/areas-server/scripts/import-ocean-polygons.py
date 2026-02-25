@@ -9,7 +9,7 @@ Imports both datasets in one run; drops existing ocean_regions and oceans tables
    Download from geovault-data or load GOaS_v1_20211214.zip from --local-path.
 
 Usage (from src/areas-server):
-  python scripts/import_ocean_polygons.py --database "postgresql://..." [--local-path /path/to/cache]
+  python scripts/import-ocean-polygons.py --database "postgresql://..." [--local-path /path/to/cache]
 """
 import argparse
 import io

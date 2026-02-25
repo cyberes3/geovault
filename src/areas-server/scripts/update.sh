@@ -69,8 +69,8 @@ case "$SUBCOMMAND" in
     ;;
   update)
     POST_SCRIPT=""
-    if [[ -f "$SCRIPT_DIR/post_analyze.sh" ]]; then
-      POST_SCRIPT="bash -c '\"$SCRIPT_DIR/post_analyze.sh\" \"$DB\" \"\$@\"'"
+    if [[ -f "$SCRIPT_DIR/post-analyze.sh" ]]; then
+      POST_SCRIPT="bash -c '\"$SCRIPT_DIR/post-analyze.sh\" \"$DB\" \"\$@\"'"
     fi
     EXTRA_OSM2PGSQL=()
     [[ -n "$CACHE_MB" ]] && EXTRA_OSM2PGSQL+=(-C "$CACHE_MB")

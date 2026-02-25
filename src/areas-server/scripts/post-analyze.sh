@@ -2,7 +2,7 @@
 # Post-processing for replication update: create geography GIST indexes for water_bodies and
 # place_nodes (flex tables) and run ANALYZE on all is_in tables used by the server:
 # admin_areas, protected_areas, water_bodies, place_nodes, ocean_regions, oceans, ski_resorts.
-# Usage: ./post_analyze.sh DATABASE_URL [sequence] [timestamp]
+# Usage: ./post-analyze.sh DATABASE_URL [sequence] [timestamp]
 #   DATABASE_URL - required connection URL (e.g. postgresql://...).
 #   When called by osm2pgsql-replication --post-processing, sequence and timestamp may be passed.
 # Also run once after initial PBF import (see installation/Areas Server.md).

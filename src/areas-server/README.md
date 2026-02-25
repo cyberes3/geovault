@@ -101,5 +101,5 @@ flask --app app run --host 0.0.0.0 --port 5001
 Benchmark script:
 
 ```shell
-./venv/bin/python scripts/benchmark_areas_server.py --points 15 --seed 42 --out areas_server_performance.md
+./venv/bin/python scripts/benchmark-areas-server.py --points 15 --seed 42 --out areas_server_performance.md
 ```
