@@ -8,24 +8,20 @@ BASE_URL="https://download.geofabrik.de/europe"
 DEST_DIR="${1:-/srv/downloads/europe}"
 VERIFY_MD5="${VERIFY_MD5:-1}"
 
-# British Isles, western/central Europe (excl. Balkans, Turkey, Cyprus, Malta).
+# British Isles, western Europe (excl. nations east of Germany, Balkans, Turkey, Cyprus, Malta).
 REGIONS=(
   austria
   belgium
-  czech-republic
   denmark
   france
   germany
   great-britain
-  hungary
   ireland-and-northern-ireland
   italy
   luxembourg
   netherlands
   norway
-  poland
   portugal
-  slovakia
   spain
   sweden
   switzerland

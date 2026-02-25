@@ -73,7 +73,7 @@ python3 -m venv venv
 ## Import OSM data
 
 Download the `.osm.pbf` data from <https://download.geofabrik.de/>. You are expected to download data to
-`/srv/downloads` (or `/srv/downloads/europe` for the western Europe script below).
+`/srv/downloads`.
 
 Scripts use a connection string in this format:
 
@@ -102,8 +102,8 @@ osmium merge \
   --overwrite
 ```
 
-A full NA + EU database requires 1TB of space for the final database. For a smaller Europe database, run the download
-script to fetch regions into `/srv/downloads/europe`:
+A full NA + EU database requires 1TB of space for the final database. For a smaller Europe database excluding
+third-world countries like Turkey, run the minimal download script to fetch regions into `/srv/downloads/europe`:
 
 ```bash
 ./scripts/download-osm-minimal-europe.sh
