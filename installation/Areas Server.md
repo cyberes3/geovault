@@ -84,19 +84,12 @@ To load the OSM data:
 
 ```bash
 ./scripts/import_pbf.sh --database "postgresql://..." /srv/downloads/north-america-latest.osm.pbf
-./scripts/import_pbf.sh --database "postgresql://..." /srv/downloads/europe-latest.osm.pbf --append --processes 4
+./scripts/import_pbf.sh --database "postgresql://..." /srv/downloads/europe-latest.osm.pbf --append
 ```
 
 Run the first `.osm.pbf` import then add the `--append` for subsequent ones. If an `import_pbf.sh` run is canceled, you
 have to start the entire run over and start at the first file. It is recommended to snapshot your VM or whatever between
 PBF imports.
-
-Optional arguments for faster imports:
-
-| Argument        | Effect                                             |
-|-----------------|----------------------------------------------------|
-| `--cache MB`    | Node cache size in MB. Default: 800.               |
-| `--processes N` | Parallel threads. Default: `nproc` (if available). |
 
 Remove small lakes so they do not clutter up the nearby-lakes results:
 
