@@ -79,17 +79,10 @@
                 <!-- Connect / Disconnect -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/connectButton"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/gv_common_ButtonConnectAccount"
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
                     android:text="@string/connect_account"
-                    android:textColor="@color/primary_blue"
-                    app:strokeColor="@color/primary_blue"
-                    app:cornerRadius="8dp"
-                    android:textSize="16sp"
-                    android:textAllCaps="false"
                     android:layout_marginBottom="16dp" />
 
                 <com.google.android.material.button.MaterialButton
