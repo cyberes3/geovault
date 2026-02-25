@@ -418,10 +418,10 @@ class MainActivity : AppCompatActivity() {
                 if (response.isSuccessful) {
                     val body = response.body()
                     if (body != null) {
+                        lastSyncTime = System.currentTimeMillis()
                         saveToCache(body)
                         placesList.clear()
                         placesList.addAll(body.features)
-                        lastSyncTime = System.currentTimeMillis()
                         updateLastSyncUI()
                         updateList()
                         runPendingSync(serverUrl)

@@ -17,6 +17,16 @@ class OAuthCallbackActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleRedirect(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleRedirect(intent)
+    }
+
+    private fun handleRedirect(intent: Intent?) {
         val uri: Uri? = intent?.data
         if (uri == null) {
             finishWithError("No redirect data")
@@ -35,7 +45,7 @@ class OAuthCallbackActivity : AppCompatActivity() {
             return
         }
         val serverUrl = GeovaultAuthManager.getServerUrl(this)
-        if ( serverUrl.isBlank()) {
+        if (serverUrl.isBlank()) {
             finishWithError("Server URL not set")
             return
         }

@@ -66,7 +66,7 @@ class SettingsActivity : AppCompatActivity() {
                 Toast.makeText(this, getString(R.string.settings_required), Toast.LENGTH_LONG).show()
                 return@setOnClickListener
             }
-            GeovaultAuthManager.setServerUrl(this, serverUrl)
+            GeovaultAuthManager.setServerUrl(this, serverUrl, commit = true)
             val (verifier, challenge) = GeovaultAuthManager.generatePkcePair()
             val state = (1..16).map { "abcdef0123456789"[kotlin.random.Random.nextInt(16)] }.joinToString("")
             GeovaultAuthManager.savePkceState(this, verifier, state)

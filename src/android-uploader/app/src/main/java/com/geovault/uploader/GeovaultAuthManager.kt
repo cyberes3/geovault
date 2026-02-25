@@ -63,8 +63,9 @@ object GeovaultAuthManager {
     fun getServerUrl(context: Context): String =
         plainPrefs(context).getString(PREF_SERVER_URL, "") ?: ""
 
-    fun setServerUrl(context: Context, url: String) {
-        plainPrefs(context).edit().putString(PREF_SERVER_URL, url).apply()
+    fun setServerUrl(context: Context, url: String, commit: Boolean = false) {
+        val editor = plainPrefs(context).edit().putString(PREF_SERVER_URL, url)
+        if (commit) editor.commit() else editor.apply()
     }
 
     /**
@@ -86,12 +87,17 @@ object GeovaultAuthManager {
         return prefs.getString(PREF_ACCESS_TOKEN, null)?.takeIf { it.isNotBlank() }
     }
 
+    /**
+     * Persist tokens. Uses commit() so the write is durable before returning; this avoids a race
+     * where the OAuth callback finishes and the next activity reads prefs before apply() has flushed,
+     * which could yield empty tokens and 401 on the first request after sign-in.
+     */
     fun saveTokens(context: Context, accessToken: String, refreshToken: String?, expiresInSeconds: Long) {
         requirePrefs(context).edit()
             .putString(PREF_ACCESS_TOKEN, accessToken)
             .putString(PREF_REFRESH_TOKEN, refreshToken ?: "")
             .putLong(PREF_EXPIRES_AT, System.currentTimeMillis() / 1000 + expiresInSeconds)
-            .apply()
+            .commit()
     }
 
     fun clearTokens(context: Context) {
@@ -111,11 +117,16 @@ object GeovaultAuthManager {
         return verifier to challenge
     }
 
+    /**
+     * Save PKCE verifier and state before launching the browser. Uses commit() so they are
+     * durable if the process is killed while in the browser; otherwise the callback may read
+     * empty state and show "Invalid state".
+     */
     fun savePkceState(context: Context, verifier: String, state: String) {
         requirePrefs(context).edit()
             .putString(PREF_PKCE_VERIFIER, verifier)
             .putString(PREF_PKCE_STATE, state)
-            .apply()
+            .commit()
     }
 
     fun getAndClearPkceState(context: Context): Pair<String, String>? {

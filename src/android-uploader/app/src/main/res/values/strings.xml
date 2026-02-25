@@ -31,6 +31,6 @@
     <string name="api_key_valid">Connected</string>
     <string name="api_key_valid_msg">✓ You are signed in.\n\nShare a file to upload it.</string>
     <string name="add_suffix_label">Add \'_android_upload\' suffix to filenames</string>
-    <string name="settings_help_text">Enter your GeoVault server URL and tap Connect account to sign in. You will be redirected to the server to log in and authorize this app.</string>
+    <string name="settings_help_text">Enter your GeoVault server URL and tap Connect to sign in.</string>
 </resources>
 
