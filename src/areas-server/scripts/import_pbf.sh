@@ -3,11 +3,8 @@
 # Usage:
 #   ./import_pbf.sh [options] <path-to.pbf> [database_url]
 #   ./import_pbf.sh --append [options] <path-to.pbf> [database_url]
-# Options: --cache MB, --processes N, --database URL. Schema is hard-coded as is_in.
-#
-# When --cache is not provided we default to 800 MB and pass -C to osm2pgsql. If we did
-# not pass -C, osm2pgsql would use its own default (often RAM-based), which can cause
-# OOM in containers. Node cache is per process; use --processes to limit parallelism.
+# Options: --processes N, --database URL. Schema is hard-coded as is_in.
+# Node cache is set to 0 (passed to osm2pgsql -C). Use --processes to limit parallelism.
 
 set -euo pipefail
 
@@ -17,7 +14,6 @@ FLEX_CONFIG="${SERVER_DIR}/flex_config/areas.lua"
 SCHEMA="is_in"
 
 APPEND=false
-CACHE_MB=""
 PROCESSES=""
 DB=""
 POSITIONALS=()
@@ -26,14 +22,12 @@ POSITIONALS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --append)    APPEND=true; shift ;;
-    --cache)     CACHE_MB="$2"; shift 2 ;;
     --processes) PROCESSES="$2"; shift 2 ;;
     --database)  DB="$2"; shift 2 ;;
     -h|--help)
-      echo "Usage: $0 [--append] [--cache MB] [--processes N] [--database URL] <path-to.osm.pbf> [database_url]" >&2
+      echo "Usage: $0 [--append] [--processes N] [--database URL] <path-to.osm.pbf> [database_url]" >&2
       echo "  Options can appear before or after the PBF path." >&2
       echo "  --append     add this PBF to existing data (first import without --append)" >&2
-      echo "  --cache      node cache size in MB (default: 800; passed to osm2pgsql -C)" >&2
       echo "  --processes  parallel threads (default: nproc)" >&2
       echo "  --database   connection URL (or pass as second positional argument)" >&2
       exit 0
@@ -45,7 +39,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ ${#POSITIONALS[@]} -lt 1 ]]; then
-  echo "Usage: $0 [--append] [--cache MB] [--processes N] [--database URL] <path-to.osm.pbf> [database_url]" >&2
+  echo "Usage: $0 [--append] [--processes N] [--database URL] <path-to.osm.pbf> [database_url]" >&2
   exit 1
 fi
 
@@ -61,14 +55,17 @@ if [[ -z "$DB" ]]; then
   exit 1
 fi
 
-# Default node cache for all operations (create and append). Without this, osm2pgsql
-# would use its own default when -C is omitted, which can be very large and cause OOM.
-[[ -z "$CACHE_MB" ]] && CACHE_MB=800
-
-OSM2PGSQL="${OSM2PGSQL:-osm2pgsql}"
+# Prefer repo's local osm2pgsql build if present; override with OSM2PGSQL env if needed.
+REPO_ROOT="$(cd "$SERVER_DIR/../.." && pwd)"
+LOCAL_OSM2PGSQL="${REPO_ROOT}/osm2pgsql/build/osm2pgsql"
+if [[ -z "${OSM2PGSQL:-}" && -x "$LOCAL_OSM2PGSQL" ]]; then
+  OSM2PGSQL="$LOCAL_OSM2PGSQL"
+elif [[ -z "${OSM2PGSQL:-}" ]]; then
+  OSM2PGSQL=osm2pgsql
+fi
 
 EXTRA_OSM2PGSQL=()
-EXTRA_OSM2PGSQL+=(-C "$CACHE_MB")
+EXTRA_OSM2PGSQL+=(-C 0)
 if [[ -n "$PROCESSES" ]]; then
   EXTRA_OSM2PGSQL+=(--number-processes "$PROCESSES")
 elif command -v nproc >/dev/null 2>&1; then
