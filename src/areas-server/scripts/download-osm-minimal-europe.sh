@@ -29,7 +29,6 @@ download_one() {
   local url="${BASE_URL}/${name}-latest.osm.pbf"
   local dest="${DEST_DIR}/${name}-latest.osm.pbf"
   local md5_url="${url}.md5"
-  local md5_dest="${dest}.md5"
 
   if [[ -f "$dest" ]]; then
     echo "[skip] $dest already exists"
@@ -37,11 +36,19 @@ download_one() {
   fi
 
   echo "[downloading] $url -> $dest"
-  aria2c -X 16 -d "$DEST_DIR" -o "${name}-latest.osm.pbf" "$url"
+  aria2c -x 16 -d "$DEST_DIR" -o "${name}-latest.osm.pbf" "$url"
 
   if [[ "$VERIFY_MD5" == "1" ]]; then
-    aria2c -X 16 -d "$DEST_DIR" -o "${name}-latest.osm.pbf.md5" "$md5_url"
-    ( cd "$DEST_DIR" && md5sum -c "${name}-latest.osm.pbf.md5" ) || { echo "MD5 mismatch for $dest" >&2; exit 1; }
+    expected_md5=$(curl -sSL "$md5_url" | awk '{print $1}')
+    if [[ -z "$expected_md5" || ${#expected_md5} -ne 32 ]]; then
+      echo "Failed to get MD5 for $name from $md5_url" >&2
+      exit 1
+    fi
+    actual_md5=$(md5sum "$dest" | awk '{print $1}')
+    if [[ "$expected_md5" != "$actual_md5" ]]; then
+      echo "MD5 mismatch for $dest (expected $expected_md5, got $actual_md5)" >&2
+      exit 1
+    fi
     echo "[verified] $dest"
   fi
 }
