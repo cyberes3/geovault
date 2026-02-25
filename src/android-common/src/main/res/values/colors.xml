@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary colors matching website theme (gv_common_ prefix required by resourcePrefix) -->
+    <color name="gv_common_primary_blue">#163D8A</color>
+    <color name="gv_common_primary_blue_dark">#063288</color>
+    <color name="gv_common_blue_light">#E4EAF5</color>
+    <color name="gv_common_blue_extra_light">#F3F6FA</color>
+
+    <!-- Text colors -->
+    <color name="gv_common_text_primary">#061D4A</color>
+    <color name="gv_common_text_secondary">#4B5563</color>
+
+    <!-- Status colors -->
+    <color name="gv_common_success_green">#5B8A3C</color>
+    <color name="gv_common_error_red">#FF3E41</color>
+    <color name="gv_common_warning_yellow">#F4AC45</color>
+    <color name="gv_common_spinner_blue">#4B6BAB</color>
+
+    <!-- Error background (light red for error state) -->
+    <color name="gv_common_error_light">#FFF5F5</color>
+    <color name="gv_common_error_stroke">#FFE0E0</color>
+
+    <!-- Basic colors -->
+    <color name="gv_common_white">#FFFFFF</color>
+    <color name="gv_common_black">#000000</color>
+    <color name="gv_common_border_light">#C4D2ED</color>
+
+    <!-- Legacy / compatibility -->
+    <color name="gv_common_gray">#6B7280</color>
+    <color name="gv_common_gray_light">#F3F4F6</color>
+    <color name="gv_common_gray_600">#4B5563</color>
+</resources>

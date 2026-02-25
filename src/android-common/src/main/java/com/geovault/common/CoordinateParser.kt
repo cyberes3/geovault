@@ -1,4 +1,4 @@
-package com.geovault.places
+package com.geovault.common
 
 import java.util.regex.Pattern
 import kotlin.math.abs
@@ -23,7 +23,6 @@ object CoordinateParser {
             val coordinates = Coordinates(preprocessed)
             return Pair(coordinates.latitude, coordinates.longitude)
         } catch (e: Exception) {
-            // e.printStackTrace() // parsing failed
             return null
         }
     }
@@ -120,31 +119,16 @@ object CoordinateParser {
 
         init {
             val normalized = normalizeCoordinateNumbers(rawNumbers)
-            // In JS: sign = normalizedSignOf(coordinateNumbers[0])
-            // But we actually took absolute values for d/m/s in JS.
-            // Let's replicate JS logic closely.
-            
-            // Check sign of the first number *before* abs
             val firstNum = rawNumbers.firstOrNull() ?: 0.0
             sign = if (firstNum >= 0) 1 else -1
 
-            // In JS: [degrees, minutes, seconds, milliseconds] = coordinateNumbers.map(Math.abs)
-            // normalizedNumbers are already processed from constructor input, but let's just map raw to abs first
-            // Wait, JS: coordinateNumbers = normalize(coordinateNumbers) -> which ensures floats
-            // Then: sign = signOf(normalized[0])
-            // Then: [d, m, s, ms] = normalized.map(Math.abs)
-            
             if (normalized.isNotEmpty()) degrees = abs(normalized[0])
             if (normalized.size > 1) minutes = abs(normalized[1])
             if (normalized.size > 2) seconds = abs(normalized[2])
             if (normalized.size > 3) milliseconds = abs(normalized[3])
         }
-        
+
         private fun normalizeCoordinateNumbers(numbers: List<Double>): List<Double> {
-            // In JS this just ensures they are floats. We already have Doubles.
-            // But we pad with 0s to length 4? 
-            // JS: normalizedNumbers = [0, 0, 0, 0]; loop and fill.
-            // So yes, effectively padding.
             val padded = MutableList(4) { 0.0 }
             for (i in numbers.indices) {
                 if (i < 4) padded[i] = numbers[i]
@@ -168,7 +152,6 @@ object CoordinateParser {
             return minutes == 0.0 && seconds == 0.0
         }
 
-        // JS: degrees > 909090
         private fun degreesCanBeMilliseconds(): Boolean {
             return degrees > 909090
         }
@@ -178,36 +161,28 @@ object CoordinateParser {
             degrees = 0.0
         }
 
-        // JS: degrees > 9090
         private fun degreesCanBeDegreesMinutesAndSeconds(): Boolean {
             return degrees > 9090
         }
 
         private fun degreesAsDegreesMinutesAndSeconds() {
-            // JS: newDegrees = Math.floor(degrees / 10000)
             val newDegrees = floor(degrees / 10000)
-            // JS: minutes = Math.floor((degrees - newDegrees * 10000) / 100)
             minutes = floor((degrees - newDegrees * 10000) / 100)
-            // JS: seconds = Math.floor(degrees - newDegrees * 10000 - minutes * 100)
             seconds = floor(degrees - newDegrees * 10000 - minutes * 100)
             degrees = newDegrees
         }
 
-        // JS: degrees > 360
         private fun degreesCanBeDegreesAndMinutes(): Boolean {
             return degrees > 360
         }
 
         private fun degreesAsDegreesAndMinutes() {
-            // JS: newDegrees = Math.floor(degrees / 100)
             val newDegrees = floor(degrees / 100)
-            // JS: minutes = degrees - newDegrees * 100
             minutes = degrees - newDegrees * 100
             degrees = newDegrees
         }
 
         fun toDecimal(): Double {
-            // JS: sign * (degrees + minutes / 60 + seconds / 3600 + milliseconds / 3600000)
             return sign * (degrees + minutes / 60.0 + seconds / 3600.0 + milliseconds / 3600000.0)
         }
     }
@@ -220,10 +195,6 @@ object CoordinateParser {
         }
 
         private fun checkContainsNoLetters(coordinates: String) {
-            // JS: /(?![neswd])[a-z]/i.test(coordinates)
-            // Negative lookahead: matches any letter that is NOT n, e, s, w, d
-            // Wait, 'd' is allowed in JS regex? "(?![neswd])[a-z]"
-            // Yes, maybe for 'deg'?
             val pattern = Pattern.compile("(?![neswd])[a-z]", Pattern.CASE_INSENSITIVE)
             if (pattern.matcher(coordinates).find()) {
                 throw IllegalArgumentException("Coordinate contains invalid alphanumeric characters.")
@@ -231,7 +202,6 @@ object CoordinateParser {
         }
 
         private fun checkValidOrientation(coordinates: String) {
-            // JS: /^[^nsew]*[ns]?[^nsew]*[ew]?[^nsew]*$/i
             val pattern = Pattern.compile("^[^nsew]*[ns]?[^nsew]*[ew]?[^nsew]*$", Pattern.CASE_INSENSITIVE)
             if (!pattern.matcher(coordinates).matches()) {
                 throw IllegalArgumentException("Invalid cardinal direction.")
@@ -245,7 +215,7 @@ object CoordinateParser {
             while (matcher.find()) {
                 count++
             }
-            
+
             if (count == 0) throw IllegalArgumentException("Could not find any coordinate number")
             if (count % 2 != 0) throw IllegalArgumentException("Uneven count of latitude/longitude numbers")
             if (count > 6) throw IllegalArgumentException("Too many coordinate numbers")

@@ -1,6 +1,7 @@
 package com.geovault.uploader
 
 import android.content.Context
+import com.geovault.common.GeovaultAuthManager
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle

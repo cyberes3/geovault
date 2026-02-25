@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary button -->
+    <style name="gv_common_ButtonPrimary" parent="Widget.MaterialComponents.Button">
+        <item name="android:textColor">@color/gv_common_white</item>
+        <item name="backgroundTint">@color/gv_common_primary_blue</item>
+        <item name="cornerRadius">8dp</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+    </style>
+
+    <!-- Outlined button -->
+    <style name="gv_common_ButtonOutlined" parent="Widget.MaterialComponents.Button.OutlinedButton">
+        <item name="android:textColor">@color/gv_common_primary_blue</item>
+        <item name="strokeColor">@color/gv_common_primary_blue</item>
+        <item name="cornerRadius">8dp</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+    </style>
+
+    <!-- EditText style for GeoVault-style input fields -->
+    <style name="gv_common_EditText">
+        <item name="android:background">@drawable/gv_common_edit_text_background</item>
+        <item name="android:textColor">@color/gv_common_text_primary</item>
+        <item name="android:textColorHint">@color/gv_common_text_secondary</item>
+        <item name="android:padding">14dp</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:minHeight">56dp</item>
+    </style>
+
+    <!-- Section header (blue bar with title) -->
+    <style name="gv_common_SectionHeader">
+        <item name="android:background">@color/gv_common_primary_blue</item>
+        <item name="android:textColor">@color/gv_common_white</item>
+        <item name="android:textSize">20sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingEnd">20dp</item>
+        <item name="android:paddingTop">20dp</item>
+        <item name="android:paddingBottom">16dp</item>
+        <item name="android:minHeight">64dp</item>
+        <item name="android:elevation">2dp</item>
+    </style>
+</resources>

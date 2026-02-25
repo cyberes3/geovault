@@ -1,6 +1,7 @@
 package com.geovault.places
 
 import android.content.Context
+import com.geovault.common.GeovaultAuthManager
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import org.osmdroid.config.Configuration

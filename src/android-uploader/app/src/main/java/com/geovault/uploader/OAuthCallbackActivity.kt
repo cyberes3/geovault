@@ -1,6 +1,7 @@
 package com.geovault.uploader
 
 import android.content.Intent
+import com.geovault.common.GeovaultAuthManager
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast

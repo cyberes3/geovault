@@ -1,4 +1,4 @@
-package com.geovault.places
+package com.geovault.common
 
 import android.content.Context
 import android.content.Intent
@@ -17,6 +17,12 @@ import java.util.concurrent.TimeUnit
 /**
  * Manages OAuth2 (Authorization Code + PKCE) and token storage for GeoVault API.
  * Server URL is stored in plain prefs; tokens in EncryptedSharedPreferences.
+ *
+ * **Required:** Call [init] with the app's redirect URI once before using any other method
+ * (e.g. in Application.onCreate()). If not initialized, other methods throw [IllegalStateException].
+ *
+ * **Threading:** [getValidAccessToken] and [refreshAccessToken] may perform network I/O and must be
+ * called from a background thread when refresh might run.
  */
 object GeovaultAuthManager {
 
@@ -30,22 +36,34 @@ object GeovaultAuthManager {
     private const val PREF_PKCE_STATE = "pkce_state"
 
     const val OAUTH_CLIENT_ID = "geovault-android"
-    const val OAUTH_REDIRECT_URI = "com.geovault.places://oauth/callback"
     const val OAUTH_SCOPE = "api"
     private const val TOKEN_ENDPOINT_PATH = "/api/oauth/token/"
     private const val AUTHORIZE_PATH = "/api/oauth/authorize/"
     private const val TOKEN_BUFFER_SECONDS = 60L
 
+    @Volatile
+    private var redirectUri: String? = null
+
     private var encryptedPrefs: android.content.SharedPreferences? = null
     private val refreshLock = Object()
 
-    fun init(context: Context) {
-        if (encryptedPrefs != null) return
-        val masterKey = MasterKey.Builder(context)
+    /**
+     * Initialize the auth manager with the application context and the app's OAuth redirect URI.
+     * Must be called once before any other method (e.g. in Application.onCreate()).
+     *
+     * @param context Application or activity context; application context is used for storage.
+     * @param redirectUri The app's redirect URI (e.g. "com.geovault.uploader://oauth/callback").
+     */
+    @JvmStatic
+    fun init(context: Context, redirectUri: String) {
+        if (this.redirectUri != null) return
+        this.redirectUri = redirectUri
+        val appContext = context.applicationContext
+        val masterKey = MasterKey.Builder(appContext)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
         encryptedPrefs = EncryptedSharedPreferences.create(
-            context,
+            appContext,
             AUTH_PREFS_NAME,
             masterKey,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
@@ -53,13 +71,26 @@ object GeovaultAuthManager {
         )
     }
 
+    private fun requireInitialized(): String {
+        val uri = redirectUri
+        if (uri.isNullOrBlank()) {
+            throw IllegalStateException(
+                "GeovaultAuthManager not initialized. Call init(context, redirectUri) first."
+            )
+        }
+        return uri
+    }
+
     private fun requirePrefs(context: Context): android.content.SharedPreferences {
-        init(context)
-        return encryptedPrefs!!
+        requireInitialized()
+        return encryptedPrefs
+            ?: throw IllegalStateException(
+                "GeovaultAuthManager not initialized. Call init(context, redirectUri) first."
+            )
     }
 
     private fun plainPrefs(context: Context) =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     fun getServerUrl(context: Context): String =
         plainPrefs(context).getString(PREF_SERVER_URL, "") ?: ""
@@ -71,8 +102,7 @@ object GeovaultAuthManager {
 
     /**
      * True if the user has a valid session: either a non-expired access token or a refresh token
-     * (so we can obtain a new access token). After access token expiry (~12h), we still consider
-     * the user logged in if a refresh token exists.
+     * (so we can obtain a new access token).
      */
     fun isLoggedIn(context: Context): Boolean {
         if (!getAccessToken(context).isNullOrBlank()) return true
@@ -89,9 +119,7 @@ object GeovaultAuthManager {
     }
 
     /**
-     * Persist tokens. Uses commit() so the write is durable before returning; this avoids a race
-     * where the OAuth callback finishes and the next activity reads prefs before apply() has flushed,
-     * which could yield empty tokens and 401 on the first request after sign-in.
+     * Persist tokens. Uses commit() so the write is durable before returning.
      */
     fun saveTokens(context: Context, accessToken: String, refreshToken: String?, expiresInSeconds: Long) {
         requirePrefs(context).edit()
@@ -120,8 +148,7 @@ object GeovaultAuthManager {
 
     /**
      * Save PKCE verifier and state before launching the browser. Uses commit() so they are
-     * durable if the process is killed while in the browser; otherwise the callback may read
-     * empty state and show "Invalid state".
+     * durable if the process is killed while in the browser.
      */
     fun savePkceState(context: Context, verifier: String, state: String) {
         requirePrefs(context).edit()
@@ -139,11 +166,12 @@ object GeovaultAuthManager {
     }
 
     fun buildAuthorizeUrl(serverUrl: String, codeChallenge: String, state: String): String {
+        val uri = requireInitialized()
         val base = serverUrl.trimEnd('/')
         return "$base$AUTHORIZE_PATH?" +
             "response_type=code" +
             "&client_id=${Uri.encode(OAUTH_CLIENT_ID)}" +
-            "&redirect_uri=${Uri.encode(OAUTH_REDIRECT_URI)}" +
+            "&redirect_uri=${Uri.encode(uri)}" +
             "&scope=${Uri.encode(OAUTH_SCOPE)}" +
             "&code_challenge=${Uri.encode(codeChallenge)}" +
             "&code_challenge_method=S256" +
@@ -157,11 +185,12 @@ object GeovaultAuthManager {
         onSuccess: (accessToken: String, refreshToken: String?, expiresIn: Long) -> Unit,
         onError: (String) -> Unit
     ) {
+        val uri = requireInitialized()
         val url = serverUrl.trimEnd('/') + TOKEN_ENDPOINT_PATH
         val body = FormBody.Builder()
             .add("grant_type", "authorization_code")
             .add("code", code)
-            .add("redirect_uri", OAUTH_REDIRECT_URI)
+            .add("redirect_uri", uri)
             .add("client_id", OAUTH_CLIENT_ID)
             .add("code_verifier", codeVerifier)
             .build()
@@ -199,8 +228,9 @@ object GeovaultAuthManager {
 
     /**
      * Exchange refresh_token for a new access token. If the server uses refresh token rotation,
-     * it returns a new refresh_token in the response; that value is passed to onSuccess and must
-     * be saved so the next refresh uses it (the old token is revoked).
+     * it returns a new refresh_token in the response; that value must be saved for the next refresh.
+     *
+     * May perform network I/O; call from a background thread.
      */
     fun refreshAccessToken(
         serverUrl: String,
@@ -246,9 +276,8 @@ object GeovaultAuthManager {
 
     /**
      * Returns current access token, or refreshes using refresh_token and returns the new one.
-     * Must be called from a background thread if refresh might run.
-     * Refresh is serialized so only one thread refreshes at a time (server rotates refresh token;
-     * a second concurrent refresh with the old token would fail and cause 401).
+     * Must be called from a background thread when refresh might run (performs network I/O).
+     * Refresh is serialized so only one thread refreshes at a time.
      */
     fun getValidAccessToken(context: Context): String? {
         var token = getAccessToken(context)

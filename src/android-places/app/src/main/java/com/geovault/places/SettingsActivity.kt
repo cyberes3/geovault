@@ -1,6 +1,7 @@
 package com.geovault.places
 
 import android.content.Intent
+import com.geovault.common.GeovaultAuthManager
 import android.os.Bundle
 import android.view.View
 import android.widget.Button

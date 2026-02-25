@@ -1,17 +1,23 @@
-package com.geovault.places
+package com.geovault.common
 
 import android.content.Context
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
+/**
+ * Builds an authenticated Retrofit instance for the GeoVault API.
+ * Uses [GeovaultAuthManager] for the server URL and Bearer token; retries on 401 with a refreshed token.
+ *
+ * Use application context when creating long-lived clients to avoid leaking activities.
+ */
 object RetrofitClient {
 
     fun getClient(context: Context, baseUrl: String): Retrofit {
-        val tokenProvider = { GeovaultAuthManager.getValidAccessToken(context) }
+        val appContext = context.applicationContext
+        val tokenProvider = { GeovaultAuthManager.getValidAccessToken(appContext) }
         val authInterceptor = Interceptor { chain ->
             val token = tokenProvider()
             val request = if (!token.isNullOrBlank()) {
@@ -23,7 +29,7 @@ object RetrofitClient {
             }
             val response = chain.proceed(request)
             if (response.code == 401) {
-                val newToken = GeovaultAuthManager.getValidAccessToken(context)
+                val newToken = GeovaultAuthManager.getValidAccessToken(appContext)
                 if (!newToken.isNullOrBlank()) {
                     response.close()
                     return@Interceptor chain.proceed(
@@ -32,7 +38,7 @@ object RetrofitClient {
                             .build()
                     )
                 }
-                GeovaultAuthManager.clearTokens(context)
+                GeovaultAuthManager.clearTokens(appContext)
             }
             response
         }

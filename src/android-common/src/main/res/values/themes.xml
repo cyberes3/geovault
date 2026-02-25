@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="gv_common_Theme.GeoVault" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/gv_common_primary_blue</item>
+        <item name="colorPrimaryDark">@color/gv_common_primary_blue_dark</item>
+        <item name="colorAccent">@color/gv_common_primary_blue</item>
+        <item name="android:textColorPrimary">@color/gv_common_text_primary</item>
+        <item name="android:textColorSecondary">@color/gv_common_text_secondary</item>
+        <item name="android:statusBarColor">@color/gv_common_primary_blue</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">@color/gv_common_blue_extra_light</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

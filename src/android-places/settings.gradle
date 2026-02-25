@@ -15,3 +15,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "android-places"
 include ':app'
+include ':android-common'
+project(':android-common').projectDir = file("../android-common")
