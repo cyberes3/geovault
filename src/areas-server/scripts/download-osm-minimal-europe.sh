@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Download western mainland Europe + European islands (e.g. Madeira, Azores) from Geofabrik.
-# Excludes: Greece, Cyprus, Malta.
+# Download OSM data for western/central Europe from Geofabrik (British Isles, W/C Europe, no Balkans, Turkey, or N Africa).
 # See: https://download.geofabrik.de/europe.html
 
 set -euo pipefail
@@ -9,18 +8,26 @@ BASE_URL="https://download.geofabrik.de/europe"
 DEST_DIR="${1:-/srv/downloads/europe}"
 VERIFY_MD5="${VERIFY_MD5:-1}"
 
-# Western mainland Europe + islands (Italy incl. Sicily/Sardinia; Portugal incl. Madeira/Azores; Spain incl. Canaries).
-# Uncomment to add: ireland-and-northern-ireland, great-britain, iceland, faroe-islands.
+# British Isles, western/central Europe (excl. Balkans, Turkey, Cyprus, Malta).
 REGIONS=(
   austria
   belgium
+  czech-republic
+  denmark
   france
   germany
+  great-britain
+  hungary
+  ireland-and-northern-ireland
   italy
   luxembourg
   netherlands
+  norway
+  poland
   portugal
+  slovakia
   spain
+  sweden
   switzerland
 )
 
@@ -55,7 +62,6 @@ download_one() {
 
 mkdir -p "$DEST_DIR"
 echo "Destination: $DEST_DIR"
-echo "Regions: ${REGIONS[*]}"
 echo ""
 
 for r in "${REGIONS[@]}"; do
@@ -64,8 +70,4 @@ done
 
 echo ""
 echo "Done. To merge into a single PBF (e.g. for import-pbf.sh):"
-echo "  osmium merge \\"
-for r in "${REGIONS[@]}"; do
-  echo "    ${DEST_DIR}/${r}-latest.osm.pbf \\"
-done
-echo "    -o /srv/downloads/western-europe.osm.pbf"
+echo "  osmium merge ${DEST_DIR}/*-latest.osm.pbf -o /srv/downloads/western-europe.osm.pbf --overwrite"
