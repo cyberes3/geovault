@@ -1,6 +1,6 @@
 """
 Tests for the standalone is_in area server (Flask + PostGIS).
-All tests hit the real server at reverse_geocoding.areas_server.api_url (AREAS_SERVER_URL).
+All tests hit the real server at reverse_geocoding.areas_server.api_url from config.yaml.
 Validation and error-path tests use the in-process client with mocks where needed.
 
 Uses urllib for HTTP so real-server tests are not affected by conftest's requests mocks.
@@ -24,8 +24,8 @@ from areas_lib import lookup_admin, lookup_common, lookup_places, lookup_protect
 
 
 def _areas_server_base_url():
-    from website.settings_utils import get_setting
-    url = (get_setting("AREAS_SERVER_URL") or "").strip()
+    from website.config_loader import get_config_loader
+    url = (get_config_loader().get_str("reverse_geocoding.areas_server.api_url", "") or "").strip()
     return url.rstrip("/") if url else ""
 
 
@@ -74,10 +74,10 @@ def _http_post(url, data_bytes=None, content_type="application/json", timeout=5)
 
 @pytest.fixture
 def areas_server_url():
-    """Base URL of the areas server from settings (reverse_geocoding.areas_server.api_url)."""
+    """Base URL of the areas server from config.yaml (reverse_geocoding.areas_server.api_url)."""
     url = _areas_server_base_url()
     if not url:
-        pytest.fail("AREAS_SERVER_URL not set")
+        pytest.fail("reverse_geocoding.areas_server.api_url not set in config.yaml")
     return url
 
 

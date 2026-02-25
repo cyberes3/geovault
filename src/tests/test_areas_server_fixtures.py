@@ -3,7 +3,7 @@ Tests that areas server fixture cache files match live server responses.
 
 Iterates over fixtures in fixtures/areas_server/*.json, calls the real areas server
 for each (lat, lon), and asserts the response equals the cached fixture. Requires
-AREAS_SERVER_URL and a running areas server.
+reverse_geocoding.areas_server.api_url in config.yaml and a running areas server.
 
 Uses urllib so real-server requests are not affected by conftest's requests mocks.
 """
@@ -38,8 +38,8 @@ def _http_get(url: str, timeout: int = 30):
 
 
 def _areas_server_base_url():
-    from website.settings_utils import get_setting
-    url = (get_setting("AREAS_SERVER_URL") or "").strip()
+    from website.config_loader import get_config_loader
+    url = (get_config_loader().get_str("reverse_geocoding.areas_server.api_url", "") or "").strip()
     return url.rstrip("/") if url else ""
 
 
@@ -69,16 +69,16 @@ def clear_areas_cache():
     """Clear the areas server response cache at the start of this test module."""
     url = _areas_server_base_url()
     if not url:
-        pytest.fail("AREAS_SERVER_URL not set")
+        pytest.fail("reverse_geocoding.areas_server.api_url not set in config.yaml")
     _http_get(url.rstrip("/") + "/cache-clear", timeout=10)
 
 
 @pytest.fixture
 def areas_server_url():
-    """Base URL of the areas server from AREAS_SERVER_URL."""
+    """Base URL of the areas server from config.yaml (reverse_geocoding.areas_server.api_url)."""
     url = _areas_server_base_url()
     if not url:
-        pytest.fail("AREAS_SERVER_URL not set")
+        pytest.fail("reverse_geocoding.areas_server.api_url not set in config.yaml")
     return url
 
 
