@@ -29,7 +29,15 @@ def _areas_server_base_url():
     return url.rstrip("/") if url else ""
 
 
-def _http_get(url, timeout=5):
+def _areas_server_timeout():
+    """Request timeout in seconds for real areas server calls (from config, or 15)."""
+    from website.config_loader import get_config_loader
+    return get_config_loader().get_int("reverse_geocoding.areas_server.request_timeout_seconds", 15)
+
+
+def _http_get(url, timeout=None):
+    if timeout is None:
+        timeout = _areas_server_timeout()
     req = urllib.request.Request(url, method="GET")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -50,7 +58,9 @@ def _http_get(url, timeout=5):
     return status, body, data
 
 
-def _http_post(url, data_bytes=None, content_type="application/json", timeout=5):
+def _http_post(url, data_bytes=None, content_type="application/json", timeout=None):
+    if timeout is None:
+        timeout = _areas_server_timeout()
     req = urllib.request.Request(url, data=data_bytes, method="POST")
     if content_type:
         req.add_header("Content-Type", content_type)
@@ -1229,13 +1239,13 @@ class TestNearbyLakesTop5:
 
 
 class TestCleanInvalidGeometry:
-    """Tests for clean_invalid_geometry script (Nominatim-style: report and delete, no ST_MakeValid)."""
+    """Tests for clean-invalid-geometry script (Nominatim-style: report and delete, no ST_MakeValid)."""
 
     @pytest.fixture
     def clean_module(self):
         import importlib.util
 
-        script_path = _areas_server_dir / "scripts" / "clean_invalid_geometry.py"
+        script_path = _areas_server_dir / "scripts" / "clean-invalid-geometry.py"
         spec = importlib.util.spec_from_file_location("clean_invalid_geometry", script_path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)

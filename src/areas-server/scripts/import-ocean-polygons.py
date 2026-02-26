@@ -9,7 +9,7 @@ Imports both datasets in one run; drops existing ocean_regions and oceans tables
    Download from geovault-data or load GOaS_v1_20211214.zip from --local-path.
 
 Usage (from src/areas-server):
-  python scripts/import-ocean-polygons.py --database "postgresql://..." [--local-path /path/to/cache]
+  python scripts/import-ocean-polygons.py DATABASE_URL [--local-path /path/to/cache]
 """
 import argparse
 import io
@@ -200,9 +200,8 @@ def main() -> None:
         description="Import ocean_regions (Natural Earth 10m) and oceans (GOaS) into is_in schema. Drops existing tables."
     )
     parser.add_argument(
-        "--database",
+        "database",
         type=str,
-        required=True,
         help="PostgreSQL connection string (e.g. postgresql://user:pass@host/dbname)",
     )
     parser.add_argument(
@@ -214,7 +213,7 @@ def main() -> None:
     args = parser.parse_args()
     conninfo = args.database.strip()
     if not conninfo:
-        print("Error: --database must be non-empty", file=sys.stderr)
+        print("Error: database URL must be non-empty", file=sys.stderr)
         sys.exit(1)
 
     print("Starting ocean polygons import (ocean_regions + oceans).", file=sys.stderr)

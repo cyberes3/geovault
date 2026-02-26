@@ -4,9 +4,8 @@ The Areas Server is a standalone Flask service used in the reverse geocoding pro
 loaded via osm2pgsql. It is a separate service from the main GeoVault stack.
 
 Your Postgres server and `.osm.pbf` files need to be stored on fast SSDs (Samsung 990 Pros work very well and the OSM
-import only takes a few hours). The host should have at least 6 CPUs and 16GB (32?????????) RAM. The python server is
-pretty
-lightweight as Postgres does the heavy lifting.
+import only takes a few hours). The host should have at least 6 CPUs and 16GB RAM. The python server is
+pretty lightweight as Postgres does the heavy lifting.
 
 ## Database Setup
 
@@ -84,8 +83,8 @@ Scripts use a connection string in this format:
 To load the OSM data:
 
 ```bash
-./scripts/import-pbf.sh --database "postgresql://..." /srv/downloads/north-america-latest.osm.pbf
-./scripts/import-pbf.sh --database "postgresql://..." /srv/downloads/europe-latest.osm.pbf --append
+./scripts/import-pbf.sh "postgresql://..." /srv/downloads/north-america-latest.osm.pbf
+./scripts/import-pbf.sh "postgresql://..." --append /srv/downloads/europe-latest.osm.pbf
 ```
 
 Run the first `.osm.pbf` import then add the `--append` for subsequent ones. If an `import-pbf.sh` run is canceled, you
@@ -113,26 +112,25 @@ Then merge all PBFs in that directory and import the result:
 
 ```bash
 osmium merge /srv/downloads/europe/*-latest.osm.pbf -o /srv/downloads/western-europe.osm.pbf --overwrite
-./scripts/import-pbf.sh --database "postgresql://..." /srv/downloads/western-europe.osm.pbf
+./scripts/import-pbf.sh "postgresql://..." /srv/downloads/western-europe.osm.pbf
 ```
 
 After import, remove small lakes so they do not clutter up the nearby-lakes results:
 
 ```bash
-./venv/bin/python scripts/delete-small-lakes.py --database "postgresql://..."
+./venv/bin/python scripts/delete-small-lakes.py "postgresql://..."
 ```
 
 Download and import the ocean dataset:
 
 ```bash
-./venv/bin/python scripts/import-ocean-polygons.py --local-path /srv/downloads --database "postgresql://..."
+./venv/bin/python scripts/import-ocean-polygons.py "postgresql://..." --local-path /srv/downloads
 ```
 
-Download and import the ski resort dataset (OpenSkiMap; script uses `ski_areas.geojson` in the download directory,
-refreshes if older than 1 day):
+Download and import the ski resort dataset:
 
 ```bash
-./venv/bin/python scripts/import-ski-areas.py --local-path /srv/downloads --database "postgresql://..."
+./venv/bin/python scripts/import-ski-areas.py "postgresql://..." --local-path /srv/downloads
 ```
 
 The standalone Python import scripts drop their table and re-import fresh data on every run.
@@ -155,34 +153,34 @@ export AREAS_SERVER_DATABASE="postgresql://..."
 
 ## Incremental Updates
 
-`osm2pgsql` supports easily importing update diffs from the OSM server.
+`osm2pgsql` supports easily importing update diffs from the OSM server. The script uses **daily** replication only.
 
 First, initalize the diffs:
 
 ```shell
-./scripts/update.sh --database "postgresql://..." init
+./scripts/update.sh "postgresql://..." init
 ```
 
 To run the update:
 
 ```shell
-./scripts/update.sh --database "postgresql://..." update
+./scripts/update.sh "postgresql://..." update
 ```
 
 It will output something like this:
 
 ```
-2026-02-22 10:02:14 [INFO]: Initialised updates for service 'https://download.geofabrik.de/north-america-updates'.
+2026-02-22 10:02:14 [INFO]: Initialised updates for service 'https://planet.openstreetmap.org/replication/day'.
 2026-02-22 10:02:14 [INFO]: Starting at sequence 4683 (2026-01-30T21:21:29Z).
 ```
 
 Start the `areas-server-update.timer` service to automatically run the updater daily.
 
-If you have already run `./scripts/update.sh init` and later import another region with `--append`, you must re-run init
+If you have already run `./scripts/update.sh "postgresql://..." init` and later import another region with `--append`, you must re-run init
 with the arg `--osm-file [path to new PBF]`:
 
 ```shell
-./scripts/update.sh --database "postgresql://..." init --osm-file /path/to/second.osm.pbf
+./scripts/update.sh "postgresql://..." init --osm-file /path/to/second.osm.pbf
 ```
 
 ## Systemd

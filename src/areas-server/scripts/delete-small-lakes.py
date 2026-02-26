@@ -4,7 +4,7 @@ Delete water bodies smaller than a minimum area (default 0.25 sq mi).
 Run after import (no need to pre-compute area; uses ST_Area(geography(geom)) in the DELETE).
 
 Usage (from src/areas-server):
-  python scripts/delete-small-lakes.py --database "postgresql://..." [--min-area-sqmi 0.25] [--dry-run]
+  python scripts/delete-small-lakes.py DATABASE_URL [--min-area-sqmi 0.25] [--dry-run]
 """
 import argparse
 import sys
@@ -24,9 +24,8 @@ SQMI_TO_SQKM = 2.589988110336
 def main() -> None:
     parser = argparse.ArgumentParser(description="Delete small lakes from water_bodies.")
     parser.add_argument(
-        "--database",
+        "database",
         type=str,
-        required=True,
         help="PostgreSQL connection string (e.g. postgresql://user:pass@host/dbname)",
     )
     parser.add_argument(
@@ -44,7 +43,7 @@ def main() -> None:
     min_sqkm = args.min_area_sqmi * SQMI_TO_SQKM
     conninfo = args.database.strip()
     if not conninfo:
-        print("Error: --database must be non-empty", file=sys.stderr)
+        print("Error: database URL must be non-empty", file=sys.stderr)
         sys.exit(1)
 
     with psycopg.connect(conninfo) as conn:

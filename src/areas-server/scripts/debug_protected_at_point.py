@@ -3,11 +3,10 @@
 Debug why a lat/lon returns no protected_areas: run ST_Contains (as the API does)
 and ST_DWithin to list any protected areas near the point.
 
-Usage (from src/areas-server, with AREAS_SERVER_DATABASE set):
-  ./venv/bin/python scripts/debug_protected_at_point.py 39.86161999885882 -105.12065936657157
+Usage (from src/areas-server):
+  ./venv/bin/python scripts/debug_protected_at_point.py DATABASE_URL 39.86161999885882 -105.12065936657157
 """
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -22,14 +21,14 @@ MILES_TO_M = 1609.34
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Debug protected_areas at a point")
+    parser.add_argument("database", type=str, help="PostgreSQL connection string")
     parser.add_argument("lat", type=float, help="Latitude")
     parser.add_argument("lon", type=float, help="Longitude")
     parser.add_argument("--radius-miles", type=float, default=2.0, help="Radius for nearby search (default 2)")
-    parser.add_argument("--database", type=str, default=None, help="PostgreSQL connection (default: AREAS_SERVER_DATABASE)")
     args = parser.parse_args()
-    conninfo = (args.database or os.environ.get("AREAS_SERVER_DATABASE") or "").strip()
+    conninfo = args.database.strip()
     if not conninfo:
-        print("Error: set AREAS_SERVER_DATABASE or pass --database", file=sys.stderr)
+        print("Error: database URL must be non-empty", file=sys.stderr)
         return 1
 
     radius_m = args.radius_miles * MILES_TO_M

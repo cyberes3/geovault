@@ -4,7 +4,7 @@ Find and delete rows with invalid or empty geometry in admin_areas, protected_ar
 Nominatim-style: report and delete; no ST_MakeValid.
 
 Usage (from src/areas-server):
-  python scripts/clean-invalid-geometry.py --database "postgresql://..." [--dry-run]
+  python scripts/clean-invalid-geometry.py DATABASE_URL [--dry-run]
 """
 import argparse
 import sys
@@ -63,9 +63,8 @@ def main() -> int:
         description="Report and delete rows with invalid or empty geometry."
     )
     parser.add_argument(
-        "--database",
+        "database",
         type=str,
-        required=True,
         help="PostgreSQL connection string",
     )
     parser.add_argument(
@@ -76,7 +75,7 @@ def main() -> int:
     args = parser.parse_args()
     conninfo = args.database.strip()
     if not conninfo:
-        print("Error: --database must be non-empty", file=sys.stderr)
+        print("Error: database URL must be non-empty", file=sys.stderr)
         return 1
 
     with psycopg.connect(conninfo) as conn:

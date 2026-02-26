@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # PBF import for areas server.
 # Usage:
-#   ./import-pbf.sh [options] <path-to.pbf> [database_url]
-#   ./import-pbf.sh --append [options] <path-to.pbf> [database_url]
-# Options: --database URL. Schema is hard-coded as is_in.
+#   ./import-pbf.sh DATABASE_URL [--append] <path-to.pbf>
+# Schema is hard-coded as is_in.
 
 set -euo pipefail
 
@@ -20,12 +19,10 @@ POSITIONALS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --append)    APPEND=true; shift ;;
-    --database)  DB="$2"; shift 2 ;;
     -h|--help)
-      echo "Usage: $0 [--append] [--database URL] <path-to.osm.pbf> [database_url]" >&2
-      echo "  Options can appear before or after the PBF path." >&2
+      echo "Usage: $0 DATABASE_URL [--append] <path-to.osm.pbf>" >&2
+      echo "  DATABASE_URL - connection URL (required, first positional)" >&2
       echo "  --append     add this PBF to existing data (first import without --append)" >&2
-      echo "  --database   connection URL (or pass as second positional argument)" >&2
       exit 0
       ;;
     --) shift; POSITIONALS+=( "$@" ); break ;;
@@ -34,20 +31,16 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ ${#POSITIONALS[@]} -lt 1 ]]; then
-  echo "Usage: $0 [--append] [--database URL] <path-to.osm.pbf> [database_url]" >&2
+if [[ ${#POSITIONALS[@]} -lt 2 ]]; then
+  echo "Usage: $0 DATABASE_URL [--append] <path-to.osm.pbf>" >&2
+  echo "  DATABASE_URL and PBF path are required." >&2
   exit 1
 fi
 
-PBF_PATH="${POSITIONALS[0]}"
+DB="${POSITIONALS[0]}"
+PBF_PATH="${POSITIONALS[1]}"
 if [[ ! -f "$PBF_PATH" ]]; then
   echo "PBF file not found: $PBF_PATH" >&2
-  exit 1
-fi
-
-DB="${DB:-${POSITIONALS[1]:-}}"
-if [[ -z "$DB" ]]; then
-  echo "Database not set. Use --database or pass database_url as second argument." >&2
   exit 1
 fi
 
@@ -67,6 +60,6 @@ else
   psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS \"$SCHEMA\";"
   echo "Importing $PBF_PATH into database (schema=$SCHEMA) with osm2pgsql flex (create mode)..."
   "$OSM2PGSQL" --disable-parallel-indexing -C 0 --number-processes 4 -c -d "$DB" -O flex -S "$FLEX_CONFIG" --schema "$SCHEMA" -s "$PBF_PATH"
-  echo "Import finished. To add another region: $0 --append <other.pbf>"
-  echo "To enable incremental updates, run: scripts/update.sh init"
+  echo "Import finished. To add another region: $0 DATABASE_URL --append <other.pbf>"
+  echo "To enable incremental updates, run: scripts/update.sh DATABASE_URL init"
 fi

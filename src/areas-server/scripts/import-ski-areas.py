@@ -8,7 +8,7 @@ With --local-path (download directory): use cache if fresh (< 1 day); if stale o
 download and save; on download failure use cached file if present.
 
 Usage (from src/areas-server):
-  python scripts/import-ski-areas.py --database "postgresql://..." [--local-path /path/to/download/dir]
+  python scripts/import-ski-areas.py DATABASE_URL [--local-path /path/to/download/dir]
 """
 import argparse
 import json
@@ -101,9 +101,8 @@ def main() -> None:
         description="Import ski areas (OpenSkiMap) into is_in.ski_resorts. Drops existing table."
     )
     parser.add_argument(
-        "--database",
+        "database",
         type=str,
-        required=True,
         help="PostgreSQL connection string (e.g. postgresql://user:pass@host/dbname)",
     )
     parser.add_argument(
@@ -115,7 +114,7 @@ def main() -> None:
     args = parser.parse_args()
     conninfo = args.database.strip()
     if not conninfo:
-        print("Error: --database must be non-empty", file=sys.stderr)
+        print("Error: database URL must be non-empty", file=sys.stderr)
         sys.exit(1)
 
     print("Starting ski areas import.", file=sys.stderr)
