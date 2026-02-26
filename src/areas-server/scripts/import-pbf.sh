@@ -55,11 +55,11 @@ fi
 
 if [[ "$APPEND" == true ]]; then
   echo "Appending $PBF_PATH to existing database (schema=$SCHEMA)..."
-  "$OSM2PGSQL" --disable-parallel-indexing -C 0 --number-processes 4 -a -d "$DB" -O flex -S "$FLEX_CONFIG" --schema "$SCHEMA" -s "$PBF_PATH"
+  "$OSM2PGSQL" --disable-parallel-indexing -C 0 --number-processes 4 -a -d "$DB" -O flex -S "$FLEX_CONFIG" --schema "$SCHEMA" -x -s "$PBF_PATH"
 else
   psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS \"$SCHEMA\";"
   echo "Importing $PBF_PATH into database (schema=$SCHEMA) with osm2pgsql flex (create mode)..."
-  "$OSM2PGSQL" --disable-parallel-indexing -C 0 --number-processes 4 -c -d "$DB" -O flex -S "$FLEX_CONFIG" --schema "$SCHEMA" -s "$PBF_PATH"
+  "$OSM2PGSQL" --disable-parallel-indexing -C 0 --number-processes 4 -c -d "$DB" -O flex -S "$FLEX_CONFIG" --schema "$SCHEMA" -x -s "$PBF_PATH"
   echo "Import finished. To add another region: $0 DATABASE_URL --append <other.pbf>"
   echo "To enable incremental updates, run: scripts/update.sh DATABASE_URL init"
 fi
