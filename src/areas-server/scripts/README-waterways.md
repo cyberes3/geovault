@@ -1,43 +1,28 @@
 # Waterways import and filtering by length (including tributaries)
 
-## Three ways to get rivers/canals into PostGIS
+## Major waterways: `waterways.world_major_waterways`
 
-### 0a. Full planet: filter first, then DB (70GB OK on disk; DB stays small)
+### Build from PBF
 
-If you have (or will download) the full planet PBF (~70GB), filter it to rivers+canals **on disk first**; only that
-smaller file is used for processing, and only the grouped result is loaded into PostGIS:
+`build-major-waterways.sh` builds grouped major rivers and canals from a PBF and loads into PostGIS. GeoJSON is stored in `--local-dir` (default `/srv/downloads`). Use `--load` to skip building and load from existing GeoJSON.
+
+```bash
+./scripts/build-major-waterways.sh "postgresql://user:pass@host/db" /srv/downloads/north-america_western-europe_combined.osm.pbf
+./scripts/build-major-waterways.sh "postgresql://user:pass@host/db" --load --local-dir /srv/downloads
+```
+
+- **Options:** `--local-dir DIR`, `--load` (use existing GeoJSON), `--min-upstream-km N` (default 50)
+- **Table:** `waterways.world_major_waterways`
+
+### Full planet (filter first)
+
+If you have the full planet PBF, filter to waterways on disk first so the 70GB never hits the DB:
 
 ```bash
 ./scripts/planet-waterways-to-db.sh "postgresql://user:pass@host/db" /srv/downloads/planet-latest.osm.pbf
 ```
 
-- Writes `<planet-basename>-waterways.osm.pbf` next to the planet (or pass a third argument for the path). The
-  waterways-only file is typically a few GB.
-- If that file already exists and is newer than the planet, the filter step is skipped.
-- Then runs the grouped-waterways pipeline and imports only `waterways.world_major_waterways`. The 70GB never goes into the
-  database.
-
-### 0b. Build from a single PBF (no downloads)
-
-`build-major-waterways.sh` builds grouped waterways and imports to PostGIS from **one** PBF you provide (e.g. North America + Europe combined, or any region/planet). It does not download anything.
-
-```bash
-./scripts/build-major-waterways.sh "postgresql://user:pass@host/db" /srv/downloads/north-america_western-europe_combined.osm.pbf
-```
-
-- No GeoJSON or KML output — loads directly into `waterways.world_major_waterways`. Option: `--min-upstream-km N` (default 50).
-
-### 1. Raw segments (single region or merged PBF): `waterways.waterways`
-
-Import individual OSM ways (each segment) with the flex config:
-
-```bash
-./scripts/import-waterways-pbf.sh "postgresql://user:pass@host/db" /srv/downloads/north-america_western-europe_combined.osm.pbf
-```
-
-- **Table:** `waterways.waterways`
-- **Columns:** `osm_id`, `waterway` (river/canal), `name`, `tags`, `geom`, `created`
-- **waterways.lua** is only used for this path; the major-waterways script does not need it.
+(Then use `build-major-waterways.sh --load` if that script writes the same table.)
 
 ## Filtering by length including tributaries
 
@@ -88,5 +73,5 @@ file and `-F` (e.g. waterwaymap.org's `flowing_water_wo_streams.tagfilterfunc`, 
 includes other flowing water).
 
 **By size (small tributaries):** To drop very short branches, raise **`--min-upstream-m`** in `osm-lump-ways-down`. The
-scripts use `--min-upstream-m 100` (metres). Increasing it (e.g. 1000 or 5000) keeps only segments with at least that
+scripts use `--min-upstream-m 1000` (metres). Increasing it (e.g. 1000 or 5000) keeps only segments with at least that
 much upstream length, which trims small feeders.
