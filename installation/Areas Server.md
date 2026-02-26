@@ -136,6 +136,13 @@ Download and import the ski resort dataset:
 
 The standalone Python import scripts drop their table and re-import fresh data on every run.
 
+Importing waterways is a bit more complicated due to some nessesary filtering. You'll need
+to [install rust](https://rustup.rs/) and then do `cargo install osm-lump-ways`.
+
+```bash
+./scripts/import-major-waterways.sh "postgresql://user:pass@host/db" /srv/downloads/north-america-latest.osm.pbf
+```
+
 After the imports, run the post-processing script to create geography indexes on the tables and refresh
 statistics:
 

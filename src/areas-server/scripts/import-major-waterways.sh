@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 # From an OSM PBF: build grouped major rivers and canals, store GeoJSON in
-# --local-dir, and load into Postgres (waterways.world_major_waterways).
+# --local-dir, and load into Postgres (waterways.major_waterways).
 # With --load, skip building and import from existing GeoJSON in local-dir.
 #
 # Requires: osm-lump-ways (cargo install osm-lump-ways), ogr2ogr (GDAL), psql
 #
 # Usage:
-#   ./build-major-waterways.sh DATABASE_URL <path-to.osm.pbf> [options]
-#   ./build-major-waterways.sh DATABASE_URL --load [--local-dir /srv/downloads]
+#   ./import-major-waterways.sh DATABASE_URL <path-to.osm.pbf> [options]
+#   ./import-major-waterways.sh DATABASE_URL --load [--local-dir /srv/downloads]
 #
 # Options:
 #   --local-dir DIR   Directory for major-waterways.geojson (default: /srv/downloads)
 #   --load            Skip build; load from existing GeoJSON in --local-dir
 #   --min-upstream-km N   Keep only systems with total length >= N km (default: 50)
 #
-# Output: GeoJSON in <local-dir>/major-waterways.geojson; table waterways.world_major_waterways.
+# Output: GeoJSON in <local-dir>/major-waterways.geojson; table waterways.major_waterways.
 
 set -euo pipefail
 
@@ -22,8 +22,6 @@ set -euo pipefail
 [[ -f "${HOME:-}/.cargo/env" ]] && . "${HOME:-}/.cargo/env"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCHEMA="waterways"
-TABLE="world_major_waterways"
 GEOJSON_NAME="major-waterways.geojson"
 MIN_UPSTREAM_M=50000   # 50 km default
 LOCAL_DIR="/srv/downloads"
@@ -51,7 +49,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     -h|--help)
       echo "Usage: $0 DATABASE_URL [path-to.osm.pbf] [--local-dir DIR] [--load] [--min-upstream-km N]" >&2
-      echo "  Builds major waterways from PBF (or --load from existing GeoJSON) and loads into ${SCHEMA}.${TABLE}." >&2
+      echo "  Builds major waterways from PBF (or --load from existing GeoJSON) and loads into waterways.major_waterways." >&2
       exit 0
       ;;
     *)
@@ -150,16 +148,16 @@ if [[ "$DATABASE_URL" =~ ^postgresql:// ]]; then
   fi
 fi
 
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS \"$SCHEMA\";"
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS \"$SCHEMA\".\"$TABLE\" CASCADE;"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS waterways;"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS waterways.major_waterways CASCADE;"
 
 ogr2ogr -f PostgreSQL PG: "$GEOJSON_PATH" \
-  -nln "${SCHEMA}.${TABLE}" -nlt MULTILINESTRING -unsetFid \
+  -nln "waterways.major_waterways" -nlt MULTILINESTRING -unsetFid \
   -oo ARRAY_AS_STRING=YES -t_srs EPSG:4326 -lco GEOMETRY_NAME=geom
 
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS \"${TABLE}_tag_group_value\" ON \"$SCHEMA\".\"$TABLE\" (tag_group_value);"
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS \"${TABLE}_length_m\" ON \"$SCHEMA\".\"$TABLE\" (length_m);"
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS \"${TABLE}_max_upstream_m\" ON \"$SCHEMA\".\"$TABLE\" (max_upstream_m);"
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS \"${TABLE}_geom\" ON \"$SCHEMA\".\"$TABLE\" USING GIST (geom);"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS major_waterways_tag_group_value ON waterways.major_waterways (tag_group_value);"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS major_waterways_length_m ON waterways.major_waterways (length_m);"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS major_waterways_max_upstream_m ON waterways.major_waterways (max_upstream_m);"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS major_waterways_geom ON waterways.major_waterways USING GIST (geom);"
 
-echo "Done. Table: $SCHEMA.$TABLE"
+echo "Done. Table: waterways.major_waterways"

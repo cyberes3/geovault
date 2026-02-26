@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Export waterways.world_major_waterways from Postgres to KML for verification.
+# Export waterways.major_waterways from Postgres to KML for verification.
 #
 # Requires: ogr2ogr (GDAL)
 #
@@ -11,7 +11,7 @@
 set -euo pipefail
 
 SCHEMA="waterways"
-TABLE="world_major_waterways"
+TABLE="major_waterways"
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 DATABASE_URL [output.kml]" >&2
@@ -23,6 +23,6 @@ DATABASE_URL="$1"
 KML_PATH="${2:-major-waterways.kml}"
 
 # ogr2ogr for PG expects connection string; postgresql:// works with GDAL 2+
-ogr2ogr -f KML "$KML_PATH" "PG:${DATABASE_URL}" -sql "SELECT tag_group_value, length_m, max_upstream_m, geom FROM ${SCHEMA}.${TABLE} ORDER BY max_upstream_m DESC" -t_srs EPSG:4326
+ogr2ogr -f KML "$KML_PATH" "PG:${DATABASE_URL}" -sql "SELECT tag_group_value, length_m, max_upstream_m, geom FROM waterways.${TABLE} ORDER BY max_upstream_m DESC" -t_srs EPSG:4326
 
 echo "Wrote: $KML_PATH ($(du -h "$KML_PATH" | cut -f1))"
