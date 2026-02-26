@@ -18,6 +18,9 @@
 
 set -euo pipefail
 
+# So cargo-installed osm-lump-ways-down is on PATH
+[[ -f "${HOME:-}/.cargo/env" ]] && . "${HOME:-}/.cargo/env"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCHEMA="waterways"
 TABLE="world_major_waterways"
