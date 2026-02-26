@@ -91,7 +91,8 @@ Run the first `.osm.pbf` import then add the `--append` for subsequent ones. If 
 have to start the entire run over and start at the first file. It is recommended to snapshot your VM or whatever between
 PBF imports.
 
-If you are having issues with the import being killed, try merging your files into one mega file and then import:
+If you are having issues with an append import being killed, try merging your files into one mega file and then
+importing:
 
 ```shell
 osmium merge \
@@ -176,8 +177,8 @@ It will output something like this:
 
 Start the `areas-server-update.timer` service to automatically run the updater daily.
 
-If you have already run `./scripts/update.sh "postgresql://..." init` and later import another region with `--append`, you must re-run init
-with the arg `--osm-file [path to new PBF]`:
+If you have already run `./scripts/update.sh "postgresql://..." init` and later import another region with `--append`,
+you must re-run init with the arg `--osm-file [path to new PBF]`:
 
 ```shell
 ./scripts/update.sh "postgresql://..." init --osm-file /path/to/second.osm.pbf
