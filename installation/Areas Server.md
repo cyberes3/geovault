@@ -155,40 +155,18 @@ The standalone Python import scripts drop their table and re-import fresh data o
 Importing waterways is a bit more complicated due to some nessesary filtering. You'll need
 to [install rust](https://rustup.rs/) and then do `cargo install osm-lump-ways`.
 
-**Single region:** pass one PBF:
-
 ```bash
 ./scripts/import-major-waterways.sh "postgresql://user:pass@host/db" /srv/downloads/north-america-latest.osm.pbf
 ```
 
-**Multiple regions (e.g. Europe + North America):** `osm-lump-ways-down` accepts only one input file and does not
-deduplicate; duplicate node/way IDs in a merged file can cause wrong results or panics. So you must produce one *
-*deduplicated** PBF first, then run the import on that file.
+You must feed a single `.osm.pbf` file into the script, so if you have multiple files you must merge them together.
+These are all supported options:
 
-1. **Merge with deduplication** using the merge script (osmium with 2 inputs does not dedup; the script uses 3 inputs so
-   the result is deduplicated):
-
-   ```bash
-   ./scripts/merge-pbf-dedup.sh /srv/downloads/western-europe.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/europe_na.osm.pbf
-   ```
-   
-   or
-   
-   ```bash
-   ./scripts/merge-pbf-dedup.sh /srv/downloads/europe/*-latest.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/western-europe_na.osm.pbf
-   ```
-
-   Use your actual PBF paths (e.g. if you built western-europe from the minimal-Europe script, use that file; if you use
-   full extracts, use e.g. `europe-latest.osm.pbf` and `north-america-latest.osm.pbf`).
-
-2. **Run the waterways import** on the merged file:
-
-   ```bash
-   ./scripts/import-major-waterways.sh "postgresql://user:pass@host/db" /srv/downloads/europe_na.osm.pbf
-   ```
-
-Do not merge two PBFs with plain `osmium merge file1.pbf file2.pbf` — that leaves duplicates and can break
-`osm-lump-ways-down`. Use `merge-pbf-dedup.sh` so the output is deduplicated.
+```bash
+./scripts/merge-pbf-dedup.sh /srv/downloads/minimal-europe.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/europe_na.osm.pbf                                                                                                                                                     
+./scripts/merge-pbf-dedup.sh /srv/downloads/europe/*-latest.osm.pbf -o /srv/downloads/minimal-europe.osm.pbf
+./scripts/merge-pbf-dedup.sh /srv/downloads/europe/*-latest.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/minimal-europe_na.osm.pbf
+```
 
 ---
 

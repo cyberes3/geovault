@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Download OSM data for western/central Europe from Geofabrik (British Isles, W/C Europe, no Balkans, Turkey, or N Africa).
+# Download OSM data for minimal Europe from Geofabrik (British Isles, W/C Europe, no Balkans, Turkey, or N Africa).
 # See: https://download.geofabrik.de/europe.html
 
 set -euo pipefail
@@ -8,7 +8,7 @@ BASE_URL="https://download.geofabrik.de/europe"
 DEST_DIR="${1:-/srv/downloads/europe}"
 VERIFY_MD5="${VERIFY_MD5:-1}"
 
-# British Isles, western Europe (excl. nations east of Germany, Balkans, Turkey, Cyprus, Malta).
+# British Isles, minimal Europe (excl. nations east of Germany, Balkans, Turkey, Cyprus, Malta).
 REGIONS=(
   austria
   belgium
