@@ -15,11 +15,11 @@
 #   --load            Skip build; load from existing merged GeoJSON in --local-dir
 #   --min-upstream-km N   Keep only systems with total length >= N km (default: 50)
 #   --sort-pbf        Pre-sort each PBF with osmium sort -s multipass (rarely needed)
-#   --rewrite-pbf     After tags-filter, rewrite with osmium cat pbf_dense_nodes=false (if reader still fails)
+#   --rewrite-pbf     No-op (rewrite is now always applied; kept for backwards compatibility)
 #
-# Preprocessing: Matches waterwaymap.org (dl_updates_from_osm.sh): osmium tags-filter with
-# the same expressions (waterway natural=coastline natural=water canoe portage), default PBF
-# output. Required: osmium-tool.
+# Preprocessing: Matches waterwaymap.org tag filter, then rewrites PBF with pbf_dense_nodes=false
+# so osm-lump-ways (osmio) can read it (osmio only reads the first PrimitiveGroup per block).
+# Required: osmium-tool.
 #
 # Output: one GeoJSON per PBF in <local-dir>/major-waterways_<basename>.geojson,
 #         merged <local-dir>/major-waterways.geojson; table waterways.major_waterways.
@@ -146,17 +146,13 @@ else
     WORK_DIR="$(mktemp -d)"
     PBF_TO_USE="$PBF_PATH"
 
-    # Same pipeline as waterwaymap.org: tags-filter with their exact expressions, default PBF output.
+    # Same tag filter as waterwaymap.org; then rewrite so osmio can read (single PrimitiveGroup per block).
     TAG_FILTER="waterway natural=coastline natural=water canoe portage"
     echo "=== [$((i+1))/${#PBF_PATHS[@]}] Tags-filter ($TAG_FILTER): $PBF_PATH ==="
     osmium tags-filter "$PBF_PATH" -o "${WORK_DIR}/waterway.osm.pbf" --overwrite $TAG_FILTER
-    PBF_TO_USE="${WORK_DIR}/waterway.osm.pbf"
-
-    if [[ "$DO_REWRITE_PBF" == true ]]; then
-      echo "=== [$((i+1))/${#PBF_PATHS[@]}] Rewrite PBF (pbf_dense_nodes=false): $PBF_TO_USE ==="
-      osmium cat "$PBF_TO_USE" -o "${WORK_DIR}/rewritten.osm.pbf" -f pbf,pbf_dense_nodes=false --overwrite
-      PBF_TO_USE="${WORK_DIR}/rewritten.osm.pbf"
-    fi
+    echo "=== [$((i+1))/${#PBF_PATHS[@]}] Rewrite PBF (pbf_dense_nodes=false for osmio): $PBF_PATH ==="
+    osmium cat "${WORK_DIR}/waterway.osm.pbf" -o "${WORK_DIR}/waterway_flat.osm.pbf" -f pbf,pbf_dense_nodes=false --overwrite
+    PBF_TO_USE="${WORK_DIR}/waterway_flat.osm.pbf"
     if [[ "$DO_SORT_PBF" == true ]]; then
       echo "=== [$((i+1))/${#PBF_PATHS[@]}] Sort PBF: $PBF_TO_USE ==="
       osmium sort -s multipass "$PBF_TO_USE" -o "${WORK_DIR}/sorted.osm.pbf" --overwrite
@@ -177,7 +173,7 @@ else
         echo "  Filtered PBF (input to osm-lump-ways-down):"
         osmium fileinfo --no-progress -e "$PBF_TO_USE" 2>/dev/null | sed 's/^/    /' || true
       fi
-      echo "  (Pipeline: osmium tags-filter waterway natural=coastline natural=water canoe portage → osm-lump-ways-down)"
+      echo "  (Filtered PBF is rewritten with pbf_dense_nodes=false; if still 0 ways, see github.com/amandasaurus/osmio)"
       rm -rf "$WORK_DIR"
       continue
     fi

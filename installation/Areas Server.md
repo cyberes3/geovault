@@ -143,7 +143,7 @@ Pass one or more `.osm.pbf` files. The script preprocesses each with **osmium ta
 
 It is fine to skip the waterways database since it is used exclusively for the `waterway` tag.
 
-The pipeline matches waterwaymap.org (dl_updates_from_osm.sh → tags-filter → osm-lump-ways-down). If you still see "0 ways", check that the source PBF has waterway data (`osmium fileinfo -e` on the original file) and consider opening an issue at [osm-lump-ways](https://github.com/amandasaurus/osm-lump-ways).
+The pipeline matches waterwaymap.org (dl_updates_from_osm.sh → tags-filter → osm-lump-ways-down). If you still see "0 ways": (1) check the filtered PBF in the script output (it runs `osmium fileinfo -e` on the temp file when skipping); (2) try `--rewrite-pbf` so osmium rewrites with `pbf_dense_nodes=false` (the osmio reader used by osm-lump-ways only processes the first PrimitiveGroup per block—see [osmio](https://github.com/amandasaurus/osmio)); (3) see [osm-lump-ways](https://github.com/amandasaurus/osm-lump-ways) and [PBF/Software Compliance](https://wiki.openstreetmap.org/wiki/PBF/Software_Compliance).
 
 ---
 
