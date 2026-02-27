@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -28,6 +29,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var disconnectButton: MaterialButton
     private lateinit var addSuffixCheckbox: CheckBox
     private lateinit var saveButton: MaterialButton
+    private lateinit var loggedInUserText: TextView
 
     private val prefs: SharedPreferences by lazy {
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
@@ -54,6 +56,7 @@ class SettingsActivity : AppCompatActivity() {
         disconnectButton = findViewById(R.id.disconnectButton)
         addSuffixCheckbox = findViewById(R.id.addSuffixCheckbox)
         saveButton = findViewById(R.id.saveButton)
+        loggedInUserText = findViewById(R.id.loggedInUserText)
 
         val rootView = findViewById<View>(R.id.rootLayout)
         val headerView = findViewById<View>(R.id.headerLayout)
@@ -127,11 +130,22 @@ class SettingsActivity : AppCompatActivity() {
             override fun onFailure(call: Call, e: java.io.IOException) {}
             override fun onResponse(call: Call, response: Response) {
                 val code = response.code
+                val bodyStr = try { response.body?.string() ?: "" } catch (e: Exception) { "" }
                 response.close()
-                if (code == 401) {
-                    runOnUiThread {
-                        if (!isDestroyed) {
-                            resetOnAuthFailure(this@SettingsActivity)
+                runOnUiThread {
+                    if (isDestroyed) return@runOnUiThread
+                    if (code == 401) {
+                        resetOnAuthFailure(this@SettingsActivity)
+                        return@runOnUiThread
+                    }
+                    if (code == 200 && bodyStr.isNotEmpty()) {
+                        try {
+                            val json = org.json.JSONObject(bodyStr)
+                            val email = json.optString("email", "").trim()
+                            loggedInUserText.visibility = if (email.isNotEmpty()) View.VISIBLE else View.GONE
+                            loggedInUserText.text = if (email.isNotEmpty()) getString(com.geovault.common.R.string.gv_common_logged_in_as, email) else ""
+                        } catch (e: Exception) {
+                            loggedInUserText.visibility = View.GONE
                         }
                     }
                 }
@@ -147,6 +161,7 @@ class SettingsActivity : AppCompatActivity() {
         val loggedIn = GeovaultAuthManager.isLoggedIn(this)
         connectButton.visibility = if (loggedIn) View.GONE else View.VISIBLE
         disconnectButton.visibility = if (loggedIn) View.VISIBLE else View.GONE
+        if (!loggedIn) loggedInUserText.visibility = View.GONE
     }
 
     private fun saveSettings() {

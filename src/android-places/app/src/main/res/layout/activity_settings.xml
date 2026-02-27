@@ -52,6 +52,16 @@
                 android:orientation="vertical"
                 android:padding="20dp">
 
+                <!-- Logged-in user (visible when connected) -->
+                <TextView
+                    android:id="@+id/loggedInUserText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_secondary"
+                    android:layout_marginBottom="16dp"
+                    android:visibility="gone" />
+
                 <!-- Server URL -->
                 <TextView
                     android:layout_width="match_parent"
