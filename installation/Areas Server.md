@@ -92,15 +92,16 @@ have to start the entire run over and start at the first file. It is recommended
 PBF imports.
 
 If you are having issues with an append import being killed, try merging your files into one mega file and then
-importing:
+importing. Use the merge script so the result is deduplicated (otherwise osm2pgsql can fail with "node id appears more than once"):
 
 ```shell
-osmium merge \
-  /srv/downloads/europe-latest.osm.pbf \
-  /srv/downloads/north-america-latest.osm.pbf \
-  -o /srv/downloads/europe_north-america-combined.osm.pbf \
-  --overwrite
+./scripts/merge-pbf-dedup.sh /srv/downloads/europe-latest.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/europe_north-america-combined.osm.pbf
+./scripts/import-pbf.sh "postgresql://..." /srv/downloads/europe_north-america-combined.osm.pbf
 ```
+
+Append imports require much heavier DB operations than initial imports.
+
+---
 
 A full NA + EU database requires 1TB of space for the final database. For a smaller Europe database excluding
 third-world countries like Turkey, run the minimal download script to fetch regions into `/srv/downloads/europe`:
@@ -109,12 +110,21 @@ third-world countries like Turkey, run the minimal download script to fetch regi
 ./scripts/download-osm-minimal-europe.sh
 ```
 
-Then merge all PBFs in that directory and import the result:
+Then merge all PBFs in that directory and import. To merge western-europe with another region (e.g. north-america), use the deduplicating merge script (avoids osm2pgsql "node id appears more than once"):
 
 ```bash
-osmium merge /srv/downloads/europe/*-latest.osm.pbf -o /srv/downloads/western-europe.osm.pbf --overwrite
+osmium merge /srv/downloads/europe/*-latest.osm.pbf -o /srv/downloads/western-europe.osm.pbf --overwrite --with-history
 ./scripts/import-pbf.sh "postgresql://..." /srv/downloads/western-europe.osm.pbf
 ```
+
+To combine western-europe with another region (e.g. north-america), merge with the deduplicating script then import the combined file:
+
+```bash
+./scripts/merge-pbf-dedup.sh /srv/downloads/western-europe.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/north-america_western-europe.osm.pbf
+./scripts/import-pbf.sh "postgresql://..." /srv/downloads/north-america_western-europe.osm.pbf
+```
+
+---
 
 After import, remove small lakes so they do not clutter up the nearby-lakes results:
 
@@ -122,11 +132,15 @@ After import, remove small lakes so they do not clutter up the nearby-lakes resu
 ./venv/bin/python scripts/delete-small-lakes.py "postgresql://..."
 ```
 
+---
+
 Download and import the ocean dataset:
 
 ```bash
 ./venv/bin/python scripts/import-ocean-polygons.py "postgresql://..." --local-path /srv/downloads
 ```
+
+---
 
 Download and import the ski resort dataset:
 
@@ -136,12 +150,16 @@ Download and import the ski resort dataset:
 
 The standalone Python import scripts drop their table and re-import fresh data on every run.
 
+---
+
 Importing waterways is a bit more complicated due to some nessesary filtering. You'll need
 to [install rust](https://rustup.rs/) and then do `cargo install osm-lump-ways`.
 
 ```bash
 ./scripts/import-major-waterways.sh "postgresql://user:pass@host/db" /srv/downloads/north-america-latest.osm.pbf
 ```
+
+---
 
 After the imports, run the post-processing script to create geography indexes on the tables and refresh
 statistics:
