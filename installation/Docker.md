@@ -1,6 +1,8 @@
 # Docker Installation
 
-GeoVault is also provided as a Docker container. **Provided as-is without any testing!**
+GeoVault is also provided as a Docker container.
+
+**Provided as-is without any testing! This setup is likely out of date!!**
 
 You will still need an nginx server to do HTTPS.
 
@@ -35,11 +37,11 @@ docker-compose up -d
 ```
 
 3. The setup will automatically:
-   - Initialize the PostgreSQL database with PostGIS extension
-   - Create the database user and grant necessary privileges
-   - Copy `config.example.yaml` to `/srv/docker-data/geovault/src/backend/config.yaml` if it doesn't exist
-   - Update the config file with database and Redis connection settings
-   - Run Django migrations
+    - Initialize the PostgreSQL database with PostGIS extension
+    - Create the database user and grant necessary privileges
+    - Copy `config.example.yaml` to `/srv/docker-data/geovault/src/backend/config.yaml` if it doesn't exist
+    - Update the config file with database and Redis connection settings
+    - Run Django migrations
 
 4. Review and update the configuration file:
 
@@ -48,6 +50,7 @@ sudo nano /srv/docker-data/geovault/src/backend/config.yaml
 ```
 
 Important settings to configure:
+
 - `site.domain` - Your domain name
 - `security.secret_key` - Generate a secure key (or set `SECRET_KEY` environment variable)
 - `database.password` - Database password (or set `DB_PASSWORD` environment variable)
@@ -75,20 +78,21 @@ SITE_DOMAIN=geovault.example.com
 The docker-compose setup includes:
 
 - **postgres**: PostgreSQL 18 with PostGIS 3.4 extension
-  - Data stored in: `/srv/docker-data/geovault-postgres`
-  - Port: `5432`
+    - Data stored in: `/srv/docker-data/geovault-postgres`
+    - Port: `5432`
 
 - **redis**: Redis 7 for Channels/WebSockets
-  - Data stored in: `/srv/docker-data/geovault-redis`
-  - Port: `6379`
+    - Data stored in: `/srv/docker-data/geovault-redis`
+    - Port: `6379`
 
 - **geovault**: GeoVault application
-  - Data stored in: `/srv/docker-data/geovault`
-  - Port: `8000`
+    - Data stored in: `/srv/docker-data/geovault`
+    - Port: `8000`
 
 ## Accessing the Application
 
 Once started, the application will be available at:
+
 - `http://localhost:8000`
 
 The first user to register will be automatically set as an admin.
@@ -96,16 +100,19 @@ The first user to register will be automatically set as an admin.
 ## Stopping and Starting
 
 Stop all services:
+
 ```bash
 docker down
 ```
 
 Start services:
+
 ```bash
 docker up -d
 ```
 
 View logs:
+
 ```bash
 docker logs -f geovault
 ```

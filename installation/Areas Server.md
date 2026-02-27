@@ -117,7 +117,7 @@ osmium merge /srv/downloads/europe/*-latest.osm.pbf -o /srv/downloads/western-eu
 ./scripts/import-pbf.sh "postgresql://..." /srv/downloads/western-europe.osm.pbf
 ```
 
-To combine western-europe with another region (e.g. north-america), merge with the deduplicating script then import the combined file:
+To combine western-europe with another region (e.g. north-america), use the deduplicating merge script then import (it passes each file twice so duplicates within and across files are removed in one pass):
 
 ```bash
 ./scripts/merge-pbf-dedup.sh /srv/downloads/western-europe.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/north-america_western-europe.osm.pbf
