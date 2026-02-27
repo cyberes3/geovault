@@ -3,7 +3,7 @@
 # merge the GeoJSONs, store in --local-dir, and load into Postgres (waterways.major_waterways).
 # With --load, skip building and import from existing merged GeoJSON in local-dir.
 #
-# Requires: osm-lump-ways (cargo install osm-lump-ways), ogr2ogr (GDAL), jq, psql
+# Requires: osm-lump-ways-down (build from scripts/amandasaurus/osm-lump-ways), ogr2ogr (GDAL), jq, psql
 #
 # Usage:
 #   ./import-major-waterways.sh DATABASE_URL <path-to.osm.pbf> [path-to.osm.pbf ...] [options]
@@ -113,7 +113,7 @@ else
     fi
   done
   if ! command -v osm-lump-ways-down &>/dev/null; then
-    echo "osm-lump-ways-down not found. Install with: cargo install osm-lump-ways" >&2
+    echo "osm-lump-ways-down not found. Build from scripts/amandasaurus: cd scripts/amandasaurus/osm-lump-ways && cargo build --release && cargo install --path ." >&2
     exit 1
   fi
   if ! command -v jq &>/dev/null; then

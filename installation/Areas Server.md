@@ -131,10 +131,17 @@ The standalone Python import scripts drop their table and re-import fresh data o
 
 ---
 
-Importing waterways is a bit more complicated due to required filtering. You'll need
-to [install rust](https://rustup.rs/) and then do `cargo install osm-lump-ways`.
+Importing waterways is a bit more complicated due to required filtering and some really shitty code.
 
-Pass one or more `.osm.pbf` files. The script preprocesses each with **osmium tags-filter** using the same expressions as [waterwaymap.org](https://waterwaymap.org) (`waterway natural=coastline natural=water canoe portage`), then runs osm-lump-ways-down, merges the GeoJSON outputs, and loads into Postgres. **osmium-tool** is required.
+First you have to build our custom working code:
+
+```bash
+cd scripts/amandasaurus/osm-lump-ways
+cargo build --release
+cargo install --path .
+```
+
+Then run the importer:
 
 ```bash
 ./scripts/import-major-waterways.sh "postgresql://user:pass@host/db" /srv/downloads/north-america-latest.osm.pbf
@@ -142,8 +149,6 @@ Pass one or more `.osm.pbf` files. The script preprocesses each with **osmium ta
 ```
 
 It is fine to skip the waterways database since it is used exclusively for the `waterway` tag.
-
-The pipeline matches waterwaymap.org (dl_updates_from_osm.sh → tags-filter → osm-lump-ways-down). If you still see "0 ways": (1) check the filtered PBF in the script output (it runs `osmium fileinfo -e` on the temp file when skipping); (2) try `--rewrite-pbf` so osmium rewrites with `pbf_dense_nodes=false` (the osmio reader used by osm-lump-ways only processes the first PrimitiveGroup per block—see [osmio](https://github.com/amandasaurus/osmio)); (3) see [osm-lump-ways](https://github.com/amandasaurus/osm-lump-ways) and [PBF/Software Compliance](https://wiki.openstreetmap.org/wiki/PBF/Software_Compliance).
 
 ---
 
