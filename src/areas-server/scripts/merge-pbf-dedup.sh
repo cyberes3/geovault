@@ -60,5 +60,6 @@ case ${#FILES[@]} in
   *) osmium merge "${FILES[@]}" -o "$MERGE_TMP" --overwrite ;;
 esac
 
-# Sort so output is type,id,version ordered (required by osm-lump-ways-down and others)
-osmium sort "$MERGE_TMP" -o "$OUT" --overwrite
+# Sort so output is type,id,version ordered (required by osm-lump-ways-down and others).
+# Use multipass strategy to avoid OOM: one pass per type (nodes, ways, relations) instead of loading all in memory.
+osmium sort -s multipass "$MERGE_TMP" -o "$OUT" --overwrite
