@@ -42,12 +42,20 @@ class MapActivity : AppCompatActivity() {
         setContentView(R.layout.activity_map)
         initMapContent()
 
-        // Set auth header when token is ready (off main thread to avoid ANR if refresh runs)
+        updateMapAuthHeader()
+    }
+
+    /** Refresh the auth header for tile requests (e.g. after returning to map or token expiry). Off main thread so refresh can run. */
+    private fun updateMapAuthHeader() {
         executor.execute {
             val accessToken = GeovaultAuthManager.getValidAccessToken(this@MapActivity)
             runOnUiThread {
-                if (!isDestroyed && !accessToken.isNullOrBlank()) {
-                    Configuration.getInstance().additionalHttpRequestProperties["Authorization"] = "Bearer $accessToken"
+                if (!isDestroyed) {
+                    if (!accessToken.isNullOrBlank()) {
+                        Configuration.getInstance().additionalHttpRequestProperties["Authorization"] = "Bearer $accessToken"
+                    } else {
+                        Configuration.getInstance().additionalHttpRequestProperties.remove("Authorization")
+                    }
                 }
             }
         }
@@ -77,6 +85,7 @@ class MapActivity : AppCompatActivity() {
         map = findViewById(R.id.map)
         map.zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER)
         map.setMultiTouchControls(true)
+        map.setMinZoomLevel(2.0)
 
         // val placeDetailsCard = findViewById<androidx.cardview.widget.CardView>(R.id.placeDetailsCard) // Removed
         val placeName = findViewById<android.widget.TextView>(R.id.placeName)
@@ -289,6 +298,8 @@ class MapActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         map.onResume()
+        // Refresh auth header so tile requests use a valid token after access token expiry (e.g. after a few hours)
+        updateMapAuthHeader()
     }
 
     override fun onPause() {

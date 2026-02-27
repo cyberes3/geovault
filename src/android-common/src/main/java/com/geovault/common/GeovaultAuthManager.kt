@@ -118,6 +118,10 @@ object GeovaultAuthManager {
         return prefs.getString(PREF_ACCESS_TOKEN, null)?.takeIf { it.isNotBlank() }
     }
 
+    private fun getRawAccessToken(context: Context): String? {
+        return requirePrefs(context).getString(PREF_ACCESS_TOKEN, null)?.takeIf { it.isNotBlank() }
+    }
+
     /**
      * Persist tokens. Uses commit() so the write is durable before returning.
      */
@@ -135,6 +139,43 @@ object GeovaultAuthManager {
             .remove(PREF_REFRESH_TOKEN)
             .remove(PREF_EXPIRES_AT)
             .apply()
+    }
+
+    /**
+     * Revoke a token (access or refresh) on the server.
+     * Fires asynchronously and ignores the result so it doesn't block the UI during logout.
+     */
+    fun revokeToken(context: Context, token: String?) {
+        if (token.isNullOrBlank()) return
+        val serverUrl = getServerUrl(context)
+        if (serverUrl.isBlank()) return
+        
+        val url = serverUrl.trimEnd('/') + "/api/oauth/revoke_token/"
+        val body = FormBody.Builder()
+            .add("token", token)
+            .add("client_id", OAUTH_CLIENT_ID)
+            .build()
+            
+        val request = Request.Builder()
+            .url(url)
+            .post(body)
+            .addHeader("Content-Type", "application/x-www-form-urlencoded")
+            .build()
+            
+        val client = OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .build()
+            
+        client.newCall(request).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                // Ignore failure during logout
+            }
+
+            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                response.close() // Just close it, we don't care about the result
+            }
+        })
     }
 
     fun generatePkcePair(): Pair<String, String> {
@@ -253,22 +294,33 @@ object GeovaultAuthManager {
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .build()
-        val response = client.newCall(request).execute()
-        val responseBody = response.body?.string() ?: ""
-        if (!response.isSuccessful) {
-            onError()
-            return false
+        try {
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string() ?: ""
+            if (!response.isSuccessful) {
+                // If the error is 4xx (e.g. 400 Bad Request or 401 Unauthorized), the refresh token is invalid/expired.
+                // We should log the user out.
+                if (response.code in 400..499) {
+                    onError()
+                    return false
+                }
+                // If it's a 5xx error or something else, it's a server/network issue.
+                // Throwing an IOException prevents the session from being cleared prematurely.
+                throw java.io.IOException("Server returned error: ${response.code}")
+            }
+            val json = JSONObject(responseBody)
+            val accessToken = json.optString("access_token")
+            val newRefreshToken = json.optString("refresh_token").takeIf { it.isNotBlank() }
+            val expiresIn = json.optLong("expires_in", 43200L)
+            if (accessToken.isBlank()) {
+                throw java.io.IOException("Missing access_token in response")
+            }
+            onSuccess(accessToken, newRefreshToken, expiresIn)
+            return true
+        } catch (e: org.json.JSONException) {
+            // Captive portals may return HTML which fails JSON parsing. Treat as network error.
+            throw java.io.IOException("Failed to parse token response", e)
         }
-        val json = JSONObject(responseBody)
-        val accessToken = json.optString("access_token")
-        val newRefreshToken = json.optString("refresh_token").takeIf { it.isNotBlank() }
-        val expiresIn = json.optLong("expires_in", 43200L)
-        if (accessToken.isBlank()) {
-            onError()
-            return false
-        }
-        onSuccess(accessToken, newRefreshToken, expiresIn)
-        return true
     }
 
     fun getRefreshToken(context: Context): String? =
@@ -278,30 +330,51 @@ object GeovaultAuthManager {
      * Returns current access token, or refreshes using refresh_token and returns the new one.
      * Must be called from a background thread when refresh might run (performs network I/O).
      * Refresh is serialized so only one thread refreshes at a time.
+     * 
+     * @param context the context
+     * @param forceRefreshForToken if this specific token is the one currently saved, force a refresh
+     *                             even if it hasn't expired locally. Used when the API returns 401.
      */
-    fun getValidAccessToken(context: Context): String? {
-        var token = getAccessToken(context)
-        if (!token.isNullOrBlank()) return token
-        synchronized(refreshLock) {
-            token = getAccessToken(context)
+    fun getValidAccessToken(context: Context, forceRefreshForToken: String? = null): String? {
+        val needsForceRefresh = forceRefreshForToken != null && getRawAccessToken(context) == forceRefreshForToken
+        if (!needsForceRefresh) {
+            val token = getAccessToken(context)
             if (!token.isNullOrBlank()) return token
+        }
+        
+        synchronized(refreshLock) {
+            // Check again inside synchronized block in case another thread just refreshed it
+            val syncNeedsForceRefresh = forceRefreshForToken != null && getRawAccessToken(context) == forceRefreshForToken
+            if (!syncNeedsForceRefresh) {
+                val token = getAccessToken(context)
+                if (!token.isNullOrBlank()) return token
+            }
+            
             val refreshToken = getRefreshToken(context) ?: return null
             val serverUrl = getServerUrl(context)
             if (serverUrl.isBlank()) return null
-            var newAccess: String? = null
-            var newRefresh: String? = null
-            var newExpires: Long = 0L
-            refreshAccessToken(serverUrl, refreshToken,
-                onSuccess = { access, newRt, expires ->
-                    newAccess = access
-                    newRefresh = newRt
-                    newExpires = expires
-                },
-                onError = { }
-            )
-            if (newAccess != null && newExpires > 0) {
-                saveTokens(context, newAccess!!, newRefresh ?: refreshToken, newExpires)
-                return newAccess
+            try {
+                var newAccess: String? = null
+                var newRefresh: String? = null
+                var newExpires: Long = 0L
+                refreshAccessToken(serverUrl, refreshToken,
+                    onSuccess = { access, newRt, expires ->
+                        newAccess = access
+                        newRefresh = newRt
+                        newExpires = expires
+                    },
+                    onError = {
+                        // Will cause it to return null and sign out
+                    }
+                )
+                if (newAccess != null && newExpires > 0) {
+                    saveTokens(context, newAccess!!, newRefresh ?: refreshToken, newExpires)
+                    return newAccess
+                }
+            } catch (e: java.io.IOException) {
+                // Network error or captive portal. Re-throw to caller so okhttp/caller 
+                // sees it as a network failure, NOT an invalid token. 
+                throw e
             }
         }
         return null

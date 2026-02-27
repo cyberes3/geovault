@@ -2,6 +2,7 @@ package com.geovault.uploader
 
 import android.content.Context
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.RetrofitClient
 import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
@@ -283,8 +284,7 @@ class MultiUploadActivity : AppCompatActivity() {
         if (isUploading) return
 
         val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
-        val token = GeovaultAuthManager.getValidAccessToken(this)
-        if (serverUrl.isEmpty() || token == null) {
+        if (serverUrl.isEmpty() || !GeovaultAuthManager.isLoggedIn(this)) {
             statusText.text = getString(R.string.config_settings_first)
             statusText.visibility = View.VISIBLE
             return
@@ -399,8 +399,7 @@ class MultiUploadActivity : AppCompatActivity() {
     
     private fun uploadFile(fileItem: FileItem, index: Int) {
         val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
-        val apiKey = GeovaultAuthManager.getValidAccessToken(this)
-        if (apiKey == null) {
+        if (!GeovaultAuthManager.isLoggedIn(this)) {
             adapter.updateFileStatus(index, FileStatus.ERROR, "Not signed in")
             currentUploadIndex++
             uploadNextFile()
@@ -437,13 +436,13 @@ class MultiUploadActivity : AppCompatActivity() {
             }
             inputStream.close()
             
-            // Build the request
-            val client = OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
+            // Use auth-aware client so token is refreshed on 401 (avoids 401 after access token expiry)
+            val client = RetrofitClient.getAuthenticatedOkHttpClient(this)
+                .newBuilder()
                 .readTimeout(60, TimeUnit.SECONDS)
                 .writeTimeout(60, TimeUnit.SECONDS)
                 .build()
-            
+
             val requestBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart(
@@ -452,14 +451,13 @@ class MultiUploadActivity : AppCompatActivity() {
                     tempFile.asRequestBody("application/octet-stream".toMediaType())
                 )
                 .build()
-            
+
             val uploadUrl = "$serverUrl/api/item/import/upload"
             val request = Request.Builder()
                 .url(uploadUrl)
-                .addHeader("Authorization", "Bearer $apiKey")
                 .post(requestBody)
                 .build()
-            
+
             val call = client.newCall(request)
             currentCall = call
             call.enqueue(object : Callback {
@@ -497,7 +495,7 @@ class MultiUploadActivity : AppCompatActivity() {
                     runOnUiThread {
                         if (isDestroyed) return@runOnUiThread
                         if (statusCode == 401) {
-                            GeovaultAuthManager.clearTokens(this@MultiUploadActivity)
+                            resetOnAuthFailure(this@MultiUploadActivity)
                         }
                         if (isCancelled) {
                             adapter.updateFileStatus(index, FileStatus.PENDING)

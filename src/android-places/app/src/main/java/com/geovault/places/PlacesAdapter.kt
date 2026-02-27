@@ -144,21 +144,13 @@ class PlacesAdapter(
         
         if (isOffline) {
             placeViewHolder.cardContent.setBackgroundResource(R.drawable.bg_offline_item)
-            // Show navigate button for offline items that have a database_id (edits)
-            if (place.properties.database_id != null) {
-                placeViewHolder.navigateButton.visibility = View.VISIBLE
-                placeViewHolder.deleteButton.visibility = View.VISIBLE
-                placeViewHolder.deleteButton.text = "Revert"
-                placeViewHolder.deleteButton.setTextColor(holder.itemView.context.getColor(R.color.warning_yellow))
-            } else {
-                placeViewHolder.navigateButton.visibility = View.GONE
-                placeViewHolder.deleteButton.visibility = View.VISIBLE
-                placeViewHolder.deleteButton.text = "Discard"
-                placeViewHolder.deleteButton.setTextColor(holder.itemView.context.getColor(R.color.text_secondary))
-            }
+            placeViewHolder.navigateButton.visibility = View.VISIBLE
             placeViewHolder.editButton.visibility = View.VISIBLE
             placeViewHolder.editButton.isEnabled = true
             placeViewHolder.editButton.alpha = 1.0f
+            placeViewHolder.deleteButton.visibility = View.VISIBLE
+            placeViewHolder.deleteButton.text = if (place.properties.database_id != null) "Revert" else "Discard"
+            placeViewHolder.deleteButton.setTextColor(holder.itemView.context.getColor(android.R.color.holo_red_dark))
         } else if (selectedId != null && place.properties.database_id == selectedId) {
             placeViewHolder.cardContent.setBackgroundResource(R.drawable.bg_place_item_selected)
             placeViewHolder.navigateButton.visibility = View.VISIBLE

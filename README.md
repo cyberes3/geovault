@@ -20,7 +20,8 @@ platforms end up extremely complicated. GeoVault aims to automate much of that c
 User Manual is in `docs/`.
 
 Development is done on my personal Git server, [git.evulid.cc](https://git.evulid.cc/cyberes/geovault), and is mirrored
-to [GitHub](https://github.com/Cyberes/geovault). Security practices are described in [SECURITY.md](https://git.evulid.cc/cyberes/geovault/src/branch/master/SECURITY.md).
+to [GitHub](https://github.com/Cyberes/geovault). Security practices are described
+in [SECURITY.md](https://git.evulid.cc/cyberes/geovault/src/branch/master/SECURITY.md).
 
 **Features:**
 
@@ -36,7 +37,8 @@ to [GitHub](https://github.com/Cyberes/geovault). Security practices are describ
 - Extension system to add custom features and integrations
 - A collection of useful GIS tools that utilize the existing platform R&D work
 
-**This platform does not support editing your tracks or whatever.** Use your own preferred tool and then upload your data to the server.
+**This platform does not support editing your tracks or whatever.** Use your own preferred tool and then upload your
+data to the server.
 
 ## Installation
 
@@ -65,6 +67,12 @@ The website also supports PWA installation and can even be set up for the automa
 WebView APKs without Google's minting service (useful for GrapheneOS).
 
 Compiled APKs available here: <https://git.evulid.cc/cyberes/geovault-app-release/releases>
+
+## This software is distributed under the following terms
+
+California results are not authorized to use GeoVault in the state of California effective January 1, 2027. California
+law [CA AB1043](https://legiscan.com/CA/text/AB1043/id/3269704) requires a complex age verification system implemented
+for software systems with no exceptions for small open source projects.
 
 ## Screenshots
 

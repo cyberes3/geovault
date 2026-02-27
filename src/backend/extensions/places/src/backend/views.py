@@ -1,6 +1,7 @@
 import json
 
 from django.contrib.gis.geos import GEOSGeometry
+from django.db import IntegrityError
 from django.db.models import F
 from django.db.models.functions import Coalesce, Greatest
 from django.http import HttpResponse
@@ -107,13 +108,21 @@ def places_list(request):
                 return error_response('Geometry is required', 400)
 
             # Create
-            feature = FeatureStore.objects.create(
-                user=request.user,
-                scope='places',
-                geojson=normalized_feature,
-                geometry=geometry,
-                geojson_hash=geojson_hash
-            )
+            try:
+                feature = FeatureStore.objects.create(
+                    user=request.user,
+                    scope='places',
+                    geojson=normalized_feature,
+                    geometry=geometry,
+                    geojson_hash=geojson_hash
+                )
+            except IntegrityError as e:
+                if 'unique_user_geojson_hash' in str(e):
+                    return error_response(
+                        'A place with the same name and coordinates already exists.',
+                        409,
+                    )
+                raise
             PlaceMetadata.objects.create(feature=feature, updated_at=timezone.now())
 
             normalized_feature['properties']['database_id'] = feature.id

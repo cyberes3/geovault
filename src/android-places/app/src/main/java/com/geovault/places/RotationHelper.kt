@@ -15,6 +15,9 @@ class RotationHelper(private val view: ImageView) {
     fun start(speedDegrees: Float = 10f, intervalMs: Long = 30L) {
         if (runnable != null) return
         view.visibility = View.VISIBLE
+        // Apply first rotation step immediately so the spinner draws "in motion" on first frame
+        view.rotation = (view.rotation + speedDegrees) % 360
+        view.invalidate()
         runnable = object : Runnable {
             override fun run() {
                 view.rotation = (view.rotation + speedDegrees) % 360

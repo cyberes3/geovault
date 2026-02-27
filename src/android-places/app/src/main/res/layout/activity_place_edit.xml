@@ -381,15 +381,18 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:orientation="vertical"
-            android:padding="40dp"
+            android:paddingStart="40dp"
+            android:paddingEnd="40dp"
+            android:paddingTop="40dp"
+            android:paddingBottom="20dp"
             android:gravity="center"
             android:background="@drawable/bg_modal"
             android:elevation="12dp">
 
             <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/savingSpinner"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
                 android:src="@drawable/ic_location_spinner"
                 android:tint="@color/spinner_blue" />
 

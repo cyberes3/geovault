@@ -2,6 +2,7 @@ package com.geovault.uploader
 
 import android.content.Context
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.RetrofitClient
 import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
@@ -240,8 +241,7 @@ class MainActivity : AppCompatActivity() {
     
     private fun uploadFile() {
         val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
-        val apiKey = GeovaultAuthManager.getValidAccessToken(this)
-        if (serverUrl.isEmpty() || apiKey == null) {
+        if (serverUrl.isEmpty() || !GeovaultAuthManager.isLoggedIn(this)) {
             openSettings()
             return
         }
@@ -294,13 +294,13 @@ class MainActivity : AppCompatActivity() {
             }
             inputStream.close()
             
-            // Build the request
-            val client = OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
+            // Use auth-aware client so token is refreshed on 401 (avoids 401 after access token expiry)
+            val client = RetrofitClient.getAuthenticatedOkHttpClient(this)
+                .newBuilder()
                 .readTimeout(60, TimeUnit.SECONDS)
                 .writeTimeout(60, TimeUnit.SECONDS)
                 .build()
-            
+
             val requestBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart(
@@ -309,14 +309,13 @@ class MainActivity : AppCompatActivity() {
                     tempFile.asRequestBody("application/octet-stream".toMediaType())
                 )
                 .build()
-            
+
             val uploadUrl = "$serverUrl/api/item/import/upload"
             val request = Request.Builder()
                 .url(uploadUrl)
-                .addHeader("Authorization", "Bearer $apiKey")
                 .post(requestBody)
                 .build()
-            
+
             client.newCall(request).enqueue(object : Callback {
                 override fun onFailure(call: Call, e: java.io.IOException) {
                     runOnUiThread {
@@ -369,7 +368,8 @@ class MainActivity : AppCompatActivity() {
                             }
                             
                             if (statusCode == 401) {
-                                GeovaultAuthManager.clearTokens(this@MainActivity)
+                                resetOnAuthFailure(this@MainActivity)
+                                return@Callback
                             }
                             val errorMessage = when (statusCode) {
                                 400 -> "Upload failed (400)\nInvalid request. Check your file format."
@@ -410,9 +410,7 @@ class MainActivity : AppCompatActivity() {
     
     private fun validateApiKey() {
         val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
-        val token = GeovaultAuthManager.getValidAccessToken(this)
-
-        if (serverUrl.isEmpty() || token == null) {
+        if (serverUrl.isEmpty() || !GeovaultAuthManager.isLoggedIn(this)) {
             validationTitleText.text = getString(R.string.config_required)
             validationStatusText.text = getString(R.string.config_settings_first)
             validationRotationHelper.stop()
@@ -425,17 +423,14 @@ class MainActivity : AppCompatActivity() {
         validationRotationHelper.start()
         validationStatusText.text = getString(R.string.connecting_server)
 
-        val client = OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .writeTimeout(20, TimeUnit.SECONDS)
+        val client = RetrofitClient.getAuthenticatedOkHttpClient(this)
+            .newBuilder()
             .retryOnConnectionFailure(true)
             .build()
 
         val statusUrl = "$serverUrl/api/user/status/"
         val request = Request.Builder()
             .url(statusUrl)
-            .addHeader("Authorization", "Bearer $token")
             .build()
 
         client.newCall(request).enqueue(object : Callback {
@@ -468,7 +463,9 @@ class MainActivity : AppCompatActivity() {
                         validationStatusText.text = getString(R.string.api_key_valid_msg)
                     } else {
                         if (statusCode == 401) {
-                            GeovaultAuthManager.clearTokens(this@MainActivity)
+                            response.close()
+                            resetOnAuthFailure(this@MainActivity)
+                            return@runOnUiThread
                         }
                         validationTitleText.text = getString(R.string.validation_failed)
                         val msg = when (statusCode) {

@@ -2,6 +2,7 @@ package com.geovault.places
 
 import android.content.Intent
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.RetrofitClient
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -14,14 +15,11 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import okhttp3.Call
 import okhttp3.Callback
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class SettingsActivity : AppCompatActivity() {
-    private val executor = Executors.newSingleThreadExecutor()
     private lateinit var serverUrlEdit: EditText
     private lateinit var connectButton: Button
     private lateinit var disconnectButton: Button
@@ -80,6 +78,8 @@ class SettingsActivity : AppCompatActivity() {
                 .setTitle(getString(R.string.disconnect_confirm_title))
                 .setMessage(getString(R.string.disconnect_confirm_message))
                 .setPositiveButton(getString(R.string.disconnect)) { _, _ ->
+                    GeovaultAuthManager.revokeToken(this, GeovaultAuthManager.getAccessToken(this))
+                    GeovaultAuthManager.revokeToken(this, GeovaultAuthManager.getRefreshToken(this))
                     GeovaultAuthManager.clearTokens(this)
                     updateConnectDisconnectVisibility()
                     Toast.makeText(this, getString(R.string.disconnect), Toast.LENGTH_SHORT).show()
@@ -101,47 +101,35 @@ class SettingsActivity : AppCompatActivity() {
 
     /**
      * If we think we're logged in, verify the token with the server.
-     * /api/user/status/ returns 401 when the token is invalid or revoked; then we clear local tokens.
-     * Token fetch runs off the main thread (getValidAccessToken can do network I/O for refresh).
+     * Uses auth-aware client so expired tokens are refreshed and retried; only clear tokens if still 401 after retry.
      */
     private fun checkTokenStillValid() {
         if (!GeovaultAuthManager.isLoggedIn(this)) return
         val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
         if (serverUrl.isBlank()) return
-        executor.execute {
-            val token = GeovaultAuthManager.getValidAccessToken(this@SettingsActivity) ?: return@execute
-            runOnUiThread {
-                if (isDestroyed) return@runOnUiThread
-                val request = Request.Builder()
-                    .url("$serverUrl/api/user/status/")
-                    .addHeader("Authorization", "Bearer $token")
-                    .build()
-                OkHttpClient.Builder()
-                    .connectTimeout(10, TimeUnit.SECONDS)
-                    .readTimeout(10, TimeUnit.SECONDS)
-                    .build()
-                    .newCall(request)
-                    .enqueue(object : Callback {
-                        override fun onFailure(call: Call, e: java.io.IOException) {}
-                        override fun onResponse(call: Call, response: Response) {
-                            val code = response.code
-                            response.close()
-                            if (code == 401) {
-                                runOnUiThread {
-                                    if (!isDestroyed) {
-                                        GeovaultAuthManager.clearTokens(this@SettingsActivity)
-                                        updateConnectDisconnectVisibility()
-                                    }
-                                }
-                            }
+        val client = RetrofitClient.getAuthenticatedOkHttpClient(this)
+            .newBuilder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .build()
+        val request = Request.Builder().url("$serverUrl/api/user/status/").build()
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: java.io.IOException) {}
+            override fun onResponse(call: Call, response: Response) {
+                val code = response.code
+                response.close()
+                if (code == 401) {
+                    runOnUiThread {
+                        if (!isDestroyed) {
+                            exportThenResetOnAuthFailure(this@SettingsActivity)
                         }
-                    })
+                    }
+                }
             }
-        }
+        })
     }
 
     override fun onDestroy() {
-        executor.shutdown()
         super.onDestroy()
     }
 

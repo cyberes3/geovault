@@ -37,6 +37,7 @@
     <string name="api_key_valid_msg">✓ API key \'%1$s\' is valid!\n\nShare a file to upload it.</string>
 
     <string name="settings_help_text">Enter your GeoVault server URL and tap Connect to sign in.</string>
+    <string name="offline_data_saved_to_files">Offline data saved to Files → Downloads</string>
     <string name="close">Close</string>
     <string name="description">Description</string>
     <string name="no_description">No description</string>

@@ -83,6 +83,7 @@ class PlaceEditActivity : AppCompatActivity() {
     private var editFeature: Feature? = null
     private var originalFeature: Feature? = null
     private var isOfflineEdit: Boolean = false
+    private var offlineEditIndex: Int = -1
     private var saveCall: Call<Feature>? = null
     private var addressSearchCall: Call<AddressSearchResponse>? = null
     private var pendingFeature: Feature? = null
@@ -143,7 +144,8 @@ class PlaceEditActivity : AppCompatActivity() {
         }
         
         isOfflineEdit = intent.getBooleanExtra("is_offline_edit", false)
-        
+        offlineEditIndex = intent.getIntExtra("offline_edit_index", -1)
+
         if (editFeature != null) {
             populateFields(editFeature!!)
             if (isOfflineEdit) {
@@ -246,6 +248,7 @@ class PlaceEditActivity : AppCompatActivity() {
     private fun setupMap() {
         map.setMultiTouchControls(true)
         map.zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER)
+        map.setMinZoomLevel(2.0)
 
         // Set standard OSM tile source
         map.setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
@@ -293,6 +296,11 @@ class PlaceEditActivity : AppCompatActivity() {
             }
         })
         useMyLocationButton.setOnClickListener {
+            currentFocus?.let { focus ->
+                focus.clearFocus()
+                (getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+                    ?.hideSoftInputFromWindow(focus.windowToken, 0)
+            }
             checkLocationPermissionAndGet()
         }
         saveButton.setOnClickListener { savePlace() }
@@ -669,6 +677,7 @@ class PlaceEditActivity : AppCompatActivity() {
 
     private fun showSavingOverlay(message: String = "Saving...") {
         savingText.text = message
+        savingSpinner.visibility = View.VISIBLE
         savingOverlay.visibility = View.VISIBLE
         startSavingAnimation()
         saveButton.isEnabled = false
@@ -677,7 +686,7 @@ class PlaceEditActivity : AppCompatActivity() {
         if (isSavingOffline) {
             savingOverlay.setOnClickListener(null)
             savingOverlay.isClickable = false
-            savingTapHint.visibility = View.GONE
+            savingTapHint.visibility = View.INVISIBLE
         } else {
             savingOverlay.isClickable = true
             savingTapHint.visibility = View.VISIBLE
@@ -824,6 +833,7 @@ class PlaceEditActivity : AppCompatActivity() {
         intent.putExtra("offline_feature", feature)
         // Use the existing originalFeature if we're editing an offline item, otherwise use editFeature
         intent.putExtra("original_feature", originalFeature ?: editFeature)
+        intent.putExtra("offline_edit_index", offlineEditIndex)
         setResult(RESULT_OK, intent)
         finish()
     }
@@ -856,7 +866,7 @@ class PlaceEditActivity : AppCompatActivity() {
         mapSearchCall = null
         searchPlaceRotationHelper.stop()
         locationRotationHelper.stop()
-        savingRotationHelper.stop()
+        savingRotationHelper.stop(hide = false)
         if (::map.isInitialized) map.onPause()
     }
     private fun setLocationLoading(loading: Boolean) {
@@ -865,8 +875,8 @@ class PlaceEditActivity : AppCompatActivity() {
             useMyLocationButton.isEnabled = false
             locationRotationHelper.start()
         } else {
-            locationRotationHelper.stop()
             btnLocationIcon.visibility = View.VISIBLE
+            locationRotationHelper.stop()
             useMyLocationButton.isEnabled = true
         }
     }
@@ -876,6 +886,6 @@ class PlaceEditActivity : AppCompatActivity() {
     }
 
     private fun stopSavingAnimation() {
-        savingRotationHelper.stop()
+        savingRotationHelper.stop(hide = false)
     }
 }

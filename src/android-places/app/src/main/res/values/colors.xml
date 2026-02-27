@@ -21,6 +21,9 @@
     <color name="black">#000000</color>
     <color name="border_light">#C4D2ED</color>      <!-- blue-200 -->
     
+    <!-- Snackbar / error bar -->
+    <color name="snackbar_background">#323232</color>
+
     <!-- Legacy colors for compatibility -->
     <color name="gray">#6B7280</color>
     <color name="gray_light">#F3F4F6</color>
