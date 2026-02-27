@@ -58,7 +58,7 @@ For full parameter reference see [PostgreSQL Tuning Guide](https://postgresqlco.
 ## Installation
 
 ```shell
-sudo apt install osm2pgsql
+sudo apt install osm2pgsql gdal-bin
 ```
 
 Then, set up the Python server:

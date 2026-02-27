@@ -1242,7 +1242,7 @@ fn main() -> Result<()> {
 
     // collect and output geometry
 
-    info!("slán / tschüss");
+    info!("Done.");
     Ok(())
 }
 
