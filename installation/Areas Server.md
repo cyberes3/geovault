@@ -134,21 +134,14 @@ The standalone Python import scripts drop their table and re-import fresh data o
 Importing waterways is a bit more complicated due to required filtering. You'll need
 to [install rust](https://rustup.rs/) and then do `cargo install osm-lump-ways`.
 
+Pass one or more `.osm.pbf` files; the script builds major waterways from each, merges the GeoJSON outputs, and loads into Postgres:
+
 ```bash
 ./scripts/import-major-waterways.sh "postgresql://user:pass@host/db" /srv/downloads/north-america-latest.osm.pbf
+./scripts/import-major-waterways.sh "postgresql://user:pass@host/db" /srv/downloads/europe/*-latest.osm.pbf /srv/downloads/north-america-latest.osm.pbf
 ```
 
-You must feed a single `.osm.pbf` file into the script so if you have multiple files you must merge them together.
-These are all supported options:
-
-```bash
-./scripts/merge-pbf-dedup.sh /srv/downloads/minimal-europe.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/europe_na.osm.pbf                                                                                                                                                     
-./scripts/merge-pbf-dedup.sh /srv/downloads/europe/*-latest.osm.pbf -o /srv/downloads/minimal-europe.osm.pbf
-./scripts/merge-pbf-dedup.sh /srv/downloads/europe/*-latest.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/minimal-europe_na.osm.pbf
-```
-
-The merge process is extremely memory-intensive and you need to have more RAM available than the total size of your
-merge (confirm?????). It is fine to skip the waterways database since it is used exclusively for the `waterway` tag.
+It is fine to skip the waterways database since it is used exclusively for the `waterway` tag.
 
 ---
 
