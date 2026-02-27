@@ -173,7 +173,11 @@ else
 
     if [[ ! -s "${WORK_DIR}/grouped.geojson" ]]; then
       echo "No grouped waterways for $PBF_PATH, skipping."
-      echo "  (Preprocessing matches waterwaymap.org: osmium tags-filter waterway natural=coastline natural=water canoe portage. If source has data: osmium fileinfo -e $PBF_PATH)"
+      if [[ -s "$PBF_TO_USE" ]]; then
+        echo "  Filtered PBF (input to osm-lump-ways-down):"
+        osmium fileinfo --no-progress -e "$PBF_TO_USE" 2>/dev/null | sed 's/^/    /' || true
+      fi
+      echo "  (Pipeline: osmium tags-filter waterway natural=coastline natural=water canoe portage → osm-lump-ways-down)"
       rm -rf "$WORK_DIR"
       continue
     fi
