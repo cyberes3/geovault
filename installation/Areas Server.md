@@ -134,27 +134,16 @@ The standalone Python import scripts drop their table and re-import fresh data o
 Importing waterways is a bit more complicated due to required filtering. You'll need
 to [install rust](https://rustup.rs/) and then do `cargo install osm-lump-ways`.
 
-Pass one or more `.osm.pbf` files; the script builds major waterways from each, merges the GeoJSON outputs, and loads into Postgres:
+Pass one or more `.osm.pbf` files. The script preprocesses each with **osmium tags-filter waterway** (same approach as [waterwaymap.org](https://waterwaymap.org)), then runs osm-lump-ways-down, merges the GeoJSON outputs, and loads into Postgres. **osmium-tool** is required.
 
 ```bash
 ./scripts/import-major-waterways.sh "postgresql://user:pass@host/db" /srv/downloads/north-america-latest.osm.pbf
 ./scripts/import-major-waterways.sh "postgresql://user:pass@host/db" /srv/downloads/europe/*-latest.osm.pbf /srv/downloads/north-america-latest.osm.pbf
 ```
 
-If you see "0 ways" for every file, try **`--rewrite-pbf`** so each PBF is rewritten with `pbf_dense_nodes=false` (requires `osmium-tool`); the reader in osm-lump-ways may not handle DenseNodes in some Geofabrik files:
-```bash
-./scripts/import-major-waterways.sh "postgresql://user:pass@host/db" --rewrite-pbf /srv/downloads/europe/*-latest.osm.pbf /srv/downloads/north-america-latest.osm.pbf
-```
-
 It is fine to skip the waterways database since it is used exclusively for the `waterway` tag.
 
-**If osm-lump-ways-down reports "0 ways"** for a PBF:
-
-1. Check that the file actually contains data:  
-   `osmium fileinfo -e /path/to/file.osm.pbf`  
-   (look at the Data section for node/way counts).
-
-2. If the file has data but the tool still sees 0 ways, the reader (osmio) may not handle that PBF structure. Try **`--rewrite-pbf`** so the script rewrites each file with `osmium cat -f pbf,pbf_dense_nodes=false` before extraction. If that still fails, consider opening an issue at [osm-lump-ways](https://github.com/amandasaurus/osm-lump-ways) with the `osmium fileinfo -e` output.
+The script preprocesses each PBF with **osmium tags-filter waterway** so the file is written by osmium (same pipeline as waterwaymap.org). If you still see "0 ways", check that the source PBF has waterway data (`osmium fileinfo -e` on the original file) and consider opening an issue at [osm-lump-ways](https://github.com/amandasaurus/osm-lump-ways).
 
 ---
 

@@ -15,7 +15,10 @@
 #   --load            Skip build; load from existing merged GeoJSON in --local-dir
 #   --min-upstream-km N   Keep only systems with total length >= N km (default: 50)
 #   --sort-pbf        Pre-sort each PBF with osmium sort -s multipass (rarely needed)
-#   --rewrite-pbf    Rewrite each PBF with osmium cat and pbf_dense_nodes=false (use if you get "0 ways")
+#   --rewrite-pbf     Rewrite with osmium cat pbf_dense_nodes=false (deprecated; prefer tags-filter)
+#
+# Preprocessing: Like waterwaymap.org, the script runs osmium tags-filter (waterway) on each
+# PBF first so the file is written by osmium and readable by osm-lump-ways. Required: osmium-tool.
 #
 # Output: one GeoJSON per PBF in <local-dir>/major-waterways_<basename>.geojson,
 #         merged <local-dir>/major-waterways.geojson; table waterways.major_waterways.
@@ -116,8 +119,8 @@ else
     echo "jq not found. Install jq to merge GeoJSON files." >&2
     exit 1
   fi
-  if { [[ "$DO_SORT_PBF" == true ]] || [[ "$DO_REWRITE_PBF" == true ]]; } && ! command -v osmium &>/dev/null; then
-    echo "osmium not found. Install osmium-tool for --sort-pbf/--rewrite-pbf (e.g. apt install osmium-tool)." >&2
+  if ! command -v osmium &>/dev/null; then
+    echo "osmium not found. Install osmium-tool (e.g. apt install osmium-tool). Required for tags-filter so osm-lump-ways can read the PBF." >&2
     exit 1
   fi
 
@@ -141,9 +144,16 @@ else
 
     WORK_DIR="$(mktemp -d)"
     PBF_TO_USE="$PBF_PATH"
+
+    # Like waterwaymap.org: osm-lump-ways reads PBF written by osmium. Run tags-filter first
+    # so the file has the structure osmio expects (avoids "0 ways" on Geofabrik-style PBFs).
+    echo "=== [$((i+1))/${#PBF_PATHS[@]}] Tags-filter (waterway): $PBF_PATH ==="
+    osmium tags-filter "$PBF_PATH" -o "${WORK_DIR}/waterway.osm.pbf" waterway --overwrite
+    PBF_TO_USE="${WORK_DIR}/waterway.osm.pbf"
+
     if [[ "$DO_REWRITE_PBF" == true ]]; then
-      echo "=== [$((i+1))/${#PBF_PATHS[@]}] Rewrite PBF (pbf_dense_nodes=false): $PBF_PATH ==="
-      osmium cat "$PBF_PATH" -o "${WORK_DIR}/rewritten.osm.pbf" -f pbf,pbf_dense_nodes=false --overwrite
+      echo "=== [$((i+1))/${#PBF_PATHS[@]}] Rewrite PBF (pbf_dense_nodes=false): $PBF_TO_USE ==="
+      osmium cat "$PBF_TO_USE" -o "${WORK_DIR}/rewritten.osm.pbf" -f pbf,pbf_dense_nodes=false --overwrite
       PBF_TO_USE="${WORK_DIR}/rewritten.osm.pbf"
     fi
     if [[ "$DO_SORT_PBF" == true ]]; then
@@ -162,7 +172,7 @@ else
 
     if [[ ! -s "${WORK_DIR}/grouped.geojson" ]]; then
       echo "No grouped waterways for $PBF_PATH, skipping."
-      echo "  (If osmium fileinfo -e shows data, try: --rewrite-pbf or open an issue at https://github.com/amandasaurus/osm-lump-ways)"
+      echo "  (Input is preprocessed with osmium tags-filter waterway; if still 0 ways, check https://github.com/amandasaurus/osm-lump-ways)"
       rm -rf "$WORK_DIR"
       continue
     fi
