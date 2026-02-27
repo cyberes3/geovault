@@ -69,7 +69,7 @@ python3 -m venv venv
 ./venv/bin/pip install -r requirements.txt
 ```
 
-## Import OSM data
+## Data Loading
 
 Download the `.osm.pbf` data from <https://download.geofabrik.de/>. You are expected to download data to
 `/srv/downloads`.
@@ -141,7 +141,25 @@ Pass one or more `.osm.pbf` files; the script builds major waterways from each, 
 ./scripts/import-major-waterways.sh "postgresql://user:pass@host/db" /srv/downloads/europe/*-latest.osm.pbf /srv/downloads/north-america-latest.osm.pbf
 ```
 
+If you see "0 ways" for every file, add **`--sort-pbf`** so each PBF is pre-sorted with `osmium sort -s multipass` before extraction (requires `osmium-tool`):
+```bash
+./scripts/import-major-waterways.sh "postgresql://user:pass@host/db" --sort-pbf /srv/downloads/europe/*-latest.osm.pbf /srv/downloads/north-america-latest.osm.pbf
+```
+
 It is fine to skip the waterways database since it is used exclusively for the `waterway` tag.
+
+**If osm-lump-ways-down reports "0 ways"** for a PBF:
+
+1. Check that the file actually contains data:  
+   `osmium fileinfo -e /path/to/file.osm.pbf`  
+   (look at the Data section for node/way counts).
+
+2. If the file has data but the tool still sees 0 ways, the PBF blob order may not match what the reader expects (common with some regional extracts). Pre-sort the file, then run the import on the sorted file:
+   ```bash
+   osmium sort -s multipass /srv/downloads/europe/austria-latest.osm.pbf -o /srv/downloads/europe/austria-sorted.osm.pbf
+   ./scripts/import-major-waterways.sh "postgresql://..." /srv/downloads/europe/austria-sorted.osm.pbf
+   ```
+   For many regions, sort each PBF (or use a batch script), then pass the sorted files to the import script.
 
 ---
 

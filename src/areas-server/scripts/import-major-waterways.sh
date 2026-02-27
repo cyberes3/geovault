@@ -14,6 +14,7 @@
 #   --local-dir DIR   Directory for per-PBF and merged GeoJSON (default: /srv/downloads)
 #   --load            Skip build; load from existing merged GeoJSON in --local-dir
 #   --min-upstream-km N   Keep only systems with total length >= N km (default: 50)
+#   --sort-pbf        Pre-sort each PBF with osmium sort -s multipass (use if you get "0 ways")
 #
 # Output: one GeoJSON per PBF in <local-dir>/major-waterways_<basename>.geojson,
 #         merged <local-dir>/major-waterways.geojson; table waterways.major_waterways.
@@ -32,6 +33,7 @@ GEOJSON_PER_PBF_PREFIX="major-waterways_"
 MIN_UPSTREAM_M=50000   # 50 km default
 LOCAL_DIR="/srv/downloads"
 DO_LOAD=false
+DO_SORT_PBF=false
 
 DATABASE_URL=""
 PBF_PATHS=()
@@ -47,6 +49,10 @@ while [[ $# -gt 0 ]]; do
       DO_LOAD=true
       shift
       ;;
+    --sort-pbf)
+      DO_SORT_PBF=true
+      shift
+      ;;
     --min-upstream-km)
       shift
       [[ $# -gt 0 ]] || { echo "Missing value for --min-upstream-km" >&2; exit 1; }
@@ -54,7 +60,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -h|--help)
-      echo "Usage: $0 DATABASE_URL [path-to.osm.pbf ...] [--local-dir DIR] [--load] [--min-upstream-km N]" >&2
+      echo "Usage: $0 DATABASE_URL [path-to.osm.pbf ...] [--local-dir DIR] [--load] [--sort-pbf] [--min-upstream-km N]" >&2
       echo "  Builds major waterways from each PBF, merges GeoJSONs, loads into waterways.major_waterways." >&2
       exit 0
       ;;
@@ -73,7 +79,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$DATABASE_URL" ]]; then
-  echo "Usage: $0 DATABASE_URL [path-to.osm.pbf ...] [--local-dir DIR] [--load] [--min-upstream-km N]" >&2
+  echo "Usage: $0 DATABASE_URL [path-to.osm.pbf ...] [--local-dir DIR] [--load] [--sort-pbf] [--min-upstream-km N]" >&2
   exit 1
 fi
 
@@ -104,6 +110,10 @@ else
     echo "jq not found. Install jq to merge GeoJSON files." >&2
     exit 1
   fi
+  if [[ "$DO_SORT_PBF" == true ]] && ! command -v osmium &>/dev/null; then
+    echo "osmium not found. Install osmium-tool for --sort-pbf (e.g. apt install osmium-tool)." >&2
+    exit 1
+  fi
 
   mkdir -p "$LOCAL_DIR"
   PER_FILE_PATHS=()
@@ -117,10 +127,16 @@ else
     PER_FILE_JSON="${LOCAL_DIR}/${GEOJSON_PER_PBF_PREFIX}${BASE}.geojson"
 
     WORK_DIR="$(mktemp -d)"
+    PBF_TO_USE="$PBF_PATH"
+    if [[ "$DO_SORT_PBF" == true ]]; then
+      echo "=== [$((i+1))/${#PBF_PATHS[@]}] Sort PBF: $PBF_PATH ==="
+      osmium sort -s multipass "$PBF_PATH" -o "${WORK_DIR}/sorted.osm.pbf" --overwrite
+      PBF_TO_USE="${WORK_DIR}/sorted.osm.pbf"
+    fi
 
     echo "=== [$((i+1))/${#PBF_PATHS[@]}] Group waterways: $PBF_PATH ==="
     osm-lump-ways-down \
-      -i "$PBF_PATH" \
+      -i "$PBF_TO_USE" \
       -f "waterway=river" -f "waterway=canal" \
       --min-upstream-m 1000 \
       --flow-follows-tag name \
@@ -128,6 +144,7 @@ else
 
     if [[ ! -s "${WORK_DIR}/grouped.geojson" ]]; then
       echo "No grouped waterways for $PBF_PATH, skipping."
+      echo "  (If the file has data, try: osmium fileinfo -e $PBF_PATH ; pre-sort with osmium sort -s multipass and re-run.)"
       rm -rf "$WORK_DIR"
       continue
     fi
