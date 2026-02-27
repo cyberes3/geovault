@@ -369,7 +369,7 @@ class MainActivity : AppCompatActivity() {
                             
                             if (statusCode == 401) {
                                 resetOnAuthFailure(this@MainActivity)
-                                return@Callback
+                                return@runOnUiThread
                             }
                             val errorMessage = when (statusCode) {
                                 400 -> "Upload failed (400)\nInvalid request. Check your file format."
