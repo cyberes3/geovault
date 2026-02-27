@@ -80,27 +80,18 @@ Scripts use a connection string in this format:
 "postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
 ```
 
-To load the OSM data pass one or more PBF files; osm2pgsql merges them and ignores duplicates. Memory use is the same as
-for a single file of the same total size.
-
-**Single region:**
+Perform the import:
 
 ```bash
 ./scripts/import-pbf.sh "postgresql://..." /srv/downloads/north-america-latest.osm.pbf
 ```
 
-**Multiple regions in one import:**
+Alternative options:
 
 ```bash
 ./scripts/import-pbf.sh "postgresql://..." /srv/downloads/north-america-latest.osm.pbf /srv/downloads/europe-latest.osm.pbf
-```
-
-**Alternatively**, import the first file then append more (heavier DB work; if an import is canceled you must re-run
-from the first file):
-
-```bash
-./scripts/import-pbf.sh "postgresql://..." /srv/downloads/north-america-latest.osm.pbf
-./scripts/import-pbf.sh "postgresql://..." --append /srv/downloads/europe-latest.osm.pbf
+./scripts/import-pbf.sh "postgresql://..." /srv/downloads/europe/*-latest.osm.pbf
+./scripts/import-pbf.sh "postgresql://..." /srv/downloads/north-america-latest.osm.pbf /srv/downloads/europe/*-latest.osm.pbf
 ```
 
 ---
@@ -110,18 +101,6 @@ third-world countries like Turkey, run the minimal download script to fetch regi
 
 ```bash
 ./scripts/download-osm-minimal-europe.sh
-```
-
-Pass all region PBFs to import in one go:
-
-```bash
-./scripts/import-pbf.sh "postgresql://..." /srv/downloads/europe/*-latest.osm.pbf
-```
-
-To include another region, add it to the file list:
-
-```bash
-./scripts/import-pbf.sh "postgresql://..." /srv/downloads/europe/*-latest.osm.pbf /srv/downloads/north-america-latest.osm.pbf
 ```
 
 ---
@@ -152,14 +131,14 @@ The standalone Python import scripts drop their table and re-import fresh data o
 
 ---
 
-Importing waterways is a bit more complicated due to some nessesary filtering. You'll need
+Importing waterways is a bit more complicated due to required filtering. You'll need
 to [install rust](https://rustup.rs/) and then do `cargo install osm-lump-ways`.
 
 ```bash
 ./scripts/import-major-waterways.sh "postgresql://user:pass@host/db" /srv/downloads/north-america-latest.osm.pbf
 ```
 
-You must feed a single `.osm.pbf` file into the script, so if you have multiple files you must merge them together.
+You must feed a single `.osm.pbf` file into the script so if you have multiple files you must merge them together.
 These are all supported options:
 
 ```bash
