@@ -80,26 +80,27 @@ Scripts use a connection string in this format:
 "postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
 ```
 
-To load the OSM data:
+To load the OSM data pass one or more PBF files; osm2pgsql merges them and ignores duplicates. Memory use is the same as for a single file of the same total size.
 
+**Single region:**
+```bash
+./scripts/import-pbf.sh "postgresql://..." /srv/downloads/north-america-latest.osm.pbf
+```
+
+**Multiple regions in one import:**
+```bash
+./scripts/import-pbf.sh "postgresql://..." /srv/downloads/north-america-latest.osm.pbf /srv/downloads/europe-latest.osm.pbf
+```
+
+```bash
+./scripts/import-pbf.sh "postgresql://..." /srv/downloads/north-america-latest.osm.pbf /srv/downloads/europe/*-latest.osm.pbf
+```
+
+**Alternatively**, import the first file then append more (heavier DB work; if an import is canceled you must re-run from the first file):
 ```bash
 ./scripts/import-pbf.sh "postgresql://..." /srv/downloads/north-america-latest.osm.pbf
 ./scripts/import-pbf.sh "postgresql://..." --append /srv/downloads/europe-latest.osm.pbf
 ```
-
-Run the first `.osm.pbf` import then add the `--append` for subsequent ones. If an `import-pbf.sh` run is canceled, you
-have to start the entire run over and start at the first file. It is recommended to snapshot your VM or whatever between
-PBF imports.
-
-If you are having issues with an append import being killed, try merging your files into one mega file and then
-importing. Use the merge script so the result is deduplicated (otherwise osm2pgsql can fail with "node id appears more than once"):
-
-```shell
-./scripts/merge-pbf-dedup.sh /srv/downloads/europe-latest.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/europe_north-america-combined.osm.pbf
-./scripts/import-pbf.sh "postgresql://..." /srv/downloads/europe_north-america-combined.osm.pbf
-```
-
-Append imports require much heavier DB operations than initial imports.
 
 ---
 
@@ -110,18 +111,16 @@ third-world countries like Turkey, run the minimal download script to fetch regi
 ./scripts/download-osm-minimal-europe.sh
 ```
 
-Then merge all PBFs in that directory and import. To merge western-europe with another region (e.g. north-america), use the deduplicating merge script (avoids osm2pgsql "node id appears more than once"):
+Pass all region PBFs to import in one go:
 
 ```bash
-osmium merge /srv/downloads/europe/*-latest.osm.pbf -o /srv/downloads/western-europe.osm.pbf --overwrite --with-history
-./scripts/import-pbf.sh "postgresql://..." /srv/downloads/western-europe.osm.pbf
+./scripts/import-pbf.sh "postgresql://..." /srv/downloads/europe/*-latest.osm.pbf
 ```
 
-To combine western-europe with another region (e.g. north-america), use the deduplicating merge script then import (it passes each file twice so duplicates within and across files are removed in one pass):
+To include north-america (or another region), add it to the file list:
 
 ```bash
-./scripts/merge-pbf-dedup.sh /srv/downloads/western-europe.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/north-america_western-europe.osm.pbf
-./scripts/import-pbf.sh "postgresql://..." /srv/downloads/north-america_western-europe.osm.pbf
+./scripts/import-pbf.sh "postgresql://..." /srv/downloads/europe/*-latest.osm.pbf /srv/downloads/north-america-latest.osm.pbf
 ```
 
 ---
@@ -155,9 +154,29 @@ The standalone Python import scripts drop their table and re-import fresh data o
 Importing waterways is a bit more complicated due to some nessesary filtering. You'll need
 to [install rust](https://rustup.rs/) and then do `cargo install osm-lump-ways`.
 
+**Single region:** pass one PBF:
+
 ```bash
 ./scripts/import-major-waterways.sh "postgresql://user:pass@host/db" /srv/downloads/north-america-latest.osm.pbf
 ```
+
+**Multiple regions (e.g. Europe + North America):** `osm-lump-ways-down` accepts only one input file and does not deduplicate; duplicate node/way IDs in a merged file can cause wrong results or panics. So you must produce one **deduplicated** PBF first, then run the import on that file.
+
+1. **Merge with deduplication** using the merge script (osmium with 2 inputs does not dedup; the script uses 3 inputs so the result is deduplicated):
+
+   ```bash
+   ./scripts/merge-pbf-dedup.sh /srv/downloads/western-europe.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/europe_na.osm.pbf
+   ```
+
+   Use your actual PBF paths (e.g. if you built western-europe from the minimal-Europe script, use that file; if you use full extracts, use e.g. `europe-latest.osm.pbf` and `north-america-latest.osm.pbf`).
+
+2. **Run the waterways import** on the merged file:
+
+   ```bash
+   ./scripts/import-major-waterways.sh "postgresql://user:pass@host/db" /srv/downloads/europe_na.osm.pbf
+   ```
+
+Do not merge two PBFs with plain `osmium merge file1.pbf file2.pbf` — that leaves duplicates and can break `osm-lump-ways-down`. Use `merge-pbf-dedup.sh` so the output is deduplicated.
 
 ---
 

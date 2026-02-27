@@ -65,7 +65,7 @@ for r in "${REGIONS[@]}"; do
 done
 
 echo ""
-echo "Done. To merge into a single PBF (e.g. for import-pbf.sh), use the deduplicating merge script:"
-echo "  ./scripts/merge-pbf-dedup.sh ${DEST_DIR}/*-latest.osm.pbf -o /srv/downloads/western-europe.osm.pbf"
-echo "To merge that with another region (e.g. north-america):"
-echo "  ./scripts/merge-pbf-dedup.sh /srv/downloads/western-europe.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/north-america_western-europe.osm.pbf"
+echo "Done. Import all region PBFs in one go (osm2pgsql merges and deduplicates):"
+echo "  ./scripts/import-pbf.sh \"postgresql://...\" ${DEST_DIR}/*-latest.osm.pbf"
+echo "To add another region (e.g. north-america), include it in the file list:"
+echo "  ./scripts/import-pbf.sh \"postgresql://...\" ${DEST_DIR}/*-latest.osm.pbf /srv/downloads/north-america-latest.osm.pbf"
