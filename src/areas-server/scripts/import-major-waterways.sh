@@ -15,10 +15,11 @@
 #   --load            Skip build; load from existing merged GeoJSON in --local-dir
 #   --min-upstream-km N   Keep only systems with total length >= N km (default: 50)
 #   --sort-pbf        Pre-sort each PBF with osmium sort -s multipass (rarely needed)
-#   --rewrite-pbf     Rewrite with osmium cat pbf_dense_nodes=false (deprecated; prefer tags-filter)
+#   --rewrite-pbf     After tags-filter, rewrite with osmium cat pbf_dense_nodes=false (if reader still fails)
 #
-# Preprocessing: Like waterwaymap.org, the script runs osmium tags-filter (waterway) on each
-# PBF first so the file is written by osmium and readable by osm-lump-ways. Required: osmium-tool.
+# Preprocessing: Matches waterwaymap.org (dl_updates_from_osm.sh): osmium tags-filter with
+# the same expressions (waterway natural=coastline natural=water canoe portage), default PBF
+# output. Required: osmium-tool.
 #
 # Output: one GeoJSON per PBF in <local-dir>/major-waterways_<basename>.geojson,
 #         merged <local-dir>/major-waterways.geojson; table waterways.major_waterways.
@@ -145,10 +146,10 @@ else
     WORK_DIR="$(mktemp -d)"
     PBF_TO_USE="$PBF_PATH"
 
-    # Like waterwaymap.org: osm-lump-ways reads PBF written by osmium. Run tags-filter first.
-    # Use pbf_dense_nodes=false so osmio (used by osm-lump-ways) can read the file.
-    echo "=== [$((i+1))/${#PBF_PATHS[@]}] Tags-filter (waterway, no DenseNodes): $PBF_PATH ==="
-    osmium tags-filter "$PBF_PATH" -o "${WORK_DIR}/waterway.osm.pbf" -f pbf,pbf_dense_nodes=false waterway --overwrite
+    # Same pipeline as waterwaymap.org: tags-filter with their exact expressions, default PBF output.
+    TAG_FILTER="waterway natural=coastline natural=water canoe portage"
+    echo "=== [$((i+1))/${#PBF_PATHS[@]}] Tags-filter ($TAG_FILTER): $PBF_PATH ==="
+    osmium tags-filter "$PBF_PATH" -o "${WORK_DIR}/waterway.osm.pbf" --overwrite $TAG_FILTER
     PBF_TO_USE="${WORK_DIR}/waterway.osm.pbf"
 
     if [[ "$DO_REWRITE_PBF" == true ]]; then
@@ -172,7 +173,7 @@ else
 
     if [[ ! -s "${WORK_DIR}/grouped.geojson" ]]; then
       echo "No grouped waterways for $PBF_PATH, skipping."
-      echo "  (Preprocessing: osmium tags-filter -f pbf,pbf_dense_nodes=false waterway. If source has data, try: osmium fileinfo -e $PBF_PATH)"
+      echo "  (Preprocessing matches waterwaymap.org: osmium tags-filter waterway natural=coastline natural=water canoe portage. If source has data: osmium fileinfo -e $PBF_PATH)"
       rm -rf "$WORK_DIR"
       continue
     fi
