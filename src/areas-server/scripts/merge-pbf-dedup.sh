@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
-# Merge OSM PBF files with deduplication, then sort the result.
-# osmium merge requires inputs sorted by type, ID, and version; Geofabrik
-# regional extracts are not guaranteed to be sorted, so merging them directly
-# can produce empty or undefined output. We merge then run osmium sort so the
-# output is valid for downstream tools (e.g. osm-lump-ways-down).
-# osmium merge with exactly 2 inputs does not deduplicate; with 3+ it does.
-# For 2 files we pass F1, F2, F1. For 1 file we pass F, F, F to deduplicate.
+# Merge OSM PBF files with deduplication. Output is sorted (type, ID, version).
+# osmium merge requires sorted inputs; Geofabrik regional extracts are not, so we
+# sort each input with osmium sort -s multipass (one region at a time to limit RAM),
+# then merge the sorted files. Merge is streaming so it never holds the full dataset.
+# For 2 inputs merge does not deduplicate; we pass F1, F2, F1. For 1 file we pass F, F, F.
 #
 # Usage: ./merge-pbf-dedup.sh [OPTIONS] FILE1.pbf [FILE2.pbf ...] -o OUTPUT.pbf
-#   --tmp-dir DIR   Directory for merge temporary file (default: same as output)
+#   --tmp-dir DIR   Directory for sorted temporary files (default: same as output)
 # Example: ./merge-pbf-dedup.sh /srv/downloads/europe/*-latest.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/merged.osm.pbf
 
 set -euo pipefail
@@ -46,20 +44,26 @@ for f in "${FILES[@]}"; do
   fi
 done
 
-MERGE_TMP=""
+SORTED_TMP=()
 cleanup() {
-  [[ -n "$MERGE_TMP" && -f "$MERGE_TMP" ]] && rm -f "$MERGE_TMP"
+  for f in "${SORTED_TMP[@]}"; do
+    [[ -f "$f" ]] && rm -f "$f"
+  done
 }
 trap cleanup EXIT
 
-MERGE_TMP="$(mktemp -u -p "$TMP_DIR" "osmium-merge.XXXXXX.pbf")"
+# Sort each input individually (multipass = lower RAM per file; never sort the full merged dataset)
+for i in "${!FILES[@]}"; do
+  t="$(mktemp -p "$TMP_DIR" "osmium-sorted.XXXXXX.pbf")"
+  SORTED_TMP+=("$t")
+  echo "Sorting ${FILES[$i]} -> temp $((i+1))/${#FILES[@]}"
+  osmium sort -s multipass "${FILES[$i]}" -o "$t" --overwrite
+done
 
-case ${#FILES[@]} in
-  1) osmium merge "${FILES[0]}" "${FILES[0]}" "${FILES[0]}" -o "$MERGE_TMP" --overwrite ;;
-  2) osmium merge "${FILES[0]}" "${FILES[1]}" "${FILES[0]}" -o "$MERGE_TMP" --overwrite ;;
-  *) osmium merge "${FILES[@]}" -o "$MERGE_TMP" --overwrite ;;
+# Merge sorted files (streaming, low memory). Output is sorted.
+echo "Merging ${#SORTED_TMP[@]} sorted files -> $OUT"
+case ${#SORTED_TMP[@]} in
+  1) osmium merge "${SORTED_TMP[0]}" "${SORTED_TMP[0]}" "${SORTED_TMP[0]}" -o "$OUT" --overwrite ;;
+  2) osmium merge "${SORTED_TMP[0]}" "${SORTED_TMP[1]}" "${SORTED_TMP[0]}" -o "$OUT" --overwrite ;;
+  *) osmium merge "${SORTED_TMP[@]}" -o "$OUT" --overwrite ;;
 esac
-
-# Sort so output is type,id,version ordered (required by osm-lump-ways-down and others).
-# Use multipass strategy to avoid OOM: one pass per type (nodes, ways, relations) instead of loading all in memory.
-osmium sort -s multipass "$MERGE_TMP" -o "$OUT" --overwrite

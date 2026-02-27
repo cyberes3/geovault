@@ -147,6 +147,9 @@ These are all supported options:
 ./scripts/merge-pbf-dedup.sh /srv/downloads/europe/*-latest.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/minimal-europe_na.osm.pbf
 ```
 
+The merge process is extremely memory-intensive and you need to have more RAM available than the total size of your
+merge (confirm?????). It is fine to skip the waterways database since it is used exclusively for the `waterway` tag.
+
 ---
 
 After the imports, run the post-processing script to create geography indexes on the tables and refresh
