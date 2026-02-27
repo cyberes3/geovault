@@ -171,6 +171,12 @@ deduplicate; duplicate node/way IDs in a merged file can cause wrong results or 
    ```bash
    ./scripts/merge-pbf-dedup.sh /srv/downloads/western-europe.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/europe_na.osm.pbf
    ```
+   
+   or
+   
+   ```bash
+   ./scripts/merge-pbf-dedup.sh /srv/downloads/europe/*-latest.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/western-europe_na.osm.pbf
+   ```
 
    Use your actual PBF paths (e.g. if you built western-europe from the minimal-Europe script, use that file; if you use
    full extracts, use e.g. `europe-latest.osm.pbf` and `north-america-latest.osm.pbf`).
