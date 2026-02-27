@@ -14,7 +14,8 @@
 #   --local-dir DIR   Directory for per-PBF and merged GeoJSON (default: /srv/downloads)
 #   --load            Skip build; load from existing merged GeoJSON in --local-dir
 #   --min-upstream-km N   Keep only systems with total length >= N km (default: 50)
-#   --sort-pbf        Pre-sort each PBF with osmium sort -s multipass (use if you get "0 ways")
+#   --sort-pbf        Pre-sort each PBF with osmium sort -s multipass (rarely needed)
+#   --rewrite-pbf    Rewrite each PBF with osmium cat and pbf_dense_nodes=false (use if you get "0 ways")
 #
 # Output: one GeoJSON per PBF in <local-dir>/major-waterways_<basename>.geojson,
 #         merged <local-dir>/major-waterways.geojson; table waterways.major_waterways.
@@ -34,6 +35,7 @@ MIN_UPSTREAM_M=50000   # 50 km default
 LOCAL_DIR="/srv/downloads"
 DO_LOAD=false
 DO_SORT_PBF=false
+DO_REWRITE_PBF=false
 
 DATABASE_URL=""
 PBF_PATHS=()
@@ -53,6 +55,10 @@ while [[ $# -gt 0 ]]; do
       DO_SORT_PBF=true
       shift
       ;;
+    --rewrite-pbf)
+      DO_REWRITE_PBF=true
+      shift
+      ;;
     --min-upstream-km)
       shift
       [[ $# -gt 0 ]] || { echo "Missing value for --min-upstream-km" >&2; exit 1; }
@@ -60,7 +66,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -h|--help)
-      echo "Usage: $0 DATABASE_URL [path-to.osm.pbf ...] [--local-dir DIR] [--load] [--sort-pbf] [--min-upstream-km N]" >&2
+      echo "Usage: $0 DATABASE_URL [path-to.osm.pbf ...] [--local-dir DIR] [--load] [--sort-pbf] [--rewrite-pbf] [--min-upstream-km N]" >&2
       echo "  Builds major waterways from each PBF, merges GeoJSONs, loads into waterways.major_waterways." >&2
       exit 0
       ;;
@@ -79,7 +85,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$DATABASE_URL" ]]; then
-  echo "Usage: $0 DATABASE_URL [path-to.osm.pbf ...] [--local-dir DIR] [--load] [--sort-pbf] [--min-upstream-km N]" >&2
+  echo "Usage: $0 DATABASE_URL [path-to.osm.pbf ...] [--local-dir DIR] [--load] [--sort-pbf] [--rewrite-pbf] [--min-upstream-km N]" >&2
   exit 1
 fi
 
@@ -110,10 +116,17 @@ else
     echo "jq not found. Install jq to merge GeoJSON files." >&2
     exit 1
   fi
-  if [[ "$DO_SORT_PBF" == true ]] && ! command -v osmium &>/dev/null; then
-    echo "osmium not found. Install osmium-tool for --sort-pbf (e.g. apt install osmium-tool)." >&2
+  if { [[ "$DO_SORT_PBF" == true ]] || [[ "$DO_REWRITE_PBF" == true ]]; } && ! command -v osmium &>/dev/null; then
+    echo "osmium not found. Install osmium-tool for --sort-pbf/--rewrite-pbf (e.g. apt install osmium-tool)." >&2
     exit 1
   fi
+
+  # Process smallest files first (glob order is undefined; sort by size for predictable progress)
+  mapfile -t PBF_PATHS < <(
+    for f in "${PBF_PATHS[@]}"; do
+      printf '%d\t%s\n' "$(stat -c %s "$f" 2>/dev/null || echo 0)" "$f"
+    done | sort -n -t$'\t' -k1 | cut -f2-
+  )
 
   mkdir -p "$LOCAL_DIR"
   PER_FILE_PATHS=()
@@ -128,9 +141,14 @@ else
 
     WORK_DIR="$(mktemp -d)"
     PBF_TO_USE="$PBF_PATH"
+    if [[ "$DO_REWRITE_PBF" == true ]]; then
+      echo "=== [$((i+1))/${#PBF_PATHS[@]}] Rewrite PBF (pbf_dense_nodes=false): $PBF_PATH ==="
+      osmium cat "$PBF_PATH" -o "${WORK_DIR}/rewritten.osm.pbf" -f pbf,pbf_dense_nodes=false --overwrite
+      PBF_TO_USE="${WORK_DIR}/rewritten.osm.pbf"
+    fi
     if [[ "$DO_SORT_PBF" == true ]]; then
-      echo "=== [$((i+1))/${#PBF_PATHS[@]}] Sort PBF: $PBF_PATH ==="
-      osmium sort -s multipass "$PBF_PATH" -o "${WORK_DIR}/sorted.osm.pbf" --overwrite
+      echo "=== [$((i+1))/${#PBF_PATHS[@]}] Sort PBF: $PBF_TO_USE ==="
+      osmium sort -s multipass "$PBF_TO_USE" -o "${WORK_DIR}/sorted.osm.pbf" --overwrite
       PBF_TO_USE="${WORK_DIR}/sorted.osm.pbf"
     fi
 
@@ -144,7 +162,7 @@ else
 
     if [[ ! -s "${WORK_DIR}/grouped.geojson" ]]; then
       echo "No grouped waterways for $PBF_PATH, skipping."
-      echo "  (If the file has data, try: osmium fileinfo -e $PBF_PATH ; pre-sort with osmium sort -s multipass and re-run.)"
+      echo "  (If osmium fileinfo -e shows data, try: --rewrite-pbf or open an issue at https://github.com/amandasaurus/osm-lump-ways)"
       rm -rf "$WORK_DIR"
       continue
     fi
