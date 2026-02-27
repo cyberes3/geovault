@@ -34,4 +34,4 @@ if [[ ! -f "$F2" ]]; then
 fi
 
 # Osmium merge with 2 inputs does not deduplicate; 3 inputs does. Pass F1 twice to get dedup with 2 logical inputs.
-exec osmium merge "$F1" "$F2" "$F1" -o "$OUT" --overwrite --with-history
+exec osmium merge "$F1" "$F2" "$F1" -o "$OUT" --overwrite
