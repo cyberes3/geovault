@@ -145,10 +145,10 @@ else
     WORK_DIR="$(mktemp -d)"
     PBF_TO_USE="$PBF_PATH"
 
-    # Like waterwaymap.org: osm-lump-ways reads PBF written by osmium. Run tags-filter first
-    # so the file has the structure osmio expects (avoids "0 ways" on Geofabrik-style PBFs).
-    echo "=== [$((i+1))/${#PBF_PATHS[@]}] Tags-filter (waterway): $PBF_PATH ==="
-    osmium tags-filter "$PBF_PATH" -o "${WORK_DIR}/waterway.osm.pbf" waterway --overwrite
+    # Like waterwaymap.org: osm-lump-ways reads PBF written by osmium. Run tags-filter first.
+    # Use pbf_dense_nodes=false so osmio (used by osm-lump-ways) can read the file.
+    echo "=== [$((i+1))/${#PBF_PATHS[@]}] Tags-filter (waterway, no DenseNodes): $PBF_PATH ==="
+    osmium tags-filter "$PBF_PATH" -o "${WORK_DIR}/waterway.osm.pbf" -f pbf,pbf_dense_nodes=false waterway --overwrite
     PBF_TO_USE="${WORK_DIR}/waterway.osm.pbf"
 
     if [[ "$DO_REWRITE_PBF" == true ]]; then
@@ -172,7 +172,7 @@ else
 
     if [[ ! -s "${WORK_DIR}/grouped.geojson" ]]; then
       echo "No grouped waterways for $PBF_PATH, skipping."
-      echo "  (Input is preprocessed with osmium tags-filter waterway; if still 0 ways, check https://github.com/amandasaurus/osm-lump-ways)"
+      echo "  (Preprocessing: osmium tags-filter -f pbf,pbf_dense_nodes=false waterway. If source has data, try: osmium fileinfo -e $PBF_PATH)"
       rm -rf "$WORK_DIR"
       continue
     fi
