@@ -80,23 +80,24 @@ Scripts use a connection string in this format:
 "postgresql://is_in_areas:your_password_here@localhost/is_in_areas"
 ```
 
-To load the OSM data pass one or more PBF files; osm2pgsql merges them and ignores duplicates. Memory use is the same as for a single file of the same total size.
+To load the OSM data pass one or more PBF files; osm2pgsql merges them and ignores duplicates. Memory use is the same as
+for a single file of the same total size.
 
 **Single region:**
+
 ```bash
 ./scripts/import-pbf.sh "postgresql://..." /srv/downloads/north-america-latest.osm.pbf
 ```
 
 **Multiple regions in one import:**
+
 ```bash
 ./scripts/import-pbf.sh "postgresql://..." /srv/downloads/north-america-latest.osm.pbf /srv/downloads/europe-latest.osm.pbf
 ```
 
-```bash
-./scripts/import-pbf.sh "postgresql://..." /srv/downloads/north-america-latest.osm.pbf /srv/downloads/europe/*-latest.osm.pbf
-```
+**Alternatively**, import the first file then append more (heavier DB work; if an import is canceled you must re-run
+from the first file):
 
-**Alternatively**, import the first file then append more (heavier DB work; if an import is canceled you must re-run from the first file):
 ```bash
 ./scripts/import-pbf.sh "postgresql://..." /srv/downloads/north-america-latest.osm.pbf
 ./scripts/import-pbf.sh "postgresql://..." --append /srv/downloads/europe-latest.osm.pbf
@@ -117,7 +118,7 @@ Pass all region PBFs to import in one go:
 ./scripts/import-pbf.sh "postgresql://..." /srv/downloads/europe/*-latest.osm.pbf
 ```
 
-To include north-america (or another region), add it to the file list:
+To include another region, add it to the file list:
 
 ```bash
 ./scripts/import-pbf.sh "postgresql://..." /srv/downloads/europe/*-latest.osm.pbf /srv/downloads/north-america-latest.osm.pbf
@@ -160,15 +161,19 @@ to [install rust](https://rustup.rs/) and then do `cargo install osm-lump-ways`.
 ./scripts/import-major-waterways.sh "postgresql://user:pass@host/db" /srv/downloads/north-america-latest.osm.pbf
 ```
 
-**Multiple regions (e.g. Europe + North America):** `osm-lump-ways-down` accepts only one input file and does not deduplicate; duplicate node/way IDs in a merged file can cause wrong results or panics. So you must produce one **deduplicated** PBF first, then run the import on that file.
+**Multiple regions (e.g. Europe + North America):** `osm-lump-ways-down` accepts only one input file and does not
+deduplicate; duplicate node/way IDs in a merged file can cause wrong results or panics. So you must produce one *
+*deduplicated** PBF first, then run the import on that file.
 
-1. **Merge with deduplication** using the merge script (osmium with 2 inputs does not dedup; the script uses 3 inputs so the result is deduplicated):
+1. **Merge with deduplication** using the merge script (osmium with 2 inputs does not dedup; the script uses 3 inputs so
+   the result is deduplicated):
 
    ```bash
    ./scripts/merge-pbf-dedup.sh /srv/downloads/western-europe.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/europe_na.osm.pbf
    ```
 
-   Use your actual PBF paths (e.g. if you built western-europe from the minimal-Europe script, use that file; if you use full extracts, use e.g. `europe-latest.osm.pbf` and `north-america-latest.osm.pbf`).
+   Use your actual PBF paths (e.g. if you built western-europe from the minimal-Europe script, use that file; if you use
+   full extracts, use e.g. `europe-latest.osm.pbf` and `north-america-latest.osm.pbf`).
 
 2. **Run the waterways import** on the merged file:
 
@@ -176,7 +181,8 @@ to [install rust](https://rustup.rs/) and then do `cargo install osm-lump-ways`.
    ./scripts/import-major-waterways.sh "postgresql://user:pass@host/db" /srv/downloads/europe_na.osm.pbf
    ```
 
-Do not merge two PBFs with plain `osmium merge file1.pbf file2.pbf` — that leaves duplicates and can break `osm-lump-ways-down`. Use `merge-pbf-dedup.sh` so the output is deduplicated.
+Do not merge two PBFs with plain `osmium merge file1.pbf file2.pbf` — that leaves duplicates and can break
+`osm-lump-ways-down`. Use `merge-pbf-dedup.sh` so the output is deduplicated.
 
 ---
 
