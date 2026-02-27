@@ -65,6 +65,7 @@ for r in "${REGIONS[@]}"; do
 done
 
 echo ""
-echo "Done. To merge into a single PBF (e.g. for import-pbf.sh):"
-echo "  osmium merge ${DEST_DIR}/*-latest.osm.pbf -o /srv/downloads/western-europe.osm.pbf --overwrite --with-history"
-echo "To merge two PBFs with deduplication, use: scripts/merge-pbf-dedup.sh file1.pbf file2.pbf -o out.pbf"
+echo "Done. To merge into a single PBF (e.g. for import-pbf.sh), use the deduplicating merge script:"
+echo "  ./scripts/merge-pbf-dedup.sh ${DEST_DIR}/*-latest.osm.pbf -o /srv/downloads/western-europe.osm.pbf"
+echo "To merge that with another region (e.g. north-america):"
+echo "  ./scripts/merge-pbf-dedup.sh /srv/downloads/western-europe.osm.pbf /srv/downloads/north-america-latest.osm.pbf -o /srv/downloads/north-america_western-europe.osm.pbf"
