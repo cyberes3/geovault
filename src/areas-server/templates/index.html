@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Areas Server – Point query</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; }
+    .layout { display: flex; flex-direction: column; height: 100vh; }
+    .panel {
+      padding: 0.75rem 1rem;
+      background: #f5f5f5;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .panel label { font-weight: 500; }
+    .panel input[type="number"] { width: 8rem; padding: 0.35rem 0.5rem; }
+    .panel button {
+      padding: 0.4rem 0.9rem;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .panel button:hover { background: #1d4ed8; }
+    .panel button:disabled { background: #94a3b8; cursor: not-allowed; }
+    #map { flex: 1; min-height: 200px; }
+    .result {
+      max-height: 40vh;
+      overflow: auto;
+      padding: 1rem;
+      background: #fff;
+      border-top: 1px solid #ddd;
+      font-size: 0.9rem;
+    }
+    .result pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
+    .result.error { color: #b91c1c; }
+    .result h3 { margin: 0 0 0.5rem 0; font-size: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="panel">
+      <label for="lat">Latitude</label>
+      <input type="number" id="lat" step="any" placeholder="e.g. 40.34">
+      <label for="lon">Longitude</label>
+      <input type="number" id="lon" step="any" placeholder="e.g. -105.68">
+      <button type="button" id="submit">Query</button>
+    </div>
+    <div id="map"></div>
+    <div class="result" id="result" aria-live="polite"></div>
+  </div>
+
+  <script>
+    const latInput = document.getElementById('lat');
+    const lonInput = document.getElementById('lon');
+    const submitBtn = document.getElementById('submit');
+    const resultEl = document.getElementById('result');
+
+    const map = L.map('map').setView([40, -105], 4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+
+    let marker = null;
+
+    map.on('click', function (e) {
+      const { lat, lng } = e.latlng;
+      latInput.value = lat.toFixed(6);
+      lonInput.value = lng.toFixed(6);
+      if (marker) map.removeLayer(marker);
+      marker = L.marker([lat, lng]).addTo(map);
+    });
+
+    function setResult(html, isError) {
+      resultEl.innerHTML = html;
+      resultEl.className = 'result' + (isError ? ' error' : '');
+    }
+
+    submitBtn.addEventListener('click', async function () {
+      const lat = latInput.value?.trim();
+      const lon = lonInput.value?.trim();
+      if (!lat || !lon) {
+        setResult('<strong>Enter latitude and longitude</strong> (or click on the map).', true);
+        return;
+      }
+      submitBtn.disabled = true;
+      setResult('Loading…');
+      try {
+        const url = new URL('/query', window.location.origin);
+        url.searchParams.set('lat', lat);
+        url.searchParams.set('lon', lon);
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!res.ok) {
+          setResult('<h3>Error</h3><pre>' + (data.error || res.statusText) + '</pre>', true);
+          return;
+        }
+        setResult('<h3>Result</h3><pre>' + JSON.stringify(data, null, 2) + '</pre>');
+      } catch (err) {
+        setResult('<h3>Error</h3><pre>' + String(err) + '</pre>', true);
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

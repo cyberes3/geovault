@@ -9,7 +9,7 @@ import sys
 import traceback
 from typing import Any, Dict, List, Optional, Tuple
 
-from flask import Flask, request, Response
+from flask import Flask, request, Response, render_template
 
 from areas_lib.query import check_health, get_stats, query_single, query_batch
 
@@ -192,6 +192,12 @@ def _error_response_with_traceback(exc: BaseException, status: int = 500) -> Res
         status=status,
         mimetype="application/json",
     )
+
+
+@app.route("/")
+def index():
+    """Serve the map UI: click to set lat/lon, submit to run a single-point query."""
+    return render_template("index.html")
 
 
 @app.route("/health")
