@@ -8,11 +8,11 @@
 # Usage:
 #   ./import-major-waterways.sh DATABASE_URL <path-to.osm.pbf> [path-to.osm.pbf ...] [options]
 #   ./import-major-waterways.sh DATABASE_URL /srv/downloads/europe/*-latest.osm.pbf /srv/downloads/north-america-latest.osm.pbf
-#   ./import-major-waterways.sh DATABASE_URL --load [--local-dir /srv/downloads]
+#   ./import-major-waterways.sh DATABASE_URL --load [--local-dir /srv/downloads]   # skip GeoJSON build, use existing merged file
 #
 # Options:
 #   --local-dir DIR   Directory for per-PBF and merged GeoJSON (default: /srv/downloads)
-#   --load            Skip build; load from existing merged GeoJSON in --local-dir
+#   --load            Skip PBF/GeoJSON generation; load from existing merged GeoJSON only
 #   --min-upstream-km N   Keep only systems with total length >= N km (default: 50)
 #   --sort-pbf        Pre-sort each PBF with osmium sort -s multipass (rarely needed)
 #   --rewrite-pbf     No-op (rewrite is now always applied; kept for backwards compatibility)
@@ -72,6 +72,7 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       echo "Usage: $0 DATABASE_URL [path-to.osm.pbf ...] [--local-dir DIR] [--load] [--sort-pbf] [--rewrite-pbf] [--min-upstream-km N]" >&2
       echo "  Builds major waterways from each PBF, merges GeoJSONs, loads into waterways.major_waterways." >&2
+      echo "  Use --load to skip PBF/GeoJSON generation and load from existing merged GeoJSON in --local-dir." >&2
       exit 0
       ;;
     *)
@@ -247,8 +248,10 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS waterways.major
 
 ogr2ogr -f PostgreSQL PG: "$GEOJSON_MERGED_PATH" \
   -nln "waterways.major_waterways" -nlt MULTILINESTRING -unsetFid \
-  -oo ARRAY_AS_STRING=YES -t_srs EPSG:4326 -lco GEOMETRY_NAME=geom \
-  -where "tag_group_value IS NOT NULL AND tag_group_value <> '' AND LOWER(tag_group_value) NOT LIKE '%canal%'"
+  -oo ARRAY_AS_STRING=YES -t_srs EPSG:4326 -lco GEOMETRY_NAME=geom
+
+# OGR SQL does not support LOWER(); filter in Postgres: drop unnamed and name containing 'canal'
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DELETE FROM waterways.major_waterways WHERE tag_group_value IS NULL OR tag_group_value = '' OR LOWER(tag_group_value) LIKE '%canal%';"
 
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS major_waterways_tag_group_value ON waterways.major_waterways (tag_group_value);"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS major_waterways_length_m ON waterways.major_waterways (length_m);"
