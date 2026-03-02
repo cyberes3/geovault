@@ -298,9 +298,9 @@ class Command(BaseCommand):
                                     updated += 1
                                     self.stdout.write(f'  Feature {feature_store.id}: {msg}')
                                     if removed_tags:
-                                        self.stdout.write(f'    Removed: {", ".join(removed_tags)}')
+                                        self.stdout.write(self.style.WARNING(f'    Removed: {", ".join(removed_tags)}'))
                                     if added_tags:
-                                        self.stdout.write(f'    Added: {", ".join(added_tags)}')
+                                        self.stdout.write(self.style.SUCCESS(f'    Added: {", ".join(added_tags)}'))
                                 else:
                                     skipped += 1
                             except Exception as e:
