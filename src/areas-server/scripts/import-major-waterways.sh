@@ -250,8 +250,8 @@ ogr2ogr -f PostgreSQL PG: "$GEOJSON_MERGED_PATH" \
   -nln "waterways.major_waterways" -nlt MULTILINESTRING -unsetFid \
   -oo ARRAY_AS_STRING=YES -t_srs EPSG:4326 -lco GEOMETRY_NAME=geom
 
-# OGR SQL does not support LOWER(); filter in Postgres: drop unnamed and name containing 'canal'
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DELETE FROM waterways.major_waterways WHERE tag_group_value IS NULL OR tag_group_value = '' OR LOWER(tag_group_value) LIKE '%canal%';"
+# OGR SQL does not support LOWER(); filter in Postgres: drop unnamed, and names containing 'canal' or 'intracoastal'
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DELETE FROM waterways.major_waterways WHERE tag_group_value IS NULL OR tag_group_value = '' OR LOWER(tag_group_value) LIKE '%canal%' OR LOWER(tag_group_value) LIKE '%intracoastal%';"
 
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS major_waterways_tag_group_value ON waterways.major_waterways (tag_group_value);"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS major_waterways_length_m ON waterways.major_waterways (length_m);"
