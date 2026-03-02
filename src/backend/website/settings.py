@@ -490,6 +490,10 @@ AREAS_SERVER_TIMEOUT = config.get_int('reverse_geocoding.areas_server.request_ti
 AREAS_SERVER_VERIFY_SSL = config.get_bool('reverse_geocoding.areas_server.verify_ssl', True)
 AREAS_SERVER_CITY_RADIUS_MILES = config.get_float('reverse_geocoding.areas_server.city_radius_miles', 3.0)
 
+# Number of points to sample along linestrings/multilinestrings (1-100, clamped)
+_raw_linestring_points = config.get_int('reverse_geocoding.linestring_geocode_points', 4)
+REVERSE_GEOCODING_LINESTRING_GEOCODE_POINTS = max(1, min(100, _raw_linestring_points))
+
 # Elevation API Configuration
 # Elevation API server URL (racemap's elevation service)
 ELEVATION_API_URL = config.get_str('elevation.api_url', 'https://elevation.racemap.com/api')

@@ -4,8 +4,8 @@ The Areas Server is a standalone Flask service used in the reverse geocoding pro
 loaded via osm2pgsql. It is a separate service from the main GeoVault stack.
 
 Your Postgres server and `.osm.pbf` files need to be stored on fast SSDs (Samsung 990 Pros work very well and the OSM
-import only takes a few hours). The host should have at least 6 CPUs and 16GB RAM. The python server is
-pretty lightweight as Postgres does the heavy lifting.
+import only takes a few hours). The host should have at least 6 CPUs, 16GB RAM, and 500GB SSD storage space. The python
+server is pretty lightweight as Postgres does the heavy lifting.
 
 ## Database Setup
 
@@ -141,7 +141,7 @@ cargo build --release
 cargo install --path .
 ```
 
-Then run the importer:
+Then run the importer. You can use single or multiple files and globs are supported:
 
 ```bash
 ./scripts/import-major-waterways.sh "postgresql://user:pass@host/db" /srv/downloads/north-america-latest.osm.pbf

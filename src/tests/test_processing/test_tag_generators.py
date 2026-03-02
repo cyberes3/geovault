@@ -962,21 +962,16 @@ class TestReverseGeocodingTagGenerator:
     
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
-    def test_reverse_geocoding_for_linestring(self, mock_setting, mock_batch_reverse_geocode):
-        """Test that reverse geocoding tags are generated for linestrings."""
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_setting', return_value=4)
+    def test_reverse_geocoding_for_linestring(self, mock_get_setting, mock_setting, mock_batch_reverse_geocode):
+        """Test that reverse geocoding tags are generated for linestrings (default N=4 points)."""
         mock_setting.return_value = True
-        
-        # Mock batch_reverse_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
-        mock_batch_reverse_geocode.return_value = {
-            (37.775, -122.4195): (
-                [
-                    'geo-state:California',
-                    'geo-country:United States'
-                ],
-                []  # Empty log messages
-            )
-        }
-        
+
+        def batch_mock(coords):
+            return {(lat, lon): (['geo-state:California', 'geo-country:United States'], []) for lat, lon in coords}
+
+        mock_batch_reverse_geocode.side_effect = batch_mock
+
         generator = ReverseGeocodingTagGenerator()
         feature = LineStringFeature(
             type='Feature',
@@ -987,54 +982,228 @@ class TestReverseGeocodingTagGenerator:
             properties={'name': 'Test Line', 'geojson_hash': 'test'}
         )
         import_log = ImportLog()
-        
+
         tags = generator.process(feature, import_log=import_log)
-        
+
+        assert mock_batch_reverse_geocode.called
+        call_args = mock_batch_reverse_geocode.call_args[0][0]
+        assert len(call_args) == 4
         assert 'geo-state:California' in tags
         assert 'geo-country:United States' in tags
     
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
-    def test_reverse_geocoding_for_multilinestring(self, mock_setting, mock_batch_reverse_geocode):
-        """Test that reverse geocoding tags are generated for multilinestrings using centroid."""
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_setting', return_value=4)
+    def test_reverse_geocoding_for_multilinestring(self, mock_get_setting, mock_setting, mock_batch_reverse_geocode):
+        """Test that reverse geocoding tags are generated for multilinestrings (default N=4 points)."""
         mock_setting.return_value = True
-        
-        # Mock batch_reverse_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
-        # The centroid of the multilinestring should be calculated from all coordinates
-        # Line 1: [[-122.4194, 37.7749], [-122.4195, 37.7750]]
-        # Line 2: [[-122.4196, 37.7751], [-122.4197, 37.7752]]
-        # Centroid: average of all 4 points
-        # lat = (37.7749 + 37.7750 + 37.7751 + 37.7752) / 4 = 37.77505
-        # lon = (-122.4194 + -122.4195 + -122.4196 + -122.4197) / 4 = -122.41955
-        mock_batch_reverse_geocode.return_value = {
-            (37.77505, -122.41955): (
-                [
-                    'geo-state:California',
-                    'geo-country:United States'
-                ],
-                []  # Empty log messages
-            )
-        }
-        
+
+        def batch_mock(coords):
+            return {(lat, lon): (['geo-state:California', 'geo-country:United States'], []) for lat, lon in coords}
+
+        mock_batch_reverse_geocode.side_effect = batch_mock
+
         generator = ReverseGeocodingTagGenerator()
         feature = MultiLineStringFeature(
             type='Feature',
             geometry={
                 'type': 'MultiLineString',
                 'coordinates': [
-                    [[-122.4194, 37.7749], [-122.4195, 37.7750]],  # First linestring
-                    [[-122.4196, 37.7751], [-122.4197, 37.7752]]  # Second linestring
+                    [[-122.4194, 37.7749], [-122.4195, 37.7750]],
+                    [[-122.4196, 37.7751], [-122.4197, 37.7752]]
                 ]
             },
             properties={'name': 'Test MultiLineString', 'geojson_hash': 'test'}
         )
         import_log = ImportLog()
-        
+
         tags = generator.process(feature, import_log=import_log)
-        
+
+        assert mock_batch_reverse_geocode.called
+        call_args = mock_batch_reverse_geocode.call_args[0][0]
+        assert len(call_args) == 4
         assert 'geo-state:California' in tags
         assert 'geo-country:United States' in tags
-    
+
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_setting', return_value=3)
+    def test_reverse_geocoding_linestring_n3_requests_three_points(self, mock_get_setting, mock_setting, mock_batch_reverse_geocode):
+        """Linestring with N=3 requests 3 coordinates and merges tags."""
+        mock_setting.return_value = True
+
+        def batch_mock(coords):
+            return {(lat, lon): ([f'geo-city:City{i}', 'geo-country:USA'], []) for i, (lat, lon) in enumerate(coords)}
+
+        mock_batch_reverse_geocode.side_effect = batch_mock
+
+        generator = ReverseGeocodingTagGenerator()
+        feature = LineStringFeature(
+            type='Feature',
+            geometry={
+                'type': 'LineString',
+                'coordinates': [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]],
+            },
+            properties={'geojson_hash': 'test'},
+        )
+        import_log = ImportLog()
+        tags = generator.process(feature, import_log=import_log)
+
+        call_args = mock_batch_reverse_geocode.call_args[0][0]
+        assert len(call_args) == 3
+        assert 'geo-country:USA' in tags
+        assert 'geo-city:City0' in tags
+        assert 'geo-city:City1' in tags
+        assert 'geo-city:City2' in tags
+
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_setting', return_value=2)
+    def test_reverse_geocoding_multilinestring_n2_requests_two_points(self, mock_get_setting, mock_setting, mock_batch_reverse_geocode):
+        """Multilinestring with N=2 requests 2 coordinates; merged tags deduplicated."""
+        mock_setting.return_value = True
+
+        def batch_mock(coords):
+            return {(lat, lon): (['geo-state:Colorado', 'geo-country:USA'], []) for lat, lon in coords}
+
+        mock_batch_reverse_geocode.side_effect = batch_mock
+
+        generator = ReverseGeocodingTagGenerator()
+        feature = MultiLineStringFeature(
+            type='Feature',
+            geometry={
+                'type': 'MultiLineString',
+                'coordinates': [[[0.0, 0.0], [1.0, 0.0]], [[2.0, 0.0], [3.0, 0.0]]],
+            },
+            properties={'geojson_hash': 'test'},
+        )
+        import_log = ImportLog()
+        tags = generator.process(feature, import_log=import_log)
+
+        call_args = mock_batch_reverse_geocode.call_args[0][0]
+        assert len(call_args) == 2
+        assert tags.count('geo-state:Colorado') == 1
+        assert tags.count('geo-country:USA') == 1
+
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_setting', return_value=3)
+    def test_reverse_geocoding_deduplication_when_same_tag_from_multiple_points(self, mock_get_setting, mock_setting, mock_batch_reverse_geocode):
+        """When multiple points return the same tag, final tag list contains it once."""
+        mock_setting.return_value = True
+
+        # Same tags for every point
+        def batch_mock(coords):
+            return {(lat, lon): (['geo-city:Denver', 'geo-country:USA'], []) for lat, lon in coords}
+
+        mock_batch_reverse_geocode.side_effect = batch_mock
+
+        generator = ReverseGeocodingTagGenerator()
+        feature = LineStringFeature(
+            type='Feature',
+            geometry={
+                'type': 'LineString',
+                'coordinates': [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]],
+            },
+            properties={'geojson_hash': 'test'},
+        )
+        import_log = ImportLog()
+        tags = generator.process(feature, import_log=import_log)
+
+        assert tags.count('geo-city:Denver') == 1
+        assert tags.count('geo-country:USA') == 1
+
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_setting', return_value=3)
+    def test_reverse_geocoding_missing_coordinate_in_batch_result_no_crash(self, mock_get_setting, mock_setting, mock_batch_reverse_geocode):
+        """When one point is missing from batch result, others still merged."""
+        mock_setting.return_value = True
+
+        def batch_mock(coords):
+            # Return results only for first two coords
+            result = {}
+            for i, (lat, lon) in enumerate(coords):
+                if i < 2:
+                    result[(lat, lon)] = (['geo-country:USA'], [])
+            return result
+
+        mock_batch_reverse_geocode.side_effect = batch_mock
+
+        generator = ReverseGeocodingTagGenerator()
+        feature = LineStringFeature(
+            type='Feature',
+            geometry={
+                'type': 'LineString',
+                'coordinates': [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]],
+            },
+            properties={'geojson_hash': 'test'},
+        )
+        import_log = ImportLog()
+        tags = generator.process(feature, import_log=import_log)
+
+        assert 'geo-country:USA' in tags
+
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_setting', return_value=2)
+    def test_reverse_geocoding_all_points_return_empty_tags(self, mock_get_setting, mock_setting, mock_batch_reverse_geocode):
+        """When all points return empty tags, feature gets empty tag list."""
+        mock_setting.return_value = True
+
+        mock_batch_reverse_geocode.return_value = {}  # No results for any coord
+
+        generator = ReverseGeocodingTagGenerator()
+        feature = LineStringFeature(
+            type='Feature',
+            geometry={
+                'type': 'LineString',
+                'coordinates': [[0.0, 0.0], [1.0, 0.0]],
+            },
+            properties={'geojson_hash': 'test'},
+        )
+        import_log = ImportLog()
+        tags = generator.process(feature, import_log=import_log)
+
+        assert tags == []
+
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.batch_reverse_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
+    @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_setting', return_value=3)
+    def test_reverse_geocoding_mixed_empty_and_non_empty_merged_deduplicated(self, mock_get_setting, mock_setting, mock_batch_reverse_geocode):
+        """Some points return tags, others empty; final list is union of non-empty, deduplicated."""
+        mock_setting.return_value = True
+
+        def batch_mock(coords):
+            result = {}
+            for i, (lat, lon) in enumerate(coords):
+                if i == 0:
+                    result[(lat, lon)] = (['geo-city:A', 'geo-country:USA'], [])
+                elif i == 1:
+                    result[(lat, lon)] = ([], [])
+                else:
+                    result[(lat, lon)] = (['geo-city:B', 'geo-country:USA'], [])
+            return result
+
+        mock_batch_reverse_geocode.side_effect = batch_mock
+
+        generator = ReverseGeocodingTagGenerator()
+        feature = LineStringFeature(
+            type='Feature',
+            geometry={
+                'type': 'LineString',
+                'coordinates': [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]],
+            },
+            properties={'geojson_hash': 'test'},
+        )
+        import_log = ImportLog()
+        tags = generator.process(feature, import_log=import_log)
+
+        assert 'geo-city:A' in tags
+        assert 'geo-city:B' in tags
+        assert tags.count('geo-country:USA') == 1
+        assert len(tags) == 3
+
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
     def test_polygon_not_processed(self, mock_setting):
         """Test that polygons are not processed for reverse geocoding."""

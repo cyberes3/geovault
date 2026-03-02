@@ -160,6 +160,9 @@ reverse_geocoding:
     # Search radius in miles for nearest place (city/town/village) when admin has no city (default 3; 0 to disable).
     city_radius_miles: 3.0
 
+  # Number of points to sample along linestrings/multilinestrings for reverse geocoding. Points are equally spaced by distance along the track. Final tags are deduplicated per feature.
+  linestring_geocode_points: 4
+
 
 processing:
   # Number of threads to use for parallel feature processing during import
