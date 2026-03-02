@@ -84,7 +84,7 @@ DEFAULT_FIXTURE_COORDINATES = [
     (45.84810, -123.96116),
     (46.56804, -86.31349),
     (39.78976, -104.97147),  # river point
-    (35.71677, -89.93794),   # river point
+    (34.53780, -90.54868),   # river point (on Mississippi centerline)
 ]
 
 

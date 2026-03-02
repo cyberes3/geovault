@@ -96,6 +96,17 @@ flask --app app run --host 0.0.0.0 --port 5001
 | `AREAS_SERVER_POOL_MAX_SIZE`        | PostgreSQL connection pool max size. Default 10 allows about 2–3 concurrent requests (default: 10).                                                                             |
 | `AREAS_SERVER_WORK_MEM`             | Session `work_mem` for PostGIS queries (sorts, distance). Default `128MB`; increase if queries are still slow.                                                                  |
 
+## Debugging waterway lookup
+
+If the server does not return a `waterway` for a point (e.g. Osceola, TN at 35.71677, -89.93794), run the diagnostic script against the areas DB:
+
+```shell
+export AREAS_SERVER_DATABASE="postgresql://user:pass@host/dbname"
+./venv/bin/python scripts/debug-waterway-at-point.py "$AREAS_SERVER_DATABASE" 35.71677 -89.93794 --radius-m 5000 --name Mississippi
+```
+
+It reports: whether `waterways.major_waterways` exists, row count, whether any waterway is within the server’s default radius (~91 m), nearest waterways within a larger radius, and (with `--name`) matching waterway names. Common causes for no river: table missing or empty (run `import-major-waterways.sh` with a PBF that covers the region), or the point is farther than 300 ft from the river centerline in the table.
+
 ## Development Notes
 
 Benchmark script:

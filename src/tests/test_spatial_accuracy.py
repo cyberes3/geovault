@@ -1,7 +1,8 @@
 """
 Validation tests for spatial precision and distortion in the areas server.
-Using real database operations to verify that ground-truth geography distance
-is maintained for land features and quantify the error for geometry-optimized ocean lookups.
+Uses real database operations to verify that ground-truth geography distance
+is maintained for land and water features, and to quantify the error when
+using geometry (degrees * constant) instead of geography at higher latitudes.
 """
 import os
 import sys
@@ -161,21 +162,18 @@ class TestRealDatabasePrecision:
         assert pytest.approx(dist_miles, 0.001) == expected_miles
         print(f"\n[PASS] Land feature accuracy at 40N: Reported {dist_miles:.4f} mi, Expected {expected_miles:.4f} mi")
 
-    def test_ocean_distortion_quantified(self, db_conn):
+    def test_ocean_lookup_returns_results(self, db_conn):
         """
-        Confirm and quantify that oceans STILL use geometry (for performance)
-        and thus have valid but distorted distances.
+        Sanity check: standalone ocean lookup (lookup_ocean.run_ocean_single) runs
+        successfully and returns ocean name(s). This path uses geography for distance.
+        Note: the unified query in query.py uses geometry for ocean_region/ocean_main
+        for performance; that path is not exercised here.
         """
-        # Ocean lookups use ST_Distance(geom, geom) * constant or similar
-        # Actually, query.py uses geometry distance.
-        # Let's verify what lookup_ocean returns.
         from areas_lib import lookup_ocean
-        
-        # Point in the middle of typical ocean coordinates
+
         lat, lon = 20.0, -40.0
-        # This hits the DB and uses our optimized (but distorted) logic.
-        name = lookup_ocean.run_ocean_single(db_conn, lat, lon, ocean_radius_miles=10.0)
-        
-        # We want to verify it doesn't crash and returns a name.
-        assert name is not None
-        print(f"\n[INFO] Ocean optimization active: Found {name}")
+        names = lookup_ocean.run_ocean_single(db_conn, lat, lon, ocean_radius_miles=10.0)
+
+        assert names is not None
+        assert len(names) > 0, "Ocean lookup should return at least one name for a mid-ocean point"
+        print(f"\n[INFO] Ocean lookup (geography): found {names}")

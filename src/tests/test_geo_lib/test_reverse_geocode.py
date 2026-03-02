@@ -5,23 +5,24 @@ Responses come from real cached fixtures under tests/fixtures/areas_server/ (loa
 get_areas_fixture). The autouse fixture in conftest.py wires query_areas_server to return
 those fixture responses so tests do not hit the network.
 """
-import pytest
 from unittest.mock import patch
-from django.test import TestCase
-from django.core.cache import cache, caches
 
-from geo_lib.reverse_geocoding.location_tags import (
-    get_location_tags,
-    batch_reverse_geocode_coordinates,
-    tags_from_areas_data,
-)
-from geo_lib.reverse_geocoding.cache import _get_cache_key, _REVERSE_GEOCODING_CACHE
+import pytest
+from django.core.cache import cache, caches
+from django.test import TestCase
+
 from geo_lib.reverse_geocoding.areas_server_models import (
     AreasQueryResponse,
     AdminHierarchy,
     ProtectedArea,
     NearbyLake,
     Waterway,
+)
+from geo_lib.reverse_geocoding.cache import _get_cache_key, _REVERSE_GEOCODING_CACHE
+from geo_lib.reverse_geocoding.location_tags import (
+    get_location_tags,
+    batch_reverse_geocode_coordinates,
+    tags_from_areas_data,
 )
 from geo_lib.spatial.haversine import haversine_distance_miles
 
@@ -368,6 +369,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'city:Nashville',
             'country:United States',
             'county:Davidson County',
+            'lake:Cheatham Lake',
             'protected-area:Bells Bend Park',
             'state:Tennessee',
         ]
@@ -415,6 +417,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
         expected = [
             'country:United States',
             'county:Gunnison County',
+            'lake:Blue Mesa Reservoir',
             'national-recreation-area:Curecanti National Recreation Area',
             'protected-area:BLM - Gunnison Field Office',
             'state:Colorado',
@@ -591,6 +594,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'city:Westminster',
             'country:United States',
             'county:Jefferson County',
+            'lake:Standley Lake',
             'protected-area:Standley Lake Regional Park',
             'state:Colorado',
         ]
@@ -673,6 +677,8 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'city:Grand Lake',
             'country:United States',
             'county:Grand County',
+            'lake:Grand Lake',
+            'lake:Shadow Mountain Lake',
             'state:Colorado',
         ]
         tags, _ = get_location_tags(lat, lon)
@@ -715,6 +721,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
         expected = [
             'country:United States',
             'county:McPherson County',
+            'lake:Sand Beach Lake',
             'state:Nebraska',
         ]
         tags, _ = get_location_tags(lat, lon)
@@ -747,6 +754,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'city:Milton',
             'country:United States',
             'county:Norfolk County',
+            'lake:Ponkapoag Pond',
             'state-park:Blue Hills Reservation',
             'state:Massachusetts',
         ]
@@ -811,6 +819,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'city:Dunes City',
             'country:United States',
             'county:Lane County',
+            'lake:Woahink Lake',
             'national-forest:Siuslaw National Forest',
             'national-recreation-area:Oregon Dunes National Recreation Area',
             'state:Oregon',
@@ -858,6 +867,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'city:Burt Township',
             'country:United States',
             'county:Alger County',
+            'lake:Beaver Lake',
             'national-lakeshore:Pictured Rocks National Lakeshore (Federal Unit)',
             'state:Michigan',
             'wilderness:Beaver Basin Wilderness',
@@ -979,14 +989,14 @@ class TestRiverPointFixtures(ReverseGeocodingTagTestMixin, TestCase):
         tags, _ = get_location_tags(lat, lon)
         self.assert_tags_exact(tags, expected)
 
-    def test_osceola_tennessee(self):
-        """River point at Osceola, TN: admin only (no waterway in fixture)."""
-        lat, lon = 35.71677, -89.93794
+    def test_mississippi_river(self):
+        """River point on the Mississippi (on centerline so waterway within 300 ft): admin + waterway from fixture."""
+        lat, lon = 34.53780, -90.54868
         expected = [
-            'city:Osceola',
             'country:United States',
-            'county:Lauderdale County',
-            'state:Tennessee',
+            'county:Phillips County',
+            'state:Arkansas',
+            'waterway:Mississippi River',
         ]
         tags, _ = get_location_tags(lat, lon)
         self.assert_tags_exact(tags, expected)

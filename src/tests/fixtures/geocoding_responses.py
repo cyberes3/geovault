@@ -21,7 +21,7 @@ SKI_RESORT_TEST_POINTS: Tuple[Tuple[str, float, float], ...] = (
 # River points: (lat, lon) for tests that assert waterway in areas server response.
 RIVER_TEST_POINTS: Tuple[Tuple[float, float], ...] = (
     (39.78976, -104.97147),
-    (35.71677, -89.93794),
+    (34.53780, -90.54868),
 )
 
 

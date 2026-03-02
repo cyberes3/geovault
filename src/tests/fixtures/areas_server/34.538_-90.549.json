@@ -1,0 +1,16 @@
+{
+  "admin_hierarchy": {
+    "city": null,
+    "country": "United States",
+    "county": "Phillips County",
+    "state": "Arkansas"
+  },
+  "lakes": [],
+  "ocean": [],
+  "protected_areas": [],
+  "ski_resort": null,
+  "waterway": {
+    "distance_m": 37,
+    "name": "Mississippi River"
+  }
+}
