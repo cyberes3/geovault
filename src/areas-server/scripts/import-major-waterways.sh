@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# From one or more OSM PBFs: build grouped major rivers and canals per PBF,
+# From one or more OSM PBFs: build grouped major rivers per PBF,
 # merge the GeoJSONs, store in --local-dir, and load into Postgres (waterways.major_waterways).
 # With --load, skip building and import from existing merged GeoJSON in local-dir.
 #
@@ -163,7 +163,7 @@ else
     echo "=== [$((i+1))/${#PBF_PATHS[@]}] Group waterways: $PBF_PATH ==="
     osm-lump-ways-down \
       -i "$PBF_TO_USE" \
-      -f "waterway=river" -f "waterway=canal" \
+      -f "waterway=river" \
       --min-upstream-m 1000 \
       --flow-follows-tag name \
       --grouped-waterways "${WORK_DIR}/grouped.geojson"
@@ -216,7 +216,6 @@ else
 fi
 
 echo "=== Import to Postgres ==="
-# Exclude unnamed (null/empty tag_group_value) and canals (name contains "canal") via ogr2ogr -where
 if [[ "$DATABASE_URL" =~ ^postgresql:// ]]; then
   REST="${DATABASE_URL#postgresql://}"
   if [[ "$REST" =~ ^([^@]+)@(.*)$ ]]; then
@@ -249,9 +248,6 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS waterways.major
 ogr2ogr -f PostgreSQL PG: "$GEOJSON_MERGED_PATH" \
   -nln "waterways.major_waterways" -nlt MULTILINESTRING -unsetFid \
   -oo ARRAY_AS_STRING=YES -t_srs EPSG:4326 -lco GEOMETRY_NAME=geom
-
-# OGR SQL does not support LOWER(); filter in Postgres: drop unnamed, and names containing 'canal' or 'intracoastal'
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DELETE FROM waterways.major_waterways WHERE tag_group_value IS NULL OR tag_group_value = '' OR LOWER(tag_group_value) LIKE '%canal%' OR LOWER(tag_group_value) LIKE '%intracoastal%';"
 
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS major_waterways_tag_group_value ON waterways.major_waterways (tag_group_value);"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS major_waterways_length_m ON waterways.major_waterways (length_m);"
