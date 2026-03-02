@@ -168,9 +168,10 @@ class Command(BaseCommand):
 
         # Only update and report if there is an actual change
         if net_removed or net_added:
-            added_tags_sorted = sorted(all_location_tags)
-            filtered_tags.extend(added_tags_sorted)
-            self._update_feature_tags(feature_store, geojson, filtered_tags, dry_run)
+            # We must use the FULL new set of geocoding tags, combined with the non-geocoding tags
+            # filtered_tags already contains the non-geocoding tags (from _separate_tags)
+            all_tags_sorted = sorted(all_location_tags.union(set(filtered_tags)))
+            self._update_feature_tags(feature_store, geojson, all_tags_sorted, dry_run)
             msg_parts = []
             if net_removed:
                 msg_parts.append(f'removed {len(net_removed)} tags')
