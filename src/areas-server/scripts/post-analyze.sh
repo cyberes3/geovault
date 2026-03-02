@@ -30,3 +30,8 @@ psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS ocean_regions_geom_
 psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS oceans_geom_gist ON \"$SCHEMA\".oceans USING GIST (geom);"
 psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS ski_resorts_geom_gist ON \"$SCHEMA\".ski_resorts USING GIST (geom);"
 psql "$DB" -v ON_ERROR_STOP=1 -c "ANALYZE \"$SCHEMA\".admin_areas; ANALYZE \"$SCHEMA\".protected_areas; ANALYZE \"$SCHEMA\".water_bodies; ANALYZE \"$SCHEMA\".place_nodes; ANALYZE \"$SCHEMA\".ocean_regions; ANALYZE \"$SCHEMA\".oceans; ANALYZE \"$SCHEMA\".ski_resorts;"
+
+# Waterways lookup requires a geography gist index for ST_DWithin and ANALYZE
+# We allow these to fail (|| true) since the waterways schema/table is optional
+psql "$DB" -c "CREATE INDEX IF NOT EXISTS major_waterways_geom_geog_gist ON waterways.major_waterways USING GIST ((geom::geography));" || true
+psql "$DB" -c "ANALYZE waterways.major_waterways;" || true
