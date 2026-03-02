@@ -15,6 +15,18 @@ def _is_running_tests():
     return False
 
 
+def _is_management_command():
+    """True when we're running a management command (e.g. manage.py regeocode_features). Skip APK worker to avoid log noise."""
+    if len(sys.argv) < 2:
+        return False
+    command = sys.argv[1].lower()
+    if command in ('runserver', 'runserver_plus'):
+        return False
+    if 'manage.py' in sys.argv[0]:
+        return True
+    return False
+
+
 class PwaMintConfig(ExtensionAppConfig):
     """
     PWA Minting extension. Does not block server or tests:
@@ -47,6 +59,10 @@ class PwaMintConfig(ExtensionAppConfig):
 
         # Do not start worker during tests (would block: 30s wait + APK HTTP request).
         if _is_running_tests():
+            return
+
+        # Do not start worker for management commands (avoids APK check log noise).
+        if _is_management_command():
             return
 
         # Worker runs in a daemon thread; returns immediately, never blocks server.

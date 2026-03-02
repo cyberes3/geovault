@@ -202,10 +202,14 @@ def batch_reverse_geocode_coordinates(
     # Step 1: Deduplicate coordinates by rounding to cache precision
     coord_mapping = {}  # Maps rounded coord -> list of original coords
     for lat, lon in coordinates:
+        # Use high precision for the mapping to ensure we return results for the exact
+        # coordinates requested, while still allowing the underlying fetch to use
+        # rounded coordinates for caching.
+        exact = (lat, lon)
         rounded = round_coordinate(lat, lon)
         if rounded not in coord_mapping:
             coord_mapping[rounded] = []
-        coord_mapping[rounded].append((lat, lon))
+        coord_mapping[rounded].append(exact)
 
     # Step 2: Fetch results for unique coordinates in parallel (cache-aware)
     results = {}
@@ -214,19 +218,19 @@ def batch_reverse_geocode_coordinates(
     # Process coordinates in parallel to avoid sequential delays
     # Limit to 2 concurrent workers to avoid overwhelming the API
     with ThreadPoolExecutor(max_workers=min(len(unique_coords), 1)) as executor:
-        future_to_coord = {
-            executor.submit(_get_from_cache_or_fetch, lat, lon): (lat, lon)
-            for lat, lon in unique_coords
+        future_to_rounded = {
+            executor.submit(_get_from_cache_or_fetch, r_lat, r_lon): (r_lat, r_lon)
+            for r_lat, r_lon in unique_coords
         }
         
-        for future in future_to_coord:
-            lat, lon = future_to_coord[future]
+        for future in future_to_rounded:
+            r_lat, r_lon = future_to_rounded[future]
             try:
                 tags, log_messages = future.result()
-                results[(lat, lon)] = (tags, log_messages)
+                results[(r_lat, r_lon)] = (tags, log_messages)
             except Exception as e:
-                _logger.error(f"Error reverse geocoding ({lat}, {lon}): {e}")
-                results[(lat, lon)] = ([], [])
+                _logger.error(f"Error reverse geocoding ({r_lat}, {r_lon}): {e}")
+                results[(r_lat, r_lon)] = ([], [])
 
     # Step 3: Map all original coordinates back to results
     final_results = {}
