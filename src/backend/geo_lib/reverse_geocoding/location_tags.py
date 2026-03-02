@@ -59,29 +59,30 @@ def tags_from_areas_data(response: Union[AreasQueryResponse, dict]) -> List[str]
         if not area.name:
             continue
         area_type = classify_protected_area(area.model_dump())
-        protected_area_tags.add(f"{area_type}:{area.name}")
+        name_for_tag = area.name.replace("_", " ")
+        protected_area_tags.add(f"{area_type}:{name_for_tag}")
     tags.extend(sorted(protected_area_tags))
 
     seen_ocean: set = set()
     for name in response.ocean[:2]:
-        n = (name or "").strip()
+        n = (name or "").strip().replace("_", " ")
         if n and n not in seen_ocean:
             seen_ocean.add(n)
             tags.append(f"ocean:{n}")
 
     lake_tags: set = set()
     for lake in response.lakes[:3]:
-        lake_tags.add(f"lake:{lake.name}")
+        lake_tags.add(f"lake:{lake.name.replace('_', ' ')}")
     tags.extend(sorted(lake_tags))
 
     if response.ski_resort and response.ski_resort.strip():
-        tags.append(f"ski-resort:{response.ski_resort.strip()}")
+        tags.append(f"ski-resort:{response.ski_resort.strip().replace('_', ' ')}")
 
     # Add waterway tag when within 300 ft of river/canal centerline (rivers are linestrings, not polygons like lakes).
     if response.waterway and response.waterway.name and response.waterway.name.strip():
         dist_m = response.waterway.distance_m
         if dist_m is not None and dist_m <= WATERWAY_TAG_MAX_DISTANCE_M:
-            tags.append(f"waterway:{response.waterway.name.strip()}")
+            tags.append(f"waterway:{response.waterway.name.strip().replace('_', ' ')}")
 
     return tags
 
