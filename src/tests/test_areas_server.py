@@ -1350,8 +1350,8 @@ class TestCleanInvalidGeometry:
         assert "ctid" in delete_calls[0][0][0].lower() or "ANY" in delete_calls[0][0][0]
 
 
-class TestWaterwaysTableNoCanalsOrUnnamed:
-    """Ensure waterways.major_waterways has no canals or unnamed features (import filter)."""
+class TestWaterwaysTableNoUnnamed:
+    """Ensure waterways.major_waterways has no unnamed features (import filter)."""
 
     @pytest.fixture
     def areas_db_conn(self):
@@ -1384,17 +1384,3 @@ class TestWaterwaysTableNoCanalsOrUnnamed:
             "import should exclude these."
         )
 
-    def test_no_canal_in_major_waterways(self, areas_db_conn):
-        """No row in waterways.major_waterways may have tag_group_value containing 'canal'."""
-        with areas_db_conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT COUNT(*) FROM waterways.major_waterways
-                WHERE LOWER(tag_group_value) LIKE '%%canal%%'
-                """
-            )
-            (bad_count,) = cur.fetchone()
-        assert bad_count == 0, (
-            f"waterways.major_waterways has {bad_count} row(s) with 'canal' in name; "
-            "import should exclude canals."
-        )

@@ -249,6 +249,12 @@ ogr2ogr -f PostgreSQL PG: "$GEOJSON_MERGED_PATH" \
   -nln "waterways.major_waterways" -nlt MULTILINESTRING -unsetFid \
   -oo ARRAY_AS_STRING=YES -t_srs EPSG:4326 -lco GEOMETRY_NAME=geom
 
+# Exclude unnamed rows (matches test_areas_server TestWaterwaysTableNoUnnamed)
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+  DELETE FROM waterways.major_waterways
+  WHERE tag_group_value IS NULL OR trim(tag_group_value) = '';
+"
+
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS major_waterways_tag_group_value ON waterways.major_waterways (tag_group_value);"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS major_waterways_length_m ON waterways.major_waterways (length_m);"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS major_waterways_max_upstream_m ON waterways.major_waterways (max_upstream_m);"
