@@ -170,8 +170,10 @@ class ReverseGeocodingTagGenerator(TagGenerator):
             if geometry_type in ['point', 'multipoint', 'linestring', 'multilinestring']:
                 points = get_representative_points(feature)
                 if points:
-                    feature_coords[i] = points
-                    all_coordinates.extend(points)
+                    # Ensure points are tuples for dictionary keys
+                    points_tuples = [tuple(p) if isinstance(p, (list, tuple)) else p for p in points]
+                    feature_coords[i] = points_tuples
+                    all_coordinates.extend(points_tuples)
         
         if not all_coordinates:
             return {i: [] for i in range(len(features))}

@@ -43,6 +43,7 @@ REVERSE_GEOCODING_TAG_PREFIXES = [
     'national-seashore',
     'national-lakeshore',
     'state-park',
+    'park',
     'wilderness',
     'protected-area',  # Default for unclassified protected areas
     'waterway',
