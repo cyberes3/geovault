@@ -109,6 +109,9 @@ class PlaceEditActivity : AppCompatActivity() {
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
     }
 
+    /** Zoom level when focusing on a single point (same as MapActivity zoom-to-point). */
+    private val zoomLevelPoint = 16.0
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -258,6 +261,7 @@ class PlaceEditActivity : AppCompatActivity() {
         val eventsReceiver = object : MapEventsReceiver {
             override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
                 updateCoords(p.latitude, p.longitude, null)
+                zoomToPoint(p.latitude, p.longitude)
                 return true
             }
             override fun longPressHelper(p: GeoPoint): Boolean = false
@@ -422,8 +426,7 @@ class PlaceEditActivity : AppCompatActivity() {
         val lat = coords[1]
         val displayText = result.place_name ?: result.text
         updateCoords(lat, lon, displayText)
-        map.controller.animateTo(GeoPoint(lat, lon))
-        map.controller.setZoom(15.0)
+        zoomToPoint(lat, lon)
         closeSearchBar()
     }
 
@@ -493,7 +496,7 @@ class PlaceEditActivity : AppCompatActivity() {
             coordinatesInput.setText(String.format("%.6f, %.6f", parsed.first, parsed.second))
             coordinatesInput.setSelection(coordinatesInput.text?.length ?: 0)
             updateMarker(parsed.first, parsed.second)
-            map.controller.animateTo(GeoPoint(parsed.first, parsed.second))
+            zoomToPoint(parsed.first, parsed.second)
             validateForm()
             return
         }
@@ -564,8 +567,7 @@ class PlaceEditActivity : AppCompatActivity() {
                         coordinatesInput.setSelection(coordinatesInput.text?.length ?: 0)
                         coordinatesError.visibility = View.GONE
                         updateMarker(lat, lon)
-                        map.controller.animateTo(GeoPoint(lat, lon))
-                        map.controller.setZoom(15.0)
+                        zoomToPoint(lat, lon)
                     } else {
                         coordinatesError.text = "Address not found"
                         coordinatesError.visibility = View.VISIBLE
@@ -596,10 +598,15 @@ class PlaceEditActivity : AppCompatActivity() {
             val displayText = if (!address.isNullOrBlank()) address else null
             updateCoords(coords[1], coords[0], displayText)
             map.post {
-                map.controller.setZoom(14.0)
+                map.controller.setZoom(zoomLevelPoint)
                 map.controller.setCenter(GeoPoint(coords[1], coords[0]))
             }
         }
+    }
+
+    private fun zoomToPoint(lat: Double, lon: Double) {
+        map.controller.animateTo(GeoPoint(lat, lon))
+        map.controller.setZoom(zoomLevelPoint)
     }
 
     private fun updateCoords(lat: Double, lon: Double, displayText: String?) {
@@ -646,16 +653,14 @@ class PlaceEditActivity : AppCompatActivity() {
                 location?.let {
                     setLocationLoading(false)
                     updateCoords(it.latitude, it.longitude, null)
-                    map.controller.animateTo(GeoPoint(it.latitude, it.longitude))
-                    map.controller.setZoom(15.0)
+                    zoomToPoint(it.latitude, it.longitude)
                 } ?: run {
                     // Fallback to last location if fresh one fails
                     fusedLocationClient.lastLocation.addOnSuccessListener { lastLoc ->
                         setLocationLoading(false)
                         lastLoc?.let {
                             updateCoords(it.latitude, it.longitude, null)
-                            map.controller.animateTo(GeoPoint(it.latitude, it.longitude))
-                            map.controller.setZoom(15.0)
+                            zoomToPoint(it.latitude, it.longitude)
                         } ?: run {
                             Toast.makeText(this, "Could not get location", Toast.LENGTH_SHORT).show()
                         }
