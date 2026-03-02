@@ -42,6 +42,18 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f'Feature {feature_id} has no geometry in geojson'))
             return
 
+        geom_type = geom.get('type', '')
+        coords = geom.get('coordinates')
+        if geom_type in ('LineString', 'MultiLineString', 'Polygon', 'MultiPolygon') and coords is not None:
+            if geom_type == 'LineString':
+                coords = coords[:3]
+            elif geom_type == 'MultiLineString':
+                coords = [coords[0][:3]] if coords else []
+            elif geom_type == 'Polygon':
+                coords = [coords[0][:3]] if coords and coords[0] else []
+            else:  # MultiPolygon
+                coords = [coords[0][0][:3]] if coords and coords[0] and coords[0][0] else []
+
         self.stdout.write(f'Feature {feature_id} (user_id={feature.user_id})')
-        self.stdout.write(f'  type: {geom.get("type")}')
-        self.stdout.write(f'  coordinates: {json.dumps(geom.get("coordinates"), indent=4)}')
+        self.stdout.write(f'  type: {geom_type}')
+        self.stdout.write(f'  coordinates: {json.dumps(coords, indent=4)}')
