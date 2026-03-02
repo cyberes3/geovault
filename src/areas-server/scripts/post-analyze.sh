@@ -19,6 +19,9 @@ shift || true
 
 SCHEMA="is_in"
 
+# Geometry GIST for ST_Contains/&& on admin and protected (critical for single-point and batch latency)
+psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS admin_areas_geom_gist ON \"$SCHEMA\".admin_areas USING GIST (geom);"
+psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS protected_areas_geom_gist ON \"$SCHEMA\".protected_areas USING GIST (geom);"
 # Geography GIST speeds up ST_DWithin(geography(geom), ...) for water/place radius lookups
 psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS water_bodies_geom_geog_gist ON \"$SCHEMA\".water_bodies USING GIST ((geom::geography));"
 psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS place_nodes_geom_geog_gist ON \"$SCHEMA\".place_nodes USING GIST ((geom::geography));"
