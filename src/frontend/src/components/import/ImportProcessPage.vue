@@ -5,6 +5,7 @@
       :original-filename="originalFilename"
       :upload-timestamp="uploadTimestamp"
       :is-imported="isImported"
+      :import-item-id="currentId"
     />
 
     <!-- Import Logs -->

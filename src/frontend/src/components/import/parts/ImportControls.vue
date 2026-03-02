@@ -83,28 +83,30 @@
     </div>
 
     <!-- Pagination Controls -->
-    <div v-if="(hasFeatures || isLoadingPage)" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-      <div class="flex flex-col md:flex-row md:items-center md:justify-center gap-4">
-        <div class="text-sm text-gray-700 text-center md:text-left">
+    <div v-if="(hasFeatures || isLoadingPage)" class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <!-- Feature count -->
+        <div class="flex items-center shrink-0 text-sm text-gray-700 whitespace-nowrap">
           <span v-if="!isLoadingPage">
             Showing features {{ (currentPage - 1) * pageSize + 1 }} - {{ Math.min(currentPage * pageSize, totalFeatures) }} of {{ totalFeatures }}
           </span>
           <span v-else class="text-blue-500 font-medium">Loading...</span>
         </div>
-        <div class="flex flex-wrap items-center justify-center md:justify-start gap-2 md:gap-3">
-          <!-- Hide Duplicates Toggle -->
-          <div v-if="hasFeatures && !isLoadingPage" class="flex items-center space-x-2 md:mr-4 md:pr-4 md:border-r border-gray-300 w-full md:w-auto justify-center md:justify-start mb-2 md:mb-0">
-            <ToggleButton
-                :model-value="hideDuplicates"
-                label="Hide duplicates"
-                :disabled="isLoadingPage"
-                size="sm"
-                @update:model-value="$emit('toggle-hide-duplicates', $event)"
-            />
-            <label class="text-sm text-gray-700 cursor-pointer whitespace-nowrap" @click="!isLoadingPage && $emit('toggle-hide-duplicates', !hideDuplicates)">
-              Hide duplicates
-            </label>
-          </div>
+        <!-- Hide Duplicates Toggle -->
+        <div v-if="hasFeatures && !isLoadingPage" class="flex items-center gap-2 shrink-0 border-r border-gray-200 pr-4">
+          <ToggleButton
+              :model-value="hideDuplicates"
+              label="Hide duplicates"
+              :disabled="isLoadingPage"
+              size="sm"
+              @update:model-value="$emit('toggle-hide-duplicates', $event)"
+          />
+          <label class="text-sm text-gray-700 cursor-pointer whitespace-nowrap" @click="!isLoadingPage && $emit('toggle-hide-duplicates', !hideDuplicates)">
+            Hide duplicates
+          </label>
+        </div>
+        <!-- Pagination -->
+        <div class="flex items-center gap-2 shrink-0">
           <BaseButton
               :disabled="!hasPreviousPage || isLoadingPage || totalPages <= 1"
               variant="white"
@@ -115,49 +117,51 @@
             <ChevronLeftIcon class="w-4 h-4 mr-1" />
             Previous
           </BaseButton>
-          <span class="text-sm text-gray-700">Page {{ currentPage }} of {{ totalPages }}</span>
+          <span class="text-sm text-gray-700 whitespace-nowrap">Page {{ currentPage }} of {{ totalPages }}</span>
           <button
               :disabled="!hasNextPage || isLoadingPage || totalPages <= 1"
-              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              class="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               @click="$emit('next-page')"
               title="Go to next page"
           >
             Next
             <ChevronRightIcon class="w-4 h-4 ml-1" />
           </button>
-          <div class="flex items-center space-x-2 md:ml-4 md:pl-4 md:border-l border-gray-300">
-            <label class="text-sm text-gray-700" for="goto-page">Go to:</label>
-            <input
-                id="goto-page"
-                v-model.number="gotoPageInputLocal"
-                :disabled="isLoadingPage || totalPages <= 1"
-                :max="totalPages"
-                class="w-16 px-2 py-1 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                min="1"
-                type="number"
-                @keyup.enter="jumpToPage"
-            />
-            <button
-                :disabled="isLoadingPage || !isValidPageNumber || totalPages <= 1"
-                class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                @click="jumpToPage"
-                title="Jump to page"
+        </div>
+        <!-- Go to page -->
+        <div class="flex items-center gap-2 shrink-0 border-l border-gray-200 pl-4">
+          <label class="text-sm text-gray-700 whitespace-nowrap" for="goto-page">Go to:</label>
+          <input
+              id="goto-page"
+              v-model.number="gotoPageInputLocal"
+              :disabled="isLoadingPage || totalPages <= 1"
+              :max="totalPages"
+              class="w-14 px-2 py-1 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              min="1"
+              type="number"
+              @keyup.enter="jumpToPage"
+          />
+          <button
+              :disabled="isLoadingPage || !isValidPageNumber || totalPages <= 1"
+              class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              @click="jumpToPage"
+              title="Jump to page"
             >
               Go
             </button>
-          </div>
-          <BaseButton
-              :disabled="isLoadingPage || !hasFeatures"
-              variant="white"
-              size="sm"
-              class="w-full md:w-auto md:ml-4 md:pl-4 md:border-l"
-              @click="$emit('show-map-preview')"
-              title="Preview all features on current page"
-          >
-            <MapIcon class="w-4 h-4 mr-2" />
-            Map Preview (Current Page)
-          </BaseButton>
         </div>
+        <!-- Map Preview -->
+        <BaseButton
+            :disabled="isLoadingPage || !hasFeatures"
+            variant="white"
+            size="sm"
+            class="shrink-0 border-l border-gray-200 pl-4 ml-auto"
+            @click="$emit('show-map-preview')"
+            title="Preview all features on current page"
+        >
+          <MapIcon class="w-4 h-4 mr-2" />
+          Map Preview (Current Page)
+        </BaseButton>
       </div>
     </div>
 

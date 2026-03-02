@@ -5,7 +5,7 @@
     max-width="6xl"
     @close="$emit('close')"
   >
-    <div class="h-full overflow-auto p-4">
+    <div ref="logScrollContainer" class="h-full overflow-auto p-4">
           <div class="space-y-1 sm:space-y-0">
             <div
                 v-for="(item, index) in logs"
@@ -86,7 +86,23 @@ export default {
       }
     }
   },
+  watch: {
+    logs() {
+      this.$nextTick(this.scrollToBottom);
+    },
+    isOpen(open) {
+      if (open) {
+        this.$nextTick(this.scrollToBottom);
+      }
+    }
+  },
   methods: {
+    scrollToBottom() {
+      const el = this.$refs.logScrollContainer;
+      if (el) {
+        el.scrollTop = el.scrollHeight;
+      }
+    },
     getLevelName(level) {
       const levelMap = {
         10: 'DEBUG',

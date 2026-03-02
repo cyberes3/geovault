@@ -9,6 +9,7 @@ from typing import Union, Optional
 from geo_lib.processing.file_types import FileType
 from geo_lib.processing.file_types import detect_file_type
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatusTracker
+from geo_lib.processing.logging import RealTimeImportLog
 from .base_processor import BaseProcessor
 from .geojson_processor import GeoJSONProcessor
 from .gpx_processor import GPXProcessor
@@ -21,10 +22,11 @@ def get_processor(file_data: Union[bytes, str], filename: str = "",
                   status_tracker: Optional[ProcessingStatusTracker] = None,
                   minimal_processing: bool = False,
                   user_id: Optional[int] = None,
-                  import_queue_id: Optional[int] = None) -> BaseProcessor:
+                  import_queue_id: Optional[int] = None,
+                  realtime_log: Optional[RealTimeImportLog] = None) -> BaseProcessor:
     """
     Factory function to create the appropriate processor for a file type.
-    
+
     Args:
         file_data: File content as bytes or string
         filename: Optional filename for type detection
@@ -33,10 +35,11 @@ def get_processor(file_data: Union[bytes, str], filename: str = "",
         minimal_processing: If True, skip tag generation and other expensive operations
         user_id: Optional user ID for database operations
         import_queue_id: Optional import queue ID for database operations
-        
+        realtime_log: Optional real-time log for streaming messages (e.g. elevation batch progress)
+
     Returns:
         Appropriate processor instance
-        
+
     Raises:
         ValueError: If file type is not supported
     """
@@ -50,17 +53,21 @@ def get_processor(file_data: Union[bytes, str], filename: str = "",
         if ext and ext not in supported_extensions:
             raise ValueError(f"Unsupported file type: {ext}")
 
+    kwargs = dict(
+        job_id=job_id,
+        status_tracker=status_tracker,
+        minimal_processing=minimal_processing,
+        user_id=user_id,
+        import_queue_id=import_queue_id,
+        realtime_log=realtime_log,
+    )
     if file_type == FileType.KML:
-        return KMLProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker,
-                            minimal_processing=minimal_processing, user_id=user_id, import_queue_id=import_queue_id)
+        return KMLProcessor(file_data, filename, **kwargs)
     elif file_type == FileType.KMZ:
-        return KMZProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker,
-                            minimal_processing=minimal_processing, user_id=user_id, import_queue_id=import_queue_id)
+        return KMZProcessor(file_data, filename, **kwargs)
     elif file_type == FileType.GPX:
-        return GPXProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker,
-                            minimal_processing=minimal_processing, user_id=user_id, import_queue_id=import_queue_id)
+        return GPXProcessor(file_data, filename, **kwargs)
     elif file_type == FileType.GEOJSON:
-        return GeoJSONProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker,
-                                minimal_processing=minimal_processing, user_id=user_id, import_queue_id=import_queue_id)
+        return GeoJSONProcessor(file_data, filename, **kwargs)
     else:
         raise ValueError(f"Unsupported file type: {file_type}")

@@ -24,8 +24,7 @@
         <!-- Recheck Duplicates Button -->
         <BaseButton
           :disabled="isDisabled || isRecheckingDuplicates"
-          variant="secondary"
-          color="blue"
+          variant="white"
           size="md"
           no-wrap
           @click="$emit('recheck-duplicates')"
@@ -38,8 +37,7 @@
         <!-- Bulk Operations Button -->
         <BaseButton
           :disabled="isDisabled"
-          variant="secondary"
-          color="blue"
+          variant="white"
           size="md"
           no-wrap
           @click="$emit('open-bulk-operations')"

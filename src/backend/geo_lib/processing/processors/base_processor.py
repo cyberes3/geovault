@@ -29,7 +29,7 @@ from geo_lib.processing.geo import (
 )
 from geo_lib.utils.date_parser import parse_date_field
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatusTracker, ProcessingStatus
-from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
+from geo_lib.processing.logging import ImportLog, RealTimeImportLog, DatabaseLogLevel
 from geo_lib.processing.utils import inject_feature_hashes
 from geo_lib.security.SecureFileValidator import validate_file
 from geo_lib.security.exceptions import FileValidationError
@@ -54,10 +54,11 @@ class BaseProcessor(ABC):
                  status_tracker: Optional[ProcessingStatusTracker] = None,
                  minimal_processing: bool = False,
                  user_id: Optional[int] = None,
-                 import_queue_id: Optional[int] = None):
+                 import_queue_id: Optional[int] = None,
+                 realtime_log: Optional[RealTimeImportLog] = None):
         """
         Initialize the processor.
-        
+
         Args:
             file_data: File content as bytes or string
             filename: Original filename for context
@@ -66,6 +67,8 @@ class BaseProcessor(ABC):
             minimal_processing: If True, skip tag generation and other expensive operations
             user_id: Optional user ID for database operations
             import_queue_id: Optional import queue ID for database operations
+            realtime_log: Optional real-time log; when set, long-running steps (e.g. elevation)
+                write to it so messages appear in the UI as they happen.
         """
         self.file_data = file_data
         self.filename = filename
@@ -78,6 +81,7 @@ class BaseProcessor(ABC):
         self.minimal_processing = minimal_processing
         self.user_id = user_id
         self.import_queue_id = import_queue_id
+        self.realtime_log = realtime_log
         self._executor = None  # Store executor reference for proper shutdown
 
     def detect_file_type(self) -> FileType:
@@ -308,11 +312,15 @@ class BaseProcessor(ABC):
         Step 5: Fill missing elevation data for features.
         Uses elevation API to fill in missing elevation values.
         Operates on self.processed_features in-place.
-        
+        When self.realtime_log is set, batch progress is written there so messages
+        appear in the import log as each batch is processed.
+
         Returns:
-            ImportLog with elevation filling information
+            ImportLog with elevation filling information (empty when using realtime_log)
         """
         step_log = ImportLog()
+        # Use realtime log when available so batch messages stream to the UI
+        elevation_log = self.realtime_log if self.realtime_log is not None else step_log
 
         try:
             # Check if elevation API is enabled
@@ -324,12 +332,12 @@ class BaseProcessor(ABC):
 
             # Check for cancellation
             if self._is_canceled():
-                step_log.add("Processing canceled during elevation data filling", "Processing", DatabaseLogLevel.WARNING)
+                elevation_log.add("Processing canceled during elevation data filling", "Processing", DatabaseLogLevel.WARNING)
                 return step_log
 
             # Fill elevations (modifies features in-place)
             temp_geojson = {'type': 'FeatureCollection', 'features': self.processed_features}
-            fill_missing_elevations(temp_geojson, step_log)
+            fill_missing_elevations(temp_geojson, elevation_log)
 
         except Exception as e:
             step_log.add(f"Elevation data filling failed: {str(e)}", "Elevation Service", DatabaseLogLevel.ERROR)

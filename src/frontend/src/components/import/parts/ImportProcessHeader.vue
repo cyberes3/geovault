@@ -7,7 +7,19 @@
         <div v-else class="h-6 w-48 bg-gray-200 rounded animate-pulse"></div>
         <p v-if="uploadTimestamp != null" class="text-xs sm:text-sm text-gray-500 mt-1">{{ formattedUploadDate }}</p>
       </div>
-      <div class="flex items-center sm:justify-end">
+      <div class="flex items-center sm:justify-end gap-2">
+        <BaseButton
+          v-if="importItemId != null"
+          tag="a"
+          :href="downloadOriginalUrl"
+          variant="white"
+          size="sm"
+          download
+          title="Download original file"
+        >
+          <ArrowDownTrayIcon class="w-4 h-4 mr-1.5" />
+          Download original
+        </BaseButton>
         <span v-if="isImported" class="inline-flex items-center px-3 py-1 rounded-full text-xs sm:text-sm font-medium bg-green-100 text-green-800">
           <CheckIcon class="w-4 h-4 mr-1" />
           Imported
@@ -18,13 +30,17 @@
 </template>
 
 <script>
-import { CheckIcon } from '@heroicons/vue/24/outline';
+import BaseButton from '@/components/parts/BaseButton.vue';
+import { CheckIcon, ArrowDownTrayIcon } from '@heroicons/vue/24/outline';
 import { formatDate } from '@/utils/dateUtils.js';
+import { IMPORT_HISTORY_URL } from '@/assets/js/import/url.js';
 
 export default {
   name: 'ImportProcessHeader',
   components: {
-    CheckIcon
+    BaseButton,
+    CheckIcon,
+    ArrowDownTrayIcon
   },
   props: {
     originalFilename: {
@@ -38,11 +54,18 @@ export default {
     isImported: {
       type: Boolean,
       default: false
+    },
+    importItemId: {
+      type: Number,
+      default: null
     }
   },
   computed: {
     formattedUploadDate() {
       return formatDate(this.uploadTimestamp);
+    },
+    downloadOriginalUrl() {
+      return this.importItemId != null ? `${IMPORT_HISTORY_URL}/${this.importItemId}` : null;
     }
   }
 };

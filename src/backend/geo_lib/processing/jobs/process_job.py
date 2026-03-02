@@ -300,6 +300,7 @@ class ProcessJob(BaseJob):
 
             # Create processor instance
             # Use minimal processing for replacement uploads (skip tags, reverse_geocoding)
+            # Pass realtime_log so long-running steps (e.g. elevation batches) stream to the UI
             processor = get_processor(
                 file_data,
                 filename,
@@ -307,7 +308,8 @@ class ProcessJob(BaseJob):
                 status_tracker=self.status_tracker,
                 minimal_processing=is_replacement,
                 user_id=user_id,
-                import_queue_id=import_queue_id
+                import_queue_id=import_queue_id,
+                realtime_log=realtime_log,
             )
 
             # Detect file type (needed for timing labels)
