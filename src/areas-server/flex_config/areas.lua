@@ -37,8 +37,13 @@ local WATER_EXCLUDE = {
 
 -- Water bodies: name required. Include natural=water (and water=* except excluded), natural=lake, landuse=reservoir.
 -- Exclude water=river/stream/canal/ditch/drain/rapids so we keep standing water (lakes, ponds, reservoirs, lagoons, etc.).
+-- Exclude only man-made swimming pools (leisure=swimming_pool, amenity=swimming_pool). Do not exclude
+-- sport=swimming or leisure=swimming_area: those can apply to natural lakes (designated swimming zones).
 local function is_water_tag(tags)
     if not get_name(tags) then return false end
+    if tags.leisure == 'swimming_pool' or tags.amenity == 'swimming_pool' then
+        return false
+    end
     local natural = tags.natural or ''
     local water = tags.water or ''
     local landuse = tags.landuse or ''
@@ -86,10 +91,12 @@ local protected_areas = osm2pgsql.define_area_table('protected_areas', {
 }})
 
 -- Water bodies: lakes, reservoirs, ponds (polygon for shoreline + on-water).
+-- tags stored so delete-small-lakes.py can also remove swimming pools etc. by tag.
 local water_bodies = osm2pgsql.define_area_table('water_bodies', {
     { column = 'osm_id', type = 'int8', not_null = true },
     { column = 'name', type = 'text' },
     { column = 'water_type', type = 'text' },
+    { column = 'tags', type = 'jsonb' },
     { column = 'geom', type = 'geometry', not_null = true, projection = 4326 },
     { column = 'created', sql_type = 'timestamptz' },
 }, { indexes = {
@@ -153,6 +160,7 @@ function osm2pgsql.process_relation(object)
                 osm_id = object.id,
                 name = get_name(t),
                 water_type = water_type_from_tags(t),
+                tags = t,
                 geom = geom,
                 created = format_timestamp(object.timestamp),
             })
@@ -184,6 +192,7 @@ function osm2pgsql.process_way(object)
                 osm_id = object.id,
                 name = get_name(object.tags),
                 water_type = water_type_from_tags(object.tags),
+                tags = object.tags,
                 geom = geom,
                 created = format_timestamp(object.timestamp),
             })

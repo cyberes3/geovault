@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Delete water bodies smaller than a minimum area (default 0.25 sq mi).
-Run after import (no need to pre-compute area; uses ST_Area(geography(geom)) in the DELETE).
+Delete water bodies smaller than a minimum area (default 0.25 sq mi) and those that are
+swimming pools / sport=swimming (same exclusions as areas.lua). Run after import.
 
 Usage (from src/areas-server):
   python scripts/delete-small-lakes.py DATABASE_URL [--min-area-sqmi 0.25] [--dry-run]
@@ -20,9 +20,27 @@ from config import SCHEMA
 # 1 sq mi = 2.589988110336 km²
 SQMI_TO_SQKM = 2.589988110336
 
+# Same exclusions as areas.lua: man-made pools only. Do not exclude sport=swimming or
+# leisure=swimming_area — those can apply to natural lakes (designated swimming zones).
+POOL_CONDITION = """(
+    (tags->>'leisure' = 'swimming_pool')
+    OR (tags->>'amenity' = 'swimming_pool')
+)"""
+
+
+def _has_tags_column(cur) -> bool:
+    cur.execute(
+        """
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = %s AND table_name = 'water_bodies' AND column_name = 'tags'
+        """,
+        (SCHEMA,),
+    )
+    return cur.fetchone() is not None
+
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Delete small lakes from water_bodies.")
+    parser = argparse.ArgumentParser(description="Delete small lakes and swimming pools from water_bodies.")
     parser.add_argument(
         "database",
         type=str,
@@ -48,32 +66,37 @@ def main() -> None:
 
     with psycopg.connect(conninfo) as conn:
         with conn.cursor() as cur:
-            print('Reading database...')
-            # Area from geometry (m²) / 1e6 = km²; no pre-computed column needed
+            has_tags = _has_tags_column(cur)
             area_expr = "public.ST_Area(public.geography(geom)) / 1e6"
+            # Delete if below area threshold OR (when tags column exists) if swimming pool by tag
+            if has_tags:
+                where_clause = f"({area_expr}) < %s OR {POOL_CONDITION}"
+            else:
+                where_clause = f"({area_expr}) < %s"
+            print("Reading database...")
             cur.execute(
                 f"""
                 SELECT COUNT(*) FROM {SCHEMA}.water_bodies
-                WHERE ({area_expr}) < %s
+                WHERE {where_clause}
                 """,
                 (min_sqkm,),
             )
             (n,) = cur.fetchone()
             if n == 0:
-                print("No water bodies below minimum area; nothing to delete.")
+                print("No water bodies to delete (none below area threshold or matching pool tags).")
                 return
             if args.dry_run:
-                print(f"Would delete {n} water bodies with area < {args.min_area_sqmi} sq mi (< {min_sqkm:.4f} km²).")
+                print(f"Would delete {n} water bodies (area < {args.min_area_sqmi} sq mi or swimming pools).")
                 return
             batch_size = 5000
             deleted = 0
-            with tqdm(total=n, unit="rows", desc="Deleting small lakes") as pbar:
+            with tqdm(total=n, unit="rows", desc="Deleting small lakes and pools") as pbar:
                 while True:
                     cur.execute(
                         f"""
                         WITH to_del AS (
                             SELECT ctid FROM {SCHEMA}.water_bodies
-                            WHERE ({area_expr}) < %s
+                            WHERE {where_clause}
                             LIMIT %s
                         )
                         DELETE FROM {SCHEMA}.water_bodies
@@ -87,7 +110,7 @@ def main() -> None:
                     deleted += batch_deleted
                     pbar.update(batch_deleted)
             conn.commit()
-    print(f"Deleted {deleted} water bodies with area < {args.min_area_sqmi} sq mi.")
+    print(f"Deleted {deleted} water bodies (small and/or swimming pools).")
 
 
 if __name__ == "__main__":

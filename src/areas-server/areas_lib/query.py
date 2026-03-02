@@ -5,7 +5,7 @@ Runs admin, protected_areas, and water lookups; exposes query_single, query_batc
 from typing import Any, Dict, List, Optional, Tuple
 
 from config import SCHEMA
-from areas_lib import lookup_admin, lookup_water, lookup_protected_areas, lookup_ocean, lookup_places, lookup_ski_resort
+from areas_lib import lookup_admin, lookup_water, lookup_protected_areas, lookup_ocean, lookup_places, lookup_ski_resort, lookup_waterway
 
 # Limits for single-point query (must match lookup module constants)
 _PROTECTED_LIMIT = 5
@@ -13,7 +13,7 @@ _NEARBY_LAKES_LIMIT = 5
 _MILES_TO_M = 1609.34
 
 
-def _query_single_sql(include_place: bool) -> Tuple[str, List[Any]]:
+def _query_single_sql(include_place: bool, include_waterway: bool = True) -> Tuple[str, List[Any]]:
     """Build one UNION ALL query for single point and return (sql, params). Params: lon, lat, lake_radius_m, ocean_radius_m (region), ocean_radius_m (main)[, city_radius_m]."""
     pt_cte = f"WITH pt AS (SELECT public.ST_SetSRID(public.ST_MakePoint(%s, %s), 4326) AS geom)"
     parts = [
@@ -88,6 +88,17 @@ def _query_single_sql(include_place: bool) -> Tuple[str, List[Any]]:
         LIMIT 1)
         """,
     ]
+    if include_waterway:
+        parts.append(
+            f"""
+        (SELECT 'waterway' AS layer, jsonb_build_object('name', w.tag_group_value,
+                 'distance_m', (public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)))::int)
+         FROM {lookup_waterway.WATERWAYS_SCHEMA}.{lookup_waterway.TABLE_NAME} w, pt
+         WHERE public.ST_DWithin(public.geography(w.geom), public.geography(pt.geom), %s)
+         ORDER BY public.ST_Distance(public.geography(w.geom), public.geography(pt.geom))
+         LIMIT 1)
+        """
+        )
     if include_place:
         parts.append(
             f"""
@@ -102,7 +113,7 @@ def _query_single_sql(include_place: bool) -> Tuple[str, List[Any]]:
     return sql, []
 
 
-def _query_batch_sql(include_place: bool) -> str:
+def _query_batch_sql(include_place: bool, include_waterway: bool = True) -> str:
     """Build one UNION ALL query for batch (all points, all layers). Params: indices, lons, lats, lake_radius_m, ocean_radius_m[, city_radius_m]."""
     cte = f"""
     WITH p AS (
@@ -202,6 +213,22 @@ def _query_batch_sql(include_place: bool) -> str:
         WHERE sub.payload IS NOT NULL
         """,
     ]
+    if include_waterway:
+        parts.append(
+            f"""
+        SELECT pt.point_idx, 'waterway' AS layer, sub.payload
+        FROM pt
+        LEFT JOIN LATERAL (
+            SELECT jsonb_build_object('name', w.tag_group_value,
+                     'distance_m', (public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)))::int) AS payload
+            FROM {lookup_waterway.WATERWAYS_SCHEMA}.{lookup_waterway.TABLE_NAME} w
+            WHERE public.ST_DWithin(public.geography(w.geom), public.geography(pt.geom), %s)
+            ORDER BY public.ST_Distance(public.geography(w.geom), public.geography(pt.geom))
+            LIMIT 1
+        ) sub ON true
+        WHERE sub.payload IS NOT NULL
+        """
+        )
     if include_place:
         parts.append(
             f"""
@@ -224,7 +251,7 @@ def _parse_batch_rows(
     rows: List[Tuple[Any, ...]],
     n: int,
     include_place: bool,
-) -> List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str], Optional[str]]]:
+) -> List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str], Optional[str], Optional[Dict[str, Any]]]]:
     """Partition (point_idx, layer, payload) rows and build one result tuple per point index."""
     admin_by_idx: Dict[int, List[Tuple[Any, ...]]] = {}
     protected_by_idx: Dict[int, List[Tuple[Any, ...]]] = {}
@@ -233,6 +260,7 @@ def _parse_batch_rows(
     ocean_main_by_idx: Dict[int, Optional[str]] = {}
     ski_by_idx: Dict[int, Optional[str]] = {}
     place_by_idx: Dict[int, Optional[str]] = {}
+    waterway_by_idx: Dict[int, Optional[Dict[str, Any]]] = {}
 
     for row in rows or []:
         if not row or len(row) < 3:
@@ -270,8 +298,12 @@ def _parse_batch_rows(
             if idx not in place_by_idx:
                 name_val = p.get("name")
                 place_by_idx[idx] = str(name_val).strip() if name_val else None
+        elif layer == "waterway":
+            p = payload if isinstance(payload, dict) else {}
+            if idx not in waterway_by_idx and (p.get("name") or p.get("distance_m") is not None):
+                waterway_by_idx[idx] = {"name": (str(p.get("name") or "").strip()) or None, "distance_m": p.get("distance_m")}
 
-    results: List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str], Optional[str]]] = [None] * n
+    results: List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str], Optional[str], Optional[Dict[str, Any]]]] = [None] * n
     for i in range(n):
         admin_rows_i = admin_by_idx.get(i, [])
         protected_rows_i = protected_by_idx.get(i, [])
@@ -289,6 +321,7 @@ def _parse_batch_rows(
             lookup_water.build_nearby_lakes(water_rows_i),
             oceans_list,
             ski_by_idx.get(i),
+            waterway_by_idx.get(i),
         )
     return results
 
@@ -296,7 +329,7 @@ def _parse_batch_rows(
 def _parse_single_rows(
     rows: List[Tuple[Any, ...]],
     include_place: bool,
-) -> Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str], Optional[str]]:
+) -> Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str], Optional[str], Optional[Dict[str, Any]]]:
     """Partition (layer, payload) rows and build single-point result tuple."""
     admin_rows: List[Tuple[Any, ...]] = []
     protected_rows: List[Tuple[Any, ...]] = []
@@ -305,6 +338,7 @@ def _parse_single_rows(
     ocean_main_name: Optional[str] = None
     ski_name: Optional[str] = None
     place_name: Optional[str] = None
+    waterway_payload: Optional[Dict[str, Any]] = None
 
     for row in rows or []:
         if not row or len(row) < 2:
@@ -337,6 +371,10 @@ def _parse_single_rows(
             p = payload if isinstance(payload, dict) else {}
             n = p.get("name")
             place_name = str(n).strip() if n else None
+        elif layer == "waterway" and waterway_payload is None:
+            p = payload if isinstance(payload, dict) else {}
+            if p.get("name") or p.get("distance_m") is not None:
+                waterway_payload = {"name": (str(p.get("name") or "").strip()) or None, "distance_m": p.get("distance_m")}
 
     oceans_list = lookup_ocean._merge_ocean_names(ocean_region_name, ocean_main_name)
     admin_hierarchy = lookup_admin.build_admin_hierarchy(admin_rows)
@@ -348,6 +386,7 @@ def _parse_single_rows(
         lookup_water.build_nearby_lakes(water_rows),
         oceans_list,
         ski_name,
+        waterway_payload,
     )
 
 
@@ -358,18 +397,25 @@ def query_single(
     lake_radius_miles: float = 1.0,
     ocean_radius_miles: float = 1.0,
     city_radius_miles: float = 3.0,
-) -> Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str], Optional[str]]:
-    """Run admin + protected + water + ocean + ski_resort (+ optional place). One SQL query. Fails hard if any table is missing."""
+    waterway_radius_miles: Optional[float] = None,
+) -> Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str], Optional[str], Optional[Dict[str, Any]]]:
+    """Run admin + protected + water + ocean + ski_resort + waterway (+ optional place). One SQL query. Fails hard if any required table is missing."""
     lake_radius_m = lake_radius_miles * _MILES_TO_M
     ocean_radius_m = ocean_radius_miles * _MILES_TO_M
     city_radius_m = city_radius_miles * _MILES_TO_M
+    if waterway_radius_miles is None:
+        waterway_radius_miles = lookup_waterway.DEFAULT_WATERWAY_RADIUS_MILES
     include_place = city_radius_miles > 0
-    sql, _ = _query_single_sql(include_place)
-    params: List[Any] = [lon, lat, lake_radius_m, ocean_radius_m, ocean_radius_m]
-    if include_place:
-        params.append(city_radius_m)
     conn = pool.getconn()
     try:
+        include_waterway = lookup_waterway.table_exists(conn)
+        waterway_radius_m = waterway_radius_miles * _MILES_TO_M
+        sql, _ = _query_single_sql(include_place, include_waterway=include_waterway)
+        params: List[Any] = [lon, lat, lake_radius_m, ocean_radius_m, ocean_radius_m]
+        if include_waterway:
+            params.append(waterway_radius_m)
+        if include_place:
+            params.append(city_radius_m)
         with conn.cursor() as cur:
             cur.execute(sql, params)
             rows = cur.fetchall()
@@ -388,8 +434,9 @@ def query_batch(
     lake_radius_miles: float = 1.0,
     ocean_radius_miles: float = 1.0,
     city_radius_miles: float = 3.0,
-) -> List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str], Optional[str]]]:
-    """Run admin + protected + water + ocean + ski_resort (+ optional place) batch. One SQL query. Fails hard if any table is missing."""
+    waterway_radius_miles: Optional[float] = None,
+) -> List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str], Optional[str], Optional[Dict[str, Any]]]]:
+    """Run admin + protected + water + ocean + ski_resort + waterway (+ optional place) batch. One SQL query. Fails hard if any required table is missing."""
     if not points:
         return []
     n = len(points)
@@ -399,13 +446,19 @@ def query_batch(
     lake_radius_m = lake_radius_miles * _MILES_TO_M
     ocean_radius_m = ocean_radius_miles * _MILES_TO_M
     city_radius_m = city_radius_miles * _MILES_TO_M
+    if waterway_radius_miles is None:
+        waterway_radius_miles = lookup_waterway.DEFAULT_WATERWAY_RADIUS_MILES
+    waterway_radius_m = waterway_radius_miles * _MILES_TO_M
     include_place = city_radius_miles > 0
-    sql = _query_batch_sql(include_place)
-    params: List[Any] = [indices, lons, lats, lake_radius_m, ocean_radius_m, ocean_radius_m]
-    if include_place:
-        params.append(city_radius_m)
     conn = pool.getconn()
     try:
+        include_waterway = lookup_waterway.table_exists(conn)
+        sql = _query_batch_sql(include_place, include_waterway=include_waterway)
+        params: List[Any] = [indices, lons, lats, lake_radius_m, ocean_radius_m, ocean_radius_m]
+        if include_waterway:
+            params.append(waterway_radius_m)
+        if include_place:
+            params.append(city_radius_m)
         with conn.cursor() as cur:
             cur.execute(sql, params)
             rows = cur.fetchall()
@@ -449,8 +502,8 @@ def check_health(conn: Any) -> Tuple[bool, Optional[str]]:
 
 
 def get_stats(conn: Any) -> Dict[str, Any]:
-    """Return database stats: feature counts, extent, and timestamps per layer. Fails hard if any table is missing."""
-    return {
+    """Return database stats: feature counts, extent, and timestamps per layer. Fails hard if any required table is missing."""
+    stats: Dict[str, Any] = {
         "admin_areas": lookup_admin.get_admin_stats(conn),
         "protected_areas": lookup_protected_areas.get_protected_stats(conn),
         "water_bodies": lookup_water.get_water_stats(conn),
@@ -459,3 +512,7 @@ def get_stats(conn: Any) -> Dict[str, Any]:
         "place_nodes": lookup_places.get_place_stats(conn),
         "ski_resorts": lookup_ski_resort.get_ski_resort_stats(conn),
     }
+    waterway_stats = lookup_waterway.get_waterway_stats(conn)
+    if waterway_stats is not None:
+        stats["major_waterways"] = waterway_stats
+    return stats
