@@ -2,6 +2,20 @@
 from typing import Any, Dict, Optional, Tuple
 
 
+# Unicode en-dash (U+2013) and em-dash (U+2014) normalized to ASCII hyphen-minus for consistency.
+_UNICODE_EN_DASH = "\u2013"
+_UNICODE_EM_DASH = "\u2014"
+
+
+def normalize_name_for_response(name: Optional[str]) -> str:
+    """Normalize a name for API response: strip, underscores to spaces, Unicode dashes to ASCII hyphen. Returns empty string for None/empty."""
+    if not name or not str(name).strip():
+        return ""
+    s = str(name).strip().replace("_", " ")
+    s = s.replace(_UNICODE_EN_DASH, "-").replace(_UNICODE_EM_DASH, "-")
+    return s
+
+
 def _ts_str(val: Any) -> Optional[str]:
     """Format timestamp/datetime for stats (isoformat if available, else str)."""
     if val is None:

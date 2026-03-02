@@ -2,7 +2,7 @@
 from typing import Any, Dict, List, Tuple
 
 from config import SCHEMA
-from .lookup_common import get_name_from_tags, get_table_stats
+from .lookup_common import get_name_from_tags, get_table_stats, normalize_name_for_response
 
 TABLE_NAME = "protected_areas"
 
@@ -22,7 +22,7 @@ def build_protected_list(rows: List[Tuple[Any, ...]]) -> List[Dict[str, str]]:
         if not name:
             continue
         out.append({
-            "name": str(name).strip(),
+            "name": normalize_name_for_response(name),
             "protection_title": str(tags.get("protection_title") or ""),
             "protect_class": str(tags.get("protect_class") or ""),
             "designation": str(tags.get("designation") or ""),

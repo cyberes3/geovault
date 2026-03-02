@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pycountry
 
 from config import SCHEMA
-from .lookup_common import get_name_from_tags, get_table_stats
+from .lookup_common import get_name_from_tags, get_table_stats, normalize_name_for_response
 
 TABLE_NAME = "admin_areas"
 
@@ -67,35 +67,32 @@ def build_admin_hierarchy(rows: List[Tuple[Any, ...]]) -> Dict[str, Optional[str
         if admin_level == 2:
             if result["country"] is None:
                 # Prefer boundary-derived name, then country code (Nominatim: country_name from largest boundary).
-                result["country"] = (
-                    _normalize_country_name(name)
-                    or _country_code_to_name(code)
-                    or (name or None)
-                )
+                raw = _normalize_country_name(name) or _country_code_to_name(code) or (name or None)
+                result["country"] = (normalize_name_for_response(raw) or None) if raw else None
         elif admin_level == 4:
             if result["state"] is None:
-                result["state"] = name
+                result["state"] = (normalize_name_for_response(name) or None) if name else None
             if result["country"] is None:
                 code_name = _country_code_to_name(tags.get("is_in:country_code"))
                 if code_name:
                     result["country"] = code_name
         elif admin_level == 6:
             if result["county"] is None:
-                result["county"] = name
+                result["county"] = (normalize_name_for_response(name) or None) if name else None
             if result["country"] is None:
                 code_name = _country_code_to_name(tags.get("is_in:country_code"))
                 if code_name:
                     result["country"] = code_name
             if result["state"] is None and tags.get("is_in:state"):
-                result["state"] = str(tags.get("is_in:state", "")).strip()
+                result["state"] = (normalize_name_for_response(str(tags.get("is_in:state", "")).strip()) or None)
             # Level-6 as city when boundary is tagged (Nominatim uses extratags.place; OSM uses border_type).
             if result["city"] is None and _level6_is_city(tags):
-                result["city"] = name
+                result["city"] = (normalize_name_for_response(name) or None) if name else None
                 result["_city_admin_level"] = 6
         elif admin_level == 8:
             # Level-8 (more specific) overrides level-6 for city; same-level tie-break is first row.
             if result["city"] is None or result.get("_city_admin_level") == 6:
-                result["city"] = name
+                result["city"] = (normalize_name_for_response(name) or None) if name else None
                 result["_city_admin_level"] = 8
     # Remove sentinel used for level-8 vs level-6 override
     result.pop("_city_admin_level", None)

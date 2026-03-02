@@ -2,7 +2,7 @@
 from typing import Any, Dict, List, Optional
 
 from config import SCHEMA
-from .lookup_common import get_table_stats
+from .lookup_common import get_table_stats, normalize_name_for_response
 
 TABLE_OCEAN_REGIONS = "ocean_regions"
 TABLE_OCEANS = "oceans"
@@ -14,13 +14,15 @@ _MAX_OCEAN_NAMES = 2
 
 
 def _merge_ocean_names(region: Optional[str], ocean: Optional[str]) -> List[str]:
-    """Return list of 0–2 names: region first, then ocean if different. Cap at 2."""
+    """Return list of 0–2 names: region first, then ocean if different. Cap at 2. Names normalized (underscores to spaces)."""
+    r = normalize_name_for_response(region) if region else ""
+    o = normalize_name_for_response(ocean) if ocean else ""
     out: List[str] = []
-    if region:
-        out.append(region)
-    if ocean and ocean != region and len(out) < _MAX_OCEAN_NAMES:
-        out.append(ocean)
-    return out[: _MAX_OCEAN_NAMES]
+    if r:
+        out.append(r)
+    if o and o != r and len(out) < _MAX_OCEAN_NAMES:
+        out.append(o)
+    return out[:_MAX_OCEAN_NAMES]
 
 
 def run_ocean_single(

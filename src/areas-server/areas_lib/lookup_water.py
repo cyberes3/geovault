@@ -2,7 +2,7 @@
 from typing import Any, Dict, List, Tuple
 
 from config import SCHEMA
-from .lookup_common import get_table_stats
+from .lookup_common import get_table_stats, normalize_name_for_response
 
 TABLE_NAME = "water_bodies"
 
@@ -23,7 +23,7 @@ def build_lakes(rows: List[Tuple[Any, ...]]) -> List[Dict[str, Any]]:
         if not name:
             continue
         out.append({
-            "name": str(name).strip(),
+            "name": normalize_name_for_response(name),
             "water_type": str(water_type or "water").strip(),
             "distance_miles": round(float(distance_miles), 2) if distance_miles is not None else 0.0,
             "on_water": bool(on_water),

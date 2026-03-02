@@ -5,7 +5,7 @@ Runs admin, protected_areas, and water lookups; exposes query_single, query_batc
 from typing import Any, Dict, List, Optional, Tuple
 
 from config import SCHEMA
-from areas_lib import lookup_admin, lookup_water, lookup_protected_areas, lookup_ocean, lookup_places, lookup_ski_resort, lookup_waterway
+from areas_lib import lookup_admin, lookup_common, lookup_water, lookup_protected_areas, lookup_ocean, lookup_places, lookup_ski_resort, lookup_waterway
 
 # Limits for single-point query (must match lookup module constants)
 _PROTECTED_LIMIT = 5
@@ -282,26 +282,27 @@ def _parse_batch_rows(
             p = payload if isinstance(payload, dict) else {}
             if idx not in ocean_region_by_idx:
                 name_val = p.get("name")
-                ocean_region_by_idx[idx] = str(name_val).strip() if name_val else None
+                ocean_region_by_idx[idx] = lookup_common.normalize_name_for_response(name_val) or None
         elif layer == "ocean_main":
             p = payload if isinstance(payload, dict) else {}
             if idx not in ocean_main_by_idx:
                 name_val = p.get("name")
-                ocean_main_by_idx[idx] = str(name_val).strip() if name_val else None
+                ocean_main_by_idx[idx] = lookup_common.normalize_name_for_response(name_val) or None
         elif layer == "ski":
             p = payload if isinstance(payload, dict) else {}
             if idx not in ski_by_idx:
                 name_val = p.get("name")
-                ski_by_idx[idx] = str(name_val).strip() if name_val else None
+                ski_by_idx[idx] = lookup_common.normalize_name_for_response(name_val) or None
         elif layer == "place" and include_place:
             p = payload if isinstance(payload, dict) else {}
             if idx not in place_by_idx:
                 name_val = p.get("name")
-                place_by_idx[idx] = str(name_val).strip() if name_val else None
+                place_by_idx[idx] = lookup_common.normalize_name_for_response(name_val) or None
         elif layer == "waterway":
             p = payload if isinstance(payload, dict) else {}
             if idx not in waterway_by_idx and (p.get("name") or p.get("distance_m") is not None):
-                waterway_by_idx[idx] = {"name": (str(p.get("name") or "").strip()) or None, "distance_m": p.get("distance_m")}
+                name_val = lookup_common.normalize_name_for_response(p.get("name")) or None
+                waterway_by_idx[idx] = {"name": name_val, "distance_m": p.get("distance_m")}
 
     results: List[Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str], Optional[str], Optional[Dict[str, Any]]]] = [None] * n
     for i in range(n):
@@ -358,23 +359,24 @@ def _parse_single_rows(
         elif layer == "ocean_region" and ocean_region_name is None:
             p = payload if isinstance(payload, dict) else {}
             n = p.get("name")
-            ocean_region_name = str(n).strip() if n else None
+            ocean_region_name = lookup_common.normalize_name_for_response(n) or None
         elif layer == "ocean_main" and ocean_main_name is None:
             p = payload if isinstance(payload, dict) else {}
             n = p.get("name")
-            ocean_main_name = str(n).strip() if n else None
+            ocean_main_name = lookup_common.normalize_name_for_response(n) or None
         elif layer == "ski" and ski_name is None:
             p = payload if isinstance(payload, dict) else {}
             n = p.get("name")
-            ski_name = str(n).strip() if n else None
+            ski_name = lookup_common.normalize_name_for_response(n) or None
         elif layer == "place" and place_name is None and include_place:
             p = payload if isinstance(payload, dict) else {}
             n = p.get("name")
-            place_name = str(n).strip() if n else None
+            place_name = lookup_common.normalize_name_for_response(n) or None
         elif layer == "waterway" and waterway_payload is None:
             p = payload if isinstance(payload, dict) else {}
             if p.get("name") or p.get("distance_m") is not None:
-                waterway_payload = {"name": (str(p.get("name") or "").strip()) or None, "distance_m": p.get("distance_m")}
+                name_val = lookup_common.normalize_name_for_response(p.get("name")) or None
+                waterway_payload = {"name": name_val, "distance_m": p.get("distance_m")}
 
     oceans_list = lookup_ocean._merge_ocean_names(ocean_region_name, ocean_main_name)
     admin_hierarchy = lookup_admin.build_admin_hierarchy(admin_rows)

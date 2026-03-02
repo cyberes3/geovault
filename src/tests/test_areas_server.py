@@ -842,6 +842,28 @@ class TestAdminHierarchy:
 # --- Fake feature data for top-5 limit tests (no real DB). ---
 
 
+# Coordinate in Humboldt Toiyabe National Forest (Nevada); fixture asserts normalized name (no underscore).
+HUMBOLDT_TOIYABE_FIXTURE_LAT = 38.646
+HUMBOLDT_TOIYABE_FIXTURE_LON = -117.409
+
+
+def test_humboldt_toiyabe_fixture_has_normalized_name():
+    """Fixture for (38.646, -117.409) must have protected area name with space, not underscore."""
+    fixture_path = Path(__file__).resolve().parent / "fixtures" / "areas_server" / "38.646_-117.409.json"
+    assert fixture_path.is_file(), f"Fixture missing: {fixture_path}"
+    with open(fixture_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    protected = data.get("protected_areas") or []
+    names = [p.get("name") or "" for p in protected]
+    humboldt = [n for n in names if "Humboldt" in n and "Toiyabe" in n]
+    assert humboldt, f"Expected a protected area named Humboldt Toiyabe in fixture, got names: {names!r}"
+    assert humboldt[0] == "Humboldt-Toiyabe National Forest", (
+        f"Protected area name must use ASCII hyphen and no underscore; got {humboldt[0]!r}"
+    )
+    assert "_" not in humboldt[0], "Protected area name must not contain underscore"
+    assert "\u2013" not in humboldt[0] and "\u2014" not in humboldt[0], "Protected area name must use ASCII hyphen (-), not en/em dash"
+
+
 def _fake_protected_row(osm_id: int, name: str, **tag_overrides) -> tuple:
     """Fake DB row (osm_id, name, tags) for protected_areas."""
     tags = {
@@ -864,6 +886,23 @@ def _fake_lake_row(name: str, water_type: str = "water", distance_miles: float =
 
 class TestProtectedAreasTop5:
     """Validate protected areas are limited to top 5 per point; DB is mocked, no real DB."""
+
+    def test_build_protected_list_normalizes_underscores_to_spaces(self):
+        """Protected area names with underscores (e.g. OSM) are returned with spaces."""
+        rows = [_fake_protected_row(1, "Humboldt_Toiyabe National Forest", protection_title="National Forest")]
+        out = lookup_protected_areas.build_protected_list(rows)
+        assert len(out) == 1
+        assert out[0]["name"] == "Humboldt Toiyabe National Forest"
+        assert "_" not in out[0]["name"]
+
+    def test_build_protected_list_normalizes_unicode_dash_to_hyphen(self):
+        """Protected area names with Unicode en-dash/em-dash are returned with ASCII hyphen."""
+        en_dash = "\u2013"
+        rows = [_fake_protected_row(1, f"Humboldt{en_dash}Toiyabe National Forest", protection_title="National Forest")]
+        out = lookup_protected_areas.build_protected_list(rows)
+        assert len(out) == 1
+        assert out[0]["name"] == "Humboldt-Toiyabe National Forest"
+        assert en_dash not in out[0]["name"]
 
     def test_build_protected_list_empty(self):
         out = lookup_protected_areas.build_protected_list([])
