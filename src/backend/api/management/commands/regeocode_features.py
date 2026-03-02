@@ -160,13 +160,23 @@ class Command(BaseCommand):
             except Exception as e:
                 self.stdout.write(self.style.WARNING(f'  Warning: Failed to geocode point ({lat}, {lon}): {e}'))
         
-        # Add new reverse_geocoding tags
-        added_tags_sorted = sorted(all_location_tags)
-        filtered_tags.extend(added_tags_sorted)
-        
-        if len(original_geocoding_tags) > 0 or len(all_location_tags) > 0:
+        # Compute net changes: only report tags that actually changed
+        original_set = set(original_geocoding_tags)
+        new_set = all_location_tags
+        net_removed = sorted(original_set - new_set)
+        net_added = sorted(new_set - original_set)
+
+        # Only update and report if there is an actual change
+        if net_removed or net_added:
+            added_tags_sorted = sorted(all_location_tags)
+            filtered_tags.extend(added_tags_sorted)
             self._update_feature_tags(feature_store, geojson, filtered_tags, dry_run)
-            return True, f'removed {len(original_geocoding_tags)} tags, added {len(all_location_tags)} tags', sorted(original_geocoding_tags), added_tags_sorted
+            msg_parts = []
+            if net_removed:
+                msg_parts.append(f'removed {len(net_removed)} tags')
+            if net_added:
+                msg_parts.append(f'added {len(net_added)} tags')
+            return True, ', '.join(msg_parts), net_removed, net_added
         return False, None, [], []
 
     def add_arguments(self, parser):
