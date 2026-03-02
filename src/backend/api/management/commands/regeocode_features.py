@@ -263,7 +263,11 @@ class Command(BaseCommand):
                     try:
                         processed += 1
                         geojson = feature_store.geojson
-                        system_tags = geojson.get('properties', {}).get('system_tags', [])
+                        props = geojson.get('properties') or {}
+                        if props.get('geojson_hash') is None and feature_store.geojson_hash:
+                            props['geojson_hash'] = feature_store.geojson_hash
+                            geojson['properties'] = props
+                        system_tags = props.get('system_tags', [])
                         
                         if skip_reverse_geocoding:
                             # Mode: Skip reverse geocoding, only regenerate other tags

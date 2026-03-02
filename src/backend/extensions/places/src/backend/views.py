@@ -13,6 +13,7 @@ from api.models import FeatureStore
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, success_response
 from geo_lib.feature_id import generate_geojson_hash
+from geo_lib.types.feature import PointFeature
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
 from geo_lib.website.auth import api_or_login_required_401
@@ -107,6 +108,9 @@ def places_list(request):
             if geometry is None:
                 return error_response('Geometry is required', 400)
 
+            normalized_feature.setdefault('properties', {})['geojson_hash'] = geojson_hash
+            PointFeature(**normalized_feature)  # validation only
+
             # Create
             try:
                 feature = FeatureStore.objects.create(
@@ -175,6 +179,9 @@ def place_detail(request, feature_id):
             geometry, geojson_hash = _feature_to_geometry_and_hash(normalized_feature)
             if geometry is None:
                 return error_response('Geometry is required', 400)
+
+            normalized_feature.setdefault('properties', {})['geojson_hash'] = geojson_hash
+            PointFeature(**normalized_feature)  # validation only
 
             # Update
             feature.geojson = normalized_feature
