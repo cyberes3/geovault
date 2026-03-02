@@ -1,5 +1,6 @@
 from geo_lib.tile_sources.global_imagery import GlobalImageryTileSource
 from geo_lib.tile_sources.google_maps import GoogleMapsTileSource
+from geo_lib.tile_sources.google_satellite_hybrid import GoogleSatelliteHybridTileSource
 from geo_lib.tile_sources.google_terrain import GoogleTerrainTileSource
 from geo_lib.tile_sources.herestreets import HereStreetsTileSource
 from geo_lib.tile_sources.maptiler import generate_maptiler_sources
@@ -35,6 +36,7 @@ def _initialize_tile_sources():
         MapTilerTerrainTileSource(),
         HereStreetsTileSource(),
         GoogleMapsTileSource(),
+        GoogleSatelliteHybridTileSource(),
         GoogleTerrainTileSource(),
     ]
     single_sources.extend(generate_maptiler_sources())

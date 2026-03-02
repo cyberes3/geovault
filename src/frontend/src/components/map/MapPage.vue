@@ -17,8 +17,8 @@
         @tag-filter-change="handleTagFilterChange"
         @tag-filter-loading-change="isDataLoading = $event"
         @tag-filter-start="filterExistingFeaturesByTags"
-        @geocoding-result-click="handleGeocodingResult"
-        @geocoding-clear="clearGeocodingMarker"
+        @reverse_geocoding-result-click="handleGeocodingResult"
+        @reverse_geocoding-clear="clearGeocodingMarker"
     />
 
     <!-- Center - Map -->

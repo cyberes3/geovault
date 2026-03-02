@@ -13,6 +13,16 @@ from django.test import TestCase, override_settings
 from geo_lib.tile_sources.registry import get_all_tile_sources, get_tile_source
 from geo_lib.utils.version import get_user_agent
 
+# Content-Type prefixes that indicate a successful tile response from upstream
+_VALID_TILE_CONTENT_TYPES = (
+    'image/png',
+    'image/jpeg',
+    'image/jpg',
+    'image/webp',
+    'application/x-protobuf',
+    'application/vnd.mapbox-vector-tile',
+)
+
 
 class TestTilesAPI(TestCase):
     """Test tile API endpoints."""
@@ -33,6 +43,40 @@ class TestTilesAPI(TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('sources', data)
+
+    @override_settings(TILE_CACHE_ENABLED=False)
+    def test_proxied_tile_source_real_request_auth_and_connection(self):
+        """Each proxied tile source must succeed with a real request to verify auth and connection."""
+        all_sources = get_all_tile_sources()
+        proxied = [
+            (source_id, config)
+            for source_id, config in all_sources.items()
+            if config.get('requires_proxy')
+        ]
+        self.assertGreater(len(proxied), 0, "At least one proxied tile source should be registered")
+        # Use a low zoom tile to minimize payload; cache disabled so request hits upstream
+        z, x, y = 2, 1, 1
+        for source_id, config in proxied:
+            with self.subTest(source_id=source_id):
+                response = self.client.get(f'/api/tiles/{source_id}/{z}/{x}/{y}')
+                self.assertEqual(
+                    response.status_code,
+                    200,
+                    f"Tile source '{source_id}' ({config.get('name', source_id)}) should return 200; "
+                    f"got {response.status_code}. Check auth/connection for upstream."
+                )
+                content_type = response.get('Content-Type', '')
+                base_type = content_type.split(';')[0].strip().lower()
+                self.assertIn(
+                    base_type,
+                    _VALID_TILE_CONTENT_TYPES,
+                    f"Tile source '{source_id}' should return a tile content type; got {content_type}"
+                )
+                self.assertGreater(
+                    len(response.content),
+                    0,
+                    f"Tile source '{source_id}' should return non-empty body"
+                )
 
     def test_google_maps_tile_source_registered(self):
         """Test that Google Maps tile source is registered correctly."""
@@ -73,6 +117,25 @@ class TestTilesAPI(TestCase):
         self.assertIn('mt0.google.com', url_template)
         # Verify it's using terrain layer (lyrs=p)
         self.assertIn('lyrs=p', url_template)
+
+    def test_google_satellite_hybrid_tile_source_registered(self):
+        """Test that Google Satellite Hybrid tile source is registered correctly."""
+        source = get_tile_source('google-satellite-hybrid')
+        self.assertIsNotNone(source)
+        self.assertEqual(source['name'], 'Google Satellite Hybrid')
+        self.assertTrue(source['requires_proxy'])
+        self.assertIn('url_template', source)
+        self.assertIn('proxy_config', source)
+        self.assertIn('client_config', source)
+
+    def test_google_satellite_hybrid_url_template_hybrid_layer(self):
+        """Test that Google Satellite Hybrid uses hybrid layer (lyrs=y)."""
+        source = get_tile_source('google-satellite-hybrid')
+        self.assertIsNotNone(source)
+        url_template = source['url_template']
+        self.assertIn('key=', url_template)
+        self.assertIn('mt0.google.com', url_template)
+        self.assertIn('lyrs=y', url_template)
 
     def test_maptiler_sources_may_be_registered(self):
         """Test that MapTiler sources may be registered if configured."""

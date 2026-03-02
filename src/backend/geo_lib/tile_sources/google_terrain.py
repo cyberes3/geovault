@@ -46,7 +46,7 @@ class GoogleTerrainTileSource(TileSource):
         return {
             'type': 'xyz',
             'url': '/api/tiles/google-terrain/{z}/{x}/{y}',
-            'tileSize': 256,
+            'tileSize': 256,  # 512px image covers one 256-tile area; grid is 256
             'attribution': '© Google'
         }
 
