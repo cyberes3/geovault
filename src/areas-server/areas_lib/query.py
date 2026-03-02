@@ -64,9 +64,9 @@ def _query_single_sql(include_place: bool, include_waterway: bool = True) -> Tup
         FROM (
             SELECT o.name FROM {SCHEMA}.{lookup_ocean.TABLE_OCEAN_REGIONS} o, pt
             WHERE public.ST_Contains(o.geom, pt.geom)
-               OR public.ST_DWithin(public.geography(o.geom), public.geography(pt.geom), %s)
+               OR public.ST_DWithin(o.geom, pt.geom, %s / 111320.0)
             ORDER BY public.ST_Contains(o.geom, pt.geom) DESC NULLS LAST,
-                     public.ST_Distance(public.geography(o.geom), public.geography(pt.geom))
+                     public.ST_Distance(o.geom, pt.geom)
             LIMIT 1
         ) sub)
         """,
@@ -75,9 +75,9 @@ def _query_single_sql(include_place: bool, include_waterway: bool = True) -> Tup
         FROM (
             SELECT o.name FROM {SCHEMA}.{lookup_ocean.TABLE_OCEANS} o, pt
             WHERE public.ST_Contains(o.geom, pt.geom)
-               OR public.ST_DWithin(public.geography(o.geom), public.geography(pt.geom), %s)
+               OR public.ST_DWithin(o.geom, pt.geom, %s / 111320.0)
             ORDER BY public.ST_Contains(o.geom, pt.geom) DESC NULLS LAST,
-                     public.ST_Distance(public.geography(o.geom), public.geography(pt.geom))
+                     public.ST_Distance(o.geom, pt.geom)
             LIMIT 1
         ) sub)
         """,
@@ -180,9 +180,9 @@ def _query_batch_sql(include_place: bool, include_waterway: bool = True) -> str:
             SELECT jsonb_build_object('name', o.name) AS payload
             FROM {SCHEMA}.{lookup_ocean.TABLE_OCEAN_REGIONS} o
             WHERE public.ST_Contains(o.geom, pt.geom)
-               OR public.ST_DWithin(public.geography(o.geom), public.geography(pt.geom), %s)
+               OR public.ST_DWithin(o.geom, pt.geom, %s / 111320.0)
             ORDER BY public.ST_Contains(o.geom, pt.geom) DESC NULLS LAST,
-                     public.ST_Distance(public.geography(o.geom), public.geography(pt.geom))
+                     public.ST_Distance(o.geom, pt.geom)
             LIMIT 1
         ) sub ON true
         WHERE sub.payload IS NOT NULL
@@ -194,9 +194,9 @@ def _query_batch_sql(include_place: bool, include_waterway: bool = True) -> str:
             SELECT jsonb_build_object('name', o.name) AS payload
             FROM {SCHEMA}.{lookup_ocean.TABLE_OCEANS} o
             WHERE public.ST_Contains(o.geom, pt.geom)
-               OR public.ST_DWithin(public.geography(o.geom), public.geography(pt.geom), %s)
+               OR public.ST_DWithin(o.geom, pt.geom, %s / 111320.0)
             ORDER BY public.ST_Contains(o.geom, pt.geom) DESC NULLS LAST,
-                     public.ST_Distance(public.geography(o.geom), public.geography(pt.geom))
+                     public.ST_Distance(o.geom, pt.geom)
             LIMIT 1
         ) sub ON true
         WHERE sub.payload IS NOT NULL
