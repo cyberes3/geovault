@@ -1,0 +1,23 @@
+{
+  "admin_hierarchy": {
+    "city": null,
+    "country": "United States",
+    "county": "Nye County",
+    "state": "Nevada"
+  },
+  "lakes": [],
+  "ocean": [],
+  "protected_areas": [
+    {
+      "boundary": "protected_area",
+      "designation": "",
+      "landuse": "",
+      "leisure": "",
+      "name": "Humboldt-Toiyabe National Forest",
+      "operator": "United States Forest Service",
+      "protect_class": "6",
+      "protection_title": "National Forest"
+    }
+  ],
+  "ski_resort": null
+}
