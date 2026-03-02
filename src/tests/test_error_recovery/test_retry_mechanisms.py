@@ -94,7 +94,7 @@ class TestGeocodingServiceFailures:
         
         # Mock reverse_geocoding service to be unavailable
         # We patch the function directly now
-        with patch('geo_lib.reverse_geocoding.location_tags.get_location_tags') as mock_geocode:
+        with patch('geo_lib.reverse_geocoding.location_tags.reverse_geocode_coordinates') as mock_geocode:
             mock_geocode.side_effect = requests.ConnectionError("Service unavailable")
             
             # Feature should still be created without reverse_geocoding info
@@ -124,7 +124,7 @@ class TestGeocodingServiceFailures:
             features.append(feature_data)
         
         # Mock reverse_geocoding to hit rate limit after 2 requests
-        with patch('geo_lib.reverse_geocoding.location_tags.get_location_tags') as mock_geocode:
+        with patch('geo_lib.reverse_geocoding.location_tags.reverse_geocode_coordinates') as mock_geocode:
             call_count = [0]
             
             def rate_limit_side_effect(*args, **kwargs):
@@ -161,7 +161,7 @@ class TestGeocodingServiceFailures:
         }
         
         # Mock reverse_geocoding to return invalid/malformed data
-        with patch('geo_lib.reverse_geocoding.location_tags.get_location_tags') as mock_geocode:
+        with patch('geo_lib.reverse_geocoding.location_tags.reverse_geocode_coordinates') as mock_geocode:
             mock_geocode.return_value = ([], []) # Empty return on failure if caught, or just bad data
             # If the test expected "invalid output" to be handled, now we just return empty tuple
             

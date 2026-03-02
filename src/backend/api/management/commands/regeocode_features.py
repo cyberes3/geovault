@@ -7,7 +7,7 @@ from django.db import transaction
 
 from api.models import FeatureStore
 from geo_lib.reverse_geocoding.constants import REVERSE_GEOCODING_TAG_PREFIXES
-from geo_lib.reverse_geocoding.location_tags import get_location_tags
+from geo_lib.reverse_geocoding.location_tags import reverse_geocode_coordinates
 from geo_lib.processing.logging import ImportLog
 from geo_lib.processing.tagging.generate import generate_auto_tags
 from geo_lib.processing.tagging.modules.reverse_geocoding import get_representative_points
@@ -148,7 +148,7 @@ class Command(BaseCommand):
         all_location_tags = set()
         for lat, lon in points:
             try:
-                location_tags, log_messages = get_location_tags(lat, lon)
+                location_tags, log_messages = reverse_geocode_coordinates(lat, lon)
                 all_location_tags.update(location_tags)
                 
                 # Display warnings/errors from reverse_geocoding

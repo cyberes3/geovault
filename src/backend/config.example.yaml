@@ -157,6 +157,8 @@ reverse_geocoding:
     api_url: http://127.0.0.1:5001
     request_timeout_seconds: 10
     verify_ssl: true
+    # Max points per query batch (default 100; must not exceed areas server AREAS_SERVER_MAX_BATCH_SIZE).
+    max_batch_size: 100
     # Search radius in miles for nearest place (city/town/village) when admin has no city (default 3; 0 to disable).
     city_radius_miles: 3.0
 

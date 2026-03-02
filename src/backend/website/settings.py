@@ -489,6 +489,7 @@ AREAS_SERVER_URL = config.get_str('reverse_geocoding.areas_server.api_url', 'htt
 AREAS_SERVER_TIMEOUT = config.get_int('reverse_geocoding.areas_server.request_timeout_seconds', 10)
 AREAS_SERVER_VERIFY_SSL = config.get_bool('reverse_geocoding.areas_server.verify_ssl', True)
 AREAS_SERVER_CITY_RADIUS_MILES = config.get_float('reverse_geocoding.areas_server.city_radius_miles', 3.0)
+AREAS_SERVER_MAX_BATCH_SIZE = config.get_int('reverse_geocoding.areas_server.max_batch_size', 100)
 
 # Number of points to sample along linestrings/multilinestrings (1-100, clamped)
 _raw_linestring_points = config.get_int('reverse_geocoding.linestring_geocode_points', 4)

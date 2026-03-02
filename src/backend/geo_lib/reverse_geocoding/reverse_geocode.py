@@ -3,7 +3,7 @@ Public API for reverse geocoding.
 
 Re-exports from location_tags. Other modules:
 
-- location_tags.py: Main public API (batch_reverse_geocode_coordinates, get_location_tags)
+- location_tags.py: Main public API (batch_reverse_geocode_coordinates, reverse_geocode_coordinates)
 - areas_server_client.py: HTTP client for areas server (admin, protected areas, lakes, ocean, ski_resort)
 - admin_boundaries.py: Administrative hierarchy parser (tests only; production uses areas server)
 - protected_areas.py: Protected area classification and parser (tests only; production uses areas server)
@@ -14,8 +14,8 @@ PUBLIC API:
     batch_reverse_geocode_coordinates(coordinates) -> Dict
         Main entry point: Batch reverse geocode multiple coordinates
         
-    get_location_tags(lat, lon) -> Tuple[List[str], List[ReverseGeocodingLogMessage]]
-        Generate tags for a single coordinate
+    reverse_geocode_coordinates(lat, lon) -> Tuple[List[str], List[ReverseGeocodingLogMessage]]
+        Generate tags for a single coordinate (GET)
         
     ReverseGeocodingLogMessage
         Log message dataclass
@@ -23,13 +23,13 @@ PUBLIC API:
 
 # Re-export the public API from the new modules
 from geo_lib.reverse_geocoding.location_tags import (
-    batch_reverse_geocode_coordinates,
-    get_location_tags,
     ReverseGeocodingLogMessage,
+    batch_reverse_geocode_coordinates,
+    reverse_geocode_coordinates,
 )
 
 __all__ = [
-    'batch_reverse_geocode_coordinates',
-    'get_location_tags',
     'ReverseGeocodingLogMessage',
+    'batch_reverse_geocode_coordinates',
+    'reverse_geocode_coordinates',
 ]

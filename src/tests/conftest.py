@@ -364,7 +364,7 @@ def conditional_external_api_mocking():
     patches = []
     
     # Mock reverse geocoding: areas server returns (AreasQueryResponse, error) from fixtures.
-    # Must return AreasQueryResponse so get_location_tags can call .has_any_location_data().
+    # Single-point (reverse_geocode_coordinates) uses query_areas_server (GET).
     def mock_query_areas_server(latitude: float, longitude: float):
         from tests.fixtures.geocoding_responses import get_areas_fixture
         from geo_lib.reverse_geocoding.areas_server_models import AreasQueryResponse
@@ -379,6 +379,26 @@ def conditional_external_api_mocking():
     )
     areas_server_patch.start()
     patches.append(areas_server_patch)
+
+    # Batch path (batch_reverse_geocode_coordinates) uses POST; return one AreasQueryResponse per point.
+    def mock_query_areas_server_batch(points):
+        from tests.fixtures.geocoding_responses import get_areas_fixture
+        from geo_lib.reverse_geocoding.areas_server_models import AreasQueryResponse
+        results = []
+        for lat, lon in points:
+            areas = get_areas_fixture(lat, lon)
+            if areas is not None:
+                results.append(AreasQueryResponse.model_validate(areas))
+            else:
+                results.append(AreasQueryResponse.empty())
+        return (results, None)
+
+    areas_server_batch_patch = patch(
+        'geo_lib.reverse_geocoding.location_tags.query_areas_server_batch',
+        side_effect=mock_query_areas_server_batch,
+    )
+    areas_server_batch_patch.start()
+    patches.append(areas_server_batch_patch)
 
     # Mock IP geolocation service
     geocoding_patch2 = patch('geo_lib.ip_geolocation.get_geolocation_service')

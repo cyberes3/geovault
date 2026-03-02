@@ -2,8 +2,8 @@
 Main public API for generating location tags from coordinates.
 
 This module provides the primary entry point for reverse geocoding:
-- batch_geocode_coordinates(): Batch process multiple coordinates (RECOMMENDED)
-- get_location_tags(): Generate tags for a single coordinate
+- batch_reverse_geocode_coordinates(): Batch process multiple coordinates (RECOMMENDED)
+- reverse_geocode_coordinates(): Generate tags for a single coordinate (GET)
 
 Tags are generated from multiple sources:
 - Administrative boundaries (city, state, country)
@@ -11,12 +11,13 @@ Tags are generated from multiple sources:
 - Lakes and water bodies
 - Nearby ski resorts
 """
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
-from geo_lib.reverse_geocoding.areas_server_client import query_areas_server
+from website.settings_utils import get_setting
+
+from geo_lib.reverse_geocoding.areas_server_client import query_areas_server, query_areas_server_batch
 from geo_lib.reverse_geocoding.areas_server_models import AreasQueryResponse
 from geo_lib.reverse_geocoding.constants import WATERWAY_TAG_MAX_DISTANCE_M
 from geo_lib.reverse_geocoding.protected_areas import classify_protected_area
@@ -97,23 +98,20 @@ def tags_from_areas_data(response: Union[AreasQueryResponse, dict]) -> List[str]
     return tags
 
 
-def get_location_tags(
+def reverse_geocode_coordinates(
     latitude: float,
-    longitude: float
+    longitude: float,
 ) -> Tuple[List[str], List[ReverseGeocodingLogMessage]]:
     """
-    Generate comprehensive location tags for a coordinate.
-    
-    This function queries multiple data sources in parallel to generate
-    location tags in format: city:Name, state:Name, country:Name, etc.
-    
-    For batch operations, use batch_geocode_coordinates() instead for better
-    performance through automatic deduplication.
-    
+    Generate comprehensive location tags for a single coordinate (GET /query).
+
+    For batch operations, use batch_reverse_geocode_coordinates() instead for better
+    performance through POST batch and deduplication.
+
     Args:
         latitude: Latitude coordinate
         longitude: Longitude coordinate
-    
+
     Returns:
         Tuple of (tags list, log messages list)
     """
@@ -155,85 +153,71 @@ def get_location_tags(
         return [], log_messages
 
 
-def _get_from_cache_or_fetch(
-    latitude: float,
-    longitude: float
-) -> Tuple[List[str], List[ReverseGeocodingLogMessage]]:
-    """
-    Internal helper: Fetch tags from API (caching happens at API level).
-    
-    Args:
-        latitude: Latitude coordinate
-        longitude: Longitude coordinate
-        
-    Returns:
-        Tuple of (tags list, log messages list)
-    """
-    # Fetch from API (caching is handled at the areas server level)
-    tags, log_messages = get_location_tags(latitude, longitude)
-
-    return tags, log_messages
-
-
 def batch_reverse_geocode_coordinates(
-    coordinates: List[Tuple[float, float]]
+    coordinates: List[Tuple[float, float]],
 ) -> Dict[Tuple[float, float], Tuple[List[str], List[ReverseGeocodingLogMessage]]]:
     """
-    THE MAIN ENTRY POINT: Batch reverse geocode multiple coordinates with deduplication.
-    
-    This is the primary function that should be called for optimal performance.
-    
+    Batch reverse geocode multiple coordinates via POST /query (deduplicated, chunked).
+
     Features:
     - Deduplicates nearby coordinates (rounded to ~111m precision)
-    - Leverages multi-level caching (per-coordinate and top-level tag cache)
-    - Minimizes API calls by batching and cache checking
-    - Thread-safe coordinate deduplication
-    - Processes multiple coordinates in parallel for better performance
-    
+    - Chunks by AREAS_SERVER_MAX_BATCH_SIZE and uses POST /query per chunk
+    - Maps results back to every input coordinate
+
     Args:
         coordinates: List of (latitude, longitude) tuples
-        
+
     Returns:
         Dict mapping each input coordinate to (tags, log_messages) tuple
     """
     if not coordinates:
         return {}
 
-    # Step 1: Deduplicate coordinates by rounding to cache precision
-    coord_mapping = {}  # Maps rounded coord -> list of original coords
+    # Step 1: Deduplicate by rounded coordinate
+    coord_mapping: Dict[Tuple[float, float], List[Tuple[float, float]]] = {}
     for lat, lon in coordinates:
-        # Use high precision for the mapping to ensure we return results for the exact
-        # coordinates requested, while still allowing the underlying fetch to use
-        # rounded coordinates for caching.
         exact = (lat, lon)
         rounded = round_coordinate(lat, lon)
         if rounded not in coord_mapping:
             coord_mapping[rounded] = []
         coord_mapping[rounded].append(exact)
 
-    # Step 2: Fetch results for unique coordinates in parallel (cache-aware)
-    results = {}
     unique_coords = list(coord_mapping.keys())
-    
-    # Process coordinates in parallel to avoid sequential delays
-    # Limit to 2 concurrent workers to avoid overwhelming the API
-    with ThreadPoolExecutor(max_workers=min(len(unique_coords), 1)) as executor:
-        future_to_rounded = {
-            executor.submit(_get_from_cache_or_fetch, r_lat, r_lon): (r_lat, r_lon)
-            for r_lat, r_lon in unique_coords
-        }
-        
-        for future in future_to_rounded:
-            r_lat, r_lon = future_to_rounded[future]
-            try:
-                tags, log_messages = future.result()
-                results[(r_lat, r_lon)] = (tags, log_messages)
-            except Exception as e:
-                _logger.error(f"Error reverse geocoding ({r_lat}, {r_lon}): {e}")
-                results[(r_lat, r_lon)] = ([], [])
+    max_batch = get_setting("AREAS_SERVER_MAX_BATCH_SIZE", 100)
+    results: Dict[Tuple[float, float], Tuple[List[str], List[ReverseGeocodingLogMessage]]] = {}
+
+    # Step 2: Chunk and call POST batch per chunk
+    for start in range(0, len(unique_coords), max_batch):
+        chunk = unique_coords[start : start + max_batch]
+        responses, err = query_areas_server_batch(chunk)
+        if err:
+            error_log = ReverseGeocodingLogMessage(
+                timestamp=datetime.now(),
+                message=err,
+                level="ERROR",
+                source="Reverse Geocoding",
+            )
+            for r_lat, r_lon in chunk:
+                results[(r_lat, r_lon)] = ([], [error_log])
+            continue
+        assert responses is not None
+        for i, (r_lat, r_lon) in enumerate(chunk):
+            resp = responses[i]
+            tags = tags_from_areas_data(resp)
+            log_messages: List[ReverseGeocodingLogMessage] = []
+            if not resp.has_any_location_data():
+                log_messages.append(
+                    ReverseGeocodingLogMessage(
+                        timestamp=datetime.now(),
+                        message=f"Reverse geocoding returned no data for ({r_lat}, {r_lon})",
+                        level="INFO",
+                        source="Reverse Geocoding",
+                    )
+                )
+            results[(r_lat, r_lon)] = (tags, log_messages)
 
     # Step 3: Map all original coordinates back to results
-    final_results = {}
+    final_results: Dict[Tuple[float, float], Tuple[List[str], List[ReverseGeocodingLogMessage]]] = {}
     for rounded_coord, original_coords in coord_mapping.items():
         result = results.get(rounded_coord, ([], []))
         for original_coord in original_coords:

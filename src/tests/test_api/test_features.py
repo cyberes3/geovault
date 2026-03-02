@@ -1643,15 +1643,15 @@ class TestQuickPointCreation(TestCase):
     
     @patch('api.views.features.creation._fetch_elevation_for_point')
     @patch('geo_lib.processing.tagging.modules.reverse_geocoding.get_required_setting')
-    @patch('geo_lib.reverse_geocoding.location_tags.get_location_tags')
-    def test_create_quick_point_geocoding_non_blocking(self, mock_get_location_tags, mock_setting, mock_elevation):
+    @patch('geo_lib.reverse_geocoding.location_tags.reverse_geocode_coordinates')
+    def test_create_quick_point_geocoding_non_blocking(self, mock_reverse_geocode_coordinates, mock_setting, mock_elevation):
         """Test that quick point creation returns without reverse_geocoding tags (reverse_geocoding happens in background)."""
         mock_elevation.return_value = 1500.0
         mock_setting.return_value = True
-        
+
         # Mock reverse_geocoding service to return tags (but these won't be in response since reverse_geocoding is async)
         # Return format is (tags, log_messages)
-        mock_get_location_tags.return_value = (
+        mock_reverse_geocode_coordinates.return_value = (
             ['geo-city:San Francisco', 'geo-state:California'], 
             []
         )

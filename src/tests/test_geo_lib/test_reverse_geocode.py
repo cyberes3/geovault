@@ -2,8 +2,8 @@
 Comprehensive tests for reverse geocoding service.
 
 Responses come from real cached fixtures under tests/fixtures/areas_server/ (loaded via
-get_areas_fixture). The autouse fixture in conftest.py wires query_areas_server to return
-those fixture responses so tests do not hit the network.
+get_areas_fixture). The autouse fixture in conftest.py wires query_areas_server (single-point) and
+query_areas_server_batch (batch) to return those fixture responses so tests do not hit the network.
 """
 from unittest.mock import patch
 
@@ -20,8 +20,8 @@ from geo_lib.reverse_geocoding.areas_server_models import (
 )
 from geo_lib.reverse_geocoding.cache import _get_cache_key, _REVERSE_GEOCODING_CACHE
 from geo_lib.reverse_geocoding.location_tags import (
-    get_location_tags,
     batch_reverse_geocode_coordinates,
+    reverse_geocode_coordinates,
     tags_from_areas_data,
 )
 from geo_lib.spatial.haversine import haversine_distance_miles
@@ -360,7 +360,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'protected-area:Cumberland Mountain State Park',
             'state:Tennessee',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_nashville_bells_bend(self):
@@ -373,7 +373,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'protected-area:Bells Bend Park',
             'state:Tennessee',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_san_francisco_ocean_city(self):
@@ -385,7 +385,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'ocean:North Pacific Ocean',
             'state:California',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
         self.assertLessEqual(sum(1 for t in tags if t.startswith('ocean:')), 2)
 
@@ -397,7 +397,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             "park:Bent's Old Fort National Historic Site",
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_point_reyes_national_seashore(self):
@@ -409,7 +409,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'state:California',
             'wilderness:Phillip Burton Wilderness',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_curecanti_national_recreation_area(self):
@@ -422,7 +422,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'protected-area:BLM - Gunnison Field Office',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_san_isabel_national_forest(self):
@@ -433,7 +433,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'national-forest:San Isabel National Forest',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_mueller_state_park(self):
@@ -444,7 +444,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'state-park:Mueller State Park',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_colorado_national_monument(self):
@@ -455,7 +455,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'national-monument:Colorado National Monument',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_pike_national_forest(self):
@@ -466,7 +466,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'national-forest:Pike National Forest',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_fairplay(self):
@@ -477,7 +477,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'county:Park County',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_lost_creek_wilderness_shawnee(self):
@@ -490,7 +490,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'state:Colorado',
             'wilderness:Lost Creek Wilderness',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_lost_creek_wilderness_park_county(self):
@@ -502,7 +502,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'state:Colorado',
             'wilderness:Lost Creek Wilderness',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_south_valley_park_open_space(self):
@@ -513,7 +513,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'protected-area:South Valley Park',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_vail_ski_resort(self):
@@ -526,7 +526,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'ski-resort:Vail',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_matthews_winters_park(self):
@@ -538,7 +538,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'protected-area:Matthews/Winters Park',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_william_frederick_hayden_park(self):
@@ -550,7 +550,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'protected-area:William Frederick Hayden Park',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_glendale_james_manley_park(self):
@@ -562,7 +562,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'park:James N. Manley Park',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_denver_city_park(self):
@@ -574,7 +574,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'park:City Park',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_denver_admin(self):
@@ -585,7 +585,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'county:Denver',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_standley_lake_on_lake_and_park(self):
@@ -598,7 +598,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'protected-area:Standley Lake Regional Park',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_two_ponds_national_wildlife_refuge(self):
@@ -610,7 +610,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'national-wildlife-refuge:Two Ponds National Wildlife Refuge',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_breckenridge_ski_resort(self):
@@ -623,7 +623,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'ski-resort:Breckenridge',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_broomfield(self):
@@ -634,7 +634,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'county:Broomfield',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_indian_peaks_wilderness(self):
@@ -645,7 +645,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'state:Colorado',
             'wilderness:Indian Peaks Wilderness',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_medicine_bow_routt_national_forest(self):
@@ -656,7 +656,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'national-forest:Medicine Bow-Routt National Forest',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_rocky_mountain_national_park(self):
@@ -668,7 +668,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'state:Colorado',
             'wilderness:Rocky Mountain Wilderness',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_grand_lake_lakes(self):
@@ -681,7 +681,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'lake:Shadow Mountain Lake',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_arapaho_national_forest(self):
@@ -692,7 +692,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'national-forest:Arapaho National Forest',
             'state:Colorado',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_rocky_mountain_np_larimer_lakes(self):
@@ -704,7 +704,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'state:Colorado',
             'wilderness:Rocky Mountain Wilderness',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_ocean_north_pacific_open(self):
@@ -712,7 +712,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
         expected = [
             'ocean:North Pacific Ocean',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
         self.assertLessEqual(sum(1 for t in tags if t.startswith('ocean:')), 2)
 
@@ -724,7 +724,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'lake:Sand Beach Lake',
             'state:Nebraska',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_crescent_lake_national_wildlife_refuge(self):
@@ -735,7 +735,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'national-wildlife-refuge:Crescent Lake National Wildlife Refuge',
             'state:Nebraska',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_morrill_nebraska(self):
@@ -745,7 +745,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'county:Morrill County',
             'state:Nebraska',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_blue_hills_reservation_state_park(self):
@@ -758,7 +758,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'state-park:Blue Hills Reservation',
             'state:Massachusetts',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_rushville_nebraska(self):
@@ -769,7 +769,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'county:Sheridan County',
             'state:Nebraska',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_jackson_hole_ski_resort(self):
@@ -782,7 +782,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'ski-resort:Jackson Hole Mountain Resort',
             'state:Wyoming',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_south_portland_ocean_shore(self):
@@ -795,7 +795,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'ocean:North Atlantic Ocean',
             'state:Maine',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
         self.assertLessEqual(sum(1 for t in tags if t.startswith('ocean:')), 2)
 
@@ -809,7 +809,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'ocean:North Atlantic Ocean',
             'state:Maine',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
         self.assertLessEqual(sum(1 for t in tags if t.startswith('ocean:')), 2)
 
@@ -824,7 +824,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'national-recreation-area:Oregon Dunes National Recreation Area',
             'state:Oregon',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_ocean_main_only_north_pacific(self):
@@ -832,7 +832,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
         expected = [
             'ocean:North Pacific Ocean',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
         self.assertLessEqual(sum(1 for t in tags if t.startswith('ocean:')), 2)
 
@@ -844,7 +844,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'national-park:Yellowstone National Park',
             'state:Wyoming',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_cannon_beach_ocean(self):
@@ -857,7 +857,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'protected-area:Arcadia Beach State Recreation Site',
             'state:Oregon',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
         self.assertLessEqual(sum(1 for t in tags if t.startswith('ocean:')), 2)
 
@@ -872,7 +872,7 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'state:Michigan',
             'wilderness:Beaver Basin Wilderness',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
 
@@ -927,9 +927,9 @@ class TestErrorHandling(ReverseGeocodingTagTestMixin, TestCase):
         """Clean up after tests."""
         cache.clear()
 
-    def test_get_location_tags_exception_handling(self):
-        """Test that get_location_tags handles invalid coordinates: no fixture -> empty tags."""
-        tags, log_messages = get_location_tags(999.0, 999.0)
+    def test_reverse_geocode_coordinates_exception_handling(self):
+        """Test that reverse_geocode_coordinates handles invalid coordinates: no fixture -> empty tags."""
+        tags, log_messages = reverse_geocode_coordinates(999.0, 999.0)
         self.assert_tags_exact(tags, [])
         self.assertIsInstance(log_messages, list)
 
@@ -939,7 +939,7 @@ class TestErrorHandling(ReverseGeocodingTagTestMixin, TestCase):
         real_client_error = "AREAS_SERVER_URL is not set; required for reverse geocoding."
         with patch('geo_lib.reverse_geocoding.location_tags.query_areas_server') as mock_areas:
             mock_areas.return_value = (None, real_client_error)
-            tags, log_messages = get_location_tags(39.746, -104.844)
+            tags, log_messages = reverse_geocode_coordinates(39.746, -104.844)
         self.assert_tags_exact(tags, [])
         errors = [m for m in log_messages if m.level == 'ERROR']
         self.assertEqual(len(errors), 1)
@@ -986,7 +986,7 @@ class TestRiverPointFixtures(ReverseGeocodingTagTestMixin, TestCase):
             'state:Colorado',
             'waterway:South Platte River',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
 
     def test_mississippi_river(self):
@@ -998,5 +998,5 @@ class TestRiverPointFixtures(ReverseGeocodingTagTestMixin, TestCase):
             'state:Arkansas',
             'waterway:Mississippi River',
         ]
-        tags, _ = get_location_tags(lat, lon)
+        tags, _ = reverse_geocode_coordinates(lat, lon)
         self.assert_tags_exact(tags, expected)
