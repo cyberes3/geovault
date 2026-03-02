@@ -320,6 +320,7 @@ class TestQueryArgs:
                 [],
                 [],
                 None,
+                None,
             )
             r = client.get(
                 "/query?lat=40.34&lon=-105.68&lake-radius-miles=2.5&ocean-radius-miles=0.5&city-radius-miles=5"
@@ -341,6 +342,7 @@ class TestQueryArgs:
                 [],
                 [],
                 [],
+                None,
                 None,
             )
             r = client.get("/query?lat=40.34&lon=-105.68")
@@ -397,6 +399,7 @@ class TestQueryArgs:
                     [],
                     [],
                     None,
+                    None,
                 ),
             ]
             r = client.post(
@@ -418,6 +421,7 @@ class TestQueryArgs:
                     [],
                     [],
                     [],
+                    None,
                     None,
                 ),
             ]
@@ -447,6 +451,7 @@ class TestQueryArgs:
                     [],
                     [],
                     None,
+                    None,
                 ),
             ]
             r = client.post(
@@ -469,6 +474,7 @@ class TestQueryArgs:
                     [],
                     [],
                     [],
+                    None,
                     None,
                 ),
             ]
@@ -496,6 +502,7 @@ class TestQueryArgs:
                     [],
                     [],
                     [],
+                    None,
                     None,
                 ),
             ]

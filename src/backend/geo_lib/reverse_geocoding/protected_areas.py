@@ -96,7 +96,9 @@ def classify_protected_area(area: Dict[str, str]) -> str:
         return "state-park"
     elif leisure == 'park' and boundary != 'protected_area':
         return "park"
-    elif 'park' in protection_title or 'park' in designation or leisure == 'park':
+    elif boundary != 'protected_area' and (
+        'park' in protection_title or 'park' in designation or leisure == 'park'
+    ):
         return "park"
 
     return "protected-area"
