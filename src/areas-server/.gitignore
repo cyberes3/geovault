@@ -3,3 +3,4 @@ areas_server_performance.md
 *.kmz
 *.geojson
 *.json
+*.html

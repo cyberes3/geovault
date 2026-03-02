@@ -23,6 +23,14 @@ fi
 # Change to tests directory
 cd "$SCRIPT_DIR" || exit 1
 
+# Load .env if present (e.g. AREAS_SERVER_DATABASE for areas-server DB tests)
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  . "$SCRIPT_DIR/.env"
+  set +a
+fi
+
 # Add to PYTHONPATH
 export PYTHONPATH="$BACKEND_DIR:$SCRIPT_DIR/..:$PYTHONPATH"
 export DJANGO_SETTINGS_MODULE=website.settings

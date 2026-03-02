@@ -215,6 +215,7 @@ else
 fi
 
 echo "=== Import to Postgres ==="
+# Exclude unnamed (null/empty tag_group_value) and canals (name contains "canal") via ogr2ogr -where
 if [[ "$DATABASE_URL" =~ ^postgresql:// ]]; then
   REST="${DATABASE_URL#postgresql://}"
   if [[ "$REST" =~ ^([^@]+)@(.*)$ ]]; then
@@ -246,7 +247,8 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS waterways.major
 
 ogr2ogr -f PostgreSQL PG: "$GEOJSON_MERGED_PATH" \
   -nln "waterways.major_waterways" -nlt MULTILINESTRING -unsetFid \
-  -oo ARRAY_AS_STRING=YES -t_srs EPSG:4326 -lco GEOMETRY_NAME=geom
+  -oo ARRAY_AS_STRING=YES -t_srs EPSG:4326 -lco GEOMETRY_NAME=geom \
+  -where "tag_group_value IS NOT NULL AND tag_group_value <> '' AND LOWER(tag_group_value) NOT LIKE '%canal%'"
 
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS major_waterways_tag_group_value ON waterways.major_waterways (tag_group_value);"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS major_waterways_length_m ON waterways.major_waterways (length_m);"

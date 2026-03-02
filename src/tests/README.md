@@ -87,6 +87,10 @@ The test suite is organized into the following directories:
 - **test_concurrent/test_concurrent_operations.py** - Race condition and concurrent access tests
 - **test_processing/test_processors.py** - File format processor tests
 
+## Optional test environment (.env)
+
+Some tests need external config (e.g. areas server DB for waterways checks). Copy `tests/.env.example` to `tests/.env` and set variables as needed. `tests/.env` is gitignored. If not set, those tests are skipped.
+
 ## Database Setup
 
 Before running tests for the first time, you need to create the PostGIS extension in the test database.

@@ -20,7 +20,7 @@ _areas_server_dir = Path(__file__).resolve().parent.parent / "areas-server"
 if str(_areas_server_dir) not in sys.path:
     sys.path.insert(0, str(_areas_server_dir))
 
-from areas_lib import lookup_admin, lookup_common, lookup_places, lookup_protected_areas, lookup_water
+from areas_lib import lookup_admin, lookup_common, lookup_places, lookup_protected_areas, lookup_water, lookup_waterway
 
 
 def _areas_server_base_url():
@@ -1302,3 +1302,53 @@ class TestCleanInvalidGeometry:
         assert len(delete_calls) == 1
         assert "admin_areas" in delete_calls[0][0][0]
         assert "ctid" in delete_calls[0][0][0].lower() or "ANY" in delete_calls[0][0][0]
+
+
+class TestWaterwaysTableNoCanalsOrUnnamed:
+    """Ensure waterways.major_waterways has no canals or unnamed features (import filter)."""
+
+    @pytest.fixture
+    def areas_db_conn(self):
+        """Connection to areas server DB; skip if not configured or table missing."""
+        from config import DATABASE_URL
+        if not DATABASE_URL or not DATABASE_URL.strip():
+            pytest.skip("AREAS_SERVER_DATABASE not set (copy tests/.env.example to tests/.env)")
+        import psycopg
+        conn = psycopg.connect(DATABASE_URL.strip())
+        try:
+            conn.execute("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
+            if not lookup_waterway.table_exists(conn):
+                pytest.skip("waterways.major_waterways table does not exist")
+            yield conn
+        finally:
+            conn.close()
+
+    def test_no_unnamed_in_major_waterways(self, areas_db_conn):
+        """No row in waterways.major_waterways may have null or empty tag_group_value."""
+        with areas_db_conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*) FROM waterways.major_waterways
+                WHERE tag_group_value IS NULL OR trim(tag_group_value) = ''
+                """
+            )
+            (bad_count,) = cur.fetchone()
+        assert bad_count == 0, (
+            f"waterways.major_waterways has {bad_count} row(s) with null/empty name; "
+            "import should exclude these."
+        )
+
+    def test_no_canal_in_major_waterways(self, areas_db_conn):
+        """No row in waterways.major_waterways may have tag_group_value containing 'canal'."""
+        with areas_db_conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*) FROM waterways.major_waterways
+                WHERE LOWER(tag_group_value) LIKE '%%canal%%'
+                """
+            )
+            (bad_count,) = cur.fetchone()
+        assert bad_count == 0, (
+            f"waterways.major_waterways has {bad_count} row(s) with 'canal' in name; "
+            "import should exclude canals."
+        )

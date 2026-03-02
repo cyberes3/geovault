@@ -10,6 +10,20 @@ script_dir = Path(__file__).parent
 backend_dir = script_dir.parent / 'backend'
 src_dir = script_dir.parent
 
+# Load tests/.env if present (e.g. AREAS_SERVER_DATABASE for waterways checks)
+_env_file = script_dir / ".env"
+if _env_file.exists():
+    with open(_env_file, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, _, value = line.partition("=")
+                key = key.strip()
+                if key:
+                    os.environ.setdefault(key, value.strip())
+
 # Add backend and src to Python path
 sys.path.insert(0, str(backend_dir))
 sys.path.insert(0, str(src_dir))
