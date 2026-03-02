@@ -2,7 +2,7 @@
 Areas server response fixtures for reverse geocoding tests.
 
 - Areas server responses: fixtures/areas_server/{lat}_{lon}.json
-  (admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort)
+  (admin_hierarchy, protected_areas, lakes, ocean, ski_resort, waterway)
 """
 import json
 import os
@@ -18,11 +18,17 @@ SKI_RESORT_TEST_POINTS: Tuple[Tuple[str, float, float], ...] = (
     ("Jackson Hole", 43.591287434883135, -110.85327582346859),
 )
 
+# River points: (lat, lon) for tests that assert waterway in areas server response.
+RIVER_TEST_POINTS: Tuple[Tuple[float, float], ...] = (
+    (39.78976, -104.97147),
+    (35.71677, -89.93794),
+)
+
 
 def get_areas_fixture(lat: float, lon: float) -> Optional[dict]:
     """
     Load areas server response fixture for (lat, lon).
-    Returns full response dict (admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort) or None if file missing/invalid.
+    Returns full response dict (admin_hierarchy, protected_areas, lakes, ocean, ski_resort, waterway) or None if file missing/invalid.
     """
     lat_r, lon_r = round_coordinate(lat, lon)
     filename = f"{lat_r}_{lon_r}.json"

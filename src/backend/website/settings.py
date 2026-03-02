@@ -484,7 +484,7 @@ REVERSE_GEOCODING_ENABLED = config.get_bool('reverse_geocoding.enabled', True)
 CITY_PROXIMITY_MILES = config.get_float('reverse_geocoding.city_proximity_miles', 5.0)
 LAKE_PROXIMITY_MILES = config.get_float('reverse_geocoding.lake_proximity_miles', 1.0)
 
-# Areas server (admin, protected areas, nearby lakes, ocean). Required when reverse geocoding is used.
+# Areas server (admin, protected areas, lakes, ocean). Required when reverse geocoding is used.
 AREAS_SERVER_URL = config.get_str('reverse_geocoding.areas_server.api_url', 'http://127.0.0.1:5001')
 AREAS_SERVER_TIMEOUT = config.get_int('reverse_geocoding.areas_server.request_timeout_seconds', 10)
 AREAS_SERVER_VERIFY_SSL = config.get_bool('reverse_geocoding.areas_server.verify_ssl', True)

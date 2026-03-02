@@ -5,14 +5,7 @@
     "county": "Cumberland County",
     "state": "Tennessee"
   },
-  "nearby_lakes": [
-    {
-      "distance_miles": 0.08,
-      "name": "Byrd Lake",
-      "on_water": false,
-      "water_type": "reservoir"
-    }
-  ],
+  "nearby_lakes": [],
   "ocean": [],
   "protected_areas": [
     {

@@ -5,14 +5,7 @@
     "county": "Summit County",
     "state": "Colorado"
   },
-  "nearby_lakes": [
-    {
-      "distance_miles": 0.94,
-      "name": "Sawmill Reservoir",
-      "on_water": false,
-      "water_type": "reservoir"
-    }
-  ],
+  "nearby_lakes": [],
   "ocean": [],
   "protected_areas": [
     {

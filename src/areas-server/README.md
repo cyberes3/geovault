@@ -3,9 +3,9 @@
 A standalone Flask server that answers point-in-area queries for the OSM dataset. Backed by PostGIS with data
 imported from OSM PBF files via osm2pgsql.
 
-This server is a replacement for the Overpass API server. Overpass is just too large, heavy, and complicated for our use
-case. Specifically, the `is_in()` query consumes dozens of GBs of memory for a single query. This standalone server also
-allows us to load alternative data sources beyond OSM.
+This server is a replacement for the Overpass API server. Overpass is just too large, heavy, slow, and complicated for
+our use case. Specifically, the `is_in()` query consumes dozens of GBs of memory for a single query. This standalone
+server also allows us to load alternative data sources beyond OSM.
 
 ### Expected performance benchmarks:
 
@@ -27,7 +27,7 @@ Data comes from OSM and other sources. See [ATTRIBUTION.md](ATTRIBUTION.md) for 
 |---------------------|-------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **admin_hierarchy** | Country, state, county, city at the point | Administrative boundaries (country, state, county, city). Country name normalized (e.g. "United States" → "United States of America"). When admin has no city, the closest OSM place node (place=city, town, village) within `city-radius-miles` (default 3) is used as the city tag. |
 | **protected_areas** | Parks, nature reserves, etc. at the point | Up to 5 protected areas that contain the point, or (when the point is on water) parks such that the water body containing the point touches the park and the point lies in the park’s convex hull still match.                                                                        |
-| **nearby_lakes**    | Named water bodies on water or near shore | Up to 5 water bodies: on water or with shoreline within `lake-radius-miles`. On-water first, then nearest by shoreline distance.                                                                                                                                                      |
+| **lakes**           | Named water bodies on water or near shore | Up to 5 water bodies: on water or with shoreline within `lake-radius-miles`. On-water first, then nearest by shoreline distance.                                                                                                                                                      |
 | **ocean**           | Ocean name when on or near ocean          | Point inside ocean, or within `ocean-radius-miles` of shoreline.                                                                                                                                                                                                                      |
 
 ## Routes
@@ -40,7 +40,7 @@ Single-point lookup at `lat`, `lon`.
   radius in miles), `ocean-radius-miles` (optional, default `1` — ocean shoreline search radius in miles),
   `city-radius-miles` (optional, default `3` — search radius in miles for nearest place node when admin has no city; use
   `0` to disable).
-- **Response:** One object with `admin_hierarchy`, `protected_areas` (up to 5), `nearby_lakes` (up to 5: on water or
+- **Response:** One object with `admin_hierarchy`, `protected_areas` (up to 5), `lakes` (up to 5: on water or
   shore within `lake-radius-miles`), and `ocean` (name when on or within `ocean-radius-miles` of ocean; null if no ocean
   data or no match).
 
@@ -53,7 +53,7 @@ Batch lookup for multiple points.
 - **Body:** `{"points": [[lat, lon], ...]}`. Optional keys: `lake-radius-miles` (default `1`), `ocean-radius-miles` (
   default `1`), `city-radius-miles` (default `3`; use `0` to disable nearest-place city lookup).
 - **Response:** `{"results": [ ... ]}` — one object per point in the same order, each with `admin_hierarchy`,
-  `protected_areas` (up to 5), `nearby_lakes` (up to 5), and `ocean`. More efficient than many GETs (up to five DB
+  `protected_areas` (up to 5), `lakes` (up to 5), and `ocean`. More efficient than many GETs (up to five DB
   round-trips in parallel).
 
 ### `GET /health`

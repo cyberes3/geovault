@@ -13,8 +13,8 @@ NEARBY_LAKES_LIMIT = 5
 _MILES_TO_M = 1609.34
 
 
-def build_nearby_lakes(rows: List[Tuple[Any, ...]]) -> List[Dict[str, Any]]:
-    """Build nearby_lakes list from query rows (name, water_type, distance_miles, on_water)."""
+def build_lakes(rows: List[Tuple[Any, ...]]) -> List[Dict[str, Any]]:
+    """Build lakes list from query rows (name, water_type, distance_miles, on_water)."""
     out: List[Dict[str, Any]] = []
     for row in rows:
         if len(row) < 4:
@@ -93,8 +93,8 @@ def run_water_batch(
                        ROW_NUMBER() OVER (
                            PARTITION BY pt.point_idx
                            ORDER BY public.ST_Contains(w.geom, pt.geom) DESC NULLS LAST,
-                                    (CASE WHEN public.ST_Contains(w.geom, pt.geom) THEN 0.0
-                                          ELSE public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)) / 1609.34 END)::double precision
+                                 (CASE WHEN public.ST_Contains(w.geom, pt.geom) THEN 0.0
+                                       ELSE public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)) / 1609.34 END)::double precision
                        ) AS rn
                 FROM pt
                 JOIN {SCHEMA}.{TABLE_NAME} w

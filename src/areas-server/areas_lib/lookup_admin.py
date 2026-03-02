@@ -111,8 +111,8 @@ def run_admin_single(conn: Any, lat: float, lon: float) -> List[Tuple[Any, ...]]
             WHERE public.ST_Contains(a.geom, public.ST_SetSRID(public.ST_MakePoint(%s, %s), 4326))
             ORDER BY a.admin_level ASC,
                      public.ST_Distance(
-                         public.ST_PointOnSurface(a.geom)::geography,
-                         public.ST_SetSRID(public.ST_MakePoint(%s, %s), 4326)::geography
+                         public.ST_PointOnSurface(a.geom),
+                         public.ST_SetSRID(public.ST_MakePoint(%s, %s), 4326)
                      ),
                      a.osm_id
             """,
@@ -141,11 +141,11 @@ def run_admin_batch(
                 FROM p
             ),
             joined AS (
-                SELECT pt.point_idx, a.osm_id, a.admin_level, a.name, a.tags,
-                       public.ST_Distance(
-                           public.ST_PointOnSurface(a.geom)::geography,
-                           public.geography(pt.geom)
-                       ) AS dist
+                    SELECT pt.point_idx, a.osm_id, a.admin_level, a.name, a.tags,
+                           public.ST_Distance(
+                               public.ST_PointOnSurface(a.geom),
+                               pt.geom
+                           ) AS dist
                 FROM pt
                 JOIN {SCHEMA}.{TABLE_NAME} a ON public.ST_Contains(a.geom, pt.geom)
             )

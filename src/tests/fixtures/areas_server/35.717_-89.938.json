@@ -1,14 +1,12 @@
 {
   "admin_hierarchy": {
-    "city": "San Francisco",
+    "city": "Osceola",
     "country": "United States",
-    "county": "San Francisco",
-    "state": "California"
+    "county": "Lauderdale County",
+    "state": "Tennessee"
   },
   "nearby_lakes": [],
-  "ocean": [
-    "North Pacific Ocean"
-  ],
+  "ocean": [],
   "protected_areas": [],
   "ski_resort": null
 }

@@ -858,7 +858,7 @@ def _fake_protected_row(osm_id: int, name: str, **tag_overrides) -> tuple:
 
 
 def _fake_lake_row(name: str, water_type: str = "water", distance_miles: float = 0.0, on_water: bool = True) -> tuple:
-    """Fake DB row (name, water_type, distance_miles, on_water) for nearby_lakes."""
+    """Fake DB row (name, water_type, distance_miles, on_water) for lakes."""
     return (name, water_type, distance_miles, on_water)
 
 
@@ -1030,37 +1030,37 @@ class TestProtectedAreasTop5:
 
 
 class TestNearbyLakesTop5:
-    """Validate nearby_lakes are limited to top 5 per point (on-water + near-shore); DB mocked."""
+    """Validate lakes are limited to top 5 per point (on-water + near-shore); DB mocked."""
 
-    def test_build_nearby_lakes_empty(self):
-        out = lookup_water.build_nearby_lakes([])
+    def test_build_lakes_empty(self):
+        out = lookup_water.build_lakes([])
         assert out == []
 
-    def test_build_nearby_lakes_one(self):
+    def test_build_lakes_one(self):
         rows = [_fake_lake_row("Lake A")]
-        out = lookup_water.build_nearby_lakes(rows)
+        out = lookup_water.build_lakes(rows)
         assert len(out) == 1
         assert out[0]["name"] == "Lake A"
         assert out[0]["on_water"] is True
 
-    def test_build_nearby_lakes_five_at_limit(self):
+    def test_build_lakes_five_at_limit(self):
         rows = [_fake_lake_row(f"Lake {i}", on_water=(i <= 2)) for i in range(1, 6)]
-        out = lookup_water.build_nearby_lakes(rows)
+        out = lookup_water.build_lakes(rows)
         assert len(out) == 5
 
-    def test_build_nearby_lakes_skips_empty_name(self):
+    def test_build_lakes_skips_empty_name(self):
         rows = [
             _fake_lake_row("Lake A"),
             ("", "water", 0.0, True),
             _fake_lake_row("Lake B"),
         ]
-        out = lookup_water.build_nearby_lakes(rows)
+        out = lookup_water.build_lakes(rows)
         assert len(out) == 2
         assert [x["name"] for x in out] == ["Lake A", "Lake B"]
 
-    def test_build_nearby_lakes_no_truncation_beyond_five(self):
+    def test_build_lakes_no_truncation_beyond_five(self):
         rows = [_fake_lake_row(f"Lake {i}") for i in range(1, 8)]
-        out = lookup_water.build_nearby_lakes(rows)
+        out = lookup_water.build_lakes(rows)
         assert len(out) == 7
 
     def test_run_water_single_execute_receives_limit_5(self):
@@ -1098,7 +1098,7 @@ class TestNearbyLakesTop5:
         cur.fetchall.return_value = on_water + near
         rows = lookup_water.run_water_single(conn, 40.0, -105.0, 1.0)
         assert len(rows) == 10
-        built = lookup_water.build_nearby_lakes(rows)
+        built = lookup_water.build_lakes(rows)
         assert len(built) == 10
 
     def test_run_water_batch_execute_receives_limit_5(self):
@@ -1129,12 +1129,12 @@ class TestNearbyLakesTop5:
         assert len(by_idx) == 2
         assert len(by_idx[0]) == 5
         assert len(by_idx[1]) == 5
-        built0 = lookup_water.build_nearby_lakes(by_idx[0])
-        built1 = lookup_water.build_nearby_lakes(by_idx[1])
+        built0 = lookup_water.build_lakes(by_idx[0])
+        built1 = lookup_water.build_lakes(by_idx[1])
         assert len(built0) == 5
         assert len(built1) == 5
 
-    def test_query_single_nearby_lakes_at_most_five_plus_five(self, mock_pool):
+    def test_query_single_lakes_at_most_five_plus_five(self, mock_pool):
         """query_single returns at most 5 nearby lakes (mocked)."""
         from areas_lib import query as areas_query
 
@@ -1161,7 +1161,7 @@ class TestNearbyLakesTop5:
         cur.fetchall.return_value = on_water
         rows = lookup_water.run_water_single(conn, 40.0, -105.0, 1.0)
         assert len(rows) == 5
-        built = lookup_water.build_nearby_lakes(rows)
+        built = lookup_water.build_lakes(rows)
         assert len(built) == 5
         assert all(b["on_water"] for b in built)
 
@@ -1175,7 +1175,7 @@ class TestNearbyLakesTop5:
         cur.fetchall.return_value = near
         rows = lookup_water.run_water_single(conn, 40.0, -105.0, 1.0)
         assert len(rows) == 5
-        built = lookup_water.build_nearby_lakes(rows)
+        built = lookup_water.build_lakes(rows)
         assert len(built) == 5
         assert not any(b["on_water"] for b in built)
 
@@ -1200,7 +1200,7 @@ class TestNearbyLakesTop5:
         assert 0 not in by_idx
         assert len(by_idx[1]) == 5
 
-    def test_build_nearby_lakes_skips_short_rows(self):
+    def test_build_lakes_skips_short_rows(self):
         """Rows with len < 4 are skipped."""
         rows = [
             ("A",),
@@ -1208,14 +1208,14 @@ class TestNearbyLakesTop5:
             ("A", "water", 0.0),
             _fake_lake_row("Lake B"),
         ]
-        out = lookup_water.build_nearby_lakes(rows)
+        out = lookup_water.build_lakes(rows)
         assert len(out) == 1
         assert out[0]["name"] == "Lake B"
 
-    def test_build_nearby_lakes_none_optional_fields(self):
+    def test_build_lakes_none_optional_fields(self):
         """None distance_miles -> 0.0; None water_type -> 'water'."""
         rows = [("Pond", None, None, True)]
-        out = lookup_water.build_nearby_lakes(rows)
+        out = lookup_water.build_lakes(rows)
         assert len(out) == 1
         assert out[0]["water_type"] == "water"
         assert out[0]["distance_miles"] == 0.0

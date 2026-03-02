@@ -7,12 +7,6 @@
   },
   "nearby_lakes": [
     {
-      "distance_miles": 0.47,
-      "name": "Houghton's Pond",
-      "on_water": false,
-      "water_type": "pond"
-    },
-    {
       "distance_miles": 0.77,
       "name": "Ponkapoag Pond",
       "on_water": false,

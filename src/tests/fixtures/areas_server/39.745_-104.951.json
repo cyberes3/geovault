@@ -5,38 +5,7 @@
     "county": "Denver",
     "state": "Colorado"
   },
-  "nearby_lakes": [
-    {
-      "distance_miles": 0.04,
-      "name": "Ferril Lake",
-      "on_water": false,
-      "water_type": "lake"
-    },
-    {
-      "distance_miles": 0.19,
-      "name": "Duck Lake",
-      "on_water": false,
-      "water_type": "water"
-    },
-    {
-      "distance_miles": 0.23,
-      "name": "Lily Pond",
-      "on_water": false,
-      "water_type": "pond"
-    },
-    {
-      "distance_miles": 0.35,
-      "name": "Harbor Seal",
-      "on_water": false,
-      "water_type": "water"
-    },
-    {
-      "distance_miles": 0.35,
-      "name": "Sea Lions",
-      "on_water": false,
-      "water_type": "water"
-    }
-  ],
+  "nearby_lakes": [],
   "ocean": [],
   "protected_areas": [
     {

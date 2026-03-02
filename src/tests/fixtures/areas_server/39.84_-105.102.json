@@ -5,20 +5,7 @@
     "county": "Jefferson County",
     "state": "Colorado"
   },
-  "nearby_lakes": [
-    {
-      "distance_miles": 0.38,
-      "name": "Pomona Lake Number 2",
-      "on_water": false,
-      "water_type": "reservoir"
-    },
-    {
-      "distance_miles": 0.62,
-      "name": "Pomona Lake",
-      "on_water": false,
-      "water_type": "reservoir"
-    }
-  ],
+  "nearby_lakes": [],
   "ocean": [],
   "protected_areas": [
     {

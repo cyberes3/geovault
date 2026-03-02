@@ -5,38 +5,7 @@
     "county": "Larimer County",
     "state": "Colorado"
   },
-  "nearby_lakes": [
-    {
-      "distance_miles": 0.13,
-      "name": "Spruce Lake",
-      "on_water": false,
-      "water_type": "lake"
-    },
-    {
-      "distance_miles": 0.53,
-      "name": "Primrose Pond",
-      "on_water": false,
-      "water_type": "lake"
-    },
-    {
-      "distance_miles": 0.53,
-      "name": "Fern Lake",
-      "on_water": false,
-      "water_type": "lake"
-    },
-    {
-      "distance_miles": 0.7,
-      "name": "Loomis Lake",
-      "on_water": false,
-      "water_type": "lake"
-    },
-    {
-      "distance_miles": 0.78,
-      "name": "Odessa Lake",
-      "on_water": false,
-      "water_type": "lake"
-    }
-  ],
+  "nearby_lakes": [],
   "ocean": [],
   "protected_areas": [
     {

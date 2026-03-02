@@ -5,20 +5,7 @@
     "county": "Jefferson County",
     "state": "Colorado"
   },
-  "nearby_lakes": [
-    {
-      "distance_miles": 0.11,
-      "name": "Mann Reservoir",
-      "on_water": false,
-      "water_type": "reservoir"
-    },
-    {
-      "distance_miles": 0.95,
-      "name": "Ken Caryl Reservoir",
-      "on_water": false,
-      "water_type": "reservoir"
-    }
-  ],
+  "nearby_lakes": [],
   "ocean": [],
   "protected_areas": [
     {

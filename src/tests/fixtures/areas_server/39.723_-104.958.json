@@ -5,32 +5,7 @@
     "county": "Denver",
     "state": "Colorado"
   },
-  "nearby_lakes": [
-    {
-      "distance_miles": 0.6,
-      "name": "Four Towers Pool",
-      "on_water": false,
-      "water_type": "pond"
-    },
-    {
-      "distance_miles": 0.6,
-      "name": "El Pomar Waterway",
-      "on_water": false,
-      "water_type": "water"
-    },
-    {
-      "distance_miles": 0.63,
-      "name": "Steppe Garden Waterway",
-      "on_water": false,
-      "water_type": "water"
-    },
-    {
-      "distance_miles": 0.68,
-      "name": "Monet Pool",
-      "on_water": false,
-      "water_type": "pond"
-    }
-  ],
+  "nearby_lakes": [],
   "ocean": [],
   "protected_areas": [
     {

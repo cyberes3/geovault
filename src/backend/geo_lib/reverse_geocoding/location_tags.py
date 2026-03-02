@@ -8,7 +8,7 @@ This module provides the primary entry point for reverse geocoding:
 Tags are generated from multiple sources:
 - Administrative boundaries (city, state, country)
 - Protected areas (national parks, state parks, etc.)
-- Nearby lakes and water bodies
+- Lakes and water bodies
 - Nearby ski resorts
 """
 from concurrent.futures import ThreadPoolExecutor
@@ -18,6 +18,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 from geo_lib.reverse_geocoding.areas_server_client import query_areas_server
 from geo_lib.reverse_geocoding.areas_server_models import AreasQueryResponse
+from geo_lib.reverse_geocoding.constants import WATERWAY_TAG_MAX_DISTANCE_M
 from geo_lib.reverse_geocoding.protected_areas import classify_protected_area
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.spatial.coordinates import round_coordinate
@@ -69,12 +70,18 @@ def tags_from_areas_data(response: Union[AreasQueryResponse, dict]) -> List[str]
             tags.append(f"ocean:{n}")
 
     lake_tags: set = set()
-    for lake in response.nearby_lakes[:3]:
+    for lake in response.lakes[:3]:
         lake_tags.add(f"lake:{lake.name}")
     tags.extend(sorted(lake_tags))
 
     if response.ski_resort and response.ski_resort.strip():
         tags.append(f"ski-resort:{response.ski_resort.strip()}")
+
+    # Add waterway tag when within 300 ft of river/canal centerline (rivers are linestrings, not polygons like lakes).
+    if response.waterway and response.waterway.name and response.waterway.name.strip():
+        dist_m = response.waterway.distance_m
+        if dist_m is not None and dist_m <= WATERWAY_TAG_MAX_DISTANCE_M:
+            tags.append(f"waterway:{response.waterway.name.strip()}")
 
     return tags
 

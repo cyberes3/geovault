@@ -67,7 +67,7 @@ def run_protected_batch(
                        ROW_NUMBER() OVER (PARTITION BY p.point_idx ORDER BY a.osm_id) AS rn
                 FROM p
                 JOIN {SCHEMA}.{TABLE_NAME} a
-                    ON public.ST_Contains(a.geom, public.ST_SetSRID(public.ST_GeomFromText(('POINT(' || p.lon::text || ' ' || p.lat::text || ')')::text), 4326))
+                    ON public.ST_Contains(a.geom, public.ST_SetSRID(public.ST_MakePoint(p.lon, p.lat), 4326))
             )
             SELECT point_idx, osm_id, name, tags
             FROM ranked

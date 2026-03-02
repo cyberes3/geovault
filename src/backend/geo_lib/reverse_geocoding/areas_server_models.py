@@ -37,15 +37,22 @@ class NearbyLake(BaseModel):
     on_water: bool = False
 
 
+class Waterway(BaseModel):
+    """Nearest major waterway (river, creek) from waterways.major_waterways."""
+    name: Optional[str] = None
+    distance_m: Optional[float] = None
+
+
 class AreasQueryResponse(BaseModel):
     """Full response from GET /query on the areas server."""
     model_config = ConfigDict(extra="ignore")
 
     admin_hierarchy: AdminHierarchy = Field(default_factory=AdminHierarchy)
     protected_areas: List[ProtectedArea] = Field(default_factory=list)
-    nearby_lakes: List[NearbyLake] = Field(default_factory=list)
+    lakes: List[NearbyLake] = Field(default_factory=list)
     ocean: List[str] = Field(default_factory=list)
     ski_resort: Optional[str] = None
+    waterway: Optional[Waterway] = None
 
     @field_validator("ocean", mode="before")
     @classmethod
@@ -64,9 +71,10 @@ class AreasQueryResponse(BaseModel):
         return cls(
             admin_hierarchy=AdminHierarchy(),
             protected_areas=[],
-            nearby_lakes=[],
+            lakes=[],
             ocean=[],
             ski_resort=None,
+            waterway=None,
         )
 
     def has_any_location_data(self) -> bool:
@@ -75,5 +83,5 @@ class AreasQueryResponse(BaseModel):
         return bool(
             (ah.country or ah.state or ah.county or ah.city)
             or self.protected_areas
-            or self.nearby_lakes
+            or self.lakes
         )

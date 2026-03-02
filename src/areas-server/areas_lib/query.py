@@ -165,7 +165,7 @@ def _query_batch_sql(include_place: bool, include_waterway: bool = True) -> str:
                    ROW_NUMBER() OVER (PARTITION BY pt.point_idx
                         ORDER BY public.ST_Contains(w.geom, pt.geom) DESC NULLS LAST,
                                  (CASE WHEN public.ST_Contains(w.geom, pt.geom) THEN 0.0
-                                       ELSE public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)) / {_MILES_TO_M} END)::double precision) AS rn
+                                       ELSE public.ST_Distance(w.geom, pt.geom) * 69.17 END)::double precision) AS rn
             FROM pt
             JOIN {SCHEMA}.{lookup_water.TABLE_NAME} w
                  ON public.ST_Contains(w.geom, pt.geom)
@@ -318,7 +318,7 @@ def _parse_batch_rows(
         results[i] = (
             admin_hierarchy,
             lookup_protected_areas.build_protected_list(protected_rows_i),
-            lookup_water.build_nearby_lakes(water_rows_i),
+            lookup_water.build_lakes(water_rows_i),
             oceans_list,
             ski_by_idx.get(i),
             waterway_by_idx.get(i),
@@ -383,7 +383,7 @@ def _parse_single_rows(
     return (
         admin_hierarchy,
         lookup_protected_areas.build_protected_list(protected_rows),
-        lookup_water.build_nearby_lakes(water_rows),
+        lookup_water.build_lakes(water_rows),
         oceans_list,
         ski_name,
         waterway_payload,

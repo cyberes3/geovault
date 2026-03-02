@@ -152,7 +152,7 @@ reverse_geocoding:
   city_proximity_miles: 5.0
   lake_proximity_miles: 1.0
 
-  # Areas server (admin, protected areas, nearby lakes, ocean). Required when reverse geocoding is enabled.
+  # Areas server (admin, protected areas, lakes, ocean). Required when reverse geocoding is enabled.
   areas_server:
     api_url: http://127.0.0.1:5001
     request_timeout_seconds: 10

@@ -5,26 +5,7 @@
     "county": "El Paso County",
     "state": "Colorado"
   },
-  "nearby_lakes": [
-    {
-      "distance_miles": 0.47,
-      "name": "Sapphire Lake",
-      "on_water": false,
-      "water_type": "reservoir"
-    },
-    {
-      "distance_miles": 0.61,
-      "name": "Leo Lake",
-      "on_water": false,
-      "water_type": "reservoir"
-    },
-    {
-      "distance_miles": 0.8,
-      "name": "Grace Lake",
-      "on_water": false,
-      "water_type": "reservoir"
-    }
-  ],
+  "nearby_lakes": [],
   "ocean": [],
   "protected_areas": [
     {

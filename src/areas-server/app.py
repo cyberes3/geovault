@@ -166,7 +166,7 @@ def _parse_int_arg(value: Optional[str], default: int, name: str) -> Tuple[int, 
 def _make_response(
         admin_hierarchy: Dict[str, Optional[str]],
         protected_areas: List[Dict[str, str]],
-        nearby_lakes: List[Dict[str, Any]],
+        lakes: List[Dict[str, Any]],
         ocean: Optional[List[str]] = None,
         ski_resort: Optional[str] = None,
         waterway: Optional[Dict[str, Any]] = None,
@@ -180,7 +180,7 @@ def _make_response(
     out: Dict[str, Any] = {
         "admin_hierarchy": admin_hierarchy,
         "protected_areas": protected_areas,
-        "nearby_lakes": nearby_lakes,
+        "lakes": lakes,
         "ocean": ocean_list,
         "ski_resort": ski_resort,
     }
@@ -283,14 +283,14 @@ def get_query():
             return cache[key]
 
     pool = get_pool()
-    admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort, waterway = query_single(
+    admin_hierarchy, protected_areas, lakes, ocean, ski_resort, waterway = query_single(
         pool, lat_f, lon_f,
         lake_radius_miles=lake_radius_miles,
         ocean_radius_miles=ocean_radius_miles,
         city_radius_miles=city_radius_miles,
         waterway_radius_miles=waterway_radius_miles,
     )
-    out = _make_response(admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort, waterway)
+    out = _make_response(admin_hierarchy, protected_areas, lakes, ocean, ski_resort, waterway)
     if cache is not None:
         cache[key] = out
     return out
@@ -381,8 +381,8 @@ def post_query():
     )
     out = {
         "results": [
-            _make_response(admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort, waterway)
-            for admin_hierarchy, protected_areas, nearby_lakes, ocean, ski_resort, waterway in results
+            _make_response(admin_hierarchy, protected_areas, lakes, ocean, ski_resort, waterway)
+            for admin_hierarchy, protected_areas, lakes, ocean, ski_resort, waterway in results
         ]
     }
     return out

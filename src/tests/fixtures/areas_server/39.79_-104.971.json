@@ -1,0 +1,16 @@
+{
+  "admin_hierarchy": {
+    "city": "Denver",
+    "country": "United States",
+    "county": "Denver",
+    "state": "Colorado"
+  },
+  "nearby_lakes": [],
+  "ocean": [],
+  "protected_areas": [],
+  "ski_resort": null,
+  "waterway": {
+    "distance_m": 41,
+    "name": "South Platte River"
+  }
+}

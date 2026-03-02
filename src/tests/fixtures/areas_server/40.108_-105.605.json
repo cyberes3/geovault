@@ -5,20 +5,7 @@
     "county": "Boulder County",
     "state": "Colorado"
   },
-  "nearby_lakes": [
-    {
-      "distance_miles": 0.61,
-      "name": "Coney Lake",
-      "on_water": false,
-      "water_type": "lake"
-    },
-    {
-      "distance_miles": 0.99,
-      "name": "Upper Coney Lake",
-      "on_water": false,
-      "water_type": "lake"
-    }
-  ],
+  "nearby_lakes": [],
   "ocean": [],
   "protected_areas": [
     {

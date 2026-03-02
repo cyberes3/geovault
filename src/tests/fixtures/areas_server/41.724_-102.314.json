@@ -5,20 +5,7 @@
     "county": "Garden County",
     "state": "Nebraska"
   },
-  "nearby_lakes": [
-    {
-      "distance_miles": 0.4,
-      "name": "Swede Lake",
-      "on_water": false,
-      "water_type": "lake"
-    },
-    {
-      "distance_miles": 0.93,
-      "name": "Deer Lake",
-      "on_water": false,
-      "water_type": "lake"
-    }
-  ],
+  "nearby_lakes": [],
   "ocean": [],
   "protected_areas": [
     {

@@ -1,5 +1,5 @@
 """
-HTTP client for the areas server (admin boundaries, protected areas, nearby lakes, ocean).
+HTTP client for the areas server (admin boundaries, protected areas, lakes, ocean).
 Required when reverse geocoding is enabled.
 """
 import json

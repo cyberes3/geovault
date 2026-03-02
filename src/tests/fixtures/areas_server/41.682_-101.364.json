@@ -7,12 +7,6 @@
   },
   "nearby_lakes": [
     {
-      "distance_miles": 0.1,
-      "name": "Stickney Lake",
-      "on_water": false,
-      "water_type": "lake"
-    },
-    {
       "distance_miles": 0.28,
       "name": "Sand Beach Lake",
       "on_water": false,

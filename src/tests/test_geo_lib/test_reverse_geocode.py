@@ -21,6 +21,7 @@ from geo_lib.reverse_geocoding.areas_server_models import (
     AdminHierarchy,
     ProtectedArea,
     NearbyLake,
+    Waterway,
 )
 from geo_lib.spatial.haversine import haversine_distance_miles
 
@@ -108,7 +109,7 @@ class TestTagsFromAreasData(ReverseGeocodingTagTestMixin, TestCase):
         response = {
             "admin_hierarchy": {"country": None, "state": None, "county": None, "city": None},
             "protected_areas": [],
-            "nearby_lakes": [],
+            "lakes": [],
             "ocean": [],
             "ski_resort": None,
         }
@@ -125,7 +126,7 @@ class TestTagsFromAreasData(ReverseGeocodingTagTestMixin, TestCase):
                 city="Boulder",
             ),
             protected_areas=[],
-            nearby_lakes=[],
+            lakes=[],
             ocean=[],
             ski_resort=None,
         )
@@ -151,7 +152,7 @@ class TestTagsFromAreasData(ReverseGeocodingTagTestMixin, TestCase):
                     designation="",
                 ),
             ],
-            nearby_lakes=[],
+            lakes=[],
             ocean=[],
             ski_resort=None,
         )
@@ -169,7 +170,7 @@ class TestTagsFromAreasData(ReverseGeocodingTagTestMixin, TestCase):
                     designation="",
                 ),
             ],
-            nearby_lakes=[],
+            lakes=[],
             ocean=[],
             ski_resort=None,
         )
@@ -183,7 +184,7 @@ class TestTagsFromAreasData(ReverseGeocodingTagTestMixin, TestCase):
             protected_areas=[
                 ProtectedArea(name="", protection_title="National Park", designation=""),
             ],
-            nearby_lakes=[],
+            lakes=[],
             ocean=[],
             ski_resort=None,
         )
@@ -195,7 +196,7 @@ class TestTagsFromAreasData(ReverseGeocodingTagTestMixin, TestCase):
         response = AreasQueryResponse(
             admin_hierarchy=AdminHierarchy(),
             protected_areas=[],
-            nearby_lakes=[],
+            lakes=[],
             ocean=["North Atlantic Ocean", "Gulf of Maine", "Third Ocean"],
             ski_resort=None,
         )
@@ -210,7 +211,7 @@ class TestTagsFromAreasData(ReverseGeocodingTagTestMixin, TestCase):
         response = AreasQueryResponse(
             admin_hierarchy=AdminHierarchy(),
             protected_areas=[],
-            nearby_lakes=[
+            lakes=[
                 NearbyLake(name="Lake A"),
                 NearbyLake(name="Lake B"),
                 NearbyLake(name="Lake C"),
@@ -232,7 +233,7 @@ class TestTagsFromAreasData(ReverseGeocodingTagTestMixin, TestCase):
         response = AreasQueryResponse(
             admin_hierarchy=AdminHierarchy(),
             protected_areas=[],
-            nearby_lakes=[],
+            lakes=[],
             ocean=[],
             ski_resort="Vail",
         )
@@ -246,9 +247,63 @@ class TestTagsFromAreasData(ReverseGeocodingTagTestMixin, TestCase):
                 response = AreasQueryResponse(
                     admin_hierarchy=AdminHierarchy(),
                     protected_areas=[],
-                    nearby_lakes=[],
+                    lakes=[],
                     ocean=[],
                     ski_resort=ski_resort_value,
+                )
+                tags = tags_from_areas_data(response)
+                self.assert_tags_exact(tags, [])
+
+    def test_waterway_added_when_within_300_feet(self):
+        """Waterway tag is added when within 300 feet of the waterway centerline (no separate on-water check)."""
+        # At centerline (distance 0)
+        response = AreasQueryResponse(
+            admin_hierarchy=AdminHierarchy(),
+            protected_areas=[],
+            lakes=[],
+            ocean=[],
+            ski_resort=None,
+            waterway=Waterway(name="South Platte River", distance_m=0),
+        )
+        tags = tags_from_areas_data(response)
+        self.assert_tags_exact(tags, ["waterway:South Platte River"])
+
+        # Within 300 feet (~91 m)
+        response = AreasQueryResponse(
+            admin_hierarchy=AdminHierarchy(),
+            protected_areas=[],
+            lakes=[],
+            ocean=[],
+            ski_resort=None,
+            waterway=Waterway(name="Some Creek", distance_m=50),
+        )
+        tags = tags_from_areas_data(response)
+        self.assert_tags_exact(tags, ["waterway:Some Creek"])
+
+    def test_waterway_not_added_beyond_300_feet(self):
+        """Waterway tag is not added when more than 300 feet from the waterway centerline."""
+        response = AreasQueryResponse(
+            admin_hierarchy=AdminHierarchy(),
+            protected_areas=[],
+            lakes=[],
+            ocean=[],
+            ski_resort=None,
+            waterway=Waterway(name="South Platte River", distance_m=100),
+        )
+        tags = tags_from_areas_data(response)
+        self.assert_tags_exact(tags, [])
+
+    def test_waterway_empty_or_none_not_added(self):
+        """None or empty waterway name does not add a tag."""
+        for waterway_value in (None, Waterway(name=None), Waterway(name=""), Waterway(name="   ")):
+            with self.subTest(waterway=waterway_value):
+                response = AreasQueryResponse(
+                    admin_hierarchy=AdminHierarchy(),
+                    protected_areas=[],
+                    lakes=[],
+                    ocean=[],
+                    ski_resort=None,
+                    waterway=waterway_value,
                 )
                 tags = tags_from_areas_data(response)
                 self.assert_tags_exact(tags, [])
@@ -261,7 +316,7 @@ class TestTagsFromAreasData(ReverseGeocodingTagTestMixin, TestCase):
                 ProtectedArea(name="Park B", protection_title="State Park"),
                 ProtectedArea(name="Park A", protection_title="National Park"),
             ],
-            nearby_lakes=[NearbyLake(name="Lake 2"), NearbyLake(name="Lake 1")],
+            lakes=[NearbyLake(name="Lake 2"), NearbyLake(name="Lake 1")],
             ocean=["Ocean A"],
             ski_resort="Resort",
         )
@@ -301,7 +356,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'city:Crossville',
             'country:United States',
             'county:Cumberland County',
-            'lake:Byrd Lake',
             'protected-area:Cumberland Mountain State Park',
             'state:Tennessee',
         ]
@@ -314,7 +368,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'city:Nashville',
             'country:United States',
             'county:Davidson County',
-            'lake:Cheatham Lake',
             'protected-area:Bells Bend Park',
             'state:Tennessee',
         ]
@@ -327,7 +380,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'city:San Francisco',
             'country:United States',
             'county:San Francisco',
-            'lake:South Lake',
             'ocean:North Pacific Ocean',
             'state:California',
         ]
@@ -363,7 +415,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
         expected = [
             'country:United States',
             'county:Gunnison County',
-            'lake:Blue Mesa Reservoir',
             'national-recreation-area:Curecanti National Recreation Area',
             'protected-area:BLM - Gunnison Field Office',
             'state:Colorado',
@@ -387,9 +438,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
         expected = [
             'country:United States',
             'county:Teller County',
-            'lake:Dragonfly',
-            'lake:Lost Pond',
-            'lake:Peak View Pond',
             'state-park:Mueller State Park',
             'state:Colorado',
         ]
@@ -412,9 +460,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
         expected = [
             'country:United States',
             'county:El Paso County',
-            'lake:Grace Lake',
-            'lake:Leo Lake',
-            'lake:Sapphire Lake',
             'national-forest:Pike National Forest',
             'state:Colorado',
         ]
@@ -462,8 +507,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
         expected = [
             'country:United States',
             'county:Jefferson County',
-            'lake:Ken Caryl Reservoir',
-            'lake:Mann Reservoir',
             'protected-area:South Valley Park',
             'state:Colorado',
         ]
@@ -513,9 +556,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'city:Denver',
             'country:United States',
             'county:Denver',
-            'lake:El Pomar Waterway',
-            'lake:Four Towers Pool',
-            'lake:Steppe Garden Waterway',
             'park:James N. Manley Park',
             'state:Colorado',
         ]
@@ -528,9 +568,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'city:Denver',
             'country:United States',
             'county:Denver',
-            'lake:Duck Lake',
-            'lake:Ferril Lake',
-            'lake:Lily Pond',
             'park:City Park',
             'state:Colorado',
         ]
@@ -554,7 +591,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'city:Westminster',
             'country:United States',
             'county:Jefferson County',
-            'lake:Standley Lake',
             'protected-area:Standley Lake Regional Park',
             'state:Colorado',
         ]
@@ -567,8 +603,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'city:Arvada',
             'country:United States',
             'county:Jefferson County',
-            'lake:Pomona Lake',
-            'lake:Pomona Lake Number 2',
             'national-wildlife-refuge:Two Ponds National Wildlife Refuge',
             'state:Colorado',
         ]
@@ -581,7 +615,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'city:Breckenridge',
             'country:United States',
             'county:Summit County',
-            'lake:Sawmill Reservoir',
             'national-forest:White River National Forest',
             'ski-resort:Breckenridge',
             'state:Colorado',
@@ -605,8 +638,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
         expected = [
             'country:United States',
             'county:Boulder County',
-            'lake:Coney Lake',
-            'lake:Upper Coney Lake',
             'state:Colorado',
             'wilderness:Indian Peaks Wilderness',
         ]
@@ -636,14 +667,12 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
         tags, _ = get_location_tags(lat, lon)
         self.assert_tags_exact(tags, expected)
 
-    def test_grand_lake_nearby_lakes(self):
+    def test_grand_lake_lakes(self):
         lat, lon = 40.24301, -105.82766
         expected = [
             'city:Grand Lake',
             'country:United States',
             'county:Grand County',
-            'lake:Grand Lake',
-            'lake:Shadow Mountain Lake',
             'state:Colorado',
         ]
         tags, _ = get_location_tags(lat, lon)
@@ -665,9 +694,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
         expected = [
             'country:United States',
             'county:Larimer County',
-            'lake:Fern Lake',
-            'lake:Primrose Pond',
-            'lake:Spruce Lake',
             'national-park:Rocky Mountain National Park',
             'state:Colorado',
             'wilderness:Rocky Mountain Wilderness',
@@ -689,8 +715,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
         expected = [
             'country:United States',
             'county:McPherson County',
-            'lake:Sand Beach Lake',
-            'lake:Stickney Lake',
             'state:Nebraska',
         ]
         tags, _ = get_location_tags(lat, lon)
@@ -701,8 +725,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
         expected = [
             'country:United States',
             'county:Garden County',
-            'lake:Deer Lake',
-            'lake:Swede Lake',
             'national-wildlife-refuge:Crescent Lake National Wildlife Refuge',
             'state:Nebraska',
         ]
@@ -725,8 +747,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'city:Milton',
             'country:United States',
             'county:Norfolk County',
-            "lake:Houghton's Pond",
-            'lake:Ponkapoag Pond',
             'state-park:Blue Hills Reservation',
             'state:Massachusetts',
         ]
@@ -791,7 +811,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'city:Dunes City',
             'country:United States',
             'county:Lane County',
-            'lake:Woahink Lake',
             'national-forest:Siuslaw National Forest',
             'national-recreation-area:Oregon Dunes National Recreation Area',
             'state:Oregon',
@@ -839,7 +858,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
             'city:Burt Township',
             'country:United States',
             'county:Alger County',
-            'lake:Beaver Lake',
             'national-lakeshore:Pictured Rocks National Lakeshore (Federal Unit)',
             'state:Michigan',
             'wilderness:Beaver Basin Wilderness',
@@ -942,3 +960,33 @@ class TestFixtureRegeneration(TestCase):
             "Missing fixture files for coordinates in DEFAULT_FIXTURE_COORDINATES. "
             "Run: cd src/tests && python fetch_areas_fixtures.py <AREAS_SERVER_URL>",
         )
+
+
+@pytest.mark.django_db
+class TestRiverPointFixtures(ReverseGeocodingTagTestMixin, TestCase):
+    """Assert exact tags for river-point fixture coordinates."""
+
+    def test_south_platte_river_denver(self):
+        """Point ~41 m from South Platte River: within 300 ft, so waterway tag is included."""
+        lat, lon = 39.78976, -104.97147
+        expected = [
+            'city:Denver',
+            'country:United States',
+            'county:Denver',
+            'state:Colorado',
+            'waterway:South Platte River',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)
+
+    def test_osceola_tennessee(self):
+        """River point at Osceola, TN: admin only (no waterway in fixture)."""
+        lat, lon = 35.71677, -89.93794
+        expected = [
+            'city:Osceola',
+            'country:United States',
+            'county:Lauderdale County',
+            'state:Tennessee',
+        ]
+        tags, _ = get_location_tags(lat, lon)
+        self.assert_tags_exact(tags, expected)

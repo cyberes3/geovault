@@ -23,6 +23,9 @@ SCHEMA="is_in"
 psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS admin_areas_geom_gist ON \"$SCHEMA\".admin_areas USING GIST (geom);"
 psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS protected_areas_geom_gist ON \"$SCHEMA\".protected_areas USING GIST (geom);"
 # Geography GIST speeds up ST_DWithin(geography(geom), ...) for water/place radius lookups
+psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS water_bodies_geom_gist ON \"$SCHEMA\".water_bodies USING GIST (geom);"
+psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS place_nodes_geom_gist ON \"$SCHEMA\".place_nodes USING GIST (geom);"
+# Geography GIST speeds up ST_DWithin(geography(geom), ...) if any remaining geography lookups are used
 psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS water_bodies_geom_geog_gist ON \"$SCHEMA\".water_bodies USING GIST ((geom::geography));"
 psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS place_nodes_geom_geog_gist ON \"$SCHEMA\".place_nodes USING GIST ((geom::geography));"
 # Geometry GIST for ST_Contains on ocean/ski tables (import scripts may only add geography GIST)
@@ -31,7 +34,8 @@ psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS oceans_geom_gist ON
 psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS ski_resorts_geom_gist ON \"$SCHEMA\".ski_resorts USING GIST (geom);"
 psql "$DB" -v ON_ERROR_STOP=1 -c "ANALYZE \"$SCHEMA\".admin_areas; ANALYZE \"$SCHEMA\".protected_areas; ANALYZE \"$SCHEMA\".water_bodies; ANALYZE \"$SCHEMA\".place_nodes; ANALYZE \"$SCHEMA\".ocean_regions; ANALYZE \"$SCHEMA\".oceans; ANALYZE \"$SCHEMA\".ski_resorts;"
 
-# Waterways lookup requires a geography gist index for ST_DWithin and ANALYZE
-# We allow these to fail (|| true) since the waterways schema/table is optional
+# Waterways lookup requires geometry index for optimized distance/within-distance checks
+# Geography index is kept for backward compatibility or direct geography queries
+psql "$DB" -c "CREATE INDEX IF NOT EXISTS major_waterways_geom_gist ON waterways.major_waterways USING GIST (geom);" || true
 psql "$DB" -c "CREATE INDEX IF NOT EXISTS major_waterways_geom_geog_gist ON waterways.major_waterways USING GIST ((geom::geography));" || true
 psql "$DB" -c "ANALYZE waterways.major_waterways;" || true
