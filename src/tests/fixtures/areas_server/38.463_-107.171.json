@@ -5,7 +5,7 @@
     "county": "Gunnison County",
     "state": "Colorado"
   },
-  "nearby_lakes": [
+  "lakes": [
     {
       "distance_miles": 0.17,
       "name": "Blue Mesa Reservoir",

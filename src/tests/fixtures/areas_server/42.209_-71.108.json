@@ -5,7 +5,7 @@
     "county": "Norfolk County",
     "state": "Massachusetts"
   },
-  "nearby_lakes": [
+  "lakes": [
     {
       "distance_miles": 0.77,
       "name": "Ponkapoag Pond",

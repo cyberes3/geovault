@@ -5,7 +5,7 @@
     "county": "Jefferson County",
     "state": "Colorado"
   },
-  "nearby_lakes": [
+  "lakes": [
     {
       "distance_miles": 0.0,
       "name": "Standley Lake",

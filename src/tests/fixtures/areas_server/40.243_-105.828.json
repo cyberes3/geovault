@@ -5,7 +5,7 @@
     "county": "Grand County",
     "state": "Colorado"
   },
-  "nearby_lakes": [
+  "lakes": [
     {
       "distance_miles": 0.08,
       "name": "Shadow Mountain Lake",

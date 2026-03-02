@@ -5,7 +5,7 @@
     "county": "McPherson County",
     "state": "Nebraska"
   },
-  "nearby_lakes": [
+  "lakes": [
     {
       "distance_miles": 0.28,
       "name": "Sand Beach Lake",

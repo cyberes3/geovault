@@ -5,7 +5,7 @@
     "county": "Alger County",
     "state": "Michigan"
   },
-  "nearby_lakes": [
+  "lakes": [
     {
       "distance_miles": 0.73,
       "name": "Beaver Lake",

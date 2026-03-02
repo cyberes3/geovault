@@ -5,7 +5,7 @@
     "county": "Lane County",
     "state": "Oregon"
   },
-  "nearby_lakes": [
+  "lakes": [
     {
       "distance_miles": 0.73,
       "name": "Woahink Lake",
