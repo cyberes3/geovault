@@ -81,6 +81,12 @@
       marker = L.marker([lat, lng]).addTo(map);
     });
 
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
     function setResult(html, isError) {
       resultEl.innerHTML = html;
       resultEl.className = 'result' + (isError ? ' error' : '');
@@ -102,12 +108,12 @@
         const res = await fetch(url);
         const data = await res.json();
         if (!res.ok) {
-          setResult('<h3>Error</h3><pre>' + (data.error || res.statusText) + '</pre>', true);
+          setResult('<h3>Error</h3><pre>' + escapeHtml(data.error || res.statusText) + '</pre>', true);
           return;
         }
-        setResult('<h3>Result</h3><pre>' + JSON.stringify(data, null, 2) + '</pre>');
+        setResult('<h3>Result</h3><pre>' + escapeHtml(JSON.stringify(data, null, 2)) + '</pre>');
       } catch (err) {
-        setResult('<h3>Error</h3><pre>' + String(err) + '</pre>', true);
+        setResult('<h3>Error</h3><pre>' + escapeHtml(String(err)) + '</pre>', true);
       } finally {
         submitBtn.disabled = false;
       }
