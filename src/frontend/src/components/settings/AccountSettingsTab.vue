@@ -320,6 +320,8 @@
               <div class="text-xs text-gray-500 space-y-1">
                 <div>Authorized: {{ formatDate(token.created) }}</div>
                 <div>Expires: {{ token.expires ? formatDate(token.expires) : '—' }}</div>
+                <div v-if="token.last_used_at">Last used: {{ formatDate(token.last_used_at) }}</div>
+                <div v-else class="text-gray-400">Never used</div>
               </div>
             </div>
             <BaseButton
@@ -705,15 +707,7 @@ export default {
         });
 
         if (response.status === 200) {
-          // Reload the list
           await this.loadApiKeys();
-          this.apiKeyMessage = 'API key deleted successfully';
-          this.apiKeyMessageType = 'success';
-          // Clear message after a few seconds
-          setTimeout(() => {
-            this.apiKeyMessage = '';
-            this.apiKeyMessageType = '';
-          }, 3000);
         } else {
           this.apiKeyMessage = response.data.error || 'Failed to delete API key';
           this.apiKeyMessageType = 'error';

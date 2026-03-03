@@ -204,6 +204,8 @@ class APIKeyResolutionMiddleware:
                         request.user = user
                         request.oauth2_access_token = access_token
                         request.is_api_authenticated = True
+                        # Track last use for settings UI (touch updated)
+                        access_token.save(update_fields=["updated"])
                     else:
                         result = validate_api_key(token)
                         if result is not None:

@@ -37,11 +37,16 @@ def list_authorized_oauth_tokens(request):
             expires_iso = expires_dt.isoformat()
         else:
             expires_iso = None
+        # Last used: token.updated is touched on each use in middleware; treat as "never used" if still at creation time
+        last_used_at = None
+        if token.updated and (token.updated - token.created).total_seconds() > 1:
+            last_used_at = token.updated.isoformat()
         items.append({
             "id": token.id,
             "application_name": app_name,
             "created": token.created.isoformat(),
             "expires": expires_iso,
+            "last_used_at": last_used_at,
         })
     return JsonResponse({"authorized_tokens": items})
 
