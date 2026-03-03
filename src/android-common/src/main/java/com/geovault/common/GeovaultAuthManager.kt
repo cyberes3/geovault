@@ -36,7 +36,11 @@ object GeovaultAuthManager {
     private const val PREF_PKCE_STATE = "pkce_state"
     private const val PREF_USER_EMAIL = "cached_user_email"
 
-    const val OAUTH_CLIENT_ID = "geovault-android"
+    const val OAUTH_CLIENT_ID_PLACES = "geovault-android-places"
+    const val OAUTH_CLIENT_ID_UPLOADER = "geovault-android-uploader"
+
+    @Volatile
+    private var clientId: String = OAUTH_CLIENT_ID_PLACES
     const val OAUTH_SCOPE = "api"
     private const val TOKEN_ENDPOINT_PATH = "/api/oauth/token/"
     private const val AUTHORIZE_PATH = "/api/oauth/authorize/"
@@ -51,14 +55,18 @@ object GeovaultAuthManager {
     /**
      * Initialize the auth manager with the application context and the app's OAuth redirect URI.
      * Must be called once before any other method (e.g. in Application.onCreate()).
+     * Use [clientId] to have this app show as "GeoVault Android Places" or "GeoVault Android Uploader"
+     * in the server's Authorized OAuth Applications list ([OAUTH_CLIENT_ID_PLACES], [OAUTH_CLIENT_ID_UPLOADER]).
      *
      * @param context Application or activity context; application context is used for storage.
      * @param redirectUri The app's redirect URI (e.g. "com.geovault.uploader://oauth/callback").
+     * @param clientId OAuth client_id for this app (e.g. [OAUTH_CLIENT_ID_PLACES] or [OAUTH_CLIENT_ID_UPLOADER]).
      */
     @JvmStatic
-    fun init(context: Context, redirectUri: String) {
+    fun init(context: Context, redirectUri: String, clientId: String) {
         if (this.redirectUri != null) return
         this.redirectUri = redirectUri
+        this.clientId = clientId
         val appContext = context.applicationContext
         val masterKey = MasterKey.Builder(appContext)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -155,7 +163,7 @@ object GeovaultAuthManager {
         val url = serverUrl.trimEnd('/') + "/api/oauth/revoke_token/"
         val body = FormBody.Builder()
             .add("token", token)
-            .add("client_id", OAUTH_CLIENT_ID)
+            .add("client_id", clientId)
             .build()
             
         val request = Request.Builder()
@@ -213,7 +221,7 @@ object GeovaultAuthManager {
         val base = serverUrl.trimEnd('/')
         return "$base$AUTHORIZE_PATH?" +
             "response_type=code" +
-            "&client_id=${Uri.encode(OAUTH_CLIENT_ID)}" +
+            "&client_id=${Uri.encode(clientId)}" +
             "&redirect_uri=${Uri.encode(uri)}" +
             "&scope=${Uri.encode(OAUTH_SCOPE)}" +
             "&code_challenge=${Uri.encode(codeChallenge)}" +
@@ -234,7 +242,7 @@ object GeovaultAuthManager {
             .add("grant_type", "authorization_code")
             .add("code", code)
             .add("redirect_uri", uri)
-            .add("client_id", OAUTH_CLIENT_ID)
+            .add("client_id", clientId)
             .add("code_verifier", codeVerifier)
             .build()
         val request = Request.Builder()
@@ -285,7 +293,7 @@ object GeovaultAuthManager {
         val body = FormBody.Builder()
             .add("grant_type", "refresh_token")
             .add("refresh_token", refreshToken)
-            .add("client_id", OAUTH_CLIENT_ID)
+            .add("client_id", clientId)
             .build()
         val request = Request.Builder()
             .url(url)

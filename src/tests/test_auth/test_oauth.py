@@ -654,37 +654,57 @@ class TestEnsureOAuth2AppCommand(TestCase):
             is_superuser=True,
         )
 
-    def test_creates_one_application(self):
-        """Command creates exactly one OAuth application with correct client_id and redirect URIs."""
+    def test_creates_android_oauth_applications(self):
+        """Command creates places and uploader OAuth applications with correct client_ids and redirect URIs."""
         from django.core.management import call_command
         from io import StringIO
 
         out = StringIO()
         call_command("ensure_oauth2_app", stdout=out)
-        self.assertEqual(Application.objects.count(), 1)
-        app = Application.objects.get()
-        self.assertEqual(app.client_id, "geovault-android")
-        self.assertEqual(app.name, "GeoVault Android")
-        redirects = set(app.redirect_uris.strip().split())
+        self.assertEqual(Application.objects.count(), 2)
+        places = Application.objects.get(client_id="geovault-android-places")
+        self.assertEqual(places.name, "GeoVault Android Places")
         self.assertEqual(
-            redirects,
-            {
-                "com.geovault.places://oauth/callback",
-                "com.geovault.places.debug://oauth/callback",
-                "com.geovault.uploader://oauth/callback",
-                "com.geovault.uploader.debug://oauth/callback",
-            },
+            set(places.redirect_uris.strip().split()),
+            {"com.geovault.places://oauth/callback", "com.geovault.places.debug://oauth/callback"},
         )
-        self.assertFalse(app.skip_authorization, "Default Android app should show authorize screen")
+        uploader = Application.objects.get(client_id="geovault-android-uploader")
+        self.assertEqual(uploader.name, "GeoVault Android Uploader")
+        self.assertEqual(
+            set(uploader.redirect_uris.strip().split()),
+            {"com.geovault.uploader://oauth/callback", "com.geovault.uploader.debug://oauth/callback"},
+        )
+        for app in (places, uploader):
+            self.assertFalse(app.skip_authorization, f"{app.client_id} should show authorize screen")
         self.assertTrue("Created" in out.getvalue() or "up to date" in out.getvalue())
 
     def test_idempotent_no_duplicate(self):
-        """Running the command twice does not create a second application."""
+        """Running the command twice does not create duplicate applications."""
         from django.core.management import call_command
 
         call_command("ensure_oauth2_app")
         call_command("ensure_oauth2_app")
+        self.assertEqual(Application.objects.count(), 2)
+        self.assertEqual(Application.objects.filter(client_id="geovault-android-places").count(), 1)
+        self.assertEqual(Application.objects.filter(client_id="geovault-android-uploader").count(), 1)
+
+    def test_deletes_legacy_app(self):
+        """Command deletes the legacy geovault-android application if present."""
+        from django.core.management import call_command
+        from io import StringIO
+
+        _create_oauth_application(
+            self.user,
+            client_id="geovault-android",
+            redirect_uri="com.geovault.places://oauth/callback",
+        )
         self.assertEqual(Application.objects.filter(client_id="geovault-android").count(), 1)
+        out = StringIO()
+        call_command("ensure_oauth2_app", stdout=out)
+        self.assertFalse(Application.objects.filter(client_id="geovault-android").exists())
+        self.assertEqual(Application.objects.filter(client_id="geovault-android-places").count(), 1)
+        self.assertEqual(Application.objects.filter(client_id="geovault-android-uploader").count(), 1)
+        self.assertIn("Deleted legacy", out.getvalue())
 
     def test_updates_redirect_uris_if_changed(self):
         """If app exists but redirect_uris differ, command updates them."""
@@ -693,10 +713,10 @@ class TestEnsureOAuth2AppCommand(TestCase):
 
         _create_oauth_application(
             self.user,
-            client_id="geovault-android",
+            client_id="geovault-android-places",
             redirect_uri="https://old.example/cb",
         )
-        app = Application.objects.get(client_id="geovault-android")
+        app = Application.objects.get(client_id="geovault-android-places")
         app.redirect_uris = "https://old.example/cb"
         app.save()
         out = StringIO()
@@ -704,8 +724,6 @@ class TestEnsureOAuth2AppCommand(TestCase):
         app.refresh_from_db()
         self.assertIn("com.geovault.places://oauth/callback", app.redirect_uris)
         self.assertIn("com.geovault.places.debug://oauth/callback", app.redirect_uris)
-        self.assertIn("com.geovault.uploader://oauth/callback", app.redirect_uris)
-        self.assertIn("com.geovault.uploader.debug://oauth/callback", app.redirect_uris)
         self.assertFalse(app.skip_authorization, "Command should set skip_authorization=False")
 
     def test_fails_without_user(self):
@@ -733,7 +751,7 @@ class TestProtectedOAuthApplications(TestCase):
         )
         self.protected_app = _create_oauth_application(
             self.user,
-            client_id="geovault-android",
+            client_id="geovault-android-places",
             redirect_uri="com.geovault.places://oauth/callback",
         )
         self.other_app = _create_oauth_application(
@@ -744,7 +762,7 @@ class TestProtectedOAuthApplications(TestCase):
         oauth2_settings = get_setting("OAUTH2_PROVIDER", {})
         self.overrides = {
             **oauth2_settings,
-            "PROTECTED_CLIENT_IDS": ["geovault-android"],
+            "PROTECTED_CLIENT_IDS": ["geovault-android-places"],
         }
 
     def test_list_excludes_protected(self):

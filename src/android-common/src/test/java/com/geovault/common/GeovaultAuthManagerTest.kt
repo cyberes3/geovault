@@ -51,7 +51,7 @@ class GeovaultAuthManagerTest {
 
     @Test
     fun buildAuthorizeUrl_containsRedirectUriAndParams() {
-        GeovaultAuthManager.init(context, "https://app.example/oauth/callback")
+        GeovaultAuthManager.init(context, "https://app.example/oauth/callback", GeovaultAuthManager.OAUTH_CLIENT_ID_PLACES)
         val url = GeovaultAuthManager.buildAuthorizeUrl(
             "https://server.example",
             "challenge123",
@@ -59,7 +59,7 @@ class GeovaultAuthManagerTest {
         )
         assertTrue(url.startsWith("https://server.example/api/oauth/authorize/?"))
         assertTrue(url.contains("response_type=code"))
-        assertTrue(url.contains("client_id=geovault-android"))
+        assertTrue(url.contains("client_id=geovault-android-places"))
         assertTrue(url.contains("redirect_uri="))
         assertTrue(url.contains("code_challenge=challenge123"))
         assertTrue(url.contains("code_challenge_method=S256"))

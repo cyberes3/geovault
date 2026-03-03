@@ -1,8 +1,9 @@
 """
-Create or update the OAuth2 Application used by the GeoVault Android apps (places & uploader).
+Create or update the OAuth2 Applications used by the GeoVault Android apps (places & uploader).
 
 Run after migrations so the Android apps can use the authorization code + PKCE flow.
-Idempotent: if an application with client_id=geovault-android exists, it is updated if needed.
+Idempotent: creates/updates one app per Android app so the Authorized OAuth Applications list
+shows "GeoVault Android Places" vs "GeoVault Android Uploader".
 """
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
@@ -10,37 +11,62 @@ from oauth2_provider.models import Application
 
 User = get_user_model()
 
-CLIENT_ID = "geovault-android"
-REDIRECT_URIS = (
-    "com.geovault.places://oauth/callback "
-    "com.geovault.places.debug://oauth/callback "
-    "com.geovault.uploader://oauth/callback "
-    "com.geovault.uploader.debug://oauth/callback"
+# Legacy client_id to remove if present (replaced by geovault-android-places / geovault-android-uploader)
+LEGACY_CLIENT_ID = "geovault-android"
+
+ANDROID_APPS = (
+    {
+        "client_id": "geovault-android-places",
+        "name": "GeoVault Android Places",
+        "redirect_uris": (
+            "com.geovault.places://oauth/callback "
+            "com.geovault.places.debug://oauth/callback"
+        ),
+    },
+    {
+        "client_id": "geovault-android-uploader",
+        "name": "GeoVault Android Uploader",
+        "redirect_uris": (
+            "com.geovault.uploader://oauth/callback "
+            "com.geovault.uploader.debug://oauth/callback"
+        ),
+    },
 )
 
 
+def _ensure_app(user, client_id, name, redirect_uris):
+    app = Application.objects.filter(client_id=client_id).first()
+    if app:
+        updated = []
+        if app.redirect_uris.strip() != redirect_uris.strip():
+            app.redirect_uris = redirect_uris
+            updated.append("redirect_uris")
+        if app.name != name:
+            app.name = name
+            updated.append("name")
+        if app.skip_authorization:
+            app.skip_authorization = False
+            updated.append("skip_authorization")
+        if updated:
+            app.save(update_fields=updated)
+            return True, "updated"
+        return False, "up to date"
+    Application.objects.create(
+        name=name,
+        user=user,
+        client_id=client_id,
+        client_type=Application.CLIENT_PUBLIC,
+        authorization_grant_type=Application.GRANT_AUTHORIZATION_CODE,
+        redirect_uris=redirect_uris,
+        skip_authorization=False,
+    )
+    return True, "created"
+
+
 class Command(BaseCommand):
-    help = "Create or update the OAuth2 application for GeoVault Android apps (client_id=geovault-android)."
+    help = "Create or update OAuth2 applications for GeoVault Android (places and uploader)."
 
     def handle(self, *args, **options):
-        app = Application.objects.filter(client_id=CLIENT_ID).first()
-        if app:
-            updated = []
-            if app.redirect_uris.strip() != REDIRECT_URIS.strip():
-                app.redirect_uris = REDIRECT_URIS
-                updated.append("redirect_uris")
-            if app.skip_authorization:
-                app.skip_authorization = False
-                updated.append("skip_authorization")
-            if updated:
-                app.save(update_fields=updated)
-                self.stdout.write(
-                    self.style.SUCCESS(f"Updated {', '.join(updated)} for OAuth2 application '{CLIENT_ID}'.")
-                )
-            else:
-                self.stdout.write(f"OAuth2 application '{CLIENT_ID}' already exists and is up to date.")
-            return
-
         user = User.objects.filter(is_superuser=True).order_by("pk").first()
         if not user:
             user = User.objects.order_by("pk").first()
@@ -50,15 +76,22 @@ class Command(BaseCommand):
             )
             return
 
-        Application.objects.create(
-            name="GeoVault Android",
-            user=user,
-            client_id=CLIENT_ID,
-            client_type=Application.CLIENT_PUBLIC,
-            authorization_grant_type=Application.GRANT_AUTHORIZATION_CODE,
-            redirect_uris=REDIRECT_URIS,
-            skip_authorization=False,
-        )
-        self.stdout.write(
-            self.style.SUCCESS(f"Created OAuth2 application '{CLIENT_ID}' with redirect URIs for places and uploader.")
-        )
+        # Remove legacy single Android app if present (invalidates its tokens)
+        legacy = Application.objects.filter(client_id=LEGACY_CLIENT_ID)
+        if legacy.exists():
+            legacy.delete()
+            self.stdout.write(self.style.WARNING(f"Deleted legacy OAuth2 application '{LEGACY_CLIENT_ID}'."))
+
+        for spec in ANDROID_APPS:
+            changed, msg = _ensure_app(
+                user,
+                spec["client_id"],
+                spec["name"],
+                spec["redirect_uris"],
+            )
+            if changed:
+                self.stdout.write(
+                    self.style.SUCCESS(f"OAuth2 application '{spec['client_id']}' {msg}.")
+                )
+            else:
+                self.stdout.write(f"OAuth2 application '{spec['client_id']}' already {msg}.")
