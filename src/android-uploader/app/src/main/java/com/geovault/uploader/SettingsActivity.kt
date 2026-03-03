@@ -30,6 +30,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var addSuffixCheckbox: CheckBox
     private lateinit var saveButton: MaterialButton
     private lateinit var loggedInUserText: TextView
+    private lateinit var settingsHelpText: TextView
 
     private val prefs: SharedPreferences by lazy {
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
@@ -57,6 +58,7 @@ class SettingsActivity : AppCompatActivity() {
         addSuffixCheckbox = findViewById(R.id.addSuffixCheckbox)
         saveButton = findViewById(R.id.saveButton)
         loggedInUserText = findViewById(R.id.loggedInUserText)
+        settingsHelpText = findViewById(R.id.settingsHelpText)
 
         val rootView = findViewById<View>(R.id.rootLayout)
         val headerView = findViewById<View>(R.id.headerLayout)
@@ -109,49 +111,8 @@ class SettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateConnectDisconnectVisibility()
-        checkTokenStillValid()
     }
 
-    /**
-     * If we think we're logged in, verify the token with the server.
-     * Uses auth-aware client so expired tokens are refreshed and retried; only clear tokens if still 401 after retry.
-     */
-    private fun checkTokenStillValid() {
-        if (!GeovaultAuthManager.isLoggedIn(this)) return
-        val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
-        if (serverUrl.isBlank()) return
-        val client = RetrofitClient.getAuthenticatedOkHttpClient(this)
-            .newBuilder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .build()
-        val request = Request.Builder().url("$serverUrl/api/user/status/").build()
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: java.io.IOException) {}
-            override fun onResponse(call: Call, response: Response) {
-                val code = response.code
-                val bodyStr = try { response.body?.string() ?: "" } catch (e: Exception) { "" }
-                response.close()
-                runOnUiThread {
-                    if (isDestroyed) return@runOnUiThread
-                    if (code == 401) {
-                        resetOnAuthFailure(this@SettingsActivity)
-                        return@runOnUiThread
-                    }
-                    if (code == 200 && bodyStr.isNotEmpty()) {
-                        try {
-                            val json = org.json.JSONObject(bodyStr)
-                            val email = json.optString("email", "").trim()
-                            loggedInUserText.visibility = if (email.isNotEmpty()) View.VISIBLE else View.GONE
-                            loggedInUserText.text = if (email.isNotEmpty()) getString(com.geovault.common.R.string.gv_common_logged_in_as, email) else ""
-                        } catch (e: Exception) {
-                            loggedInUserText.visibility = View.GONE
-                        }
-                    }
-                }
-            }
-        })
-    }
 
     override fun onDestroy() {
         super.onDestroy()
@@ -162,7 +123,34 @@ class SettingsActivity : AppCompatActivity() {
         serverUrlEdit.isEnabled = !loggedIn
         connectButton.visibility = if (loggedIn) View.GONE else View.VISIBLE
         disconnectButton.visibility = if (loggedIn) View.VISIBLE else View.GONE
-        if (!loggedIn) loggedInUserText.visibility = View.GONE
+        saveButton.visibility = if (loggedIn) View.VISIBLE else View.GONE
+        
+        // Hide instructions when signed in
+        settingsHelpText.visibility = if (loggedIn) View.GONE else View.VISIBLE
+        
+        if (loggedIn) {
+            val email = GeovaultAuthManager.getCachedUserEmail(this)
+            if (!email.isNullOrBlank()) {
+                loggedInUserText.text = getString(com.geovault.common.R.string.gv_common_logged_in_as, email)
+                loggedInUserText.visibility = View.VISIBLE
+            } else {
+                // If we don't have it yet (e.g. background fetch still running), reserve space
+                loggedInUserText.text = "Logged in as..."
+                loggedInUserText.visibility = View.INVISIBLE
+                
+                // Trigger a fetch if we are missing it
+                GeovaultAuthManager.fetchUserStatus(this) { fetchedEmail ->
+                    runOnUiThread {
+                        if (!isDestroyed && GeovaultAuthManager.isLoggedIn(this) && !fetchedEmail.isNullOrBlank()) {
+                            loggedInUserText.text = getString(com.geovault.common.R.string.gv_common_logged_in_as, fetchedEmail)
+                            loggedInUserText.visibility = View.VISIBLE
+                        }
+                    }
+                }
+            }
+        } else {
+            loggedInUserText.visibility = View.GONE
+        }
     }
 
     private fun saveSettings() {

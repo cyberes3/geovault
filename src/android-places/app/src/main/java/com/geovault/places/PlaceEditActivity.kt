@@ -74,6 +74,7 @@ class PlaceEditActivity : AppCompatActivity() {
     private lateinit var searchPlaceResults: ListView
     private lateinit var mapContainer: View
     private lateinit var searchPlaceRotationHelper: RotationHelper
+    private lateinit var sourceManager: MapSourceManager
 
     private var latitude: Double? = null
     private var longitude: Double? = null
@@ -122,6 +123,12 @@ class PlaceEditActivity : AppCompatActivity() {
         Configuration.getInstance().userAgentValue = "Mozilla/5.0 (Android; Mobile; rv:123.0) Gecko/123.0 Firefox/123.0"
         // Set internal cache directory to avoid permission issues
         Configuration.getInstance().osmdroidTileCache = java.io.File(ctx.cacheDir, "osmdroid")
+        // Performance optimizations
+        Configuration.getInstance().tileDownloadThreads = 8
+        Configuration.getInstance().cacheMapTileCount = 600
+        Configuration.getInstance().tileFileSystemCacheMaxBytes = 500L * 1024 * 1024 // 500MB
+
+        sourceManager = MapSourceManager(this)
 
         setContentView(R.layout.activity_place_edit)
 
@@ -130,6 +137,7 @@ class PlaceEditActivity : AppCompatActivity() {
         initViews()
         setupWindowInsets()
         setupMap()
+        fetchMapSources()
         
         // Check for edit intent
         editFeature = if (android.os.Build.VERSION.SDK_INT >= 33) {
@@ -171,6 +179,27 @@ class PlaceEditActivity : AppCompatActivity() {
 
         setupListeners()
         validateForm() // Initial check
+    }
+
+    private fun fetchMapSources() {
+        val serverUrl = GeovaultAuthManager.getServerUrl(this)
+        if (serverUrl.isEmpty()) return
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = com.geovault.common.RetrofitClient.getClient(this, baseUrl).create(GeovaultApi::class.java)
+        
+        sourceManager.fetchSources(api) {
+            runOnUiThread {
+                if (!isDestroyed) {
+                    applySelectedSource()
+                }
+            }
+        }
+    }
+
+    private fun applySelectedSource() {
+        val sourceId = sourceManager.getSelectedSourceId()
+        map.setTileSource(sourceManager.getTileSource(sourceId))
+        map.invalidate()
     }
 
     private fun initViews() {
@@ -249,9 +278,11 @@ class PlaceEditActivity : AppCompatActivity() {
     }
 
     private fun setupMap() {
+        applySelectedSource() // Set initial source immediately to prevent default OSM flash
         map.setMultiTouchControls(true)
         map.zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER)
         map.setMinZoomLevel(2.0)
+        map.setMaxZoomLevel(20.0)
 
         // Set standard OSM tile source
         map.setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
@@ -261,12 +292,17 @@ class PlaceEditActivity : AppCompatActivity() {
         val eventsReceiver = object : MapEventsReceiver {
             override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
                 updateCoords(p.latitude, p.longitude, null)
-                zoomToPoint(p.latitude, p.longitude)
                 return true
             }
             override fun longPressHelper(p: GeoPoint): Boolean = false
         }
         map.overlays.add(MapEventsOverlay(eventsReceiver))
+
+        findViewById<View>(R.id.mapToggle).setOnClickListener {
+            val nextSourceId = sourceManager.getNextSourceId()
+            sourceManager.setSelectedSourceId(nextSourceId)
+            applySelectedSource()
+        }
 
         // Initial view
         map.controller.setZoom(2.0)

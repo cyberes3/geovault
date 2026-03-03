@@ -7,5 +7,6 @@ class UploaderApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         GeovaultAuthManager.init(this, "com.geovault.uploader://oauth/callback")
+        GeovaultAuthManager.fetchUserStatus(this)
     }
 }

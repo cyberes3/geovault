@@ -27,6 +27,7 @@ class MapActivity : AppCompatActivity() {
     private lateinit var features: ArrayList<Feature>
     private var lastSelectedMarker: Marker? = null
     private val executor = Executors.newSingleThreadExecutor()
+    private lateinit var sourceManager: MapSourceManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,11 +39,39 @@ class MapActivity : AppCompatActivity() {
         Configuration.getInstance().userAgentValue = "Mozilla/5.0 (Android; Mobile; rv:123.0) Gecko/123.0 Firefox/123.0"
         // Set internal cache directory to avoid permission issues
         Configuration.getInstance().osmdroidTileCache = java.io.File(ctx.cacheDir, "osmdroid")
+        // Performance optimizations
+        Configuration.getInstance().tileDownloadThreads = 8
+        Configuration.getInstance().cacheMapTileCount = 600
+        Configuration.getInstance().tileFileSystemCacheMaxBytes = 500L * 1024 * 1024 // 500MB
+
+        sourceManager = MapSourceManager(this)
 
         setContentView(R.layout.activity_map)
         initMapContent()
 
         updateMapAuthHeader()
+        fetchMapSources()
+    }
+
+    private fun fetchMapSources() {
+        val serverUrl = GeovaultAuthManager.getServerUrl(this)
+        if (serverUrl.isEmpty()) return
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = com.geovault.common.RetrofitClient.getClient(this, baseUrl).create(GeovaultApi::class.java)
+        
+        sourceManager.fetchSources(api) {
+            runOnUiThread {
+                if (!isDestroyed) {
+                    applySelectedSource()
+                }
+            }
+        }
+    }
+
+    private fun applySelectedSource() {
+        val sourceId = sourceManager.getSelectedSourceId()
+        map.setTileSource(sourceManager.getTileSource(sourceId))
+        map.invalidate()
     }
 
     /** Refresh the auth header for tile requests (e.g. after returning to map or token expiry). Off main thread so refresh can run. */
@@ -83,9 +112,17 @@ class MapActivity : AppCompatActivity() {
         }
 
         map = findViewById(R.id.map)
+        applySelectedSource() // Set initial source immediately to prevent default OSM flash
         map.zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER)
         map.setMultiTouchControls(true)
         map.setMinZoomLevel(2.0)
+        map.setMaxZoomLevel(20.0)
+
+        findViewById<View>(R.id.mapToggle).setOnClickListener {
+            val nextSourceId = sourceManager.getNextSourceId()
+            sourceManager.setSelectedSourceId(nextSourceId)
+            applySelectedSource()
+        }
 
         // val placeDetailsCard = findViewById<androidx.cardview.widget.CardView>(R.id.placeDetailsCard) // Removed
         val placeName = findViewById<android.widget.TextView>(R.id.placeName)
@@ -133,9 +170,8 @@ class MapActivity : AppCompatActivity() {
         // For a simple implementation, tapping the map doesn't inherently clear selection in osmdroid without an overlay.
         // We will just let the user tap another marker or use the button.
 
-        // Set standard OSM tile source
-        map.setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
-        map.invalidate()
+        // Set initial tile source
+        applySelectedSource()
 
         // Get features from intent handling deprecation
         features = if (Build.VERSION.SDK_INT >= 33) {

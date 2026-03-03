@@ -52,15 +52,6 @@
                 android:orientation="vertical"
                 android:padding="20dp">
 
-                <!-- Logged-in user (visible when connected) -->
-                <TextView
-                    android:id="@+id/loggedInUserText"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:textSize="14sp"
-                    android:textColor="@color/text_secondary"
-                    android:layout_marginBottom="16dp"
-                    android:visibility="gone" />
 
                 <!-- Server URL -->
                 <TextView
@@ -108,8 +99,19 @@
                     app:cornerRadius="8dp"
                     android:textSize="16sp"
                     android:textAllCaps="false"
-                    android:layout_marginBottom="24dp"
+                    android:layout_marginBottom="8dp"
                     android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/loggedInUserText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Logged in as..."
+                    android:textSize="14sp"
+                    android:textColor="@color/text_secondary"
+                    android:layout_marginBottom="24dp"
+                    android:gravity="center"
+                    android:visibility="invisible" />
 
                 <!-- Add Suffix Checkbox -->
                 <CheckBox
@@ -124,6 +126,7 @@
 
                 <!-- Help Text -->
                 <TextView
+                    android:id="@+id/settingsHelpText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/settings_help_text"

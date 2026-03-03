@@ -34,6 +34,7 @@ object GeovaultAuthManager {
     private const val PREF_EXPIRES_AT = "expires_at"
     private const val PREF_PKCE_VERIFIER = "pkce_code_verifier"
     private const val PREF_PKCE_STATE = "pkce_state"
+    private const val PREF_USER_EMAIL = "cached_user_email"
 
     const val OAUTH_CLIENT_ID = "geovault-android"
     const val OAUTH_SCOPE = "api"
@@ -138,6 +139,7 @@ object GeovaultAuthManager {
             .remove(PREF_ACCESS_TOKEN)
             .remove(PREF_REFRESH_TOKEN)
             .remove(PREF_EXPIRES_AT)
+            .remove(PREF_USER_EMAIL)
             .apply()
     }
 
@@ -378,6 +380,63 @@ object GeovaultAuthManager {
             }
         }
         return null
+    }
+
+    fun getCachedUserEmail(context: Context): String? {
+        return requirePrefs(context).getString(PREF_USER_EMAIL, null)
+    }
+
+    fun setCachedUserEmail(context: Context, email: String?) {
+        requirePrefs(context).edit().putString(PREF_USER_EMAIL, email).apply()
+    }
+
+    /**
+     * Fetch user status (email) from server and cache it.
+     */
+    fun fetchUserStatus(context: Context, callback: ((String?) -> Unit)? = null) {
+        if (!isLoggedIn(context)) {
+            setCachedUserEmail(context, null)
+            callback?.invoke(null)
+            return
+        }
+        val serverUrl = getServerUrl(context)
+        if (serverUrl.isBlank()) return
+
+        val client = RetrofitClient.getAuthenticatedOkHttpClient(context)
+            .newBuilder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .build()
+        val request = Request.Builder().url(serverUrl.trimEnd('/') + "/api/user/status/").build()
+        client.newCall(request).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                callback?.invoke(null)
+            }
+            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                val bodyStr = try { response.body?.string() ?: "" } catch (e: Exception) { "" }
+                val code = response.code
+                response.close()
+                if (code == 200 && bodyStr.isNotEmpty()) {
+                    try {
+                        val json = org.json.JSONObject(bodyStr)
+                        val email = json.optString("email", "").trim()
+                        if (email.isNotEmpty()) {
+                            setCachedUserEmail(context, email)
+                            callback?.invoke(email)
+                        } else {
+                            callback?.invoke(null)
+                        }
+                    } catch (e: Exception) {
+                        callback?.invoke(null)
+                    }
+                } else if (code == 401) {
+                    clearTokens(context)
+                    callback?.invoke(null)
+                } else {
+                    callback?.invoke(null)
+                }
+            }
+        })
     }
 
     fun launchOAuthInBrowser(context: Context, authorizeUrl: String) {

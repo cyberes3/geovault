@@ -27,4 +27,7 @@ interface GeovaultApi {
 
     @GET("api/geocoding/search/")
     fun geocodingSearch(@Query("q") query: String): Call<AddressSearchResponse>
+
+    @GET("api/tiles/sources/")
+    fun getTileSources(): Call<TileSourceResponse>
 }
