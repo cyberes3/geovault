@@ -319,7 +319,7 @@
               </div>
               <div class="text-xs text-gray-500 space-y-1">
                 <div>Authorized: {{ formatDate(token.created) }}</div>
-                <div>Expires: {{ formatDate(token.expires) }}</div>
+                <div>Expires: {{ token.expires ? formatDate(token.expires) : '—' }}</div>
               </div>
             </div>
             <BaseButton

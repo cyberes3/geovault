@@ -2,6 +2,8 @@
 API endpoints for the current user to list and revoke their authorized OAuth applications (access tokens).
 Session-only; API keys and OAuth tokens cannot manage these.
 """
+from datetime import timedelta
+
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
@@ -16,21 +18,30 @@ _logger = get_tagged_logger(__name__)
 def list_authorized_oauth_tokens(request):
     """List OAuth access tokens (authorized applications) for the current user."""
     from oauth2_provider.models import get_access_token_model
+    from oauth2_provider.settings import oauth2_settings
 
     AccessToken = get_access_token_model()
     tokens = (
         AccessToken.objects.filter(user=request.user)
-        .select_related("application")
+        .select_related("application", "refresh_token")
         .order_by("-created")
     )
+    refresh_expire_seconds = oauth2_settings.REFRESH_TOKEN_EXPIRE_SECONDS or 0
     items = []
     for token in tokens:
         app_name = token.application.name if token.application else "Unknown application"
+        # Show refresh token expiry when available; omit when this grant has no refresh token
+        if getattr(token, "refresh_token", None) and refresh_expire_seconds:
+            rt = token.refresh_token
+            expires_dt = rt.created + timedelta(seconds=refresh_expire_seconds)
+            expires_iso = expires_dt.isoformat()
+        else:
+            expires_iso = None
         items.append({
             "id": token.id,
             "application_name": app_name,
             "created": token.created.isoformat(),
-            "expires": token.expires.isoformat(),
+            "expires": expires_iso,
         })
     return JsonResponse({"authorized_tokens": items})
 
