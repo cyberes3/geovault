@@ -384,29 +384,24 @@ export default {
 
       vectorSource.value = new window.gv_core.ol.source.Vector();
 
-      const defaultStyle = new window.gv_core.ol.style.Style({
-        image: new window.gv_core.ol.style.Circle({
-          radius: 7,
-          fill: new window.gv_core.ol.style.Fill({color: '#2563EB'}),
-          stroke: new window.gv_core.ol.style.Stroke({color: 'white', width: 2})
-        })
-      });
-      const hoveredStyle = new window.gv_core.ol.style.Style({
-        image: new window.gv_core.ol.style.Circle({
-          radius: 9,
-          fill: new window.gv_core.ol.style.Fill({color: '#FBBF24'}),
-          stroke: new window.gv_core.ol.style.Stroke({color: '#000', width: 2})
-        }),
-        zIndex: 100
-      });
-
+      // Theme: primary blue #163D8A (default) with white border, primary yellow #F4AC45 (selected/hovered) with black border.
       const layer = new window.gv_core.ol.layer.Vector({
         source: vectorSource.value,
         style: (feature) => {
           const id = feature.get('database_id');
           const isSelected = selectedPlace.value?.properties?.database_id === id;
           const isHovered = hoveredPlaceId.value != null && id === hoveredPlaceId.value;
-          return (isSelected || isHovered) ? hoveredStyle : defaultStyle;
+          const isHighlighted = isSelected || isHovered;
+          const fillColor = isHighlighted ? '#F4AC45' : '#163D8A';
+          const strokeColor = isHighlighted ? '#000' : '#FFF';
+          return new window.gv_core.ol.style.Style({
+            image: new window.gv_core.ol.style.Circle({
+              radius: 7,
+              fill: new window.gv_core.ol.style.Fill({ color: fillColor }),
+              stroke: new window.gv_core.ol.style.Stroke({ color: strokeColor, width: 2 })
+            }),
+            zIndex: isHighlighted ? 100 : 0
+          });
         }
       });
       vectorLayer.value = layer;

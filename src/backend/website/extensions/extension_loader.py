@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
+from django.conf import settings
+
 from website.config_loader import get_config_loader
 from website.extensions.extension_base import ExtensionAppConfig
 
@@ -248,6 +250,8 @@ class ExtensionRegistry:
         # Extract frontend metadata
         frontend_entry = None
         frontend_css = None
+        frontend_entry_path: Optional[Path] = None
+        frontend_css_path: Optional[Path] = None
         dist_path = extension_path / 'src' / 'frontend' / 'dist'
 
         if dist_path.exists():
@@ -265,14 +269,16 @@ class ExtensionRegistry:
                     return 3
 
                 js_files.sort(key=js_sort_key)
+                frontend_entry_path = dist_path / js_files[0].name
                 frontend_entry = f"/extensions/static/{kebab_name}/src/frontend/dist/{js_files[0].name}"
-                frontend_entry = _static_url_with_version(dist_path / js_files[0].name, frontend_entry)
+                frontend_entry = _static_url_with_version(frontend_entry_path, frontend_entry)
             else:
                 assets_dir = dist_path / 'assets'
                 assets_js = list(assets_dir.glob('index*.js')) if assets_dir.exists() else []
                 if assets_js:
+                    frontend_entry_path = assets_dir / assets_js[0].name
                     frontend_entry = f"/extensions/static/{kebab_name}/src/frontend/dist/assets/{assets_js[0].name}"
-                    frontend_entry = _static_url_with_version(assets_dir / assets_js[0].name, frontend_entry)
+                    frontend_entry = _static_url_with_version(frontend_entry_path, frontend_entry)
 
             # 2. Discover CSS entry point
             css_files = list(dist_path.glob('*.css'))
@@ -285,14 +291,16 @@ class ExtensionRegistry:
                     return 2
 
                 css_files.sort(key=css_sort_key)
+                frontend_css_path = dist_path / css_files[0].name
                 frontend_css = f"/extensions/static/{kebab_name}/src/frontend/dist/{css_files[0].name}"
-                frontend_css = _static_url_with_version(dist_path / css_files[0].name, frontend_css)
+                frontend_css = _static_url_with_version(frontend_css_path, frontend_css)
             else:
                 assets_dir = dist_path / 'assets'
                 assets_css = list(assets_dir.glob('*.css')) if assets_dir.exists() else []
                 if assets_css:
+                    frontend_css_path = assets_dir / assets_css[0].name
                     frontend_css = f"/extensions/static/{kebab_name}/src/frontend/dist/assets/{assets_css[0].name}"
-                    frontend_css = _static_url_with_version(assets_dir / assets_css[0].name, frontend_css)
+                    frontend_css = _static_url_with_version(frontend_css_path, frontend_css)
 
         # Check for urls.py
         urls_module = None
@@ -304,14 +312,16 @@ class ExtensionRegistry:
         # Icon can be: heroicon name (string), SVG path (string), or inline SVG (string)
         icon = getattr(manifest, 'icon', None)
 
-        # Store extension metadata (internal use includes urls_module)
+        # Store extension metadata (internal use includes urls_module and file paths for fresh ?v= in API)
         self.loaded_extensions[ext_name] = {
             'name': ext_name,
             'version': manifest.version,
             'frontend_entry': frontend_entry,
             'frontend_css': frontend_css,
             'icon': icon,  # Optional icon field
-            '_urls_module': urls_module  # Internal only, prefixed with underscore
+            '_urls_module': urls_module,  # Internal only, prefixed with underscore
+            '_frontend_entry_path': frontend_entry_path,
+            '_frontend_css_path': frontend_css_path,
         }
 
         return app_config_path
@@ -374,15 +384,30 @@ class ExtensionRegistry:
         Returns metadata for all loaded extensions.
         Used by the API to expose extension info to the frontend.
         Only includes frontend-relevant fields.
+        In DEBUG, recomputes frontend_entry and frontend_css ?v= hash from current
+        file so rebuilt extension assets get a new URL without restarting Django.
+        In production, returns the startup URLs (no disk I/O per request).
         
         Returns:
             List of extension metadata dicts (excludes internal fields prefixed with _)
         """
-        # Filter out internal fields (prefixed with underscore) from API response
-        return [
-            {k: v for k, v in ext.items() if not k.startswith('_')}
-            for ext in self.loaded_extensions.values()
-        ]
+        result = []
+        for ext in self.loaded_extensions.values():
+            out = {k: v for k, v in ext.items() if not k.startswith('_')}
+            if settings.DEBUG:
+                # Recompute versioned URLs from current file so rebuilds update the URL
+                entry_path = ext.get('_frontend_entry_path')
+                if entry_path is not None and isinstance(entry_path, Path) and entry_path.exists():
+                    base = (ext.get('frontend_entry') or '').split('?')[0]
+                    if base:
+                        out['frontend_entry'] = _static_url_with_version(entry_path, base)
+                css_path = ext.get('_frontend_css_path')
+                if css_path is not None and isinstance(css_path, Path) and css_path.exists():
+                    base = (ext.get('frontend_css') or '').split('?')[0]
+                    if base:
+                        out['frontend_css'] = _static_url_with_version(css_path, base)
+            result.append(out)
+        return result
 
     def get_extension_urls(self) -> List[Any]:
         """

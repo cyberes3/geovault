@@ -41,6 +41,7 @@ import os
 from pathlib import Path
 
 from django.views.static import serve
+from django.conf import settings
 
 from geo_lib.utils.secure_path import is_path_under_base, secure_path
 from website.settings import EXTENSIONS_DIR
@@ -80,7 +81,11 @@ def serve_extension_static(request, path, **kwargs):
     kwargs['document_root'] = EXTENSIONS_DIR
     response = serve(request, path, **kwargs)
     if response.status_code == 200:
-        response['Cache-Control'] = 'public, max-age=31536000, immutable'
+        if settings.DEBUG:
+            # In dev, avoid long cache so rebuilt extension assets are picked up without restart
+            response['Cache-Control'] = 'no-cache, must-revalidate'
+        else:
+            response['Cache-Control'] = 'public, max-age=31536000, immutable'
     return response
 
 urlpatterns = [
