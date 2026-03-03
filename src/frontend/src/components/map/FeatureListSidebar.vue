@@ -52,7 +52,6 @@
         />
       </button>
       <button
-        v-if="geocodingAvailable"
         @click="activeTab = 'reverse_geocoding'"
         :class="[
           'px-2 py-1 text-xs font-medium transition-colors',
@@ -60,7 +59,7 @@
             ? 'text-blue-500 border-b-2 border-blue-500'
             : 'text-gray-600 hover:text-gray-900'
         ]"
-        title="Search for places"
+        title="Search for places or paste coordinates"
       >
         Search Places
       </button>
@@ -283,7 +282,7 @@
             v-model="geocodingQuery"
             @input="handleGeocodingInput"
             type="text"
-            placeholder="Search places or paste coordinates..."
+            :placeholder="geocodingAvailable ? 'Search places or coordinates...' : 'Search for coordinates...'"
             class="w-full px-2 py-1.5 pr-7 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent lg:px-1.5 lg:py-1 xl:px-2 xl:py-1.5"
           />
           <button
@@ -321,10 +320,10 @@
         
         <div class="flex-1 select-none min-h-0">
           <div v-if="geocodingResults.length === 0 && !geocodingQuery.trim()" class="text-xs text-gray-500 text-center py-3">
-            Enter a place name to search
+            {{ geocodingAvailable ? 'Enter a place name to search' : 'Enter coordinates' }}
           </div>
           <div v-else-if="geocodingResults.length === 0 && geocodingQuery.trim()" class="text-xs text-gray-500 text-center py-3">
-            No results found
+            {{ geocodingAvailable ? 'No results found' : 'Only coordinate search is available.' }}
           </div>
           <RecycleScroller
             v-else
@@ -790,7 +789,15 @@ export default {
         return
       }
 
-      // Not coordinates, proceed with forward reverse_geocoding search
+      // Not coordinates: only call geocoding API if available; otherwise coordinate-only mode
+      if (!this.geocodingAvailable) {
+        if (this.currentSearchQuery === query) {
+          this.geocodingResults = []
+          this.isGeocodingSearching = false
+        }
+        return
+      }
+
       try {
         const url = `${APIHOST}/api/geocoding/search/?q=${encodeURIComponent(query)}`
         const response = await fetch(url)
