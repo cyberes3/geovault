@@ -4,6 +4,7 @@ Tests for RealtimeConsumer WebSocket functionality.
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from channels.db import database_sync_to_async
+from django.test import TestCase
 from channels.layers import get_channel_layer
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser
@@ -22,6 +23,30 @@ from geo_lib.websocket.modules.import_history_module import ImportHistoryModule
 from django.utils import timezone
 
 User = get_user_model()
+
+
+class TestRealtimeConsumerLoadModules(TestCase):
+    """Test that RealtimeConsumer loads built-in and extension-registered WebSocket modules."""
+
+    def test_load_modules_includes_registered_extension_modules(self):
+        """_load_modules() adds modules from get_registered_websocket_modules()."""
+        class FakeExtensionModule:
+            def __init__(self, consumer):
+                self.consumer = consumer
+
+        with patch(
+            "api.ws_consumers.realtime_consumer.get_registered_websocket_modules",
+            return_value=[("_test_extension_mod_", FakeExtensionModule)],
+        ):
+            consumer = RealtimeConsumer()
+            consumer.user = MagicMock()
+            consumer.room_group_name = "realtime_1"
+            consumer._load_modules()
+
+        self.assertIn("import_queue", consumer.modules)
+        self.assertIn("_test_extension_mod_", consumer.modules)
+        self.assertIsInstance(consumer.modules["_test_extension_mod_"], FakeExtensionModule)
+        self.assertIs(consumer.modules["_test_extension_mod_"].consumer, consumer)
 
 
 class TestRealtimeConsumerConnection(TransactionTestCase):

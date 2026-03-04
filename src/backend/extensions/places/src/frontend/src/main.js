@@ -1,26 +1,27 @@
 import PlacesView from './views/PlacesView.vue';
 import PlaceNewView from './views/PlaceNewView.vue';
 
+/**
+ * Uses platform createRouteWrapper so extensionApi/extensionRouter are provided per-route.
+ */
 async function setup({app, router, store, registry, api, metadata}) {
-    app.provide('extensionApi', api);
-    app.provide('extensionRouter', router);
-
-    // Register Nav Link (path '' so fullPath is /extensions/places)
     registry.registerNavLink({
         label: 'Places',
         path: ''
     });
 
-    // Register Routes
+    const createRouteWrapper = window.gv_core?.createRouteWrapper;
+    const wrap = (component) => createRouteWrapper ? createRouteWrapper(component, { api, router }) : component;
+
     router.addRoute({
         path: '',
-        component: PlacesView,
+        component: wrap(PlacesView),
         name: 'places-list'
     });
 
     router.addRoute({
         path: '/new',
-        component: PlaceNewView,
+        component: wrap(PlaceNewView),
         name: 'place-new'
     });
 }

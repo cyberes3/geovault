@@ -1195,6 +1195,58 @@ class TestExtensionAPIEdgeCases(TestCase):
                 assert 'name' in public_ext
                 assert 'version' in public_ext
 
+    def test_extension_map_route_in_metadata(self):
+        """Test that map_route from manifest is exposed in get_loaded_extensions() (for map layout)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ext_dir = Path(tmpdir)
+            ext_path = ext_dir / 'test_map_route_ext'
+            ext_path.mkdir()
+            manifest_path = ext_path / 'manifest.py'
+            manifest_path.write_text(
+                'name = "test_map_route_ext"\nversion = "1.0.0"\nmap_route = True'
+            )
+            backend_path = ext_path / 'src' / 'backend'
+            backend_path.mkdir(parents=True)
+            (backend_path / '__init__.py').write_text('')
+            (backend_path / 'urls.py').write_text('from django.urls import path\nurlpatterns = []')
+
+            registry = ExtensionRegistry(ext_dir)
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
+                mock_config = MagicMock()
+                mock_config.get_bool.return_value = True
+                mock_loader_get.return_value = mock_config
+                registry.discover_extensions()
+
+            extensions = registry.get_loaded_extensions()
+            public_ext = next((e for e in extensions if e['name'] == 'test_map_route_ext'), None)
+            assert public_ext is not None
+            assert public_ext.get('map_route') is True
+
+    def test_extension_map_route_default_false(self):
+        """Test that extension without map_route in manifest has map_route False in API."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ext_dir = Path(tmpdir)
+            ext_path = ext_dir / 'test_no_map_route_ext'
+            ext_path.mkdir()
+            manifest_path = ext_path / 'manifest.py'
+            manifest_path.write_text('name = "test_no_map_route_ext"\nversion = "1.0.0"')
+            backend_path = ext_path / 'src' / 'backend'
+            backend_path.mkdir(parents=True)
+            (backend_path / '__init__.py').write_text('')
+            (backend_path / 'urls.py').write_text('from django.urls import path\nurlpatterns = []')
+
+            registry = ExtensionRegistry(ext_dir)
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
+                mock_config = MagicMock()
+                mock_config.get_bool.return_value = True
+                mock_loader_get.return_value = mock_config
+                registry.discover_extensions()
+
+            extensions = registry.get_loaded_extensions()
+            public_ext = next((e for e in extensions if e['name'] == 'test_no_map_route_ext'), None)
+            assert public_ext is not None
+            assert public_ext.get('map_route') is False
+
 
 # ============================================================================
 # Static Asset Serving Edge Cases Tests

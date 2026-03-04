@@ -57,6 +57,8 @@ interface State {
         [key: string]: any
     }
     deferredPrompt: any | null
+    /** Path prefixes for extension routes that use full-height map layout (from API) */
+    extensionMapRoutePrefixes: string[]
 }
 
 // Store type is inferred from createStore<State>
@@ -84,7 +86,8 @@ export default createStore<State>({
             importTable: [],
             importHistory: []
         },
-        deferredPrompt: null
+        deferredPrompt: null,
+        extensionMapRoutePrefixes: []
     },
     mutations: {
         userInfo(state: State, payload: UserInfo | null) {
@@ -165,6 +168,9 @@ export default createStore<State>({
         },
         setWebSocketReconnectAttempts(state: State, attempts: number) {
             state.websocketReconnectAttempts = attempts;
+        },
+        setExtensionMapRoutePrefixes(state: State, prefixes: string[]) {
+            state.extensionMapRoutePrefixes = Array.isArray(prefixes) ? prefixes : [];
         },
         setRealtimeModuleData(state: State, { module, data }: { module: string, data: any }) {
             state.realtimeData[module] = data;

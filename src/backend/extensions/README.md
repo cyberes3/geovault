@@ -103,9 +103,26 @@ All shared platform resources live on **`window.gv_core`** only. Use `window.gv_
 - **`window.gv_core.Vue`**, **`window.gv_core.VueRouter`**, **`window.gv_core.Vuex`**, **`window.gv_core.axios`** — Vue ecosystem
 - **`window.gv_core.HeroiconsOutline`**, **`window.gv_core.HeroiconsSolid`** — Heroicons
 - **`window.gv_core.ol`** — OpenLayers (map, source, layer, proj, geom, style, interaction, Feature)
+- **`window.gv_core.maplibre`** — MapLibre GL JS (for map components)
+- **`window.gv_core.createRouteWrapper`** — helper to wrap a route component so `extensionApi` (and optional `extensionRouter`) are provided per-route; use for `router.addRoute()` so child components can `inject('extensionApi')` without overwriting app-level provide (see below)
 - **`window.gv_core.Loader`** — shared Loader component
 
 The same values are also exposed at top level (`window.Vue`, `window.ol`, etc.) so UMD builds that externalize these dependencies keep working. Prefer `window.gv_core.*` in your source.
+
+### Registering routes with extensionApi
+
+If your route components use `inject('extensionApi')` (or `inject('extensionRouter')`), wrap the component with **`gv_core.createRouteWrapper`** so each extension gets its own provide and Vue’s render function works correctly (runtime-only build):
+
+```javascript
+const createRouteWrapper = window.gv_core?.createRouteWrapper;
+router.addRoute({
+  path: '',
+  component: createRouteWrapper ? createRouteWrapper(MyView, { api }) : MyView
+});
+// With router: createRouteWrapper(MyView, { api, router })
+```
+
+See **live_track** and **places** extensions for examples.
 
 ### Vite and shared libraries
 

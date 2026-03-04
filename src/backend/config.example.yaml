@@ -252,3 +252,9 @@ extensions:
     # URL of the self-hosted pwabuilder-google-play container.
     # If running in Docker, use the service name (e.g., http://pwabuilder:5858)
     pwa_builder_url: "http://pwabuilder:5858"
+
+  live_track:
+    # Location tracking server for devices to publish live location tracks to.
+    enabled: true
+    # Maximum number of points to keep per track. Oldest points are removed when exceeded.
+    max_points: 1000

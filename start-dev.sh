@@ -39,8 +39,9 @@ echo ""
 echo "Press Ctrl+C to stop all"
 echo ""
 
-# Run Django, Vite, and each extension's build --watch with concurrently
+# Run Django, Vite, and each extension's build --watch with concurrently.
+# If any process exits with non-zero status (e.g. extension build fails), kill all others.
 CONCURRENTLY_NAMES=$(IFS=,; echo "${EXT_NAMES[*]}")
 cd "$SCRIPT_DIR/src/frontend"
-npx concurrently -n "$CONCURRENTLY_NAMES" -c "blue,green,yellow" "${EXT_CMDS[@]}"
+npx concurrently -n "$CONCURRENTLY_NAMES" -c "blue,green,yellow" --kill-others-on-fail "${EXT_CMDS[@]}"
 

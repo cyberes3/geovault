@@ -311,6 +311,8 @@ class ExtensionRegistry:
         # Extract icon from manifest (optional)
         # Icon can be: heroicon name (string), SVG path (string), or inline SVG (string)
         icon = getattr(manifest, 'icon', None)
+        # If True, frontend uses full-height map layout for this extension's routes
+        map_route = getattr(manifest, 'map_route', False)
 
         # Store extension metadata (internal use includes urls_module and file paths for fresh ?v= in API)
         self.loaded_extensions[ext_name] = {
@@ -319,6 +321,7 @@ class ExtensionRegistry:
             'frontend_entry': frontend_entry,
             'frontend_css': frontend_css,
             'icon': icon,  # Optional icon field
+            'map_route': map_route,
             '_urls_module': urls_module,  # Internal only, prefixed with underscore
             '_frontend_entry_path': frontend_entry_path,
             '_frontend_css_path': frontend_css_path,

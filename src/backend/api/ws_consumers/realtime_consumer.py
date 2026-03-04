@@ -16,6 +16,7 @@ from geo_lib.websocket.modules.delete_job_module import DeleteJobModule
 from geo_lib.websocket.modules.import_history_module import ImportHistoryModule
 from geo_lib.websocket.modules.import_queue_module import ImportQueueModule
 from geo_lib.websocket.modules.process_job_module import ProcessJobModule
+from geo_lib.websocket.registry import get_registered_websocket_modules
 
 _logger = get_tagged_logger()
 
@@ -28,14 +29,15 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
         self.modules = {}
 
     def _load_modules(self):
-        """Load all available WebSocket modules."""
+        """Load built-in and extension-registered WebSocket modules."""
         self.modules['import_queue'] = ImportQueueModule(self)
         self.modules['import_history'] = ImportHistoryModule(self)
         self.modules['process_job'] = ProcessJobModule(self)
         self.modules['delete_job'] = DeleteJobModule(self)
         self.modules['bulk_import_job'] = BulkImportJobModule(self)
         self.modules['bulk_delete_job'] = BulkDeleteJobModule(self)
-        # Add more modules here as they are created
+        for name, module_class in get_registered_websocket_modules():
+            self.modules[name] = module_class(self)
 
     async def connect(self):
         """Handle WebSocket connection."""

@@ -2,7 +2,7 @@
 Startup checks for the GeoVault Django application.
 
 This module performs essential checks when the server starts up:
-1. Python version (requires 3.12)
+1. Python version (requires 3.13)
 2. Database connection
 3. Required tables exist
 4. PostGIS extension is installed
@@ -50,17 +50,17 @@ _logger = get_tagged_logger('startup')
 
 def check_python_version():
     """
-    Check if Python version is 3.12.
+    Check if Python version is 3.13.
     
     Returns:
-        bool: True if Python 3.12 is being used, False otherwise
+        bool: True if Python 3.13 is being used, False otherwise
     """
     try:
-        if sys.version_info[:2] != (3, 12):
+        if sys.version_info[:2] != (3, 13):
             current_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-            _logger.error(f"✗ Python version check failed: requires Python 3.12, but found {current_version}")
+            _logger.error(f"✗ Python version check failed: requires Python 3.13, but found {current_version}")
             _logger.error(f"  Full version info: {sys.version}")
-            _logger.error("  Please install Python 3.12 and ensure it's being used")
+            _logger.error("  Please install Python 3.13 and ensure it's being used")
             return False
         else:
             _logger.info(f"✓ Python version check passed: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
@@ -864,8 +864,8 @@ def check_extensions():
             ext_names = [ext['name'] for ext in active_exts]
             _logger.info(f"✓ Successfully loaded {len(ext_names)} extensions: {', '.join(ext_names)}")
             for ext in active_exts:
-                status = "Frontend module found" if ext.get('frontend_entry') else "No frontend module"
-                _logger.info(f"  - {ext['name']} v{ext['version']} ({status})")
+                suffix = " (No frontend module)" if not ext.get('frontend_entry') else ""
+                _logger.info(f"  - {ext['name']} v{ext['version']}{suffix}")
         else:
             _logger.info("  No extensions loaded or enabled")
         return True
@@ -880,7 +880,7 @@ def run_startup_checks():
     Run all startup checks and exit if any fail.
     
     This function will:
-    1. Check Python version (requires 3.12)
+    1. Check Python version (requires 3.13)
     2. Check database connection
     3. Verify PostGIS installation
     4. Check required tables exist
@@ -960,7 +960,7 @@ def run_startup_checks():
         _logger.error("")
         _logger.error("Please fix the issues above before starting the server.")
         _logger.error("Common solutions:")
-        _logger.error("  - Install Python 3.12 and ensure it's being used")
+        _logger.error("  - Install Python 3.13 and ensure it's being used")
         _logger.error("  - Ensure PostgreSQL is running")
         _logger.error("  - Install PostGIS extension: CREATE EXTENSION postgis;")
         _logger.error("  - Run migrations: python manage.py migrate")

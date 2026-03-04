@@ -37,6 +37,7 @@ import { keyValueToNested, getNestedValue } from '@/utils/settingsUtils.js';
 import { geolocationManager } from '@/utils/map/geolocationManager.js';
 import { parseCoordinates, looksLikeCoordinates } from '@/utils/coordinateParser.js';
 import { ExtensionApi } from './utils/extensionApi.js';
+import { realtimeSocket } from '@/assets/js/websocket/realtimeSocket.js';
 import * as HeroiconsOutline from '@heroicons/vue/24/outline';
 import * as HeroiconsSolid from '@heroicons/vue/24/solid';
 
@@ -49,6 +50,9 @@ import * as olGeom from 'ol/geom';
 import * as olStyle from 'ol/style';
 import * as olInteraction from 'ol/interaction';
 import Feature from 'ol/Feature';
+
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 
 // Inject utils into registry
 extensionRegistry.utils.updateUserSetting = updateUserSetting;
@@ -82,6 +86,38 @@ const olNamespace = {
     interaction: olInteraction,
     Feature: Feature
 };
+
+/**
+ * Creates a route component wrapper that provides extensionApi (and optionally extensionRouter)
+ * to descendant components via inject(), and renders the given component using Vue's h().
+ * Use this for extension routes so each extension gets its own api instance without overwriting
+ * app-level provide. Call from extension setup: gv_core.createRouteWrapper(MyView, { api }) or
+ * createRouteWrapper(MyView, { api, router }).
+ * @param {import('vue').Component} component - The root component for the route
+ * @param {{ api: import('./utils/extensionApi').ExtensionApi, router?: object, [key: string]: unknown }} options - api (required), router (optional), and any extra provide keys
+ * @returns {object} Component option object with provide() and render()
+ */
+function createRouteWrapper(component, options = {}) {
+    const h = VueState.h;
+    if (!h) {
+        console.warn('[gv_core.createRouteWrapper] Vue h not available');
+        return component;
+    }
+    const { api, router = null, ...rest } = options;
+    return {
+        provide() {
+            return {
+                extensionApi: api,
+                extensionRouter: router,
+                ...rest
+            };
+        },
+        render() {
+            return h(component);
+        }
+    };
+}
+
 window.gv_core = {
     GeoVault,
     Vue: VueState,
@@ -91,6 +127,8 @@ window.gv_core = {
     HeroiconsOutline,
     HeroiconsSolid,
     ol: olNamespace,
+    maplibre: maplibregl,
+    createRouteWrapper,
     Loader: null, // set below after import
     store: null
 };
@@ -105,13 +143,16 @@ window.axios = window.gv_core.axios;
 window.HeroiconsOutline = window.gv_core.HeroiconsOutline;
 window.HeroiconsSolid = window.gv_core.HeroiconsSolid;
 window.ol = window.gv_core.ol;
+window.maplibregl = window.gv_core.maplibre;
 window.Loader = window.gv_core.Loader;
+window.gv_core.realtimeSocket = realtimeSocket;
 
 import BaseButton from '@/components/parts/BaseButton.vue';
 import ToggleButton from '@/components/parts/ToggleButton.vue';
 import Loader from '@/components/parts/Loader.vue';
 import SettingsInput from '@/components/settings/components/SettingsInput.vue';
 import BaseModal from '@/components/parts/BaseModal.vue';
+import ColorPickerElement from '@/components/parts/ColorPickerElement.vue';
 
 const app = createApp(App);
 
@@ -121,6 +162,7 @@ app.component('ToggleButton', ToggleButton);
 app.component('Loader', Loader);
 app.component('SettingsInput', SettingsInput);
 app.component('BaseModal', BaseModal);
+app.component('ColorPickerElement', ColorPickerElement);
 
 /**
  * Helper to find setup function from extension module.
@@ -517,6 +559,10 @@ async function loadExtensions() {
     try {
         const response = await axios.get('/api/extensions/');
         const extensions = response.data;
+        const mapPrefixes = (Array.isArray(extensions) ? extensions : [])
+            .filter(ext => ext && ext.map_route)
+            .map(ext => `/extensions/${ext.name.replace(/_/g, '-')}`);
+        store.commit('setExtensionMapRoutePrefixes', mapPrefixes);
         const successfullyLoaded = [];
 
         for (const ext of extensions) {
