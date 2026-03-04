@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Uploader</string>
+    <string name="app_title">GeoVault Uploader</string>
     <string name="filename_label">Filename</string>
     <string name="upload_button">Upload</string>
     <string name="cancel_button">Cancel</string>
