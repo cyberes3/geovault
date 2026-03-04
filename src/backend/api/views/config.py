@@ -2,9 +2,11 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, TAG_PRIORITIES
+from geo_lib.website.auth import api_or_login_required_401
 from website.config_loader import get_config_loader
 
 
+@api_or_login_required_401()
 @require_http_methods(["GET"])
 def get_config(request):
     """
@@ -35,5 +37,5 @@ def get_config(request):
 
     response = JsonResponse(config)
     # Cache for 1 day (86400 seconds)
-    response['Cache-Control'] = 'public, max-age=86400'
+    response['Cache-Control'] = 'private, max-age=86400'
     return response

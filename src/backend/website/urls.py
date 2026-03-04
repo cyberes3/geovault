@@ -16,11 +16,20 @@ Including another URLconf
 """
 from django.conf.urls import include
 from django.contrib import admin
+from django.contrib.admin import AdminSite
 from django.urls import path, re_path
 from django.http import HttpResponse
 
 
 from users.views.account_management import block_account_email_view
+
+
+class SuperuserOnlyAdminSite(AdminSite):
+    def has_permission(self, request):
+        return request.user.is_active and request.user.is_superuser
+
+
+admin.site.__class__ = SuperuserOnlyAdminSite
 from website.exception_handler import custom_exception_handler
 from website.views import index
 

@@ -77,6 +77,24 @@ class TestUserStatusEndpoint(TestCase):
         self.assertTrue(data['authorized'])
         self.assertTrue(data['is_superuser'])
 
+    def test_user_status_with_api_key(self):
+        """GET /api/user/status/ with valid API key returns 200 and auth payload."""
+        from users.api_keys import create_user_api_key
+
+        self.client.logout()
+        key_obj, raw_key = create_user_api_key(self.user, 'Status Test Key')
+        response = self.client.get(
+            '/api/user/status/',
+            HTTP_AUTHORIZATION=f'Bearer {raw_key}',
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertTrue(data['authorized'])
+        self.assertEqual(data['id'], self.user.id)
+        self.assertIn('email', data)
+        self.assertIn('featureCount', data)
+        self.assertIn('is_superuser', data)
+
 
 class TestFeatureCountCalculation(TestCase):
     """Test feature count calculation in user status."""

@@ -165,11 +165,35 @@ class TestHealthConfigAPI(TestCase):
             data = json.loads(response.content)
             self.assertEqual(data['status'], 'healthy')
 
-    def test_get_config_no_auth_required(self):
-        """Test that config endpoint doesn't require authentication."""
-        # No login required
+    def test_get_config_requires_auth(self):
+        """Test that config endpoint requires authentication."""
+        self.client.logout()
+        response = self.client.get('/api/config/')
+        self.assertEqual(response.status_code, 401)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+
+    def test_get_config_cache_control_private(self):
+        """Test that config response uses private cache (no shared proxy caching)."""
         response = self.client.get('/api/config/')
         self.assertEqual(response.status_code, 200)
+        self.assertIn('Cache-Control', response)
+        self.assertEqual(response['Cache-Control'], 'private, max-age=86400')
+
+    def test_get_config_with_api_key(self):
+        """Test that config endpoint works with API key authentication."""
+        from users.api_keys import create_user_api_key
+
+        self.client.logout()
+        key_obj, raw_key = create_user_api_key(self.user, 'Config Test Key')
+        response = self.client.get(
+            '/api/config/',
+            HTTP_AUTHORIZATION=f'Bearer {raw_key}',
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('systemTagPrefixes', data)
+        self.assertIn('tagPriorities', data)
 
     @patch('api.views.config.get_config_loader')
     def test_maptiler_config_excludes_api_key_when_proxying(self, mock_get_config_loader):

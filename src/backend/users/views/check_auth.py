@@ -23,40 +23,34 @@ class StorageUsageResponse(BaseModel):
     total_storage_bytes: int = Field(description="Total storage in bytes")
 
 
+@api_or_login_required_401()
 def check_auth(request):
-    if request.user.is_authenticated:
-        # Count the number of features for this user
-        feature_count = FeatureStore.objects.filter(user=request.user).count()
+    # Count the number of features for this user
+    feature_count = FeatureStore.objects.filter(user=request.user).count()
 
-        # Get primary email address
-        primary_email = None
-        try:
-            email_address = EmailAddress.objects.filter(user=request.user, primary=True).first()
+    # Get primary email address
+    primary_email = None
+    try:
+        email_address = EmailAddress.objects.filter(user=request.user, primary=True).first()
+        if email_address:
+            primary_email = email_address.email
+        else:
+            # Fallback to first email if no primary is set
+            email_address = EmailAddress.objects.filter(user=request.user).first()
             if email_address:
                 primary_email = email_address.email
-            else:
-                # Fallback to first email if no primary is set
-                email_address = EmailAddress.objects.filter(user=request.user).first()
-                if email_address:
-                    primary_email = email_address.email
-        except Exception:
-            pass
+    except Exception:
+        pass
 
-        data = {
-            'authorized': True,
-            'email': primary_email,
-            'id': request.user.id,
-            'featureCount': feature_count,
-            'tags': [],
-            'is_superuser': request.user.is_superuser
-        }
-        return JsonResponse(data)
-
-    # Unauthenticated: always return 401 (never 200)
-    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
-    if auth_header.startswith('Bearer ') and auth_header[7:].strip():
-        return JsonResponse({'error': 'Invalid or revoked token'}, status=401)
-    return JsonResponse({'error': 'Authentication required'}, status=401)
+    data = {
+        'authorized': True,
+        'email': primary_email,
+        'id': request.user.id,
+        'featureCount': feature_count,
+        'tags': [],
+        'is_superuser': request.user.is_superuser
+    }
+    return JsonResponse(data)
 
 
 def _compute_feature_storage_bytes(user_id: int) -> int:
