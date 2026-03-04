@@ -142,6 +142,8 @@ if config.get('database.pool'):
     }
 
 # Build database configuration
+# When pooling is enabled, CONN_MAX_AGE must be 0 (pooling doesn't support persistent connections).
+# When not pooling, reuse connections for 300s to avoid per-request connect overhead.
 db_config = {
     'ENGINE': 'django.contrib.gis.db.backends.postgis',
     'NAME': config.get_str('database.name', 'geovault'),
@@ -149,9 +151,7 @@ db_config = {
     'PASSWORD': config.get_with_env_override('database.password', 'DB_PASSWORD', ''),
     'HOST': config.get_str('database.host', 'localhost'),
     'PORT': config.get_str('database.port', '5432'),
-    # Note: CONN_MAX_AGE may be ignored when using native pooling
-    # The pool manages connection lifetime instead
-    'CONN_MAX_AGE': config.get_int('database.conn_max_age', 600),
+    'CONN_MAX_AGE': 0 if pool_config else 300,
     # Test database configuration - hardcoded for test environment
     # Uses existing database (gv_tests) and drops all tables instead of creating new DB
     # The --reuse-db flag in pytest ensures the database is not created/destroyed

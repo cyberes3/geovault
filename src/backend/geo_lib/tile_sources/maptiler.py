@@ -100,11 +100,15 @@ def generate_maptiler_sources():
     if not api_key:
         return []
 
-    # Get list of map IDs
+    # Get list of map IDs to show in basemap selector and to hide (hidden = registered but not in selector)
     map_ids = config.get_list('maptiler.maps', [])
+    hidden_map_ids = config.get_list('maptiler.hidden_maps', [])
+    hidden_set = {m for m in hidden_map_ids if m and isinstance(m, str)}
 
-    # If no maps configured, skip registration
-    if not map_ids:
+    # Register maps from both lists so hidden_maps does not need to duplicate maptiler.maps
+    all_map_ids = list(dict.fromkeys((*map_ids, *hidden_map_ids)))
+
+    if not all_map_ids:
         return []
 
     # Get site domain for MapTiler API requests
@@ -113,13 +117,9 @@ def generate_maptiler_sources():
     # Get proxy setting
     use_proxy = config.get_bool('maptiler.proxy_tiles', False)
 
-    # Get list of map IDs to hide from the basemap selector
-    hidden_map_ids = config.get_list('maptiler.hidden_maps', [])
-    hidden_set = {m for m in hidden_map_ids if m and isinstance(m, str)}
-
-    # Build tile sources for each map
+    # Build tile sources for each map (hidden = in maptiler.hidden_maps)
     sources = []
-    for map_id in map_ids:
+    for map_id in all_map_ids:
         if not map_id or not isinstance(map_id, str):
             continue
 

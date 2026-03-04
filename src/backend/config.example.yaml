@@ -84,6 +84,10 @@ tilesources:
   #    - opentopomap
   #    - openhikingmap
 
+  # Source IDs to hide from the website map's basemap selector.
+  # hidden:
+  #   - google-satellite-hybrid
+
 
 maptiler:
   # MapTiler API key for accessing MapTiler maps and 3D terrain tiles
@@ -99,18 +103,17 @@ maptiler:
   # Default: false (tiles loaded directly from MapTiler)
   proxy_tiles: false
 
-  # List of MapTiler map IDs to include as tile sources
+  # List of MapTiler map IDs to include as tile sources (and in the basemap selector).
   # Get map IDs from https://cloud.maptiler.com/maps/
   maps:
-    - base-v4
     - topo-v4 # General purpose topo map
     - outdoor-v4 # Topo map with trails highlighted
-    - openstreetmap-dark # Dark OSM style. Required for dark mode in the Android apps
-    - satellite # Satellite map
-    - streets # Designed for navigation
+    - satellite
+    - streets
+    - hybrid-v4
 
-  # Map IDs that are registered but excluded from the frontend basemap selector.
-  # Used by external clients.
+  # Map IDs that are registered as tile sources but hidden from the basemap selector.
+  # Used by external clients (e.g. Android app).
   hidden_maps:
     - base-v4
     - openstreetmap-dark

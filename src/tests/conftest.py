@@ -78,7 +78,31 @@ def pytest_configure():
             'HOST': test_config.get('HOST', settings.DATABASES['default']['HOST']),
             'PORT': test_config.get('PORT', settings.DATABASES['default']['PORT']),
         })
-        
+        # Strip pool from default so the full suite uses a single non-pooled connection
+        # and never hits "couldn't get a connection after 10.00 sec".
+        pool_opts = None
+        if 'OPTIONS' in settings.DATABASES['default'] and 'pool' in settings.DATABASES['default']['OPTIONS']:
+            pool_opts = settings.DATABASES['default']['OPTIONS']['pool'].copy()
+            opts = settings.DATABASES['default']['OPTIONS'].copy()
+            opts.pop('pool', None)
+            settings.DATABASES['default']['OPTIONS'] = opts
+        elif 'OPTIONS' not in settings.DATABASES['default']:
+            settings.DATABASES['default']['OPTIONS'] = {}
+        settings.DATABASES['default']['CONN_MAX_AGE'] = 0
+
+        # Add a separate alias used only by test_database_pooling.py: same test DB,
+        # but with connection pooling so those tests verify pool behavior in isolation.
+        if pool_opts is not None:
+            pool_test = settings.DATABASES['default'].copy()
+            pool_test['OPTIONS'] = dict(pool_test.get('OPTIONS', {}), pool=pool_opts)
+            pool_test['CONN_MAX_AGE'] = 0
+            # Django ConnectionHandler applies these when loading; we add them for the new alias
+            pool_test.setdefault('ATOMIC_REQUESTS', False)
+            pool_test.setdefault('AUTOCOMMIT', True)
+            pool_test.setdefault('CONN_HEALTH_CHECKS', False)
+            pool_test.setdefault('TIME_ZONE', None)
+            settings.DATABASES['pool_test'] = pool_test
+
         # Close any existing connections to force reconnection with new settings
         connections.close_all()
 

@@ -10,7 +10,7 @@ import requests
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
-from geo_lib.tile_sources.registry import get_all_tile_sources, get_tile_source
+from geo_lib.tile_sources.registry import get_all_tile_sources, get_tile_source, get_tile_sources_for_client
 from geo_lib.utils.version import get_user_agent
 
 # Content-Type prefixes that indicate a successful tile response from upstream
@@ -363,6 +363,109 @@ class TestTilesAPI(TestCase):
         # Reset the registry for other tests
         registry_module._tile_sources = {}
         registry_module._registered = False
+
+    @patch('geo_lib.tile_sources.registry.get_config_loader')
+    def test_tilesources_hidden_hides_sources_from_client(self, mock_get_config_loader):
+        """Test that tilesources.hidden marks sources as hidden so the website dropdown excludes them."""
+        mock_get_config_loader.return_value = self._mock_config_for_tilesources_hidden(
+            ['google-satellite-hybrid']
+        )
+        self._reset_registry()
+
+        source = get_tile_source('google-satellite-hybrid')
+        self.assertIsNotNone(source)
+        self.assertTrue(source.get('hidden'), 'google-satellite-hybrid should be hidden when in tilesources.hidden')
+
+        client_sources = get_tile_sources_for_client()
+        hybrid_client = next((s for s in client_sources if s['id'] == 'google-satellite-hybrid'), None)
+        self.assertIsNotNone(hybrid_client)
+        self.assertTrue(hybrid_client.get('hidden'), 'Client response should include hidden: true')
+
+        self._reset_registry()
+
+    def _mock_config_for_tilesources_hidden(self, hidden_ids):
+        """Return a mock config loader that sets tilesources.hidden to hidden_ids."""
+        mock_config_loader = MagicMock()
+        mock_config_loader.get.side_effect = lambda key, default=None: (
+            list(hidden_ids) if key == 'tilesources.hidden' else default
+        )
+        mock_config_loader.get_bool.return_value = False
+        mock_config_loader.get_with_env_override.return_value = None
+        mock_config_loader.get_str.return_value = ''
+        mock_config_loader.get_list.side_effect = lambda key, default=None: (
+            list(hidden_ids) if key == 'tilesources.hidden' else (default or [])
+        )
+        return mock_config_loader
+
+    def _reset_registry(self):
+        import geo_lib.tile_sources.registry as registry_module
+        registry_module._tile_sources = {}
+        registry_module._registered = False
+
+    @patch('geo_lib.tile_sources.registry.get_config_loader')
+    def test_tilesources_hidden_empty_does_not_hide_sources(self, mock_get_config_loader):
+        """When tilesources.hidden is empty or not set, sources are not marked hidden."""
+        mock_get_config_loader.return_value = self._mock_config_for_tilesources_hidden([])
+        self._reset_registry()
+
+        source = get_tile_source('google-satellite-hybrid')
+        self.assertIsNotNone(source)
+        self.assertFalse(source.get('hidden'), 'Should not be hidden when tilesources.hidden is empty')
+        self._reset_registry()
+
+    @patch('geo_lib.tile_sources.registry.get_config_loader')
+    def test_tilesources_hidden_api_returns_hidden_flag(self, mock_get_config_loader):
+        """GET /api/tiles/sources/ returns hidden: true for sources in tilesources.hidden."""
+        mock_get_config_loader.return_value = self._mock_config_for_tilesources_hidden(
+            ['google-satellite-hybrid']
+        )
+        self._reset_registry()
+
+        response = self.client.get('/api/tiles/sources/')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        sources = data.get('sources', [])
+        hybrid = next((s for s in sources if s['id'] == 'google-satellite-hybrid'), None)
+        self.assertIsNotNone(hybrid)
+        self.assertTrue(hybrid.get('hidden'), 'API should return hidden: true for tilesources.hidden')
+        self._reset_registry()
+
+    @patch('geo_lib.tile_sources.registry.get_config_loader')
+    def test_tilesources_hidden_multiple_sources(self, mock_get_config_loader):
+        """tilesources.hidden can list multiple source IDs; all get hidden=True."""
+        mock_get_config_loader.return_value = self._mock_config_for_tilesources_hidden([
+            'google-satellite-hybrid',
+            'osm',
+        ])
+        self._reset_registry()
+
+        hybrid = get_tile_source('google-satellite-hybrid')
+        osm = get_tile_source('osm')
+        self.assertIsNotNone(hybrid)
+        self.assertIsNotNone(osm)
+        self.assertTrue(hybrid.get('hidden'))
+        self.assertTrue(osm.get('hidden'))
+
+        # Sources not in the list remain visible
+        opentopo = get_tile_source('opentopomap')
+        self.assertIsNotNone(opentopo)
+        self.assertFalse(opentopo.get('hidden'))
+        self._reset_registry()
+
+    @patch('geo_lib.tile_sources.registry.get_config_loader')
+    def test_tilesources_hidden_ignores_nonexistent_ids(self, mock_get_config_loader):
+        """Non-existent IDs in tilesources.hidden do not break registration."""
+        mock_get_config_loader.return_value = self._mock_config_for_tilesources_hidden([
+            'google-satellite-hybrid',
+            'no-such-source-id',
+        ])
+        self._reset_registry()
+
+        source = get_tile_source('google-satellite-hybrid')
+        self.assertIsNotNone(source)
+        self.assertTrue(source.get('hidden'))
+        self.assertIsNone(get_tile_source('no-such-source-id'))
+        self._reset_registry()
 
     @patch('geo_lib.tiles.requests.get')
     @override_settings(TILE_CACHE_ENABLED=False)

@@ -50,11 +50,20 @@ def _initialize_tile_sources():
     # Filter out MapTiler sources - maptiler.proxy_tiles controls MapTiler proxying
     proxy_sources = [source_id for source_id in proxy_sources if not source_id.startswith('maptiler-')]
 
+    hidden_sources = config_loader.get('tilesources.hidden', [])
+    if not isinstance(hidden_sources, list):
+        hidden_sources = []
+    hidden_set = {s for s in hidden_sources if s and isinstance(s, str)}
+
     for source in single_sources:
         config = source.to_dict()
         if config:
             source_id = config['id']
-            
+
+            # Hide from basemap selector if in tilesources.hidden (or source's own hidden, e.g. maptiler.hidden_maps)
+            if source_id in hidden_set:
+                config['hidden'] = True
+
             # Override requires_proxy if this source is in the proxy_sources config list
             # But skip MapTiler sources - they're controlled by maptiler.proxy_tiles
             if source_id in proxy_sources and not source_id.startswith('maptiler-'):
