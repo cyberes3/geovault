@@ -183,11 +183,10 @@ class TestTilesAPI(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_unauthorized_access(self):
-        """Test that unauthorized users cannot access tiles."""
+        """Test that unauthorized users cannot access tile sources."""
         self.client.logout()
         response = self.client.get('/api/tiles/sources/')
-        # Tiles may or may not require authentication depending on implementation
-        self.assertIn(response.status_code, [200, 401])
+        self.assertEqual(response.status_code, 401)
 
     def test_osm_has_proxy_config_with_user_agent(self):
         """Test that OSM tile source has proxy_config with User-Agent header."""

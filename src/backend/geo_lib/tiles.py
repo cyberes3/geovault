@@ -10,6 +10,7 @@ import requests
 from django.http import HttpResponse, JsonResponse
 
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.website.auth import api_or_login_required_401
 from website.settings_utils import get_required_setting, get_setting
 from geo_lib.tile_sources.registry import get_tile_source, get_tile_sources_for_client
 from geo_lib.utils.secure_path import is_path_under_base, secure_filename
@@ -191,6 +192,7 @@ def tile_proxy(request, service, z, x, y):
         return HttpResponse(f'Unexpected error', status=500)
 
 
+@api_or_login_required_401()
 def get_tile_sources(request):
     """
     API endpoint to get all available tile sources with their configurations.
