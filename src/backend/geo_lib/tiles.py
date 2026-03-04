@@ -54,6 +54,7 @@ def _apply_cache_headers(response, cache_control, etag=None):
         del response['Set-Cookie']
 
 
+@api_or_login_required_401()
 def tile_proxy(request, service, z, x, y):
     """
     Proxy tile requests to external tile servers to avoid CORS issues.
@@ -114,7 +115,6 @@ def tile_proxy(request, service, z, x, y):
             if _matches_if_none_match(request, etag):
                 resp_304 = HttpResponse(status=304)
                 _apply_cache_headers(resp_304, f'public, max-age={cache_max_age_seconds}', etag=etag)
-                resp_304['Access-Control-Allow-Origin'] = '*'
                 return resp_304
             content_type_map = {
                 'pbf': 'application/x-protobuf',
@@ -126,7 +126,6 @@ def tile_proxy(request, service, z, x, y):
             content_type = content_type_map.get(url_extension, 'image/png')
             http_response = HttpResponse(tile_data, content_type=content_type)
             _apply_cache_headers(http_response, f'public, max-age={cache_max_age_seconds}', etag=etag)
-            http_response['Access-Control-Allow-Origin'] = '*'
             return http_response
 
     # Cache miss or cache disabled - fetch from external service
@@ -207,6 +206,7 @@ def get_tile_sources(request):
     return response
 
 
+@api_or_login_required_401()
 def style_proxy(request, map_id):
     """
     Proxy MapTiler style.json requests and modify tile URLs to use proxy endpoints.
@@ -273,17 +273,15 @@ def style_proxy(request, map_id):
         if _matches_if_none_match(request, etag):
             resp_304 = HttpResponse(status=304)
             _apply_cache_headers(resp_304, 'public, max-age=3600', etag=etag)
-            resp_304['Access-Control-Allow-Origin'] = '*'
             return resp_304
         http_response = JsonResponse(style_data)
         _apply_cache_headers(http_response, 'public, max-age=3600', etag=etag)
-        http_response['Access-Control-Allow-Origin'] = '*'
         return http_response
         
     except json.JSONDecodeError:
         _logger.error(f"Invalid JSON in style.json for {map_id}")
         return HttpResponse('Invalid style.json', status=500)
-    except Exception as e:
+    except:
         _logger.error(f"Unexpected error fetching style.json for {map_id}: {traceback.format_exc()}")
         return HttpResponse(f'Unexpected error', status=500)
 
