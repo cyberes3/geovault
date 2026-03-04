@@ -102,6 +102,7 @@ maptiler:
   # List of MapTiler map IDs to include as tile sources
   # Get map IDs from https://cloud.maptiler.com/maps/
   maps:
+    - base-v4
     - topo-v4 # General purpose topo map
     - outdoor-v4 # Topo map with trails highlighted
     - openstreetmap-dark # Dark OSM style. Required for dark mode in the Android apps
@@ -111,8 +112,8 @@ maptiler:
   # Map IDs that are registered but excluded from the frontend basemap selector.
   # Used by external clients.
   hidden_maps:
-    - openstreetmap-dark
     - base-v4
+    - openstreetmap-dark
 
 
 # Google API services

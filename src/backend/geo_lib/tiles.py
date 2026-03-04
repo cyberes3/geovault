@@ -196,17 +196,12 @@ def get_tile_sources(request):
     API endpoint to get all available tile sources with their configurations.
 
     Returns JSON response with tile source configurations for the client.
-    Cached for 1 day (86400 seconds). Supports ETag and 304 Not Modified.
+    Not cached so clients always get current server config.
     """
     sources = get_tile_sources_for_client()
     payload = {'sources': sources}
-    etag = _etag_for_json(payload)
-    if _matches_if_none_match(request, etag):
-        resp_304 = HttpResponse(status=304)
-        _apply_cache_headers(resp_304, 'public, max-age=86400', etag=etag)
-        return resp_304
     response = JsonResponse(payload)
-    _apply_cache_headers(response, 'public, max-age=86400', etag=etag)
+    _apply_cache_headers(response, 'no-store, no-cache, must-revalidate, max-age=0')
     return response
 
 
