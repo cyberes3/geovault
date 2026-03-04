@@ -103,17 +103,20 @@ class LoggingMiddleware:
         # Log API requests and errors
         if request.path.startswith('/api/'):
             query_string = request.GET.urlencode()
-            api_key_suffix = ' (API KEY)' if getattr(request, 'is_api_authenticated', False) else ''
-            if query_string:
-                log_msg = f"{request.method} {request.path}?{query_string} - {user_identifier}{api_key_suffix} - {client_ip}"
+            if getattr(request, 'oauth2_access_token', None) is not None:
+                auth_suffix = ' (OAUTH)'
+            elif getattr(request, 'api_key', None) is not None:
+                auth_suffix = ' (API KEY)'
             else:
-                log_msg = f"{request.method} {request.path} - {user_identifier}{api_key_suffix} - {client_ip}"
+                auth_suffix = ''
+            if query_string:
+                log_msg = f"{request.method} {request.path}?{query_string} - {user_identifier}{auth_suffix} - {client_ip} - {response.status_code}"
+            else:
+                log_msg = f"{request.method} {request.path} - {user_identifier}{auth_suffix} - {client_ip} - {response.status_code}"
 
             if response.status_code >= 400:
-                # Log errors with status
-                _logger.warning(f"{log_msg} - Status: {response.status_code}")
+                _logger.warning(log_msg)
             else:
-                # Log successful requests
                 _logger.info(log_msg)
 
         # Log static file requests (no username for static files)
@@ -123,13 +126,12 @@ class LoggingMiddleware:
 
             # Build log message
             if content_length:
-                log_msg = f"{request.method} {request.path} - {client_ip} - {content_length} bytes"
+                log_msg = f"{request.method} {request.path} - {client_ip} - {content_length} bytes - {response.status_code}"
             else:
-                log_msg = f"{request.method} {request.path} - {client_ip}"
+                log_msg = f"{request.method} {request.path} - {client_ip} - {response.status_code}"
 
-            # Log based on status code
             if response.status_code >= 400:
-                _logger.warning(f"{log_msg} - Status: {response.status_code}")
+                _logger.warning(log_msg)
             else:
                 _logger.info(log_msg)
 
@@ -139,12 +141,12 @@ class LoggingMiddleware:
             content_length = _get_content_length(response)
 
             if content_length:
-                log_msg = f"{request.method} {request.path} - {client_ip} - {content_length} bytes"
+                log_msg = f"{request.method} {request.path} - {client_ip} - {content_length} bytes - {response.status_code}"
             else:
-                log_msg = f"{request.method} {request.path} - {client_ip}"
+                log_msg = f"{request.method} {request.path} - {client_ip} - {response.status_code}"
 
             if response.status_code >= 400:
-                _logger.warning(f"{log_msg} - Status: {response.status_code}")
+                _logger.warning(log_msg)
             else:
                 _logger.info(log_msg)
 
@@ -153,9 +155,9 @@ class LoggingMiddleware:
             # This catches root path and other non-API routes
             # Skip static files as they're handled above, but this is a fallback
             if not request.path.startswith('/static/'):
-                log_msg = f"{request.method} {request.path} - {client_ip}"
+                log_msg = f"{request.method} {request.path} - {client_ip} - {response.status_code}"
                 if response.status_code >= 400:
-                    _logger.warning(f"{log_msg} - Status: {response.status_code}")
+                    _logger.warning(log_msg)
                 else:
                     _logger.info(log_msg)
 
