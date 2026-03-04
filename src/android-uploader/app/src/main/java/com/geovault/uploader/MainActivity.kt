@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
@@ -46,6 +47,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var validationStatusText: TextView
     private lateinit var validationTitleText: TextView
     private lateinit var settingsButton: MaterialButton
+    private lateinit var menuButton: ImageButton
     
     private lateinit var uploadRotationHelper: RotationHelper
     private lateinit var validationRotationHelper: RotationHelper
@@ -106,11 +108,15 @@ class MainActivity : AppCompatActivity() {
         validationStatusText = findViewById(R.id.validationStatusText)
         validationTitleText = findViewById(R.id.validationTitleText)
         settingsButton = findViewById(R.id.settingsButton)
+        menuButton = findViewById(R.id.menuButton)
         
         uploadRotationHelper = RotationHelper(uploadSpinner)
         validationRotationHelper = RotationHelper(validationSpinner)
         
-        // Set up settings button click listener
+        // Set up header menu button (always visible) and settings button click listeners
+        menuButton.setOnClickListener {
+            openSettings()
+        }
         settingsButton.setOnClickListener {
             openSettings()
         }

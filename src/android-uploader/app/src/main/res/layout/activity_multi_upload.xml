@@ -3,14 +3,14 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/blue_extra_light">
+    android:background="@color/list_background">
 
 <LinearLayout
     android:id="@+id/rootLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/blue_extra_light">
+    android:background="@color/list_background">
 
     <!-- Header -->
     <LinearLayout
@@ -35,16 +35,16 @@
             android:text="0 files"
             android:textSize="20sp"
             android:textStyle="bold"
-            android:textColor="@color/white" />
+            android:textColor="@color/content_on_primary" />
 
         <ImageButton
             android:id="@+id/menuButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_more_vert"
             android:contentDescription="@string/settings_title"
-            android:padding="12dp" />
+            android:padding="4dp" />
     </LinearLayout>
 
     <!-- File list -->
@@ -53,10 +53,17 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:background="@color/list_background"
         android:padding="8dp"
         android:clipToPadding="false" />
 
-    <!-- Bottom action area -->
+    <!-- Divider between list and bottom action area -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/primary_blue" />
+
+    <!-- Bottom action area: fixed-height slot (72dp) so height doesn't change when button vs status swap -->
     <LinearLayout
         android:id="@+id/bottomLayout"
         android:layout_width="match_parent"
@@ -66,57 +73,64 @@
         android:paddingEnd="20dp"
         android:paddingTop="16dp"
         android:paddingBottom="20dp"
-        android:background="@color/white"
+        android:background="@color/surface"
         android:elevation="8dp">
 
-        <LinearLayout
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="60dp"
-            android:orientation="vertical"
-            android:gravity="center">
+            android:layout_height="72dp">
 
-            <ProgressBar
-                android:id="@+id/uploadProgressBar"
-                style="?android:attr/progressBarStyleHorizontal"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="6dp"
-                android:layout_marginBottom="12dp"
-                android:progressTint="@color/primary_blue"
-                android:visibility="gone" />
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center">
 
-            <TextView
-                android:id="@+id/statusText"
+                <ProgressBar
+                    android:id="@+id/uploadProgressBar"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="6dp"
+                    android:layout_marginBottom="12dp"
+                    android:progressTint="@color/primary_blue"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/statusText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_secondary"
+                    android:gravity="center"
+                    android:layout_marginBottom="16dp"
+                    android:visibility="gone"
+                    android:maxLines="2"
+                    android:ellipsize="end" />
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/uploadAllButton"
+                style="@style/Widget.MaterialComponents.Button"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textSize="14sp"
-                android:textColor="@color/text_secondary"
-                android:gravity="center"
-                android:layout_marginBottom="16dp"
-                android:visibility="gone" />
-        </LinearLayout>
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/uploadAllButton"
-            style="@style/Widget.MaterialComponents.Button"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:text="Upload All"
-            android:textColor="@color/white"
-            app:backgroundTint="@color/primary_blue"
-            app:cornerRadius="8dp"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="12dp"
-            android:textAllCaps="false" />
+                android:layout_height="48dp"
+                android:layout_gravity="center"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="Upload All"
+                android:textColor="@color/content_on_primary"
+                app:backgroundTint="@color/primary_blue"
+                app:cornerRadius="8dp"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textAllCaps="false" />
+        </FrameLayout>
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/cancelButton"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="match_parent"
             android:layout_height="48dp"
+            android:layout_marginTop="12dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
             android:text="@string/cancel_button"

@@ -348,9 +348,14 @@ class PlaceEditActivity : AppCompatActivity() {
 
     private fun setupMapSearch() {
         searchPlaceButton.setOnClickListener {
+            if (searchBarPanel.visibility == View.VISIBLE) {
+                closeSearchBar()
+                return@setOnClickListener
+            }
             searchBarPanel.visibility = View.VISIBLE
             searchPlaceResults.visibility = View.GONE
             searchPlaceInput.requestFocus()
+            updateSearchCloseButtonVisibility()
             ViewCompat.requestApplyInsets(findViewById(R.id.rootLayout))
             (getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
                 ?.showSoftInput(searchPlaceInput, InputMethodManager.SHOW_IMPLICIT)
@@ -376,6 +381,7 @@ class PlaceEditActivity : AppCompatActivity() {
                 mapSearchCall = null
                 searchPlaceRotationHelper.stop()
                 val query = searchPlaceInput.text.toString().trim()
+                updateSearchCloseButtonVisibility()
                 if (query.isEmpty()) {
                     mapSearchResults.clear()
                     mapSearchAdapter.notifyDataSetChanged()
@@ -466,6 +472,11 @@ class PlaceEditActivity : AppCompatActivity() {
         closeSearchBar()
     }
 
+    private fun updateSearchCloseButtonVisibility() {
+        searchPlaceCloseButton.visibility =
+            if (searchPlaceInput.text.toString().trim().isEmpty()) View.GONE else View.VISIBLE
+    }
+
     private fun closeSearchBar() {
         searchPlaceInput.setText("")
         searchPlaceInput.clearFocus()
@@ -474,6 +485,7 @@ class PlaceEditActivity : AppCompatActivity() {
         setSearchBarCornersForResults(false)
         searchBarPanel.visibility = View.GONE
         searchPlaceResults.visibility = View.GONE
+        searchPlaceCloseButton.visibility = View.GONE
         (getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
             ?.hideSoftInputFromWindow(searchPlaceInput.windowToken, 0)
         ViewCompat.requestApplyInsets(findViewById(R.id.rootLayout))

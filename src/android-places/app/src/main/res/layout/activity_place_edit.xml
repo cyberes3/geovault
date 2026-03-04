@@ -30,7 +30,7 @@
             android:text="New Place"
             android:textSize="20sp"
             android:textStyle="bold"
-            android:textColor="@color/white" />
+            android:textColor="@color/content_on_primary" />
 
         <ImageView
             android:id="@+id/closeButton"
@@ -38,7 +38,7 @@
             android:layout_height="32dp"
             android:src="@drawable/ic_close"
             android:contentDescription="Cancel"
-            app:tint="@color/white"
+            app:tint="@color/content_on_primary"
             android:clickable="true"
             android:focusable="true"
             android:background="?attr/selectableItemBackgroundBorderless" />
@@ -84,7 +84,8 @@
                 android:layout_height="match_parent"
                 android:src="@drawable/ic_search"
                 android:contentDescription="Search place"
-                app:tint="@color/white"
+                android:scaleType="center"
+                app:tint="@color/content_on_primary"
                 android:clickable="true"
                 android:focusable="true"
                 android:background="?attr/selectableItemBackground"
@@ -109,7 +110,7 @@
                 android:layout_height="match_parent"
                 android:src="@drawable/ic_layers"
                 android:contentDescription="Toggle map source"
-                app:tint="@color/white"
+                app:tint="@color/content_on_primary"
                 android:clickable="true"
                 android:focusable="true"
                 android:background="?attr/selectableItemBackground"
@@ -147,6 +148,8 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:minHeight="40dp"
+                    android:gravity="center_vertical"
                     android:hint="Search..."
                     android:inputType="text"
                     android:maxLines="1"
@@ -176,7 +179,8 @@
                         android:layout_width="40dp"
                         android:layout_height="40dp"
                         android:src="@drawable/ic_close"
-                        android:contentDescription="Clear and close"
+                        android:contentDescription="@string/close"
+                        android:visibility="gone"
                         app:tint="@color/text_secondary"
                         android:clickable="true"
                         android:focusable="true"
@@ -203,7 +207,7 @@
         android:id="@+id/nestedScrollView"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/white"
+        android:background="@color/surface"
         android:elevation="8dp"
         app:layout_constrainedHeight="true"
         app:layout_constraintTop_toBottomOf="@id/guideline"
@@ -278,7 +282,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textSize="12sp"
-                    android:textColor="@android:color/holo_red_dark"
+                    android:textColor="@color/error_red"
                     android:visibility="gone"
                     android:gravity="end" />
 
@@ -369,7 +373,7 @@
                     android:insetTop="0dp"
                     android:insetBottom="0dp"
                     android:text="Save Place"
-                    android:textColor="@color/white"
+                    android:textColor="@color/content_on_primary"
                     app:backgroundTint="@color/primary_blue"
                     app:cornerRadius="8dp"
                     android:textAllCaps="false" />

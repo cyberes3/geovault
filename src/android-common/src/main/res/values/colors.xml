@@ -23,6 +23,8 @@
     <!-- Basic colors -->
     <color name="gv_common_white">#FFFFFF</color>
     <color name="gv_common_black">#000000</color>
+    <color name="gv_common_surface">#FFFFFF</color>
+    <color name="gv_common_content_on_primary">#FFFFFF</color>
     <color name="gv_common_border_light">#C4D2ED</color>
 
     <!-- Legacy / compatibility -->

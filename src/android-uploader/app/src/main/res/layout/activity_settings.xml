@@ -3,14 +3,14 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/blue_extra_light">
+    android:background="@color/list_background">
 
     <LinearLayout
         android:id="@+id/rootLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:background="@color/blue_extra_light">
+        android:background="@color/list_background">
 
         <!-- Header -->
         <LinearLayout
@@ -34,7 +34,7 @@
                 android:text="@string/settings_title"
                 android:textSize="20sp"
                 android:textStyle="bold"
-                android:textColor="@color/white" />
+                android:textColor="@color/content_on_primary" />
 
         </LinearLayout>
 
@@ -44,7 +44,7 @@
             android:layout_height="0dp"
             android:layout_weight="1"
             android:fillViewport="true"
-            android:background="@color/white">
+            android:background="@color/surface">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -122,7 +122,8 @@
                     android:textSize="16sp"
                     android:textColor="@color/text_primary"
                     android:padding="8dp"
-                    android:layout_marginBottom="16dp" />
+                    android:layout_marginBottom="16dp"
+                    app:buttonTint="@color/primary_blue" />
 
                 <!-- Help Text -->
                 <TextView
@@ -144,7 +145,7 @@
                     android:insetTop="0dp"
                     android:insetBottom="0dp"
                     android:text="@string/save_settings"
-                    android:textColor="@color/white"
+                    android:textColor="@color/content_on_primary"
                     app:backgroundTint="@color/primary_blue"
                     app:cornerRadius="8dp"
                     android:textSize="16sp"

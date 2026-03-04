@@ -7,12 +7,11 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
-import android.view.MenuItem
 import android.view.View
 import android.widget.ImageButton
-import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
@@ -103,9 +102,9 @@ class MultiUploadActivity : AppCompatActivity() {
         filesRecyclerView.layoutManager = LinearLayoutManager(this)
         filesRecyclerView.adapter = adapter
         
-        // Setup menu button
+        // Setup menu button - open settings directly
         menuButton.setOnClickListener {
-            showMenu(it)
+            openSettings()
         }
         
         uploadAllButton.setOnClickListener {
@@ -124,23 +123,6 @@ class MultiUploadActivity : AppCompatActivity() {
         
         // Handle the share intent
         handleIntent(intent)
-    }
-    
-    private fun showMenu(anchor: View) {
-        val popup = PopupMenu(this, anchor)
-        popup.menuInflater.inflate(R.menu.upload_menu, popup.menu)
-        
-        popup.setOnMenuItemClickListener { item: MenuItem ->
-            when (item.itemId) {
-                R.id.menu_settings -> {
-                    openSettings()
-                    true
-                }
-                else -> false
-            }
-        }
-        
-        popup.show()
     }
     
     private fun openSettings() {
@@ -287,8 +269,14 @@ class MultiUploadActivity : AppCompatActivity() {
         
         fileCountText.text = "${files.size} file${if (files.size != 1) "s" else ""}"
         
-        // Show/hide upload button based on whether there are valid files
-        uploadAllButton.visibility = if (validFilesCount == 0) View.GONE else View.VISIBLE
+        // Show/hide upload button based on whether there are valid files; hide status until upload runs
+        if (validFilesCount == 0) {
+            uploadAllButton.visibility = View.GONE
+            statusText.visibility = View.GONE
+        } else {
+            uploadAllButton.visibility = View.VISIBLE
+            if (!isUploading) statusText.visibility = View.GONE
+        }
     }
     
     private fun startUploadQueue() {
@@ -296,8 +284,8 @@ class MultiUploadActivity : AppCompatActivity() {
 
         val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
         if (serverUrl.isEmpty() || !GeovaultAuthManager.isLoggedIn(this)) {
-            statusText.text = getString(R.string.config_settings_first)
-            statusText.visibility = View.VISIBLE
+            statusText.visibility = View.GONE
+            Toast.makeText(this, getString(R.string.config_settings_first), Toast.LENGTH_SHORT).show()
             return
         }
         
@@ -308,8 +296,8 @@ class MultiUploadActivity : AppCompatActivity() {
         }
         
         if (validFilesCount == 0) {
-            statusText.text = "No valid files to upload"
-            statusText.visibility = View.VISIBLE
+            statusText.visibility = View.GONE
+            Toast.makeText(this, "No valid files to upload", Toast.LENGTH_SHORT).show()
             return
         }
         

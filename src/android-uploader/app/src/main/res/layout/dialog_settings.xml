@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -49,7 +50,8 @@
         android:layout_height="wrap_content"
         android:text="@string/add_suffix_label"
         android:textSize="14sp"
-        android:checked="true" />
+        android:checked="true"
+        app:buttonTint="@color/primary_blue" />
 
     <TextView
         android:layout_width="match_parent"

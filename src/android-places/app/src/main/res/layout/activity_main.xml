@@ -38,7 +38,7 @@
                     android:text="@string/app_title"
                     android:textSize="20sp"
                     android:textStyle="bold"
-                    android:textColor="@color/white" />
+                    android:textColor="@color/content_on_primary" />
 
                 <TextView
                     android:id="@+id/lastSyncText"
@@ -46,7 +46,7 @@
                     android:layout_height="wrap_content"
                     android:text="Not synced"
                     android:textSize="11sp"
-                    android:textColor="@color/white"
+                    android:textColor="@color/content_on_primary"
                     android:alpha="0.8" />
             </LinearLayout>
 
@@ -54,9 +54,10 @@
                 android:id="@+id/settingsButton"
                 android:layout_width="32dp"
                 android:layout_height="32dp"
+                android:padding="4dp"
                 android:src="@drawable/ic_more_vert"
                 android:contentDescription="@string/settings_title"
-                app:tint="@color/white"
+                app:tint="@color/content_on_primary"
                 android:clickable="true"
                 android:focusable="true"
                 android:background="?attr/selectableItemBackgroundBorderless" />
@@ -74,7 +75,7 @@
             android:paddingEnd="20dp"
             android:paddingTop="8dp"
             android:paddingBottom="8dp"
-            android:background="@color/blue_extra_light"
+            android:background="@color/search_bar_container_background"
             android:elevation="0dp">
 
             <LinearLayout
@@ -122,17 +123,19 @@
             android:id="@+id/searchDivider"
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="@color/border_light"
+            android:background="@color/search_divider"
             android:visibility="invisible" />
 
         <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
             android:id="@+id/swipeRefresh"
             android:layout_width="match_parent"
-            android:layout_height="match_parent">
+            android:layout_height="match_parent"
+            android:background="@color/list_background">
 
             <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent">
+                android:layout_height="match_parent"
+                android:background="@color/list_background">
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/placesRecyclerView"
@@ -194,7 +197,7 @@
         android:layout_marginBottom="88dp"
         android:contentDescription="Create Place"
         android:src="@drawable/ic_add"
-        app:tint="@color/white"
+        app:tint="@color/content_on_primary"
         app:backgroundTint="@color/primary_blue" />
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -205,7 +208,7 @@
         android:layout_margin="16dp"
         android:contentDescription="Map View"
         android:src="@android:drawable/ic_dialog_map"
-        app:tint="@color/white"
+        app:tint="@color/content_on_primary"
         app:backgroundTint="@color/primary_blue" />
 
     <!-- Sync/error message bar: overlays bottom (on top of FABs), tap to dismiss -->
@@ -236,7 +239,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:textSize="14sp"
-            android:textColor="@color/white"
+            android:textColor="@color/content_on_primary"
             android:maxLines="3"
             android:ellipsize="end" />
     </LinearLayout>

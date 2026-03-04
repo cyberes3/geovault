@@ -29,16 +29,17 @@
             android:text="@string/app_title"
             android:textSize="20sp"
             android:textStyle="bold"
-            android:textColor="@color/white" />
+            android:textColor="@color/content_on_primary" />
 
         <!-- Optional settings button, keeping consistent with main -->
         <ImageView
             android:id="@+id/settingsButton"
             android:layout_width="32dp"
             android:layout_height="32dp"
+            android:padding="4dp"
             android:src="@drawable/ic_more_vert"
             android:contentDescription="@string/settings_title"
-            app:tint="@color/white"
+            app:tint="@color/content_on_primary"
             android:clickable="true"
             android:focusable="true"
             android:background="?attr/selectableItemBackgroundBorderless" />
@@ -73,7 +74,7 @@
                 android:layout_height="match_parent"
                 android:src="@drawable/ic_layers"
                 android:contentDescription="Toggle map source"
-                app:tint="@color/white"
+                app:tint="@color/content_on_primary"
                 android:clickable="true"
                 android:focusable="true"
                 android:background="?attr/selectableItemBackground"
@@ -89,7 +90,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:background="@color/white"
+        android:background="@color/surface"
         android:elevation="8dp"
         android:padding="16dp">
 
@@ -128,7 +129,7 @@
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:text="View in List"
-                android:textColor="@color/white"
+                android:textColor="@color/content_on_primary"
                 app:backgroundTint="@color/primary_blue"
                 app:cornerRadius="8dp"
                 android:textAllCaps="false"
@@ -166,7 +167,7 @@
             android:insetTop="0dp"
             android:insetBottom="0dp"
             android:text="Navigate"
-            android:textColor="@color/white"
+            android:textColor="@color/content_on_primary"
             app:backgroundTint="@color/primary_blue"
             app:cornerRadius="8dp"
             android:textAllCaps="false"

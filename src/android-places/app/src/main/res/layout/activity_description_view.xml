@@ -29,7 +29,7 @@
             android:layout_weight="1"
             android:textSize="20sp"
             android:textStyle="bold"
-            android:textColor="@color/white"
+            android:textColor="@color/content_on_primary"
             android:ellipsize="end"
             android:maxLines="2" />
 
@@ -39,7 +39,7 @@
             android:layout_height="32dp"
             android:src="@drawable/ic_close"
             android:contentDescription="@string/close"
-            app:tint="@color/white"
+            app:tint="@color/content_on_primary"
             android:clickable="true"
             android:focusable="true"
             android:background="?attr/selectableItemBackgroundBorderless" />
@@ -51,7 +51,7 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:fillViewport="true"
-        android:background="@color/white"
+        android:background="@color/surface"
         android:padding="16dp">
 
         <TextView

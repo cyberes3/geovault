@@ -132,6 +132,8 @@ class MainActivity : AppCompatActivity() {
         recyclerView = findViewById(R.id.placesRecyclerView)
         emptyState = findViewById(R.id.emptyState)
         swipeRefresh = findViewById(R.id.swipeRefresh)
+        swipeRefresh.setProgressBackgroundColorSchemeResource(R.color.surface)
+        swipeRefresh.setColorSchemeResources(R.color.primary_blue)
         refreshOverlay = findViewById(R.id.refreshOverlay)
         syncSpinner = findViewById(R.id.syncSpinner)
         syncText = findViewById(R.id.syncText)

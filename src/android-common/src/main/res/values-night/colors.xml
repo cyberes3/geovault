@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Night mode (pure black OLED): overrides for dark theme -->
+    <color name="gv_common_surface">#000000</color>
+    <color name="gv_common_content_on_primary">#C0C0C0</color>
+    <color name="gv_common_text_primary">#C0C0C0</color>
+    <color name="gv_common_black">#C0C0C0</color>
+    <color name="gv_common_blue_extra_light">#1A1A1A</color>
+    <color name="gv_common_text_secondary">#A0A0A0</color>
+    <color name="gv_common_border_light">#404040</color>
+    <color name="gv_common_error_light">#3D1F1F</color>
+    <color name="gv_common_error_stroke">#5C2E2E</color>
+</resources>

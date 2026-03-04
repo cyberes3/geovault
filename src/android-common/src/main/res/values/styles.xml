@@ -2,7 +2,7 @@
 <resources>
     <!-- Primary button -->
     <style name="gv_common_ButtonPrimary" parent="Widget.MaterialComponents.Button">
-        <item name="android:textColor">@color/gv_common_white</item>
+        <item name="android:textColor">@color/gv_common_content_on_primary</item>
         <item name="backgroundTint">@color/gv_common_primary_blue</item>
         <item name="cornerRadius">8dp</item>
         <item name="android:textSize">16sp</item>
@@ -25,7 +25,7 @@
 
     <!-- Connect account button: primary blue when signed out (main CTA) -->
     <style name="gv_common_ButtonConnectAccount" parent="Widget.MaterialComponents.Button">
-        <item name="android:textColor">@color/gv_common_white</item>
+        <item name="android:textColor">@color/gv_common_content_on_primary</item>
         <item name="backgroundTint">@color/gv_common_primary_blue</item>
         <item name="cornerRadius">8dp</item>
         <item name="android:textSize">16sp</item>
@@ -48,7 +48,7 @@
     <!-- Section header (blue bar with title) -->
     <style name="gv_common_SectionHeader">
         <item name="android:background">@color/gv_common_primary_blue</item>
-        <item name="android:textColor">@color/gv_common_white</item>
+        <item name="android:textColor">@color/gv_common_content_on_primary</item>
         <item name="android:textSize">20sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:paddingStart">20dp</item>

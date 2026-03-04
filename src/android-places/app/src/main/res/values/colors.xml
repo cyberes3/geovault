@@ -19,8 +19,23 @@
     <!-- Basic colors -->
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="content_on_primary">#FFFFFF</color>
     <color name="border_light">#C4D2ED</color>      <!-- blue-200 -->
+
+    <!-- Error state (for error_background drawable) -->
+    <color name="error_light">#FFF5F5</color>
+    <color name="error_stroke">#FFE0E0</color>
     
+    <!-- List area background (same as container in day; pure black in night) -->
+    <color name="list_background">@color/blue_extra_light</color>
+
+    <!-- Search bar container (same as container in day; black in night) -->
+    <color name="search_bar_container_background">@color/blue_extra_light</color>
+
+    <!-- Search bar divider (border in day; blue in night) -->
+    <color name="search_divider">@color/border_light</color>
+
     <!-- Snackbar / error bar -->
     <color name="snackbar_background">#323232</color>
 

@@ -35,16 +35,16 @@
             android:text="0 files"
             android:textSize="20sp"
             android:textStyle="bold"
-            android:textColor="@color/white" />
+            android:textColor="@color/content_on_primary" />
 
         <ImageButton
             android:id="@+id/menuButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_more_vert"
             android:contentDescription="@string/settings_title"
-            android:padding="12dp" />
+            android:padding="4dp" />
     </LinearLayout>
 
     <!-- File list -->
@@ -66,7 +66,7 @@
         android:paddingEnd="20dp"
         android:paddingTop="16dp"
         android:paddingBottom="20dp"
-        android:background="@color/white"
+        android:background="@color/surface"
         android:elevation="8dp">
 
         <ProgressBar
@@ -96,7 +96,7 @@
             android:insetTop="0dp"
             android:insetBottom="0dp"
             android:text="Upload All"
-            android:textColor="@color/white"
+            android:textColor="@color/content_on_primary"
             app:backgroundTint="@color/primary_blue"
             app:cornerRadius="8dp"
             android:textSize="16sp"
