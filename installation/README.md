@@ -134,8 +134,6 @@ Once the database is ready, create the tables:
 If you get the error `django.db.utils.ProgrammingError: permission denied to create extension "postgis"` then you forgot
 to create the PostGIS extension in the database.
 
-You don't need to run `collectstatic`.
-
 Finally, set the correct permissions:
 
 ```shell

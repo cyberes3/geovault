@@ -124,23 +124,6 @@
                     android:lineSpacingMultiplier="1.3"
                     android:layout_marginTop="8dp" />
 
-                <!-- Save Button -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/saveButton"
-                    style="@style/Widget.MaterialComponents.Button"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:text="@string/save_settings"
-                    android:textColor="@color/white"
-                    app:backgroundTint="@color/primary_blue"
-                    app:cornerRadius="8dp"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:layout_marginTop="24dp"
-                    android:textAllCaps="false" />
-
             </LinearLayout>
 
         </androidx.core.widget.NestedScrollView>

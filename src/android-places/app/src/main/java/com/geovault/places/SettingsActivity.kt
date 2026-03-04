@@ -24,7 +24,6 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var serverUrlEdit: EditText
     private lateinit var connectButton: Button
     private lateinit var disconnectButton: Button
-    private lateinit var saveButton: Button
     private lateinit var loggedInUserText: TextView
     private lateinit var settingsHelpText: TextView
 
@@ -43,7 +42,6 @@ class SettingsActivity : AppCompatActivity() {
         serverUrlEdit = findViewById(R.id.serverUrlEdit)
         connectButton = findViewById(R.id.connectButton)
         disconnectButton = findViewById(R.id.disconnectButton)
-        saveButton = findViewById(R.id.saveButton)
         loggedInUserText = findViewById(R.id.loggedInUserText)
         settingsHelpText = findViewById(R.id.settingsHelpText)
 
@@ -92,10 +90,6 @@ class SettingsActivity : AppCompatActivity() {
                 .setNegativeButton(getString(R.string.cancel_button), null)
                 .show()
         }
-
-        saveButton.setOnClickListener {
-            saveSettings()
-        }
     }
 
     override fun onResume() {
@@ -113,8 +107,7 @@ class SettingsActivity : AppCompatActivity() {
         serverUrlEdit.isEnabled = !loggedIn
         connectButton.visibility = if (loggedIn) View.GONE else View.VISIBLE
         disconnectButton.visibility = if (loggedIn) View.VISIBLE else View.GONE
-        saveButton.visibility = if (loggedIn) View.VISIBLE else View.GONE
-        
+
         // Hide instructions when signed in
         settingsHelpText.visibility = if (loggedIn) View.GONE else View.VISIBLE
         
@@ -141,18 +134,6 @@ class SettingsActivity : AppCompatActivity() {
         } else {
             loggedInUserText.visibility = View.GONE
         }
-    }
-
-    private fun saveSettings() {
-        val serverUrl = normalizeServerUrl(serverUrlEdit.text.toString())
-        if (serverUrl.isEmpty()) {
-            Toast.makeText(this, getString(R.string.settings_required), Toast.LENGTH_LONG).show()
-            return
-        }
-        GeovaultAuthManager.setServerUrl(this, serverUrl)
-        Toast.makeText(this, getString(R.string.settings_saved), Toast.LENGTH_SHORT).show()
-        setResult(RESULT_OK)
-        finish()
     }
 
     override fun finish() {
