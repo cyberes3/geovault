@@ -13,6 +13,7 @@ import okhttp3.Request
 import org.json.JSONObject
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
+import javax.crypto.AEADBadTagException
 
 /**
  * Manages OAuth2 (Authorization Code + PKCE) and token storage for GeoVault API.
@@ -71,13 +72,48 @@ object GeovaultAuthManager {
         val masterKey = MasterKey.Builder(appContext)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
-        encryptedPrefs = EncryptedSharedPreferences.create(
-            appContext,
-            AUTH_PREFS_NAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
+        encryptedPrefs = createEncryptedPrefs(appContext, masterKey)
+    }
+
+    private fun createEncryptedPrefs(
+        appContext: Context,
+        masterKey: MasterKey
+    ): android.content.SharedPreferences {
+        return try {
+            EncryptedSharedPreferences.create(
+                appContext,
+                AUTH_PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            if (isEncryptedPrefsCorruption(e)) {
+                appContext.deleteSharedPreferences(AUTH_PREFS_NAME)
+                EncryptedSharedPreferences.create(
+                    appContext,
+                    AUTH_PREFS_NAME,
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                )
+            } else {
+                throw e
+            }
+        }
+    }
+
+    private fun isEncryptedPrefsCorruption(e: Throwable): Boolean {
+        var t: Throwable? = e
+        while (t != null) {
+            when (t) {
+                is AEADBadTagException,
+                is SecurityException,
+                is android.security.KeyStoreException -> return true
+            }
+            t = t.cause
+        }
+        return false
     }
 
     private fun requireInitialized(): String {
