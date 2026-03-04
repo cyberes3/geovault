@@ -2,9 +2,9 @@ package com.geovault.places
 
 import android.content.Context
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.ImportantMessageSnackbar
 import com.geovault.common.RetrofitClient
 import android.content.Intent
-import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -22,7 +22,6 @@ import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-import com.google.gson.Gson
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -30,10 +29,13 @@ import java.io.Serializable
 import java.util.concurrent.Executors
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
+
 class MainActivity : AppCompatActivity() {
 
     companion object {
+        private const val TAG = "MainActivity"
         const val EXTRA_SELECTED_ID_FROM_MAP = "selected_id_from_map"
     }
 
@@ -48,17 +50,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var searchDivider: View
     private lateinit var fabAdd: View
     private lateinit var fabMap: View
-    private lateinit var syncErrorBar: View
-    private lateinit var syncErrorBarText: TextView
+    private lateinit var importantMessageSnackbar: ImportantMessageSnackbar
     private lateinit var adapter: PlacesAdapter
-    private val placesList = mutableListOf<Feature>()
-    private val offlinePlacesList = mutableListOf<OfflineFeature>()
     private var refreshCall: Call<FeatureCollection>? = null
     private var initialLoadDone = false
     private var searchQuery: String = ""
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var rotationHelper: RotationHelper
-    private var lastSyncTime: Long = 0
     private val timeoutRunnable = Runnable {
         if (swipeRefresh.isRefreshing) {
             cancelRefresh("Refresh timed out (10s)")
@@ -67,22 +65,18 @@ class MainActivity : AppCompatActivity() {
 
     private val executor = Executors.newSingleThreadExecutor()
 
-    private val prefs: SharedPreferences by lazy {
-        getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-    }
+    private val cache: PlacesCache
+        get() = (application as PlacesApplication).placesCache
 
     private val mapLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
             val selectedId = result.data?.getIntExtra("selected_id", -1) ?: -1
             if (selectedId != -1) {
                 adapter.selectedId = selectedId
-                val index = placesList.indexOfFirst { it.properties.database_id == selectedId }
+                val index = displayIndexForId(selectedId)
                 if (index != -1) {
                     adapter.notifyDataSetChanged()
-                    
-                    // Center the item
                     val layoutManager = recyclerView.layoutManager as LinearLayoutManager
-                    // Put item at 1/3 of the screen height effectively centering it with context
                     val offset = recyclerView.height / 3
                     layoutManager.scrollToPositionWithOffset(index, offset)
                 }
@@ -91,14 +85,44 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val editLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) {
-            val offlineFeature = result.data?.getParcelableExtra("offline_feature", Feature::class.java)
-            if (offlineFeature != null) {
-                val originalFeature = result.data?.getParcelableExtra("original_feature", Feature::class.java)
-                val offlineEditIndex = result.data?.getIntExtra("offline_edit_index", -1) ?: -1
+        Log.d(TAG, "editLauncher: resultCode=${result.resultCode}, data=${result.data}")
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val data = result.data
+        val hasOffline = data?.getParcelableExtra("offline_feature", Feature::class.java) != null
+        val hasUpdated = data?.getParcelableExtra("updated_feature", Feature::class.java) != null
+        Log.d(TAG, "editLauncher: data null=${data == null}, hasOffline=$hasOffline, hasUpdated=$hasUpdated")
+        when {
+            hasOffline -> {
+                val offlineFeature = data!!.getParcelableExtra("offline_feature", Feature::class.java)!!
+                val originalFeature = data.getParcelableExtra("original_feature", Feature::class.java)
+                val offlineEditIndex = data.getIntExtra("offline_edit_index", -1)
                 handleOfflineSave(offlineFeature, originalFeature, offlineEditIndex)
-            } else {
-                loadPlaces()
+            }
+            hasUpdated -> {
+                val updated = data!!.getParcelableExtra("updated_feature", Feature::class.java)!!
+                Log.d(TAG, "editLauncher: got updated_feature id=${updated.properties.database_id}, name=${updated.properties.name}")
+                cache.updateCachedFeature(updated)
+                Log.d(TAG, "editLauncher: after updateCachedFeature, cache size=${cache.getCachedFeatures().size}")
+                searchQuery = ""
+                searchInput.setText("")
+                searchClear.visibility = View.GONE
+                val id = updated.properties.database_id
+                handler.post {
+                    refreshListFromCache()
+                    if (id != null) {
+                        val index = displayIndexForId(id)
+                        Log.d(TAG, "editLauncher: displayIndexForId($id)=$index")
+                        if (index >= 0) {
+                            recyclerView.post {
+                                (recyclerView.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(index, 0)
+                            }
+                        }
+                    }
+                }
+            }
+            else -> {
+                Log.d(TAG, "editLauncher: else branch, only refreshListFromCache()")
+                refreshListFromCache()
             }
         }
     }
@@ -136,15 +160,13 @@ class MainActivity : AppCompatActivity() {
         searchDivider = findViewById(R.id.searchDivider)
         fabAdd = findViewById(R.id.fab_add)
         fabMap = findViewById(R.id.fab_map)
-        syncErrorBar = findViewById(R.id.syncErrorBar)
-        syncErrorBarText = findViewById(R.id.syncErrorBarText)
-        syncErrorBar.setOnClickListener { syncErrorBar.visibility = View.GONE }
+        importantMessageSnackbar = findViewById(R.id.importantMessageSnackbar)
         rotationHelper = RotationHelper(syncSpinner)
 
         adapter = PlacesAdapter(
-            placesList, 
-            offlinePlacesList.map { it.feature },
-            offlinePlacesList,
+            emptyList(),
+            emptyList(),
+            emptyList(),
             { feature: Feature ->
                 navigateToPlace(feature)
             }, 
@@ -155,7 +177,10 @@ class MainActivity : AppCompatActivity() {
                 safeNoAnimation()
             },
             { offlineFeature: OfflineFeature ->
-                val index = offlinePlacesList.indexOf(offlineFeature)
+                val index = cache.getOfflineFeatures().indexOfFirst { of ->
+                    of.feature.properties.database_id == offlineFeature.feature.properties.database_id &&
+                        (of.feature.properties.database_id != null || of.feature.properties.name == offlineFeature.feature.properties.name)
+                }.takeIf { it >= 0 } ?: -1
                 val intent = Intent(this, PlaceEditActivity::class.java)
                 intent.putExtra("feature", offlineFeature.feature)
                 intent.putExtra("original_feature", offlineFeature.original)
@@ -192,7 +217,7 @@ class MainActivity : AppCompatActivity() {
 
         searchInput.addTextChangedListener { text ->
             searchQuery = text?.toString()?.trim() ?: ""
-            updateList()
+            refreshListFromCache()
             searchClear.visibility = if (searchQuery.isEmpty()) View.GONE else View.VISIBLE
         }
 
@@ -215,10 +240,6 @@ class MainActivity : AppCompatActivity() {
         fabMap.setOnClickListener {
             val intent = Intent(this, MapActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                putParcelableArrayListExtra("features", ArrayList<Feature>().apply {
-                    addAll(offlinePlacesList.map { it.feature })
-                    addAll(placesList)
-                })
             }
             mapLauncher.launch(intent)
             safeNoAnimation()
@@ -242,13 +263,13 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         if (intent?.getBooleanExtra(EXTRA_SHOW_EXPORT_SAVED_MESSAGE, false) == true) {
             intent?.removeExtra(EXTRA_SHOW_EXPORT_SAVED_MESSAGE)
-            Toast.makeText(this, getString(R.string.offline_data_saved_to_files), Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.offline_data_saved_to_files), Toast.LENGTH_SHORT).show()
         }
         val selectedIdFromMap = intent?.getIntExtra(EXTRA_SELECTED_ID_FROM_MAP, -1) ?: -1
         if (selectedIdFromMap != -1) {
             intent?.removeExtra(EXTRA_SELECTED_ID_FROM_MAP)
             adapter.selectedId = selectedIdFromMap
-            val index = placesList.indexOfFirst { it.properties.database_id == selectedIdFromMap }
+            val index = displayIndexForId(selectedIdFromMap)
             if (index != -1) {
                 adapter.notifyDataSetChanged()
                 val layoutManager = recyclerView.layoutManager as? LinearLayoutManager
@@ -284,10 +305,8 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, SettingsActivity::class.java))
             safeNoAnimation()
         } else {
-            // Always load from cache/offline for immediate display when resuming
-            loadOfflinePlaces()
-            loadFromCache()
-            // Sync from server only on first load; refresh token first so first request doesn't get 401
+            // Defer so activity result (e.g. from PlaceEditActivity) is delivered first, then we refresh
+            handler.post { refreshListFromCache() }
             if (!initialLoadDone) {
                 initialLoadDone = true
                 executor.execute {
@@ -298,7 +317,7 @@ class MainActivity : AppCompatActivity() {
                             handler.post { loadPlaces() }
                         } else {
                             showSnackbar("Session expired. Sign in again in Settings.")
-                            updateList()
+                            refreshListFromCache()
                         }
                     }
                 }
@@ -333,10 +352,8 @@ class MainActivity : AppCompatActivity() {
         handler.removeCallbacks(timeoutRunnable)
         hideSyncOverlayAndReset()
         showSnackbar(message)
-        // If we cancelled, ensure we at least show what's in cache if lists are empty
-        if (placesList.isEmpty() && offlinePlacesList.isEmpty()) {
-            loadOfflinePlaces()
-            loadFromCache()
+        if (cache.getCachedFeatures().isEmpty() && cache.getOfflineFeatures().isEmpty()) {
+            refreshListFromCache()
         }
     }
 
@@ -348,98 +365,72 @@ class MainActivity : AppCompatActivity() {
         fabMap.isEnabled = true
     }
 
-    private fun loadFromCache() {
-        val cachedJson = prefs.getString("cached_places", null)
-        lastSyncTime = prefs.getLong("last_sync_time", 0L)
-        
-        if (cachedJson != null) {
-            try {
-                val collection = Gson().fromJson(cachedJson, FeatureCollection::class.java)
-                placesList.clear()
-                placesList.addAll(collection.features)
-                updateLastSyncUI()
-                updateList()
-            } catch (e: Exception) {}
-        }
-    }
-
-    private fun loadOfflinePlaces() {
-        val json = prefs.getString("offline_places", "[]") ?: "[]"
-        try {
-            val items = Gson().fromJson(json, Array<OfflineFeature>::class.java).toList()
-            offlinePlacesList.clear()
-            offlinePlacesList.addAll(items)
-        } catch (e: Exception) {}
-    }
-
-    private fun saveOfflinePlace(feature: Feature, original: Feature? = null) {
-        // If we already have an offline edit for this ID, update it instead of adding a new one
-        val existingIndex = if (feature.properties.database_id != null) {
-            offlinePlacesList.indexOfFirst { it.feature.properties.database_id == feature.properties.database_id }
-        } else -1
-
-        val newOfflineFeature = OfflineFeature(feature, original)
-        if (existingIndex != -1) {
-            // Keep the very first 'original' as the baseline for conflict detection
-            val firstOriginal = offlinePlacesList[existingIndex].original ?: original
-            offlinePlacesList[existingIndex] = OfflineFeature(feature, firstOriginal)
-        } else {
-            offlinePlacesList.add(newOfflineFeature)
-        }
-        
-        val json = Gson().toJson(offlinePlacesList)
-        prefs.edit().putString("offline_places", json).apply()
-        updateList()
-        Toast.makeText(this, "Saved offline. Pull to sync.", Toast.LENGTH_LONG).show()
-    }
-
-    private fun removeOfflinePlace(offlineFeature: OfflineFeature) {
-        offlinePlacesList.remove(offlineFeature)
-        val json = Gson().toJson(offlinePlacesList)
-        prefs.edit().putString("offline_places", json).apply()
-    }
-
-    private fun saveToCache(collection: FeatureCollection) {
-        val json = Gson().toJson(collection)
-        prefs.edit()
-            .putString("cached_places", json)
-            .putLong("last_sync_time", lastSyncTime)
-            .apply()
-    }
-
-    private fun updateList() {
-        val query = searchQuery
-
-        val filteredOfflineFeatures: List<OfflineFeature>
-        val filteredPlaces: List<Feature>
-
-        if (query.isBlank()) {
-            filteredOfflineFeatures = offlinePlacesList
-            filteredPlaces = placesList
-        } else {
+    private fun refreshListFromCache() {
+        val cached = cache.getCachedFeatures()
+        val offline = cache.getOfflineFeatures()
+        Log.d(TAG, "refreshListFromCache: cached=${cached.size}, offline=${offline.size}")
+        val q = searchQuery
+        val (filteredCached, filteredOffline) = if (q.isNotBlank()) {
             fun matches(feature: Feature): Boolean {
                 val name = feature.properties.name ?: ""
                 val desc = feature.properties.description ?: ""
-                return name.contains(query, ignoreCase = true) || desc.contains(query, ignoreCase = true)
+                return name.contains(q, ignoreCase = true) || desc.contains(q, ignoreCase = true)
             }
-
-            filteredOfflineFeatures = offlinePlacesList.filter { matches(it.feature) }
-            filteredPlaces = placesList.filter { matches(it) }
+            cached.filter(::matches) to offline.filter { matches(it.feature) }
+        } else {
+            cached to offline
         }
-
+        Log.d(TAG, "refreshListFromCache: searchQuery='$q', filteredCached=${filteredCached.size}")
         adapter.updateData(
-            filteredPlaces,
-            filteredOfflineFeatures.map { it.feature },
-            filteredOfflineFeatures
+            filteredCached,
+            filteredOffline.map { it.feature },
+            filteredOffline
         )
-        
-        if (filteredPlaces.isEmpty() && filteredOfflineFeatures.isEmpty()) {
+        if (filteredCached.isEmpty() && filteredOffline.isEmpty()) {
             emptyState.visibility = View.VISIBLE
             recyclerView.visibility = View.GONE
         } else {
             emptyState.visibility = View.GONE
             recyclerView.visibility = View.VISIBLE
         }
+        updateLastSyncUI()
+    }
+
+    /** Returns adapter display position for the item with given database_id, or -1. Matches adapter order: header, offline items, header, saved (cached minus offline ids). */
+    private fun displayIndexForId(id: Int): Int {
+        val cached = cache.getCachedFeatures()
+        val offline = cache.getOfflineFeatures()
+        val q = searchQuery
+        val (filteredCached, filteredOffline) = if (q.isNotBlank()) {
+            fun matches(feature: Feature): Boolean {
+                val name = feature.properties.name ?: ""
+                val desc = feature.properties.description ?: ""
+                return name.contains(q, ignoreCase = true) || desc.contains(q, ignoreCase = true)
+            }
+            cached.filter(::matches) to offline.filter { matches(it.feature) }
+        } else {
+            cached to offline
+        }
+        val offlineIds = filteredOffline.map { it.feature.properties.database_id }.toSet()
+        val saved = filteredCached.filter { it.properties.database_id !in offlineIds }
+        val offlineIndex = filteredOffline.indexOfFirst { it.feature.properties.database_id == id }
+        if (offlineIndex >= 0) return 1 + offlineIndex
+        val savedIndex = saved.indexOfFirst { it.properties.database_id == id }
+        if (savedIndex >= 0) {
+            return if (filteredOffline.isEmpty()) savedIndex else 2 + filteredOffline.size + savedIndex
+        }
+        return -1
+    }
+
+    private fun saveOfflinePlace(feature: Feature, original: Feature? = null) {
+        cache.addOrUpdateOffline(feature, original, -1)
+        refreshListFromCache()
+        Toast.makeText(this, "Saved offline. Pull to sync.", Toast.LENGTH_LONG).show()
+    }
+
+    private fun removeOfflinePlace(offlineFeature: OfflineFeature) {
+        cache.removeOffline(offlineFeature)
+        refreshListFromCache()
     }
 
     private fun loadPlaces(syncOffline: Boolean = true) {
@@ -473,19 +464,19 @@ class MainActivity : AppCompatActivity() {
                 if (response.isSuccessful) {
                     val body = response.body()
                     if (body != null) {
-                        lastSyncTime = System.currentTimeMillis()
-                        saveToCache(body)
-                        placesList.clear()
-                        placesList.addAll(body.features)
-                        updateLastSyncUI()
-                        updateList()
-                    }
-                    // If we have offline items, keep overlay up and run offline sync (no vanish/reappear)
-                    if (syncOffline && offlinePlacesList.isNotEmpty()) {
-                        syncText.text = "Syncing ${offlinePlacesList.size} offline ${if (offlinePlacesList.size == 1) "item" else "items"}..."
-                        runPendingSync(serverUrl)
+                        cache.setCached(body, System.currentTimeMillis())
+                        refreshListFromCache()
+                        val offlineCount = cache.getOfflineFeatures().size
+                        if (syncOffline && offlineCount > 0) {
+                            syncText.text = "Syncing $offlineCount offline ${if (offlineCount == 1) "item" else "items"}..."
+                            runPendingSync(serverUrl)
+                        } else {
+                            hideSyncOverlayAndReset()
+                        }
                     } else {
                         hideSyncOverlayAndReset()
+                        showSnackbar("Server returned no data")
+                        refreshListFromCache()
                     }
                 } else {
                     hideSyncOverlayAndReset()
@@ -494,7 +485,7 @@ class MainActivity : AppCompatActivity() {
                         return
                     }
                     showSnackbar("Server Error: ${response.code()}")
-                    loadFromCache() // Use cache on error
+                    refreshListFromCache()
                 }
             }
 
@@ -506,9 +497,7 @@ class MainActivity : AppCompatActivity() {
                 hideSyncOverlayAndReset()
 
                 showSnackbar("Network failed: ${t.message}")
-                loadOfflinePlaces()
-                loadFromCache() // Use cache on failure
-                updateList()
+                refreshListFromCache()
             }
         })
     }
@@ -522,10 +511,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateLastSyncUI() {
-        if (lastSyncTime == 0L) return
+        val lastSync = cache.getLastSyncTime()
+        if (lastSync == 0L) return
         val sdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-        val timeStr = sdf.format(java.util.Date(lastSyncTime))
-        // We'll add this view to activity_main.xml next
+        val timeStr = sdf.format(java.util.Date(lastSync))
         findViewById<TextView>(R.id.lastSyncText)?.text = "Last synced: $timeStr"
     }
 
@@ -535,28 +524,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun syncOfflinePlaces() {
-        if (offlinePlacesList.isEmpty()) return
+        val toSync = cache.getOfflineFeatures().toList()
+        if (toSync.isEmpty()) return
 
         val serverUrl = GeovaultAuthManager.getServerUrl(this)
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
         val api = RetrofitClient.getClient(this, baseUrl).create(GeovaultApi::class.java)
 
-        // Show syncing status in overlay
         syncSpinner.visibility = View.VISIBLE
         refreshOverlay.visibility = View.VISIBLE
         startSyncAnimation()
-        syncText.text = "Syncing ${offlinePlacesList.size} offline ${if (offlinePlacesList.size == 1) "item" else "items"}..."
+        syncText.text = "Syncing ${toSync.size} offline ${if (toSync.size == 1) "item" else "items"}..."
 
-        val toSync = ArrayList(offlinePlacesList)
         var syncedCount = 0
         var successCount = 0
-        
+
         fun checkSyncComplete(success: Boolean = false) {
             syncedCount++
             if (success) successCount++
-            
             if (syncedCount >= toSync.size) {
-                if (successCount > 0 || offlinePlacesList.isEmpty()) {
+                if (successCount > 0 || cache.getOfflineFeatures().isEmpty()) {
                     loadPlaces(syncOffline = false)
                 } else {
                     hideSyncOverlayAndReset()
@@ -592,12 +579,7 @@ class MainActivity : AppCompatActivity() {
                                 override fun onResponse(createCall: Call<Feature>, createResponse: Response<Feature>) {
                                     if (createResponse.isSuccessful) {
                                         removeOfflinePlace(offlineItem)
-                                        updateList()
-                                        Toast.makeText(
-                                            this@MainActivity,
-                                            "Conflict detected: '${feature.properties.name}' saved as new item",
-                                            Toast.LENGTH_LONG
-                                        ).show()
+                                        showSnackbar("Conflict detected: '${feature.properties.name}' saved as new item")
                                         checkSyncComplete(success = true)
                                     } else {
                                         showSnackbar(syncErrorMessage(createResponse))
@@ -616,7 +598,6 @@ class MainActivity : AppCompatActivity() {
                             override fun onResponse(updateCall: Call<Feature>, updateResponse: Response<Feature>) {
                                 if (updateResponse.isSuccessful) {
                                     removeOfflinePlace(offlineItem)
-                                    updateList()
                                     checkSyncComplete(success = true)
                                 } else {
                                     showSnackbar(syncErrorMessage(updateResponse))
@@ -641,7 +622,6 @@ class MainActivity : AppCompatActivity() {
                     override fun onResponse(call: Call<Feature>, response: Response<Feature>) {
                         if (response.isSuccessful) {
                             removeOfflinePlace(offlineItem)
-                            updateList()
                             checkSyncComplete(success = true)
                         } else {
                             showSnackbar(syncErrorMessage(response))
@@ -673,10 +653,6 @@ class MainActivity : AppCompatActivity() {
     private fun openMapToPlace(feature: Feature) {
         val intent = Intent(this, MapActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-            putParcelableArrayListExtra("features", ArrayList<Feature>().apply {
-                addAll(offlinePlacesList.map { it.feature })
-                addAll(placesList)
-            })
             val coords = feature.geometry.coordinates
             if (coords.size >= 2) {
                 putExtra("zoom_to_lat", coords[1])
@@ -689,34 +665,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun handleOfflineSave(feature: Feature, original: Feature? = null, offlineEditIndex: Int = -1) {
-        val indexToReplace = when {
-            offlineEditIndex in offlinePlacesList.indices -> offlineEditIndex
-            feature.properties.database_id != null -> {
-                offlinePlacesList.indexOfFirst { it.feature.properties.database_id == feature.properties.database_id }
-                    .takeIf { it >= 0 }
-            }
-            else -> null
-        }
-        if (indexToReplace != null) {
-            val firstOriginal = offlinePlacesList[indexToReplace].original ?: original
-            offlinePlacesList[indexToReplace] = OfflineFeature(feature, firstOriginal)
-            val json = Gson().toJson(offlinePlacesList)
-            prefs.edit().putString("offline_places", json).apply()
-            updateList()
-            Toast.makeText(this, "Saved offline. Pull to sync.", Toast.LENGTH_LONG).show()
-        } else {
-            saveOfflinePlace(feature, original)
-        }
+        cache.addOrUpdateOffline(feature, original, offlineEditIndex)
+        refreshListFromCache()
+        Toast.makeText(this, "Saved offline. Pull to sync.", Toast.LENGTH_LONG).show()
     }
 
     private fun deletePlace(feature: Feature) {
         val dbId = feature.properties.database_id
         if (dbId == null) {
-            // This is an offline-only item, just remove it from offline list
-            val offlineItem = offlinePlacesList.find { it.feature.properties.name == feature.properties.name }
+            val offlineItem = cache.getOfflineFeatures().find { it.feature.properties.name == feature.properties.name }
             if (offlineItem != null) {
-                removeOfflinePlace(offlineItem)
-                updateList()
+                cache.removeOffline(offlineItem)
+                refreshListFromCache()
                 Toast.makeText(this, "Offline place discarded", Toast.LENGTH_SHORT).show()
             }
             return
@@ -729,43 +689,34 @@ class MainActivity : AppCompatActivity() {
         api.deletePlace(dbId).enqueue(object : Callback<Void> {
             override fun onResponse(call: Call<Void>, response: Response<Void>) {
                 if (response.isSuccessful) {
-                    // Remove from offline list if it exists there
-                    val offlineItem = offlinePlacesList.find { it.feature.properties.database_id == dbId }
+                    val offlineItem = cache.getOfflineFeatures().find { it.feature.properties.database_id == dbId }
                     if (offlineItem != null) {
-                        removeOfflinePlace(offlineItem)
+                        cache.removeOffline(offlineItem)
+                        refreshListFromCache()
                     }
-                    // Refresh the list from server
                     loadPlaces()
-                    Toast.makeText(this@MainActivity, "Place deleted", Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(this@MainActivity, "Failed to delete: Server error", Toast.LENGTH_LONG).show()
+                    showSnackbar("Failed to delete: Server error")
                 }
             }
 
             override fun onFailure(call: Call<Void>, t: Throwable) {
-                Toast.makeText(
-                    this@MainActivity,
-                    "Cannot delete while offline. Please try again when connected.",
-                    Toast.LENGTH_LONG
-                ).show()
+                showSnackbar("Cannot delete while offline. Please try again when connected.")
             }
         })
     }
 
     private fun revertOfflineChanges(offlineFeature: OfflineFeature) {
         removeOfflinePlace(offlineFeature)
-        updateList()
-        
         if (offlineFeature.feature.properties.database_id != null) {
-            showSnackbar("Changes reverted - showing original")
+            Toast.makeText(this, "Changes reverted - showing original", Toast.LENGTH_SHORT).show()
         } else {
-            showSnackbar("Offline place discarded")
+            Toast.makeText(this, "Offline place discarded", Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun showSnackbar(message: String) {
-        syncErrorBarText.text = message
-        syncErrorBar.visibility = View.VISIBLE
+        importantMessageSnackbar.showMessage(message)
     }
 
     /** Parse API error body (e.g. {"error": "..."}) for a user-facing sync failure message. */

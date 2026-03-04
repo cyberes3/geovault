@@ -973,8 +973,13 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
                     pendingFeature = null
                     hideSavingOverlay()
                     if (response.isSuccessful) {
-                        Toast.makeText(this@PlaceEditActivity, "Place saved", Toast.LENGTH_SHORT).show()
-                        setResult(RESULT_OK)
+                        val savedFeature = response.body()
+                        if (savedFeature != null) {
+                            val data = android.content.Intent().apply { putExtra("updated_feature", savedFeature) }
+                            setResult(RESULT_OK, data)
+                        } else {
+                            setResult(RESULT_OK)
+                        }
                         finish()
                     } else {
                         showSavingOverlay("Saving offline...")
@@ -1000,8 +1005,13 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
                     pendingFeature = null
                     hideSavingOverlay()
                     if (response.isSuccessful) {
-                        Toast.makeText(this@PlaceEditActivity, "Place saved online", Toast.LENGTH_SHORT).show()
-                        setResult(RESULT_OK)
+                        val savedFeature = response.body()
+                        if (savedFeature != null) {
+                            val data = android.content.Intent().apply { putExtra("updated_feature", savedFeature) }
+                            setResult(RESULT_OK, data)
+                        } else {
+                            setResult(RESULT_OK)
+                        }
                         finish()
                     } else {
                         showSavingOverlay("Saving offline...")

@@ -136,8 +136,8 @@ android {
             debuggable true
         }
         release {
-            minifyEnabled = true
-            shrinkResources = true
+            minifyEnabled = !project.hasProperty('SKIP_MINIFY')
+            shrinkResources = !project.hasProperty('SKIP_MINIFY')
             proguardFiles(getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro')
             signingConfig = signingConfigs.release
             

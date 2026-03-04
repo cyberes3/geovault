@@ -51,11 +51,28 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
     /** True after we've applied initial fit-bounds/zoom once; when restored we skip so MapView saved state keeps camera. */
     private var initialCameraApplied = false
 
+    private val cache: PlacesCache
+        get() = (application as PlacesApplication).placesCache
+
     private val editLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) {
-            setResult(RESULT_OK, result.data)
-            // Don't finish so the map stays; user can press back when done.
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val data = result.data
+        when {
+            data?.getParcelableExtra("offline_feature", Feature::class.java) != null -> {
+                val feature = data.getParcelableExtra("offline_feature", Feature::class.java)!!
+                val original = data.getParcelableExtra("original_feature", Feature::class.java)
+                val offlineEditIndex = data.getIntExtra("offline_edit_index", -1)
+                cache.addOrUpdateOffline(feature, original, offlineEditIndex)
+                loadFeaturesFromCache()
+            }
+            data?.getParcelableExtra("updated_feature", Feature::class.java) != null -> {
+                val updated = data.getParcelableExtra("updated_feature", Feature::class.java)!!
+                cache.updateCachedFeature(updated)
+                loadFeaturesFromCache()
+            }
+            else -> loadFeaturesFromCache()
         }
+        setResult(RESULT_OK, data)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -79,7 +96,7 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
         mapView.addOnDidFailLoadingMapListener(this)
         mapView.onCreate(savedInstanceState)
         initialCameraApplied = savedInstanceState?.getBoolean(KEY_INITIAL_CAMERA_APPLIED, false) ?: false
-        features = intent.getParcelableArrayListExtra("features", Feature::class.java) ?: ArrayList()
+        features = ArrayList(cache.getDisplayFeatures())
         mapView.getMapAsync(this)
         updateMapAuthHeader()
         fetchMapSources()
@@ -96,6 +113,7 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        loadFeaturesFromCache()
         applyZoomFromIntent()
     }
 
@@ -111,6 +129,31 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
             val pair = symbolToFeature.entries.find { it.value.properties.database_id == zoomToId }
             pair?.let { (symbol, feature) -> selectMarkerAndUpdateUi(symbol, feature) }
         }
+    }
+
+    /** Single refresh path: load features from cache and redraw markers. */
+    private fun loadFeaturesFromCache() {
+        features.clear()
+        features.addAll(cache.getDisplayFeatures())
+        refreshMarkers()
+    }
+
+    /** Clear existing markers and redraw from current {@code features} list. Call after updating features. */
+    private fun refreshMarkers() {
+        val map = maplibreMap ?: return
+        if (map.style == null) return
+        selectionSymbol?.let { selectionSymbolManager?.delete(it) }
+        selectionSymbol = null
+        lastSelectedSymbol = null
+        selectedFeature = null
+        selectionSymbolManager?.onDestroy()
+        selectionSymbolManager = null
+        symbolManager?.onDestroy()
+        symbolManager = null
+        symbols.clear()
+        symbolToFeature.clear()
+        clearSelectionUi()
+        addMarkersIfReady(map)
     }
 
     override fun onDidFailLoadingMap(errorMessage: String) {
@@ -547,6 +590,7 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
         super.onResume()
         mapView.onResume()
         updateMapAuthHeader()
+        loadFeaturesFromCache()
     }
 
     override fun onPause() {

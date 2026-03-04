@@ -211,38 +211,15 @@
         app:tint="@color/content_on_primary"
         app:backgroundTint="@color/primary_blue" />
 
-    <!-- Sync/error message bar: overlays bottom (on top of FABs), tap to dismiss -->
-    <LinearLayout
-        android:id="@+id/syncErrorBar"
+    <!-- Important message bar from common: tap to dismiss, auto-dismisses after 15s -->
+    <com.geovault.common.ImportantMessageSnackbar
+        android:id="@+id/importantMessageSnackbar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
-        android:layout_marginBottom="16dp"
-        android:background="@color/snackbar_background"
-        android:elevation="8dp"
-        android:visibility="gone"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="14dp"
-        android:paddingBottom="14dp"
-        android:clickable="true"
-        android:focusable="true"
-        android:minHeight="48dp">
-
-        <TextView
-            android:id="@+id/syncErrorBarText"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:textSize="14sp"
-            android:textColor="@color/content_on_primary"
-            android:maxLines="3"
-            android:ellipsize="end" />
-    </LinearLayout>
+        android:layout_marginBottom="16dp" />
 
     <!-- Syncing overlay with spinner -->
     <FrameLayout

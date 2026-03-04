@@ -13,6 +13,8 @@ import java.util.concurrent.TimeUnit
 
 class PlacesApplication : Application() {
 
+    val placesCache: PlacesCache by lazy { PlacesCache(applicationContext) }
+
     companion object {
         private const val TAG = "GeoVaultMap"
     }

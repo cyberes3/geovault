@@ -32,8 +32,6 @@
     <!-- Dialog cancel button (negative): grey in light mode -->
     <color name="gv_common_dialog_negative_button">@color/gv_common_text_secondary</color>
 
-    <!-- Legacy / compatibility -->
-    <color name="gv_common_gray">#6B7280</color>
-    <color name="gv_common_gray_light">#F3F4F6</color>
-    <color name="gv_common_gray_600">#4B5563</color>
+    <!-- Important message snackbar (dismissable bar) -->
+    <color name="gv_common_snackbar_background">#323232</color>
 </resources>

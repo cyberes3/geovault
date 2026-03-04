@@ -6,15 +6,11 @@ import android.content.Intent
 import android.os.Environment
 import android.provider.MediaStore
 import com.geovault.common.GeovaultAuthManager
-import com.google.gson.Gson
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 private const val PREFS_NAME = "geovault_prefs"
-private const val KEY_CACHED_PLACES = "cached_places"
-private const val KEY_OFFLINE_PLACES = "offline_places"
-private const val KEY_LAST_SYNC_TIME = "last_sync_time"
 private const val PENDING_NAVIGATION_IDS_KEY = "pending_navigation_ids"
 
 const val EXTRA_SHOW_EXPORT_SAVED_MESSAGE = "show_export_saved_message"
@@ -49,21 +45,14 @@ private fun formatPlaceBlock(feature: Feature, source: String): String {
  */
 fun exportThenResetOnAuthFailure(activity: Activity) {
     val context = activity.applicationContext
-    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-
-    val offlineJson = prefs.getString(KEY_OFFLINE_PLACES, null)?.takeIf { it != "[]" }
-    val cachedJson = prefs.getString(KEY_CACHED_PLACES, null)
-    val hasData = !offlineJson.isNullOrBlank() || !cachedJson.isNullOrBlank()
+    val cache = (context as PlacesApplication).placesCache
+    val offlineList = cache.getOfflineFeatures()
+    val cachedFeatures = cache.getCachedFeatures()
+    val hasData = offlineList.isNotEmpty() || cachedFeatures.isNotEmpty()
 
     var exportSaved = false
     if (hasData) {
         try {
-            val offlineList = if (!offlineJson.isNullOrBlank()) {
-                Gson().fromJson(offlineJson, Array<OfflineFeature>::class.java).toList()
-            } else emptyList()
-            val cached = if (!cachedJson.isNullOrBlank()) {
-                Gson().fromJson(cachedJson, FeatureCollection::class.java)
-            } else null
             val sb = StringBuilder()
             val exportedAt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date())
             sb.appendLine("GeoVault emergency export — $exportedAt")
@@ -71,10 +60,10 @@ fun exportThenResetOnAuthFailure(activity: Activity) {
             for (offline in offlineList) {
                 sb.append(formatPlaceBlock(offline.feature, "offline"))
             }
-            val cachedFeatures = cached?.features?.filter { c ->
+            val cachedFiltered = cachedFeatures.filter { c ->
                 offlineList.none { it.feature.properties.database_id == c.properties.database_id }
-            }.orEmpty()
-            for (feature in cachedFeatures) {
+            }
+            for (feature in cachedFiltered) {
                 sb.append(formatPlaceBlock(feature, "cached"))
             }
             val txtBytes = sb.toString().toByteArray(Charsets.UTF_8)
@@ -94,10 +83,8 @@ fun exportThenResetOnAuthFailure(activity: Activity) {
     }
 
     GeovaultAuthManager.clearTokens(context)
-    prefs.edit()
-        .remove(KEY_CACHED_PLACES)
-        .remove(KEY_OFFLINE_PLACES)
-        .remove(KEY_LAST_SYNC_TIME)
+    cache.clear()
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
         .remove(PENDING_NAVIGATION_IDS_KEY)
         .apply()
 

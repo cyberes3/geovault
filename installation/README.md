@@ -26,10 +26,10 @@ systemctl enable --now postgresql
 ## Install Required Packages
 
 ```shell
-sudo apt install python3.12 python3.12-dev python3-venv python3-gdal git
+sudo apt install python3.13 python3.13-dev python3-venv python3-gdal git
 ```
 
-If your system doesn't provide Python 3.12, add this repo:
+If your system doesn't provide Python 3.13, add this repo:
 
 ```shell
 sudo add-apt-repository ppa:deadsnakes/ppa

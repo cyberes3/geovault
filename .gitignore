@@ -8,6 +8,9 @@ failures.txt
 *.apk
 .kotlin
 *.swp
+todo.txt
+
+external sources/
 
 # ---> Python
 # Byte-compiled / optimized / DLL files

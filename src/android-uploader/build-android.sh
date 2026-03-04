@@ -58,17 +58,29 @@ if [ -f "app/src/main/res/drawable/ic_launcher_foreground.xml" ]; then
     rm -f app/src/main/res/drawable/ic_launcher_foreground.xml
 fi
 
-# Build type: debug (default) or release
-BUILD_TYPE=${1:-debug}
+# Parse arguments: [debug|release] and optional --skip-minify
+BUILD_TYPE=""
+SKIP_MINIFY=false
+for arg in "$@"; do
+    if [ "$arg" = "--skip-minify" ]; then
+        SKIP_MINIFY=true
+    elif [ -z "$BUILD_TYPE" ] && { [ "$arg" = "debug" ] || [ "$arg" = "release" ]; }; then
+        BUILD_TYPE="$arg"
+    fi
+done
+BUILD_TYPE=${BUILD_TYPE:-debug}
 
 if [ "$BUILD_TYPE" != "debug" ] && [ "$BUILD_TYPE" != "release" ]; then
     echo "Error: Build type must be 'debug' or 'release'"
-    echo "Usage: ./build-android.sh [debug|release]"
+    echo "Usage: ./build-android.sh [debug|release] [--skip-minify]"
     exit 1
 fi
 
 # For release builds, prompt for signing passwords
 GRADLE_ARGS=()
+if [ "$SKIP_MINIFY" = true ]; then
+    GRADLE_ARGS+=("-PSKIP_MINIFY=true")
+fi
 if [ "$BUILD_TYPE" = "release" ]; then
     # Check if passwords are already set as environment variables
     if [ -z "$RELEASE_STORE_PASSWORD" ]; then
