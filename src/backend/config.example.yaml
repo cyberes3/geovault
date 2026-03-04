@@ -104,8 +104,9 @@ maptiler:
   maps:
     - topo-v4 # General purpose topo map
     - outdoor-v4 # Topo map with trails highlighted
-    - satellite
-    - streets
+    - openstreetmap-dark # Dark OSM style. Required for dark mode in the Android apps
+    - satellite # Satellite map
+    - streets # Designed for navigation
 
 
 # Google API services
