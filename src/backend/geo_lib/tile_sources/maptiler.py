@@ -16,11 +16,12 @@ from website.config_loader import get_config_loader
 class MapTilerMapTileSource(TileSource):
     """Individual MapTiler map tile source."""
 
-    def __init__(self, map_id, api_key, site_domain, use_proxy=False):
+    def __init__(self, map_id, api_key, site_domain, use_proxy=False, hidden=False):
         self._map_id = map_id
         self._api_key = api_key
         self._site_domain = site_domain
         self._use_proxy = use_proxy
+        self._hidden = hidden
         self._display_name = _fetch_map_name(map_id, api_key, site_domain)
 
     @property
@@ -38,6 +39,10 @@ class MapTilerMapTileSource(TileSource):
     @property
     def requires_proxy(self):
         return self._use_proxy
+
+    @property
+    def hidden(self):
+        return self._hidden
 
     @property
     def url_template(self):
@@ -108,13 +113,19 @@ def generate_maptiler_sources():
     # Get proxy setting
     use_proxy = config.get_bool('maptiler.proxy_tiles', False)
 
+    # Get list of map IDs to hide from the basemap selector
+    hidden_map_ids = config.get_list('maptiler.hidden_maps', [])
+    hidden_set = {m for m in hidden_map_ids if m and isinstance(m, str)}
+
     # Build tile sources for each map
     sources = []
     for map_id in map_ids:
         if not map_id or not isinstance(map_id, str):
             continue
 
-        sources.append(MapTilerMapTileSource(map_id, api_key, site_domain, use_proxy))
+        sources.append(MapTilerMapTileSource(
+            map_id, api_key, site_domain, use_proxy, hidden=map_id in hidden_set
+        ))
 
     return sources
 

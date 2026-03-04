@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import re
@@ -15,6 +16,41 @@ from geo_lib.utils.secure_path import is_path_under_base, secure_filename
 from website.config_loader import get_config_loader
 
 _logger = get_tagged_logger()
+
+
+def _etag_for_bytes(data):
+    """Return a strong ETag (W/"hex") for binary data."""
+    return 'W/"' + hashlib.md5(data).hexdigest() + '"'
+
+
+def _etag_for_json(obj):
+    """Return a strong ETag (W/"hex") for a JSON-serializable object (canonical sort)."""
+    payload = json.dumps(obj, sort_keys=True, separators=(',', ':'))
+    return 'W/"' + hashlib.md5(payload.encode('utf-8')).hexdigest() + '"'
+
+
+def _matches_if_none_match(request, etag):
+    """Return True if request has If-None-Match header matching the given ETag."""
+    raw = request.META.get('HTTP_IF_NONE_MATCH', '').strip()
+    if not raw:
+        return False
+    # Header can be a single value or comma-separated list; * matches any
+    if raw == '*':
+        return True
+    for candidate in (v.strip().strip('"') for v in raw.split(',')):
+        if candidate == etag or candidate == etag.strip('W/"').rstrip('"'):
+            return True
+    return False
+
+
+def _apply_cache_headers(response, cache_control, etag=None):
+    """Set Cache-Control and optionally ETag; clear cookies for cacheability."""
+    response['Cache-Control'] = cache_control
+    if etag is not None:
+        response['ETag'] = etag
+    response.cookies.clear()
+    if response.has_header('Set-Cookie'):
+        del response['Set-Cookie']
 
 
 def tile_proxy(request, service, z, x, y):
@@ -73,7 +109,12 @@ def tile_proxy(request, service, z, x, y):
         
         if tile_data:
             _logger.debug(f"Tile cache hit: {service}/{z}/{x}/{y}")
-            # Determine content type from extension
+            etag = _etag_for_bytes(tile_data)
+            if _matches_if_none_match(request, etag):
+                resp_304 = HttpResponse(status=304)
+                _apply_cache_headers(resp_304, f'public, max-age={cache_max_age_seconds}', etag=etag)
+                resp_304['Access-Control-Allow-Origin'] = '*'
+                return resp_304
             content_type_map = {
                 'pbf': 'application/x-protobuf',
                 'png': 'image/png',
@@ -83,15 +124,8 @@ def tile_proxy(request, service, z, x, y):
             }
             content_type = content_type_map.get(url_extension, 'image/png')
             http_response = HttpResponse(tile_data, content_type=content_type)
-            http_response['Cache-Control'] = f'public, max-age={cache_max_age_seconds}'
+            _apply_cache_headers(http_response, f'public, max-age={cache_max_age_seconds}', etag=etag)
             http_response['Access-Control-Allow-Origin'] = '*'
-            
-            # Remove Set-Cookie header to allow Cloudflare caching
-            # Cloudflare does not cache responses with Set-Cookie headers
-            http_response.cookies.clear()
-            if http_response.has_header('Set-Cookie'):
-                del http_response['Set-Cookie']
-            
             return http_response
 
     # Cache miss or cache disabled - fetch from external service
@@ -140,17 +174,16 @@ def tile_proxy(request, service, z, x, y):
                 # Log cache save error but don't fail the request
                 _logger.warning(f"Failed to cache tile {service}/{z}/{x}/{y}: {e}")
 
-        # Return the tile with appropriate headers
+        # Return the tile with appropriate headers (ETag and optional 304)
+        etag = _etag_for_bytes(tile_data)
+        if _matches_if_none_match(request, etag):
+            resp_304 = HttpResponse(status=304)
+            _apply_cache_headers(resp_304, f'public, max-age={cache_max_age_seconds}', etag=etag)
+            resp_304['Access-Control-Allow-Origin'] = '*'
+            return resp_304
         http_response = HttpResponse(tile_data, content_type=content_type)
-        http_response['Cache-Control'] = f'public, max-age={cache_max_age_seconds}'
-        http_response['Access-Control-Allow-Origin'] = '*'  # Allow cross-origin requests
-        
-        # Remove Set-Cookie header to allow Cloudflare caching
-        # Cloudflare does not cache responses with Set-Cookie headers
-        http_response.cookies.clear()
-        if http_response.has_header('Set-Cookie'):
-            del http_response['Set-Cookie']
-        
+        _apply_cache_headers(http_response, f'public, max-age={cache_max_age_seconds}', etag=etag)
+        http_response['Access-Control-Allow-Origin'] = '*'
         return http_response
 
     except:
@@ -163,12 +196,17 @@ def get_tile_sources(request):
     API endpoint to get all available tile sources with their configurations.
 
     Returns JSON response with tile source configurations for the client.
-    Cached for 1 day (86400 seconds).
+    Cached for 1 day (86400 seconds). Supports ETag and 304 Not Modified.
     """
     sources = get_tile_sources_for_client()
-    response = JsonResponse({'sources': sources})
-    # Cache for 1 day (86400 seconds)
-    response['Cache-Control'] = 'public, max-age=86400'
+    payload = {'sources': sources}
+    etag = _etag_for_json(payload)
+    if _matches_if_none_match(request, etag):
+        resp_304 = HttpResponse(status=304)
+        _apply_cache_headers(resp_304, 'public, max-age=86400', etag=etag)
+        return resp_304
+    response = JsonResponse(payload)
+    _apply_cache_headers(response, 'public, max-age=86400', etag=etag)
     return response
 
 
@@ -233,10 +271,15 @@ def style_proxy(request, map_id):
                         new_tiles.append(proxy_url)
                     source_config['tiles'] = new_tiles
         
-        # Return the modified style.json
+        # Return the modified style.json (ETag and optional 304)
+        etag = _etag_for_json(style_data)
+        if _matches_if_none_match(request, etag):
+            resp_304 = HttpResponse(status=304)
+            _apply_cache_headers(resp_304, 'public, max-age=3600', etag=etag)
+            resp_304['Access-Control-Allow-Origin'] = '*'
+            return resp_304
         http_response = JsonResponse(style_data)
-        # Cache style.json for 1 hour (3600 seconds) - styles don't change often
-        http_response['Cache-Control'] = 'public, max-age=3600'
+        _apply_cache_headers(http_response, 'public, max-age=3600', etag=etag)
         http_response['Access-Control-Allow-Origin'] = '*'
         return http_response
         

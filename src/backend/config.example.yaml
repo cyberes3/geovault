@@ -108,6 +108,12 @@ maptiler:
     - satellite # Satellite map
     - streets # Designed for navigation
 
+  # Map IDs that are registered but excluded from the frontend basemap selector.
+  # Used by external clients.
+  hidden_maps:
+    - openstreetmap-dark
+    - base-v4
+
 
 # Google API services
 google:
