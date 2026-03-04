@@ -18,5 +18,7 @@ fun resetOnAuthFailure(activity: Activity) {
     val main = Intent(context, MainActivity::class.java)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     context.startActivity(main)
+    activity.overrideActivityTransition(Activity.OVERRIDE_TRANSITION_OPEN, 0, 0)
+    activity.overrideActivityTransition(Activity.OVERRIDE_TRANSITION_CLOSE, 0, 0)
     activity.finishAffinity()
 }

@@ -107,5 +107,7 @@ fun exportThenResetOnAuthFailure(activity: Activity) {
         main.putExtra(EXTRA_SHOW_EXPORT_SAVED_MESSAGE, true)
     }
     context.startActivity(main)
+    activity.overrideActivityTransition(Activity.OVERRIDE_TRANSITION_OPEN, 0, 0)
+    activity.overrideActivityTransition(Activity.OVERRIDE_TRANSITION_CLOSE, 0, 0)
     activity.finishAffinity()
 }

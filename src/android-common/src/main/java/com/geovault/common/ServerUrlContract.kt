@@ -5,8 +5,7 @@ import android.net.Uri
 
 /**
  * Contract and helper for cross-app server URL discovery.
- * Debug builds only consider packages matching com.geovault.*.debug;
- * release builds consider com.geovault.* and filter out *.debug.
+ * Prefill runs on release builds only; debug builds return empty.
  */
 object ServerUrlContract {
 
@@ -17,30 +16,22 @@ object ServerUrlContract {
     const val COLUMN_SERVER_URL = "server_url"
 
     /**
-     * Collects server URLs from other installed GeoVault apps of the same build type.
-     * - Debug builds (packageName ends with .debug): only query apps with package com.geovault.*.debug.
-     * - Release builds: only query apps with package com.geovault.* that do not end with .debug.
-     *
-     * @return Set of non-empty server URLs returned by other apps. Prefill only when size == 1.
+     * Server URLs from other installed GeoVault release apps. Empty on debug builds.
+     * Caller may prefill when size == 1.
      */
     @JvmStatic
     fun getServerUrlsFromOtherApps(context: Context): Set<String> {
-        val packageManager = context.packageManager
         val ourPackage = context.packageName
-        val isDebug = ourPackage.endsWith(DEBUG_SUFFIX)
-        val ourMain = if (isDebug) ourPackage.removeSuffix(DEBUG_SUFFIX) else ourPackage
+        if (ourPackage.endsWith(DEBUG_SUFFIX)) return emptySet()
+
+        val packageManager = context.packageManager
+        val ourMain = ourPackage
 
         val installedPackages = packageManager.getInstalledPackages(0).map { it.packageName }
         val mainPackages = installedPackages
             .asSequence()
             .filter { it.startsWith(PACKAGE_PREFIX) }
-            .let { pkgs ->
-                if (isDebug) {
-                    pkgs.filter { it.endsWith(DEBUG_SUFFIX) }.map { it.removeSuffix(DEBUG_SUFFIX) }
-                } else {
-                    pkgs.filter { !it.endsWith(DEBUG_SUFFIX) }.map { it }
-                }
-            }
+            .filter { !it.endsWith(DEBUG_SUFFIX) }
             .filter { it != ourMain }
             .toSet()
 

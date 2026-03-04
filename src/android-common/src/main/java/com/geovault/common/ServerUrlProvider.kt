@@ -9,8 +9,7 @@ import android.net.Uri
 /**
  * ContentProvider that exposes this app's configured GeoVault server URL (read-only).
  * Each app registers this provider with its own authority (e.g. com.geovault.places.serverurl).
- * Used for cross-app prefill: other GeoVault apps (with same signature) can query to prefill
- * the server URL when the user has not set it yet.
+ * Release builds use this for cross-app prefill; debug builds skip prefill.
  */
 class ServerUrlProvider : ContentProvider() {
 

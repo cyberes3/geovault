@@ -88,6 +88,7 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
                 startActivity(Intent(this@MapActivity, MainActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                 })
+                safeNoAnimation()
             }
         })
     }

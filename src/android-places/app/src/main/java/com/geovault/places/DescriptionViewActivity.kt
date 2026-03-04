@@ -30,6 +30,16 @@ class DescriptionViewActivity : AppCompatActivity() {
         setupWindowInsets()
     }
 
+    override fun finish() {
+        super.finish()
+        safeNoAnimation()
+    }
+
+    private fun safeNoAnimation() {
+        overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
+        overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
+    }
+
     private fun setupWindowInsets() {
         val rootView = findViewById<View>(R.id.description_view_root)
         val headerView = findViewById<View>(R.id.headerLayout)

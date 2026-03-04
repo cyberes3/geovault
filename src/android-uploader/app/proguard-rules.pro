@@ -29,6 +29,24 @@
 -keepnames class okhttp3.internal.publicsuffix.PublicSuffixDatabase
 
 # ---------------------------------------------------------------------------
+# Retrofit (R8 must not obfuscate retrofit2.* or Call adapter lookup fails)
+# ---------------------------------------------------------------------------
+-keep class retrofit2.** { *; }
+-keepattributes Signature, InnerClasses, EnclosingMethod
+-keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
+
+# ---------------------------------------------------------------------------
+# android-common (ServerUrlProvider is referenced in manifest by class name;
+# GeovaultAuthManager, RetrofitClient used from app)
+# ---------------------------------------------------------------------------
+-keep class com.geovault.common.** { *; }
+
+# ---------------------------------------------------------------------------
+# Android components referenced by name (manifest, system)
+# ---------------------------------------------------------------------------
+-keep public class * extends android.content.ContentProvider
+
+# ---------------------------------------------------------------------------
 # AndroidX / Security Crypto (reflection)
 # ---------------------------------------------------------------------------
 -keep class androidx.security.crypto.** { *; }

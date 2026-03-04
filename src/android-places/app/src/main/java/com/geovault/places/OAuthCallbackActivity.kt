@@ -83,7 +83,13 @@ class OAuthCallbackActivity : AppCompatActivity() {
     }
 
     override fun finish() {
-        super.finish()
+        safeNoAnimation()
         startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
+        super.finish()
+    }
+
+    private fun safeNoAnimation() {
+        overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
+        overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
     }
 }

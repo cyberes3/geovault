@@ -59,7 +59,7 @@
         </provider>
         <provider
             android:name="com.geovault.common.ServerUrlProvider"
-            android:authorities="com.geovault.places.serverurl"
+            android:authorities="${applicationId}.serverurl"
             android:exported="true"
             android:permission="com.geovault.common.permission.READ_SERVER_URL" />
         <activity

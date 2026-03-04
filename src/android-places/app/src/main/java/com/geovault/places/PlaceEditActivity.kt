@@ -437,8 +437,9 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
             applySelectedSource()
         }
         // Only set default camera when no place coords; initial center on place happens in onStyleLoaded (once).
+        // New place: show entire world (zoom 0).
         if (latitude == null || longitude == null) {
-            map.setCameraPosition(CameraPosition.Builder().target(LatLng(0.0, 0.0)).zoom(2.0).build())
+            map.setCameraPosition(CameraPosition.Builder().target(LatLng(0.0, 0.0)).zoom(0.0).build())
         }
     }
 
@@ -1028,6 +1029,16 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
         intent.putExtra("offline_edit_index", offlineEditIndex)
         setResult(RESULT_OK, intent)
         finish()
+    }
+
+    override fun finish() {
+        super.finish()
+        safeNoAnimation()
+    }
+
+    private fun safeNoAnimation() {
+        overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
+        overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
     }
 
     override fun onStart() {

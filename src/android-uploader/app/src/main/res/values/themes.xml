@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.GeoVaultUploader" parent="gv_common_Theme.GeoVault" />
+    <style name="Theme.GeoVaultUploader" parent="gv_common_Theme.GeoVault">
+        <item name="android:windowAnimationStyle">@style/Animation.NoAnimation</item>
+    </style>
+
+    <style name="Animation.NoAnimation" parent="android:Animation">
+        <item name="android:activityOpenEnterAnimation">@null</item>
+        <item name="android:activityOpenExitAnimation">@null</item>
+        <item name="android:activityCloseEnterAnimation">@null</item>
+        <item name="android:activityCloseExitAnimation">@null</item>
+    </style>
 </resources>

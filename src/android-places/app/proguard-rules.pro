@@ -37,8 +37,9 @@
 -keep interface com.geovault.places.GeovaultApi { *; }
 
 # ---------------------------------------------------------------------------
-# Retrofit
+# Retrofit (R8 must not obfuscate retrofit2.* or Call adapter lookup fails)
 # ---------------------------------------------------------------------------
+-keep class retrofit2.** { *; }
 -keepattributes Signature, InnerClasses, EnclosingMethod
 -keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
 -keepclassmembers,allowshrinking,allowobfuscation interface * {
@@ -69,9 +70,21 @@
 -dontwarn javax.annotation.**
 
 # ---------------------------------------------------------------------------
-# MapLibre (Java API; native libs are JNI)
+# MapLibre (Java API; native libs use JNI and look up classes by name)
 # ---------------------------------------------------------------------------
 -keep class org.maplibre.** { *; }
+-keepclassmembers class org.maplibre.** { *; }
+
+# ---------------------------------------------------------------------------
+# android-common (ServerUrlProvider is referenced in manifest by class name;
+# GeovaultAuthManager, RetrofitClient used from app)
+# ---------------------------------------------------------------------------
+-keep class com.geovault.common.** { *; }
+
+# ---------------------------------------------------------------------------
+# Android components referenced by name (manifest, system)
+# ---------------------------------------------------------------------------
+-keep public class * extends android.content.ContentProvider
 
 # ---------------------------------------------------------------------------
 # AndroidX / Security Crypto (reflection)
