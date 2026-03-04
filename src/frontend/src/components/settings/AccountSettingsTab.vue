@@ -319,7 +319,6 @@
               </div>
               <div class="text-xs text-gray-500 space-y-1">
                 <div>Authorized: {{ formatDate(token.created) }}</div>
-                <div>Expires: {{ token.expires ? formatDate(token.expires) : '—' }}</div>
                 <div v-if="token.last_used_at">Last used: {{ formatDate(token.last_used_at) }}</div>
                 <div v-else class="text-gray-400">Never used</div>
               </div>

@@ -50,13 +50,13 @@ database:
   host: 127.0.0.1
   port: 5432
 
-  # Connection pool configuration (Django 5.1+ native pooling)
-  # PostgreSQL default max_connections is 100 (97 available for non-superusers)
-  # With max_size=8, this allows ~12 Django processes (8*12=96) safely
-  pool:
-    min_size: 2      # Minimum connections to keep in pool
-    max_size: 8      # Maximum connections per Django process
-    timeout: 10      # Seconds to wait for connection from pool
+  # Connection pool configuration (Django 5.1+ native pooling).
+  # Uncomment to use pooling. Defaults below are for 3 workers (3 × 30 = 90 < 97).
+  # PostgreSQL default max_connections is 100 (97 for non-superuser). Total = workers × max_size; keep under 97.
+  # pool:
+  #   min_size: 2
+  #   max_size: 30     # For 3 workers: 3 × 30 = 90. Adjust if using different worker count.
+  #   timeout: 60      # Wait up to 60s for a connection before failing
 
 
 redis:

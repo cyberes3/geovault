@@ -129,12 +129,12 @@ ASGI_APPLICATION = 'website.asgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-# Build pool options from config
+# Build pool options from config. Defaults for 3 workers (3 × 30 = 90 < PostgreSQL 97).
 pool_config = {}
 if config.get('database.pool'):
     pool_min = config.get_int('database.pool.min_size', 2)
-    pool_max = config.get_int('database.pool.max_size', 8)
-    pool_timeout = config.get_int('database.pool.timeout', 10)
+    pool_max = config.get_int('database.pool.max_size', 30)
+    pool_timeout = config.get_int('database.pool.timeout', 60)
     pool_config = {
         'min_size': pool_min,
         'max_size': pool_max,
