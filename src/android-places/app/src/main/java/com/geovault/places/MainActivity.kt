@@ -32,6 +32,11 @@ import android.os.Handler
 import android.os.Looper
 import androidx.activity.result.contract.ActivityResultContracts
 class MainActivity : AppCompatActivity() {
+
+    companion object {
+        const val EXTRA_SELECTED_ID_FROM_MAP = "selected_id_from_map"
+    }
+
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyState: View
     private lateinit var swipeRefresh: SwipeRefreshLayout
@@ -87,20 +92,9 @@ class MainActivity : AppCompatActivity() {
 
     private val editLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
-            val offlineFeature = if (android.os.Build.VERSION.SDK_INT >= 33) {
-                result.data?.getParcelableExtra("offline_feature", Feature::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                result.data?.getParcelableExtra("offline_feature")
-            }
-            
+            val offlineFeature = result.data?.getParcelableExtra("offline_feature", Feature::class.java)
             if (offlineFeature != null) {
-                val originalFeature = if (android.os.Build.VERSION.SDK_INT >= 33) {
-                    result.data?.getParcelableExtra("original_feature", Feature::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    result.data?.getParcelableExtra("original_feature")
-                }
+                val originalFeature = result.data?.getParcelableExtra("original_feature", Feature::class.java)
                 val offlineEditIndex = result.data?.getIntExtra("offline_edit_index", -1) ?: -1
                 handleOfflineSave(offlineFeature, originalFeature, offlineEditIndex)
             } else {
@@ -219,11 +213,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         fabMap.setOnClickListener {
-            val intent = Intent(this, MapActivity::class.java)
-            val allFeatures = ArrayList<Feature>()
-            allFeatures.addAll(offlinePlacesList.map { it.feature })
-            allFeatures.addAll(placesList)
-            intent.putParcelableArrayListExtra("features", allFeatures)
+            val intent = Intent(this, MapActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                putParcelableArrayListExtra("features", ArrayList<Feature>().apply {
+                    addAll(offlinePlacesList.map { it.feature })
+                    addAll(placesList)
+                })
+            }
             mapLauncher.launch(intent)
             safeNoAnimation()
         }
@@ -237,11 +233,30 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
+
     override fun onResume() {
         super.onResume()
         if (intent?.getBooleanExtra(EXTRA_SHOW_EXPORT_SAVED_MESSAGE, false) == true) {
             intent?.removeExtra(EXTRA_SHOW_EXPORT_SAVED_MESSAGE)
             Toast.makeText(this, getString(R.string.offline_data_saved_to_files), Toast.LENGTH_LONG).show()
+        }
+        val selectedIdFromMap = intent?.getIntExtra(EXTRA_SELECTED_ID_FROM_MAP, -1) ?: -1
+        if (selectedIdFromMap != -1) {
+            intent?.removeExtra(EXTRA_SELECTED_ID_FROM_MAP)
+            adapter.selectedId = selectedIdFromMap
+            val index = placesList.indexOfFirst { it.properties.database_id == selectedIdFromMap }
+            if (index != -1) {
+                adapter.notifyDataSetChanged()
+                val layoutManager = recyclerView.layoutManager as? LinearLayoutManager
+                if (layoutManager != null) {
+                    val offset = recyclerView.height / 3
+                    layoutManager.scrollToPositionWithOffset(index, offset)
+                }
+            }
         }
         checkConfigAndLoad()
     }
@@ -308,13 +323,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun safeNoAnimation() {
-        if (android.os.Build.VERSION.SDK_INT >= 34) {
-            overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
-            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
-        } else {
-            @Suppress("DEPRECATION")
-            overridePendingTransition(0, 0)
-        }
+        overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
+        overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
     }
 
     private fun cancelRefresh(message: String) {
@@ -661,16 +671,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openMapToPlace(feature: Feature) {
-        val intent = Intent(this, MapActivity::class.java)
-        val allFeatures = ArrayList<Feature>()
-        allFeatures.addAll(offlinePlacesList.map { it.feature })
-        allFeatures.addAll(placesList)
-        intent.putParcelableArrayListExtra("features", allFeatures)
-        val coords = feature.geometry.coordinates
-        if (coords.size >= 2) {
-            intent.putExtra("zoom_to_lat", coords[1])
-            intent.putExtra("zoom_to_lon", coords[0])
-            intent.putExtra("zoom_to_id", feature.properties.database_id ?: -1)
+        val intent = Intent(this, MapActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            putParcelableArrayListExtra("features", ArrayList<Feature>().apply {
+                addAll(offlinePlacesList.map { it.feature })
+                addAll(placesList)
+            })
+            val coords = feature.geometry.coordinates
+            if (coords.size >= 2) {
+                putExtra("zoom_to_lat", coords[1])
+                putExtra("zoom_to_lon", coords[0])
+                putExtra("zoom_to_id", feature.properties.database_id ?: -1)
+            }
         }
         mapLauncher.launch(intent)
         safeNoAnimation()

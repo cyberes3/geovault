@@ -51,10 +51,12 @@
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <org.osmdroid.views.MapView
+        <org.maplibre.android.maps.MapView
             android:id="@+id/map"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:background="@color/map_underlay"
+            app:maplibre_foregroundLoadColor="@color/map_underlay"
             android:clickable="true"
             android:focusable="true" />
 
@@ -98,7 +100,7 @@
             android:id="@+id/placeName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Select a place"
+            android:text="@string/map_select_place"
             android:textSize="18sp"
             android:textStyle="bold"
             android:textColor="@color/black"
@@ -108,7 +110,7 @@
             android:id="@+id/placeDescription"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Tap a marker to view details"
+            android:text="@string/map_tap_marker_hint"
             android:textSize="14sp"
             android:textColor="@color/gray_600"
             android:layout_marginBottom="16dp"

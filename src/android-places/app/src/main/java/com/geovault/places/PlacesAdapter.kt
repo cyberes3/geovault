@@ -10,6 +10,7 @@ import android.widget.Toast
 import android.content.Context
 import android.content.ClipboardManager
 import android.content.ClipData
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 
 class PlacesAdapter(
@@ -199,7 +200,7 @@ class PlacesAdapter(
                     }
                     val buttonText = if (offlineFeature.feature.properties.database_id != null) "Revert" else "Discard"
                     
-                    android.app.AlertDialog.Builder(context)
+                    val revertDialog = android.app.AlertDialog.Builder(context)
                         .setTitle("${buttonText} Changes")
                         .setMessage("Are you sure you want to $action '${place.properties.name ?: "this place"}'?")
                         .setPositiveButton(buttonText) { _, _ ->
@@ -207,10 +208,16 @@ class PlacesAdapter(
                         }
                         .setNegativeButton("Cancel", null)
                         .show()
+                    revertDialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)?.setTextColor(
+                        ContextCompat.getColor(context, com.geovault.common.R.color.gv_common_error_red)
+                    )
+                    revertDialog.getButton(android.app.AlertDialog.BUTTON_NEGATIVE)?.setTextColor(
+                        ContextCompat.getColor(context, com.geovault.common.R.color.gv_common_dialog_negative_button)
+                    )
                 }
             } else {
                 val context = holder.itemView.context
-                android.app.AlertDialog.Builder(context)
+                val deleteDialog = android.app.AlertDialog.Builder(context)
                     .setTitle("Delete Place")
                     .setMessage("Are you sure you want to delete '${place.properties.name ?: "this place"}'? This cannot be undone.")
                     .setPositiveButton("Delete") { _, _ ->
@@ -218,6 +225,12 @@ class PlacesAdapter(
                     }
                     .setNegativeButton("Cancel", null)
                     .show()
+                deleteDialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)?.setTextColor(
+                    ContextCompat.getColor(context, com.geovault.common.R.color.gv_common_error_red)
+                )
+                deleteDialog.getButton(android.app.AlertDialog.BUTTON_NEGATIVE)?.setTextColor(
+                    ContextCompat.getColor(context, com.geovault.common.R.color.gv_common_dialog_negative_button)
+                )
             }
         }
         

@@ -45,6 +45,14 @@
         <item name="android:minHeight">56dp</item>
     </style>
 
+    <!-- Alert dialog: confirmation (positive) button uses theme-aware color (blue in light, light grey in dark) -->
+    <style name="gv_common_AlertDialogTheme" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
+        <item name="buttonBarPositiveButtonStyle">@style/gv_common_DialogPositiveButton</item>
+    </style>
+    <style name="gv_common_DialogPositiveButton" parent="Widget.MaterialComponents.Button.TextButton.Dialog">
+        <item name="android:textColor">@color/gv_common_dialog_positive_button</item>
+    </style>
+
     <!-- Section header (blue bar with title) -->
     <style name="gv_common_SectionHeader">
         <item name="android:background">@color/gv_common_primary_blue</item>

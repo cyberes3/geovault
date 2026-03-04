@@ -9,6 +9,7 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Bundle
+import android.util.Log
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.KeyEvent
@@ -26,30 +27,37 @@ import android.widget.Toast
 import com.google.android.material.button.MaterialButton
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
-import org.osmdroid.config.Configuration
-import org.osmdroid.events.MapEventsReceiver
-import org.osmdroid.tileprovider.tilesource.XYTileSource
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.MapEventsOverlay
-import org.osmdroid.views.overlay.Marker
+import org.maplibre.android.camera.CameraPosition
+import org.maplibre.android.camera.CameraUpdateFactory
+import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.maps.MapView
+import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.OnMapReadyCallback
+import org.maplibre.android.maps.Style
+import org.maplibre.android.style.sources.RasterSource
+import org.maplibre.android.style.sources.TileSet
+import org.maplibre.android.style.layers.RasterLayer
+import org.maplibre.android.plugins.annotation.Symbol
+import org.maplibre.android.plugins.annotation.SymbolManager
+import org.maplibre.android.plugins.annotation.SymbolOptions
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 
-class PlaceEditActivity : AppCompatActivity() {
+class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLoadingMapListener {
 
-    private lateinit var map: MapView
+    private lateinit var mapView: MapView
+    private var maplibreMap: MapLibreMap? = null
     private lateinit var nameInput: EditText
     private lateinit var descriptionInput: EditText
     private lateinit var coordinatesInput: EditText
@@ -80,7 +88,14 @@ class PlaceEditActivity : AppCompatActivity() {
     private var longitude: Double? = null
     private var storedAddress: String? = null
     
-    private var marker: Marker? = null
+    private var symbolManager: SymbolManager? = null
+    private var placeSymbol: Symbol? = null
+    /** True when map is ready (onMapReady ran). */
+    private var mapReady = false
+    /** True when fetchMapSources callback ran (server configured). */
+    private var sourcesFetched = false
+    /** True after we've centered the map on the place once; layer switches should not re-center. */
+    private var initialMapCenterApplied = false
     private var editFeature: Feature? = null
     private var originalFeature: Feature? = null
     private var isOfflineEdit: Boolean = false
@@ -111,48 +126,33 @@ class PlaceEditActivity : AppCompatActivity() {
     }
 
     /** Zoom level when focusing on a single point (same as MapActivity zoom-to-point). */
-    private val zoomLevelPoint = 16.0
+    private val zoomLevelPoint = 12.0
+
+    private val requestLocationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) getCurrentLocation()
+        else Toast.makeText(this, "Location permission denied", Toast.LENGTH_SHORT).show()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // OSMDroid config
-        val ctx = applicationContext
-        Configuration.getInstance().load(ctx, androidx.preference.PreferenceManager.getDefaultSharedPreferences(ctx))
-        // Standard browser UA to avoid being blocked by OSM servers
-        Configuration.getInstance().userAgentValue = "Mozilla/5.0 (Android; Mobile; rv:123.0) Gecko/123.0 Firefox/123.0"
-        // Set internal cache directory to avoid permission issues
-        Configuration.getInstance().osmdroidTileCache = java.io.File(ctx.cacheDir, "osmdroid")
-        // Performance optimizations
-        Configuration.getInstance().tileDownloadThreads = 8
-        Configuration.getInstance().cacheMapTileCount = 600
-        Configuration.getInstance().tileFileSystemCacheMaxBytes = 500L * 1024 * 1024 // 500MB
-
         sourceManager = MapSourceManager(this)
-
         setContentView(R.layout.activity_place_edit)
-
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-
         initViews()
         setupWindowInsets()
-        setupMap()
+        mapView = findViewById(R.id.map)
+        // MapLibre shows a foreground drawable until the map loads; use theme-aware color (black in dark mode).
+        mapView.foreground = android.graphics.drawable.ColorDrawable(ContextCompat.getColor(this, R.color.map_underlay))
+        mapView.addOnDidFailLoadingMapListener(this)
+        mapView.onCreate(savedInstanceState)
+        mapView.getMapAsync(this)
         fetchMapSources()
         
         // Check for edit intent
-        editFeature = if (android.os.Build.VERSION.SDK_INT >= 33) {
-            intent.getParcelableExtra("feature", Feature::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            intent.getParcelableExtra("feature")
-        }
-        
-        originalFeature = if (android.os.Build.VERSION.SDK_INT >= 33) {
-            intent.getParcelableExtra("original_feature", Feature::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            intent.getParcelableExtra("original_feature")
-        }
+        editFeature = intent.getParcelableExtra("feature", Feature::class.java)
+        originalFeature = intent.getParcelableExtra("original_feature", Feature::class.java)
         
         isOfflineEdit = intent.getBooleanExtra("is_offline_edit", false)
         offlineEditIndex = intent.getIntExtra("offline_edit_index", -1)
@@ -190,20 +190,166 @@ class PlaceEditActivity : AppCompatActivity() {
         sourceManager.fetchSources(api) {
             runOnUiThread {
                 if (!isDestroyed) {
-                    applySelectedSource()
+                    sourcesFetched = true
+                    if (mapReady) applySelectedSource()
                 }
             }
         }
     }
 
     private fun applySelectedSource() {
-        val sourceId = sourceManager.getSelectedSourceId()
-        map.setTileSource(sourceManager.getTileSource(sourceId))
-        map.invalidate()
+        val map = maplibreMap ?: return
+        if (isDestroyed) return
+        // Remove current marker from the existing style before replacing it, so we never accumulate
+        // symbols across layer switches (old style is replaced but clearing refs avoids any stale state).
+        placeSymbol?.let { symbolManager?.delete(it) }
+        placeSymbol = null
+        symbolManager = null
+        Log.d(TAG, "applySelectedSource: called, will setStyle")
+        try {
+            val effectiveId = sourceManager.getEffectiveSourceId()
+            val mapMaxZoom = if (sourceManager.isVectorSource(effectiveId)) MAX_ZOOM_LEVEL_VECTOR.toDouble() else MAX_ZOOM_LEVEL.toDouble()
+            map.setMaxZoomPreference(mapMaxZoom)
+            if (sourceManager.isVectorSource(effectiveId)) {
+                val styleUrl = sourceManager.getResolvedStyleUrl(effectiveId)
+                if (!styleUrl.isNullOrBlank()) {
+                    loadVectorStyle(map, styleUrl)
+                } else {
+                    map.setStyle(Style.Builder()) { style -> if (!isDestroyed) onStyleLoaded(style) }
+                }
+            } else {
+                val rasterUrl = sourceManager.getRasterUrl(effectiveId)
+                if (!rasterUrl.isNullOrBlank()) {
+                    map.setStyle(Style.Builder()) { style ->
+                        if (isDestroyed) return@setStyle
+                        try {
+                            // tileSize 256, maxZoom capped at 15; raster below features.
+                            val tileSet = TileSet("2.1.0", rasterUrl).apply { maxZoom = MAX_ZOOM_LEVEL.toFloat() }
+                            style.addSource(RasterSource(RASTER_SOURCE_ID, tileSet, 256))
+                            val rasterLayer = RasterLayer(RASTER_LAYER_ID, RASTER_SOURCE_ID)
+                            try {
+                                style.addLayerBelow(rasterLayer, ANNOTATIONS_LAYER_ID)
+                            } catch (_: Exception) {
+                                style.addLayer(rasterLayer)
+                            }
+                        } catch (_: Exception) { }
+                        if (!isDestroyed) onStyleLoaded(style)
+                    }
+                } else {
+                    map.setStyle(Style.Builder()) { style -> if (!isDestroyed) onStyleLoaded(style) }
+                }
+            }
+        } catch (_: Exception) {
+            map.setStyle(Style.Builder()) { style -> if (!isDestroyed) onStyleLoaded(style) }
+        }
+    }
+
+    override fun onDidFailLoadingMap(errorMessage: String) {
+        Log.e(TAG, "Map style load failed: $errorMessage")
+        runOnUiThread {
+            val map = maplibreMap ?: return@runOnUiThread
+            val effectiveId = sourceManager.getEffectiveSourceId()
+            if (sourceManager.isVectorSource(effectiveId)) {
+                Toast.makeText(this, getString(R.string.map_style_unavailable_fallback_osm), Toast.LENGTH_SHORT).show()
+                loadOsmFallback(map)
+            }
+        }
+    }
+
+    /**
+     * Load vector style from URL. Uses MapStyleCache so repeat layer switches load instantly.
+     * On failure, falls back to OSM raster.
+     */
+    private fun loadVectorStyle(map: MapLibreMap, styleUrl: String) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(this).trimEnd('/')
+        val isOurServer = serverUrl.isNotEmpty() && (styleUrl == serverUrl || styleUrl.startsWith("$serverUrl/"))
+        val serverBase = if (isOurServer) java.net.URI.create(styleUrl).let { "${it.scheme}://${it.host}" } else null
+
+        MapStyleCache.getStyleJson(this, styleUrl, isOurServer, serverBase) { json ->
+            if (isDestroyed) return@getStyleJson
+            if (!json.isNullOrBlank()) {
+                map.setStyle(Style.Builder().fromJson(json)) { style -> if (!isDestroyed) onStyleLoaded(style) }
+            } else {
+                Toast.makeText(this@PlaceEditActivity, getString(R.string.map_style_unavailable_fallback_osm), Toast.LENGTH_SHORT).show()
+                loadOsmFallback(map)
+            }
+        }
+    }
+
+    private fun loadOsmFallback(map: MapLibreMap) {
+        val rasterUrl = sourceManager.getStreetFallbackRasterUrl()
+        if (rasterUrl.isNullOrBlank()) {
+            map.setStyle(Style.Builder()) { style -> if (!isDestroyed) onStyleLoaded(style) }
+            return
+        }
+        map.setMaxZoomPreference(MAX_ZOOM_LEVEL.toDouble())
+        map.setStyle(Style.Builder()) { style ->
+            if (isDestroyed) return@setStyle
+            try {
+                style.addSource(RasterSource(RASTER_SOURCE_ID, TileSet("2.1.0", rasterUrl).apply { maxZoom = MAX_ZOOM_LEVEL.toFloat() }, 256))
+                val rasterLayer = RasterLayer(RASTER_LAYER_ID, RASTER_SOURCE_ID)
+                if (!isDestroyed) onStyleLoaded(style)
+                val mgr = symbolManager
+                mapView.post {
+                    if (isDestroyed) return@post
+                    val s = map.style ?: return@post
+                    try {
+                        if (mgr != null) s.addLayerBelow(rasterLayer, mgr.layerId) else s.addLayer(rasterLayer)
+                    } catch (_: Exception) {
+                        try { s.addLayer(rasterLayer) } catch (_: Exception) { }
+                    }
+                }
+            } catch (_: Exception) { }
+        }
+    }
+
+    private fun onStyleLoaded(style: Style) {
+        // Do not call symbolManager.onDestroy() here: the previous style was already replaced
+        // by setStyle(), so the old manager's native layer is invalid and onDestroy() can throw
+        // (wstring_convert / nativeGetId). Just clear references.
+        Log.d(TAG, "onStyleLoaded: clearing old refs, style.uri=${style.uri}")
+        symbolManager = null
+        placeSymbol = null
+        val bitmap = MapMarkerUtils.getMarkerBitmap(this, R.drawable.ic_marker_default)
+        Log.d(TAG, "onStyleLoaded: bitmap=${if (bitmap != null) "${bitmap.width}x${bitmap.height}" else "null"}, iconId=$ICON_MARKER_PLACE")
+        if (bitmap != null) {
+            style.addImage(ICON_MARKER_PLACE, bitmap, false)
+            Log.d(TAG, "onStyleLoaded: addImage($ICON_MARKER_PLACE) ok")
+        } else {
+            Log.e(TAG, "onStyleLoaded: bitmap null, marker icon will be missing/black")
+        }
+        val map = maplibreMap ?: return
+        val manager = SymbolManager(mapView, map, style, null, null)
+        symbolManager = manager
+        manager.setIconAllowOverlap(true)
+        Log.d(TAG, "onStyleLoaded: new SymbolManager layerId=${manager.layerId}, lat=$latitude lon=$longitude")
+        latitude?.let { lat ->
+            longitude?.let { lon ->
+                Log.d(TAG, "onStyleLoaded: calling updateMarker($lat, $lon)")
+                updateMarker(lat, lon)
+                if (!initialMapCenterApplied) {
+                    initialMapCenterApplied = true
+                    zoomToPoint(lat, lon)
+                }
+            }
+        }
+    }
+
+    override fun onMapReady(map: MapLibreMap) {
+        maplibreMap = map
+        mapReady = true
+        map.uiSettings.setLogoEnabled(false)
+        map.uiSettings.setAttributionEnabled(false)
+        map.uiSettings.isRotateGesturesEnabled = false
+        map.setMaxZoomPreference(MAX_ZOOM_LEVEL.toDouble())
+        setupMap()
+        // Load style once: when no server we load now; when server configured we wait for fetchSources callback.
+        if (sourcesFetched || GeovaultAuthManager.getServerUrl(this).isEmpty()) {
+            applySelectedSource()
+        }
     }
 
     private fun initViews() {
-        map = findViewById(R.id.map)
         nameInput = findViewById(R.id.placeNameInput)
         descriptionInput = findViewById(R.id.placeDescriptionInput)
         coordinatesInput = findViewById(R.id.coordinatesInput)
@@ -278,35 +424,22 @@ class PlaceEditActivity : AppCompatActivity() {
     }
 
     private fun setupMap() {
-        applySelectedSource() // Set initial source immediately to prevent default OSM flash
-        map.setMultiTouchControls(true)
-        map.zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER)
-        map.setMinZoomLevel(2.0)
-        map.setMaxZoomLevel(20.0)
-
-        // Set standard OSM tile source
-        map.setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
-        map.invalidate()
-
-        // Click listener for map
-        val eventsReceiver = object : MapEventsReceiver {
-            override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
-                updateCoords(p.latitude, p.longitude, null)
-                return true
-            }
-            override fun longPressHelper(p: GeoPoint): Boolean = false
+        val map = maplibreMap ?: return
+        Log.d(TAG, "setupMap: registering map click listener")
+        map.addOnMapClickListener { point ->
+            Log.d(TAG, "setupMap: map tapped lat=${point.latitude} lon=${point.longitude} symbolManager=${symbolManager != null} placeSymbol=${placeSymbol != null}")
+            updateCoords(point.latitude, point.longitude, null)
+            true
         }
-        map.overlays.add(MapEventsOverlay(eventsReceiver))
-
         findViewById<View>(R.id.mapToggle).setOnClickListener {
             val nextSourceId = sourceManager.getNextSourceId()
             sourceManager.setSelectedSourceId(nextSourceId)
             applySelectedSource()
         }
-
-        // Initial view
-        map.controller.setZoom(2.0)
-        map.controller.setCenter(GeoPoint(0.0, 0.0))
+        // Only set default camera when no place coords; initial center on place happens in onStyleLoaded (once).
+        if (latitude == null || longitude == null) {
+            map.setCameraPosition(CameraPosition.Builder().target(LatLng(0.0, 0.0)).zoom(2.0).build())
+        }
     }
 
     private fun setupListeners() {
@@ -527,11 +660,8 @@ class PlaceEditActivity : AppCompatActivity() {
             latitude = null
             longitude = null
             storedAddress = null
-            if (marker != null) {
-                map.overlays.remove(marker)
-                marker = null
-                map.invalidate()
-            }
+            placeSymbol?.let { symbolManager?.delete(it) }
+            placeSymbol = null
             validateForm()
             return
         }
@@ -559,11 +689,8 @@ class PlaceEditActivity : AppCompatActivity() {
         latitude = null
         longitude = null
         storedAddress = null
-        if (marker != null) {
-            map.overlays.remove(marker)
-            marker = null
-            map.invalidate()
-        }
+        placeSymbol?.let { symbolManager?.delete(it) }
+        placeSymbol = null
         validateForm()
     }
 
@@ -645,19 +772,18 @@ class PlaceEditActivity : AppCompatActivity() {
             val address = feature.properties.address
             val displayText = if (!address.isNullOrBlank()) address else null
             updateCoords(coords[1], coords[0], displayText)
-            map.post {
-                map.controller.setZoom(zoomLevelPoint)
-                map.controller.setCenter(GeoPoint(coords[1], coords[0]))
+            maplibreMap?.let { map ->
+                map.setCameraPosition(CameraPosition.Builder().target(LatLng(coords[1], coords[0])).zoom(zoomLevelPoint).build())
             }
         }
     }
 
     private fun zoomToPoint(lat: Double, lon: Double) {
-        map.controller.animateTo(GeoPoint(lat, lon))
-        map.controller.setZoom(zoomLevelPoint)
+        maplibreMap?.animateCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(LatLng(lat, lon)).zoom(zoomLevelPoint).build()))
     }
 
     private fun updateCoords(lat: Double, lon: Double, displayText: String?) {
+        Log.d(TAG, "updateCoords: lat=$lat lon=$lon")
         latitude = lat
         longitude = lon
         storedAddress = if (displayText.isNullOrBlank()) null else displayText
@@ -670,26 +796,33 @@ class PlaceEditActivity : AppCompatActivity() {
     }
 
     private fun updateMarker(lat: Double, lon: Double) {
-        if (marker == null) {
-            marker = Marker(map)
-            marker?.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-            marker?.icon = ContextCompat.getDrawable(this, R.drawable.ic_marker_default)
-            map.overlays.add(marker)
+        val manager = symbolManager
+        if (manager == null) {
+            Log.e(TAG, "updateMarker: symbolManager is null, skipping lat=$lat lon=$lon")
+            return
         }
-        marker?.position = GeoPoint(lat, lon)
-        map.invalidate()
+        val latLng = LatLng(lat, lon)
+        val hadExisting = placeSymbol != null
+        placeSymbol?.let { sym ->
+            Log.d(TAG, "updateMarker: deleting existing symbol")
+            manager.delete(sym)
+        }
+        placeSymbol = manager.create(
+            SymbolOptions().withLatLng(latLng).withIconImage(ICON_MARKER_PLACE)
+        )
+        Log.d(TAG, "updateMarker: hadExisting=$hadExisting created new at $lat,$lon icon=$ICON_MARKER_PLACE")
     }
 
     private fun checkLocationPermissionAndGet() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 100)
-        } else {
-            getCurrentLocation()
+        when {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ->
+                getCurrentLocation()
+            else -> requestLocationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }
     }
 
     private fun getCurrentLocation() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return
         }
         
@@ -777,12 +910,18 @@ class PlaceEditActivity : AppCompatActivity() {
             finish()
             return
         }
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle("Discard changes?")
             .setMessage("You have unsaved changes. Are you sure you want to leave?")
             .setPositiveButton("Discard") { _, _ -> finish() }
             .setNegativeButton("Cancel", null)
             .show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(
+            ContextCompat.getColor(this, com.geovault.common.R.color.gv_common_error_red)
+        )
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(
+            ContextCompat.getColor(this, com.geovault.common.R.color.gv_common_dialog_negative_button)
+        )
     }
 
     private fun savePlace() {
@@ -891,20 +1030,14 @@ class PlaceEditActivity : AppCompatActivity() {
         finish()
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 100) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                getCurrentLocation()
-            } else {
-                Toast.makeText(this, "Location permission denied", Toast.LENGTH_SHORT).show()
-            }
-        }
+    override fun onStart() {
+        super.onStart()
+        if (::mapView.isInitialized) mapView.onStart()
     }
 
     override fun onResume() {
         super.onResume()
-        if (::map.isInitialized) map.onResume()
+        if (::mapView.isInitialized) mapView.onResume()
     }
 
     override fun onPause() {
@@ -920,7 +1053,26 @@ class PlaceEditActivity : AppCompatActivity() {
         searchPlaceRotationHelper.stop()
         locationRotationHelper.stop()
         savingRotationHelper.stop(hide = false)
-        if (::map.isInitialized) map.onPause()
+        if (::mapView.isInitialized) mapView.onPause()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (::mapView.isInitialized) mapView.onStop()
+    }
+
+    override fun onDestroy() {
+        if (::mapView.isInitialized) mapView.removeOnDidFailLoadingMapListener(this)
+        symbolManager?.onDestroy()
+        symbolManager = null
+        placeSymbol = null
+        if (::mapView.isInitialized) mapView.onDestroy()
+        super.onDestroy()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        if (::mapView.isInitialized) mapView.onSaveInstanceState(outState)
     }
     private fun setLocationLoading(loading: Boolean) {
         if (loading) {
@@ -940,5 +1092,17 @@ class PlaceEditActivity : AppCompatActivity() {
 
     private fun stopSavingAnimation() {
         savingRotationHelper.stop(hide = false)
+    }
+
+    companion object {
+        private const val TAG = "PlaceEditActivity"
+        private const val RASTER_SOURCE_ID = "geovault-raster"
+        private const val RASTER_LAYER_ID = "geovault-raster-layer"
+        private const val ANNOTATIONS_LAYER_ID = "org.maplibre.annotations.points"
+        /** Max zoom for raster (OSM, satellite) tiles. */
+        private const val MAX_ZOOM_LEVEL = 15
+        /** Max zoom for MapTiler vector maps. */
+        private const val MAX_ZOOM_LEVEL_VECTOR = 18
+        private const val ICON_MARKER_PLACE = "geovault-marker-place"
     }
 }

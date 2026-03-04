@@ -113,7 +113,7 @@ maptiler:
     - hybrid-v4
 
   # Map IDs that are registered as tile sources but hidden from the basemap selector.
-  # Used by external clients (e.g. Android app).
+  # Used by external clients (e.g. Android apps).
   hidden_maps:
     - base-v4
     - openstreetmap-dark

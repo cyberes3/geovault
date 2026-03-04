@@ -265,7 +265,7 @@
             android:paddingTop="40dp"
             android:paddingBottom="20dp"
             android:gravity="center"
-            android:background="@drawable/bg_modal"
+            android:background="@drawable/bg_sync_overlay"
             android:elevation="12dp">
 
             <androidx.appcompat.widget.AppCompatImageView

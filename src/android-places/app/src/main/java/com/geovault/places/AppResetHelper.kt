@@ -3,12 +3,10 @@ package com.geovault.places
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import com.geovault.common.GeovaultAuthManager
 import com.google.gson.Gson
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -81,20 +79,13 @@ fun exportThenResetOnAuthFailure(activity: Activity) {
             }
             val txtBytes = sb.toString().toByteArray(Charsets.UTF_8)
             val filename = exportFilename()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val contentValues = android.content.ContentValues().apply {
-                    put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
-                    put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                }
-                context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)?.let { uri ->
-                    context.contentResolver.openOutputStream(uri)?.use { it.write(txtBytes) }
-                    exportSaved = true
-                }
-            } else {
-                val dir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
-                val file = File(dir, filename)
-                file.writeBytes(txtBytes)
+            val contentValues = android.content.ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            }
+            context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)?.let { uri ->
+                context.contentResolver.openOutputStream(uri)?.use { it.write(txtBytes) }
                 exportSaved = true
             }
         } catch (e: Exception) {

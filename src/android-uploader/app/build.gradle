@@ -82,7 +82,7 @@ android {
 
     defaultConfig {
         applicationId = "com.geovault.uploader"
-        minSdk = 24
+        minSdk = 34
         targetSdk = 36
         versionName = "${getGitCommitDate()}-${getGitCommitHash()}"
     }

@@ -27,6 +27,11 @@
     <color name="gv_common_content_on_primary">#FFFFFF</color>
     <color name="gv_common_border_light">#C4D2ED</color>
 
+    <!-- Dialog confirmation button (positive): blue in light mode -->
+    <color name="gv_common_dialog_positive_button">@color/gv_common_primary_blue</color>
+    <!-- Dialog cancel button (negative): grey in light mode -->
+    <color name="gv_common_dialog_negative_button">@color/gv_common_text_secondary</color>
+
     <!-- Legacy / compatibility -->
     <color name="gv_common_gray">#6B7280</color>
     <color name="gv_common_gray_light">#F3F4F6</color>

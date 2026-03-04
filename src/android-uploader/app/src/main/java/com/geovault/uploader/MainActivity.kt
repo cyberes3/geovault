@@ -153,12 +153,7 @@ class MainActivity : AppCompatActivity() {
         
         when (intent.action) {
             Intent.ACTION_SEND -> {
-                fileUri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
-                }
+                fileUri = intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
                 originalFilename = intent.getStringExtra(Intent.EXTRA_TEXT)
             }
             else -> {
@@ -494,13 +489,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun safeNoAnimation() {
-        if (android.os.Build.VERSION.SDK_INT >= 34) {
-            overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
-            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
-        } else {
-            @Suppress("DEPRECATION")
-            overridePendingTransition(0, 0)
-        }
+        overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
+        overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
     }
 }
 

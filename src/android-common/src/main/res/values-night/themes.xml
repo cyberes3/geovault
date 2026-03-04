@@ -6,5 +6,7 @@
         <item name="android:windowBackground">@color/gv_common_surface</item>
         <item name="android:colorBackground">@color/gv_common_surface</item>
         <item name="android:navigationBarColor">@color/gv_common_surface</item>
+        <item name="materialAlertDialogTheme">@style/gv_common_AlertDialogTheme</item>
+        <item name="alertDialogTheme">@style/gv_common_AlertDialogTheme</item>
     </style>
 </resources>

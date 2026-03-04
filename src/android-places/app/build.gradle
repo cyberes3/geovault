@@ -83,7 +83,7 @@ android {
 
     defaultConfig {
         applicationId = "com.geovault.places"
-        minSdk = 24
+        minSdk = 34
         targetSdk = 36
         versionName = "${getGitCommitDate()}-${getGitCommitHash()}"
     }
@@ -193,8 +193,9 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
 
-    // Map
-    implementation 'org.osmdroid:osmdroid-android:6.1.18'
+    // Map (MapLibre for vector + raster; OSMDroid removed)
+    implementation 'org.maplibre.gl:android-sdk:11.3.0'
+    implementation 'org.maplibre.gl:android-plugin-annotation-v9:3.0.2'
     implementation 'com.google.android.gms:play-services-location:21.0.1'
 
     testImplementation libs.junit

@@ -132,25 +132,14 @@ class MultiUploadActivity : AppCompatActivity() {
     }
 
     private fun safeNoAnimation() {
-        if (android.os.Build.VERSION.SDK_INT >= 34) {
-            overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
-            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
-        } else {
-            @Suppress("DEPRECATION")
-            overridePendingTransition(0, 0)
-        }
+        overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
+        overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
     }
     
     private fun handleIntent(intent: Intent?) {
         when (intent?.action) {
             Intent.ACTION_SEND_MULTIPLE -> {
-                val uris = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
-                }
-                
+                val uris = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
                 uris?.forEach { uri ->
                     val filename = getFilenameFromUri(uri)
                     val size = getFileSizeFromUri(uri)
@@ -175,13 +164,7 @@ class MultiUploadActivity : AppCompatActivity() {
             }
             Intent.ACTION_SEND -> {
                 // Handle single file share - add it to the list just like multiple files
-                val uri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
-                }
-                
+                val uri = intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
                 uri?.let {
                     val filename = getFilenameFromUri(it)
                     val size = getFileSizeFromUri(it)

@@ -12,6 +12,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -87,7 +88,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         disconnectButton.setOnClickListener {
-            AlertDialog.Builder(this)
+            val dialog = AlertDialog.Builder(this)
                 .setTitle(getString(R.string.disconnect_confirm_title))
                 .setMessage(getString(R.string.disconnect_confirm_message))
                 .setPositiveButton(getString(R.string.disconnect)) { _, _ ->
@@ -99,6 +100,12 @@ class SettingsActivity : AppCompatActivity() {
                 }
                 .setNegativeButton(getString(R.string.cancel_button), null)
                 .show()
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(
+                ContextCompat.getColor(this, com.geovault.common.R.color.gv_common_dialog_positive_button)
+            )
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(
+                ContextCompat.getColor(this, com.geovault.common.R.color.gv_common_dialog_negative_button)
+            )
         }
     }
 
@@ -152,12 +159,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun safeNoAnimation() {
-        if (android.os.Build.VERSION.SDK_INT >= 34) {
-            overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
-            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
-        } else {
-            @Suppress("DEPRECATION")
-            overridePendingTransition(0, 0)
-        }
+        overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
+        overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
     }
 }

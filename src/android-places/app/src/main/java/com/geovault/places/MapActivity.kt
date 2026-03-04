@@ -1,56 +1,129 @@
 package com.geovault.places
 
-import android.content.Context
+import android.content.Intent
 import com.geovault.common.GeovaultAuthManager
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
-import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.tilesource.XYTileSource
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
-import org.osmdroid.util.BoundingBox
-import java.util.ArrayList
-import java.util.concurrent.Executors
-
-import android.os.Build
-
 import android.view.View
+import androidx.activity.OnBackPressedCallback
 import android.view.ViewTreeObserver
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import androidx.core.content.ContextCompat
+import org.maplibre.android.camera.CameraPosition
+import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
+import org.maplibre.android.maps.MapView
+import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.OnMapReadyCallback
+import org.maplibre.android.maps.Style
+import org.maplibre.android.style.sources.RasterSource
+import org.maplibre.android.style.sources.TileSet
+import org.maplibre.android.style.layers.RasterLayer
+import org.maplibre.android.plugins.annotation.Symbol
+import org.maplibre.android.plugins.annotation.SymbolManager
+import org.maplibre.android.plugins.annotation.SymbolOptions
+import android.util.Log
+import android.widget.Toast
+import java.util.ArrayList
+import java.util.concurrent.Executors
 
-class MapActivity : AppCompatActivity() {
+class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLoadingMapListener {
 
-    private lateinit var map: MapView
+    private lateinit var mapView: MapView
+    private var maplibreMap: MapLibreMap? = null
     private lateinit var features: ArrayList<Feature>
-    private var lastSelectedMarker: Marker? = null
+    private var symbolManager: SymbolManager? = null
+    /** Selection overlay: single yellow symbol on a layer above all blue markers. */
+    private var selectionSymbolManager: SymbolManager? = null
+    private var selectionSymbol: Symbol? = null
+    private var lastSelectedSymbol: Symbol? = null
+    private val symbols = mutableListOf<Symbol>()
+    private val symbolToFeature = mutableMapOf<Symbol, Feature>()
+    private var selectedFeature: Feature? = null
     private val executor = Executors.newSingleThreadExecutor()
     private lateinit var sourceManager: MapSourceManager
+    /** True when map is ready (onMapReady ran). */
+    private var mapReady = false
+    /** True when fetchMapSources callback ran (server configured). */
+    private var sourcesFetched = false
+    /** True after we've applied initial fit-bounds/zoom once; when restored we skip so MapView saved state keeps camera. */
+    private var initialCameraApplied = false
+
+    private val editLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            setResult(RESULT_OK, result.data)
+            // Don't finish so the map stays; user can press back when done.
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Load OSMDroid configuration
-        val ctx = applicationContext
-        Configuration.getInstance().load(ctx, androidx.preference.PreferenceManager.getDefaultSharedPreferences(ctx))
-        // Standard browser UA to avoid being blocked by OSM servers
-        Configuration.getInstance().userAgentValue = "Mozilla/5.0 (Android; Mobile; rv:123.0) Gecko/123.0 Firefox/123.0"
-        // Set internal cache directory to avoid permission issues
-        Configuration.getInstance().osmdroidTileCache = java.io.File(ctx.cacheDir, "osmdroid")
-        // Performance optimizations
-        Configuration.getInstance().tileDownloadThreads = 8
-        Configuration.getInstance().cacheMapTileCount = 600
-        Configuration.getInstance().tileFileSystemCacheMaxBytes = 500L * 1024 * 1024 // 500MB
-
         sourceManager = MapSourceManager(this)
-
         setContentView(R.layout.activity_map)
-        initMapContent()
-
+        // Apply window insets in onCreate so we get initial dispatch (insets are sent when window attaches;
+        // registering in onMapReady was too late and nav bar covered content).
+        val rootView = findViewById<View>(R.id.rootLayout)
+        val headerView = findViewById<View>(R.id.headerLayout)
+        val bottomInfoLayout = findViewById<View>(R.id.bottomInfoLayout)
+        ViewCompat.setOnApplyWindowInsetsListener(rootView) { _, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            headerView.updatePadding(top = insets.top + 20)
+            bottomInfoLayout.updatePadding(bottom = insets.bottom + 16)
+            WindowInsetsCompat.CONSUMED
+        }
+        mapView = findViewById(R.id.map)
+        // MapLibre shows a foreground drawable until the map loads; use theme-aware color (black in dark mode).
+        mapView.foreground = android.graphics.drawable.ColorDrawable(ContextCompat.getColor(this, R.color.map_underlay))
+        mapView.addOnDidFailLoadingMapListener(this)
+        mapView.onCreate(savedInstanceState)
+        initialCameraApplied = savedInstanceState?.getBoolean(KEY_INITIAL_CAMERA_APPLIED, false) ?: false
+        features = intent.getParcelableArrayListExtra("features", Feature::class.java) ?: ArrayList()
+        mapView.getMapAsync(this)
         updateMapAuthHeader()
         fetchMapSources()
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                startActivity(Intent(this@MapActivity, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                })
+            }
+        })
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        applyZoomFromIntent()
+    }
+
+    /** Apply zoom_to_lat, zoom_to_lon, zoom_to_id from current intent (e.g. when opened from list "view on map"). */
+    private fun applyZoomFromIntent() {
+        if (!intent.hasExtra("zoom_to_lat") || !intent.hasExtra("zoom_to_lon")) return
+        val map = maplibreMap ?: return
+        val centerLat = intent.getDoubleExtra("zoom_to_lat", 0.0)
+        val centerLon = intent.getDoubleExtra("zoom_to_lon", 0.0)
+        val zoomToId = intent.getIntExtra("zoom_to_id", -1)
+        map.setCameraPosition(CameraPosition.Builder().target(LatLng(centerLat, centerLon)).zoom(DEFAULT_POINT_ZOOM).build())
+        if (zoomToId >= 0) {
+            val pair = symbolToFeature.entries.find { it.value.properties.database_id == zoomToId }
+            pair?.let { (symbol, feature) -> selectMarkerAndUpdateUi(symbol, feature) }
+        }
+    }
+
+    override fun onDidFailLoadingMap(errorMessage: String) {
+        Log.e(TAG, "Map style load failed: $errorMessage")
+        runOnUiThread {
+            val map = maplibreMap ?: return@runOnUiThread
+            val effectiveId = sourceManager.getEffectiveSourceId()
+            if (sourceManager.isVectorSource(effectiveId)) {
+                Toast.makeText(this, getString(R.string.map_style_unavailable_fallback_osm), Toast.LENGTH_SHORT).show()
+                loadOsmFallback(map)
+            } else {
+                Toast.makeText(this, "Map failed: $errorMessage", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun fetchMapSources() {
@@ -58,88 +131,209 @@ class MapActivity : AppCompatActivity() {
         if (serverUrl.isEmpty()) return
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
         val api = com.geovault.common.RetrofitClient.getClient(this, baseUrl).create(GeovaultApi::class.java)
-        
         sourceManager.fetchSources(api) {
             runOnUiThread {
                 if (!isDestroyed) {
-                    applySelectedSource()
+                    sourcesFetched = true
+                    if (mapReady) applySelectedSource()
                 }
             }
+        }
+    }
+
+    override fun onMapReady(map: MapLibreMap) {
+        maplibreMap = map
+        mapReady = true
+        map.uiSettings.setLogoEnabled(false)
+        map.uiSettings.setAttributionEnabled(false)
+        map.uiSettings.isRotateGesturesEnabled = false
+        map.setMaxZoomPreference(MAX_ZOOM_LEVEL.toDouble())
+        setupMapUi()
+        // Load style once: when no server load now (OSM); when server configured wait for fetchSources callback.
+        if (sourcesFetched || GeovaultAuthManager.getServerUrl(this).isEmpty()) {
+            applySelectedSource()
         }
     }
 
     private fun applySelectedSource() {
-        val sourceId = sourceManager.getSelectedSourceId()
-        map.setTileSource(sourceManager.getTileSource(sourceId))
-        map.invalidate()
+        val map = maplibreMap ?: run {
+            Log.d(TAG, "applySelectedSource: map not ready yet, skipping")
+            return
+        }
+        if (isDestroyed) return
+        Log.d(TAG, "applySelectedSource: effectiveId=${sourceManager.getEffectiveSourceId()}")
+        // Remove yellow marker before destroying manager so it doesn't linger; clear selection state
+        selectionSymbol?.let { sym -> selectionSymbolManager?.delete(sym) }
+        selectionSymbol = null
+        selectionSymbolManager?.onDestroy()
+        selectionSymbolManager = null
+        symbolManager?.onDestroy()
+        symbolManager = null
+        symbols.clear()
+        symbolToFeature.clear()
+        lastSelectedSymbol = null
+        selectedFeature = null
+        clearSelectionUi()
+        try {
+            val effectiveId = sourceManager.getEffectiveSourceId()
+            val mapMaxZoom = if (sourceManager.isVectorSource(effectiveId)) MAX_ZOOM_LEVEL_VECTOR.toDouble() else MAX_ZOOM_LEVEL.toDouble()
+            map.setMaxZoomPreference(mapMaxZoom)
+            if (sourceManager.isVectorSource(effectiveId)) {
+                val styleUrl = sourceManager.getResolvedStyleUrl(effectiveId)
+                if (!styleUrl.isNullOrBlank()) {
+                    loadVectorStyle(map, styleUrl)
+                } else {
+                    map.setStyle(Style.Builder()) { if (!isDestroyed) applyStyleLoaded(map) }
+                }
+            } else {
+                val rasterUrl = sourceManager.getRasterUrl(effectiveId)
+                if (!rasterUrl.isNullOrBlank()) {
+                    map.setStyle(Style.Builder()) { style ->
+                        if (isDestroyed) return@setStyle
+                        try {
+                            // tileSize 256, maxZoom capped at 15; tile layer below annotations.
+                            val tileSet = TileSet("2.1.0", rasterUrl).apply {
+                                maxZoom = MAX_ZOOM_LEVEL.toFloat()
+                            }
+                            style.addSource(RasterSource(RASTER_SOURCE_ID, tileSet, 256))
+                            val rasterLayer = RasterLayer(RASTER_LAYER_ID, RASTER_SOURCE_ID)
+                            try {
+                                style.addLayerBelow(rasterLayer, ANNOTATIONS_LAYER_ID)
+                            } catch (_: Exception) {
+                                style.addLayer(rasterLayer)
+                            }
+                        } catch (_: Exception) { /* ignore */ }
+                        if (!isDestroyed) applyStyleLoaded(map)
+                    }
+                } else {
+                    map.setStyle(Style.Builder()) { if (!isDestroyed) applyStyleLoaded(map) }
+                }
+            }
+        } catch (_: Exception) {
+            map.setStyle(Style.Builder()) { if (!isDestroyed) applyStyleLoaded(map) }
+        }
     }
 
-    /** Refresh the auth header for tile requests (e.g. after returning to map or token expiry). Off main thread so refresh can run. */
-    private fun updateMapAuthHeader() {
-        executor.execute {
-            val accessToken = GeovaultAuthManager.getValidAccessToken(this@MapActivity)
-            runOnUiThread {
-                if (!isDestroyed) {
-                    if (!accessToken.isNullOrBlank()) {
-                        Configuration.getInstance().additionalHttpRequestProperties["Authorization"] = "Bearer $accessToken"
-                    } else {
-                        Configuration.getInstance().additionalHttpRequestProperties.remove("Authorization")
-                    }
+    /**
+     * Load vector style from URL. Uses MapStyleCache so repeat layer switches load instantly.
+     * On failure, falls back to OSM raster.
+     */
+    private fun loadVectorStyle(map: MapLibreMap, styleUrl: String) {
+        Log.d(TAG, "loadVectorStyle: $styleUrl")
+        val serverUrl = GeovaultAuthManager.getServerUrl(this).trimEnd('/')
+        val isOurServer = serverUrl.isNotEmpty() && (styleUrl == serverUrl || styleUrl.startsWith("$serverUrl/"))
+        val serverBase = if (isOurServer) java.net.URI.create(styleUrl).let { "${it.scheme}://${it.host}" } else null
+
+        MapStyleCache.getStyleJson(this, styleUrl, isOurServer, serverBase) { json ->
+            if (isDestroyed) return@getStyleJson
+            if (!json.isNullOrBlank()) {
+                map.setStyle(Style.Builder().fromJson(json)) {
+                    Log.d(TAG, "loadVectorStyle: style loaded (fromJson)")
+                    if (!isDestroyed) applyStyleLoaded(map)
                 }
+            } else {
+                Toast.makeText(this@MapActivity, getString(R.string.map_style_unavailable_fallback_osm), Toast.LENGTH_SHORT).show()
+                loadOsmFallback(map)
             }
         }
     }
 
-    private fun initMapContent() {
-
-        // Handle window insets
-        // Handle window insets
-        val rootView = findViewById<View>(R.id.rootLayout)
-        val headerView = findViewById<View>(R.id.headerLayout)
-        val bottomInfoLayout = findViewById<View>(R.id.bottomInfoLayout)
-        
-        ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            headerView.updatePadding(top = insets.top + 20)
-            // Apply bottom padding to the info layout so content sits above nav bar
-            bottomInfoLayout.updatePadding(bottom = insets.bottom + 16) // +16 for extra breathing room
-            WindowInsetsCompat.CONSUMED
+    /** Load OSM raster as fallback when vector (MapTiler) street style fails. */
+    private fun loadOsmFallback(map: MapLibreMap) {
+        val rasterUrl = sourceManager.getStreetFallbackRasterUrl()
+        if (rasterUrl.isNullOrBlank()) {
+            Log.d(TAG, "loadOsmFallback: no raster URL, empty style")
+            map.setStyle(Style.Builder()) { if (!isDestroyed) applyStyleLoaded(map) }
+            return
         }
+        Log.d(TAG, "loadOsmFallback: start, rasterUrl=$rasterUrl")
+        map.setMaxZoomPreference(MAX_ZOOM_LEVEL.toDouble())
+        map.setStyle(Style.Builder()) { style ->
+            if (isDestroyed) return@setStyle
+            try {
+                style.addSource(RasterSource(RASTER_SOURCE_ID, TileSet("2.1.0", rasterUrl).apply { maxZoom = MAX_ZOOM_LEVEL.toFloat() }, 256))
+                val rasterLayer = RasterLayer(RASTER_LAYER_ID, RASTER_SOURCE_ID)
+                Log.d(TAG, "loadOsmFallback: added raster source, calling applyStyleLoaded")
+                if (!isDestroyed) applyStyleLoaded(map)
+                val mgr = symbolManager
+                Log.d(TAG, "loadOsmFallback: after applyStyleLoaded markersLayerId=${mgr?.layerId} selectionLayerId=${selectionSymbolManager?.layerId}")
+                logStyleLayerOrder(style, "loadOsmFallback after symbols")
+                mapView.post {
+                    if (isDestroyed) return@post
+                    val s = map.style ?: run {
+                        Log.e(TAG, "loadOsmFallback post: style is null")
+                        return@post
+                    }
+                    try {
+                        if (mgr != null) {
+                            s.addLayerBelow(rasterLayer, mgr.layerId)
+                            Log.d(TAG, "loadOsmFallback post: added raster below layer ${mgr.layerId}")
+                        } else {
+                            s.addLayer(rasterLayer)
+                            Log.d(TAG, "loadOsmFallback post: symbolManager null, added raster with addLayer")
+                        }
+                        logStyleLayerOrder(s, "loadOsmFallback after raster")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "loadOsmFallback post: addLayerBelow failed", e)
+                        try {
+                            s.addLayer(rasterLayer)
+                            Log.d(TAG, "loadOsmFallback post: fallback addLayer(raster) ok")
+                        } catch (e2: Exception) {
+                            Log.e(TAG, "loadOsmFallback post: addLayer(raster) also failed", e2)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "loadOsmFallback: exception", e)
+            }
+        }
+    }
 
+    private fun logStyleLayerOrder(style: Style, label: String) {
+        try {
+            val ids = style.layers.map { it.id }
+            Log.d(TAG, "layerOrder [$label]: ${ids.joinToString(" -> ")}")
+        } catch (e: Exception) {
+            Log.e(TAG, "layerOrder [$label]: failed to get layers", e)
+        }
+    }
+
+    /** Move selection layer to top of draw order so yellow marker is not covered by other symbol layers. */
+    private fun moveSelectionLayerToTop() {
+        val style = maplibreMap?.style ?: return
+        val selManager = selectionSymbolManager ?: return
+        val layerId = selManager.layerId
+        try {
+            val layer = style.getLayer(layerId) ?: return
+            if (style.removeLayer(layer)) {
+                style.addLayer(layer)
+                Log.d(TAG, "moveSelectionLayerToTop: moved $layerId to top")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "moveSelectionLayerToTop: failed", e)
+        }
+    }
+
+    private fun applyStyleLoaded(map: MapLibreMap) {
+        Log.d(TAG, "applyStyleLoaded: adding markers")
+        addMarkersIfReady(map)
+    }
+
+    private fun setupMapUi() {
         findViewById<View>(R.id.settingsButton).setOnClickListener {
             startActivity(android.content.Intent(this, SettingsActivity::class.java))
             safeNoAnimation()
         }
-
-        map = findViewById(R.id.map)
-        applySelectedSource() // Set initial source immediately to prevent default OSM flash
-        map.zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER)
-        map.setMultiTouchControls(true)
-        map.setMinZoomLevel(2.0)
-        map.setMaxZoomLevel(20.0)
-
         findViewById<View>(R.id.mapToggle).setOnClickListener {
             val nextSourceId = sourceManager.getNextSourceId()
             sourceManager.setSelectedSourceId(nextSourceId)
             applySelectedSource()
         }
-
-        // val placeDetailsCard = findViewById<androidx.cardview.widget.CardView>(R.id.placeDetailsCard) // Removed
         val placeName = findViewById<android.widget.TextView>(R.id.placeName)
         val placeDescription = findViewById<android.widget.TextView>(R.id.placeDescription)
         val viewInListButton = findViewById<android.widget.Button>(R.id.viewInListButton)
         val editPlaceButton = findViewById<android.widget.Button>(R.id.editPlaceButton)
         val navigateButton = findViewById<android.widget.Button>(R.id.navigateButton)
-        
-        var selectedFeature: Feature? = null
-        val editLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode == RESULT_OK) {
-                // Refresh map content or just close and let main refresh
-                setResult(RESULT_OK)
-                finish()
-            }
-        }
-        
         editPlaceButton.setOnClickListener {
             selectedFeature?.let { feature ->
                 val intent = android.content.Intent(this, PlaceEditActivity::class.java)
@@ -148,199 +342,244 @@ class MapActivity : AppCompatActivity() {
                 safeNoAnimation()
             }
         }
-
         navigateButton.setOnClickListener {
             selectedFeature?.let { feature ->
                 val serverUrl = GeovaultAuthManager.getServerUrl(this)
                 NavigationHelper.navigateToPlace(this, feature, serverUrl)
             }
         }
-        
         viewInListButton.setOnClickListener {
             selectedFeature?.properties?.database_id?.let { id ->
-                val resultIntent = android.content.Intent()
-                resultIntent.putExtra("selected_id", id)
-                setResult(RESULT_OK, resultIntent)
-                finish()
+                startActivity(Intent(this, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                    putExtra(MainActivity.EXTRA_SELECTED_ID_FROM_MAP, id)
+                })
                 safeNoAnimation()
-            }
-        }
-        
-        // Hide card when clicking on map (if possible to detect) or just rely on selection
-        // For a simple implementation, tapping the map doesn't inherently clear selection in osmdroid without an overlay.
-        // We will just let the user tap another marker or use the button.
-
-        // Set initial tile source
-        applySelectedSource()
-
-        // Get features from intent handling deprecation
-        features = if (Build.VERSION.SDK_INT >= 33) {
-            intent.getParcelableArrayListExtra("features", Feature::class.java) ?: ArrayList()
-        } else {
-            @Suppress("DEPRECATION")
-            intent.getParcelableArrayListExtra("features") ?: ArrayList()
-        }
-
-        // Add markers
-        if (features.isNotEmpty()) {
-            var minLat = 90.0
-            var maxLat = -90.0
-            var minLon = 180.0
-            var maxLon = -180.0
-            var hasValidPoints = false
-
-            // Use BitmapDrawable for cleaner rendering of vector assets in OSMDroid
-            // Create shared instances outside the loop for performance
-            val defaultIcon = getBitmapDrawable(R.drawable.ic_marker_default)
-            val selectedIcon = getBitmapDrawable(R.drawable.ic_marker_selected)
-            val markerByDatabaseId = mutableMapOf<Int, Pair<Marker, Feature>>()
-
-            fun selectMarkerAndUpdateUi(m: Marker, f: Feature) {
-                lastSelectedMarker?.icon = defaultIcon
-                m.icon = selectedIcon
-                lastSelectedMarker = m
-                map.invalidate()
-                placeName.text = f.properties.name ?: "Unknown Place"
-                placeDescription.text = f.properties.description ?: ""
-                selectedFeature = f
-                val dbId = f.properties.database_id
-                viewInListButton.isEnabled = dbId != null
-                viewInListButton.alpha = if (dbId != null) 1.0f else 0.5f
-                editPlaceButton.isEnabled = dbId != null
-                editPlaceButton.alpha = if (dbId != null) 1.0f else 0.5f
-                navigateButton.isEnabled = dbId != null
-                navigateButton.alpha = if (dbId != null) 1.0f else 0.5f
-            }
-
-            for (feature in features) {
-                val coords = feature.geometry.coordinates
-                if (coords.size >= 2) {
-                    val lon = coords[0] // GeoJSON is [lon, lat]
-                    val lat = coords[1]
-                    
-                    val point = GeoPoint(lat, lon)
-                    val marker = Marker(map)
-                    marker.position = point
-                    marker.icon = defaultIcon
-                    marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                    marker.infoWindow = null // Disable bubble logic
-                    feature.properties.database_id?.let { id -> markerByDatabaseId[id] = Pair(marker, feature) }
-                    
-                    // Store data directly
-                    val name = feature.properties.name ?: "Unknown Place"
-                    val desc = feature.properties.description ?: ""
-                    val dbId = feature.properties.database_id
-                    
-                    marker.setOnMarkerClickListener { m, _ ->
-                        map.post { selectMarkerAndUpdateUi(m as Marker, feature) }
-                        true
-                    }
-                    
-                    map.overlays.add(marker)
-
-                    if (lat < minLat) minLat = lat
-                    if (lat > maxLat) maxLat = lat
-                    if (lon < minLon) minLon = lon
-                    if (lon > maxLon) maxLon = lon
-                    hasValidPoints = true
-                }
-            }
-
-            if (hasValidPoints) {
-                 // Zoom to bounds
-                 // Fix invalid bounds if all points are the same
-                 if (minLat == maxLat) {
-                     minLat -= 0.01
-                     maxLat += 0.01
-                 }
-                 if (minLon == maxLon) {
-                     minLon -= 0.01
-                     maxLon += 0.01
-                 }
-
-                 // Expand bounds by a fraction so icons aren't flush against the edge
-                 val latPadding = (maxLat - minLat) * 0.15
-                 val lonPadding = (maxLon - minLon) * 0.15
-                 val paddedMinLat = minLat - latPadding
-                 val paddedMaxLat = maxLat + latPadding
-                 val paddedMinLon = minLon - lonPadding
-                 val paddedMaxLon = maxLon + lonPadding
-
-                 val boundingBox = BoundingBox(paddedMaxLat, paddedMaxLon, paddedMinLat, paddedMinLon)
-                 val zoomToId = intent.getIntExtra("zoom_to_id", -1)
-
-                 // setCenter() needs map width/height; run after layout (post() can run before onLayout)
-                 fun applyZoomAndCenter() {
-                     if (intent.hasExtra("zoom_to_lat") && intent.hasExtra("zoom_to_lon")) {
-                         val centerLat: Double
-                         val centerLon: Double
-                         if (zoomToId >= 0) {
-                             val pair = markerByDatabaseId[zoomToId]
-                             if (pair != null) {
-                                 val (m, f) = pair
-                                 val c = f.geometry.coordinates
-                                 if (c.size >= 2) {
-                                     centerLon = c[0] // GeoJSON: [lon, lat]
-                                     centerLat = c[1]
-                                     map.controller.setZoom(16.0)
-                                     map.controller.setCenter(GeoPoint(centerLat, centerLon))
-                                     selectMarkerAndUpdateUi(m, f)
-                                 } else {
-                                     centerLat = intent.getDoubleExtra("zoom_to_lat", 0.0)
-                                     centerLon = intent.getDoubleExtra("zoom_to_lon", 0.0)
-                                     map.controller.setZoom(16.0)
-                                     map.controller.setCenter(GeoPoint(centerLat, centerLon))
-                                 }
-                             } else {
-                                 centerLat = intent.getDoubleExtra("zoom_to_lat", 0.0)
-                                 centerLon = intent.getDoubleExtra("zoom_to_lon", 0.0)
-                                 map.controller.setZoom(16.0)
-                                 map.controller.setCenter(GeoPoint(centerLat, centerLon))
-                             }
-                         } else {
-                             centerLat = intent.getDoubleExtra("zoom_to_lat", 0.0)
-                             centerLon = intent.getDoubleExtra("zoom_to_lon", 0.0)
-                             map.controller.setZoom(16.0)
-                             map.controller.setCenter(GeoPoint(centerLat, centerLon))
-                         }
-                     } else {
-                         map.zoomToBoundingBox(boundingBox, true)
-                     }
-                 }
-
-                 map.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
-                     override fun onGlobalLayout() {
-                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
-                             map.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                         } else {
-                             @Suppress("DEPRECATION")
-                             map.viewTreeObserver.removeGlobalOnLayoutListener(this)
-                         }
-                         applyZoomAndCenter()
-                     }
-                 })
-            } else {
-                map.controller.setZoom(2.0)
-                map.controller.setCenter(GeoPoint(0.0, 0.0))
             }
         }
     }
 
-    override fun onDestroy() {
-        executor.shutdown()
-        super.onDestroy()
+    private fun selectMarkerAndUpdateUi(symbol: Symbol, f: Feature) {
+        Log.d(TAG, "selectMarkerAndUpdateUi: latLng=${symbol.latLng}")
+        lastSelectedSymbol = symbol
+        selectedFeature = f
+        val selManager = selectionSymbolManager
+        if (selManager == null) {
+            Log.e(TAG, "selectMarkerAndUpdateUi: selectionSymbolManager is null, cannot show yellow marker")
+            return
+        }
+        selectionSymbol?.let { selManager.delete(it) }
+        selectionSymbol = selManager.create(
+            SymbolOptions()
+                .withLatLng(symbol.latLng)
+                .withIconImage(ICON_MARKER_SELECTED)
+        )
+        Log.d(TAG, "selectMarkerAndUpdateUi: created selection symbol on layer ${selManager.layerId}")
+        moveSelectionLayerToTop()
+        maplibreMap?.style?.let { logStyleLayerOrder(it, "after selectMarker") }
+
+        findViewById<android.widget.TextView>(R.id.placeName).text = f.properties.name ?: "Unknown Place"
+        findViewById<android.widget.TextView>(R.id.placeDescription).text = f.properties.description ?: ""
+        val dbId = f.properties.database_id
+        val viewInListButton = findViewById<android.widget.Button>(R.id.viewInListButton)
+        val editPlaceButton = findViewById<android.widget.Button>(R.id.editPlaceButton)
+        val navigateButton = findViewById<android.widget.Button>(R.id.navigateButton)
+        viewInListButton.isEnabled = dbId != null
+        viewInListButton.alpha = if (dbId != null) 1.0f else 0.5f
+        editPlaceButton.isEnabled = dbId != null
+        editPlaceButton.alpha = if (dbId != null) 1.0f else 0.5f
+        navigateButton.isEnabled = dbId != null
+        navigateButton.alpha = if (dbId != null) 1.0f else 0.5f
+    }
+
+    /** Clear selection panel when switching map layers or leaving map; show default prompt. */
+    private fun clearSelectionUi() {
+        findViewById<android.widget.TextView>(R.id.placeName).text = getString(R.string.map_select_place)
+        findViewById<android.widget.TextView>(R.id.placeDescription).text = getString(R.string.map_tap_marker_hint)
+        val viewInListButton = findViewById<android.widget.Button>(R.id.viewInListButton)
+        val editPlaceButton = findViewById<android.widget.Button>(R.id.editPlaceButton)
+        val navigateButton = findViewById<android.widget.Button>(R.id.navigateButton)
+        viewInListButton.isEnabled = false
+        viewInListButton.alpha = 0.5f
+        editPlaceButton.isEnabled = false
+        editPlaceButton.alpha = 0.5f
+        navigateButton.isEnabled = false
+        navigateButton.alpha = 0.5f
+    }
+
+    private fun addMarkersIfReady(map: MapLibreMap?) {
+        if (isDestroyed) return
+        val mapRef = map ?: maplibreMap ?: return
+        if (features.isEmpty()) {
+            Log.d(TAG, "addMarkersIfReady: no features, skip")
+            return
+        }
+        val style = mapRef.style ?: return
+        Log.d(TAG, "addMarkersIfReady: style loaded, features=${features.size}")
+        symbols.clear()
+        symbolToFeature.clear()
+        lastSelectedSymbol = null
+        selectionSymbol = null
+        symbolManager = null
+        selectionSymbolManager = null
+        val defaultBitmap = MapMarkerUtils.getMarkerBitmap(this, R.drawable.ic_marker_default)
+        val selectedBitmap = MapMarkerUtils.getMarkerBitmap(this, R.drawable.ic_marker_selected)
+        if (defaultBitmap == null || selectedBitmap == null) {
+            Log.e(TAG, "addMarkersIfReady: failed to load marker bitmaps")
+            return
+        }
+        style.addImage(ICON_MARKER_DEFAULT, defaultBitmap, false)
+        style.addImage(ICON_MARKER_SELECTED, selectedBitmap, false)
+        val manager = SymbolManager(mapView, mapRef, style, null, null)
+        symbolManager = manager
+        manager.setIconAllowOverlap(true)
+        manager.setIconIgnorePlacement(true)
+        val markersLayerId = manager.layerId
+        Log.d(TAG, "addMarkersIfReady: markers layerId=$markersLayerId")
+        val selManager = SymbolManager(mapView, mapRef, style, null, markersLayerId)
+        selectionSymbolManager = selManager
+        Log.d(TAG, "addMarkersIfReady: selection layerId=${selManager.layerId} (above $markersLayerId)")
+        selManager.setIconAllowOverlap(true)
+        selManager.setIconIgnorePlacement(true)
+        manager.addClickListener { symbol ->
+            Log.d(TAG, "addMarkersIfReady: marker clicked")
+            symbolToFeature[symbol]?.let { selectMarkerAndUpdateUi(symbol, it) }
+            false
+        }
+        var minLat = 90.0
+        var maxLat = -90.0
+        var minLon = 180.0
+        var maxLon = -180.0
+        var hasValidPoints = false
+        for (feature in features) {
+            val coords = feature.geometry.coordinates
+            if (coords.size >= 2) {
+                val lon = coords[0]
+                val lat = coords[1]
+                val opts = SymbolOptions()
+                    .withLatLng(LatLng(lat, lon))
+                    .withIconImage(ICON_MARKER_DEFAULT)
+                val symbol = manager.create(opts)
+                symbols.add(symbol)
+                symbolToFeature[symbol] = feature
+                if (lat < minLat) minLat = lat
+                if (lat > maxLat) maxLat = lat
+                if (lon < minLon) minLon = lon
+                if (lon > maxLon) maxLon = lon
+                hasValidPoints = true
+            }
+        }
+        Log.d(TAG, "addMarkersIfReady: created ${symbols.size} blue markers")
+        if (hasValidPoints && !initialCameraApplied) {
+            initialCameraApplied = true
+            var paddedMinLat = minLat
+            var paddedMaxLat = maxLat
+            var paddedMinLon = minLon
+            var paddedMaxLon = maxLon
+            if (minLat == maxLat) {
+                paddedMinLat = minLat - 0.01
+                paddedMaxLat = maxLat + 0.01
+            }
+            if (minLon == maxLon) {
+                paddedMinLon = minLon - 0.01
+                paddedMaxLon = maxLon + 0.01
+            }
+            val latPadding = (paddedMaxLat - paddedMinLat) * 0.15
+            val lonPadding = (paddedMaxLon - paddedMinLon) * 0.15
+            paddedMinLat -= latPadding
+            paddedMaxLat += latPadding
+            paddedMinLon -= lonPadding
+            paddedMaxLon += lonPadding
+            val bounds = LatLngBounds.Builder()
+                .include(LatLng(paddedMinLat, paddedMinLon))
+                .include(LatLng(paddedMaxLat, paddedMaxLon))
+                .build()
+            val zoomToId = intent.getIntExtra("zoom_to_id", -1)
+            fun applyZoomAndCenter() {
+                if (intent.hasExtra("zoom_to_lat") && intent.hasExtra("zoom_to_lon")) {
+                    if (zoomToId >= 0) {
+                        val pair = symbolToFeature.entries.find { it.value.properties.database_id == zoomToId }
+                        if (pair != null) {
+                            val (m, f) = pair
+                            val c = f.geometry.coordinates
+                            if (c.size >= 2) {
+                                mapRef.setCameraPosition(CameraPosition.Builder().target(LatLng(c[1], c[0])).zoom(DEFAULT_POINT_ZOOM).build())
+                                selectMarkerAndUpdateUi(m, f)
+                                return
+                            }
+                        }
+                    }
+                    val centerLat = intent.getDoubleExtra("zoom_to_lat", 0.0)
+                    val centerLon = intent.getDoubleExtra("zoom_to_lon", 0.0)
+                    mapRef.setCameraPosition(CameraPosition.Builder().target(LatLng(centerLat, centerLon)).zoom(DEFAULT_POINT_ZOOM).build())
+                } else {
+                    val padding = (50 * resources.displayMetrics.density).toInt()
+                    val cameraPosition = mapRef.getCameraForLatLngBounds(bounds, intArrayOf(padding, padding, padding, padding))
+                    cameraPosition?.let { mapRef.setCameraPosition(it) }
+                }
+            }
+            mapView.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
+                override fun onGlobalLayout() {
+                    mapView.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                    applyZoomAndCenter()
+                }
+            })
+        } else if (!hasValidPoints && !initialCameraApplied) {
+            initialCameraApplied = true
+            mapRef.setCameraPosition(CameraPosition.Builder().target(LatLng(0.0, 0.0)).zoom(2.0).build())
+        }
+    }
+
+    private fun updateMapAuthHeader() {
+        executor.execute {
+            GeovaultAuthManager.getValidAccessToken(this@MapActivity)
+            runOnUiThread { if (!isDestroyed) { /* token refreshed for next requests */ } }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        mapView.onStart()
     }
 
     override fun onResume() {
         super.onResume()
-        map.onResume()
-        // Refresh auth header so tile requests use a valid token after access token expiry (e.g. after a few hours)
+        mapView.onResume()
         updateMapAuthHeader()
     }
 
     override fun onPause() {
         super.onPause()
-        map.onPause()
+        mapView.onPause()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        mapView.onStop()
+        // Clear selected point when leaving the map so it's not selected when returning.
+        selectionSymbol?.let { selectionSymbolManager?.delete(it) }
+        selectionSymbol = null
+        selectedFeature = null
+        lastSelectedSymbol = null
+        clearSelectionUi()
+    }
+
+    override fun onDestroy() {
+        mapView.removeOnDidFailLoadingMapListener(this)
+        selectionSymbolManager?.onDestroy()
+        selectionSymbolManager = null
+        selectionSymbol = null
+        symbolManager?.onDestroy()
+        symbolManager = null
+        executor.shutdown()
+        mapView.onDestroy()
+        super.onDestroy()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(KEY_INITIAL_CAMERA_APPLIED, initialCameraApplied)
+        mapView.onSaveInstanceState(outState)
     }
 
     override fun finish() {
@@ -349,25 +588,23 @@ class MapActivity : AppCompatActivity() {
     }
 
     private fun safeNoAnimation() {
-        if (android.os.Build.VERSION.SDK_INT >= 34) {
-            overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
-            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
-        } else {
-            @Suppress("DEPRECATION")
-            overridePendingTransition(0, 0)
-        }
+        overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
+        overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
     }
 
-    private fun getBitmapDrawable(resId: Int): android.graphics.drawable.BitmapDrawable? {
-        val drawable = androidx.core.content.ContextCompat.getDrawable(this, resId) ?: return null
-        val bitmap = android.graphics.Bitmap.createBitmap(
-            drawable.intrinsicWidth,
-            drawable.intrinsicHeight,
-            android.graphics.Bitmap.Config.ARGB_8888
-        )
-        val canvas = android.graphics.Canvas(bitmap)
-        drawable.setBounds(0, 0, canvas.width, canvas.height)
-        drawable.draw(canvas)
-        return android.graphics.drawable.BitmapDrawable(resources, bitmap)
+    companion object {
+        private const val KEY_INITIAL_CAMERA_APPLIED = "initial_camera_applied"
+        private const val TAG = "GeoVaultMap"
+        private const val RASTER_SOURCE_ID = "geovault-raster"
+        private const val RASTER_LAYER_ID = "geovault-raster-layer"
+        /** Layer ID below which we add raster so markers (annotations) render on top (cf. frontend moveLayer tile to bottom). */
+        private const val ANNOTATIONS_LAYER_ID = "org.maplibre.annotations.points"
+        /** Max zoom for raster (OSM, satellite) tiles. */
+        private const val MAX_ZOOM_LEVEL = 15
+        /** Max zoom for MapTiler vector maps. */
+        private const val MAX_ZOOM_LEVEL_VECTOR = 18
+        private const val DEFAULT_POINT_ZOOM = 12.0
+        private const val ICON_MARKER_DEFAULT = "geovault-marker-default"
+        private const val ICON_MARKER_SELECTED = "geovault-marker-selected"
     }
 }

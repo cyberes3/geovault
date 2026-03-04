@@ -14,4 +14,7 @@
     <color name="list_background">#000000</color>
     <color name="search_bar_container_background">#000000</color>
     <color name="search_divider">#163D8A</color>
+
+    <!-- Map underlay: pure black in dark mode -->
+    <color name="map_underlay">#000000</color>
 </resources>
