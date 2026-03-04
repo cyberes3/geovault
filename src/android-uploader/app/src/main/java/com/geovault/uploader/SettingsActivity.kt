@@ -3,6 +3,7 @@ package com.geovault.uploader
 import android.content.Context
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
+import com.geovault.common.ServerUrlContract
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
@@ -69,7 +70,17 @@ class SettingsActivity : AppCompatActivity() {
             WindowInsetsCompat.CONSUMED
         }
 
-        serverUrlEdit.setText(GeovaultAuthManager.getServerUrl(this))
+        val serverUrl = GeovaultAuthManager.getServerUrl(this)
+        if (serverUrl.isNotEmpty()) {
+            serverUrlEdit.setText(serverUrl)
+        } else {
+            val otherUrls = ServerUrlContract.getServerUrlsFromOtherApps(this)
+            if (otherUrls.size == 1) {
+                serverUrlEdit.setText(otherUrls.single())
+            } else {
+                serverUrlEdit.setText("")
+            }
+        }
         addSuffixCheckbox.isChecked = prefs.getBoolean(PREF_ADD_SUFFIX, true)
 
         updateConnectDisconnectVisibility()

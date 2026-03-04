@@ -3,6 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="com.geovault.common.permission.READ_SERVER_URL" />
 
     <application
         android:name=".UploaderApplication"
@@ -28,6 +29,11 @@
             android:exported="false"
             android:theme="@style/Theme.GeoVaultUploader"
             android:parentActivityName=".MainActivity" />
+        <provider
+            android:name="com.geovault.common.ServerUrlProvider"
+            android:authorities="com.geovault.uploader.serverurl"
+            android:exported="true"
+            android:permission="com.geovault.common.permission.READ_SERVER_URL" />
         <!-- Handle both single and multiple file shares -->
         <activity
             android:name=".OAuthCallbackActivity"

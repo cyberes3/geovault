@@ -3,6 +3,7 @@ package com.geovault.places
 import android.content.Intent
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
+import com.geovault.common.ServerUrlContract
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -58,7 +59,16 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         val serverUrl = GeovaultAuthManager.getServerUrl(this)
-        serverUrlEdit.setText(if (serverUrl.isEmpty()) "" else serverUrl)
+        if (serverUrl.isNotEmpty()) {
+            serverUrlEdit.setText(serverUrl)
+        } else {
+            val otherUrls = ServerUrlContract.getServerUrlsFromOtherApps(this)
+            if (otherUrls.size == 1) {
+                serverUrlEdit.setText(otherUrls.single())
+            } else {
+                serverUrlEdit.setText("")
+            }
+        }
 
         updateConnectDisconnectVisibility()
 
