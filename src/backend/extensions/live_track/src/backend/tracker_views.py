@@ -17,7 +17,7 @@ from geo_lib.website.auth import api_or_login_required_401
 
 from .helpers import track_to_response
 from .models import LiveTrack
-from .validation import get_ingress_body_template
+from .validation import PARAM_PRETTY_NAMES, get_ingress_body_template
 
 
 def _get_json_body(request):
@@ -89,8 +89,11 @@ def tracker_get_patch_delete(request, tracker_id):
 @require_http_methods(["GET"])
 @csrf_exempt
 def ingress_body_template(request):
-    """Return the form body template with all supported params (for GPSLogger config)."""
-    return JsonResponse({"body_template": get_ingress_body_template()})
+    """Return the form body template and param pretty names (for GPSLogger config and params table)."""
+    return JsonResponse({
+        "body_template": get_ingress_body_template(),
+        "param_labels": PARAM_PRETTY_NAMES,
+    })
 
 
 @api_or_login_required_401()

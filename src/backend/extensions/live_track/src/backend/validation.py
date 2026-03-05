@@ -27,7 +27,6 @@ class LiveTrackIngressBody(BaseModel):
     spd_kph: Optional[float] = None
     timestamp: Optional[int] = None
     starttimestamp: Optional[int] = None
-    date: Optional[str] = None
     batt: Optional[float] = None
     ischarging: Optional[Union[bool, str]] = None
     ser: Optional[str] = None
@@ -36,6 +35,28 @@ class LiveTrackIngressBody(BaseModel):
     pdop: Optional[str] = None
     dist: Optional[float] = None
 
+
+# Human-readable labels for the params table (e.g. in Latest Params modal)
+PARAM_PRETTY_NAMES = {
+    "lat": "Latitude",
+    "lon": "Longitude",
+    "timestamp": "Timestamp",
+    "sat": "Satellites",
+    "desc": "Description",
+    "alt": "Altitude",
+    "acc": "Accuracy",
+    "dir": "Direction",
+    "prov": "Provider",
+    "spd_kph": "Speed",
+    "starttimestamp": "Start Timestamp",
+    "batt": "Battery",
+    "ischarging": "Charging",
+    "ser": "Serial",
+    "hdop": "HDOP",
+    "vdop": "VDOP",
+    "pdop": "PDOP",
+    "dist": "Distance",
+}
 
 # GPSLogger-style placeholders for each field (uppercase key or common name)
 INGRESS_BODY_PLACEHOLDERS = {
@@ -50,7 +71,6 @@ INGRESS_BODY_PLACEHOLDERS = {
     "prov": "%PROV",
     "spd_kph": "%SPD",
     "starttimestamp": "%STARTTIMESTAMP",
-    "date": "%DATE",
     "batt": "%BATT",
     "ischarging": "%ISCHARGING",
     "ser": "%SER",

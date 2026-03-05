@@ -140,6 +140,7 @@
     <LatestParamsModal
       v-if="paramsModalTrack"
       :track="paramsModalTrack"
+      :param-labels="paramLabels"
       @close="paramsModalTrack = null"
     />
   </div>
@@ -253,6 +254,7 @@ export default {
     const showModal = ref(false);
     const showLayerModal = ref(false);
     const paramsModalTrack = ref(null);
+    const paramLabels = ref({});
     const modalMode = ref('create');
     const modalTrack = ref(null);
     const mapContainer = ref(null);
@@ -907,6 +909,14 @@ export default {
       if (userInfo?.email) userLogin.value = userInfo.email;
       applyDefaultSortFromStore();
       await fetchTileSources();
+      try {
+        const res = await api.get('/ingress-body-template/');
+        if (res?.data?.param_labels && typeof res.data.param_labels === 'object') {
+          paramLabels.value = res.data.param_labels;
+        }
+      } catch (_) {
+        // keep empty; modal will show raw keys
+      }
       fetchTrackers().finally(() => {
         requestAnimationFrame(() => initMap());
       });
@@ -978,6 +988,7 @@ export default {
       showModal,
       showLayerModal,
       paramsModalTrack,
+      paramLabels,
       modalMode,
       modalTrack,
       mapContainer,
