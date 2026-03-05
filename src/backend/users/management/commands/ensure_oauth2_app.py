@@ -1,9 +1,9 @@
 """
-Create or update the OAuth2 Applications used by the GeoVault Android apps (places & uploader).
+Create or update the OAuth2 Applications used by the GeoVault Android apps (places, uploader, tracker).
 
 Run after migrations so the Android apps can use the authorization code + PKCE flow.
 Idempotent: creates/updates one app per Android app so the Authorized OAuth Applications list
-shows "GeoVault Android Places" vs "GeoVault Android Uploader".
+shows "GeoVault Android Places", "GeoVault Android Uploader", "GeoVault Android Tracker".
 """
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
@@ -11,7 +11,7 @@ from oauth2_provider.models import Application
 
 User = get_user_model()
 
-# Legacy client_id to remove if present (replaced by geovault-android-places / geovault-android-uploader)
+# Legacy client_id to remove if present (replaced by geovault-android-places / geovault-android-uploader / geovault-android-tracker)
 LEGACY_CLIENT_ID = "geovault-android"
 
 ANDROID_APPS = (
@@ -29,6 +29,14 @@ ANDROID_APPS = (
         "redirect_uris": (
             "com.geovault.uploader://oauth/callback "
             "com.geovault.uploader.debug://oauth/callback"
+        ),
+    },
+    {
+        "client_id": "geovault-android-tracker",
+        "name": "GeoVault Android Tracker",
+        "redirect_uris": (
+            "com.geovault.tracker://oauth/callback "
+            "com.geovault.tracker.debug://oauth/callback"
         ),
     },
 )
@@ -64,7 +72,7 @@ def _ensure_app(user, client_id, name, redirect_uris):
 
 
 class Command(BaseCommand):
-    help = "Create or update OAuth2 applications for GeoVault Android (places and uploader)."
+    help = "Create or update OAuth2 applications for GeoVault Android (places, uploader, tracker)."
 
     def handle(self, *args, **options):
         user = User.objects.filter(is_superuser=True).order_by("pk").first()

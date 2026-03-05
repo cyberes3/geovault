@@ -1,0 +1,190 @@
+package com.geovault.common.map
+
+import android.app.Activity
+import android.content.Context
+import android.util.Log
+import android.widget.Toast
+import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.RetrofitClient
+import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapView
+import org.maplibre.android.maps.Style
+import org.maplibre.android.style.layers.RasterLayer
+import org.maplibre.android.style.sources.RasterSource
+import org.maplibre.android.style.sources.TileSet
+
+/**
+ * Handles shared MapLibre setup, style loading, and OSM fallback.
+ * Add this to activities that host a MapView.
+ */
+class MapLibreManager(private val activity: Activity, private val mapView: MapView) {
+
+    val sourceManager = MapSourceManager(activity)
+    
+    /** True when fetchMapSources callback ran (server configured). */
+    var sourcesFetched = false
+        private set
+        
+    private var maplibreMap: MapLibreMap? = null
+    
+    var onStyleLoaded: ((MapLibreMap, Style) -> Unit)? = null
+
+    /**
+     * Helper to add a marker icon to the map style.
+     */
+    fun addMarkerIcon(style: Style, id: String, drawableId: Int) {
+        val bitmap = MapMarkerUtils.getMarkerBitmap(activity, drawableId)
+        if (bitmap != null) {
+            style.addImage(id, bitmap)
+        }
+    }
+
+    companion object {
+        private const val TAG = "MapLibreManager"
+        const val RASTER_SOURCE_ID = "geovault-raster"
+        const val RASTER_LAYER_ID = "geovault-raster-layer"
+        const val ANNOTATIONS_LAYER_ID = "org.maplibre.annotations.points"
+        const val MAX_ZOOM_LEVEL = 15
+        const val MAX_ZOOM_LEVEL_VECTOR = 18
+        const val DEFAULT_POINT_ZOOM = 12.0
+    }
+
+    /** 
+     * Configure base map settings like hiding logo, attribution, and disabling rotation. 
+     */
+    fun setupBaseMapSettings(map: MapLibreMap) {
+        maplibreMap = map
+        map.uiSettings.setLogoEnabled(false)
+        map.uiSettings.setAttributionEnabled(false)
+        map.uiSettings.isRotateGesturesEnabled = false
+        map.setMaxZoomPreference(MAX_ZOOM_LEVEL.toDouble())
+    }
+
+    /**
+     * Fetch the available tile sources from the Geovault Server.
+     * When completed, if the map is ready, it applies the selected source.
+     */
+    fun fetchMapSources(onFetched: () -> Unit = {}) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(activity)
+        if (serverUrl.isEmpty()) return
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(activity, baseUrl).create(MapApi::class.java)
+        sourceManager.fetchSources(api) {
+            activity.runOnUiThread {
+                if (!activity.isDestroyed) {
+                    sourcesFetched = true
+                    onFetched()
+                }
+            }
+        }
+    }
+
+    /**
+     * Applies the current [MapSourceManager] selected style/raster to the MapLibreMap.
+     */
+    fun applySelectedSource(map: MapLibreMap = maplibreMap!!) {
+        if (activity.isDestroyed) return
+        
+        try {
+            val effectiveId = sourceManager.getEffectiveSourceId()
+            val mapMaxZoom = if (sourceManager.isVectorSource(effectiveId)) MAX_ZOOM_LEVEL_VECTOR.toDouble() else MAX_ZOOM_LEVEL.toDouble()
+            map.setMaxZoomPreference(mapMaxZoom)
+            
+            if (sourceManager.isVectorSource(effectiveId)) {
+                val styleUrl = sourceManager.getResolvedStyleUrl(effectiveId)
+                if (!styleUrl.isNullOrBlank()) {
+                    loadVectorStyle(map, styleUrl)
+                } else {
+                    map.setStyle(Style.Builder()) { style -> if (!activity.isDestroyed) onStyleLoaded?.invoke(map, style) }
+                }
+            } else {
+                val rasterUrl = sourceManager.getRasterUrl(effectiveId)
+                if (!rasterUrl.isNullOrBlank()) {
+                    map.setStyle(Style.Builder()) { style ->
+                        if (activity.isDestroyed) return@setStyle
+                        try {
+                            val tileSet = TileSet("2.1.0", rasterUrl).apply {
+                                maxZoom = MAX_ZOOM_LEVEL.toFloat()
+                            }
+                            style.addSource(RasterSource(RASTER_SOURCE_ID, tileSet, 256))
+                            val rasterLayer = RasterLayer(RASTER_LAYER_ID, RASTER_SOURCE_ID)
+                            try {
+                                style.addLayerBelow(rasterLayer, ANNOTATIONS_LAYER_ID)
+                            } catch (_: Exception) {
+                                style.addLayer(rasterLayer)
+                            }
+                        } catch (_: Exception) { /* ignore */ }
+                        if (!activity.isDestroyed) onStyleLoaded?.invoke(map, style)
+                    }
+                } else {
+                    map.setStyle(Style.Builder()) { style -> if (!activity.isDestroyed) onStyleLoaded?.invoke(map, style) }
+                }
+            }
+        } catch (_: Exception) {
+            map.setStyle(Style.Builder()) { style -> if (!activity.isDestroyed) onStyleLoaded?.invoke(map, style) }
+        }
+    }
+
+    private fun loadVectorStyle(map: MapLibreMap, styleUrl: String) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(activity).trimEnd('/')
+        val isOurServer = serverUrl.isNotEmpty() && (styleUrl == serverUrl || styleUrl.startsWith("$serverUrl/"))
+        val serverBase = if (isOurServer) java.net.URI.create(styleUrl).let { "${it.scheme}://${it.host}" } else null
+
+        MapStyleCache.getStyleJson(activity, styleUrl, isOurServer, serverBase) { json ->
+            if (activity.isDestroyed) return@getStyleJson
+            if (!json.isNullOrBlank()) {
+                map.setStyle(Style.Builder().fromJson(json)) { style ->
+                    if (!activity.isDestroyed) onStyleLoaded?.invoke(map, style)
+                }
+            } else {
+                Toast.makeText(activity, "Map style unavailable, falling back to basic map.", Toast.LENGTH_SHORT).show()
+                loadOsmFallback(map)
+            }
+        }
+    }
+
+    /** 
+     * Load OSM raster as fallback when vector (MapTiler) street style fails. 
+     * Handles adding the raster layer below point annotations if present.
+     */
+    fun loadOsmFallback(map: MapLibreMap) {
+        val rasterUrl = sourceManager.getStreetFallbackRasterUrl()
+        if (rasterUrl.isNullOrBlank()) {
+            map.setStyle(Style.Builder()) { style -> if (!activity.isDestroyed) onStyleLoaded?.invoke(map, style) }
+            return
+        }
+        
+        map.setMaxZoomPreference(MAX_ZOOM_LEVEL.toDouble())
+        map.setStyle(Style.Builder()) { style ->
+            if (activity.isDestroyed) return@setStyle
+            try {
+                style.addSource(RasterSource(RASTER_SOURCE_ID, TileSet("2.1.0", rasterUrl).apply { maxZoom = MAX_ZOOM_LEVEL.toFloat() }, 256))
+                val rasterLayer = RasterLayer(RASTER_LAYER_ID, RASTER_SOURCE_ID)
+                if (!activity.isDestroyed) onStyleLoaded?.invoke(map, style)
+                
+                mapView.post {
+                    if (activity.isDestroyed) return@post
+                    val s = map.style ?: return@post
+                    try {
+                        // Attempt to place below annotations
+                        s.addLayerBelow(rasterLayer, ANNOTATIONS_LAYER_ID)
+                    } catch (e: Exception) {
+                        try {
+                            // First, try adding below first symbol layer
+                            val firstSymbolLayer = s.layers.firstOrNull { it is org.maplibre.android.style.layers.SymbolLayer }
+                            if (firstSymbolLayer != null) {
+                                s.addLayerBelow(rasterLayer, firstSymbolLayer.id)
+                            } else {
+                                s.addLayer(rasterLayer)
+                            }
+                        } catch (e2: Exception) {
+                            Log.e(TAG, "addLayer failed", e2)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "loadOsmFallback exception", e)
+            }
+        }
+    }
+}

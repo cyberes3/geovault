@@ -37,7 +37,7 @@
         class="flex-1 overflow-y-auto p-2 border-t sm:border-t-0 border-gray-200"
         @click.self="highlightedId = null"
       >
-        <div v-if="sortedTrackers.length === 0" class="text-center py-8 text-gray-500 text-sm">
+        <div v-if="!loading && sortedTrackers.length === 0" class="text-center py-8 text-gray-500 text-sm">
           No trackers yet. Tap + to create one.
         </div>
         <div

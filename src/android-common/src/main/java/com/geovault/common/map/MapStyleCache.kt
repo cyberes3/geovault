@@ -1,4 +1,4 @@
-package com.geovault.places
+package com.geovault.common.map
 
 import android.content.Context
 import android.os.Handler
@@ -96,9 +96,6 @@ object MapStyleCache {
         }
     }
 
-    private const val SOURCE_MAPTILER_STREETS = "maptiler-streets"
-    private const val SOURCE_MAPTILER_HYBRID = "maptiler-hybrid-v4"
-
     /**
      * Preloads both MapTiler style JSONs (streets and hybrid) in the background when a server is
      * configured and provides them. Call from app start so layer switching is instant.
@@ -107,7 +104,7 @@ object MapStyleCache {
         val serverUrl = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
         if (serverUrl.isEmpty()) return
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(GeovaultApi::class.java)
+        val api = RetrofitClient.getClient(context, baseUrl).create(MapApi::class.java)
         api.getTileSources().enqueue(object : Callback<TileSourceResponse> {
             override fun onResponse(call: Call<TileSourceResponse>, response: Response<TileSourceResponse>) {
                 val sources = response.body()?.sources ?: return

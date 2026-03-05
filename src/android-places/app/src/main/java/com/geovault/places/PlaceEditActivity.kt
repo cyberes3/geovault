@@ -2,6 +2,7 @@ package com.geovault.places
 
 import com.geovault.common.CoordinateParser
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.map.*
 import com.geovault.common.RetrofitClient
 import android.Manifest
 import android.content.Context
@@ -82,18 +83,16 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
     private lateinit var searchPlaceResults: ListView
     private lateinit var mapContainer: View
     private lateinit var searchPlaceRotationHelper: RotationHelper
-    private lateinit var sourceManager: MapSourceManager
+    private lateinit var mapManager: MapLibreManager
 
     private var latitude: Double? = null
     private var longitude: Double? = null
     private var storedAddress: String? = null
-    
+
     private var symbolManager: SymbolManager? = null
     private var placeSymbol: Symbol? = null
     /** True when map is ready (onMapReady ran). */
     private var mapReady = false
-    /** True when fetchMapSources callback ran (server configured). */
-    private var sourcesFetched = false
     /** True after we've centered the map on the place once; layer switches should not re-center. */
     private var initialMapCenterApplied = false
     private var editFeature: Feature? = null
@@ -137,7 +136,6 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        sourceManager = MapSourceManager(this)
         setContentView(R.layout.activity_place_edit)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         initViews()
@@ -147,8 +145,12 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
         mapView.foreground = android.graphics.drawable.ColorDrawable(ContextCompat.getColor(this, R.color.map_underlay))
         mapView.addOnDidFailLoadingMapListener(this)
         mapView.onCreate(savedInstanceState)
+        mapManager = MapLibreManager(this, mapView)
+        mapManager.onStyleLoaded = { map, style -> onStyleLoaded(style) }
         mapView.getMapAsync(this)
-        fetchMapSources()
+        mapManager.fetchMapSources {
+            if (mapReady) mapManager.applySelectedSource()
+        }
         
         // Check for edit intent
         editFeature = intent.getParcelableExtra("feature", Feature::class.java)
@@ -181,125 +183,15 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
         validateForm() // Initial check
     }
 
-    private fun fetchMapSources() {
-        val serverUrl = GeovaultAuthManager.getServerUrl(this)
-        if (serverUrl.isEmpty()) return
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = com.geovault.common.RetrofitClient.getClient(this, baseUrl).create(GeovaultApi::class.java)
-        
-        sourceManager.fetchSources(api) {
-            runOnUiThread {
-                if (!isDestroyed) {
-                    sourcesFetched = true
-                    if (mapReady) applySelectedSource()
-                }
-            }
-        }
-    }
-
-    private fun applySelectedSource() {
-        val map = maplibreMap ?: return
-        if (isDestroyed) return
-        // Remove current marker from the existing style before replacing it, so we never accumulate
-        // symbols across layer switches (old style is replaced but clearing refs avoids any stale state).
-        placeSymbol?.let { symbolManager?.delete(it) }
-        placeSymbol = null
-        symbolManager = null
-        Log.d(TAG, "applySelectedSource: called, will setStyle")
-        try {
-            val effectiveId = sourceManager.getEffectiveSourceId()
-            val mapMaxZoom = if (sourceManager.isVectorSource(effectiveId)) MAX_ZOOM_LEVEL_VECTOR.toDouble() else MAX_ZOOM_LEVEL.toDouble()
-            map.setMaxZoomPreference(mapMaxZoom)
-            if (sourceManager.isVectorSource(effectiveId)) {
-                val styleUrl = sourceManager.getResolvedStyleUrl(effectiveId)
-                if (!styleUrl.isNullOrBlank()) {
-                    loadVectorStyle(map, styleUrl)
-                } else {
-                    map.setStyle(Style.Builder()) { style -> if (!isDestroyed) onStyleLoaded(style) }
-                }
-            } else {
-                val rasterUrl = sourceManager.getRasterUrl(effectiveId)
-                if (!rasterUrl.isNullOrBlank()) {
-                    map.setStyle(Style.Builder()) { style ->
-                        if (isDestroyed) return@setStyle
-                        try {
-                            // tileSize 256, maxZoom capped at 15; raster below features.
-                            val tileSet = TileSet("2.1.0", rasterUrl).apply { maxZoom = MAX_ZOOM_LEVEL.toFloat() }
-                            style.addSource(RasterSource(RASTER_SOURCE_ID, tileSet, 256))
-                            val rasterLayer = RasterLayer(RASTER_LAYER_ID, RASTER_SOURCE_ID)
-                            try {
-                                style.addLayerBelow(rasterLayer, ANNOTATIONS_LAYER_ID)
-                            } catch (_: Exception) {
-                                style.addLayer(rasterLayer)
-                            }
-                        } catch (_: Exception) { }
-                        if (!isDestroyed) onStyleLoaded(style)
-                    }
-                } else {
-                    map.setStyle(Style.Builder()) { style -> if (!isDestroyed) onStyleLoaded(style) }
-                }
-            }
-        } catch (_: Exception) {
-            map.setStyle(Style.Builder()) { style -> if (!isDestroyed) onStyleLoaded(style) }
-        }
-    }
-
     override fun onDidFailLoadingMap(errorMessage: String) {
         Log.e(TAG, "Map style load failed: $errorMessage")
         runOnUiThread {
             val map = maplibreMap ?: return@runOnUiThread
-            val effectiveId = sourceManager.getEffectiveSourceId()
-            if (sourceManager.isVectorSource(effectiveId)) {
+            val effectiveId = mapManager.sourceManager.getEffectiveSourceId()
+            if (mapManager.sourceManager.isVectorSource(effectiveId)) {
                 Toast.makeText(this, getString(R.string.map_style_unavailable_fallback_osm), Toast.LENGTH_SHORT).show()
-                loadOsmFallback(map)
+                mapManager.loadOsmFallback(map)
             }
-        }
-    }
-
-    /**
-     * Load vector style from URL. Uses MapStyleCache so repeat layer switches load instantly.
-     * On failure, falls back to OSM raster.
-     */
-    private fun loadVectorStyle(map: MapLibreMap, styleUrl: String) {
-        val serverUrl = GeovaultAuthManager.getServerUrl(this).trimEnd('/')
-        val isOurServer = serverUrl.isNotEmpty() && (styleUrl == serverUrl || styleUrl.startsWith("$serverUrl/"))
-        val serverBase = if (isOurServer) java.net.URI.create(styleUrl).let { "${it.scheme}://${it.host}" } else null
-
-        MapStyleCache.getStyleJson(this, styleUrl, isOurServer, serverBase) { json ->
-            if (isDestroyed) return@getStyleJson
-            if (!json.isNullOrBlank()) {
-                map.setStyle(Style.Builder().fromJson(json)) { style -> if (!isDestroyed) onStyleLoaded(style) }
-            } else {
-                Toast.makeText(this@PlaceEditActivity, getString(R.string.map_style_unavailable_fallback_osm), Toast.LENGTH_SHORT).show()
-                loadOsmFallback(map)
-            }
-        }
-    }
-
-    private fun loadOsmFallback(map: MapLibreMap) {
-        val rasterUrl = sourceManager.getStreetFallbackRasterUrl()
-        if (rasterUrl.isNullOrBlank()) {
-            map.setStyle(Style.Builder()) { style -> if (!isDestroyed) onStyleLoaded(style) }
-            return
-        }
-        map.setMaxZoomPreference(MAX_ZOOM_LEVEL.toDouble())
-        map.setStyle(Style.Builder()) { style ->
-            if (isDestroyed) return@setStyle
-            try {
-                style.addSource(RasterSource(RASTER_SOURCE_ID, TileSet("2.1.0", rasterUrl).apply { maxZoom = MAX_ZOOM_LEVEL.toFloat() }, 256))
-                val rasterLayer = RasterLayer(RASTER_LAYER_ID, RASTER_SOURCE_ID)
-                if (!isDestroyed) onStyleLoaded(style)
-                val mgr = symbolManager
-                mapView.post {
-                    if (isDestroyed) return@post
-                    val s = map.style ?: return@post
-                    try {
-                        if (mgr != null) s.addLayerBelow(rasterLayer, mgr.layerId) else s.addLayer(rasterLayer)
-                    } catch (_: Exception) {
-                        try { s.addLayer(rasterLayer) } catch (_: Exception) { }
-                    }
-                }
-            } catch (_: Exception) { }
         }
     }
 
@@ -338,14 +230,11 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
     override fun onMapReady(map: MapLibreMap) {
         maplibreMap = map
         mapReady = true
-        map.uiSettings.setLogoEnabled(false)
-        map.uiSettings.setAttributionEnabled(false)
-        map.uiSettings.isRotateGesturesEnabled = false
-        map.setMaxZoomPreference(MAX_ZOOM_LEVEL.toDouble())
+        mapManager.setupBaseMapSettings(map)
         setupMap()
         // Load style once: when no server we load now; when server configured we wait for fetchSources callback.
-        if (sourcesFetched || GeovaultAuthManager.getServerUrl(this).isEmpty()) {
-            applySelectedSource()
+        if (mapManager.sourcesFetched || GeovaultAuthManager.getServerUrl(this).isEmpty()) {
+            mapManager.applySelectedSource(map)
         }
     }
 
@@ -432,9 +321,9 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
             true
         }
         findViewById<View>(R.id.mapToggle).setOnClickListener {
-            val nextSourceId = sourceManager.getNextSourceId()
-            sourceManager.setSelectedSourceId(nextSourceId)
-            applySelectedSource()
+            val nextSourceId = mapManager.sourceManager.getNextSourceId()
+            mapManager.sourceManager.setSelectedSourceId(nextSourceId)
+            mapManager.applySelectedSource()
         }
         // Only set default camera when no place coords; initial center on place happens in onStyleLoaded (once).
         // New place: show entire world (zoom 0).

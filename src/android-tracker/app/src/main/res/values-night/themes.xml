@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.GeoVault" parent="gv_common_Theme.GeoVault">
+        <item name="android:windowAnimationStyle">@style/Animation.NoAnimation</item>
+    </style>
+</resources>

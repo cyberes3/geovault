@@ -249,8 +249,8 @@
                 android:id="@+id/syncSpinner"
                 android:layout_width="28dp"
                 android:layout_height="28dp"
-                android:src="@drawable/ic_location_spinner"
-                android:tint="@color/spinner_blue" />
+                android:src="@drawable/gv_common_ic_spinner"
+                android:tint="@color/gv_common_spinner_blue" />
 
             <TextView
                 android:id="@+id/syncText"

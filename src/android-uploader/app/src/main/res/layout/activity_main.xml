@@ -86,8 +86,8 @@
                         android:layout_width="48dp"
                         android:layout_height="48dp"
                         android:layout_marginBottom="16dp"
-                        android:src="@drawable/ic_spinner_design"
-                        app:tint="@color/spinner_blue"
+                        android:src="@drawable/gv_common_ic_spinner"
+                        app:tint="@color/gv_common_spinner_blue"
                         android:visibility="gone" />
 
                     <TextView
@@ -212,8 +212,8 @@
                         android:layout_height="48dp"
                         android:layout_gravity="center"
                         android:layout_marginTop="24dp"
-                        android:src="@drawable/ic_spinner_design"
-                        app:tint="@color/spinner_blue"
+                        android:src="@drawable/gv_common_ic_spinner"
+                        app:tint="@color/gv_common_spinner_blue"
                         android:visibility="gone" />
 
                     <TextView

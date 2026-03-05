@@ -170,10 +170,10 @@
                         android:id="@+id/searchPlaceSpinner"
                         android:layout_width="40dp"
                         android:layout_height="40dp"
-                        android:src="@drawable/ic_location_spinner"
+                        android:src="@drawable/gv_common_ic_spinner"
                         android:contentDescription="Searching"
                         android:visibility="gone"
-                        app:tint="@color/spinner_blue"
+                        app:tint="@color/gv_common_spinner_blue"
                         android:padding="8dp" />
 
                     <ImageView
@@ -344,8 +344,8 @@
                             android:id="@+id/btnLocationSpinner"
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"
-                            android:src="@drawable/ic_location_spinner"
-                            android:tint="@color/spinner_blue"
+                            android:src="@drawable/gv_common_ic_spinner"
+                            android:tint="@color/gv_common_spinner_blue"
                             android:visibility="gone" />
                     </FrameLayout>
 
@@ -433,8 +433,8 @@
                 android:id="@+id/savingSpinner"
                 android:layout_width="28dp"
                 android:layout_height="28dp"
-                android:src="@drawable/ic_location_spinner"
-                android:tint="@color/spinner_blue" />
+                android:src="@drawable/gv_common_ic_spinner"
+                android:tint="@color/gv_common_spinner_blue" />
 
             <TextView
                 android:id="@+id/savingText"

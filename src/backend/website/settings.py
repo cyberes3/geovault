@@ -354,7 +354,7 @@ OAUTH2_PROVIDER = {
     'DEFAULT_SCOPES': ['api'],
     'ACCESS_TOKEN_EXPIRE_SECONDS': 3600 * 12,  # 12 hours
     'REFRESH_TOKEN_EXPIRE_SECONDS': 3600 * 24 * 365,  # 1 year
-    'PROTECTED_CLIENT_IDS': ['geovault-android-places', 'geovault-android-uploader'],
+    'PROTECTED_CLIENT_IDS': ['geovault-android-places', 'geovault-android-uploader', 'geovault-android-tracker'],
     # Redirect URI schemes: only these are accepted when an app registers or uses a redirect_uri.
     # Real security is that the redirect_uri must be in the application's registered list.
     # "custom" (via oauth_custom_scheme monkeypatch) allows any reverse-DNS scheme (e.g. com.*.app).

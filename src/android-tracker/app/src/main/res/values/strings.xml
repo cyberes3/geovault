@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tracker</string>
+    <string name="app_title">GeoVault Places</string>
+    <string name="live_tracker_title">GeoVault Live Tracker</string>
+    <string name="server_url_label">Server URL</string>
+    <string name="filename_label">Filename</string>
+    <string name="upload_button">Upload</string>
+    <string name="cancel_button">Cancel</string>
+    <string name="uploading">Uploading…</string>
+    <string name="upload_success">Upload successful!</string>
+    <string name="upload_error">Upload failed: %1$s</string>
+    <string name="no_file">No file provided</string>
+    <string name="server_url_hint">Server URL</string>
+    <string name="api_key_hint">API Key</string>
+    <string name="settings_title">Settings</string>
+    <string name="loading_trackers">Loading trackers…</string>
+    <string name="select_tracker">Select a tracker</string>
+    <string name="no_trackers_found">No trackers found</string>
+    <string name="no_trackers_found_message">No trackers yet. Create one to start tracking.</string>
+    <string name="create_new_tracker">Create New Tracker</string>
+    <string name="could_not_save_tracker_selection">Could not save tracker selection</string>
+    <string name="tracker_operation_timeout">Request timed out. Please try again.</string>
+    <string name="not_tracking">Not Tracking</string>
+    <string name="tracking_active">Tracking Active</string>
+    <string name="start_tracking">Start Tracking</string>
+    <string name="stop_tracking">Stop Tracking</string>
+    <string name="tracking_duration">Tracking for %1$s</string>
+    <string name="last_point_sent">Last point sent %1$s</string>
+    <string name="points_sent_session">%1$d points sent this session</string>
+    <string name="just_now">just now</string>
+    <string name="stat_label_elapsed">Elapsed</string>
+    <string name="stat_label_sent">Sent</string>
+    <string name="stat_label_last">Last</string>
+    <string name="stat_label_queued">Queued</string>
+
+    <!-- Places strings -->
+    <string name="no_places">No places found</string>
+    <string name="search_places_hint">Search places</string>
+    <string name="navigate">Navigate</string>
+    <string name="refresh">Refresh</string>
+    <!-- Messages -->
+    <string name="enter_filename">Please enter a filename</string>
+    <string name="error_read_file">Could not read file</string>
+    <string name="settings_required">Server URL is required. Connect your account to sign in.</string>
+    <string name="connect_account">Connect account</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="disconnect_confirm_title">Disconnect account?</string>
+    <string name="disconnect_confirm_message">You will be signed out. You can connect again from Settings.</string>
+    <string name="oauth_connected">Connected successfully</string>
+    <string name="config_required">Configuration Required</string>
+    <string name="config_settings_first">Please configure settings first</string>
+    <string name="validating_key">Validating API Key…</string>
+    <string name="connecting_server">Connecting to server…</string>
+    <string name="validation_failed">Validation Failed</string>
+    <string name="api_key_valid">API Key Valid</string>
+    <string name="api_key_valid_msg">✓ API key \'%1$s\' is valid!\n\nShare a file to upload it.</string>
+
+    <string name="settings_help_text">Enter your GeoVault server URL and tap Connect to sign in.</string>
+    <string name="offline_data_saved_to_files">Offline data saved to Files → Downloads</string>
+    <string name="close">Close</string>
+    <string name="description">Description</string>
+    <string name="no_description">No description</string>
+    <string name="map_style_unavailable_fallback_osm">Map style unavailable, using OpenStreetMap</string>
+    <string name="map_toggle_description">Toggle street or satellite map</string>
+    <string name="zoom_to_latest_description">Zoom to latest track point</string>
+    <string name="map_select_place">Select a place</string>
+    <string name="map_tap_marker_hint">Tap a marker to view details</string>
+
+    <!-- Logging settings help -->
+    <string name="logging_help_button">Tips for logging settings</string>
+    <string name="logging_help_title">Logging &amp; distance tips</string>
+    <string name="logging_help_message">Logging interval – seconds between points. Suggested: 30 for walking, 15 for biking, 10 for driving. Use 0 for maximum frequency (more battery use).\n\nDistance filter – minimum meters between points. Suggested: 10 for walking, 30 for biking, 100 for driving. Use 0 to log as often as the interval allows.\n\nOnly log if significant motion – when on, the app logs only after your device detects significant activity (e.g. walking, biking, driving). The device uses its built-in motion sensor; no points are recorded while you stay still, which saves battery. On some devices this option may be disabled if the sensor is not available.</string>
+</resources>
+

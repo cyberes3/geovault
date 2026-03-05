@@ -2,6 +2,7 @@ package com.geovault.places
 
 import android.content.Intent
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.map.*
 import android.os.Bundle
 import android.view.View
 import androidx.activity.OnBackPressedCallback
@@ -43,11 +44,9 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
     private val symbolToFeature = mutableMapOf<Symbol, Feature>()
     private var selectedFeature: Feature? = null
     private val executor = Executors.newSingleThreadExecutor()
-    private lateinit var sourceManager: MapSourceManager
+    private lateinit var mapManager: MapLibreManager
     /** True when map is ready (onMapReady ran). */
     private var mapReady = false
-    /** True when fetchMapSources callback ran (server configured). */
-    private var sourcesFetched = false
     /** True after we've applied initial fit-bounds/zoom once; when restored we skip so MapView saved state keeps camera. */
     private var initialCameraApplied = false
 
@@ -77,29 +76,17 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        sourceManager = MapSourceManager(this)
-        setContentView(R.layout.activity_map)
-        // Apply window insets in onCreate so we get initial dispatch (insets are sent when window attaches;
-        // registering in onMapReady was too late and nav bar covered content).
-        val rootView = findViewById<View>(R.id.rootLayout)
-        val headerView = findViewById<View>(R.id.headerLayout)
-        val bottomInfoLayout = findViewById<View>(R.id.bottomInfoLayout)
-        ViewCompat.setOnApplyWindowInsetsListener(rootView) { _, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            headerView.updatePadding(top = insets.top + 20)
-            bottomInfoLayout.updatePadding(bottom = insets.bottom + 16)
-            WindowInsetsCompat.CONSUMED
+        mapManager = MapLibreManager(this, mapView)
+        mapManager.onStyleLoaded = { map, style ->
+            applyStyleLoaded(map)
         }
-        mapView = findViewById(R.id.map)
-        // MapLibre shows a foreground drawable until the map loads; use theme-aware color (black in dark mode).
-        mapView.foreground = android.graphics.drawable.ColorDrawable(ContextCompat.getColor(this, R.color.map_underlay))
-        mapView.addOnDidFailLoadingMapListener(this)
-        mapView.onCreate(savedInstanceState)
         initialCameraApplied = savedInstanceState?.getBoolean(KEY_INITIAL_CAMERA_APPLIED, false) ?: false
         features = ArrayList(cache.getDisplayFeatures())
         mapView.getMapAsync(this)
         updateMapAuthHeader()
-        fetchMapSources()
+        mapManager.fetchMapSources {
+            if (mapReady) mapManager.applySelectedSource()
+        }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 startActivity(Intent(this@MapActivity, MainActivity::class.java).apply {
@@ -160,27 +147,12 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
         Log.e(TAG, "Map style load failed: $errorMessage")
         runOnUiThread {
             val map = maplibreMap ?: return@runOnUiThread
-            val effectiveId = sourceManager.getEffectiveSourceId()
-            if (sourceManager.isVectorSource(effectiveId)) {
+            val effectiveId = mapManager.sourceManager.getEffectiveSourceId()
+            if (mapManager.sourceManager.isVectorSource(effectiveId)) {
                 Toast.makeText(this, getString(R.string.map_style_unavailable_fallback_osm), Toast.LENGTH_SHORT).show()
-                loadOsmFallback(map)
+                mapManager.loadOsmFallback(map)
             } else {
                 Toast.makeText(this, "Map failed: $errorMessage", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
-    private fun fetchMapSources() {
-        val serverUrl = GeovaultAuthManager.getServerUrl(this)
-        if (serverUrl.isEmpty()) return
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = com.geovault.common.RetrofitClient.getClient(this, baseUrl).create(GeovaultApi::class.java)
-        sourceManager.fetchSources(api) {
-            runOnUiThread {
-                if (!isDestroyed) {
-                    sourcesFetched = true
-                    if (mapReady) applySelectedSource()
-                }
             }
         }
     }
@@ -188,149 +160,18 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
     override fun onMapReady(map: MapLibreMap) {
         maplibreMap = map
         mapReady = true
-        map.uiSettings.setLogoEnabled(false)
-        map.uiSettings.setAttributionEnabled(false)
-        map.uiSettings.isRotateGesturesEnabled = false
-        map.setMaxZoomPreference(MAX_ZOOM_LEVEL.toDouble())
+        mapManager.setupBaseMapSettings(map)
         setupMapUi()
         // Load style once: when no server load now (OSM); when server configured wait for fetchSources callback.
-        if (sourcesFetched || GeovaultAuthManager.getServerUrl(this).isEmpty()) {
-            applySelectedSource()
+        if (mapManager.sourcesFetched || GeovaultAuthManager.getServerUrl(this).isEmpty()) {
+            mapManager.applySelectedSource(map)
         }
     }
 
-    private fun applySelectedSource() {
-        val map = maplibreMap ?: run {
-            Log.d(TAG, "applySelectedSource: map not ready yet, skipping")
-            return
-        }
-        if (isDestroyed) return
-        Log.d(TAG, "applySelectedSource: effectiveId=${sourceManager.getEffectiveSourceId()}")
-        // Remove yellow marker before destroying manager so it doesn't linger; clear selection state
-        selectionSymbol?.let { sym -> selectionSymbolManager?.delete(sym) }
-        selectionSymbol = null
-        selectionSymbolManager?.onDestroy()
-        selectionSymbolManager = null
-        symbolManager?.onDestroy()
-        symbolManager = null
-        symbols.clear()
-        symbolToFeature.clear()
-        lastSelectedSymbol = null
-        selectedFeature = null
-        clearSelectionUi()
-        try {
-            val effectiveId = sourceManager.getEffectiveSourceId()
-            val mapMaxZoom = if (sourceManager.isVectorSource(effectiveId)) MAX_ZOOM_LEVEL_VECTOR.toDouble() else MAX_ZOOM_LEVEL.toDouble()
-            map.setMaxZoomPreference(mapMaxZoom)
-            if (sourceManager.isVectorSource(effectiveId)) {
-                val styleUrl = sourceManager.getResolvedStyleUrl(effectiveId)
-                if (!styleUrl.isNullOrBlank()) {
-                    loadVectorStyle(map, styleUrl)
-                } else {
-                    map.setStyle(Style.Builder()) { if (!isDestroyed) applyStyleLoaded(map) }
-                }
-            } else {
-                val rasterUrl = sourceManager.getRasterUrl(effectiveId)
-                if (!rasterUrl.isNullOrBlank()) {
-                    map.setStyle(Style.Builder()) { style ->
-                        if (isDestroyed) return@setStyle
-                        try {
-                            // tileSize 256, maxZoom capped at 15; tile layer below annotations.
-                            val tileSet = TileSet("2.1.0", rasterUrl).apply {
-                                maxZoom = MAX_ZOOM_LEVEL.toFloat()
-                            }
-                            style.addSource(RasterSource(RASTER_SOURCE_ID, tileSet, 256))
-                            val rasterLayer = RasterLayer(RASTER_LAYER_ID, RASTER_SOURCE_ID)
-                            try {
-                                style.addLayerBelow(rasterLayer, ANNOTATIONS_LAYER_ID)
-                            } catch (_: Exception) {
-                                style.addLayer(rasterLayer)
-                            }
-                        } catch (_: Exception) { /* ignore */ }
-                        if (!isDestroyed) applyStyleLoaded(map)
-                    }
-                } else {
-                    map.setStyle(Style.Builder()) { if (!isDestroyed) applyStyleLoaded(map) }
-                }
-            }
-        } catch (_: Exception) {
-            map.setStyle(Style.Builder()) { if (!isDestroyed) applyStyleLoaded(map) }
-        }
-    }
 
-    /**
-     * Load vector style from URL. Uses MapStyleCache so repeat layer switches load instantly.
-     * On failure, falls back to OSM raster.
-     */
-    private fun loadVectorStyle(map: MapLibreMap, styleUrl: String) {
-        Log.d(TAG, "loadVectorStyle: $styleUrl")
-        val serverUrl = GeovaultAuthManager.getServerUrl(this).trimEnd('/')
-        val isOurServer = serverUrl.isNotEmpty() && (styleUrl == serverUrl || styleUrl.startsWith("$serverUrl/"))
-        val serverBase = if (isOurServer) java.net.URI.create(styleUrl).let { "${it.scheme}://${it.host}" } else null
-
-        MapStyleCache.getStyleJson(this, styleUrl, isOurServer, serverBase) { json ->
-            if (isDestroyed) return@getStyleJson
-            if (!json.isNullOrBlank()) {
-                map.setStyle(Style.Builder().fromJson(json)) {
-                    Log.d(TAG, "loadVectorStyle: style loaded (fromJson)")
-                    if (!isDestroyed) applyStyleLoaded(map)
-                }
-            } else {
-                Toast.makeText(this@MapActivity, getString(R.string.map_style_unavailable_fallback_osm), Toast.LENGTH_SHORT).show()
-                loadOsmFallback(map)
-            }
-        }
-    }
-
-    /** Load OSM raster as fallback when vector (MapTiler) street style fails. */
-    private fun loadOsmFallback(map: MapLibreMap) {
-        val rasterUrl = sourceManager.getStreetFallbackRasterUrl()
-        if (rasterUrl.isNullOrBlank()) {
-            Log.d(TAG, "loadOsmFallback: no raster URL, empty style")
-            map.setStyle(Style.Builder()) { if (!isDestroyed) applyStyleLoaded(map) }
-            return
-        }
-        Log.d(TAG, "loadOsmFallback: start, rasterUrl=$rasterUrl")
-        map.setMaxZoomPreference(MAX_ZOOM_LEVEL.toDouble())
-        map.setStyle(Style.Builder()) { style ->
-            if (isDestroyed) return@setStyle
-            try {
-                style.addSource(RasterSource(RASTER_SOURCE_ID, TileSet("2.1.0", rasterUrl).apply { maxZoom = MAX_ZOOM_LEVEL.toFloat() }, 256))
-                val rasterLayer = RasterLayer(RASTER_LAYER_ID, RASTER_SOURCE_ID)
-                Log.d(TAG, "loadOsmFallback: added raster source, calling applyStyleLoaded")
-                if (!isDestroyed) applyStyleLoaded(map)
-                val mgr = symbolManager
-                Log.d(TAG, "loadOsmFallback: after applyStyleLoaded markersLayerId=${mgr?.layerId} selectionLayerId=${selectionSymbolManager?.layerId}")
-                logStyleLayerOrder(style, "loadOsmFallback after symbols")
-                mapView.post {
-                    if (isDestroyed) return@post
-                    val s = map.style ?: run {
-                        Log.e(TAG, "loadOsmFallback post: style is null")
-                        return@post
-                    }
-                    try {
-                        if (mgr != null) {
-                            s.addLayerBelow(rasterLayer, mgr.layerId)
-                            Log.d(TAG, "loadOsmFallback post: added raster below layer ${mgr.layerId}")
-                        } else {
-                            s.addLayer(rasterLayer)
-                            Log.d(TAG, "loadOsmFallback post: symbolManager null, added raster with addLayer")
-                        }
-                        logStyleLayerOrder(s, "loadOsmFallback after raster")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "loadOsmFallback post: addLayerBelow failed", e)
-                        try {
-                            s.addLayer(rasterLayer)
-                            Log.d(TAG, "loadOsmFallback post: fallback addLayer(raster) ok")
-                        } catch (e2: Exception) {
-                            Log.e(TAG, "loadOsmFallback post: addLayer(raster) also failed", e2)
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "loadOsmFallback: exception", e)
-            }
-        }
+    private fun applyStyleLoaded(map: MapLibreMap) {
+        Log.d(TAG, "applyStyleLoaded: adding markers")
+        addMarkersIfReady(map)
     }
 
     private fun logStyleLayerOrder(style: Style, label: String) {
@@ -358,20 +199,15 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
         }
     }
 
-    private fun applyStyleLoaded(map: MapLibreMap) {
-        Log.d(TAG, "applyStyleLoaded: adding markers")
-        addMarkersIfReady(map)
-    }
-
     private fun setupMapUi() {
         findViewById<View>(R.id.settingsButton).setOnClickListener {
             startActivity(android.content.Intent(this, SettingsActivity::class.java))
             safeNoAnimation()
         }
         findViewById<View>(R.id.mapToggle).setOnClickListener {
-            val nextSourceId = sourceManager.getNextSourceId()
-            sourceManager.setSelectedSourceId(nextSourceId)
-            applySelectedSource()
+            val nextSourceId = mapManager.sourceManager.getNextSourceId()
+            mapManager.sourceManager.setSelectedSourceId(nextSourceId)
+            mapManager.applySelectedSource()
         }
         val placeName = findViewById<android.widget.TextView>(R.id.placeName)
         val placeDescription = findViewById<android.widget.TextView>(R.id.placeDescription)

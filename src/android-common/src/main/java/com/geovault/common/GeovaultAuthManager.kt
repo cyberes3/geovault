@@ -39,6 +39,7 @@ object GeovaultAuthManager {
 
     const val OAUTH_CLIENT_ID_PLACES = "geovault-android-places"
     const val OAUTH_CLIENT_ID_UPLOADER = "geovault-android-uploader"
+    const val OAUTH_CLIENT_ID_TRACKER = "geovault-android-tracker"
 
     @Volatile
     private var clientId: String = OAUTH_CLIENT_ID_PLACES

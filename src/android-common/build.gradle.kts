@@ -59,6 +59,8 @@ dependencies {
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.google.code.gson:gson:2.10.1")
+    implementation("org.maplibre.gl:android-sdk:11.3.0")
+    implementation("org.maplibre.gl:android-plugin-annotation-v9:3.0.2")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.11.1")

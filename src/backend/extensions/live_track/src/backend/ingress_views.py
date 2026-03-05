@@ -123,7 +123,16 @@ def app_ingress(request, tracker_secret):
     track = LiveTrack.objects.filter(tracker_secret=tracker_secret).first()
     if not track:
         return error_response("Invalid tracker secret", 404)
-        
+
+    cache_backend = getattr(settings, "CACHES", {}).get("default", {}).get("BACKEND", "")
+    if "redis" in cache_backend.lower():
+        rate_key = f"live_track_ingress:{track.id}"
+        now_ts = timezone.now().timestamp()
+        last = cache.get(rate_key)
+        if last is not None and (now_ts - last) < 1.0:
+            return error_response("Rate limit exceeded", 429)
+        cache.set(rate_key, now_ts, timeout=2)
+
     body = request.body
     if not body.startswith(b'GVLT\x01'):
         if not body.startswith(b'GVLT'):
