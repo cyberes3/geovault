@@ -2,7 +2,7 @@
 Startup checks for the GeoVault Django application.
 
 This module performs essential checks when the server starts up:
-1. Python version (requires 3.13)
+1. Python version (requires 3.12 or 3.13)
 2. Database connection
 3. Required tables exist
 4. PostGIS extension is installed
@@ -50,17 +50,17 @@ _logger = get_tagged_logger('startup')
 
 def check_python_version():
     """
-    Check if Python version is 3.13.
+    Check if Python version is 3.12 or 3.13.
     
     Returns:
-        bool: True if Python 3.13 is being used, False otherwise
+        bool: True if Python 3.12 or 3.13 is being used, False otherwise
     """
     try:
-        if sys.version_info[:2] != (3, 13):
+        if sys.version_info[:2] not in ((3, 12), (3, 13)):
             current_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-            _logger.error(f"✗ Python version check failed: requires Python 3.13, but found {current_version}")
+            _logger.error(f"✗ Python version check failed: requires Python 3.12 or 3.13, but found {current_version}")
             _logger.error(f"  Full version info: {sys.version}")
-            _logger.error("  Please install Python 3.13 and ensure it's being used")
+            _logger.error("  Please install Python 3.12 or 3.13 and ensure it's being used")
             return False
         else:
             _logger.info(f"✓ Python version check passed: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
@@ -880,7 +880,7 @@ def run_startup_checks():
     Run all startup checks and exit if any fail.
     
     This function will:
-    1. Check Python version (requires 3.13)
+    1. Check Python version (requires 3.12 or 3.13)
     2. Check database connection
     3. Verify PostGIS installation
     4. Check required tables exist
