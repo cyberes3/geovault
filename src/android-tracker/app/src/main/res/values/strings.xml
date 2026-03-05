@@ -75,7 +75,7 @@
     
     <!-- Permissions -->
     <string name="permissions_required_title">Permissions Required</string>
-    <string name="permissions_required_message">To track your location, we need the following permissions:</string>
+    <string name="permissions_required_message">To track your location, the app needs the following permissions:</string>
     <string name="grant_location_permission">Grant Location Permission</string>
     <string name="grant_background_location">Grant Background Location</string>
     <string name="grant_notification_permission">Grant Notification Permission</string>

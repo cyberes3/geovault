@@ -49,6 +49,7 @@
 # ---------------------------------------------------------------------------
 -dontwarn okhttp3.**
 -dontwarn retrofit2.**
+-keepnames class okhttp3.internal.publicsuffix.PublicSuffixDatabase
 -dontwarn org.conscrypt.**
 -keepattributes Signature, InnerClasses, EnclosingMethod
 -keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
@@ -67,9 +68,15 @@
 -keep class com.geovault.tracker.db.** { *; }
 
 # ---------------------------------------------------------------------------
-# MapLibre (consumer rules often bundled; keep critical classes if needed)
+# MapLibre (Java API; native libs use JNI and look up classes by name)
 # ---------------------------------------------------------------------------
--dontwarn org.maplibre.**
+-keep class org.maplibre.** { *; }
+-keepclassmembers class org.maplibre.** { *; }
+
+# ---------------------------------------------------------------------------
+# android-common (GeovaultAuthManager, MapStyleCache, etc. used from app)
+# ---------------------------------------------------------------------------
+-keep class com.geovault.common.** { *; }
 
 # ---------------------------------------------------------------------------
 # Play Services Location
