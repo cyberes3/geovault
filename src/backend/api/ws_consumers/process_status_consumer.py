@@ -44,7 +44,7 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
 
         # Reject connection if user is not authenticated
         if isinstance(self.user, AnonymousUser):
-            _logger.warning(f"WebSocket connection rejected: {path} - Anonymous@{client_ip}")
+            _logger.warning(f"WebSocket connection rejected: {path} - Anonymous - {client_ip}")
             # Don't accept the connection - just return without accepting
             # This will cause the connection to fail gracefully
             return
@@ -64,7 +64,7 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
 
             # Log successful connection
             user_identifier = get_user_identifier(self.scope)
-            _logger.info(f"WebSocket connected: {path} - {user_identifier}@{client_ip} - Item: {self.item_id}")
+            _logger.info(f"WebSocket connected: {path} - {user_identifier} - {client_ip} - Item: {self.item_id}")
 
             # Create item-specific room group
             self.room_group_name = f"process_status_{self.user.id}_{self.item_id}"
@@ -85,7 +85,7 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
             # Accept connection briefly to send error message, then close
             await self.accept()
             user_identifier = get_user_identifier(self.scope)
-            _logger.warning(f"WebSocket connection rejected: {path} - {user_identifier}@{client_ip} - Item {self.item_id} not found")
+            _logger.warning(f"WebSocket connection rejected: {path} - {user_identifier} - {client_ip} - Item {self.item_id} not found")
             await self.send(text_data=json.dumps({
                 'type': 'error',
                 'data': {
@@ -95,7 +95,7 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
             }))
             await self.close(code=4004)  # 4004 = 404 Not Found
         except:
-            _logger.error(f"WebSocket connection error: {path} - {get_user_identifier(self.scope)}@{client_ip}: {traceback.format_exc()}")
+            _logger.error(f"WebSocket connection error: {path} - {get_user_identifier(self.scope)} - {client_ip}: {traceback.format_exc()}")
 
             # Try to accept and close the connection with error code if not already accepted
             try:
@@ -115,7 +115,7 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
         client_ip = get_client_ip(self.scope)
         user_identifier = get_user_identifier(self.scope)
         item_id = getattr(self, 'item_id', 'Unknown')
-        _logger.info(f"WebSocket disconnected: {path} - {user_identifier}@{client_ip} - Item: {item_id} - Close code: {close_code}")
+        _logger.info(f"WebSocket disconnected: {path} - {user_identifier} - {client_ip} - Item: {item_id} - Close code: {close_code}")
 
         if self.room_group_name:
             # Leave room group

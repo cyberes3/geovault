@@ -56,7 +56,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
 
             # Reject connection if user is not authenticated
             if isinstance(self.user, AnonymousUser):
-                _logger.warning(f"WebSocket connection rejected: {path} - Anonymous@{client_ip}")
+                _logger.warning(f"WebSocket connection rejected: {path} - Anonymous - {client_ip}")
                 # Don't accept the connection - just return without accepting
                 # This will cause the connection to fail gracefully
                 return
@@ -74,7 +74,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
 
             # Log successful connection
             user_identifier = get_user_identifier(self.scope)
-            _logger.info(f"WebSocket connected: {path} - {user_identifier}@{client_ip}")
+            _logger.info(f"WebSocket connected: {path} - {user_identifier} - {client_ip}")
 
             # Load modules now that user is available
             self._load_modules()
@@ -84,7 +84,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
                 await module.send_initial_state()
 
         except:
-            _logger.error(f"WebSocket connection error: {path} - {get_user_identifier(self.scope)}@{client_ip}: {traceback.format_exc()}")
+            _logger.error(f"WebSocket connection error: {path} - {get_user_identifier(self.scope)} - {client_ip}: {traceback.format_exc()}")
 
             # Try to accept and close the connection with error code if not already accepted
             try:
@@ -107,7 +107,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
         try:
             client_ip = get_client_ip(self.scope)
             user_identifier = get_user_identifier(self.scope)
-            _logger.info(f"WebSocket disconnected: {path} - {user_identifier}@{client_ip} - Close code: {close_code}")
+            _logger.info(f"WebSocket disconnected: {path} - {user_identifier} - {client_ip} - Close code: {close_code}")
 
             # Leave room group if it was created
             if hasattr(self, 'room_group_name') and self.room_group_name:
@@ -117,7 +117,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
                 )
         except:
             # Log the error but don't raise - we're already disconnecting
-            _logger.error(f"WebSocket disconnect error: {path} - {get_user_identifier(self.scope)}@{client_ip}: {traceback.format_exc()}")
+            _logger.error(f"WebSocket disconnect error: {path} - {get_user_identifier(self.scope)} - {client_ip}: {traceback.format_exc()}")
 
     async def receive(self, text_data=None, bytes_data=None):
         """Handle messages received from WebSocket."""
