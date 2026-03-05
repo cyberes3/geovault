@@ -13,7 +13,6 @@ import android.provider.Settings
 import android.view.View
 import android.widget.EditText
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -22,6 +21,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.viewpager2.widget.ViewPager2
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.ImportantMessageSnackbar
 import com.geovault.common.ServerUrlContract
 import com.geovault.tracker.db.AppDatabase
 import com.google.android.material.button.MaterialButton
@@ -37,6 +37,7 @@ class MainActivity : AppCompatActivity() {
     lateinit var database: AppDatabase
         private set
     private var isMainContentSetup = false
+    private var importantMessageSnackbar: ImportantMessageSnackbar? = null
 
     private val locationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -96,6 +97,7 @@ class MainActivity : AppCompatActivity() {
             view.updatePadding(bottom = insets.bottom)
             WindowInsetsCompat.CONSUMED
         }
+        importantMessageSnackbar = findViewById(R.id.importantMessageSnackbar)
         val serverUrlEdit = findViewById<EditText>(R.id.guestServerUrlEdit)
         val serverUrl = GeovaultAuthManager.getServerUrl(this)
         if (serverUrl.isNotEmpty()) {
@@ -109,7 +111,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.guestConnectButton).setOnClickListener {
             val url = normalizeServerUrl(serverUrlEdit.text.toString())
             if (url.isEmpty()) {
-                Toast.makeText(this, "Please enter server URL", Toast.LENGTH_SHORT).show()
+                showSnackbar("Please enter server URL")
                 return@setOnClickListener
             }
             GeovaultAuthManager.setServerUrl(this, url)
@@ -137,6 +139,7 @@ class MainActivity : AppCompatActivity() {
         }
         ViewCompat.requestApplyInsets(rootView)
 
+        importantMessageSnackbar = findViewById(R.id.importantMessageSnackbar)
         database = AppDatabase.getDatabase(this)
 
         viewPager = findViewById(R.id.viewPager)
@@ -212,6 +215,11 @@ class MainActivity : AppCompatActivity() {
         text?.setTextColor(color)
     }
     
+    /** Show an important dismissable message. Use for errors and blocking issues. */
+    fun showSnackbar(message: String) {
+        importantMessageSnackbar?.showMessage(message)
+    }
+    
     fun hasLocationPermission(): Boolean {
         return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -247,7 +255,7 @@ class MainActivity : AppCompatActivity() {
     
     fun requestBackgroundLocationPermission() {
         if (!hasLocationPermission()) {
-            Toast.makeText(this, getString(R.string.location_permission_needed_first), Toast.LENGTH_SHORT).show()
+            showSnackbar(getString(R.string.location_permission_needed_first))
             return
         }
         backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
@@ -279,7 +287,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             val trackerId = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).getString("selected_tracker_id", "") ?: ""
             if (trackerId.isEmpty()) {
-                Toast.makeText(this, "Please select a tracker in settings first", Toast.LENGTH_LONG).show()
+                showSnackbar("Please select a tracker in settings first")
                 startActivity(Intent(this, SettingsActivity::class.java))
                 return
             }

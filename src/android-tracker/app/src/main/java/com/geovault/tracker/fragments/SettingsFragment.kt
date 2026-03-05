@@ -252,7 +252,7 @@ class SettingsFragment : Fragment() {
     private fun onConnectClicked() {
         val url = normalizeServerUrl(serverUrlEdit.text.toString())
         if (url.isEmpty()) {
-            Toast.makeText(requireContext(), "Please enter server URL", Toast.LENGTH_SHORT).show()
+            (requireActivity() as? MainActivity)?.showSnackbar("Please enter server URL")
             return
         }
         GeovaultAuthManager.setServerUrl(requireContext(), url)
@@ -310,11 +310,11 @@ class SettingsFragment : Fragment() {
         if (serverUrl.isEmpty()) return
 
         setTrackerOperationInProgress(true)
-        scheduleTrackerOperationTimeout {
+                scheduleTrackerOperationTimeout {
             if (isAdded) {
                 requireActivity().runOnUiThread {
                     setTrackerOperationInProgress(false)
-                    Toast.makeText(requireContext(), R.string.tracker_operation_timeout, Toast.LENGTH_SHORT).show()
+                    (requireActivity() as? MainActivity)?.showSnackbar(getString(R.string.tracker_operation_timeout))
                 }
             }
         }
@@ -344,7 +344,10 @@ class SettingsFragment : Fragment() {
                         } else {
                             cancelTrackerOperationTimeout()
                             setTrackerOperationInProgress(false)
-                            Toast.makeText(requireContext(), "Failed to create tracker", Toast.LENGTH_SHORT).show()
+                            val body = response.errorBody()?.string()?.trim()?.takeIf { it.isNotEmpty() }
+                            val msg = body?.let { it.take(120) + if (it.length > 120) "…" else "" }
+                                ?: "server error ${response.code()}"
+                            (requireActivity() as? MainActivity)?.showSnackbar("Failed to create tracker: $msg")
                         }
                     }
                 }
@@ -355,7 +358,7 @@ class SettingsFragment : Fragment() {
                         cancelTrackerOperationTimeout()
                         setTrackerOperationInProgress(false)
                         Log.e("SettingsFragment", "Failed to create tracker", t)
-                        Toast.makeText(requireContext(), "Network error", Toast.LENGTH_SHORT).show()
+                        (requireActivity() as? MainActivity)?.showSnackbar("Failed to create tracker: ${t.message ?: "Network error"}")
                     }
                 }
             }

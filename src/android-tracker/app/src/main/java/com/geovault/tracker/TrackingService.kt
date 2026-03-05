@@ -26,6 +26,7 @@ import android.hardware.TriggerEvent
 import android.hardware.TriggerEventListener
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
+import kotlin.random.Random
 
 class TrackingService : Service() {
 
@@ -58,6 +59,15 @@ class TrackingService : Service() {
         const val PREF_ACCURACY = "logging_accuracy"
         const val PREF_EXTENDED_PARAMS = "extended_params"
         const val PREF_SIGNIFICANT_MOTION = "significant_motion_only"
+
+        /** Interval between retry attempts when the queue has failed-to-send items. */
+        const val RETRY_INTERVAL_MS = 60_000L
+
+        /** ±jitter (ms) added to retry interval to avoid thundering herd. */
+        private const val RETRY_JITTER_MS = 10_000L
+
+        /** Max batches to send in one push call to avoid holding the lock too long. */
+        private const val MAX_BATCHES_PER_PUSH = 10
     }
 
     private var isTracking = false
@@ -81,6 +91,8 @@ class TrackingService : Service() {
     private var lastLocation: Location? = null
     private var sigMotionSensorStartTime = 0L
     private var watchdogJob: Job? = null
+    private var retryJob: Job? = null
+    private val pushMutex = kotlinx.coroutines.sync.Mutex()
 
     override fun onCreate() {
         super.onCreate()
@@ -149,6 +161,9 @@ class TrackingService : Service() {
         serviceScope.launch {
             pushLocations()
         }
+        
+        // Start periodic retry job to push failed locations every minute
+        startRetryJob()
     }
 
     private fun stopTracking() {
@@ -159,6 +174,7 @@ class TrackingService : Service() {
         sessionStartTimeMs = 0
         fusedLocationClient.removeLocationUpdates(locationCallback)
         cancelSignificantMotion()
+        stopRetryJob()
         runBlocking(Dispatchers.IO) {
             database.locationDao().deleteAll()
         }
@@ -211,74 +227,85 @@ class TrackingService : Service() {
     }
 
     private suspend fun pushLocations() {
-        val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val trackerIdStr = prefs.getString("selected_tracker_id", "") ?: ""
-        if (trackerIdStr.isEmpty()) {
-            Log.e(TAG, "No tracker selected, cannot push locations")
-            updateNotificationCount()
+        // Prevent concurrent pushes
+        if (!pushMutex.tryLock()) {
+            Log.d(TAG, "Push already in progress, skipping")
             return
         }
-        val trackerId = try {
-            java.util.UUID.fromString(trackerIdStr)
-        } catch (e: IllegalArgumentException) {
-            Log.e(TAG, "Invalid selected_tracker_id, cannot push locations", e)
-            updateNotificationCount()
-            return
-        }
-
-        val serverUrl = GeovaultAuthManager.getServerUrl(this)
-        if (serverUrl.isEmpty()) {
-            updateNotificationCount()
-            return
-        }
-
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val ingressUrl = "${baseUrl}api/extensions/live-track/app-ingress/"
-
-        val locationsToPush = database.locationDao().getAll()
-        if (locationsToPush.isEmpty()) {
-            updateNotificationCount()
-            return
-        }
-
-        // Limit to 50 locations per payload to avoid massive payloads
-        val batch = locationsToPush.take(50)
-        val androidLocations = batch.map { it.toLocation() }
-
-        val includeExtended = prefs.getBoolean(PREF_EXTENDED_PARAMS, true)
-        val payload = BinaryPayloadBuilder.buildPayload(androidLocations, trackerId, includeExtended)
-        val requestBody = payload.toRequestBody("application/octet-stream".toMediaTypeOrNull())
-
-        val request = Request.Builder()
-            .url(ingressUrl)
-            .post(requestBody)
-            .build()
-
-        var success = false
-        try {
-            val response = getAuthenticatedHttpClient().newCall(request).execute()
-            if (response.isSuccessful) {
-                Log.d(TAG, "Successfully pushed ${batch.size} locations")
-                success = true
-                pointsSentThisSession += batch.size
-                lastPointSentAtMs = System.currentTimeMillis()
-                sendBroadcast(Intent(SESSION_STATS_UPDATE))
-                database.locationDao().delete(batch)
-            } else {
-                Log.e(TAG, "Failed to push locations: ${response.code} ${response.message}")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Exception pushing locations", e)
-        }
-
-        updateNotificationCount()
         
-        // Clean up old ones if queue is getting too big (e.g., max 1000)
-        // This ensures the device doesn't run out of space if the server is permanently down
-        val count = database.locationDao().getCount()
-        if (count > 1000) {
-            val oldest = database.locationDao().getOldest(count - 1000)
-            database.locationDao().delete(oldest)
+        try {
+            val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+            val trackerIdStr = prefs.getString("selected_tracker_id", "") ?: ""
+            if (trackerIdStr.isEmpty()) {
+                Log.e(TAG, "No tracker selected, cannot push locations")
+                updateNotificationCount()
+                return
+            }
+            val trackerId = try {
+                java.util.UUID.fromString(trackerIdStr)
+            } catch (e: IllegalArgumentException) {
+                Log.e(TAG, "Invalid selected_tracker_id, cannot push locations", e)
+                updateNotificationCount()
+                return
+            }
+
+            val serverUrl = GeovaultAuthManager.getServerUrl(this)
+            if (serverUrl.isEmpty()) {
+                updateNotificationCount()
+                return
+            }
+
+            val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+            val ingressUrl = "${baseUrl}api/extensions/live-track/app-ingress/"
+
+            var batchesSent = 0
+            while (batchesSent < MAX_BATCHES_PER_PUSH) {
+                val locationsToPush = database.locationDao().getAll()
+                if (locationsToPush.isEmpty()) break
+
+                // Limit to 50 locations per payload to avoid massive payloads
+                val batch = locationsToPush.take(50)
+                val androidLocations = batch.map { it.toLocation() }
+
+                val includeExtended = prefs.getBoolean(PREF_EXTENDED_PARAMS, true)
+                val payload = BinaryPayloadBuilder.buildPayload(androidLocations, trackerId, includeExtended)
+                val requestBody = payload.toRequestBody("application/octet-stream".toMediaTypeOrNull())
+
+                val request = Request.Builder()
+                    .url(ingressUrl)
+                    .post(requestBody)
+                    .build()
+
+                try {
+                    val response = getAuthenticatedHttpClient().newCall(request).execute()
+                    if (response.isSuccessful) {
+                        Log.d(TAG, "Successfully pushed ${batch.size} locations")
+                        pointsSentThisSession += batch.size
+                        lastPointSentAtMs = System.currentTimeMillis()
+                        sendBroadcast(Intent(SESSION_STATS_UPDATE))
+                        database.locationDao().delete(batch)
+                        batchesSent++
+                    } else {
+                        Log.e(TAG, "Failed to push locations: ${response.code} ${response.message}")
+                        break
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Exception pushing locations", e)
+                    break
+                }
+            }
+
+            updateNotificationCount()
+            
+            // Clean up old ones if queue is getting too big (e.g., max 1000)
+            // This ensures the device doesn't run out of space if the server is permanently down
+            val count = database.locationDao().getCount()
+            if (count > 1000) {
+                val oldest = database.locationDao().getOldest(count - 1000)
+                database.locationDao().delete(oldest)
+            }
+        } finally {
+            pushMutex.unlock()
         }
     }
 
@@ -330,7 +357,28 @@ class TrackingService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         cancelSignificantMotion()
+        stopRetryJob()
         serviceScope.cancel()
+    }
+    
+    private fun startRetryJob() {
+        retryJob?.cancel()
+        retryJob = serviceScope.launch {
+            while (isActive && isTracking) {
+                val jitter = Random.nextLong(-RETRY_JITTER_MS, RETRY_JITTER_MS + 1)
+                delay(RETRY_INTERVAL_MS + jitter)
+                val count = database.locationDao().getCount()
+                if (count > 0) {
+                    Log.d(TAG, "Retry job: attempting to push $count queued locations")
+                    pushLocations()
+                }
+            }
+        }
+    }
+    
+    private fun stopRetryJob() {
+        retryJob?.cancel()
+        retryJob = null
     }
 
     private fun pauseGps() {

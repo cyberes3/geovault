@@ -17,6 +17,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.ImportantMessageSnackbar
 import com.geovault.common.RetrofitClient
 import com.google.android.material.button.MaterialButton
 import retrofit2.Call
@@ -40,6 +41,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var extendedParamsSwitch: SwitchCompat
     private lateinit var significantMotionSwitch: SwitchCompat
     private lateinit var startOnBootSwitch: SwitchCompat
+    private lateinit var importantMessageSnackbar: ImportantMessageSnackbar
 
     private fun normalizeServerUrl(url: String): String {
         var serverUrl = url.trim().trimStart('/').trimEnd('/')
@@ -122,6 +124,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         serverUrlEdit = findViewById(R.id.serverUrlEdit)
+        importantMessageSnackbar = findViewById(R.id.importantMessageSnackbar)
         connectButton = findViewById(R.id.connectButton)
         disconnectButton = findViewById(R.id.disconnectButton)
         loggedInUserText = findViewById(R.id.loggedInUserText)
@@ -159,6 +162,10 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         findViewById<View>(R.id.loggingHelpButton).setOnClickListener { showLoggingHelpDialog() }
+    }
+
+    private fun showSnackbar(message: String) {
+        importantMessageSnackbar.showMessage(message)
     }
 
     private fun showLoggingHelpDialog() {
@@ -247,7 +254,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun onConnectClicked() {
         val url = normalizeServerUrl(serverUrlEdit.text.toString())
         if (url.isEmpty()) {
-            Toast.makeText(this, "Please enter server URL", Toast.LENGTH_SHORT).show()
+            showSnackbar("Please enter server URL")
             return
         }
         GeovaultAuthManager.setServerUrl(this, url)
@@ -308,7 +315,7 @@ class SettingsActivity : AppCompatActivity() {
         scheduleTrackerOperationTimeout {
             runOnUiThread {
                 setTrackerOperationInProgress(false)
-                Toast.makeText(this@SettingsActivity, R.string.tracker_operation_timeout, Toast.LENGTH_SHORT).show()
+                showSnackbar(getString(R.string.tracker_operation_timeout))
             }
         }
 
@@ -337,7 +344,10 @@ class SettingsActivity : AppCompatActivity() {
                     } else {
                         cancelTrackerOperationTimeout()
                         setTrackerOperationInProgress(false)
-                        Toast.makeText(this@SettingsActivity, "Failed to create tracker", Toast.LENGTH_SHORT).show()
+                        val body = response.errorBody()?.string()?.trim()?.takeIf { it.isNotEmpty() }
+                        val msg = body?.let { it.take(120) + if (it.length > 120) "…" else "" }
+                            ?: "server error ${response.code()}"
+                        showSnackbar("Failed to create tracker: $msg")
                     }
                 }
             }
@@ -346,7 +356,7 @@ class SettingsActivity : AppCompatActivity() {
                     cancelTrackerOperationTimeout()
                     setTrackerOperationInProgress(false)
                     Log.e("SettingsActivity", "Failed to create tracker", t)
-                    Toast.makeText(this@SettingsActivity, "Network error", Toast.LENGTH_SHORT).show()
+                    showSnackbar("Failed to create tracker: ${t.message ?: "Network error"}")
                 }
             }
         })
