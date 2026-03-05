@@ -22,7 +22,7 @@
       @update:name="name = $event"
       @color-picked="onColorPicked"
     />
-    <div v-else-if="mode === 'edit' && !track" class="flex items-center justify-center py-12">
+    <div v-else-if="mode === 'edit' && (loading || !track)" class="flex items-center justify-center py-12">
       <Loader size="md" message="Loading track..." />
     </div>
     <EditTrackForm
@@ -52,7 +52,7 @@
           Create
         </BaseButton>
       </template>
-      <template v-else-if="mode === 'edit' && !track">
+      <template v-else-if="mode === 'edit' && (loading || !track)">
         <BaseButton variant="white" size="sm" @click="$emit('close')">Close</BaseButton>
       </template>
       <template v-else>
@@ -79,6 +79,8 @@
 <script>
 import { ref, watch, computed, inject, onMounted } from 'vue';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
+import Loader from 'platform/components/parts/Loader.vue';
+import { getIngressBodyTemplate } from './ingressBodyTemplateCache.js';
 import CreateTrackForm from './CreateTrackForm.vue';
 import CreateSuccessView from './CreateSuccessView.vue';
 import EditTrackForm from './EditTrackForm.vue';
@@ -86,10 +88,11 @@ import GpsLoggerInstructionsModal from './GpsLoggerInstructionsModal.vue';
 
 export default {
   name: 'TrackModal',
-  components: { BaseModal, CreateTrackForm, CreateSuccessView, EditTrackForm, GpsLoggerInstructionsModal },
+  components: { BaseModal, Loader, CreateTrackForm, CreateSuccessView, EditTrackForm, GpsLoggerInstructionsModal },
   props: {
     mode: { type: String, required: true },
     track: { type: Object, default: null },
+    loading: { type: Boolean, default: false },
     userLogin: { type: String, default: '' }
   },
   emits: ['close', 'saved', 'deleted'],
@@ -147,14 +150,8 @@ export default {
     const baseUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/extensions/live-track` : '';
     const bodyTemplate = ref('lat=%LAT&lon=%LON&timestamp=%TIMESTAMP');
     onMounted(async () => {
-      if (api) {
-        try {
-          const res = await api.get('/ingress-body-template/');
-          if (res?.data?.body_template) bodyTemplate.value = res.data.body_template;
-        } catch (_) {
-          // keep fallback
-        }
-      }
+      const data = await getIngressBodyTemplate(api);
+      if (data?.body_template) bodyTemplate.value = data.body_template;
     });
     const ingressUrl = computed(() => (createdTrack.value ? `${baseUrl}/ingress/` : ''));
     const instructionsIngressUrl = computed(() => `${baseUrl}/ingress/`);

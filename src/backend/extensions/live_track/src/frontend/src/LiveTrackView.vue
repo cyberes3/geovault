@@ -32,18 +32,24 @@
         <div v-if="loading" class="flex-1 flex items-center justify-center p-4">
         <Loader size="md" message="Loading trackers..." />
       </div>
-      <div v-else class="flex-1 overflow-y-auto p-2 border-t sm:border-t-0 border-gray-200">
+      <div
+        ref="listScrollContainer"
+        class="flex-1 overflow-y-auto p-2 border-t sm:border-t-0 border-gray-200"
+        @click.self="highlightedId = null"
+      >
         <div v-if="sortedTrackers.length === 0" class="text-center py-8 text-gray-500 text-sm">
           No trackers yet. Tap + to create one.
         </div>
         <div
           v-for="track in sortedTrackers"
           :key="track.id"
+          :data-track-id="track.id"
           :class="[
             'flex items-center gap-2 p-3 rounded-lg cursor-pointer border transition-all mt-2 first:mt-0',
             selectedId === track.id
               ? 'border-blue-500 bg-blue-100 shadow-sm'
-              : 'bg-white border-gray-200 hover:border-blue-200 hover:bg-blue-50 hover:shadow-sm'
+              : 'border border-gray-200 bg-white hover:border-blue-200 hover:bg-blue-50 hover:shadow-sm',
+            highlightedId === track.id && selectedId !== track.id ? 'ring-2 ring-blue-500' : ''
           ]"
           @click="onTrackListClick(track)"
         >
@@ -132,6 +138,7 @@
       v-if="showModal"
       :mode="modalMode"
       :track="modalTrack"
+      :loading="modalTrackLoading"
       :user-login="userLogin"
       @close="showModal = false"
       @saved="onModalSaved"
@@ -147,9 +154,10 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, onActivated, onBeforeUnmount, inject, watch } from 'vue';
+import { ref, computed, onMounted, onActivated, onBeforeUnmount, inject, watch, nextTick } from 'vue';
 import { PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon } from '@heroicons/vue/24/outline';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
+import { getIngressBodyTemplate } from './ingressBodyTemplateCache.js';
 import TrackModal from './TrackModal.vue';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
 import LatestParamsModal from './LatestParamsModal.vue';
@@ -257,7 +265,10 @@ export default {
     const paramLabels = ref({});
     const modalMode = ref('create');
     const modalTrack = ref(null);
+    const modalTrackLoading = ref(false);
     const mapContainer = ref(null);
+    const listScrollContainer = ref(null);
+    const highlightedId = ref(null);
     const userLogin = ref('');
     const tileSources = ref([]);
     const selectedLayer = ref('osm');
@@ -780,6 +791,31 @@ export default {
           selectedId.value = null;
         }
       });
+      map.on('click', (e) => {
+        if (!map.getLayer(POINTS_LAYER_ID)) return;
+        const features = map.queryRenderedFeatures(e.point, { layers: [POINTS_LAYER_ID] });
+        const feature = features[0];
+        if (feature?.properties?.trackId) {
+          const trackId = feature.properties.trackId;
+          highlightedId.value = trackId;
+          nextTick(() => {
+            const el = listScrollContainer.value?.querySelector(`[data-track-id="${trackId}"]`);
+            el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          });
+        } else {
+          highlightedId.value = null;
+        }
+      });
+      map.on('mousemove', (e) => {
+        const canvas = map.getCanvas();
+        if (!canvas) return;
+        if (!map.getLayer(POINTS_LAYER_ID)) {
+          canvas.style.cursor = '';
+          return;
+        }
+        const features = map.queryRenderedFeatures(e.point, { layers: [POINTS_LAYER_ID] });
+        canvas.style.cursor = features.length ? 'pointer' : '';
+      });
     }
 
     /** Disable map rotation (drag, touch pinch, keyboard) so north stays up. See maplibre disable-map-rotation example. */
@@ -791,6 +827,7 @@ export default {
     }
 
     function onTrackListClick(track) {
+      highlightedId.value = null;
       if (selectedId.value === track.id) {
         selectedId.value = null;
         followLocked.value = false;
@@ -867,16 +904,22 @@ export default {
     function openEditModal(track) {
       modalMode.value = 'edit';
       modalTrack.value = null;
+      modalTrackLoading.value = true;
       showModal.value = true;
-      api.get(`/trackers/${track.id}/`)
-        .then((res) => {
-          modalTrack.value = res.data;
-        })
-        .catch((e) => {
-          const err = api.handleError?.(e);
-          if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to load track');
-          showModal.value = false;
-        });
+      nextTick(() => {
+        api.get(`/trackers/${track.id}/`)
+          .then((res) => {
+            modalTrack.value = res.data;
+          })
+          .catch((e) => {
+            const err = api.handleError?.(e);
+            if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to load track');
+            showModal.value = false;
+          })
+          .finally(() => {
+            modalTrackLoading.value = false;
+          });
+      });
     }
 
     function onModalSaved() {
@@ -921,13 +964,9 @@ export default {
       if (userInfo?.email) userLogin.value = userInfo.email;
       applyDefaultSortFromStore();
       await fetchTileSources();
-      try {
-        const res = await api.get('/ingress-body-template/');
-        if (res?.data?.param_labels && typeof res.data.param_labels === 'object') {
-          paramLabels.value = res.data.param_labels;
-        }
-      } catch (_) {
-        // keep empty; modal will show raw keys
+      const ingressData = await getIngressBodyTemplate(api);
+      if (ingressData?.param_labels && typeof ingressData.param_labels === 'object') {
+        paramLabels.value = ingressData.param_labels;
       }
       fetchTrackers().finally(() => {
         requestAnimationFrame(() => initMap());
@@ -1001,6 +1040,7 @@ export default {
       sortedTrackers,
       loading,
       selectedId,
+      highlightedId,
       showModal,
       showLayerModal,
       paramsModalTrack,
