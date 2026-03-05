@@ -44,9 +44,6 @@ class LiveTrackIngressBody(BaseModel):
     batt: Optional[float] = None
     ischarging: Optional[Union[bool, str]] = None
     ser: Optional[str] = None
-    hdop: Optional[str] = None
-    vdop: Optional[str] = None
-    pdop: Optional[str] = None
     dist: Optional[float] = None
 
 
@@ -66,9 +63,6 @@ PARAM_PRETTY_NAMES = {
     "batt": "Battery",
     "ischarging": "Charging",
     "ser": "Serial",
-    "hdop": "HDOP",
-    "vdop": "VDOP",
-    "pdop": "PDOP",
     "dist": "Distance",
 }
 
@@ -88,9 +82,6 @@ INGRESS_BODY_PLACEHOLDERS = {
     "batt": "%BATT",
     "ischarging": "%ISCHARGING",
     "ser": "%SER",
-    "hdop": "%HDOP",
-    "vdop": "%VDOP",
-    "pdop": "%PDOP",
     "dist": "%DIST",
 }
 
