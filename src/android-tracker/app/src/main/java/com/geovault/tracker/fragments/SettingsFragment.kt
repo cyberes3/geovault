@@ -292,7 +292,7 @@ class SettingsFragment : Fragment() {
             setPadding(48, 32, 48, 32)
         }
 
-        AlertDialog.Builder(requireContext())
+        val dialog = AlertDialog.Builder(requireContext())
             .setTitle("Create New Tracker")
             .setView(input)
             .setPositiveButton("Create") { _, _ ->
@@ -302,7 +302,11 @@ class SettingsFragment : Fragment() {
                 }
             }
             .setNegativeButton("Cancel", null)
-            .show()
+            .create()
+        dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(
+            ContextCompat.getColor(requireContext(), com.geovault.common.R.color.gv_common_dialog_negative_button)
+        )
     }
 
     private fun createTracker(name: String) {
@@ -379,12 +383,16 @@ class SettingsFragment : Fragment() {
 
     private fun showTrackerSelectionDialog() {
         if (trackers.isEmpty()) {
-            AlertDialog.Builder(requireContext())
+            val dialog = AlertDialog.Builder(requireContext())
                 .setTitle(R.string.select_tracker)
                 .setMessage(getString(R.string.no_trackers_found_message))
                 .setPositiveButton(android.R.string.ok, null)
                 .setNeutralButton(getString(R.string.create_new_tracker)) { _, _ -> onCreateTrackerClicked() }
-                .show()
+                .create()
+            dialog.show()
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setTextColor(
+                ContextCompat.getColor(requireContext(), com.geovault.common.R.color.gv_common_dialog_negative_button)
+            )
             return
         }
         val names = trackers.map { it.name }.toTypedArray()
@@ -406,6 +414,9 @@ class SettingsFragment : Fragment() {
             .create()
         selectDialog.setOnDismissListener { fetchTrackers(forceRefresh = true) }
         selectDialog.show()
+        selectDialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(
+            ContextCompat.getColor(requireContext(), com.geovault.common.R.color.gv_common_dialog_negative_button)
+        )
     }
 
     private fun fetchTrackers(forceRefresh: Boolean = false, onComplete: (() -> Unit)? = null) {

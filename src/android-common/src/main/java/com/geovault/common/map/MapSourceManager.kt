@@ -22,10 +22,7 @@ class MapSourceManager(private val context: Context) {
             baseSources.add(filtered.find { it.id == SOURCE_OSM }!!)
         }
 
-        val osmDark = filtered.find { it.id == SOURCE_OSM_DARK }
-        if (osmDark != null) {
-            baseSources.add(osmDark)
-        }
+        filtered.find { it.id == SOURCE_OSM_DARK }?.let { baseSources.add(it) }
         filtered.find { it.id == SOURCE_MAPTILER_STREETS }?.let { baseSources.add(it) }
 
         val maptilerHybrid = filtered.find { it.id == SOURCE_MAPTILER_HYBRID }
@@ -98,7 +95,7 @@ class MapSourceManager(private val context: Context) {
         return "$baseUrl$url"
     }
 
-    /** OSM raster URL for fallback when vector (MapTiler) street style fails to load. */
+    /** Raster URL for fallback when vector (MapTiler) street style fails to load. Always OSM light (dark source from server is vector, no raster URL). */
     fun getStreetFallbackRasterUrl(): String? = getRasterUrl(SOURCE_OSM)
 
     /** Resolved XYZ URL for raster source (absolute; with server base for relative paths). */

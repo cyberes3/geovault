@@ -12,6 +12,6 @@
     <color name="gv_common_error_stroke">#5C2E2E</color>
     <!-- Dialog confirmation button: light grey in dark mode -->
     <color name="gv_common_dialog_positive_button">#C0C0C0</color>
-    <!-- Dialog cancel button: white in dark mode -->
-    <color name="gv_common_dialog_negative_button">#FFFFFF</color>
+    <!-- Dialog cancel/neutral button: standard light grey in dark mode -->
+    <color name="gv_common_dialog_negative_button">#C0C0C0</color>
 </resources>

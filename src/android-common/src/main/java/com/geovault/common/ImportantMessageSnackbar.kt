@@ -12,6 +12,7 @@ import android.widget.TextView
 /**
  * Dismissable message bar for important messages (errors, confirmations).
  * Tap to dismiss; auto-dismisses after 15 seconds.
+ * Callers should apply navigation bar bottom inset to this view so it appears above the system nav bar.
  */
 class ImportantMessageSnackbar @JvmOverloads constructor(
     context: Context,
@@ -27,6 +28,8 @@ class ImportantMessageSnackbar @JvmOverloads constructor(
         val root = LayoutInflater.from(context).inflate(R.layout.gv_common_view_important_message_snackbar, this, true)
         messageText = root.findViewById(R.id.gv_common_important_message_snackbar_text)
         visibility = View.GONE
+        isClickable = true
+        isFocusable = true
         setOnClickListener {
             handler.removeCallbacks(dismissRunnable)
             visibility = View.GONE

@@ -120,6 +120,7 @@ class SettingsActivity : AppCompatActivity() {
             headerLayout.updatePadding(top = systemBars.top + 20)
             val bottomInset = if (ime.bottom > systemBars.bottom) ime.bottom else systemBars.bottom
             view.updatePadding(bottom = bottomInset)
+            view.findViewById<View>(R.id.importantMessageSnackbar)?.updatePadding(bottom = bottomInset)
             windowInsets
         }
 
@@ -294,7 +295,7 @@ class SettingsActivity : AppCompatActivity() {
             setPadding(48, 32, 48, 32)
         }
 
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle("Create New Tracker")
             .setView(input)
             .setPositiveButton("Create") { _, _ ->
@@ -304,7 +305,11 @@ class SettingsActivity : AppCompatActivity() {
                 }
             }
             .setNegativeButton("Cancel", null)
-            .show()
+            .create()
+        dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(
+            ContextCompat.getColor(this, com.geovault.common.R.color.gv_common_dialog_negative_button)
+        )
     }
 
     private fun createTracker(name: String) {
@@ -376,12 +381,16 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun showTrackerSelectionDialog() {
         if (trackers.isEmpty()) {
-            AlertDialog.Builder(this)
+            val dialog = AlertDialog.Builder(this)
                 .setTitle(R.string.select_tracker)
                 .setMessage(getString(R.string.no_trackers_found_message))
                 .setPositiveButton(android.R.string.ok, null)
                 .setNeutralButton(getString(R.string.create_new_tracker)) { _, _ -> onCreateTrackerClicked() }
-                .show()
+                .create()
+            dialog.show()
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setTextColor(
+                ContextCompat.getColor(this, com.geovault.common.R.color.gv_common_dialog_negative_button)
+            )
             return
         }
         val names = trackers.map { it.name }.toTypedArray()
@@ -403,6 +412,9 @@ class SettingsActivity : AppCompatActivity() {
             .create()
         selectDialog.setOnDismissListener { fetchTrackers(forceRefresh = true) }
         selectDialog.show()
+        selectDialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(
+            ContextCompat.getColor(this, com.geovault.common.R.color.gv_common_dialog_negative_button)
+        )
     }
 
     private fun fetchTrackers(forceRefresh: Boolean = false, onComplete: (() -> Unit)? = null) {

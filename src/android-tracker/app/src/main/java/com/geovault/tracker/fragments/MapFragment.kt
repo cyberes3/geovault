@@ -7,7 +7,9 @@ import android.view.Choreographer
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.util.Log
 import android.widget.ImageView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import androidx.fragment.app.Fragment
@@ -44,6 +46,23 @@ class MapFragment : Fragment() {
     private var followLockEnabled = false
 
     private val mainScope = CoroutineScope(Dispatchers.Main + Job())
+
+    private val failLoadingMapListener = MapView.OnDidFailLoadingMapListener { errorMessage ->
+        Log.e(TAG, "Map style load failed: $errorMessage")
+        val map = maplibreMap ?: return@OnDidFailLoadingMapListener
+        val effectiveId = mapManager.sourceManager.getEffectiveSourceId()
+        if (mapManager.sourceManager.isVectorSource(effectiveId)) {
+            requireActivity().runOnUiThread {
+                if (!isAdded) return@runOnUiThread
+                Toast.makeText(requireContext(), getString(R.string.map_style_unavailable_fallback_osm), Toast.LENGTH_SHORT).show()
+                mapManager.loadOsmFallback(map)
+            }
+        } else {
+            requireActivity().runOnUiThread {
+                if (isAdded) Toast.makeText(requireContext(), "Map failed: $errorMessage", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     private val locationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -87,7 +106,8 @@ class MapFragment : Fragment() {
         }
         
         mapView.onCreate(savedInstanceState)
-        
+        mapView.addOnDidFailLoadingMapListener(failLoadingMapListener)
+
         mapManager.fetchMapSources {
             maplibreMap?.let { map ->
                 Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
@@ -168,6 +188,7 @@ class MapFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        mapView.removeOnDidFailLoadingMapListener(failLoadingMapListener)
         super.onDestroyView()
         mapView.onDestroy()
         mainScope.cancel()
@@ -265,6 +286,7 @@ class MapFragment : Fragment() {
     }
 
     companion object {
+        private const val TAG = "MapFragment"
         private const val KEY_FOLLOW_LOCK = "follow_lock"
     }
 }

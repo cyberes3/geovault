@@ -21,7 +21,8 @@ data class TileClientConfig(
 data class TileSourceResponse(val sources: List<TileSource>)
 
 const val SOURCE_OSM = "osm"
-const val SOURCE_OSM_DARK = "osm-dark"
+/** MapTiler dark style id from server (maptiler.maps: openstreetmap-dark). Matches backend tile source id. */
+const val SOURCE_OSM_DARK = "maptiler-openstreetmap-dark"
 const val SOURCE_MAPTILER_STREETS = "maptiler-streets"
 const val SOURCE_MAPTILER_HYBRID = "maptiler-hybrid-v4"
 const val OPTION_STREET = "street"

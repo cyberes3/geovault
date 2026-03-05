@@ -95,6 +95,7 @@ class MainActivity : AppCompatActivity() {
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             headerLayout.updatePadding(top = insets.top + 20)
             view.updatePadding(bottom = insets.bottom)
+            view.findViewById<View>(R.id.importantMessageSnackbar)?.updatePadding(bottom = insets.bottom)
             WindowInsetsCompat.CONSUMED
         }
         importantMessageSnackbar = findViewById(R.id.importantMessageSnackbar)
@@ -131,10 +132,11 @@ class MainActivity : AppCompatActivity() {
         val rootView = findViewById<View>(R.id.rootLayout)
         val headerLayout = findViewById<View>(R.id.headerLayout)
         val mainContentLayout = findViewById<View>(R.id.mainContentLayout)
-        ViewCompat.setOnApplyWindowInsetsListener(rootView) { _, windowInsets ->
+        ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             headerLayout.updatePadding(top = insets.top + 20)
             mainContentLayout.updatePadding(bottom = insets.bottom)
+            view.findViewById<View>(R.id.importantMessageSnackbar)?.updatePadding(bottom = insets.bottom)
             WindowInsetsCompat.CONSUMED
         }
         ViewCompat.requestApplyInsets(rootView)
@@ -306,7 +308,7 @@ class MainActivity : AppCompatActivity() {
                     TrackerRepository.clearCurrentTrackerCache()
                     TrackerRepository.clearCache()
                     TrackerRepository.getTrackers(this@MainActivity, forceRefresh = true) { }
-                    showSnackbar(getString(R.string.no_tracker_selected_go_to_settings))
+                    showSnackbar(getString(R.string.tracker_validation_failed_go_to_settings))
                     val homeFragment = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
                     homeFragment?.updateTrackingUi()
                     return@runOnUiThread

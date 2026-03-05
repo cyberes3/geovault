@@ -2,5 +2,8 @@
 <resources>
     <style name="Theme.GeoVault" parent="gv_common_Theme.GeoVault">
         <item name="android:windowAnimationStyle">@style/Animation.NoAnimation</item>
+        <!-- Keep switch/toggle colors same as light mode (primary blue when checked) -->
+        <item name="colorPrimary">@color/primary_blue</item>
+        <item name="colorControlActivated">@color/primary_blue</item>
     </style>
 </resources>
