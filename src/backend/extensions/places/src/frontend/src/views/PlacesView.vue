@@ -1,7 +1,7 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-0 sm:space-y-6 sm:mx-4 sm:my-4 sm:flex-1 sm:min-h-0 sm:flex sm:flex-col">
     <!-- Page Header (matches Collections page) -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+    <div class="bg-white rounded-none sm:rounded-lg shadow-sm border border-gray-200 border-t-0 sm:border-t p-4 sm:p-6">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <div>
           <h1 class="text-xl sm:text-2xl font-bold text-gray-900 mb-1 sm:mb-2">Places</h1>
@@ -27,16 +27,16 @@
       </div>
     </div>
 
-    <!-- List + Map row: fixed height on desktop so list scrolls internally -->
+    <!-- List + Map row: fills remaining vertical space on desktop so list scrolls internally -->
     <!-- Mobile: Map top, List bottom, no fixed height so page scrolls -->
-    <div class="flex flex-col-reverse sm:flex-row gap-3 min-h-0 sm:h-[60vh] sm:min-h-[400px]">
+    <div class="flex flex-col-reverse sm:flex-row gap-0 sm:gap-3 min-h-0 sm:flex-1 sm:min-h-0">
       <!-- List panel (50% width, card style) -->
       <div
-          class="w-full sm:w-1/2 min-w-0 min-h-0 flex-1 flex flex-col bg-white rounded-lg shadow-sm border border-gray-200 sm:overflow-hidden relative">
+          class="w-full sm:w-1/2 min-w-0 min-h-0 flex-1 flex flex-col bg-white rounded-none sm:rounded-lg shadow-sm border border-gray-200 sm:overflow-hidden relative">
         <!-- Loading overlay: grey out and disable list while refreshing -->
         <div
             v-if="loading"
-            class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/50 pointer-events-auto cursor-wait rounded-lg"
+            class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/50 pointer-events-auto cursor-wait rounded-none sm:rounded-lg"
             aria-busy="true"
             aria-live="polite"
         >
@@ -86,13 +86,14 @@
                 :ref="(el) => setPlaceItemRef(place.properties.database_id, el)"
                 :data-place-id="place.properties.database_id"
                 @click="selectPlace(place, { scroll: false })"
+                @touchend="onPlaceRowTouchEnd(place, $event)"
                 @mouseenter="setHoveredPlace(place.properties.database_id)"
                 @mouseleave="clearHoveredPlace()"
                 :class="[
                 'group cursor-pointer p-3 sm:p-4 border rounded-lg transition-all',
                 selectedPlace?.properties?.database_id === place.properties.database_id
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-200 bg-white hover:bg-gray-50'
+                  ? 'border-blue-500 bg-blue-100 shadow-sm'
+                  : 'border-gray-200 bg-white hover:border-blue-200 hover:bg-blue-50 hover:shadow-sm'
               ]"
             >
               <!-- Mobile: stacked (Title, Buttons, Coords+date, Description). Desktop: grid row1 title|buttons, row2 desc|coords+date -->
@@ -189,7 +190,7 @@
 
       <!-- Map (50% width, card style) -->
       <div
-          class="w-full sm:w-1/2 min-w-0 flex-shrink-0 relative bg-gray-100 rounded-lg border border-gray-200 overflow-hidden h-[250px] sm:h-auto">
+          class="w-full sm:w-1/2 min-w-0 flex-shrink-0 relative bg-gray-100 rounded-none sm:rounded-lg border border-gray-200 border-t-0 border-b-0 sm:border-t sm:border-b overflow-hidden h-[250px] sm:h-auto">
         <div ref="mapContainer" class="absolute inset-0 touch-pan-y"></div>
 
         <!-- Cooperative Gesture Overlay -->
@@ -409,11 +410,15 @@ export default {
       map.value = new window.gv_core.ol.Map({
         target: mapContainer.value,
         controls: [],
-        interactions: window.gv_core.ol.interaction.defaults({dragPan: false}).extend([
+        interactions: window.gv_core.ol.interaction.defaults({
+          dragPan: false,
+          pinchRotate: false,
+          altShiftDragRotate: false
+        }).extend([
           new window.gv_core.ol.interaction.DragPan({
             condition: function (e) {
-              // Return TRUE if it's a mouse, or if it's a multi-touch (2+ fingers)
-              return e.originalEvent.pointerType === 'mouse' || (e.originalEvent.pointerType === 'touch' && isMultiTouchGesture);
+              // Mouse: always allow. Touch: handled by custom two-finger pan below.
+              return e.originalEvent.pointerType === 'mouse';
             }
           })
         ]),
@@ -425,35 +430,82 @@ export default {
         ],
         view: new window.gv_core.ol.View({
           center: window.gv_core.ol.proj.fromLonLat([0, 0]),
-          zoom: 2
+          zoom: 2,
+          minZoom: 1,
+          maxZoom: 18
         })
       });
 
-      // Add gesture handling for overlay
+      // Add gesture handling: custom two-finger pan (centroid-based), single finger scrolls the page.
       const container = mapContainer.value;
-      let isMultiTouchGesture = false;
+      let activeTouchCount = 0;
+      let gestureStartedWithOneFinger = false;
+      let lastTwoFingerCentroidPixel = null;
+
+      function getCentroidPixel(touches) {
+        const rect = container.getBoundingClientRect();
+        const x = (touches[0].clientX + touches[1].clientX) / 2 - rect.left;
+        const y = (touches[0].clientY + touches[1].clientY) / 2 - rect.top;
+        return [x, y];
+      }
 
       const handleTouchStart = (e) => {
-        if (e.touches.length >= 2) {
-          isMultiTouchGesture = true;
+        activeTouchCount = e.touches.length;
+        if (activeTouchCount >= 2) {
+          gestureStartedWithOneFinger = false;
+          lastTwoFingerCentroidPixel = getCentroidPixel(e.touches);
           hideGestureMessage();
-        } else if (e.touches.length === 1) {
-          isMultiTouchGesture = false;
+        } else {
+          lastTwoFingerCentroidPixel = null;
+          if (activeTouchCount === 1) gestureStartedWithOneFinger = true;
+        }
+      };
+
+      const handleTouchEnd = (e) => {
+        activeTouchCount = e.touches.length;
+        if (activeTouchCount < 2) lastTwoFingerCentroidPixel = null;
+        if (activeTouchCount === 0) {
+          gestureStartedWithOneFinger = false;
+          hideGestureMessage();
+        } else if (activeTouchCount === 1) {
+          gestureStartedWithOneFinger = false;
         }
       };
 
       const handleTouchMove = (e) => {
-        if (e.touches && e.touches.length >= 2) {
-          isMultiTouchGesture = true;
+        if (e.touches.length >= 2) {
+          activeTouchCount = e.touches.length;
+          gestureStartedWithOneFinger = false;
           hideGestureMessage();
-        } else if (e.touches && e.touches.length === 1 && !isMultiTouchGesture) {
-          // Only show message if we haven't seen 2+ fingers in this touch sequence
-          showGestureMessage();
+          // Custom two-finger pan: pan by movement of centroid so both fingers move the map together.
+          const m = map.value;
+          if (m && lastTwoFingerCentroidPixel) {
+            const currentPixel = getCentroidPixel(e.touches);
+            const prevCoord = m.getCoordinateFromPixel(lastTwoFingerCentroidPixel);
+            const currCoord = m.getCoordinateFromPixel(currentPixel);
+            if (prevCoord && currCoord) {
+              const view = m.getView();
+              const center = view.getCenter();
+              view.setCenter([
+                center[0] + (prevCoord[0] - currCoord[0]),
+                center[1] + (prevCoord[1] - currCoord[1])
+              ]);
+            }
+            lastTwoFingerCentroidPixel = currentPixel;
+          } else if (m && e.touches.length === 2) {
+            lastTwoFingerCentroidPixel = getCentroidPixel(e.touches);
+          }
+        } else {
+          activeTouchCount = e.touches.length;
+          lastTwoFingerCentroidPixel = null;
+          if (activeTouchCount === 1 && gestureStartedWithOneFinger) showGestureMessage();
         }
       };
 
       container.addEventListener('touchstart', handleTouchStart, {passive: true});
       container.addEventListener('touchmove', handleTouchMove, {passive: true});
+      container.addEventListener('touchend', handleTouchEnd, {passive: true});
+      container.addEventListener('touchcancel', handleTouchEnd, {passive: true});
 
       // Helper for mobile toast to scroll down
       window._placesScrollTo = (id) => {
@@ -480,6 +532,8 @@ export default {
       onBeforeUnmount(() => {
         container.removeEventListener('touchstart', handleTouchStart);
         container.removeEventListener('touchmove', handleTouchMove);
+        container.removeEventListener('touchend', handleTouchEnd);
+        container.removeEventListener('touchcancel', handleTouchEnd);
         delete window._placesScrollTo;
       });
 
@@ -559,7 +613,7 @@ export default {
       // Fit view to extent
       if (features.length > 0) {
         const extent = vectorSource.value.getExtent();
-        map.value.getView().fit(extent, {padding: [100, 100, 100, 100], maxZoom: 15});
+        map.value.getView().fit(extent, {padding: [100, 100, 140, 140], maxZoom: 15, duration: 0});
       }
     };
 
@@ -571,16 +625,16 @@ export default {
       if (places.value.length > 0 && vectorSource.value) {
         const extent = vectorSource.value.getExtent();
         view.fit(extent, {
-          padding: [100, 100, 100, 100],
+          padding: [100, 100, 140, 140],
           maxZoom: 15,
-          duration: 500
+          duration: 0
         });
-        view.animate({rotation: 0, duration: 500});
+        view.animate({rotation: 0, duration: 0});
       } else {
         view.animate({
           center: window.gv_core.ol.proj.fromLonLat([0, 0]),
           zoom: 2,
-          duration: 500,
+          duration: 0,
           rotation: 0
         });
       }
@@ -622,17 +676,18 @@ export default {
       if (zoom && map.value && place.geometry.coordinates) {
         programmaticMapMove.value = true;
         const coords = window.gv_core.ol.proj.fromLonLat([place.geometry.coordinates[0], place.geometry.coordinates[1]]);
-
-        // Tiny delay to ensure the browser has a chance to render the new marker style
-        // before the heavy animation loop begins.
-        setTimeout(() => {
-          map.value.getView().animate({
-            center: coords,
-            zoom: 12,
-            duration: 1000
-          });
-        }, 50);
+        map.value.getView().animate({
+          center: coords,
+          zoom: 12,
+          duration: 0
+        });
       }
+    };
+
+    const onPlaceRowTouchEnd = (place, e) => {
+      if (e.target.closest('button')) return;
+      e.preventDefault();
+      selectPlace(place, { scroll: false });
     };
 
     const editPlace = (place) => {
@@ -939,6 +994,7 @@ export default {
       setHoveredPlace,
       clearHoveredPlace,
       selectPlace,
+      onPlaceRowTouchEnd,
       editPlace,
       deletePlace,
       openInGoogleMaps,
