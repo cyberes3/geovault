@@ -2,6 +2,8 @@
 
 When doing AI programming its really really nice to have comprehensive tests.
 
+Must do `pip install Flask==3.1.3`
+
 ## Running Tests
 
 ### Run all tests

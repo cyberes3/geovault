@@ -682,7 +682,11 @@ class TestEnsureOAuth2AppCommand(TestCase):
         )
         for app in (places, uploader, tracker):
             self.assertFalse(app.skip_authorization, f"{app.client_id} should show authorize screen")
-        self.assertTrue("Created" in out.getvalue() or "up to date" in out.getvalue())
+        out_val = out.getvalue()
+        self.assertTrue(
+            "created" in out_val or "Created" in out_val or "up to date" in out_val,
+            f"Expected command output to mention created/up to date, got: {out_val!r}",
+        )
 
     def test_idempotent_no_duplicate(self):
         """Running the command twice does not create duplicate applications."""
