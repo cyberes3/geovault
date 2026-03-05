@@ -980,17 +980,15 @@ class TestLiveTrackIngress(TestCase):
 
 
 class TestLiveTrackAppIngress(TestCase):
-    """Test app-ingress stub."""
+    """Test app-ingress requires auth."""
 
-    def test_app_ingress_501(self):
-        """POST app-ingress/ returns 501 Not Implemented."""
-        User = get_user_model()
-        user = User.objects.create_user(email="u@example.com", password="p", username="u")
-        self.client.force_login(user)
+    def test_app_ingress_401_unauthenticated(self):
+        """POST app-ingress/ without auth returns 401."""
+        self.client.logout()
         with _patch_live_track_enabled():
             response = self.client.post(
                 "/api/extensions/live-track/app-ingress/",
-                data=json.dumps({"lat": 37.0, "lon": -122.0, "timestamp": 1705312800}),
-                content_type="application/json",
+                data=b"",
+                content_type="application/octet-stream",
             )
-        self.assertEqual(response.status_code, 501)
+        self.assertEqual(response.status_code, 401)

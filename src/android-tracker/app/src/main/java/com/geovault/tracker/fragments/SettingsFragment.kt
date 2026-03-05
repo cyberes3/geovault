@@ -1,29 +1,31 @@
-package com.geovault.tracker
+package com.geovault.tracker.fragments
 
 import android.content.Context
-import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import androidx.fragment.app.Fragment
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
+import com.geovault.tracker.*
 import com.google.android.material.button.MaterialButton
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 
-class SettingsActivity : AppCompatActivity() {
+class SettingsFragment : Fragment() {
 
     private lateinit var serverUrlEdit: EditText
     private lateinit var connectButton: MaterialButton
@@ -65,7 +67,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun setTrackerOperationInProgress(inProgress: Boolean) {
         createTrackerButton.isEnabled = !inProgress
         trackerSelectorCard.isClickable = !inProgress
-        findViewById<View>(R.id.selectedTrackerLabel).isClickable = !inProgress
+        view?.findViewById<View>(R.id.selectedTrackerLabel)?.isClickable = !inProgress
         if (inProgress) {
             trackerSaveProgress.visibility = View.VISIBLE
             trackerSaveProgress.rotation = 0f
@@ -78,7 +80,6 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    /** Updates spinner rotation every frame using elapsed time so it works when animator scale is 0. */
     private fun scheduleNextSpinnerFrame() {
         if (trackerSaveProgress.visibility != View.VISIBLE) return
         val elapsed = SystemClock.elapsedRealtime() - trackerSaveRotationStartTime
@@ -106,36 +107,41 @@ class SettingsActivity : AppCompatActivity() {
         trackerOperationTimeoutRunnable = null
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_settings)
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        return inflater.inflate(R.layout.fragment_settings, container, false)
+    }
 
-        val rootView = findViewById<View>(R.id.rootLayout)
-        val headerLayout = findViewById<View>(R.id.headerLayout)
-        ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        val rootView = view.findViewById<View>(R.id.rootLayout)
+        ViewCompat.setOnApplyWindowInsetsListener(rootView) { v, windowInsets ->
             val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
-            headerLayout.updatePadding(top = systemBars.top + 20)
             val bottomInset = if (ime.bottom > systemBars.bottom) ime.bottom else systemBars.bottom
-            view.updatePadding(bottom = bottomInset)
+            v.updatePadding(bottom = bottomInset)
             windowInsets
         }
 
-        serverUrlEdit = findViewById(R.id.serverUrlEdit)
-        connectButton = findViewById(R.id.connectButton)
-        disconnectButton = findViewById(R.id.disconnectButton)
-        loggedInUserText = findViewById(R.id.loggedInUserText)
-        trackerSelectorCard = findViewById(R.id.trackerSelectorCard)
-        selectedTrackerText = findViewById(R.id.selectedTrackerText)
-        trackerSaveProgress = findViewById(R.id.trackerSaveProgress)
-        trackerSpinner = findViewById(R.id.trackerSpinner)
-        createTrackerButton = findViewById(R.id.createTrackerButton)
-        intervalEdit = findViewById(R.id.intervalEdit)
-        distanceEdit = findViewById(R.id.distanceEdit)
-        accuracyEdit = findViewById(R.id.accuracyEdit)
-        extendedParamsSwitch = findViewById(R.id.extendedParamsSwitch)
-        significantMotionSwitch = findViewById(R.id.significantMotionSwitch)
-        startOnBootSwitch = findViewById(R.id.startOnBootSwitch)
+        serverUrlEdit = view.findViewById(R.id.serverUrlEdit)
+        connectButton = view.findViewById(R.id.connectButton)
+        disconnectButton = view.findViewById(R.id.disconnectButton)
+        loggedInUserText = view.findViewById(R.id.loggedInUserText)
+        trackerSelectorCard = view.findViewById(R.id.trackerSelectorCard)
+        selectedTrackerText = view.findViewById(R.id.selectedTrackerText)
+        trackerSaveProgress = view.findViewById(R.id.trackerSaveProgress)
+        trackerSpinner = view.findViewById(R.id.trackerSpinner)
+        createTrackerButton = view.findViewById(R.id.createTrackerButton)
+        intervalEdit = view.findViewById(R.id.intervalEdit)
+        distanceEdit = view.findViewById(R.id.distanceEdit)
+        accuracyEdit = view.findViewById(R.id.accuracyEdit)
+        extendedParamsSwitch = view.findViewById(R.id.extendedParamsSwitch)
+        significantMotionSwitch = view.findViewById(R.id.significantMotionSwitch)
+        startOnBootSwitch = view.findViewById(R.id.startOnBootSwitch)
 
         loadSettings()
         updateUi()
@@ -144,7 +150,7 @@ class SettingsActivity : AppCompatActivity() {
         disconnectButton.setOnClickListener { onDisconnectClicked() }
         createTrackerButton.setOnClickListener { onCreateTrackerClicked() }
         trackerSelectorCard.setOnClickListener { showTrackerSelectionDialog() }
-        findViewById<View>(R.id.selectedTrackerLabel).setOnClickListener { showTrackerSelectionDialog() }
+        view.findViewById<View>(R.id.selectedTrackerLabel).setOnClickListener { showTrackerSelectionDialog() }
 
         extendedParamsSwitch.setOnCheckedChangeListener { _, isChecked ->
             saveSetting("extended_params", isChecked)
@@ -158,11 +164,11 @@ class SettingsActivity : AppCompatActivity() {
             saveSetting("start_on_boot", isChecked)
         }
 
-        findViewById<View>(R.id.loggingHelpButton).setOnClickListener { showLoggingHelpDialog() }
+        view.findViewById<View>(R.id.loggingHelpButton).setOnClickListener { showLoggingHelpDialog() }
     }
 
     private fun showLoggingHelpDialog() {
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(requireContext())
             .setTitle(getString(R.string.logging_help_title))
             .setMessage(getString(R.string.logging_help_message))
             .setPositiveButton(getString(R.string.close), null)
@@ -170,12 +176,12 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun loadSettings() {
-        val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val serverUrl = GeovaultAuthManager.getServerUrl(this)
+        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+        val serverUrl = GeovaultAuthManager.getServerUrl(requireContext())
         if (serverUrl.isNotEmpty()) {
             serverUrlEdit.setText(serverUrl)
         } else {
-            val otherUrls = com.geovault.common.ServerUrlContract.getServerUrlsFromOtherApps(this)
+            val otherUrls = com.geovault.common.ServerUrlContract.getServerUrlsFromOtherApps(requireContext())
             if (otherUrls.size == 1) {
                 serverUrlEdit.setText(otherUrls.single())
             }
@@ -213,29 +219,28 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun saveSetting(key: String, value: String) {
-        getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit().putString(key, value).apply()
+        requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit().putString(key, value).apply()
     }
 
     private fun saveSetting(key: String, value: Boolean) {
-        getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit().putBoolean(key, value).apply()
+        requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit().putBoolean(key, value).apply()
     }
 
-    /** Saves the selected tracker immediately (synchronous) so it is persisted before the dialog closes. */
     private fun saveSelectedTracker(trackerId: String, trackerName: String) {
-        getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
+        requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
             .putString("selected_tracker_id", trackerId)
             .putString("selected_tracker_name", trackerName)
             .commit()
     }
 
     private fun updateUi() {
-        val isLoggedIn = GeovaultAuthManager.isLoggedIn(this)
+        val isLoggedIn = GeovaultAuthManager.isLoggedIn(requireContext())
         connectButton.visibility = if (isLoggedIn) View.GONE else View.VISIBLE
         disconnectButton.visibility = if (isLoggedIn) View.VISIBLE else View.GONE
         loggedInUserText.visibility = if (isLoggedIn) View.VISIBLE else View.GONE
         createTrackerButton.visibility = if (isLoggedIn) View.VISIBLE else View.GONE
         
-        val email = GeovaultAuthManager.getCachedUserEmail(this)
+        val email = GeovaultAuthManager.getCachedUserEmail(requireContext())
         loggedInUserText.text = if (email != null) "Logged in as $email" else "Logged in"
 
         if (isLoggedIn) {
@@ -247,47 +252,47 @@ class SettingsActivity : AppCompatActivity() {
     private fun onConnectClicked() {
         val url = normalizeServerUrl(serverUrlEdit.text.toString())
         if (url.isEmpty()) {
-            Toast.makeText(this, "Please enter server URL", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "Please enter server URL", Toast.LENGTH_SHORT).show()
             return
         }
-        GeovaultAuthManager.setServerUrl(this, url)
+        GeovaultAuthManager.setServerUrl(requireContext(), url)
         
         val (verifier, challenge) = GeovaultAuthManager.generatePkcePair()
         val state = java.util.UUID.randomUUID().toString()
-        GeovaultAuthManager.savePkceState(this, verifier, state)
+        GeovaultAuthManager.savePkceState(requireContext(), verifier, state)
         
         val authUrl = GeovaultAuthManager.buildAuthorizeUrl(url, challenge, state)
-        GeovaultAuthManager.launchOAuthInBrowser(this, authUrl)
+        GeovaultAuthManager.launchOAuthInBrowser(requireContext(), authUrl)
     }
 
     private fun onDisconnectClicked() {
-        val dialog = AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(requireContext())
             .setTitle(getString(R.string.disconnect_confirm_title))
             .setMessage(getString(R.string.disconnect_confirm_message))
             .setPositiveButton(getString(R.string.disconnect)) { _, _ ->
-                GeovaultAuthManager.revokeToken(this, GeovaultAuthManager.getAccessToken(this))
-                GeovaultAuthManager.revokeToken(this, GeovaultAuthManager.getRefreshToken(this))
-                GeovaultAuthManager.clearTokens(this)
+                GeovaultAuthManager.revokeToken(requireContext(), GeovaultAuthManager.getAccessToken(requireContext()))
+                GeovaultAuthManager.revokeToken(requireContext(), GeovaultAuthManager.getRefreshToken(requireContext()))
+                GeovaultAuthManager.clearTokens(requireContext())
                 updateUi()
-                Toast.makeText(this, getString(R.string.disconnect), Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), getString(R.string.disconnect), Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton(getString(R.string.cancel_button), null)
             .show()
         dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(
-            ContextCompat.getColor(this, R.color.error_red)
+            ContextCompat.getColor(requireContext(), R.color.error_red)
         )
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(
-            ContextCompat.getColor(this, com.geovault.common.R.color.gv_common_dialog_negative_button)
+            ContextCompat.getColor(requireContext(), com.geovault.common.R.color.gv_common_dialog_negative_button)
         )
     }
 
     private fun onCreateTrackerClicked() {
-        val input = EditText(this).apply {
+        val input = EditText(requireContext()).apply {
             hint = "Tracker name"
             setPadding(48, 32, 48, 32)
         }
 
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(requireContext())
             .setTitle("Create New Tracker")
             .setView(input)
             .setPositiveButton("Create") { _, _ ->
@@ -301,72 +306,77 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun createTracker(name: String) {
-        val serverUrl = GeovaultAuthManager.getServerUrl(this)
+        val serverUrl = GeovaultAuthManager.getServerUrl(requireContext())
         if (serverUrl.isEmpty()) return
 
         setTrackerOperationInProgress(true)
         scheduleTrackerOperationTimeout {
-            runOnUiThread {
-                setTrackerOperationInProgress(false)
-                Toast.makeText(this@SettingsActivity, R.string.tracker_operation_timeout, Toast.LENGTH_SHORT).show()
+            if (isAdded) {
+                requireActivity().runOnUiThread {
+                    setTrackerOperationInProgress(false)
+                    Toast.makeText(requireContext(), R.string.tracker_operation_timeout, Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(this, baseUrl).create(TrackerApi::class.java)
+        val api = RetrofitClient.getClient(requireContext(), baseUrl).create(TrackerApi::class.java)
 
         api.createTracker(TrackerCreateRequest(name)).enqueue(object : Callback<Tracker> {
             override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
-                runOnUiThread {
-                    if (response.isSuccessful) {
-                        val newTracker = response.body()
-                        if (newTracker != null) {
-                            saveSelectedTracker(newTracker.id, newTracker.name)
-                            TrackerRepository.clearCurrentTrackerCache()
-                            selectedTrackerText.text = newTracker.name
-                            Toast.makeText(this@SettingsActivity, "Tracker '${newTracker.name}' created", Toast.LENGTH_SHORT).show()
-                            // Timeout stays active; clear loading when list refresh completes
-                            fetchTrackers(forceRefresh = true) {
+                if (isAdded) {
+                    requireActivity().runOnUiThread {
+                        if (response.isSuccessful) {
+                            val newTracker = response.body()
+                            if (newTracker != null) {
+                                saveSelectedTracker(newTracker.id, newTracker.name)
+                                TrackerRepository.clearCurrentTrackerCache()
+                                selectedTrackerText.text = newTracker.name
+                                Toast.makeText(requireContext(), "Tracker '${newTracker.name}' created", Toast.LENGTH_SHORT).show()
+                                fetchTrackers(forceRefresh = true) {
+                                    cancelTrackerOperationTimeout()
+                                    setTrackerOperationInProgress(false)
+                                }
+                            } else {
                                 cancelTrackerOperationTimeout()
                                 setTrackerOperationInProgress(false)
                             }
                         } else {
                             cancelTrackerOperationTimeout()
                             setTrackerOperationInProgress(false)
+                            Toast.makeText(requireContext(), "Failed to create tracker", Toast.LENGTH_SHORT).show()
                         }
-                    } else {
-                        cancelTrackerOperationTimeout()
-                        setTrackerOperationInProgress(false)
-                        Toast.makeText(this@SettingsActivity, "Failed to create tracker", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
             override fun onFailure(call: Call<Tracker>, t: Throwable) {
-                runOnUiThread {
-                    cancelTrackerOperationTimeout()
-                    setTrackerOperationInProgress(false)
-                    Log.e("SettingsActivity", "Failed to create tracker", t)
-                    Toast.makeText(this@SettingsActivity, "Network error", Toast.LENGTH_SHORT).show()
+                if (isAdded) {
+                    requireActivity().runOnUiThread {
+                        cancelTrackerOperationTimeout()
+                        setTrackerOperationInProgress(false)
+                        Log.e("SettingsFragment", "Failed to create tracker", t)
+                        Toast.makeText(requireContext(), "Network error", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         })
     }
 
     private fun showTrackerSpinnerPlaceholder() {
-        val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val savedName = prefs.getString("selected_tracker_name", null)
         selectedTrackerText.text = when {
             !savedName.isNullOrBlank() -> savedName
             else -> getString(R.string.loading_trackers)
         }
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, listOf(selectedTrackerText.text))
+        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, listOf(selectedTrackerText.text))
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         trackerSpinner.adapter = adapter
     }
 
     private fun showTrackerSelectionDialog() {
         if (trackers.isEmpty()) {
-            AlertDialog.Builder(this)
+            AlertDialog.Builder(requireContext())
                 .setTitle(R.string.select_tracker)
                 .setMessage(getString(R.string.no_trackers_found_message))
                 .setPositiveButton(android.R.string.ok, null)
@@ -375,12 +385,12 @@ class SettingsActivity : AppCompatActivity() {
             return
         }
         val names = trackers.map { it.name }.toTypedArray()
-        val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val currentId = prefs.getString("selected_tracker_id", null)
         var selectedIndex = trackers.indexOfFirst { it.id == currentId }
         if (selectedIndex < 0) selectedIndex = 0
 
-        val selectDialog = AlertDialog.Builder(this)
+        val selectDialog = AlertDialog.Builder(requireContext())
             .setTitle(R.string.select_tracker)
             .setSingleChoiceItems(names, selectedIndex) { dialog, which ->
                 val tracker = trackers.getOrNull(which) ?: return@setSingleChoiceItems
@@ -396,11 +406,13 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun fetchTrackers(forceRefresh: Boolean = false, onComplete: (() -> Unit)? = null) {
-        TrackerRepository.getTrackers(this, forceRefresh) { list ->
-            runOnUiThread {
-                trackers = list ?: emptyList()
-                setupTrackerSpinner()
-                onComplete?.invoke()
+        TrackerRepository.getTrackers(requireContext(), forceRefresh) { list ->
+            if (isAdded) {
+                requireActivity().runOnUiThread {
+                    trackers = list ?: emptyList()
+                    setupTrackerSpinner()
+                    onComplete?.invoke()
+                }
             }
         }
     }
@@ -408,17 +420,17 @@ class SettingsActivity : AppCompatActivity() {
     private fun setupTrackerSpinner() {
         if (trackers.isEmpty()) {
             selectedTrackerText.text = getString(R.string.no_trackers_found)
-            val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, listOf(getString(R.string.no_trackers_found)))
+            val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, listOf(getString(R.string.no_trackers_found)))
             trackerSpinner.adapter = adapter
             return
         }
 
         val names = trackers.map { it.name }
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, names)
+        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, names)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         trackerSpinner.adapter = adapter
 
-        val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val currentId = prefs.getString("selected_tracker_id", null)
         val currentIndex = trackers.indexOfFirst { it.id == currentId }
         if (currentIndex >= 0) {
@@ -427,5 +439,15 @@ class SettingsActivity : AppCompatActivity() {
         } else {
             selectedTrackerText.text = trackers.firstOrNull()?.name ?: getString(R.string.select_tracker)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        trackerSaveRotationRunnable?.let { mainHandler.removeCallbacks(it) }
+        trackerOperationTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
     }
 }

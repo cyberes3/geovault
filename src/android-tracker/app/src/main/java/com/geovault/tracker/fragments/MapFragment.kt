@@ -1,0 +1,270 @@
+package com.geovault.tracker.fragments
+
+import android.content.*
+import android.location.Location
+import android.os.Bundle
+import android.view.Choreographer
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ImageView
+import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
+import androidx.fragment.app.Fragment
+import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.map.MapLibreManager
+import com.geovault.tracker.MainActivity
+import com.geovault.tracker.R
+import com.geovault.tracker.TrackerRepository
+import kotlinx.coroutines.*
+import org.maplibre.android.camera.CameraUpdateFactory
+import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapView
+import org.maplibre.android.plugins.annotation.LineManager
+import org.maplibre.android.plugins.annotation.LineOptions
+import org.maplibre.android.plugins.annotation.SymbolManager
+import org.maplibre.android.plugins.annotation.SymbolOptions
+
+class MapFragment : Fragment() {
+
+    private lateinit var mapView: MapView
+    private lateinit var mapManager: MapLibreManager
+    private var maplibreMap: MapLibreMap? = null
+    private var symbolManager: SymbolManager? = null
+    private var lineManager: LineManager? = null
+    private var trackPoints: MutableList<LatLng> = mutableListOf()
+    
+    private lateinit var mapLoadingOverlay: View
+    private lateinit var mapToggle: View
+    private lateinit var zoomToLatestButton: View
+    private lateinit var zoomToLatestButtonIcon: ImageView
+
+    private var mapReady = false
+    private var followLockEnabled = false
+
+    private val mainScope = CoroutineScope(Dispatchers.Main + Job())
+
+    private val locationReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val location = IntentCompat.getParcelableExtra(intent, "location", Location::class.java)
+            if (location != null) {
+                updateLocationOnMap(location)
+            }
+        }
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        return inflater.inflate(R.layout.fragment_map, container, false)
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        mapView = view.findViewById(R.id.mapView)
+        mapLoadingOverlay = view.findViewById(R.id.mapLoadingOverlay)
+        mapToggle = view.findViewById(R.id.mapToggle)
+        zoomToLatestButton = view.findViewById(R.id.zoomToLatestButton)
+        zoomToLatestButtonIcon = view.findViewById(R.id.zoomToLatestButtonIcon)
+
+        followLockEnabled = savedInstanceState?.getBoolean(KEY_FOLLOW_LOCK, false) ?: false
+        updateFollowLockButton()
+
+        mapManager = MapLibreManager(requireActivity(), mapView)
+        mapManager.onStyleLoaded = { map, style ->
+            maplibreMap = map
+            mapManager.addMarkerIcon(style, "marker-default", R.drawable.ic_marker_default)
+            mapManager.addMarkerIcon(style, "track-direction-arrow", R.drawable.ic_track_direction_arrow)
+            lineManager = LineManager(mapView, map, style)
+            symbolManager = SymbolManager(mapView, map, style)
+            mapReady = true
+            mapLoadingOverlay.visibility = View.GONE
+            mapView.post { fetchHistory() }
+        }
+        
+        mapView.onCreate(savedInstanceState)
+        
+        mapManager.fetchMapSources {
+            maplibreMap?.let { map ->
+                Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
+                    override fun doFrame(frameTimeNanos: Long) {
+                        if (!isAdded) return
+                        mapManager.applySelectedSource(map)
+                    }
+                })
+            }
+        }
+        
+        mapView.getMapAsync { map ->
+            maplibreMap = map
+            mapManager.setupBaseMapSettings(map)
+            map.addOnCameraMoveStartedListener { reason ->
+                if (reason == 1 && followLockEnabled) {
+                    followLockEnabled = false
+                    updateFollowLockButton()
+                }
+            }
+            val serverUrl = GeovaultAuthManager.getServerUrl(requireContext())
+            if (mapManager.sourcesFetched || serverUrl.isEmpty()) {
+                Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
+                    override fun doFrame(frameTimeNanos: Long) {
+                        if (!isAdded) return
+                        mapManager.applySelectedSource(map)
+                    }
+                })
+            }
+        }
+
+        mapToggle.setOnClickListener {
+            val map = maplibreMap ?: return@setOnClickListener
+            mapManager.sourceManager.setSelectedSourceId(mapManager.sourceManager.getNextSourceId())
+            mapManager.applySelectedSource(map)
+        }
+        
+        zoomToLatestButton.setOnClickListener {
+            followLockEnabled = !followLockEnabled
+            if (followLockEnabled && trackPoints.isNotEmpty()) {
+                maplibreMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(trackPoints.last(), 16.0))
+            }
+            updateFollowLockButton()
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        mapView.onStart()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        mapView.onResume()
+        
+        ContextCompat.registerReceiver(
+            requireContext(),
+            locationReceiver,
+            IntentFilter("com.geovault.tracker.LOCATION_UPDATE"),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+    }
+
+    override fun onPause() {
+        super.onPause()
+        mapView.onPause()
+        
+        try {
+            requireContext().unregisterReceiver(locationReceiver)
+        } catch (e: IllegalArgumentException) {
+            // Already unregistered
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        mapView.onStop()
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        mapView.onDestroy()
+        mainScope.cancel()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(KEY_FOLLOW_LOCK, followLockEnabled)
+        mapView.onSaveInstanceState(outState)
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        mapView.onLowMemory()
+    }
+
+    private fun updateFollowLockButton() {
+        if (followLockEnabled) {
+            zoomToLatestButtonIcon.setImageResource(R.drawable.ic_crosshair_locked)
+            zoomToLatestButtonIcon.contentDescription = getString(R.string.follow_lock_on_description)
+        } else {
+            zoomToLatestButtonIcon.setImageResource(R.drawable.ic_crosshair)
+            zoomToLatestButtonIcon.contentDescription = getString(R.string.zoom_to_latest_description)
+        }
+    }
+
+    private fun updateLocationOnMap(location: Location) {
+        val map = maplibreMap ?: return
+        val latLng = LatLng(location.latitude, location.longitude)
+        trackPoints.add(latLng)
+        if (trackPoints.size > 1000) {
+            trackPoints.removeAt(0)
+        }
+        updateTrackLine()
+        if (followLockEnabled) {
+            map.animateCamera(CameraUpdateFactory.newLatLng(latLng))
+        }
+    }
+
+    private fun fetchHistory() {
+        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+        val trackerId = prefs.getString("selected_tracker_id", "") ?: ""
+        if (trackerId.isEmpty()) return
+
+        TrackerRepository.getTracker(requireContext(), trackerId) { tracker ->
+            mainScope.launch {
+                val coords = tracker?.geometry?.coordinates
+                if (coords != null) {
+                    trackPoints.clear()
+                    trackPoints.addAll(coords.map { LatLng(it[1], it[0]) }.takeLast(1000))
+                    updateTrackLine()
+                    if (trackPoints.isNotEmpty()) {
+                        maplibreMap?.animateCamera(CameraUpdateFactory.newLatLng(trackPoints.last()))
+                    }
+                }
+            }
+        }
+    }
+
+    private fun updateTrackLine() {
+        val manager = lineManager ?: return
+        manager.deleteAll()
+        if (trackPoints.size >= 2) {
+            manager.create(LineOptions()
+                .withLatLngs(trackPoints)
+                .withLineColor("#3388ff")
+                .withLineWidth(3f)
+            )
+        }
+        updatePositionSymbol()
+    }
+
+    private fun updatePositionSymbol() {
+        val symManager = symbolManager ?: return
+        symManager.deleteAll()
+        if (trackPoints.isEmpty()) return
+        val last = trackPoints.last()
+        val rotation = getTrackDirectionDegrees(trackPoints)
+        symManager.create(SymbolOptions()
+            .withLatLng(last)
+            .withIconImage("track-direction-arrow")
+            .withIconSize(0.75f)
+            .withIconRotate(rotation)
+        )
+    }
+
+    private fun getTrackDirectionDegrees(points: List<LatLng>): Float {
+        if (points.size < 2) return 0f
+        val prev = points[points.size - 2]
+        val last = points.last()
+        val dLon = last.longitude - prev.longitude
+        val dLat = last.latitude - prev.latitude
+        if (dLon == 0.0 && dLat == 0.0) return 0f
+        return (Math.atan2(dLon, dLat) * 180 / Math.PI).toFloat()
+    }
+
+    companion object {
+        private const val KEY_FOLLOW_LOCK = "follow_lock"
+    }
+}

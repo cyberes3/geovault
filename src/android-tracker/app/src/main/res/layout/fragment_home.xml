@@ -1,0 +1,325 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/surface"
+    android:fillViewport="true">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <!-- Permissions Container (shown when permissions not granted) -->
+        <LinearLayout
+            android:id="@+id/permissionsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="32dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/permissions_required_title"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/permissions_required_message"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:gravity="center"
+                android:layout_marginBottom="32dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/grantLocationButton"
+                style="@style/gv_common_ButtonPrimary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/grant_location_permission"
+                android:textSize="16sp"
+                android:layout_marginBottom="12dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/grantBackgroundLocationButton"
+                style="@style/gv_common_ButtonPrimary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/grant_background_location"
+                android:textSize="16sp"
+                android:layout_marginBottom="12dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/grantNotificationButton"
+                style="@style/gv_common_ButtonPrimary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/grant_notification_permission"
+                android:textSize="16sp"
+                android:layout_marginBottom="12dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/grantBatteryButton"
+                style="@style/gv_common_ButtonPrimary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/disable_battery_optimization"
+                android:textSize="16sp" />
+
+        </LinearLayout>
+
+        <!-- Tracking Content Container (shown when permissions granted) -->
+        <LinearLayout
+            android:id="@+id/trackingContentContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="32dp"
+            android:visibility="visible">
+
+        <!-- Radar Dish Visualization -->
+        <FrameLayout
+            android:layout_width="180dp"
+            android:layout_height="180dp"
+            android:layout_marginBottom="24dp">
+            
+            <!-- Radar dish icon -->
+            <ImageView
+                android:id="@+id/radarDishIcon"
+                android:layout_width="140dp"
+                android:layout_height="140dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_radar_dish"
+                app:tint="@color/primary_blue" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/trackingStatusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/not_tracking"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary"
+            android:layout_marginBottom="16dp" />
+
+        <LinearLayout
+            android:id="@+id/sessionStatsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="visible"
+            android:layout_marginBottom="32dp">
+
+            <!-- Row 1: Elapsed, Sent -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:layout_marginBottom="6dp">
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="3dp"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp"
+                    app:strokeWidth="1dp"
+                    app:strokeColor="@color/border_light">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:paddingHorizontal="6dp"
+                        android:paddingVertical="6dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/stat_label_elapsed"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/text_secondary"
+                            android:includeFontPadding="false" />
+                        <TextView
+                            android:id="@+id/trackingDurationText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="1dp"
+                            android:gravity="center"
+                            android:text="—"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_primary"
+                            android:maxLines="1"
+                            android:ellipsize="end"
+                            android:includeFontPadding="false" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="3dp"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp"
+                    app:strokeWidth="1dp"
+                    app:strokeColor="@color/border_light">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:paddingHorizontal="6dp"
+                        android:paddingVertical="6dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/stat_label_sent"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/text_secondary"
+                            android:includeFontPadding="false" />
+                        <TextView
+                            android:id="@+id/pointsSentSessionText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="1dp"
+                            android:gravity="center"
+                            android:text="—"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_primary"
+                            android:maxLines="1"
+                            android:ellipsize="end"
+                            android:includeFontPadding="false" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+
+            <!-- Row 2: Last, Queued -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center">
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="3dp"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp"
+                    app:strokeWidth="1dp"
+                    app:strokeColor="@color/border_light">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:paddingHorizontal="6dp"
+                        android:paddingVertical="6dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/stat_label_last"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/text_secondary"
+                            android:includeFontPadding="false" />
+                        <TextView
+                            android:id="@+id/lastPointSentText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="1dp"
+                            android:gravity="center"
+                            android:text="—"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_primary"
+                            android:maxLines="1"
+                            android:ellipsize="end"
+                            android:includeFontPadding="false" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="3dp"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="0dp"
+                    app:strokeWidth="1dp"
+                    app:strokeColor="@color/border_light">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:paddingHorizontal="6dp"
+                        android:paddingVertical="6dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/stat_label_queued"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/text_secondary"
+                            android:includeFontPadding="false" />
+                        <TextView
+                            android:id="@+id/queueCountText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="1dp"
+                            android:gravity="center"
+                            android:text="0"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_primary"
+                            android:maxLines="1"
+                            android:ellipsize="end"
+                            android:includeFontPadding="false" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+        </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/startStopButton"
+            style="@style/gv_common_ButtonPrimary"
+            android:layout_width="200dp"
+            android:layout_height="64dp"
+            android:text="@string/start_tracking"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/currentLocationText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:text=""
+            android:textSize="14sp"
+            android:textColor="@color/text_secondary"
+            android:gravity="center" />
+
+        </LinearLayout>
+
+    </FrameLayout>
+</ScrollView>

@@ -133,9 +133,9 @@
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <h2 class="text-lg font-semibold text-gray-900 mb-4">Android Apps</h2>
       <p class="text-sm text-gray-500 mb-4">
-        Install the companion apps (Android only) to upload files and manage your places on the go.
+        Install the companion apps (Android only) to upload files, manage your places, and track your location on the go.
       </p>
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <a
             :href="uploaderApkUrl"
             target="_blank"
@@ -144,12 +144,12 @@
         >
           <div class="flex-shrink-0">
             <div
-                class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition-colors duration-200">
-              <DevicePhoneMobileIcon class="w-6 h-6 text-green-600"/>
+                class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center group-hover:bg-purple-200 transition-colors duration-200">
+              <DevicePhoneMobileIcon class="w-6 h-6 text-purple-600"/>
             </div>
           </div>
           <div class="ml-4 flex-1 min-w-0">
-            <h3 class="text-sm font-medium text-gray-900 group-hover:text-green-600">Uploader</h3>
+            <h3 class="text-sm font-medium text-gray-900 group-hover:text-purple-600">Uploader</h3>
             <p class="text-sm text-gray-500">Upload KML/KMZ/GPX files</p>
           </div>
           <ArrowDownTrayIcon class="w-5 h-5 text-gray-400 flex-shrink-0"/>
@@ -169,6 +169,24 @@
           <div class="ml-4 flex-1 min-w-0">
             <h3 class="text-sm font-medium text-gray-900 group-hover:text-yellow-600">Places</h3>
             <p class="text-sm text-gray-500">Manage and view your places</p>
+          </div>
+          <ArrowDownTrayIcon class="w-5 h-5 text-gray-400 flex-shrink-0"/>
+        </a>
+        <a
+            :href="trackerApkUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors duration-200 group"
+        >
+          <div class="flex-shrink-0">
+            <div
+                class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors duration-200">
+              <SignalIcon class="w-6 h-6 text-blue-600"/>
+            </div>
+          </div>
+          <div class="ml-4 flex-1 min-w-0">
+            <h3 class="text-sm font-medium text-gray-900 group-hover:text-blue-600">Tracker</h3>
+            <p class="text-sm text-gray-500">Live location sharing</p>
           </div>
           <ArrowDownTrayIcon class="w-5 h-5 text-gray-400 flex-shrink-0"/>
         </a>
@@ -230,6 +248,7 @@ import {
   ArrowTopRightOnSquareIcon,
   DevicePhoneMobileIcon,
   MapPinIcon,
+  SignalIcon,
   ArrowDownOnSquareIcon,
 } from "@heroicons/vue/24/outline";
 
@@ -241,6 +260,9 @@ export default {
     },
     placesApkUrl() {
       return this.appReleases?.places_url ?? this.releasesPageUrl;
+    },
+    trackerApkUrl() {
+      return this.appReleases?.tracker_url ?? this.releasesPageUrl;
     },
     pwaMintEnabled() {
       return this.extensions.some(ext => ext.name === 'pwa_mint');
@@ -262,6 +284,7 @@ export default {
     ArrowDownTrayIcon,
     ArrowTopRightOnSquareIcon,
     MapPinIcon,
+    SignalIcon,
     ArrowDownOnSquareIcon,
   },
   data() {

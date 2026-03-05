@@ -9,6 +9,7 @@ Always use top-level imports in Python, not local/function level!
 The backend venv is at src/backend/venv
 
 Run tests with src/tests/run-tests.sh. We have like 2000+ tests so do not blindly run this script. Instead, run specific tests. More instructions available at src/tests/README.md. Read this before running any tests.
+YES: `./run-tests.sh test_api/test_app_releases.py` NO: `src/tests/run-tests.sh src/tests/test_api/test_app_releases.py`
 
 Do not re-export modules or use __all__. Instead, do direct imports
 

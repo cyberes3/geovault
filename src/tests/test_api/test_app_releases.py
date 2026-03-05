@@ -51,6 +51,7 @@ class TestAppReleasesAPI(TestCase):
         self.assertEqual(data["releases_page_url"], TEST_RELEASES_PAGE_URL)
         self.assertIn("uploader_url", data)
         self.assertIn("places_url", data)
+        self.assertIn("tracker_url", data)
         # At least uploader APK should be present from real releases
         self.assertIsNotNone(
             data["uploader_url"],
@@ -73,6 +74,7 @@ class TestAppReleasesAPI(TestCase):
         data = json.loads(response.content)
         self.assertIsNone(data["uploader_url"])
         self.assertIsNone(data["places_url"])
+        self.assertIsNone(data["tracker_url"])
         self.assertEqual(data["releases_page_url"], TEST_RELEASES_PAGE_URL)
         self.assertIn("no-store", response.get("Cache-Control", ""))
 
@@ -91,6 +93,7 @@ class TestAppReleasesAPI(TestCase):
         data = json.loads(response.content)
         self.assertIsNone(data["uploader_url"])
         self.assertIsNone(data["places_url"])
+        self.assertIsNone(data["tracker_url"])
         self.assertEqual(data["releases_page_url"], TEST_RELEASES_PAGE_URL)
         self.assertIn("no-store", response.get("Cache-Control", ""))
 

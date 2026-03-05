@@ -1,9 +1,11 @@
 """
-Ingress endpoints: POST-only, Basic Auth, rate limit, insert point by timestamp.
+Ingress endpoints: POST-only, Basic Auth or OAuth, rate limit, insert point by timestamp.
 """
 
 import base64
 import bisect
+import struct
+import uuid
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -14,9 +16,12 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.website.auth import api_or_login_required_401
 from pydantic import ValidationError as PydanticValidationError
 
+from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response
+from api.utils.responses import handle_404
 from website.config_loader import get_config_loader
 
 from .helpers import broadcast_track_updated, parse_ingress_body, parse_time_to_ms
@@ -117,12 +122,27 @@ def ingress(request):
     return JsonResponse({"ok": True}, status=200)
 
 
+@api_or_login_required_401()
+@handle_404
 @require_http_methods(["POST"])
 @csrf_exempt
-def app_ingress(request, tracker_secret):
-    track = LiveTrack.objects.filter(tracker_secret=tracker_secret).first()
-    if not track:
-        return error_response("Invalid tracker secret", 404)
+def app_ingress(request):
+    body = request.body
+    if not body.startswith(b"GVLT"):
+        return error_response("Invalid magic bytes", 400)
+    if len(body) < 5:
+        return error_response("Invalid magic bytes", 400)
+    version = body[4]
+    if version != 0x02:
+        return error_response("Unsupported version", 400)
+    if len(body) < 21:
+        return error_response("Missing tracker ID", 400)
+    try:
+        tracker_uuid = uuid.UUID(bytes=bytes(body[5:21]))
+    except (ValueError, TypeError):
+        return error_response("Invalid tracker ID", 400)
+
+    track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_uuid)
 
     cache_backend = getattr(settings, "CACHES", {}).get("default", {}).get("BACKEND", "")
     if "redis" in cache_backend.lower():
@@ -133,71 +153,64 @@ def app_ingress(request, tracker_secret):
             return error_response("Rate limit exceeded", 429)
         cache.set(rate_key, now_ts, timeout=2)
 
-    body = request.body
-    if not body.startswith(b'GVLT\x01'):
-        if not body.startswith(b'GVLT'):
-            return error_response("Invalid magic bytes", 400)
-        return error_response("Unsupported version", 400)
-        
-    import struct
-    offset = 5
+    offset = 21
     points = []
     while offset < len(body):
         if offset + 25 > len(body):
             return error_response("Incomplete base point", 400)
-            
-        flag, ts_ms, lat, lon = struct.unpack_from('>Bqdd', body, offset)
+
+        flag, ts_ms, lat, lon = struct.unpack_from(">Bqdd", body, offset)
         offset += 25
-        
+
         point_data = {"lat": lat, "lon": lon, "timestamp": ts_ms}
-        
+
         if flag & 1:
             if offset + 16 > len(body):
                 return error_response("Incomplete extended data", 400)
-            alt, spd, bearing, acc = struct.unpack_from('>ffff', body, offset)
+            alt, spd, bearing, acc = struct.unpack_from(">ffff", body, offset)
             offset += 16
             point_data.update({"alt": alt, "spd_kph": spd, "bearing": bearing, "acc": acc})
-            
+
         points.append(point_data)
-        
+
     if not points:
         return JsonResponse({"ok": True}, status=200)
-        
+
     max_points = get_config_loader().get_int("extensions.live_track.max_points", 1000)
-    
+
     with transaction.atomic():
         track_locked = LiveTrack.objects.select_for_update().get(pk=track.id)
         geom = track_locked.geometry or {"type": "LineString", "coordinates": []}
         coords = list(geom.get("coordinates") or [])
         point_params = list(track_locked.point_params or [])
-        
+
         for point_data in points:
             new_point = [point_data["lon"], point_data["lat"], point_data["timestamp"]]
             extra = {k: v for k, v in point_data.items() if k not in ("lat", "lon", "timestamp")}
-            
+
             ts_list = [c[2] for c in coords]
             idx = bisect.bisect_right(ts_list, point_data["timestamp"])
             coords.insert(idx, new_point)
             point_params.insert(idx, extra)
-            
+
         if len(coords) > max_points:
             n_removed = len(coords) - max_points
             coords = coords[n_removed:]
             point_params = point_params[n_removed:]
-            
+
         track_locked.geometry = {"type": "LineString", "coordinates": coords}
         track_locked.point_params = point_params
         track_locked.updated_at = timezone.now()
         track_locked.save(update_fields=["geometry", "point_params", "updated_at"])
-        
+
         last_point_data = points[-1]
         last_new_point = [last_point_data["lon"], last_point_data["lat"], last_point_data["timestamp"]]
         last_extra = {k: v for k, v in last_point_data.items() if k not in ("lat", "lon", "timestamp")}
         try:
             broadcast_idx = coords.index(last_new_point)
-        except ValueError: # Pruned out
+        except ValueError:
             broadcast_idx = None
-            
+
     if broadcast_idx is not None:
         broadcast_track_updated(track.user.id, str(track.id), last_new_point, last_extra, index=broadcast_idx)
 

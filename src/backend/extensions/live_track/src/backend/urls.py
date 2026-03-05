@@ -11,5 +11,5 @@ urlpatterns = [
     path("ingress-body-template/", views.ingress_body_template),
     path("ingress/", views.ingress),
     path("ingress", views.ingress),  # no slash: GPSLogger may send here; redirect would drop POST body
-    path("app-ingress/<str:tracker_secret>/", views.app_ingress),
+    path("app-ingress/", views.app_ingress),
 ]

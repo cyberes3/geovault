@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.RetrofitClient
 import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.db.QueuedLocation
 import com.google.android.gms.location.*
@@ -55,7 +56,6 @@ class TrackingService : Service() {
         const val PREF_INTERVAL = "logging_interval"
         const val PREF_DISTANCE = "logging_distance"
         const val PREF_ACCURACY = "logging_accuracy"
-        const val PREF_TRACKER_SECRET = "tracker_secret"
         const val PREF_EXTENDED_PARAMS = "extended_params"
         const val PREF_SIGNIFICANT_MOTION = "significant_motion_only"
     }
@@ -70,6 +70,8 @@ class TrackingService : Service() {
         .writeTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .build()
+
+    private fun getAuthenticatedHttpClient(): OkHttpClient = RetrofitClient.getAuthenticatedOkHttpClient(applicationContext)
 
     private var sensorManager: SensorManager? = null
     private var significantMotionSensor: Sensor? = null
@@ -124,6 +126,10 @@ class TrackingService : Service() {
         lastPointSentAtMs = 0
         sendBroadcast(Intent(SESSION_STATS_UPDATE))
 
+        runBlocking(Dispatchers.IO) {
+            database.locationDao().deleteAll()
+        }
+
         startForeground(NOTIFICATION_ID, createNotification(0), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
 
         val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
@@ -151,9 +157,12 @@ class TrackingService : Service() {
         isTracking = false
         isRunning = false
         sessionStartTimeMs = 0
-        sendBroadcast(Intent(SESSION_STATS_UPDATE))
         fusedLocationClient.removeLocationUpdates(locationCallback)
         cancelSignificantMotion()
+        runBlocking(Dispatchers.IO) {
+            database.locationDao().deleteAll()
+        }
+        sendBroadcast(Intent(SESSION_STATS_UPDATE))
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -203,9 +212,16 @@ class TrackingService : Service() {
 
     private suspend fun pushLocations() {
         val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val secret = prefs.getString(PREF_TRACKER_SECRET, "") ?: ""
-        if (secret.isEmpty()) {
-            Log.e(TAG, "No tracker secret configured, cannot push locations")
+        val trackerIdStr = prefs.getString("selected_tracker_id", "") ?: ""
+        if (trackerIdStr.isEmpty()) {
+            Log.e(TAG, "No tracker selected, cannot push locations")
+            updateNotificationCount()
+            return
+        }
+        val trackerId = try {
+            java.util.UUID.fromString(trackerIdStr)
+        } catch (e: IllegalArgumentException) {
+            Log.e(TAG, "Invalid selected_tracker_id, cannot push locations", e)
             updateNotificationCount()
             return
         }
@@ -217,7 +233,7 @@ class TrackingService : Service() {
         }
 
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val ingressUrl = "${baseUrl}api/extensions/live-track/app-ingress/$secret/"
+        val ingressUrl = "${baseUrl}api/extensions/live-track/app-ingress/"
 
         val locationsToPush = database.locationDao().getAll()
         if (locationsToPush.isEmpty()) {
@@ -230,7 +246,7 @@ class TrackingService : Service() {
         val androidLocations = batch.map { it.toLocation() }
 
         val includeExtended = prefs.getBoolean(PREF_EXTENDED_PARAMS, true)
-        val payload = BinaryPayloadBuilder.buildPayload(androidLocations, includeExtendedData = includeExtended)
+        val payload = BinaryPayloadBuilder.buildPayload(androidLocations, trackerId, includeExtended)
         val requestBody = payload.toRequestBody("application/octet-stream".toMediaTypeOrNull())
 
         val request = Request.Builder()
@@ -240,7 +256,7 @@ class TrackingService : Service() {
 
         var success = false
         try {
-            val response = httpClient.newCall(request).execute()
+            val response = getAuthenticatedHttpClient().newCall(request).execute()
             if (response.isSuccessful) {
                 Log.d(TAG, "Successfully pushed ${batch.size} locations")
                 success = true
@@ -294,7 +310,7 @@ class TrackingService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.live_tracker_title))
             .setContentText(text)
-            .setSmallIcon(R.drawable.ic_marker_default)
+            .setSmallIcon(R.drawable.ic_radio)
             .setContentIntent(pendingIntent)
             .addAction(R.drawable.ic_close, getString(R.string.stop_tracking), stopPendingIntent)
             .setOngoing(true)

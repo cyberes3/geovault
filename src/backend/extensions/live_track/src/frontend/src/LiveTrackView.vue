@@ -508,18 +508,18 @@ export default {
       if (!map.getSource(POINTS_SOURCE_ID)) {
         map.addSource(POINTS_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       }
-      if (!map.getLayer(`${LINES_LAYER_ID}-outline`)) {
-        map.addLayer(lineOutlineLayerSpec);
-      }
-      if (!map.getLayer(LINES_LAYER_ID)) {
-        map.addLayer(lineLayerSpec);
-      }
       if (!map.getLayer(POINTS_LAYER_ID)) {
         const defaultColor = '#3388ff';
         const defaultId = getArrowImageId(defaultColor);
         const imageData = await rasterizeArrowToImageData(defaultColor);
         if (imageData && !map.hasImage(defaultId)) map.addImage(defaultId, imageData, { pixelRatio: 1 });
         map.addLayer(pointsLayerSpec);
+      }
+      if (!map.getLayer(`${LINES_LAYER_ID}-outline`)) {
+        map.addLayer(lineOutlineLayerSpec, POINTS_LAYER_ID);
+      }
+      if (!map.getLayer(LINES_LAYER_ID)) {
+        map.addLayer(lineLayerSpec, POINTS_LAYER_ID);
       }
       await updateMapFeatures();
     }

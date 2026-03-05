@@ -63,7 +63,8 @@
     <string name="no_description">No description</string>
     <string name="map_style_unavailable_fallback_osm">Map style unavailable, using OpenStreetMap</string>
     <string name="map_toggle_description">Toggle street or satellite map</string>
-    <string name="zoom_to_latest_description">Zoom to latest track point</string>
+    <string name="zoom_to_latest_description">Lock camera to follow latest track point</string>
+    <string name="follow_lock_on_description">Unlock camera (stop following track)</string>
     <string name="map_select_place">Select a place</string>
     <string name="map_tap_marker_hint">Tap a marker to view details</string>
 
@@ -71,5 +72,14 @@
     <string name="logging_help_button">Tips for logging settings</string>
     <string name="logging_help_title">Logging &amp; distance tips</string>
     <string name="logging_help_message">Logging interval – seconds between points. Suggested: 30 for walking, 15 for biking, 10 for driving. Use 0 for maximum frequency (more battery use).\n\nDistance filter – minimum meters between points. Suggested: 10 for walking, 30 for biking, 100 for driving. Use 0 to log as often as the interval allows.\n\nOnly log if significant motion – when on, the app logs only after your device detects significant activity (e.g. walking, biking, driving). The device uses its built-in motion sensor; no points are recorded while you stay still, which saves battery. On some devices this option may be disabled if the sensor is not available.</string>
+    
+    <!-- Permissions -->
+    <string name="permissions_required_title">Permissions Required</string>
+    <string name="permissions_required_message">To track your location, we need the following permissions:</string>
+    <string name="grant_location_permission">Grant Location Permission</string>
+    <string name="grant_background_location">Grant Background Location</string>
+    <string name="grant_notification_permission">Grant Notification Permission</string>
+    <string name="disable_battery_optimization">Disable Battery Optimization</string>
+    <string name="location_permission_needed_first">Please grant location permission first</string>
 </resources>
 

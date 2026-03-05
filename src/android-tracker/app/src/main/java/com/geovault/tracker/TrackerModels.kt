@@ -8,7 +8,6 @@ data class Tracker(
     val id: String,
     val name: String,
     val color: String?,
-    val tracker_secret: String?,
     val geometry: GeoJsonLineString? = null
 ) : Parcelable
 

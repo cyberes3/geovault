@@ -3,28 +3,30 @@ package com.geovault.tracker
 import android.location.Location
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.UUID
 
 object BinaryPayloadBuilder {
     private val MAGIC_BYTES = byteArrayOf('G'.code.toByte(), 'V'.code.toByte(), 'L'.code.toByte(), 'T'.code.toByte())
-    private const val VERSION: Byte = 1
+    private const val VERSION_V2: Byte = 2
 
     /**
-     * Builds the binary payload for the given list of locations.
+     * Builds the GVLT v2 binary payload: magic (4) + version 0x02 (1) + tracker_id UUID (16) + points.
+     *
      * @param locations List of Location objects to pack.
+     * @param trackerId UUID of the track to upload to (included in payload).
      * @param includeExtendedData Whether to try packing extended data (altitude, speed, bearing, accuracy).
      * @return ByteArray containing the payload.
      */
-    fun buildPayload(locations: List<Location>, includeExtendedData: Boolean): ByteArray {
-        // Base point size = 25 bytes
-        // Extended point size = 16 bytes
-        // Max possible size = 5 (header) + locations.size * 41
-        val capacity = 5 + locations.size * 41
+    fun buildPayload(locations: List<Location>, trackerId: UUID, includeExtendedData: Boolean): ByteArray {
+        // Header: 4 (magic) + 1 (version) + 16 (UUID). Points: 25 or 41 bytes each.
+        val capacity = 5 + 16 + locations.size * 41
         val buffer = ByteBuffer.allocate(capacity)
         buffer.order(ByteOrder.BIG_ENDIAN)
 
-        // Header
         buffer.put(MAGIC_BYTES)
-        buffer.put(VERSION)
+        buffer.put(VERSION_V2)
+        buffer.putLong(trackerId.mostSignificantBits)
+        buffer.putLong(trackerId.leastSignificantBits)
 
         for (loc in locations) {
             val hasExtended = includeExtendedData && (loc.hasAltitude() || loc.hasSpeed() || loc.hasBearing() || loc.hasAccuracy())
