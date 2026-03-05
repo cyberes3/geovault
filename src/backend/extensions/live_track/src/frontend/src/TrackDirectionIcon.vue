@@ -2,9 +2,10 @@
   <svg
     :width="size"
     :height="size"
-    viewBox="0 0 32 32"
+    viewBox="-2 -2 36 36"
     xmlns="http://www.w3.org/2000/svg"
-    class="inline-block flex-shrink-0"
+    class="block flex-shrink-0"
+    :style="{ minWidth: size + 'px', maxWidth: size + 'px', minHeight: size + 'px', maxHeight: size + 'px' }"
     role="img"
     aria-hidden="true"
   >

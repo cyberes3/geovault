@@ -17,8 +17,7 @@ class LiveTrackIngressBody(BaseModel):
 
     lat: float = Field(..., description="Latitude")
     lon: float = Field(..., description="Longitude")
-    time: Optional[str] = Field(None, description="ISO datetime; if omitted, server uses current time")
-    # Optional (stored in point_params)
+    # Optional (stored in point_params); timestamp (epoch sec or ms) used for point time if present
     sat: Optional[int] = None
     desc: Optional[str] = None
     alt: Optional[float] = None

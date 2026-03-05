@@ -376,7 +376,7 @@ class TestLiveTrackAPI(TestCase):
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
-                    data=json.dumps({"lat": 37.5, "lon": -122.5, "time": "2024-01-15T12:00:00Z"}),
+                    data=json.dumps({"lat": 37.5, "lon": -122.5, "timestamp": 1705312800}),
                     content_type="application/json",
                     HTTP_AUTHORIZATION=auth,
                 )
@@ -401,7 +401,7 @@ class TestLiveTrackAPI(TestCase):
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
-                    data=json.dumps({"lat": 38.0, "lon": -121.0, "time": "2024-01-15T12:00:00Z"}),
+                    data=json.dumps({"lat": 38.0, "lon": -121.0, "timestamp": 1705312800}),
                     content_type="application/json",
                     HTTP_AUTHORIZATION=auth,
                 )
@@ -454,7 +454,7 @@ class TestLiveTrackIngress(TestCase):
 
     def _ingress_post(self, data=None, auth_header=None, content_type="application/json"):
         if data is None:
-            data = {"lat": 37.0, "lon": -122.0, "time": "2024-01-15T12:00:00Z"}
+            data = {"lat": 37.0, "lon": -122.0, "timestamp": 1705312800}
         body = json.dumps(data) if content_type == "application/json" else "&".join(f"{k}={v}" for k, v in data.items())
         headers = {}
         if auth_header:
@@ -491,7 +491,7 @@ class TestLiveTrackIngress(TestCase):
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 response = self.client.post(
                     self.ingress_url,
-                    data="lat=37.5&lon=-122.5&time=2024-01-15T12:00:00Z",
+                    data="lat=37.5&lon=-122.5&timestamp=1705312800",
                     content_type="application/x-www-form-urlencoded",
                     HTTP_AUTHORIZATION=self.auth_header,
                 )
@@ -508,7 +508,7 @@ class TestLiveTrackIngress(TestCase):
             with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 response = self._ingress_post(
-                    data={"lat": 38.0, "lon": -121.0, "time": "2024-01-15T12:00:00Z", "alt": 100.5, "acc": 10, "spd_kph": 5.0},
+                    data={"lat": 38.0, "lon": -121.0, "timestamp": 1705312800, "alt": 100.5, "acc": 10, "spd_kph": 5.0},
                     auth_header=self.auth_header,
                 )
         self.assertEqual(response.status_code, 200)
@@ -543,7 +543,7 @@ class TestLiveTrackIngress(TestCase):
         """POST with missing lat returns 400."""
         with _patch_live_track_enabled():
             response = self._ingress_post(
-                data={"lon": -122.0, "time": "2024-01-15T12:00:00Z"},
+                data={"lon": -122.0, "timestamp": 1705312800},
                 auth_header=self.auth_header,
             )
         self.assertEqual(response.status_code, 400)
@@ -552,13 +552,13 @@ class TestLiveTrackIngress(TestCase):
         """POST with missing lon returns 400."""
         with _patch_live_track_enabled():
             response = self._ingress_post(
-                data={"lat": 37.0, "time": "2024-01-15T12:00:00Z"},
+                data={"lat": 37.0, "timestamp": 1705312800},
                 auth_header=self.auth_header,
             )
         self.assertEqual(response.status_code, 400)
 
-    def test_ingress_time_optional_uses_server_time(self):
-        """POST without time is accepted; server uses current wall clock for the point."""
+    def test_ingress_timestamp_optional_uses_server_time(self):
+        """POST without timestamp is accepted; server uses current wall clock for the point."""
         with _patch_live_track_enabled():
             with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
@@ -575,21 +575,6 @@ class TestLiveTrackIngress(TestCase):
         self.assertIsInstance(coords[0][2], (int, float))
         self.assertGreater(coords[0][2], 0)
 
-    def test_ingress_unparseable_time_uses_server_time(self):
-        """POST with time that cannot be parsed is accepted; server uses current time."""
-        with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
-                response = self._ingress_post(
-                    data={"lat": 37.0, "lon": -122.0, "time": "not-a-date"},
-                    auth_header=self.auth_header,
-                )
-        self.assertEqual(response.status_code, 200)
-        track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
-        self.assertEqual(len(coords), 1)
-        self.assertIsInstance(coords[0][2], (int, float))
-
     def test_ingress_400_invalid_json(self):
         """POST with invalid JSON body returns 400."""
         with _patch_live_track_enabled():
@@ -601,29 +586,32 @@ class TestLiveTrackIngress(TestCase):
             )
         self.assertEqual(response.status_code, 400)
 
-    def test_ingress_400_time_equal_to_last_point(self):
-        """POST with time equal to last point returns 400 (must be strictly after)."""
+    def test_ingress_400_timestamp_equal_to_last_point(self):
+        """POST with timestamp equal to last point returns 400 (must be strictly after)."""
         with _patch_live_track_enabled():
             with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self._ingress_post(
-                    data={"lat": 37.0, "lon": -122.0, "time": "2024-01-15T12:00:00Z"},
+                    data={"lat": 37.0, "lon": -122.0, "timestamp": 1705312800},
                     auth_header=self.auth_header,
                 )
                 response = self._ingress_post(
-                    data={"lat": 37.1, "lon": -121.9, "time": "2024-01-15T12:00:00Z"},
+                    data={"lat": 37.1, "lon": -121.9, "timestamp": 1705312800},
                     auth_header=self.auth_header,
                 )
         self.assertEqual(response.status_code, 400)
 
-    def test_ingress_400_time_older_than_last_point(self):
-        """POST with time not after last point returns 400."""
+    def test_ingress_400_timestamp_older_than_last_point(self):
+        """POST with timestamp not after last point returns 400."""
         with _patch_live_track_enabled():
             with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
-                self._ingress_post(data={"lat": 37.0, "lon": -122.0, "time": "2024-01-15T12:00:00Z"}, auth_header=self.auth_header)
+                self._ingress_post(
+                    data={"lat": 37.0, "lon": -122.0, "timestamp": 1705312800},
+                    auth_header=self.auth_header,
+                )
                 response = self._ingress_post(
-                    data={"lat": 37.1, "lon": -121.9, "time": "2024-01-15T11:00:00Z"},
+                    data={"lat": 37.1, "lon": -121.9, "timestamp": 1705309200},
                     auth_header=self.auth_header,
                 )
         self.assertEqual(response.status_code, 400)
@@ -634,7 +622,7 @@ class TestLiveTrackIngress(TestCase):
             with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 response = self._ingress_post(
-                    data={"lat": 37.0, "lon": -122.0, "time": "2024-01-15T12:00:00Z", "foo": "bar"},
+                    data={"lat": 37.0, "lon": -122.0, "timestamp": 1705312800, "foo": "bar"},
                     auth_header=self.auth_header,
                 )
         self.assertEqual(response.status_code, 200)
@@ -649,7 +637,7 @@ class TestLiveTrackIngress(TestCase):
             with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 response = self._ingress_post(
-                    data={"lat": 37.0, "lon": -122.0, "time": "2024-01-15T12:00:00Z", "profile": "x"},
+                    data={"lat": 37.0, "lon": -122.0, "timestamp": 1705312800, "profile": "x"},
                     auth_header=self.auth_header,
                 )
         self.assertEqual(response.status_code, 200)
@@ -662,7 +650,7 @@ class TestLiveTrackIngress(TestCase):
         """POST with lat=abc returns 400."""
         with _patch_live_track_enabled():
             response = self._ingress_post(
-                data={"lat": "abc", "lon": -122.0, "time": "2024-01-15T12:00:00Z"},
+                data={"lat": "abc", "lon": -122.0, "timestamp": 1705312800},
                 auth_header=self.auth_header,
             )
         self.assertEqual(response.status_code, 400)
@@ -689,7 +677,7 @@ class TestLiveTrackIngress(TestCase):
                             data={
                                 "lat": 37.0 + i * 0.01,
                                 "lon": -122.0,
-                                "time": f"2024-01-15T12:{i:02d}:00Z",
+                                "timestamp": 1705312800 + i * 60,
                             },
                             auth_header=self.auth_header,
                         )
@@ -699,13 +687,13 @@ class TestLiveTrackIngress(TestCase):
         self.assertEqual(len(coords), 2)
         self.assertEqual(len(params), 2)
 
-    def test_ingress_time_stored_as_unix_ms(self):
-        """Time (ISO) or timestamp (epoch sec) yields coordinate third value as Unix ms."""
+    def test_ingress_timestamp_stored_as_unix_ms(self):
+        """timestamp (epoch sec) yields coordinate third value as Unix ms."""
         with _patch_live_track_enabled():
             with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 response = self._ingress_post(
-                    data={"lat": 39.0, "lon": -120.0, "time": "2024-01-15T12:00:00Z"},
+                    data={"lat": 39.0, "lon": -120.0, "timestamp": 1705312800},
                     auth_header=self.auth_header,
                 )
         self.assertEqual(response.status_code, 200)
@@ -713,7 +701,7 @@ class TestLiveTrackIngress(TestCase):
         coords = (track.geometry or {}).get("coordinates", [])
         self.assertEqual(len(coords), 1)
         self.assertIsInstance(coords[0][2], (int, float))
-        self.assertGreater(coords[0][2], 1700000000000)
+        self.assertEqual(coords[0][2], 1705312800000)
 
 
 class TestLiveTrackAppIngress(TestCase):
@@ -727,7 +715,7 @@ class TestLiveTrackAppIngress(TestCase):
         with _patch_live_track_enabled():
             response = self.client.post(
                 "/api/extensions/live-track/app-ingress/",
-                data=json.dumps({"lat": 37.0, "lon": -122.0, "time": "2024-01-15T12:00:00Z"}),
+                data=json.dumps({"lat": 37.0, "lon": -122.0, "timestamp": 1705312800}),
                 content_type="application/json",
             )
         self.assertEqual(response.status_code, 501)

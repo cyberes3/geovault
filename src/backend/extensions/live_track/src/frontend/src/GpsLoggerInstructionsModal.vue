@@ -95,18 +95,21 @@
         </div>
       </div>
       <div class="flex justify-end pt-2">
-        <BaseButton variant="white" size="sm" @click="$emit('close')">Close</BaseButton>
+        <BaseButton variant="primary" color="blue" size="sm" @click="$emit('close')">Close</BaseButton>
       </div>
     </div>
   </BaseModal>
 </template>
 
 <script>
+import BaseModal from 'platform/components/parts/BaseModal.vue';
+
 export default {
   name: 'GpsLoggerInstructionsModal',
+  components: { BaseModal },
   props: {
     ingressUrl: { type: String, default: '' },
-    bodyTemplate: { type: String, default: 'lat=%LAT&lon=%LON&time=%TIME' },
+    bodyTemplate: { type: String, default: 'lat=%LAT&lon=%LON&timestamp=%TIMESTAMP' },
     username: { type: String, default: '' },
     password: { type: String, default: '' }
   },

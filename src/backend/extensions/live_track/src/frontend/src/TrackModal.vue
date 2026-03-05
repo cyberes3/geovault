@@ -120,17 +120,17 @@
 
     <template #actions>
       <template v-if="mode === 'create' && createdTrack">
-        <BaseButton variant="white" size="sm" @click="$emit('saved')">Done</BaseButton>
+        <BaseButton variant="primary" color="blue" size="sm" @click="$emit('saved')">Close</BaseButton>
       </template>
       <template v-else-if="mode === 'create'">
-        <BaseButton variant="white" size="sm" @click="$emit('close')">Cancel</BaseButton>
+        <BaseButton variant="primary" color="blue" size="sm" @click="$emit('close')">Close</BaseButton>
         <BaseButton variant="primary" color="blue" size="sm" :disabled="saving || !name.trim()" @click="create">
           <Loader v-if="saving" size="sm" layout="inline" :show-message="false" class="mr-1" />
           Create
         </BaseButton>
       </template>
       <template v-else>
-        <BaseButton variant="white" size="sm" @click="$emit('close')">Cancel</BaseButton>
+        <BaseButton variant="primary" color="blue" size="sm" @click="$emit('close')">Close</BaseButton>
         <BaseButton variant="primary" color="blue" size="sm" :disabled="saving || !name.trim()" @click="save">
           <Loader v-if="saving" size="sm" layout="inline" :show-message="false" class="mr-1" />
           Save
@@ -152,11 +152,12 @@
 <script>
 import { ref, watch, computed, inject } from 'vue';
 import { ArrowPathIcon } from '@heroicons/vue/24/outline';
+import BaseModal from 'platform/components/parts/BaseModal.vue';
 import GpsLoggerInstructionsModal from './GpsLoggerInstructionsModal.vue';
 
 export default {
   name: 'TrackModal',
-  components: { GpsLoggerInstructionsModal, ArrowPathIcon },
+  components: { BaseModal, GpsLoggerInstructionsModal, ArrowPathIcon },
   props: {
     mode: { type: String, required: true },
     track: { type: Object, default: null },
@@ -213,7 +214,7 @@ export default {
     }
 
     const baseUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/extensions/live-track` : '';
-    const bodyTemplate = 'lat=%LAT&lon=%LON&time=%TIME';
+    const bodyTemplate = 'lat=%LAT&lon=%LON&timestamp=%TIMESTAMP';
     const ingressUrl = computed(() => (createdTrack.value ? `${baseUrl}/ingress/` : ''));
     const ingressUrlEdit = computed(() => (props.track ? `${baseUrl}/ingress/` : ''));
     const instructionsIngressUrl = computed(() => `${baseUrl}/ingress/`);

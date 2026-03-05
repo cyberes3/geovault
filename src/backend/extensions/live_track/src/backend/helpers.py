@@ -3,7 +3,6 @@ Shared helpers for live_track extension (response building, parsing, broadcast).
 """
 
 import json
-from datetime import datetime
 from urllib.parse import parse_qs
 
 from asgiref.sync import async_to_sync
@@ -46,18 +45,14 @@ def parse_ingress_body(request) -> dict:
 
 
 def parse_time_to_ms(body: dict) -> int | None:
-    """Parse time from body: 'time' (ISO) or 'timestamp' (epoch sec) -> Unix ms."""
-    time_str = body.get("time")
-    if time_str:
-        try:
-            dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
-            return int(dt.timestamp() * 1000)
-        except (ValueError, TypeError):
-            pass
+    """Parse time from body: 'timestamp' (epoch sec or ms) -> Unix ms. If < 1e12 treat as seconds."""
     ts = body.get("timestamp")
     if ts is not None:
         try:
-            return int(ts) * 1000
+            val = int(ts)
+            if val < 1e12:
+                return val * 1000
+            return val
         except (ValueError, TypeError):
             pass
     return None

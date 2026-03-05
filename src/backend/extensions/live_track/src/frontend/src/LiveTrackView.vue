@@ -1,34 +1,38 @@
 <template>
-  <div class="h-full flex flex-col sm:flex-row bg-gray-50">
-    <!-- Left: trackers list (25%) -->
-    <div class="w-full sm:w-1/4 min-w-0 flex flex-col bg-white border-r border-gray-200 relative">
-      <div class="p-2 border-b border-gray-200 flex items-center justify-between gap-2 flex-shrink-0">
-        <h2 class="text-lg font-semibold text-gray-900 truncate">Trackers</h2>
-        <div class="flex items-center gap-2 flex-shrink-0">
-          <select
-            v-model="sortBy"
-            class="text-sm border border-gray-300 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            title="Sort by"
-          >
-            <option value="alphabetical">Alphabetical</option>
-            <option value="last_updated">Last updated</option>
-            <option value="num_points">Number of points</option>
-            <option value="newest">Newest</option>
-          </select>
-          <button
-            type="button"
-            title="Add track"
-            class="p-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            @click="openCreateModal"
-          >
-            <PlusIcon class="h-5 w-5" />
-          </button>
-        </div>
+  <div class="h-full min-h-0 grid grid-cols-1 grid-rows-[auto_minmax(0,1fr)] sm:grid-cols-[1fr_3fr] bg-gray-50">
+    <!-- Row 1 col 1: Title left, Sort + right -->
+    <div class="h-12 px-3 py-2 flex items-center justify-between gap-2 flex-shrink-0 bg-gray-50 border-b border-gray-200 order-1">
+      <h2 class="text-lg font-semibold text-gray-900 truncate min-w-0">Live Trackers</h2>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <select
+          v-model="sortBy"
+          class="text-sm border border-gray-300 rounded-md px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          title="Sort by"
+        >
+          <option value="alphabetical">Alphabetical</option>
+          <option value="last_updated">Last updated</option>
+          <option value="num_points">Number of points</option>
+          <option value="newest">Newest</option>
+        </select>
+        <button
+          type="button"
+          title="Add track"
+          class="p-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+          @click="openCreateModal"
+        >
+          <PlusIcon class="h-5 w-5" />
+        </button>
       </div>
-      <div v-if="loading" class="flex-1 flex items-center justify-center p-4">
+    </div>
+    <!-- Row 1 col 2: empty (aligns with map column on desktop) -->
+    <div class="hidden sm:block h-12 flex-shrink-0 bg-gray-50 border-b border-gray-200 order-2" aria-hidden="true" />
+
+    <!-- Row 2 col 1: List (order-3 on mobile so it appears after map) -->
+    <div class="w-full min-w-0 min-h-0 flex flex-col bg-white relative overflow-hidden order-3 sm:order-3 border-r-0 sm:border-r border-gray-200">
+        <div v-if="loading" class="flex-1 flex items-center justify-center p-4">
         <Loader size="md" message="Loading trackers..." />
       </div>
-      <div v-else class="flex-1 overflow-y-auto p-2">
+      <div v-else class="flex-1 overflow-y-auto p-2 border-t sm:border-t-0 border-gray-200">
         <div v-if="sortedTrackers.length === 0" class="text-center py-8 text-gray-500 text-sm">
           No trackers yet. Tap + to create one.
         </div>
@@ -36,16 +40,20 @@
           v-for="track in sortedTrackers"
           :key="track.id"
           :class="[
-            'flex items-center gap-2 p-3 rounded-lg cursor-pointer border transition-all',
-            selectedId === track.id ? 'border-black bg-gray-100' : 'border-transparent hover:bg-gray-50'
+            'flex items-center gap-2 p-3 rounded-lg cursor-pointer border transition-all mt-2 first:mt-0',
+            selectedId === track.id
+              ? 'border-blue-500 bg-blue-100 shadow-sm'
+              : 'bg-white border-gray-200 hover:border-blue-200 hover:bg-blue-50 hover:shadow-sm'
           ]"
-          @click="selectedId = track.id"
+          @click="onTrackListClick(track)"
         >
-          <TrackDirectionIcon
-            :color="track.color || '#3388ff'"
-            :angle="getTrackDirectionAngle(track)"
-            :size="20"
-          />
+          <div class="flex-shrink-0 min-w-[36px] min-h-[36px] w-[36px] h-[36px] flex items-center justify-center overflow-hidden" aria-hidden="true">
+            <TrackDirectionIcon
+              :color="track.color || '#3388ff'"
+              :angle="getTrackDirectionAngle(track)"
+              :size="24"
+            />
+          </div>
           <div class="flex-1 min-w-0">
             <div class="font-medium text-gray-900 truncate">{{ track.name }}</div>
             <div class="text-xs text-gray-500">
@@ -63,8 +71,55 @@
         </div>
       </div>
     </div>
-    <!-- Right: map (75%) -->
-    <div ref="mapContainer" class="flex-1 min-h-[300px] bg-gray-200 relative" />
+    <!-- Row 2 col 2: Map (order-2 on mobile so it appears under header, above list) -->
+    <div class="w-full flex-shrink-0 h-[40vh] min-h-[220px] sm:h-auto sm:min-h-0 min-w-0 flex flex-col order-2 sm:order-4">
+        <div class="flex-1 min-h-0 relative">
+          <div ref="mapContainer" class="absolute inset-0 w-full h-full bg-gray-200" />
+          <div class="absolute z-10 bottom-4 left-4 flex flex-col gap-2 bg-white border border-gray-200 rounded shadow-md overflow-hidden">
+            <button
+              type="button"
+              class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
+              title="Map Settings"
+              @click="showLayerModal = true"
+            >
+              <Square3Stack3DIcon class="w-5 h-5" />
+            </button>
+            <button
+              type="button"
+              class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
+              title="Go to home extent"
+              @click="goHome"
+            >
+              <HomeIcon class="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      </div>
+    <BaseModal
+      :is-open="showLayerModal"
+      title="Map Settings"
+      @close="showLayerModal = false"
+    >
+      <div class="p-4">
+        <label for="live-track-layer-select" class="block text-sm font-medium text-gray-700 mb-2">Layer</label>
+        <select
+          id="live-track-layer-select"
+          v-model="selectedLayer"
+          class="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          title="Map layer"
+          @change="onLayerChange"
+        >
+          <option v-for="source in tileSources" :key="source.id" :value="source.id">
+            {{ source.name }}
+          </option>
+        </select>
+      </div>
+      <template #actions>
+        <BaseButton variant="primary" color="blue" size="sm" @click="showLayerModal = false">
+          Close
+        </BaseButton>
+      </template>
+    </BaseModal>
     <TrackModal
       v-if="showModal"
       :mode="modalMode"
@@ -78,8 +133,9 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, onBeforeUnmount, inject, watch } from 'vue';
-import { PlusIcon, PencilIcon } from '@heroicons/vue/24/outline';
+import { ref, computed, onMounted, onActivated, onBeforeUnmount, inject, watch } from 'vue';
+import { PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon } from '@heroicons/vue/24/outline';
+import BaseModal from 'platform/components/parts/BaseModal.vue';
 import TrackModal from './TrackModal.vue';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
 
@@ -89,27 +145,77 @@ const LINES_SOURCE_ID = 'live-track-lines';
 const POINTS_SOURCE_ID = 'live-track-points';
 const LINES_LAYER_ID = 'live-track-lines';
 const POINTS_LAYER_ID = 'live-track-points';
-const TRACK_ARROW_IMAGE_ID = 'track-direction-arrow';
+const BASE_SOURCE_ID = 'base-raster';
+const BASE_LAYER_ID = 'base-raster-layer';
+const MIN_ZOOM = 0;
+const MAX_ZOOM = 18;
+const LAYER_MAX_ZOOM = MAX_ZOOM + 1;
+const TILE_SOURCES_API_URL = '/api/tiles/sources/';
+const DEFAULT_MAP_KEY = 'extensions.live_track.default_map';
+const DEFAULT_SORT_KEY = 'extensions.live_track.default_sort';
+const VALID_SORT_VALUES = new Set(['alphabetical', 'last_updated', 'num_points', 'newest']);
+const ARROW_PATH_D =
+  'M29.9,28.6l-13-26c-0.3-0.7-1.4-0.7-1.8,0l-13,26c-0.2,0.4-0.1,0.8,0.2,1.1C2.5,30,3,30.1,3.4,29.9L16,25.1l12.6,4.9c0.1,0,0.2,0.1,0.4,0.1c0.3,0,0.5-0.1,0.7-0.3C30,29.4,30.1,28.9,29.9,28.6z';
 
-// Same arrow as TrackDirectionIcon: white fill so MapLibre icon-color tints it, thin black stroke
-const TRACK_ARROW_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' +
-  '<path fill="#fff" stroke="#000" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" ' +
-  'd="M29.9,28.6l-13-26c-0.3-0.7-1.4-0.7-1.8,0l-13,26c-0.2,0.4-0.1,0.8,0.2,1.1C2.5,30,3,30.1,3.4,29.9L16,25.1l12.6,4.9c0.1,0,0.2,0.1,0.4,0.1c0.3,0,0.5-0.1,0.7-0.3C30,29.4,30.1,28.9,29.9,28.6z"/>' +
-  '</svg>';
-function getTrackArrowDataURL() {
-  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(TRACK_ARROW_SVG);
+function getArrowImageId(color) {
+  return 'track-arrow-' + (color || '#3388ff').replace('#', '');
+}
+
+/** 96px gives more source pixels for MapLibre's LINEAR sampling so scaled-down icons look cleaner (see draw_symbol.ts). */
+const ARROW_RASTER_SIZE = 96;
+
+/** SVG data URL for the direction arrow. Use width/height so decode is at desired size. */
+function getTrackArrowDataURL(color) {
+  const fill = color || '#3388ff';
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="' + ARROW_RASTER_SIZE + '" height="' + ARROW_RASTER_SIZE + '" shape-rendering="geometricPrecision">' +
+    '<path fill="' + fill + '" stroke="#000" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" shape-rendering="geometricPrecision" d="' + ARROW_PATH_D + '"/>' +
+    '</svg>';
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
+/**
+ * Rasterize arrow SVG and return MapLibre image spec { width, height, data } so sprite size stays consistent.
+ * Passing a canvas can cause "mismatched image size" when the sprite reads dimensions; explicit data avoids that.
+ */
+function rasterizeArrowToImageData(color) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = ARROW_RASTER_SIZE;
+      canvas.height = ARROW_RASTER_SIZE;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+      ctx.imageSmoothingEnabled = true;
+      if (ctx.imageSmoothingQuality) ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, ARROW_RASTER_SIZE, ARROW_RASTER_SIZE);
+      const imageData = ctx.getImageData(0, 0, ARROW_RASTER_SIZE, ARROW_RASTER_SIZE);
+      resolve({
+        width: ARROW_RASTER_SIZE,
+        height: ARROW_RASTER_SIZE,
+        data: new Uint8Array(imageData.data)
+      });
+    };
+    img.onerror = () => resolve(null);
+    img.src = getTrackArrowDataURL(color);
+  });
 }
 
 export default {
   name: 'LiveTrackView',
-  components: { TrackModal, TrackDirectionIcon, PlusIcon, PencilIcon },
+  components: { BaseModal, TrackModal, TrackDirectionIcon, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon },
   setup() {
     const api = inject('extensionApi');
     const trackers = ref([]);
     const sortBy = ref('alphabetical');
     const loading = ref(true);
     const selectedId = ref(null);
+    const followLocked = ref(false);
+    const isAutoMoving = ref(false);
 
     const sortedTrackers = computed(() => {
       const list = [...trackers.value];
@@ -131,12 +237,58 @@ export default {
       }
     });
     const showModal = ref(false);
+    const showLayerModal = ref(false);
     const modalMode = ref('create');
     const modalTrack = ref(null);
     const mapContainer = ref(null);
     const userLogin = ref('');
+    const tileSources = ref([]);
+    const selectedLayer = ref('osm');
     let map = null;
     let trackUpdatedHandler = null;
+
+    async function fetchTileSources() {
+      try {
+        const response = await fetch(TILE_SOURCES_API_URL);
+        const data = await response.json();
+        if (data.sources && Array.isArray(data.sources)) {
+          tileSources.value = data.sources.filter((s) => !s.hidden);
+        }
+        if (tileSources.value.length === 0) {
+          tileSources.value = [{
+            id: 'osm',
+            name: 'OpenStreetMap',
+            type: 'osm',
+            requires_proxy: false,
+            client_config: {
+              type: 'osm',
+              url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              tileSize: 256,
+              attribution: '© OpenStreetMap'
+            }
+          }];
+        }
+        applyDefaultMapFromStore();
+        if (!tileSources.value.some((s) => s.id === selectedLayer.value)) {
+          selectedLayer.value = tileSources.value[0]?.id || 'osm';
+        }
+      } catch (e) {
+        console.error('Live Track: fetch tile sources failed', e);
+        tileSources.value = [{
+          id: 'osm',
+          name: 'OpenStreetMap',
+          type: 'osm',
+          requires_proxy: false,
+          client_config: {
+            type: 'osm',
+            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            tileSize: 256,
+            attribution: '© OpenStreetMap'
+          }
+        }];
+        selectedLayer.value = 'osm';
+      }
+    }
 
     function formatTime(ms) {
       if (!ms) return '';
@@ -180,7 +332,6 @@ export default {
         const res = await api.get('/trackers/');
         const raw = Array.isArray(res.data) ? res.data : [];
         trackers.value = raw.map(normalizeTrackForMemory);
-        if (trackers.value.length && !selectedId.value) selectedId.value = trackers.value[0].id;
         updateMapFeatures();
       } catch (e) {
         const err = api.handleError && api.handleError(e);
@@ -218,13 +369,15 @@ export default {
         const coords = geom.coordinates || [];
         const last = coords[coords.length - 1];
         if (!last || last.length < 2) continue;
+        const color = track.color || '#3388ff';
         features.push({
           type: 'Feature',
           properties: {
             trackId: track.id,
-            color: track.color || '#3388ff',
+            color,
             selected: selectedId.value === track.id,
-            rotation: getTrackDirectionAngle(track)
+            rotation: getTrackDirectionAngle(track),
+            iconImage: getArrowImageId(color)
           },
           geometry: { type: 'Point', coordinates: [last[0], last[1]] }
         });
@@ -232,64 +385,279 @@ export default {
       return { type: 'FeatureCollection', features };
     }
 
-    function updateMapFeatures() {
+    function ensureArrowImage(color) {
+      const id = getArrowImageId(color);
+      if (map.hasImage(id)) return Promise.resolve();
+      return rasterizeArrowToImageData(color).then((imageData) => {
+        if (imageData && map && map.getStyle() && !map.hasImage(id)) {
+          map.addImage(id, imageData, { pixelRatio: 1 });
+        }
+      });
+    }
+
+    async function updateMapFeatures() {
       if (!map || !maplibregl) return;
       const lineSource = map.getSource(LINES_SOURCE_ID);
       const pointSource = map.getSource(POINTS_SOURCE_ID);
       if (lineSource) lineSource.setData(buildLinesGeoJSON());
-      if (pointSource) pointSource.setData(buildPointsGeoJSON());
+      if (!pointSource) return;
+      const pointsGeoJSON = buildPointsGeoJSON();
+      const colors = [...new Set(pointsGeoJSON.features.map((f) => f.properties.color))];
+      await Promise.all(colors.map((c) => ensureArrowImage(c)));
+      pointSource.setData(pointsGeoJSON);
+    }
+
+    function getRasterSourceSpec(layerValue, tileSource) {
+      const clientConfig = tileSource?.client_config || {};
+      const url = clientConfig.url || `/api/tiles/${layerValue}/{z}/{x}/{y}`;
+      let tiles;
+      if (clientConfig.tileSubdomains && Array.isArray(clientConfig.tileSubdomains)) {
+        tiles = clientConfig.tileSubdomains.map((sub) => url.replace('{s}', sub));
+      } else {
+        tiles = [url.replace('{s}', clientConfig.tileSubdomains?.[0] || 'a')];
+      }
+      return {
+        type: 'raster',
+        tiles,
+        tileSize: clientConfig.tileSize || 256,
+        attribution: clientConfig.attribution || ''
+      };
+    }
+
+    function getRasterLayerMaxZoom(clientConfig) {
+      return Math.max(clientConfig?.maxzoom ?? MAX_ZOOM, LAYER_MAX_ZOOM);
+    }
+
+    const lineOutlineLayerSpec = {
+      id: `${LINES_LAYER_ID}-outline`,
+      type: 'line',
+      source: LINES_SOURCE_ID,
+      filter: ['==', ['get', 'selected'], true],
+      paint: { 'line-color': '#2563eb', 'line-width': 4, 'line-opacity': 1 },
+      layout: { 'line-join': 'round', 'line-cap': 'round' }
+    };
+    const lineLayerSpec = {
+      id: LINES_LAYER_ID,
+      type: 'line',
+      source: LINES_SOURCE_ID,
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': ['case', ['get', 'selected'], 3, 2],
+        'line-opacity': 1
+      },
+      layout: { 'line-join': 'round', 'line-cap': 'round' }
+    };
+    const pointsLayerSpec = {
+      id: POINTS_LAYER_ID,
+      type: 'symbol',
+      source: POINTS_SOURCE_ID,
+      layout: {
+        'icon-image': ['get', 'iconImage'],
+        'icon-size': 0.2,
+        'icon-rotate': ['get', 'rotation'],
+        'icon-anchor': 'center',
+        'icon-pitch-alignment': 'viewport',
+        'icon-rotation-alignment': 'map',
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true
+      }
+    };
+
+    async function addLiveTrackLayersAndData() {
+      if (!map || !map.getStyle()) return;
+      if (!map.getSource(LINES_SOURCE_ID)) {
+        map.addSource(LINES_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      }
+      if (!map.getSource(POINTS_SOURCE_ID)) {
+        map.addSource(POINTS_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      }
+      if (!map.getLayer(`${LINES_LAYER_ID}-outline`)) {
+        map.addLayer(lineOutlineLayerSpec);
+      }
+      if (!map.getLayer(LINES_LAYER_ID)) {
+        map.addLayer(lineLayerSpec);
+      }
+      if (!map.getLayer(POINTS_LAYER_ID)) {
+        const defaultColor = '#3388ff';
+        const defaultId = getArrowImageId(defaultColor);
+        const imageData = await rasterizeArrowToImageData(defaultColor);
+        if (imageData && !map.hasImage(defaultId)) map.addImage(defaultId, imageData, { pixelRatio: 1 });
+        map.addLayer(pointsLayerSpec);
+      }
+      await updateMapFeatures();
+    }
+
+    async function switchMapLayer(layerValue) {
+      if (!map || !maplibregl) return;
+      const tileSource = tileSources.value.find((s) => s.id === layerValue);
+      if (!tileSource) return;
+      const clientConfig = tileSource.client_config || {};
+      const isStyleBased = !!(clientConfig.style_url || clientConfig.type === 'maptiler');
+
+      if (isStyleBased) {
+        const styleUrl = clientConfig.style_url;
+        if (!styleUrl) return;
+        const center = map.getCenter();
+        const zoom = map.getZoom();
+        const bearing = map.getBearing();
+        map.setStyle(styleUrl);
+        map.once('styledata', async () => {
+          if (!map) return;
+          map.resize();
+          await addLiveTrackLayersAndData();
+          setTimeout(() => {
+            if (map) {
+              map.resize();
+              map.jumpTo({ center, zoom, bearing, duration: 0 });
+            }
+          }, 0);
+        });
+      } else {
+        const wasStyleBased = !map.getSource(BASE_SOURCE_ID);
+        if (wasStyleBased) {
+          const center = map.getCenter();
+          const zoom = map.getZoom();
+          const bearing = map.getBearing();
+          map.remove();
+          map = null;
+          const rasterSpec = getRasterSourceSpec(layerValue, tileSource);
+          const layerMaxZoom = getRasterLayerMaxZoom(clientConfig);
+          const style = {
+            version: 8,
+            sources: {
+              [BASE_SOURCE_ID]: rasterSpec,
+              [LINES_SOURCE_ID]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+              [POINTS_SOURCE_ID]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } }
+            },
+            layers: [
+              { id: BASE_LAYER_ID, type: 'raster', source: BASE_SOURCE_ID, minzoom: clientConfig.minzoom ?? 0, maxzoom: layerMaxZoom },
+              lineOutlineLayerSpec,
+              lineLayerSpec
+            ]
+          };
+          map = new maplibregl.Map({
+            container: mapContainer.value,
+            style,
+            center: [center.lng, center.lat],
+            zoom,
+            bearing,
+            minZoom: MIN_ZOOM,
+            maxZoom: MAX_ZOOM,
+            maxPitch: 0,
+            attributionControl: false
+          });
+          map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
+          setupMapFollowListeners();
+          disableMapRotation();
+          map.on('load', () => {
+            if (!map) return;
+            map.resize();
+            const defaultColor = '#3388ff';
+            const defaultId = getArrowImageId(defaultColor);
+            rasterizeArrowToImageData(defaultColor).then((imageData) => {
+              if (!map || !map.getStyle()) return;
+              if (!imageData) return;
+              if (!map.hasImage(defaultId)) map.addImage(defaultId, imageData, { pixelRatio: 1 });
+              map.addLayer(pointsLayerSpec);
+              updateMapFeatures().then(() => {
+                setTimeout(() => {
+                  if (map) {
+                    map.resize();
+                    map.jumpTo({ center: [center.lng, center.lat], zoom, bearing, duration: 0 });
+                  }
+                }, 0);
+              }).catch(() => {
+                setTimeout(() => {
+                  if (map) {
+                    map.resize();
+                    map.jumpTo({ center: [center.lng, center.lat], zoom, bearing, duration: 0 });
+                  }
+                }, 0);
+              });
+            });
+          });
+        } else {
+          if (map.getLayer(BASE_LAYER_ID)) map.removeLayer(BASE_LAYER_ID);
+          if (map.getSource(BASE_SOURCE_ID)) map.removeSource(BASE_SOURCE_ID);
+          const spec = getRasterSourceSpec(layerValue, tileSource);
+          const layerMaxZoom = getRasterLayerMaxZoom(clientConfig);
+          map.addSource(BASE_SOURCE_ID, spec);
+          const firstTrackLayerId = `${LINES_LAYER_ID}-outline`;
+          map.addLayer(
+            {
+              id: BASE_LAYER_ID,
+              type: 'raster',
+              source: BASE_SOURCE_ID,
+              minzoom: clientConfig.minzoom ?? 0,
+              maxzoom: layerMaxZoom
+            },
+            firstTrackLayerId
+          );
+        }
+      }
+    }
+
+    function onLayerChange() {
+      switchMapLayer(selectedLayer.value);
     }
 
     function initMap() {
       if (!mapContainer.value || !maplibregl) return;
 
+      const layerValue = selectedLayer.value;
+      const tileSource = tileSources.value.find((s) => s.id === layerValue) || tileSources.value[0];
+      const clientConfig = tileSource?.client_config || {};
+      const isStyleBased = !!(clientConfig.style_url || clientConfig.type === 'maptiler');
+
+      if (isStyleBased && clientConfig.style_url) {
+        map = new maplibregl.Map({
+          container: mapContainer.value,
+          style: clientConfig.style_url,
+          center: [0, 0],
+          zoom: 2,
+          minZoom: MIN_ZOOM,
+          maxZoom: MAX_ZOOM,
+          maxPitch: 0,
+          attributionControl: false
+        });
+        map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
+        setupMapFollowListeners();
+        disableMapRotation();
+        map.on('load', () => {
+          if (!map) return;
+          map.resize();
+          addLiveTrackLayersAndData().then(() => {
+            setTimeout(() => {
+              if (map) {
+                map.resize();
+                fitMapToTracks();
+              }
+            }, 0);
+          }).catch(() => {
+            setTimeout(() => {
+              if (map) {
+                map.resize();
+                fitMapToTracks();
+              }
+            }, 0);
+          });
+        });
+        return;
+      }
+
+      const rasterSpec = getRasterSourceSpec(layerValue, tileSource);
+      const layerMaxZoom = getRasterLayerMaxZoom(clientConfig);
       const style = {
         version: 8,
         sources: {
-          'osm': {
-            type: 'raster',
-            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-            tileSize: 256,
-            attribution: '© OpenStreetMap'
-          },
-          [LINES_SOURCE_ID]: {
-            type: 'geojson',
-            data: { type: 'FeatureCollection', features: [] }
-          },
-          [POINTS_SOURCE_ID]: {
-            type: 'geojson',
-            data: { type: 'FeatureCollection', features: [] }
-          }
+          [BASE_SOURCE_ID]: rasterSpec,
+          [LINES_SOURCE_ID]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+          [POINTS_SOURCE_ID]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } }
         },
         layers: [
-          { id: 'osm', type: 'raster', source: 'osm' },
-          {
-            id: `${LINES_LAYER_ID}-outline`,
-            type: 'line',
-            source: LINES_SOURCE_ID,
-            filter: ['==', ['get', 'selected'], true],
-            paint: {
-              'line-color': '#555',
-              'line-width': 4,
-              'line-opacity': 1
-            },
-            layout: { 'line-join': 'round', 'line-cap': 'round' }
-          },
-          {
-            id: LINES_LAYER_ID,
-            type: 'line',
-            source: LINES_SOURCE_ID,
-            paint: {
-              'line-color': ['get', 'color'],
-              'line-width': [
-                'case',
-                ['get', 'selected'], 3,
-                2
-              ],
-              'line-opacity': 1
-            },
-            layout: { 'line-join': 'round', 'line-cap': 'round' }
-          }
+          { id: BASE_LAYER_ID, type: 'raster', source: BASE_SOURCE_ID, minzoom: clientConfig.minzoom ?? 0, maxzoom: layerMaxZoom },
+          lineOutlineLayerSpec,
+          lineLayerSpec
         ]
       };
 
@@ -298,46 +666,42 @@ export default {
         style,
         center: [0, 0],
         zoom: 2,
+        minZoom: MIN_ZOOM,
+        maxZoom: MAX_ZOOM,
+        maxPitch: 0,
         attributionControl: false
       });
 
-      map.addControl(new maplibregl.NavigationControl(), 'top-right');
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
+      setupMapFollowListeners();
+      disableMapRotation();
 
       map.on('load', () => {
-        const img = new Image();
-        img.onload = () => {
+        if (!map) return;
+        map.resize();
+        const defaultColor = '#3388ff';
+        const defaultId = getArrowImageId(defaultColor);
+        rasterizeArrowToImageData(defaultColor).then((imageData) => {
           if (!map || !map.getStyle()) return;
-          map.addImage(TRACK_ARROW_IMAGE_ID, img, { pixelRatio: 2 });
-          map.addLayer({
-            id: POINTS_LAYER_ID,
-            type: 'symbol',
-            source: POINTS_SOURCE_ID,
-            layout: {
-              'icon-image': TRACK_ARROW_IMAGE_ID,
-              'icon-size': ['case', ['get', 'selected'], 0.5, 0.4],
-              'icon-rotate': ['get', 'rotation'],
-              'icon-anchor': 'bottom',
-              'icon-allow-overlap': true,
-              'icon-ignore-placement': true
-            },
-            paint: {
-              'icon-color': ['get', 'color']
-            }
+          if (!imageData) return;
+          if (!map.hasImage(defaultId)) map.addImage(defaultId, imageData, { pixelRatio: 1 });
+          map.addLayer(pointsLayerSpec);
+          updateMapFeatures().then(() => {
+            setTimeout(() => {
+              if (map) {
+                map.resize();
+                fitMapToTracks();
+              }
+            }, 0);
+          }).catch(() => {
+            setTimeout(() => {
+              if (map) {
+                map.resize();
+                fitMapToTracks();
+              }
+            }, 0);
           });
-          updateMapFeatures();
-          setTimeout(() => {
-            map.resize();
-            fitMapToTracks();
-          }, 0);
-        };
-        img.onerror = () => {
-          updateMapFeatures();
-          setTimeout(() => {
-            map.resize();
-            fitMapToTracks();
-          }, 0);
-        };
-        img.src = getTrackArrowDataURL();
+        });
       });
     }
 
@@ -348,6 +712,68 @@ export default {
       const coords = geom.coordinates || [];
       const slice = coords.length ? coords.slice(-n) : [];
       return slice.map((c) => [c[0], c[1]]);
+    }
+
+    function getSelectedTrackLastPoint() {
+      if (!selectedId.value) return null;
+      const track = trackers.value.find((t) => t.id === selectedId.value);
+      if (!track) return null;
+      const coords = getLastNCoords(track, 1);
+      return coords.length ? coords[0] : null;
+    }
+
+    function centerOnSelectedTrackLastPoint() {
+      if (!map) return;
+      const center = getSelectedTrackLastPoint();
+      if (!center) return;
+      isAutoMoving.value = true;
+      map.panTo(center, { duration: 300 });
+      setTimeout(() => {
+        isAutoMoving.value = false;
+      }, 600);
+    }
+
+    function setupMapFollowListeners() {
+      if (!map) return;
+      map.on('move', () => {
+        if (followLocked.value && !isAutoMoving.value) {
+          followLocked.value = false;
+          selectedId.value = null;
+        }
+      });
+      map.on('zoom', () => {
+        if (followLocked.value && !isAutoMoving.value) {
+          followLocked.value = false;
+          selectedId.value = null;
+        }
+      });
+    }
+
+    /** Disable map rotation (drag, touch pinch, keyboard) so north stays up. See maplibre disable-map-rotation example. */
+    function disableMapRotation() {
+      if (!map) return;
+      if (map.dragRotate && map.dragRotate.disable) map.dragRotate.disable();
+      if (map.touchZoomRotate && map.touchZoomRotate.disableRotation) map.touchZoomRotate.disableRotation();
+      if (map.keyboard && map.keyboard.disableRotation) map.keyboard.disableRotation();
+    }
+
+    function onTrackListClick(track) {
+      if (selectedId.value === track.id) {
+        selectedId.value = null;
+        followLocked.value = false;
+        return;
+      }
+      selectedId.value = track.id;
+      followLocked.value = true;
+      updateMapFeatures();
+      const coords = getLastNCoords(track, LAST_POINTS_FIT);
+      if (map && coords.length > 0) {
+        isAutoMoving.value = true;
+        fitBoundsFromCoords(coords);
+        setTimeout(() => {
+          isAutoMoving.value = false;
+        }, 600);
+      }
     }
 
     function fitBoundsFromCoords(coords) {
@@ -364,7 +790,7 @@ export default {
       if (maxLon <= minLon) { minLon -= pad; maxLon += pad; }
       if (maxLat <= minLat) { minLat -= pad; maxLat += pad; }
       map.fitBounds([[minLon, minLat], [maxLon, maxLat]], {
-        padding: 40,
+        padding: { top: 50, bottom: 80, left: 80, right: 80 },
         maxZoom: 15,
         duration: 0
       });
@@ -386,6 +812,17 @@ export default {
       const coords = getLastNCoords(track, LAST_POINTS_FIT);
       if (coords.length === 0) return;
       fitBoundsFromCoords(coords);
+    }
+
+    async function goHome() {
+      selectedId.value = null;
+      followLocked.value = false;
+      await updateMapFeatures();
+      if (trackers.value.length > 0) {
+        fitMapToTracks();
+      } else if (map) {
+        map.flyTo({ center: [0, 0], zoom: 2, duration: 0 });
+      }
     }
 
     function openCreateModal() {
@@ -412,16 +849,39 @@ export default {
 
     watch(selectedId, () => {
       updateMapFeatures();
-      fitMapToSelectedTrack();
+      if (selectedId.value && !followLocked.value) {
+        fitMapToSelectedTrack();
+      }
+      // When unselecting we only unlock; do not reset zoom (no fitMapToTracks)
     });
 
-    onMounted(() => {
-      fetchTrackers().then(() => {
-        initMap();
-      });
+    function applyDefaultSortFromStore() {
+      const store = window.gv_core?.store;
+      const getNestedValue = window.gv_core?.GeoVault?.utils?.getNestedValue;
+      if (!store || !getNestedValue) return;
+      const saved = getNestedValue(store.state?.userSettings, DEFAULT_SORT_KEY);
+      if (saved && VALID_SORT_VALUES.has(saved)) sortBy.value = saved;
+    }
+
+    function applyDefaultMapFromStore() {
+      const store = window.gv_core?.store;
+      const getNestedValue = window.gv_core?.GeoVault?.utils?.getNestedValue;
+      if (!store || !getNestedValue || !tileSources.value.length) return;
+      const defaultMap = getNestedValue(store.state?.userSettings, DEFAULT_MAP_KEY);
+      if (defaultMap && tileSources.value.some((s) => s.id === defaultMap)) {
+        selectedLayer.value = defaultMap;
+      }
+    }
+
+    onMounted(async () => {
       const store = window.gv_core?.store;
       const userInfo = store?.state?.userInfo;
       if (userInfo?.email) userLogin.value = userInfo.email;
+      applyDefaultSortFromStore();
+      await fetchTileSources();
+      fetchTrackers().finally(() => {
+        requestAnimationFrame(() => initMap());
+      });
 
       const socket = window.gv_core?.realtimeSocket;
       trackUpdatedHandler = (data) => {
@@ -435,11 +895,35 @@ export default {
         track.last_timestamp_ms = data.point[2];
         track.latestPointParams = data.props && typeof data.props === 'object' ? data.props : {};
         updateMapFeatures();
+        if (data.track_id === selectedId.value && followLocked.value && map) {
+          centerOnSelectedTrackLastPoint();
+        }
       };
       if (socket && socket.subscribe) {
         socket.subscribe('live_track', 'track_updated', trackUpdatedHandler);
       }
     });
+
+    onActivated(() => {
+      applyDefaultSortFromStore();
+      applyDefaultMapFromStore();
+      if (map && tileSources.value.some((s) => s.id === selectedLayer.value)) {
+        switchMapLayer(selectedLayer.value);
+      }
+    });
+
+    watch(
+      () => window.gv_core?.store?.state?.userSettings,
+      (userSettings) => {
+        if (!userSettings) return;
+        applyDefaultSortFromStore();
+        applyDefaultMapFromStore();
+        if (map && tileSources.value.length && tileSources.value.some((s) => s.id === selectedLayer.value)) {
+          switchMapLayer(selectedLayer.value);
+        }
+      },
+      { deep: true, immediate: true }
+    );
 
     onBeforeUnmount(() => {
       const socket = window.gv_core?.realtimeSocket;
@@ -459,12 +943,18 @@ export default {
       loading,
       selectedId,
       showModal,
+      showLayerModal,
       modalMode,
       modalTrack,
       mapContainer,
       userLogin,
+      tileSources,
+      selectedLayer,
       formatTime,
       getTrackDirectionAngle,
+      goHome,
+      onLayerChange,
+      onTrackListClick,
       openCreateModal,
       openEditModal,
       onModalSaved,

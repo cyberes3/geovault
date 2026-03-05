@@ -11,6 +11,7 @@ from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from geo_lib.logging.console import get_tagged_logger
 from pydantic import ValidationError as PydanticValidationError
 
 from api.utils.responses import error_response
@@ -19,6 +20,8 @@ from website.config_loader import get_config_loader
 from .helpers import broadcast_track_updated, parse_ingress_body, parse_time_to_ms
 from .models import LiveTrack
 from .validation import LiveTrackIngressBody
+
+logger = get_tagged_logger()
 
 
 def _decode_basic_auth(request):
@@ -59,6 +62,8 @@ def ingress(request):
     if not track:
         return error_response("Invalid credentials", 401)
 
+    request.user = user  # So logging middleware shows identity instead of Anonymous
+
     cache_backend = getattr(settings, "CACHES", {}).get("default", {}).get("BACKEND", "")
     if "redis" in cache_backend.lower():
         rate_key = f"live_track_ingress:{track.id}"
@@ -74,6 +79,7 @@ def ingress(request):
     except PydanticValidationError as e:
         errs = e.errors()
         msg = errs[0].get("msg", "Invalid body") if errs else "Invalid body"
+        logger.warning("live-track ingress 400: %s (body=%s)", msg, raw)
         return error_response(msg, 400)
 
     timestamp_ms = parse_time_to_ms(raw)
@@ -91,11 +97,22 @@ def ingress(request):
         if coords:
             last_ts = coords[-1][2] if len(coords[-1]) >= 3 else 0
             if timestamp_ms <= last_ts:
+                # Out-of-order: client sent a point older than the last stored. GPSLogger sends
+                # each point via WorkManager (order not guaranteed) and retries on 4xx, so the same
+                # old point can be sent repeatedly. See docs/live-track-gpslogger-behavior.md.
+                logger.warning(
+                    "live-track ingress 400: Point time must be after the last point "
+                    "(timestamp_ms=%s, last_ts=%s, raw timestamp=%s). "
+                    "Likely WorkManager ordering or retry; client may retry this request.",
+                    timestamp_ms,
+                    last_ts,
+                    raw.get("timestamp"),
+                )
                 return error_response("Point time must be after the last point", 400)
 
         new_point = [body.lon, body.lat, timestamp_ms]
         coords.append(new_point)
-        extra = {k: v for k, v in body.model_dump().items() if k not in ("lat", "lon", "time") and v is not None}
+        extra = {k: v for k, v in body.model_dump().items() if k not in ("lat", "lon", "timestamp") and v is not None}
         point_params.append(extra)
 
         if len(coords) > max_points:
@@ -108,6 +125,7 @@ def ingress(request):
         track_locked.save(update_fields=["geometry", "point_params", "updated_at"])
 
     broadcast_track_updated(user.id, str(track.id), new_point, extra)
+    logger.info("live-track ingress 200: point accepted (timestamp_ms=%s)", timestamp_ms)
     return JsonResponse({"ok": True}, status=200)
 
 
