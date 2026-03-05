@@ -49,7 +49,7 @@ export function formatParamDisplay(key, value) {
       if (units === 'metric') return `${Math.round(m)} m`;
       return `${Math.round(m * METERS_TO_FEET)} ft`;
     }
-    case 'dir': {
+    case 'bearing': {
       const n = Number(value);
       if (!Number.isFinite(n)) return String(value);
       return `${Math.round(n)}°`;

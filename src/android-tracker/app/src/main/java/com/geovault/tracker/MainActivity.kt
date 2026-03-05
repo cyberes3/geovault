@@ -298,6 +298,8 @@ class MainActivity : AppCompatActivity() {
             showSnackbar(getString(R.string.no_tracker_selected_go_to_settings))
             return
         }
+        val homeFragment = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
+        homeFragment?.showPreparingState()
         TrackerRepository.checkTracker(this, trackerId) { valid ->
             runOnUiThread {
                 if (!valid) {

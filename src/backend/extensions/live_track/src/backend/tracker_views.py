@@ -147,6 +147,7 @@ def tracker_profile_properties(request, tracker_id, profile_basename=None):
     # Ingress URL: replace .../trackers/<id>/<anything>.properties with .../ingress/
     ingress_path = re.sub(r"/trackers/[^/]+/[^/]+\.properties$", "/ingress/", request.path)
     ingress_url = f"{scheme}://{host}{ingress_path}"
+    # Body template uses our param names (e.g. bearing=%BEARING); GPSLogger substitutes placeholders.
     body_template = get_ingress_body_template()
     username = (track.user.email or "").strip()
     if profile_basename and profile_basename.strip():

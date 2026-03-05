@@ -36,7 +36,7 @@ class LiveTrackIngressBody(BaseModel):
     desc: Optional[str] = None
     alt: Optional[float] = None
     acc: Optional[float] = None
-    dir: Optional[float] = None
+    bearing: Optional[float] = Field(default=None, description="Bearing in degrees (0–360)")
     prov: Optional[str] = None
     spd_kph: Optional[float] = None
     timestamp: Optional[int] = None
@@ -59,7 +59,7 @@ PARAM_PRETTY_NAMES = {
     "desc": "Description",
     "alt": "Altitude",
     "acc": "Accuracy",
-    "dir": "Direction",
+    "bearing": "Bearing",
     "prov": "Provider",
     "spd_kph": "Speed",
     "starttimestamp": "Start Timestamp",
@@ -72,7 +72,7 @@ PARAM_PRETTY_NAMES = {
     "dist": "Distance",
 }
 
-# GPSLogger-style placeholders for each field (uppercase key or common name)
+# Placeholders for GPSLogger config: param name -> %PLACEHOLDER (e.g. bearing=%BEARING in log_customurl_body).
 INGRESS_BODY_PLACEHOLDERS = {
     "lat": "%LAT",
     "lon": "%LON",
@@ -81,7 +81,7 @@ INGRESS_BODY_PLACEHOLDERS = {
     "desc": "%DESC",
     "alt": "%ALT",
     "acc": "%ACC",
-    "dir": "%DIR",
+    "bearing": "%BEARING",
     "prov": "%PROV",
     "spd_kph": "%SPD",
     "starttimestamp": "%STARTTIMESTAMP",

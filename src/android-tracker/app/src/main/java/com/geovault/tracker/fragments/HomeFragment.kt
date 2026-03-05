@@ -201,6 +201,14 @@ class HomeFragment : Fragment() {
         }
     }
 
+    /** Show "Preparing" while pre-tracking validation/setup is in progress. */
+    fun showPreparingState() {
+        trackingStatusText.text = getString(R.string.preparing)
+        trackingStatusText.setTextColor(
+            ContextCompat.getColor(requireContext(), R.color.primary_blue)
+        )
+    }
+
     fun updateTrackingUi() {
         val running = TrackingService.isRunning
         trackingStatusText.text = getString(if (running) R.string.tracking_active else R.string.not_tracking)
