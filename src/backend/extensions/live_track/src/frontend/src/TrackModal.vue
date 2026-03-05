@@ -22,6 +22,9 @@
       @update:name="name = $event"
       @color-picked="onColorPicked"
     />
+    <div v-else-if="mode === 'edit' && !track" class="flex items-center justify-center py-12">
+      <Loader size="md" message="Loading track..." />
+    </div>
     <EditTrackForm
       v-else
       :track="track"
@@ -49,6 +52,9 @@
           Create
         </BaseButton>
       </template>
+      <template v-else-if="mode === 'edit' && !track">
+        <BaseButton variant="white" size="sm" @click="$emit('close')">Close</BaseButton>
+      </template>
       <template v-else>
         <BaseButton variant="white" size="sm" @click="$emit('close')">Close</BaseButton>
         <BaseButton variant="primary" color="blue" size="sm" :disabled="saving || !name.trim()" @click="save">
@@ -59,11 +65,12 @@
     </template>
 
     <GpsLoggerInstructionsModal
-      v-if="showInstructions"
+      v-if="showInstructions && instructionsPassword"
       :ingress-url="instructionsIngressUrl"
       :body-template="bodyTemplate"
       :username="userLogin"
       :password="instructionsPassword"
+      :profile-url="profileUrl"
       @close="showInstructions = false"
     />
   </BaseModal>
@@ -152,7 +159,19 @@ export default {
     const ingressUrl = computed(() => (createdTrack.value ? `${baseUrl}/ingress/` : ''));
     const instructionsIngressUrl = computed(() => `${baseUrl}/ingress/`);
     const instructionsPassword = computed(() => createdTrack.value?.tracker_secret || props.track?.tracker_secret || '');
-
+    const trackIdForProfile = computed(() => createdTrack.value?.id ?? props.track?.id);
+    const profileDisplayName = computed(() => {
+      const raw = (createdTrack.value?.name ?? props.track?.name ?? 'track').replace(/[^a-zA-Z0-9 \-_]/g, '').trim().slice(0, 41);
+      const name = raw ? `GeoVault ${raw}`.trim() : 'GeoVault';
+      return name;
+    });
+    const profileUrl = computed(() => {
+      const id = trackIdForProfile.value;
+      const secret = instructionsPassword.value;
+      const name = profileDisplayName.value;
+      if (!id || !secret) return '';
+      return `${baseUrl}/trackers/${id}/${encodeURIComponent(name)}.properties?secret=${encodeURIComponent(secret)}`;
+    });
     function copy(text) {
       const toast = window.gv_core?.GeoVault?.toast;
       const showCopied = () => toast && toast.success('Copied');
@@ -274,6 +293,7 @@ export default {
       bodyTemplate,
       instructionsIngressUrl,
       instructionsPassword,
+      profileUrl,
       copy,
       create,
       save,

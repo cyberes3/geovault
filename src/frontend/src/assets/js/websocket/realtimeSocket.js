@@ -103,7 +103,7 @@ class RealtimeSocket {
         }
         
         const { module, type, data: messageData = {} } = data;
-        
+
         // Handle ping/pong
         if (type === 'pong') {
             if (this.pingTimeout) {
@@ -243,12 +243,12 @@ class RealtimeSocket {
         if (!this.moduleHandlers.has(module)) {
             this.moduleHandlers.set(module, new Map());
         }
-        
+
         const moduleHandlers = this.moduleHandlers.get(module);
         if (!moduleHandlers.has(event)) {
             moduleHandlers.set(event, []);
         }
-        
+
         moduleHandlers.get(event).push(handler);
     }
 

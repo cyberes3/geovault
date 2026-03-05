@@ -39,7 +39,7 @@
       </div>
     </div>
     <BaseButton variant="primary" color="blue" size="sm" @click="$emit('open-instructions')">
-      Instructions (GPSLogger)
+      GPSLogger Instructions
     </BaseButton>
   </div>
 </template>

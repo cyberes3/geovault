@@ -36,7 +36,7 @@
       Anyone with the tracker password can send location data to this track.
     </p>
     <div class="flex flex-wrap gap-2">
-      <BaseButton variant="white" size="sm" @click="$emit('open-instructions')">Instructions (GPSLogger)</BaseButton>
+      <BaseButton variant="white" size="sm" @click="$emit('open-instructions')">GPSLogger Instructions</BaseButton>
       <BaseButton variant="white" size="sm" @click="$emit('download-kml')">Download KML</BaseButton>
       <BaseButton variant="secondary" color="red" size="sm" :disabled="deleting" @click="$emit('delete')">
         <Loader v-if="deleting" size="sm" layout="inline" :show-message="false" class="mr-1" />

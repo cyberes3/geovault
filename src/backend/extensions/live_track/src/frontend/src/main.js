@@ -8,13 +8,13 @@ import './assets/main.css';
  */
 async function setup({ app, router, registry, api, toast, metadata }) {
   registry.registerNavLink({
-    label: 'Live',
+    label: 'Tracker',
     path: ''
   });
 
   registry.registerSettingsTab({
     id: 'live-track',
-    label: 'Live Track',
+    label: 'Live Tracker',
     component: LiveTrackSettings,
     icon: metadata?.icon
   });

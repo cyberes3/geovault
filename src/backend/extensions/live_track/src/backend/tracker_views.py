@@ -3,6 +3,7 @@ Tracker CRUD and KML download views.
 """
 
 import json
+import re
 import secrets
 import uuid
 from xml.etree import ElementTree as ET
@@ -83,6 +84,59 @@ def tracker_get_patch_delete(request, tracker_id):
         track.color = data["color"].strip()
     track.save()
     return JsonResponse(track_to_response(track, include_secret=True))
+
+
+@require_http_methods(["GET"])
+@csrf_exempt
+def tracker_profile_properties(request, tracker_id, profile_basename=None):
+    """GET profile.properties: session owner or ?secret=tracker_secret. Returns GPSLogger .properties file.
+    If profile_basename is in the URL (e.g. GeoVault%20My%20Track.properties), that name is used so
+    GPSLogger's getBaseName(url) shows the correct profile name after import."""
+    track = LiveTrack.objects.filter(id=tracker_id).first()
+    if not track:
+        return error_response("Not found", 404)
+    allowed = (
+        (request.user.is_authenticated and request.user == track.user)
+        or (request.GET.get("secret") == track.tracker_secret)
+    )
+    if not allowed:
+        return error_response("Not found", 404)
+    # Use Host / X-Forwarded-Host so profile URLs match what the client sees (e.g. 192.168.1.235:5173 not 127.0.0.1:8000)
+    forwarded_host = request.META.get("HTTP_X_FORWARDED_HOST")
+    host = (forwarded_host or request.META.get("HTTP_HOST") or request.get_host()).split(",")[0].strip()
+    scheme = request.META.get("HTTP_X_FORWARDED_PROTO") or request.scheme or "http"
+    # Ingress URL: replace .../trackers/<id>/<anything>.properties with .../ingress/
+    ingress_path = re.sub(r"/trackers/[^/]+/[^/]+\.properties$", "/ingress/", request.path)
+    ingress_url = f"{scheme}://{host}{ingress_path}"
+    body_template = get_ingress_body_template()
+    username = (track.user.email or "").strip()
+    if profile_basename and profile_basename.strip():
+        profile_display_name = profile_basename.strip()[:50]
+    else:
+        raw_name = "".join(c for c in (track.name or "track") if c.isalnum() or c in " -_")[:41]
+        profile_display_name = f"GeoVault {raw_name}".strip() or "GeoVault"
+    lines = [
+        f"current_profile_name={profile_display_name}",
+        "log_customurl_enabled=true",
+        f"log_customurl_url={ingress_url}",
+        f"log_customurl_body={body_template}",
+        "log_customurl_method=POST",
+        f"log_customurl_basicauth_username={username}",
+        f"log_customurl_basicauth_password={track.tracker_secret}",
+        "log_customurl_discard_offline_locations_enabled=true",
+        "autocustomurl_enabled=true",
+        "hide_notification_from_lock_screen=true",
+        "log_satellite_locations=true",
+        "log_network_locations=true",
+        "new_file_creation=everystart",
+        "time_before_logging=15",
+        "distance_before_logging=10",
+        "accuracy_before_logging=50",
+    ]
+    body = "\n".join(lines) + "\n"
+    resp = HttpResponse(body, content_type="application/x-gpslogger-properties")
+    resp["Content-Disposition"] = f'inline; filename="{profile_display_name}.properties"'
+    return resp
 
 
 @api_or_login_required_401()

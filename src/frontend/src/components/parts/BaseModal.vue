@@ -50,7 +50,7 @@
         </div>
 
         <!-- Content -->
-        <div class="flex-1 overflow-y-auto bg-white min-h-0">
+        <div ref="contentScroll" class="flex-1 overflow-y-auto bg-white min-h-0">
           <slot></slot>
         </div>
 
@@ -150,6 +150,10 @@ export default {
           if (this.$refs.modalBackdrop) {
             this.$refs.modalBackdrop.focus()
           }
+          // Snap scroll to top when modal opens
+          if (this.$refs.contentScroll) {
+            this.$refs.contentScroll.scrollTop = 0
+          }
         })
       } else {
         if (this._boundEscape) {
@@ -177,6 +181,9 @@ export default {
       this.$nextTick(() => {
         if (this.$el && this.$el.parentNode !== document.body) {
           document.body.appendChild(this.$el)
+        }
+        if (this.$refs.contentScroll) {
+          this.$refs.contentScroll.scrollTop = 0
         }
       })
     }

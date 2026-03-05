@@ -5,7 +5,7 @@
     @close="$emit('close')"
   >
     <div class="p-4 sm:p-5 space-y-3">
-      <div v-if="track?.name" class="text-sm font-medium text-gray-900 tracking-wide uppercase">
+      <div v-if="track?.name" class="text-sm font-medium text-gray-900 tracking-wide uppercase truncate min-w-0" :title="track.name">
         {{ track.name }}
       </div>
       <div

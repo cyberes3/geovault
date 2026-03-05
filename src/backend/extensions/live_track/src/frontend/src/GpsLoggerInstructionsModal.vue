@@ -4,6 +4,48 @@
       <p class="text-gray-900">
         In the GPSLogger app, follow these steps to send your location to this track.
       </p>
+      <div v-if="profileUrl" class="space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+        <p class="font-medium text-gray-900">Import Profile</p>
+        <p class="text-gray-700 text-xs">Scan the QR code or copy the profile URL to load this track’s settings into GPSLogger in one step.</p>
+        <div class="flex flex-col sm:flex-row gap-4 items-start">
+          <div v-if="qrDataUrl" class="flex-shrink-0">
+            <img :src="qrDataUrl" alt="Open in GPSLogger (gpslogger://)" class="w-32 h-32 rounded border border-gray-300" />
+          </div>
+          <div class="flex-1 min-w-0 space-y-2">
+            <div>
+              <p class="text-gray-700 text-xs font-medium mb-1">Profile URL (paste in GPSLogger: From URL)</p>
+              <div class="flex gap-2">
+                <input :value="profileUrl" readonly class="flex-1 px-2 py-1.5 text-xs border rounded bg-white min-w-0" />
+                <button type="button" class="px-2 py-1.5 bg-gray-200 rounded text-xs flex-shrink-0" @click="copy(profileUrl)">Copy</button>
+              </div>
+            </div>
+            <div v-if="isMobile && gpsloggerOpenUrl" class="pt-1">
+              <button
+                type="button"
+                class="px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded"
+                @click="openInGpsLogger"
+              >
+                Open in GPSLogger
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="flex justify-center">
+        <a
+          href="https://f-droid.org/en/packages/com.mendhak.gpslogger/"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-block"
+          aria-label="Get GPSLogger on F-Droid"
+        >
+          <img
+            :src="fdroidBadgeUrl"
+            alt="Get it on F-Droid"
+            class="h-8 w-auto max-w-[140px] object-contain"
+          />
+        </a>
+      </div>
       <div class="space-y-4">
         <div class="flex gap-3">
           <span class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center font-medium">1</span>
@@ -102,7 +144,10 @@
 </template>
 
 <script>
+import { ref, watch, computed } from 'vue';
+import QRCode from 'qrcode';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
+import fdroidBadgeUrl from '@/assets/get-it-on-fdroid.svg';
 
 export default {
   name: 'GpsLoggerInstructionsModal',
@@ -111,10 +156,33 @@ export default {
     ingressUrl: { type: String, default: '' },
     bodyTemplate: { type: String, default: 'lat=%LAT&lon=%LON&timestamp=%TIMESTAMP' },
     username: { type: String, default: '' },
-    password: { type: String, default: '' }
+    password: { type: String, default: '' },
+    profileUrl: { type: String, default: '' }
   },
   emits: ['close'],
-  setup() {
+  setup(props) {
+    const qrDataUrl = ref('');
+    // gpslogger:// link is exactly profileUrl with scheme prefix so it always matches "Profile URL (paste in GPSLogger: From URL)"
+    const gpsloggerOpenUrl = computed(() =>
+      props.profileUrl ? `gpslogger://properties/${props.profileUrl}` : ''
+    );
+    watch(() => gpsloggerOpenUrl.value, (url) => {
+      if (!url) {
+        qrDataUrl.value = '';
+        return;
+      }
+      QRCode.toDataURL(url, { width: 256, margin: 1 }).then((dataUrl) => {
+        qrDataUrl.value = dataUrl;
+      }).catch(() => {
+        qrDataUrl.value = '';
+      });
+    }, { immediate: true });
+    const isMobile = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    function openInGpsLogger() {
+      if (gpsloggerOpenUrl.value) {
+        window.location.href = gpsloggerOpenUrl.value;
+      }
+    }
     function copy(text) {
       const toast = window.gv_core?.GeoVault?.toast;
       const showCopied = () => toast && toast.success('Copied');
@@ -141,7 +209,7 @@ export default {
       }
       document.body.removeChild(el);
     }
-    return { copy };
+    return { copy, qrDataUrl, fdroidBadgeUrl, isMobile, openInGpsLogger, gpsloggerOpenUrl };
   }
 };
 </script>

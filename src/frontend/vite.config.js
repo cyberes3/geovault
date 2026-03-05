@@ -242,32 +242,47 @@ export default defineConfig({
                 '**/src/tests/**',
             ],
         },
-        proxy: {
+        proxy: (() => {
+            // changeOrigin: true rewrites Host to the target (127.0.0.1:8000), so the backend never sees
+            // the original host (e.g. 192.168.1.235:5173). Forward it so build_absolute_uri and profile URLs work.
+            function forwardHost(proxy) {
+                proxy.on('proxyReq', (proxyReq, req) => {
+                    if (req.headers.host) proxyReq.setHeader('X-Forwarded-Host', req.headers.host);
+                    const proto = req.headers['x-forwarded-proto'] || (req.socket?.encrypted ? 'https' : 'http');
+                    proxyReq.setHeader('X-Forwarded-Proto', proto);
+                });
+            }
+            return {
             '/api': {
                 target: 'http://127.0.0.1:8000',
                 changeOrigin: true,
                 secure: false,
+                configure: forwardHost,
             },
             '/accounts': {
                 target: 'http://127.0.0.1:8000',
                 changeOrigin: true,
                 secure: false,
+                configure: forwardHost,
             },
             '/static': {
                 target: 'http://127.0.0.1:8000',
                 changeOrigin: true,
                 secure: false,
+                configure: forwardHost,
             },
             '/extensions': {
                 target: 'http://127.0.0.1:8000',
                 changeOrigin: true,
                 secure: false,
+                configure: forwardHost,
             },
             '/ws': {
                 target: 'ws://127.0.0.1:8000',
                 ws: true,
                 changeOrigin: true,
             },
-        },
+            };
+        })(),
     },
 })

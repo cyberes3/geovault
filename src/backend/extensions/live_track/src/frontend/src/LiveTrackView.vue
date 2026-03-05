@@ -55,7 +55,7 @@
             />
           </div>
           <div class="flex-1 min-w-0">
-            <div class="font-medium text-gray-900 truncate">{{ track.name }}</div>
+            <div class="font-medium text-gray-900 truncate" :title="track.name">{{ track.name }}</div>
             <div class="text-xs text-gray-500">
               {{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'No points' }}
             </div>
@@ -313,13 +313,21 @@ export default {
       return d.toLocaleString();
     }
 
-    /** Degrees from north (0 = up), clockwise. From second-to-last to last point. */
+    /** Degrees from north (0 = up), clockwise. Uses two most recent points by timestamp when present (insert-at-index can put newest mid-array). */
     function getTrackDirectionAngle(track) {
       const geom = track.geometry || {};
       const coords = geom.coordinates || [];
       if (coords.length < 2) return 0;
-      const prev = coords[coords.length - 2];
-      const last = coords[coords.length - 1];
+      let prev, last;
+      const withTs = coords.filter((c) => c.length >= 3);
+      if (withTs.length >= 2) {
+        const sorted = [...withTs].sort((a, b) => (b[2] ?? 0) - (a[2] ?? 0));
+        last = sorted[0];
+        prev = sorted[1];
+      } else {
+        prev = coords[coords.length - 2];
+        last = coords[coords.length - 1];
+      }
       const dLon = last[0] - prev[0];
       const dLat = last[1] - prev[1];
       if (dLon === 0 && dLat === 0) return 0;
@@ -385,7 +393,8 @@ export default {
         const geom = track.geometry || {};
         const coords = geom.coordinates || [];
         const last = coords[coords.length - 1];
-        if (!last || last.length < 2) continue;
+        const pos = track.last_position ? [track.last_position.lon, track.last_position.lat] : (last && last.length >= 2 ? [last[0], last[1]] : null);
+        if (!pos) continue;
         const color = track.color || '#3388ff';
         features.push({
           type: 'Feature',
@@ -396,7 +405,7 @@ export default {
             rotation: getTrackDirectionAngle(track),
             iconImage: getArrowImageId(color)
           },
-          geometry: { type: 'Point', coordinates: [last[0], last[1]] }
+          geometry: { type: 'Point', coordinates: pos }
         });
       }
       return { type: 'FeatureCollection', features };
@@ -855,16 +864,19 @@ export default {
       showModal.value = true;
     }
 
-    async function openEditModal(track) {
+    function openEditModal(track) {
       modalMode.value = 'edit';
-      try {
-        const res = await api.get(`/trackers/${track.id}/`);
-        modalTrack.value = res.data;
-        showModal.value = true;
-      } catch (e) {
-        const err = api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to load track');
-      }
+      modalTrack.value = null;
+      showModal.value = true;
+      api.get(`/trackers/${track.id}/`)
+        .then((res) => {
+          modalTrack.value = res.data;
+        })
+        .catch((e) => {
+          const err = api.handleError?.(e);
+          if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to load track');
+          showModal.value = false;
+        });
     }
 
     function onModalSaved() {
@@ -924,9 +936,10 @@ export default {
       const socket = window.gv_core?.realtimeSocket;
       trackUpdatedHandler = (data) => {
         if (!data || !data.track_id || !Array.isArray(data.point)) return;
-        const track = trackers.value.find((t) => t.id === data.track_id);
-        if (!track) return;
-        const geom = track.geometry || { type: 'LineString', coordinates: [] };
+        const idx = trackers.value.findIndex((t) => t.id === data.track_id);
+        if (idx < 0) return;
+        const track = trackers.value[idx];
+        const geom = track.geometry ? { ...track.geometry, coordinates: [...(track.geometry.coordinates || [])] } : { type: 'LineString', coordinates: [] };
         if (!geom.coordinates) geom.coordinates = [];
         if (typeof data.index === 'number' && Number.isInteger(data.index)) {
           geom.coordinates.splice(data.index, 0, data.point);
@@ -934,9 +947,12 @@ export default {
           geom.coordinates.push(data.point);
         }
         const last = geom.coordinates[geom.coordinates.length - 1];
-        track.last_position = last && last.length >= 2 ? { lon: last[0], lat: last[1] } : null;
-        track.last_timestamp_ms = last && last.length >= 3 ? last[2] : null;
-        track.latestPointParams = data.props && typeof data.props === 'object' ? data.props : {};
+        const newPoint = data.point;
+        const last_position = newPoint && newPoint.length >= 2 ? { lon: newPoint[0], lat: newPoint[1] } : (last && last.length >= 2 ? { lon: last[0], lat: last[1] } : null);
+        const last_timestamp_ms = newPoint && newPoint.length >= 3 ? newPoint[2] : (last && last.length >= 3 ? last[2] : null);
+        const latestPointParams = data.props && typeof data.props === 'object' ? data.props : {};
+        const updated = { ...track, geometry: geom, last_position, last_timestamp_ms, latestPointParams };
+        trackers.value = trackers.value.slice(0, idx).concat(updated).concat(trackers.value.slice(idx + 1));
         updateMapFeatures();
         if (data.track_id === selectedId.value && followLocked.value && map) {
           centerOnSelectedTrackLastPoint();

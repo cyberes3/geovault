@@ -9,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from extensions.live_track.src.backend.models import LiveTrack
+from extensions.live_track.src.backend.validation import get_ingress_body_template
 
 
 def _patch_live_track_enabled():
@@ -431,6 +432,172 @@ class TestLiveTrackAPI(TestCase):
         with _patch_live_track_enabled():
             response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/kml/")
         self.assertEqual(response.status_code, 404)
+
+    def test_profile_properties_owner_returns_200_and_content(self):
+        """GET profile.properties as owner returns 200 and body contains all required keys."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "ProfileTrack"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        tracker_secret = create_resp.json()["tracker_secret"]
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/trackers/{track_id}/profile.properties"
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("application/x-gpslogger-properties", response.get("Content-Type", ""))
+        body = response.content.decode("utf-8")
+        self.assertIn("current_profile_name=GeoVault ProfileTrack", body)
+        self.assertIn("log_customurl_enabled=true", body)
+        self.assertIn("log_customurl_url=", body)
+        self.assertIn("/ingress/", body)
+        expected_body_template = get_ingress_body_template()
+        self.assertIn(f"log_customurl_body={expected_body_template}", body)
+        self.assertIn("log_customurl_method=POST", body)
+        self.assertIn("log_customurl_basicauth_username=", body)
+        self.assertIn(self.user.email, body)
+        self.assertIn("log_customurl_basicauth_password=", body)
+        self.assertIn(tracker_secret, body)
+        self.assertIn("log_customurl_discard_offline_locations_enabled=true", body)
+        self.assertIn("autocustomurl_enabled=true", body)
+        self.assertIn("hide_notification_from_lock_screen=true", body)
+        self.assertIn("log_satellite_locations=true", body)
+        self.assertIn("log_network_locations=true", body)
+        self.assertIn("new_file_creation=everystart", body)
+        self.assertIn("time_before_logging=15", body)
+        self.assertIn("distance_before_logging=10", body)
+        self.assertNotIn("only_log_if_significant_motion", body)
+        self.assertIn("Content-Disposition", response)
+
+    def test_profile_properties_404_other_user(self):
+        """GET profile.properties for another user's track returns 404 and does not leak secret."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Mine"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        tracker_secret = create_resp.json()["tracker_secret"]
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/trackers/{track_id}/profile.properties"
+            )
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn(tracker_secret, response.content.decode("utf-8"))
+
+    def test_profile_properties_200_unauthenticated_with_correct_secret(self):
+        """GET profile.properties with correct ?secret= returns 200 without session (QR / From URL flow)."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "SecretTrack"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        tracker_secret = create_resp.json()["tracker_secret"]
+        self.client.logout()
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/trackers/{track_id}/profile.properties",
+                {"secret": tracker_secret},
+            )
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode("utf-8")
+        self.assertIn("log_customurl_enabled=true", body)
+
+    def test_profile_properties_404_unauthenticated_wrong_or_missing_secret(self):
+        """GET profile.properties without secret or with wrong secret returns 404."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "NoLeak"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        self.client.logout()
+        with _patch_live_track_enabled():
+            r_no_secret = self.client.get(
+                f"/api/extensions/live-track/trackers/{track_id}/profile.properties"
+            )
+            r_wrong_secret = self.client.get(
+                f"/api/extensions/live-track/trackers/{track_id}/profile.properties",
+                {"secret": "wrong"},
+            )
+        self.assertEqual(r_no_secret.status_code, 404)
+        self.assertEqual(r_wrong_secret.status_code, 404)
+
+    def test_profile_properties_404_not_found(self):
+        """GET profile.properties with non-existent track id returns 404."""
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                "/api/extensions/live-track/trackers/00000000-0000-0000-0000-000000000000/profile.properties"
+            )
+        self.assertEqual(response.status_code, 404)
+
+    def test_profile_properties_ingress_url_absolute(self):
+        """Profile body log_customurl_url is an absolute URL containing /ingress/."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "UrlTrack"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/trackers/{track_id}/profile.properties"
+            )
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode("utf-8")
+        for line in body.splitlines():
+            if line.startswith("log_customurl_url="):
+                url = line.split("=", 1)[1].strip()
+                self.assertTrue(
+                    url.startswith("http://") or url.startswith("https://"),
+                    f"Expected absolute URL, got {url!r}",
+                )
+                self.assertIn("/ingress/", url)
+                break
+        else:
+            self.fail("log_customurl_url not found in profile body")
+
+    def test_profile_properties_optional_accuracy(self):
+        """Profile body contains accuracy_before_logging=50."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "AccTrack"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/trackers/{track_id}/profile.properties"
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("accuracy_before_logging=50", response.content.decode("utf-8"))
+
+    def test_profile_properties_method_get_only(self):
+        """POST to profile.properties returns 405."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "PostTrack"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/profile.properties",
+                data=json.dumps({}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 405)
 
 
 class TestLiveTrackIngress(TestCase):
