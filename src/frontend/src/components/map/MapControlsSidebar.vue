@@ -7,11 +7,11 @@
       // Desktop styles (full width) - show at xl (1280px) and above
       'xl:w-64 xl:p-4',
       // Mobile/Tablet portrait styles - up to lg (1024px)
-      isMobileOpen ? 'fixed inset-0 z-50 w-full h-full p-4' : 'hidden'
+      isMobileOpen ? 'fixed inset-0 z-50 w-full h-full' : 'hidden'
     ]"
   >
-    <!-- Mobile Header -->
-    <div class="lg:hidden flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
+    <!-- Mobile Header (full-width so border runs edge to edge; match left sidebar) -->
+    <div class="lg:hidden flex items-center justify-between px-4 py-3 border-b border-gray-200">
       <h2 class="text-lg font-semibold text-gray-900">Map Controls</h2>
       <button
           @click="$emit('close')"
@@ -21,6 +21,8 @@
       </button>
     </div>
 
+    <!-- Content area: padded on mobile (header is full-bleed); desktop uses root padding -->
+    <div class="flex-1 flex flex-col min-h-0 overflow-auto p-4 lg:p-0">
     <!-- View Context Header (Tag/Collection name) -->
     <div v-if="viewContext" class="mb-4 pb-3 border-b border-gray-200 lg:mb-3 lg:pb-2 xl:mb-4 xl:pb-3">
       <div class="flex items-center gap-2 lg:gap-1.5 xl:gap-2">
@@ -154,6 +156,7 @@
         <ArrowDownTrayIcon class="w-5 h-5 mr-2"/>
         Download All
       </BaseButton>
+    </div>
     </div>
   </div>
 </template>

@@ -249,7 +249,7 @@
 
     <!-- Main Content -->
     <main
-        :class="isMapRoute ? 'w-full h-[calc(100vh-4rem)] overflow-hidden' : 'max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8'">
+        :class="isMapRoute ? 'w-full h-[calc(100vh-4rem)] overflow-auto sm:overflow-hidden flex flex-col' : 'max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8'">
       <!-- Show error state if loading failed -->
       <div v-if="loadingError" class="flex items-center justify-center min-h-[400px]">
         <div class="bg-red-50 border border-red-200 rounded-lg shadow-md p-8 max-w-md w-full mx-4">
@@ -280,11 +280,13 @@
         <Loader layout="centered" />
       </div>
       <!-- Render router-view only after auth check completes (or immediately for public routes) and no error occurred -->
-      <router-view v-else-if="!userInfoLoading || isPublicShareRoute" v-slot="{ Component }">
-        <keep-alive>
-          <component :is="Component"/>
-        </keep-alive>
-      </router-view>
+      <div v-else-if="!userInfoLoading || isPublicShareRoute" :class="isMapRoute ? 'flex-1 min-h-0 flex flex-col overflow-auto sm:overflow-hidden' : ''">
+        <router-view v-slot="{ Component }">
+          <keep-alive>
+            <component :is="Component"/>
+          </keep-alive>
+        </router-view>
+      </div>
     </main>
     
     <!-- Universal Toast Container -->
