@@ -104,4 +104,33 @@ object TrackerRepository {
         currentTrackerId = null
         currentTrackerCache = null
     }
+
+    /**
+     * Efficient single-tracker check (POST tracker-check). Use to validate the selected tracker
+     * before starting a session; call back with true only if the tracker exists and belongs to the user.
+     */
+    fun checkTracker(context: Context, trackerId: String, callback: (Boolean) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(false)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.checkTracker(TrackerCheckRequest(tracker_id = trackerId, password = null))
+            .enqueue(object : Callback<TrackerCheckResponse> {
+                override fun onResponse(
+                    call: Call<TrackerCheckResponse>,
+                    response: Response<TrackerCheckResponse>
+                ) {
+                    val body = response.body()
+                    callback(body?.valid == true)
+                }
+
+                override fun onFailure(call: Call<TrackerCheckResponse>, t: Throwable) {
+                    Log.e("TrackerRepository", "Tracker check failed", t)
+                    callback(false)
+                }
+            })
+    }
 }

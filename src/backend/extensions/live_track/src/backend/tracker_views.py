@@ -16,9 +16,16 @@ from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, handle_404
 from geo_lib.website.auth import api_or_login_required_401
 
+from pydantic import ValidationError as PydanticValidationError
+
 from .helpers import track_to_response
 from .models import LiveTrack
-from .validation import PARAM_PRETTY_NAMES, get_ingress_body_template
+from .validation import (
+    PARAM_PRETTY_NAMES,
+    TrackerCheckRequest,
+    TrackerCheckResponse,
+    get_ingress_body_template,
+)
 
 
 def _get_json_body(request):
@@ -28,6 +35,38 @@ def _get_json_body(request):
         return data, None
     except json.JSONDecodeError:
         return None, error_response("Invalid JSON", 400)
+
+
+@api_or_login_required_401()
+@require_http_methods(["POST"])
+@csrf_exempt
+def tracker_check(request):
+    """POST: Check a single tracker ID (and optionally password). Supports session, OAuth, and API auth."""
+    data, err = _get_json_body(request)
+    if err is not None:
+        return err
+    try:
+        body = TrackerCheckRequest.model_validate(data or {})
+    except PydanticValidationError as e:
+        errs = e.errors()
+        msg = errs[0].get("msg", "Invalid body") if errs else "Invalid body"
+        return error_response(msg, 400)
+    try:
+        tracker_uuid = uuid.UUID(body.tracker_id)
+    except (ValueError, TypeError):
+        return error_response("Invalid tracker_id", 400)
+    track = (
+        LiveTrack.objects.filter(id=tracker_uuid, user=request.user)
+        .only("id", "tracker_secret", "name")
+        .first()
+    )
+    if not track:
+        return JsonResponse(TrackerCheckResponse(valid=False).model_dump())
+    if body.password is not None and track.tracker_secret != body.password:
+        return JsonResponse(TrackerCheckResponse(valid=False).model_dump())
+    return JsonResponse(
+        TrackerCheckResponse(valid=True, name=track.name).model_dump()
+    )
 
 
 @api_or_login_required_401()

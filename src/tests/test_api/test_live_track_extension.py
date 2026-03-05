@@ -600,6 +600,188 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(response.status_code, 405)
 
 
+class TestTrackerCheck(TestCase):
+    """Test POST tracker-check/ (session, API key, OAuth); validate tracker ID and optional password."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email="checkuser@example.com",
+            password="testpass123",
+            username="checkuser",
+        )
+        self.other_user = User.objects.create_user(
+            email="othercheck@example.com",
+            password="otherpass123",
+            username="othercheck",
+        )
+        self.client.force_login(self.user)
+
+    def _post_check(self, tracker_id, password=None, **kwargs):
+        body = {"tracker_id": tracker_id}
+        if password is not None:
+            body["password"] = password
+        return self.client.post(
+            "/api/extensions/live-track/tracker-check/",
+            data=json.dumps(body),
+            content_type="application/json",
+            **kwargs,
+        )
+
+    def test_tracker_check_tracker_id_only_valid_when_owned(self):
+        """POST tracker-check/ with only tracker_id (no password): returns valid=True and name when user owns the tracker."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "My Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self._post_check(track_id)  # no password
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["valid"])
+        self.assertEqual(data["name"], "My Track")
+
+    def test_tracker_check_tracker_id_and_password_valid_when_both_match(self):
+        """POST tracker-check/ with tracker_id and password: returns valid=True when both match the tracker."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Secret Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        secret = create_resp.json()["tracker_secret"]
+        with _patch_live_track_enabled():
+            response = self._post_check(track_id, password=secret)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["valid"])
+        self.assertEqual(data["name"], "Secret Track")
+
+    def test_tracker_check_invalid_wrong_password(self):
+        """POST tracker-check/ with correct tracker_id but wrong password returns valid=False."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self._post_check(track_id, password="wrong-secret")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertFalse(data["valid"])
+        self.assertIsNone(data.get("name"))
+
+    def test_tracker_check_invalid_other_user_tracker(self):
+        """POST tracker-check/ with another user's tracker_id returns valid=False."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Mine"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self._post_check(track_id)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertFalse(data["valid"])
+
+    def test_tracker_check_invalid_unknown_tracker_id(self):
+        """POST tracker-check/ with non-existent tracker_id returns valid=False."""
+        with _patch_live_track_enabled():
+            response = self._post_check("00000000-0000-0000-0000-000000000000")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertFalse(data["valid"])
+
+    def test_tracker_check_invalid_tracker_id_returns_400(self):
+        """POST tracker-check/ with malformed tracker_id returns 400."""
+        with _patch_live_track_enabled():
+            response = self._post_check("not-a-uuid")
+        self.assertEqual(response.status_code, 400)
+
+    def test_tracker_check_missing_tracker_id_returns_400(self):
+        """POST tracker-check/ without tracker_id returns 400."""
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                "/api/extensions/live-track/tracker-check/",
+                data=json.dumps({}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 400)
+
+    def test_tracker_check_unauthenticated_returns_401(self):
+        """POST tracker-check/ without auth returns 401."""
+        self.client.logout()
+        with _patch_live_track_enabled():
+            response = self._post_check("00000000-0000-0000-0000-000000000000")
+        self.assertEqual(response.status_code, 401)
+
+    def test_tracker_check_with_api_key_tracker_id_only(self):
+        """POST tracker-check/ with API key and only tracker_id returns valid when tracker belongs to key owner."""
+        from users.api_keys import create_user_api_key
+
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "API Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        key_obj, raw_key = create_user_api_key(self.user, "Check Key")
+        self.client.logout()
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                "/api/extensions/live-track/tracker-check/",
+                data=json.dumps({"tracker_id": track_id}),
+                content_type="application/json",
+                HTTP_AUTHORIZATION=f"Bearer {raw_key}",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["valid"])
+        self.assertEqual(data["name"], "API Track")
+
+    def test_tracker_check_with_api_key_tracker_id_and_password(self):
+        """POST tracker-check/ with API key, tracker_id and password returns valid when both match."""
+        from users.api_keys import create_user_api_key
+
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "API Secret Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        secret = create_resp.json()["tracker_secret"]
+        key_obj, raw_key = create_user_api_key(self.user, "Check Key")
+        self.client.logout()
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                "/api/extensions/live-track/tracker-check/",
+                data=json.dumps({"tracker_id": track_id, "password": secret}),
+                content_type="application/json",
+                HTTP_AUTHORIZATION=f"Bearer {raw_key}",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["valid"])
+        self.assertEqual(data["name"], "API Secret Track")
+
+    def test_tracker_check_get_not_allowed(self):
+        """GET tracker-check/ returns 405."""
+        with _patch_live_track_enabled():
+            response = self.client.get("/api/extensions/live-track/tracker-check/")
+        self.assertEqual(response.status_code, 405)
+
+
 class TestLiveTrackIngress(TestCase):
     """Test ingress endpoint (POST only, Basic Auth, body validation, rate limit)."""
 

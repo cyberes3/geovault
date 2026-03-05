@@ -7,6 +7,20 @@ from typing import Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
+
+class TrackerCheckRequest(BaseModel):
+    """Request body for POST tracker-check: validate tracker ID and optionally password."""
+
+    tracker_id: str = Field(..., description="UUID of the tracker")
+    password: Optional[str] = Field(default=None, description="Optional tracker_secret to verify")
+
+
+class TrackerCheckResponse(BaseModel):
+    """Response for tracker-check: valid and optional tracker name when valid."""
+
+    valid: bool = Field(..., description="Whether the tracker exists and (if password given) secret matches")
+    name: Optional[str] = Field(default=None, description="Tracker name when valid")
+
 # Optional params we accept (subset of GPSLogger; exclude profile, filename, act, timeoffset, spd, aid)
 
 

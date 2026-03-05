@@ -284,20 +284,41 @@ class MainActivity : AppCompatActivity() {
         if (TrackingService.isRunning) {
             intent.action = TrackingService.ACTION_STOP
             startService(intent)
-        } else {
-            val trackerId = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).getString("selected_tracker_id", "") ?: ""
-            if (trackerId.isEmpty()) {
-                showSnackbar(getString(R.string.no_tracker_selected_go_to_settings))
-                return
-            }
-            intent.action = TrackingService.ACTION_START
-            startForegroundService(intent)
+            Handler(Looper.getMainLooper()).postDelayed({
+                val homeFragment = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
+                homeFragment?.updateTrackingUi()
+            }, 300)
+            return
         }
-        
-        Handler(Looper.getMainLooper()).postDelayed({
-            val homeFragment = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
-            homeFragment?.updateTrackingUi()
-        }, 300)
+        val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+        val trackerId = prefs.getString("selected_tracker_id", "") ?: ""
+        if (trackerId.isEmpty()) {
+            showSnackbar(getString(R.string.no_tracker_selected_go_to_settings))
+            return
+        }
+        TrackerRepository.checkTracker(this, trackerId) { valid ->
+            runOnUiThread {
+                if (!valid) {
+                    prefs.edit()
+                        .remove("selected_tracker_id")
+                        .remove("selected_tracker_name")
+                        .apply()
+                    TrackerRepository.clearCurrentTrackerCache()
+                    TrackerRepository.clearCache()
+                    TrackerRepository.getTrackers(this@MainActivity, forceRefresh = true) { }
+                    showSnackbar(getString(R.string.no_tracker_selected_go_to_settings))
+                    val homeFragment = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
+                    homeFragment?.updateTrackingUi()
+                    return@runOnUiThread
+                }
+                intent.action = TrackingService.ACTION_START
+                startForegroundService(intent)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    val homeFragment = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
+                    homeFragment?.updateTrackingUi()
+                }, 300)
+            }
+        }
     }
 
     fun updateQueueCountFromFragment(textView: TextView) {
@@ -319,6 +340,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
         GeovaultAuthManager.fetchUserStatus(this)
+        if (!isGuestView && isMainContentSetup) {
+            TrackerRepository.getTrackers(this, forceRefresh = true) { }
+        }
         updatePermissionsState()
     }
 

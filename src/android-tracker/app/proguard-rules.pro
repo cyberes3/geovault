@@ -40,6 +40,8 @@
 -keep class com.geovault.tracker.Tracker { *; }
 -keep class com.geovault.tracker.GeoJsonLineString { *; }
 -keep class com.geovault.tracker.TrackerCreateRequest { *; }
+-keep class com.geovault.tracker.TrackerCheckRequest { *; }
+-keep class com.geovault.tracker.TrackerCheckResponse { *; }
 -keepattributes Signature
 -keepattributes *Annotation*
 -dontwarn com.google.gson.**
