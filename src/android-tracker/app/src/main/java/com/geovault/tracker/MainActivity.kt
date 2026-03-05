@@ -287,8 +287,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             val trackerId = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).getString("selected_tracker_id", "") ?: ""
             if (trackerId.isEmpty()) {
-                showSnackbar("Please select a tracker in settings first")
-                startActivity(Intent(this, SettingsActivity::class.java))
+                showSnackbar(getString(R.string.no_tracker_selected_go_to_settings))
                 return
             }
             intent.action = TrackingService.ACTION_START

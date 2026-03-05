@@ -14,7 +14,7 @@ the repo and naming below.
 |----------|--------------------------------------------------------------------------------------------------------------------------|
 | Uploader | Name must **contain** `Uploader` and **end with** `.apk`. Example: `GeoVault Uploader 2026-01-02 0168732762.apk`         |
 | Places   | Name must **start with** `GeoVault Places ` and **end with** `.apk`. Example: `GeoVault Places 2026-02-12 abc123def.apk` |
-| Tracker  | Name must **contain** `GeoVault Live Tracker` and **end with** `.apk`. Example: `GeoVault Live Tracker 2026-03-01.apk`    |
+| Tracker  | Name must **contain** `GeoVault Live Tracker` and **end with** `.apk`. Example: `GeoVault Live Tracker 2026-03-01.apk`   |
 
 Only the **latest** release (by Gitea’s order) is used. After publishing a new release, the dashboard will show the new
 APK links within the cache window (30 minutes) or on the next request after cache expiry.
