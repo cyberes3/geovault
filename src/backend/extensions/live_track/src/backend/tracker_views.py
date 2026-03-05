@@ -17,6 +17,16 @@ from geo_lib.website.auth import api_or_login_required_401
 
 from .helpers import track_to_response
 from .models import LiveTrack
+from .validation import get_ingress_body_template
+
+
+def _get_json_body(request):
+    """Parse request body as JSON. Returns (data, None) or (None, error_response)."""
+    try:
+        data = json.loads(request.body) if request.body else {}
+        return data, None
+    except json.JSONDecodeError:
+        return None, error_response("Invalid JSON", 400)
 
 
 @api_or_login_required_401()
@@ -27,10 +37,9 @@ def tracker_list_create(request):
         tracks = LiveTrack.objects.filter(user=request.user).order_by("name")
         return JsonResponse([track_to_response(t) for t in tracks], safe=False)
 
-    try:
-        data = json.loads(request.body) if request.body else {}
-    except json.JSONDecodeError:
-        return error_response("Invalid JSON", 400)
+    data, err = _get_json_body(request)
+    if err is not None:
+        return err
     name = (data.get("name") or "").strip()
     if not name:
         return error_response("name is required", 400)
@@ -46,7 +55,7 @@ def tracker_list_create(request):
         user=request.user,
         color=color,
     )
-    return JsonResponse(track_to_response(track), status=201)
+    return JsonResponse(track_to_response(track, include_secret=True), status=201)
 
 
 @api_or_login_required_401()
@@ -56,14 +65,13 @@ def tracker_list_create(request):
 def tracker_get_patch_delete(request, tracker_id):
     track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
     if request.method == "GET":
-        return JsonResponse(track_to_response(track))
+        return JsonResponse(track_to_response(track, include_secret=True))
     if request.method == "DELETE":
         track.delete()
         return JsonResponse({"message": "Deleted"}, status=204)
-    try:
-        data = json.loads(request.body) if request.body else {}
-    except json.JSONDecodeError:
-        return error_response("Invalid JSON", 400)
+    data, err = _get_json_body(request)
+    if err is not None:
+        return err
     if "name" in data:
         name = (data["name"] or "").strip()
         if not name:
@@ -74,7 +82,15 @@ def tracker_get_patch_delete(request, tracker_id):
     if "color" in data and data["color"]:
         track.color = data["color"].strip()
     track.save()
-    return JsonResponse(track_to_response(track))
+    return JsonResponse(track_to_response(track, include_secret=True))
+
+
+@api_or_login_required_401()
+@require_http_methods(["GET"])
+@csrf_exempt
+def ingress_body_template(request):
+    """Return the form body template with all supported params (for GPSLogger config)."""
+    return JsonResponse({"body_template": get_ingress_body_template()})
 
 
 @api_or_login_required_401()

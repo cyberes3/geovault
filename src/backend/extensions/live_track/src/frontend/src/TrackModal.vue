@@ -1,136 +1,56 @@
 <template>
   <BaseModal
     :is-open="true"
-    :title="mode === 'create' ? 'New track' : 'Edit track'"
+    :title="modalTitle"
+    :close-on-escape="false"
     @close="$emit('close')"
   >
-    <div class="p-4 space-y-4">
-      <!-- After create: show credentials + Instructions -->
-      <div v-if="mode === 'create' && createdTrack" class="space-y-3">
-        <p class="text-sm text-amber-800 bg-amber-50 p-3 rounded">
-          Keep your tracker password secret. Anyone who has it can send location data to this track.
-        </p>
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700">URL</label>
-          <div class="flex gap-2">
-            <input :value="ingressUrl" readonly class="flex-1 px-2 py-1 text-sm border rounded bg-gray-50" />
-            <button type="button" class="px-2 py-1 bg-gray-200 rounded text-sm" @click="copy(ingressUrl)">Copy</button>
-          </div>
-        </div>
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700">Method</label>
-          <div class="flex gap-2">
-            <input value="POST" readonly class="flex-1 px-2 py-1 text-sm border rounded bg-gray-50" />
-            <button type="button" class="px-2 py-1 bg-gray-200 rounded text-sm" @click="copy('POST')">Copy</button>
-          </div>
-        </div>
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700">Body</label>
-          <div class="flex gap-2">
-            <input :value="bodyTemplate" readonly class="flex-1 px-2 py-1 text-sm border rounded bg-gray-50" />
-            <button type="button" class="px-2 py-1 bg-gray-200 rounded text-sm" @click="copy(bodyTemplate)">Copy</button>
-          </div>
-        </div>
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700">Username</label>
-          <div class="flex gap-2">
-            <input :value="userLogin" readonly class="flex-1 px-2 py-1 text-sm border rounded bg-gray-50" />
-            <button type="button" class="px-2 py-1 bg-gray-200 rounded text-sm" @click="copy(userLogin)">Copy</button>
-          </div>
-        </div>
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700">Password (tracker secret)</label>
-          <div class="flex gap-2">
-            <input :value="createdTrack.tracker_secret" readonly class="flex-1 px-2 py-1 text-sm border rounded bg-gray-50" />
-            <button type="button" class="px-2 py-1 bg-gray-200 rounded text-sm" @click="copy(createdTrack.tracker_secret)">Copy</button>
-          </div>
-        </div>
-        <BaseButton variant="primary" color="blue" size="sm" @click="showInstructions = true">
-          Instructions (GPSLogger)
-        </BaseButton>
-      </div>
-
-      <!-- Create form -->
-      <template v-else-if="mode === 'create'">
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700">Name <span class="text-red-500">*</span></label>
-          <input
-            v-model="name"
-            type="text"
-            placeholder="Track name"
-            class="w-full border border-gray-300 px-3 py-2 rounded-lg"
-          />
-          <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
-        </div>
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700">Color</label>
-          <ColorPickerElement
-            :model-value="displayColor"
-            @update:model-value="onColorPicked"
-          />
-        </div>
-      </template>
-
-      <!-- Edit form -->
-      <template v-else>
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700">Name <span class="text-red-500">*</span></label>
-          <input
-            v-model="name"
-            type="text"
-            placeholder="Track name"
-            class="w-full border border-gray-300 px-3 py-2 rounded-lg"
-          />
-          <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
-        </div>
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700">Password (read-only)</label>
-          <div class="flex gap-2">
-            <input :value="track?.tracker_secret" readonly class="flex-1 px-2 py-1 text-sm border rounded bg-gray-50" />
-            <button type="button" class="px-2 py-1 bg-gray-200 rounded text-sm" @click="copy(track?.tracker_secret || '')">Copy</button>
-          </div>
-        </div>
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700">Color</label>
-          <div class="flex items-center gap-2">
-            <ColorPickerElement v-model="color" />
-            <button
-              type="button"
-              title="Reset to default color from name"
-              class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              @click="resetColorToDeterministic"
-            >
-              <ArrowPathIcon class="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-        <p class="text-sm text-amber-800 bg-amber-50 p-2 rounded">
-          Anyone with the tracker password can send location data to this track.
-        </p>
-        <div class="flex flex-wrap gap-2">
-          <BaseButton variant="white" size="sm" @click="showInstructions = true">Instructions (GPSLogger)</BaseButton>
-          <BaseButton variant="white" size="sm" @click="downloadKml">Download KML</BaseButton>
-          <BaseButton variant="secondary" color="red" size="sm" :disabled="deleting" @click="confirmDelete">
-            <Loader v-if="deleting" size="sm" layout="inline" :show-message="false" class="mr-1" />
-            Delete
-          </BaseButton>
-        </div>
-      </template>
-    </div>
+    <CreateSuccessView
+      v-if="mode === 'create' && createdTrack"
+      :ingress-url="ingressUrl"
+      :body-template="bodyTemplate"
+      :user-login="userLogin"
+      :tracker-secret="createdTrack?.tracker_secret ?? ''"
+      :copy="copy"
+      @open-instructions="showInstructions = true"
+    />
+    <CreateTrackForm
+      v-else-if="mode === 'create'"
+      :name="name"
+      :display-color="displayColor"
+      :error="error"
+      @update:name="name = $event"
+      @color-picked="onColorPicked"
+    />
+    <EditTrackForm
+      v-else
+      :track="track"
+      :name="name"
+      :color="color"
+      :error="error"
+      :deleting="deleting"
+      :copy="copy"
+      @update:name="name = $event"
+      @update:color="color = $event"
+      @reset-color="resetColorToDeterministic"
+      @open-instructions="showInstructions = true"
+      @download-kml="downloadKml"
+      @delete="confirmDelete"
+    />
 
     <template #actions>
       <template v-if="mode === 'create' && createdTrack">
-        <BaseButton variant="primary" color="blue" size="sm" @click="$emit('saved')">Close</BaseButton>
+        <BaseButton variant="white" size="sm" @click="$emit('saved')">Close</BaseButton>
       </template>
       <template v-else-if="mode === 'create'">
-        <BaseButton variant="primary" color="blue" size="sm" @click="$emit('close')">Close</BaseButton>
+        <BaseButton variant="white" size="sm" @click="$emit('close')">Close</BaseButton>
         <BaseButton variant="primary" color="blue" size="sm" :disabled="saving || !name.trim()" @click="create">
           <Loader v-if="saving" size="sm" layout="inline" :show-message="false" class="mr-1" />
           Create
         </BaseButton>
       </template>
       <template v-else>
-        <BaseButton variant="primary" color="blue" size="sm" @click="$emit('close')">Close</BaseButton>
+        <BaseButton variant="white" size="sm" @click="$emit('close')">Close</BaseButton>
         <BaseButton variant="primary" color="blue" size="sm" :disabled="saving || !name.trim()" @click="save">
           <Loader v-if="saving" size="sm" layout="inline" :show-message="false" class="mr-1" />
           Save
@@ -139,7 +59,7 @@
     </template>
 
     <GpsLoggerInstructionsModal
-      v-if="showInstructions && instructionsPassword"
+      v-if="showInstructions"
       :ingress-url="instructionsIngressUrl"
       :body-template="bodyTemplate"
       :username="userLogin"
@@ -150,14 +70,16 @@
 </template>
 
 <script>
-import { ref, watch, computed, inject } from 'vue';
-import { ArrowPathIcon } from '@heroicons/vue/24/outline';
+import { ref, watch, computed, inject, onMounted } from 'vue';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
+import CreateTrackForm from './CreateTrackForm.vue';
+import CreateSuccessView from './CreateSuccessView.vue';
+import EditTrackForm from './EditTrackForm.vue';
 import GpsLoggerInstructionsModal from './GpsLoggerInstructionsModal.vue';
 
 export default {
   name: 'TrackModal',
-  components: { BaseModal, GpsLoggerInstructionsModal, ArrowPathIcon },
+  components: { BaseModal, CreateTrackForm, CreateSuccessView, EditTrackForm, GpsLoggerInstructionsModal },
   props: {
     mode: { type: String, required: true },
     track: { type: Object, default: null },
@@ -174,6 +96,8 @@ export default {
     const deleting = ref(false);
     const createdTrack = ref(null);
     const showInstructions = ref(false);
+
+    const modalTitle = computed(() => (props.mode === 'create' ? 'New track' : 'Edit track'));
 
     /** Deterministic hex color from string (high S, high V so not too dark). */
     function colorFromName(str) {
@@ -214,9 +138,18 @@ export default {
     }
 
     const baseUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/extensions/live-track` : '';
-    const bodyTemplate = 'lat=%LAT&lon=%LON&timestamp=%TIMESTAMP';
+    const bodyTemplate = ref('lat=%LAT&lon=%LON&timestamp=%TIMESTAMP');
+    onMounted(async () => {
+      if (api) {
+        try {
+          const res = await api.get('/ingress-body-template/');
+          if (res?.data?.body_template) bodyTemplate.value = res.data.body_template;
+        } catch (_) {
+          // keep fallback
+        }
+      }
+    });
     const ingressUrl = computed(() => (createdTrack.value ? `${baseUrl}/ingress/` : ''));
-    const ingressUrlEdit = computed(() => (props.track ? `${baseUrl}/ingress/` : ''));
     const instructionsIngressUrl = computed(() => `${baseUrl}/ingress/`);
     const instructionsPassword = computed(() => createdTrack.value?.tracker_secret || props.track?.tracker_secret || '');
 
@@ -336,8 +269,8 @@ export default {
       deleting,
       createdTrack,
       showInstructions,
+      modalTitle,
       ingressUrl,
-      ingressUrlEdit,
       bodyTemplate,
       instructionsIngressUrl,
       instructionsPassword,

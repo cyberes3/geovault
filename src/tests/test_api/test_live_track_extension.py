@@ -385,15 +385,14 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"-122.5,37.5,0", response.content)
 
-    def test_list_returns_last_position_when_has_points(self):
-        """GET trackers/ includes last_position and last_timestamp_ms when track has points."""
+    def test_list_returns_geometry_last_point_not_deduped_fields(self):
+        """GET trackers/ returns geometry with coordinates; list omits last_position, last_timestamp_ms, tracker_secret."""
         with _patch_live_track_enabled():
             create_resp = self.client.post(
                 "/api/extensions/live-track/trackers/",
                 data=json.dumps({"name": "WithPoint"}),
                 content_type="application/json",
             )
-        track_id = create_resp.json()["id"]
         tracker_secret = create_resp.json()["tracker_secret"]
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         with _patch_live_track_enabled():
@@ -410,10 +409,14 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(response.status_code, 200)
         tracks = response.json()
         self.assertEqual(len(tracks), 1)
-        self.assertIsNotNone(tracks[0].get("last_position"))
-        self.assertEqual(tracks[0]["last_position"]["lat"], 38.0)
-        self.assertEqual(tracks[0]["last_position"]["lon"], -121.0)
-        self.assertIsNotNone(tracks[0].get("last_timestamp_ms"))
+        coords = tracks[0].get("geometry", {}).get("coordinates", [])
+        self.assertEqual(len(coords), 1)
+        self.assertEqual(coords[0][0], -121.0)
+        self.assertEqual(coords[0][1], 38.0)
+        self.assertEqual(coords[0][2], 1705312800000)
+        self.assertNotIn("last_position", tracks[0])
+        self.assertNotIn("last_timestamp_ms", tracks[0])
+        self.assertNotIn("tracker_secret", tracks[0])
 
     def test_kml_404_other_user(self):
         """GET kml/ for another user's track returns 404."""
@@ -586,8 +589,8 @@ class TestLiveTrackIngress(TestCase):
             )
         self.assertEqual(response.status_code, 400)
 
-    def test_ingress_400_timestamp_equal_to_last_point(self):
-        """POST with timestamp equal to last point returns 400 (must be strictly after)."""
+    def test_ingress_same_timestamp_inserted_after(self):
+        """POST with timestamp equal to last point is accepted; point is inserted after (same ts)."""
         with _patch_live_track_enabled():
             with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
@@ -599,10 +602,17 @@ class TestLiveTrackIngress(TestCase):
                     data={"lat": 37.1, "lon": -121.9, "timestamp": 1705312800},
                     auth_header=self.auth_header,
                 )
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
+        track = LiveTrack.objects.get(id=self.track_id)
+        coords = (track.geometry or {}).get("coordinates", [])
+        self.assertEqual(len(coords), 2)
+        self.assertEqual(coords[0][2], 1705312800000)
+        self.assertEqual(coords[1][2], 1705312800000)
+        self.assertEqual(coords[0][:2], [-122.0, 37.0])
+        self.assertEqual(coords[1][:2], [-121.9, 37.1])
 
-    def test_ingress_400_timestamp_older_than_last_point(self):
-        """POST with timestamp not after last point returns 400."""
+    def test_ingress_older_timestamp_inserted_in_order(self):
+        """POST with timestamp older than last is accepted; point is inserted at correct index."""
         with _patch_live_track_enabled():
             with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
@@ -614,7 +624,105 @@ class TestLiveTrackIngress(TestCase):
                     data={"lat": 37.1, "lon": -121.9, "timestamp": 1705309200},
                     auth_header=self.auth_header,
                 )
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
+        track = LiveTrack.objects.get(id=self.track_id)
+        coords = (track.geometry or {}).get("coordinates", [])
+        self.assertEqual(len(coords), 2)
+        self.assertEqual(coords[0][2], 1705309200000)
+        self.assertEqual(coords[1][2], 1705312800000)
+
+    def test_ingress_insert_in_middle(self):
+        """Out-of-order: A (ts=100), B (ts=300), C (ts=200) -> order A, C, B."""
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                self._ingress_post(
+                    data={"lat": 37.0, "lon": -122.0, "timestamp": 100},
+                    auth_header=self.auth_header,
+                )
+                self._ingress_post(
+                    data={"lat": 38.0, "lon": -121.0, "timestamp": 300},
+                    auth_header=self.auth_header,
+                )
+                response = self._ingress_post(
+                    data={"lat": 37.5, "lon": -121.5, "timestamp": 200, "alt": 50},
+                    auth_header=self.auth_header,
+                )
+        self.assertEqual(response.status_code, 200)
+        track = LiveTrack.objects.get(id=self.track_id)
+        coords = (track.geometry or {}).get("coordinates", [])
+        params = track.point_params or []
+        self.assertEqual(len(coords), 3)
+        self.assertEqual(len(params), 3)
+        self.assertEqual(coords[0][2], 100000)
+        self.assertEqual(coords[1][2], 200000)
+        self.assertEqual(coords[2][2], 300000)
+        self.assertEqual(coords[1][:2], [-121.5, 37.5])
+        self.assertEqual(params[1].get("alt"), 50)
+
+    def test_ingress_insert_at_start(self):
+        """Out-of-order: A (ts=200), B (ts=100) -> order B, A."""
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                self._ingress_post(
+                    data={"lat": 37.0, "lon": -122.0, "timestamp": 200},
+                    auth_header=self.auth_header,
+                )
+                response = self._ingress_post(
+                    data={"lat": 36.0, "lon": -123.0, "timestamp": 100},
+                    auth_header=self.auth_header,
+                )
+        self.assertEqual(response.status_code, 200)
+        track = LiveTrack.objects.get(id=self.track_id)
+        coords = (track.geometry or {}).get("coordinates", [])
+        self.assertEqual(len(coords), 2)
+        self.assertEqual(coords[0][2], 100000)
+        self.assertEqual(coords[1][2], 200000)
+
+    def test_ingress_multiple_out_of_order(self):
+        """Send timestamps 500, 100, 300, 200, 400 -> final order 100, 200, 300, 400, 500."""
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                for ts in (500, 100, 300, 200, 400):
+                    response = self._ingress_post(
+                        data={"lat": 37.0, "lon": -122.0, "timestamp": ts},
+                        auth_header=self.auth_header,
+                    )
+                    self.assertEqual(response.status_code, 200)
+        track = LiveTrack.objects.get(id=self.track_id)
+        coords = (track.geometry or {}).get("coordinates", [])
+        self.assertEqual(len(coords), 5)
+        self.assertEqual([c[2] for c in coords], [100000, 200000, 300000, 400000, 500000])
+
+    def test_ingress_trim_after_insert_at_start(self):
+        """With max_points=2, send A(200), B(300), C(100) -> order [C,A,B]; trim drops oldest C -> [A, B] remain."""
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.get_config_loader") as mock_cfg:
+                mock_cfg.return_value.get_int.return_value = 2
+                with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                    mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                    self._ingress_post(
+                        data={"lat": 37.0, "lon": -122.0, "timestamp": 200},
+                        auth_header=self.auth_header,
+                    )
+                    self._ingress_post(
+                        data={"lat": 38.0, "lon": -121.0, "timestamp": 300},
+                        auth_header=self.auth_header,
+                    )
+                    response = self._ingress_post(
+                        data={"lat": 36.0, "lon": -123.0, "timestamp": 100},
+                        auth_header=self.auth_header,
+                    )
+        self.assertEqual(response.status_code, 200)
+        track = LiveTrack.objects.get(id=self.track_id)
+        coords = (track.geometry or {}).get("coordinates", [])
+        params = track.point_params or []
+        self.assertEqual(len(coords), 2)
+        self.assertEqual(len(params), 2)
+        self.assertEqual(coords[0][2], 200000)
+        self.assertEqual(coords[1][2], 300000)
 
     def test_ingress_unknown_key_silently_dropped(self):
         """POST with body key not in allowed list is accepted; unknown key is dropped."""

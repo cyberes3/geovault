@@ -3,4 +3,9 @@ Live track extension views. Re-exports from tracker_views and ingress_views so u
 """
 
 from .ingress_views import app_ingress, ingress
-from .tracker_views import tracker_get_patch_delete, tracker_kml, tracker_list_create
+from .tracker_views import (
+    ingress_body_template,
+    tracker_get_patch_delete,
+    tracker_kml,
+    tracker_list_create,
+)

@@ -1,10 +1,12 @@
 """
-Ingress endpoints: POST-only, Basic Auth, rate limit, append point.
+Ingress endpoints: POST-only, Basic Auth, rate limit, insert point by timestamp.
 """
 
 import base64
+import bisect
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.db import transaction
 from django.http import JsonResponse
@@ -21,6 +23,7 @@ from .helpers import broadcast_track_updated, parse_ingress_body, parse_time_to_
 from .models import LiveTrack
 from .validation import LiveTrackIngressBody
 
+User = get_user_model()
 logger = get_tagged_logger()
 
 
@@ -34,15 +37,12 @@ def _decode_basic_auth(request):
             return None, None
         username, password = decoded.split(":", 1)
         return username.strip(), password
-    except Exception:
+    except (ValueError, UnicodeDecodeError):
         return None, None
 
 
 def _resolve_user_and_track(email: str, password: str):
     """Resolve user by email only (user-facing identifier); internal username is not used."""
-    from django.contrib.auth import get_user_model
-
-    User = get_user_model()
     user = User.objects.filter(email=email).first()
     if not user:
         return None, None
@@ -53,8 +53,6 @@ def _resolve_user_and_track(email: str, password: str):
 @require_http_methods(["POST"])
 @csrf_exempt
 def ingress(request):
-    if request.method != "POST":
-        return error_response("Method Not Allowed", 405)
     username, password = _decode_basic_auth(request)
     if not username or not password:
         return error_response("Missing or invalid Basic Auth", 401)
@@ -94,38 +92,28 @@ def ingress(request):
         coords = list(geom.get("coordinates") or [])
         point_params = list(track_locked.point_params or [])
 
-        if coords:
-            last_ts = coords[-1][2] if len(coords[-1]) >= 3 else 0
-            if timestamp_ms <= last_ts:
-                # Out-of-order: client sent a point older than the last stored. GPSLogger sends
-                # each point via WorkManager (order not guaranteed) and retries on 4xx, so the same
-                # old point can be sent repeatedly. See docs/live-track-gpslogger-behavior.md.
-                logger.warning(
-                    "live-track ingress 400: Point time must be after the last point "
-                    "(timestamp_ms=%s, last_ts=%s, raw timestamp=%s). "
-                    "Likely WorkManager ordering or retry; client may retry this request.",
-                    timestamp_ms,
-                    last_ts,
-                    raw.get("timestamp"),
-                )
-                return error_response("Point time must be after the last point", 400)
-
         new_point = [body.lon, body.lat, timestamp_ms]
-        coords.append(new_point)
         extra = {k: v for k, v in body.model_dump().items() if k not in ("lat", "lon", "timestamp") and v is not None}
-        point_params.append(extra)
+
+        ts_list = [c[2] for c in coords]
+        idx = bisect.bisect_right(ts_list, timestamp_ms)
+        coords.insert(idx, new_point)
+        point_params.insert(idx, extra)
 
         if len(coords) > max_points:
-            n = len(coords) - max_points
-            coords = coords[n:]
-            point_params = point_params[n:]
+            n_removed = len(coords) - max_points
+            coords = coords[n_removed:]
+            point_params = point_params[n_removed:]
 
         track_locked.geometry = {"type": "LineString", "coordinates": coords}
         track_locked.point_params = point_params
+        track_locked.updated_at = timezone.now()
         track_locked.save(update_fields=["geometry", "point_params", "updated_at"])
 
-    broadcast_track_updated(user.id, str(track.id), new_point, extra)
-    logger.info("live-track ingress 200: point accepted (timestamp_ms=%s)", timestamp_ms)
+        broadcast_idx = next((i for i, c in enumerate(coords) if c == new_point), None)
+
+    if broadcast_idx is not None:
+        broadcast_track_updated(user.id, str(track.id), new_point, extra, index=broadcast_idx)
     return JsonResponse({"ok": True}, status=200)
 
 

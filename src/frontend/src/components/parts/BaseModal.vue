@@ -2,6 +2,7 @@
   <div
     v-if="isOpen"
     ref="modalBackdrop"
+    data-base-modal
     :class="[
       'fixed inset-0',
       onTop ? 'z-[60]' : 'z-50'
@@ -135,6 +136,11 @@ export default {
       if (newVal) {
         // Prevent background scroll
         document.body.classList.add('overflow-hidden')
+        // Document-level ESC so it works when focus is inside modal content
+        this._boundEscape = (e) => {
+          if (e.key === 'Escape') this.handleEscapeKey(e)
+        }
+        document.addEventListener('keydown', this._boundEscape)
         // Move modal to body to avoid layout offsets
         this.$nextTick(() => {
           if (this.$el && this.$el.parentNode !== document.body) {
@@ -146,6 +152,10 @@ export default {
           }
         })
       } else {
+        if (this._boundEscape) {
+          document.removeEventListener('keydown', this._boundEscape)
+          this._boundEscape = null
+        }
         // Restore background scroll
         document.body.classList.remove('overflow-hidden')
       }
@@ -158,8 +168,12 @@ export default {
     }
   },
   mounted() {
-    // If modal is already open when component mounts, move it to body
+    // If modal is already open when component mounts, add ESC listener and move to body
     if (this.isOpen) {
+      this._boundEscape = (e) => {
+        if (e.key === 'Escape') this.handleEscapeKey(e)
+      }
+      document.addEventListener('keydown', this._boundEscape)
       this.$nextTick(() => {
         if (this.$el && this.$el.parentNode !== document.body) {
           document.body.appendChild(this.$el)
@@ -168,6 +182,10 @@ export default {
     }
   },
   beforeUnmount() {
+    if (this._boundEscape) {
+      document.removeEventListener('keydown', this._boundEscape)
+      this._boundEscape = null
+    }
     // Clean up: restore background scroll
     document.body.classList.remove('overflow-hidden')
   },
@@ -181,9 +199,14 @@ export default {
       }
     },
     handleEscapeKey(event) {
-      if (this.closeOnEscape && event.key === 'Escape') {
-        this.handleClose()
-      }
+      if (!this.closeOnEscape || event.key !== 'Escape') return
+      // Only close if this modal is the topmost. Use all [role="dialog"] so when e.g. ColorPicker
+      // is open on top of us, it is the last dialog and we don't close; first ESC closes the picker,
+      // second ESC closes us.
+      const dialogs = document.querySelectorAll('[role="dialog"]')
+      const topmost = dialogs.length ? dialogs[dialogs.length - 1] : null
+      if (this.$refs.modalBackdrop && this.$refs.modalBackdrop !== topmost) return
+      this.handleClose()
     }
   }
 }

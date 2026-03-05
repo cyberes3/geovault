@@ -35,3 +35,36 @@ class LiveTrackIngressBody(BaseModel):
     vdop: Optional[str] = None
     pdop: Optional[str] = None
     dist: Optional[float] = None
+
+
+# GPSLogger-style placeholders for each field (uppercase key or common name)
+INGRESS_BODY_PLACEHOLDERS = {
+    "lat": "%LAT",
+    "lon": "%LON",
+    "timestamp": "%TIMESTAMP",
+    "sat": "%SAT",
+    "desc": "%DESC",
+    "alt": "%ALT",
+    "acc": "%ACC",
+    "dir": "%DIR",
+    "prov": "%PROV",
+    "spd_kph": "%SPD",
+    "starttimestamp": "%STARTTIMESTAMP",
+    "date": "%DATE",
+    "batt": "%BATT",
+    "ischarging": "%ISCHARGING",
+    "ser": "%SER",
+    "hdop": "%HDOP",
+    "vdop": "%VDOP",
+    "pdop": "%PDOP",
+    "dist": "%DIST",
+}
+
+
+def get_ingress_body_template() -> str:
+    """Build form-urlencoded body template with all supported params (single source of truth from LiveTrackIngressBody)."""
+    parts = []
+    for name in LiveTrackIngressBody.model_fields:
+        placeholder = INGRESS_BODY_PLACEHOLDERS.get(name, f"%{name.upper()}")
+        parts.append(f"{name}={placeholder}")
+    return "&".join(parts)

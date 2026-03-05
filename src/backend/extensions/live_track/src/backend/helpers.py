@@ -2,6 +2,7 @@
 Shared helpers for live_track extension (response building, parsing, broadcast).
 """
 
+import copy
 import json
 from urllib.parse import parse_qs
 
@@ -11,24 +12,21 @@ from channels.layers import get_channel_layer
 from .models import LiveTrack
 
 
-def track_to_response(track: LiveTrack) -> dict:
-    geom = track.geometry or {"type": "LineString", "coordinates": []}
-    coords = geom.get("coordinates") or []
-    point_params = track.point_params or []
-    last_coord = coords[-1] if coords else None
-    last_time_ms = int(last_coord[2]) if (last_coord and len(last_coord) >= 3) else None
-    return {
+def track_to_response(track: LiveTrack, include_secret: bool = False) -> dict:
+    geom = copy.deepcopy(track.geometry or {"type": "LineString", "coordinates": []})
+    point_params = copy.deepcopy(track.point_params or [])
+    out = {
         "id": str(track.id),
         "name": track.name,
         "color": track.color,
-        "tracker_secret": track.tracker_secret,
         "geometry": geom,
         "point_params": point_params,
         "created_at": track.created_at.isoformat() if track.created_at else None,
         "updated_at": track.updated_at.isoformat() if track.updated_at else None,
-        "last_position": {"lon": last_coord[0], "lat": last_coord[1]} if last_coord else None,
-        "last_timestamp_ms": last_time_ms,
     }
+    if include_secret:
+        out["tracker_secret"] = track.tracker_secret
+    return out
 
 
 def parse_ingress_body(request) -> dict:
@@ -63,18 +61,15 @@ def broadcast_track_updated(
     track_id: str,
     point: list,
     props: dict,
+    index: int | None = None,
 ):
-    """Broadcast new point so client can append without full refetch. point = [lon, lat, timestamp_ms]; props = point_params for that point."""
+    """Broadcast new point so client can insert or append. point = [lon, lat, timestamp_ms]; props = point_params; index = insertion index when not append."""
     channel_layer = get_channel_layer()
     if channel_layer:
+        data = {"track_id": track_id, "point": point, "props": props}
+        if index is not None:
+            data["index"] = index
         async_to_sync(channel_layer.group_send)(
             f"realtime_{user_id}",
-            {
-                "type": "live_track_track_updated",
-                "data": {
-                    "track_id": track_id,
-                    "point": point,
-                    "props": props,
-                },
-            },
+            {"type": "live_track_track_updated", "data": data},
         )

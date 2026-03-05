@@ -20,7 +20,7 @@
             <ul class="list-disc list-inside text-gray-900 space-y-1 mb-2">
               <li><strong>Logging interval</strong> – seconds between points. Suggested: <strong>30</strong> for walking, <strong>15</strong> for biking, <strong>10</strong> for driving. Use 0 for maximum frequency (more battery use).</li>
               <li><strong>Distance filter</strong> – minimum meters between points. Suggested: <strong>10</strong> for walking, <strong>30</strong> for biking, <strong>100</strong> for driving. Use 0 to log as often as the interval allows.</li>
-              <li><strong>Only log if significant motion</strong> – turn on to log only when the device detects movement; saves battery when stationary.</li>
+              <li><strong>Only log if significant motion</strong> – when on, the app logs only after your device detects significant activity (e.g. walking, biking, driving). The device uses its built-in motion sensor; no points are recorded while you stay still, which saves battery. On some devices this option may be disabled if the sensor is not available.</li>
             </ul>
             <p class="text-gray-900 text-xs">Interval and distance work together: a point is logged at most every N seconds and only after you've moved the set distance (whichever is later).</p>
           </div>
@@ -95,7 +95,7 @@
         </div>
       </div>
       <div class="flex justify-end pt-2">
-        <BaseButton variant="primary" color="blue" size="sm" @click="$emit('close')">Close</BaseButton>
+        <BaseButton variant="white" size="sm" @click="$emit('close')">Close</BaseButton>
       </div>
     </div>
   </BaseModal>

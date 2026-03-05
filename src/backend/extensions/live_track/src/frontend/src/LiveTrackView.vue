@@ -62,6 +62,14 @@
           </div>
           <button
             type="button"
+            title="Latest params"
+            class="p-1.5 rounded text-gray-500 hover:bg-gray-200"
+            @click.stop="paramsModalTrack = track"
+          >
+            <TableCellsIcon class="h-4 w-4" />
+          </button>
+          <button
+            type="button"
             title="Edit"
             class="p-1.5 rounded text-gray-500 hover:bg-gray-200"
             @click.stop="openEditModal(track)"
@@ -115,7 +123,7 @@
         </select>
       </div>
       <template #actions>
-        <BaseButton variant="primary" color="blue" size="sm" @click="showLayerModal = false">
+        <BaseButton variant="white" size="sm" @click="showLayerModal = false">
           Close
         </BaseButton>
       </template>
@@ -129,15 +137,21 @@
       @saved="onModalSaved"
       @deleted="onTrackDeleted"
     />
+    <LatestParamsModal
+      v-if="paramsModalTrack"
+      :track="paramsModalTrack"
+      @close="paramsModalTrack = null"
+    />
   </div>
 </template>
 
 <script>
 import { ref, computed, onMounted, onActivated, onBeforeUnmount, inject, watch } from 'vue';
-import { PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon } from '@heroicons/vue/24/outline';
+import { PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon } from '@heroicons/vue/24/outline';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
 import TrackModal from './TrackModal.vue';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
+import LatestParamsModal from './LatestParamsModal.vue';
 
 const maplibregl = window.gv_core?.maplibre || window.maplibregl;
 
@@ -207,7 +221,7 @@ function rasterizeArrowToImageData(color) {
 
 export default {
   name: 'LiveTrackView',
-  components: { BaseModal, TrackModal, TrackDirectionIcon, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon },
+  components: { BaseModal, TrackModal, TrackDirectionIcon, LatestParamsModal, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon },
   setup() {
     const api = inject('extensionApi');
     const trackers = ref([]);
@@ -238,6 +252,7 @@ export default {
     });
     const showModal = ref(false);
     const showLayerModal = ref(false);
+    const paramsModalTrack = ref(null);
     const modalMode = ref('create');
     const modalTrack = ref(null);
     const mapContainer = ref(null);
@@ -733,16 +748,23 @@ export default {
       }, 600);
     }
 
+    /** Only unlock when the user pans (center changes). Zoom-only changes (e.g. map controls) keep the lock. */
+    const CENTER_TOLERANCE = 1e-6;
+
     function setupMapFollowListeners() {
       if (!map) return;
       map.on('move', () => {
-        if (followLocked.value && !isAutoMoving.value) {
+        if (!followLocked.value || isAutoMoving.value) return;
+        const center = map.getCenter();
+        const trackPoint = getSelectedTrackLastPoint();
+        if (!trackPoint) {
           followLocked.value = false;
           selectedId.value = null;
+          return;
         }
-      });
-      map.on('zoom', () => {
-        if (followLocked.value && !isAutoMoving.value) {
+        const dLon = Math.abs(center.lng - trackPoint[0]);
+        const dLat = Math.abs(center.lat - trackPoint[1]);
+        if (dLon > CENTER_TOLERANCE || dLat > CENTER_TOLERANCE) {
           followLocked.value = false;
           selectedId.value = null;
         }
@@ -766,13 +788,13 @@ export default {
       selectedId.value = track.id;
       followLocked.value = true;
       updateMapFeatures();
-      const coords = getLastNCoords(track, LAST_POINTS_FIT);
-      if (map && coords.length > 0) {
+      const lastPoint = getLastNCoords(track, 1);
+      if (map && lastPoint.length > 0) {
         isAutoMoving.value = true;
-        fitBoundsFromCoords(coords);
+        map.jumpTo({ center: lastPoint[0], zoom: 14, duration: 0 });
         setTimeout(() => {
           isAutoMoving.value = false;
-        }, 600);
+        }, 100);
       }
     }
 
@@ -831,10 +853,16 @@ export default {
       showModal.value = true;
     }
 
-    function openEditModal(track) {
+    async function openEditModal(track) {
       modalMode.value = 'edit';
-      modalTrack.value = track;
-      showModal.value = true;
+      try {
+        const res = await api.get(`/trackers/${track.id}/`);
+        modalTrack.value = res.data;
+        showModal.value = true;
+      } catch (e) {
+        const err = api.handleError?.(e);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to load track');
+      }
     }
 
     function onModalSaved() {
@@ -890,9 +918,14 @@ export default {
         if (!track) return;
         const geom = track.geometry || { type: 'LineString', coordinates: [] };
         if (!geom.coordinates) geom.coordinates = [];
-        geom.coordinates.push(data.point);
-        track.last_position = { lon: data.point[0], lat: data.point[1] };
-        track.last_timestamp_ms = data.point[2];
+        if (typeof data.index === 'number' && Number.isInteger(data.index)) {
+          geom.coordinates.splice(data.index, 0, data.point);
+        } else {
+          geom.coordinates.push(data.point);
+        }
+        const last = geom.coordinates[geom.coordinates.length - 1];
+        track.last_position = last && last.length >= 2 ? { lon: last[0], lat: last[1] } : null;
+        track.last_timestamp_ms = last && last.length >= 3 ? last[2] : null;
         track.latestPointParams = data.props && typeof data.props === 'object' ? data.props : {};
         updateMapFeatures();
         if (data.track_id === selectedId.value && followLocked.value && map) {
@@ -944,6 +977,7 @@ export default {
       selectedId,
       showModal,
       showLayerModal,
+      paramsModalTrack,
       modalMode,
       modalTrack,
       mapContainer,
