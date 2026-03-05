@@ -249,7 +249,7 @@
                 android:id="@+id/extendedParamsSwitch"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
-                android:text="Send extended data (speed, bearing, altitude)"
+                android:text="Send extended data"
                 android:textSize="16sp"
                 android:textColor="@color/text_primary"
                 android:layout_marginBottom="8dp" />

@@ -97,7 +97,6 @@
 # ---------------------------------------------------------------------------
 -keep class com.geovault.tracker.TrackerApplication { *; }
 -keep class com.geovault.tracker.MainActivity { *; }
--keep class com.geovault.tracker.SettingsActivity { *; }
 -keep class com.geovault.tracker.OAuthCallbackActivity { *; }
 -keep class com.geovault.tracker.TrackingService { *; }
 -keep class com.geovault.tracker.BootReceiver { *; }
