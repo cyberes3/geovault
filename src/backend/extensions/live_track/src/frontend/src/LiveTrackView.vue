@@ -540,15 +540,11 @@ export default {
       id: `${LINES_LAYER_ID}-black-outline`,
       type: 'line',
       source: LINES_SOURCE_ID,
-      paint: { 'line-color': '#000', 'line-width': 4, 'line-opacity': 1 },
-      layout: { 'line-join': 'round', 'line-cap': 'round' }
-    };
-    const lineOutlineLayerSpec = {
-      id: `${LINES_LAYER_ID}-outline`,
-      type: 'line',
-      source: LINES_SOURCE_ID,
-      filter: ['==', ['get', 'selected'], true],
-      paint: { 'line-color': '#2563eb', 'line-width': 4, 'line-opacity': 1 },
+      paint: {
+        'line-color': '#000',
+        'line-width': ['case', ['get', 'selected'], 6, 4],
+        'line-opacity': 1
+      },
       layout: { 'line-join': 'round', 'line-cap': 'round' }
     };
     const lineLayerSpec = {
@@ -592,9 +588,6 @@ export default {
         const imageData = await rasterizeArrowToImageData(defaultColor, false);
         if (imageData && !map.hasImage(defaultId)) map.addImage(defaultId, imageData, { pixelRatio: 1 });
         map.addLayer(pointsLayerSpec);
-      }
-      if (!map.getLayer(`${LINES_LAYER_ID}-outline`)) {
-        map.addLayer(lineOutlineLayerSpec, POINTS_LAYER_ID);
       }
       if (!map.getLayer(LINES_LAYER_ID)) {
         map.addLayer(lineLayerSpec, POINTS_LAYER_ID);
@@ -650,7 +643,6 @@ export default {
             layers: [
               { id: BASE_LAYER_ID, type: 'raster', source: BASE_SOURCE_ID, minzoom: clientConfig.minzoom ?? 0, maxzoom: layerMaxZoom },
               lineBlackOutlineLayerSpec,
-              lineOutlineLayerSpec,
               lineLayerSpec
             ]
           };
@@ -701,7 +693,7 @@ export default {
           const spec = getRasterSourceSpec(layerValue, tileSource);
           const layerMaxZoom = getRasterLayerMaxZoom(clientConfig);
           map.addSource(BASE_SOURCE_ID, spec);
-          const firstTrackLayerId = `${LINES_LAYER_ID}-outline`;
+          const firstTrackLayerId = `${LINES_LAYER_ID}-black-outline`;
           map.addLayer(
             {
               id: BASE_LAYER_ID,
@@ -776,7 +768,6 @@ export default {
         layers: [
           { id: BASE_LAYER_ID, type: 'raster', source: BASE_SOURCE_ID, minzoom: clientConfig.minzoom ?? 0, maxzoom: layerMaxZoom },
           lineBlackOutlineLayerSpec,
-          lineOutlineLayerSpec,
           lineLayerSpec
         ]
       };
@@ -877,7 +868,6 @@ export default {
       const TRACK_LAYER_IDS = [
         POINTS_LAYER_ID,
         LINES_LAYER_ID,
-        `${LINES_LAYER_ID}-outline`,
         `${LINES_LAYER_ID}-black-outline`
       ];
       function getClickableTrackLayers() {
