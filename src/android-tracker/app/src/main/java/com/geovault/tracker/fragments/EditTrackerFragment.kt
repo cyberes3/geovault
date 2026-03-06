@@ -75,6 +75,7 @@ class EditTrackerFragment : Fragment() {
                     .putString("selected_tracker_name", name)
                     .apply()
                 requireActivity().supportFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
+                TrackerRepository.getTrackerGeometry(requireContext(), trackerId) { }
             } else {
                 if (prefs.getString("selected_tracker_id", null) == trackerId) {
                     prefs.edit()
@@ -115,16 +116,19 @@ class EditTrackerFragment : Fragment() {
                 (activity as? MainActivity)?.showSnackbar("Name is required")
                 return@setOnClickListener
             }
-            saveButton.isEnabled = false
+            setAllInputsEnabled(false)
             TrackerRepository.updateTracker(requireContext(), trackerId, name, color) { updated ->
                 if (isAdded) {
                     requireActivity().runOnUiThread {
-                        saveButton.isEnabled = true
                         if (updated != null) {
-                            requireActivity().supportFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
+                            requireActivity().supportFragmentManager.setFragmentResult(
+                                TrackersFragment.REQUEST_UPDATE_TRACKER,
+                                android.os.Bundle().apply { putParcelable("tracker", updated) }
+                            )
                             requireActivity().supportFragmentManager.popBackStack()
-                            Toast.makeText(requireContext(), getString(R.string.save), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(requireContext(), getString(R.string.saved_tracker), Toast.LENGTH_SHORT).show()
                         } else {
+                            setAllInputsEnabled(true)
                             (activity as? MainActivity)?.showSnackbar("Failed to save tracker")
                         }
                     }
@@ -139,11 +143,10 @@ class EditTrackerFragment : Fragment() {
                 .setPositiveButton(getString(R.string.delete_tracker)) { _, _ ->
                     val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
                     val selectedId = prefs.getString("selected_tracker_id", null)
-                    deleteButton.isEnabled = false
+                    setAllInputsEnabled(false)
                     TrackerRepository.deleteTracker(requireContext(), trackerId) { success ->
                         if (isAdded) {
                             requireActivity().runOnUiThread {
-                                deleteButton.isEnabled = true
                                 if (success) {
                                     if (trackerId == selectedId) {
                                         prefs.edit()
@@ -155,6 +158,7 @@ class EditTrackerFragment : Fragment() {
                                     requireActivity().supportFragmentManager.popBackStack()
                                     Toast.makeText(requireContext(), getString(R.string.tracker_deleted), Toast.LENGTH_SHORT).show()
                                 } else {
+                                    setAllInputsEnabled(true)
                                     (activity as? MainActivity)?.showSnackbar("Failed to delete tracker")
                                 }
                             }
@@ -170,6 +174,24 @@ class EditTrackerFragment : Fragment() {
                 ContextCompat.getColor(requireContext(), com.geovault.common.R.color.gv_common_dialog_negative_button)
             )
         }
+    }
+
+    private fun setActionButtonsEnabled(enabled: Boolean) {
+        val alpha = if (enabled) 1f else 0.4f
+        saveButton.isEnabled = enabled
+        saveButton.alpha = alpha
+        cancelButton.isEnabled = enabled
+        cancelButton.alpha = alpha
+        deleteButton.isEnabled = enabled
+        deleteButton.alpha = alpha
+    }
+
+    private fun setAllInputsEnabled(enabled: Boolean) {
+        nameEdit.isEnabled = enabled
+        colorEdit.isEnabled = enabled
+        pickColorButton.isEnabled = enabled
+        defaultTrackSwitch.isEnabled = enabled
+        setActionButtonsEnabled(enabled)
     }
 
     companion object {

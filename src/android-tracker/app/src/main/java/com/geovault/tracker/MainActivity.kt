@@ -144,6 +144,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         isMainContentSetup = true
+        TrackerApplication.prefetchIfNeeded(this)
         val rootView = findViewById<View>(R.id.rootLayout)
         val headerLayout = findViewById<View>(R.id.headerLayout)
         val mainContentLayout = findViewById<View>(R.id.mainContentLayout)
@@ -355,6 +356,20 @@ class MainActivity : AppCompatActivity() {
             }
         )
         text?.setTextColor(color)
+    }
+
+    /** Initial track (with latest 100 points) to show on map when opening from "View on map"; cleared after use. */
+    var initialTrackForMap: Tracker? = null
+        private set
+
+    fun setInitialTrackForMap(tracker: Tracker?) {
+        initialTrackForMap = tracker
+    }
+
+    fun getAndClearInitialTrackForMap(): Tracker? {
+        val t = initialTrackForMap
+        initialTrackForMap = null
+        return t
     }
 
     fun setCurrentTab(index: Int, forceRefreshMap: Boolean = false) {

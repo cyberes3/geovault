@@ -136,6 +136,7 @@
     <string name="delete_tracker_confirm_title">Delete tracker?</string>
     <string name="delete_tracker_confirm_message">This cannot be undone. The track history will be lost.</string>
     <string name="save">Save</string>
+    <string name="saved_tracker">Saved tracker</string>
     <string name="create">Create</string>
     <string name="new_tracker_title">New track</string>
     <string name="edit_tracker_title">Edit track</string>

@@ -75,7 +75,7 @@ def tracker_check(request):
 def tracker_list_create(request):
     if request.method == "GET":
         tracks = LiveTrack.objects.filter(user=request.user).order_by("name")
-        return JsonResponse([track_to_response(t) for t in tracks], safe=False)
+        return JsonResponse([track_to_response_metadata_only(t, include_secret=False) for t in tracks], safe=False)
 
     data, err = _get_json_body(request)
     if err is not None:
@@ -133,6 +133,29 @@ def tracker_get_geometry(request, tracker_id):
     """GET trackers/<id>/geometry/ — full geometry + all point_params (for map, params table, etc.)."""
     track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
     return JsonResponse(track_to_response(track, include_secret=False))
+
+
+LATEST_COORDINATES_LIMIT = 100
+
+
+@api_or_login_required_401()
+@require_http_methods(["GET"])
+@handle_404
+@csrf_exempt
+def tracker_get_latest_coordinates(request, tracker_id):
+    """GET trackers/<id>/coordinates/ — latest 100 coordinates + corresponding point_params."""
+    track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
+    geom = track.geometry or {"type": "LineString", "coordinates": []}
+    coords = geom.get("coordinates") or []
+    point_params = track.point_params or []
+    # Take last N; point_params[i] corresponds to coords[i]
+    take = min(LATEST_COORDINATES_LIMIT, len(coords))
+    latest_coords = coords[-take:] if take else []
+    latest_params = point_params[-take:] if take else []
+    return JsonResponse({
+        "coordinates": latest_coords,
+        "point_params": latest_params,
+    })
 
 
 @require_http_methods(["GET"])

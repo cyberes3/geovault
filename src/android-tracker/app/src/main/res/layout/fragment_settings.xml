@@ -19,7 +19,66 @@
             android:orientation="vertical"
             android:padding="20dp">
 
-            <!-- Logging settings help -->
+            <!-- Toggle switches section (top) -->
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/extendedParamsSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="@string/extended_params_label"
+                android:textSize="16sp"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <FrameLayout
+                android:id="@+id/significantMotionRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp">
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/significantMotionSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:text="Only log if motion detected"
+                    android:textSize="16sp"
+                    android:textColor="@color/text_primary" />
+            </FrameLayout>
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/startOnBootSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="Start tracking on boot"
+                android:textSize="16sp"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/restartTrackingIfKilledSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="@string/restart_tracking_if_killed_label"
+                android:textSize="16sp"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/startTrackingOnLaunchSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="@string/start_tracking_on_launch_label"
+                android:textSize="16sp"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="16dp" />
+
+            <!-- HR between toggles and logging/filter -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="24dp" />
+
+            <!-- Logging / filter fields section -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -60,7 +119,6 @@
                 android:layout_marginBottom="24dp"
                 android:minHeight="56dp" />
 
-            <!-- Distance Filter -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -83,7 +141,6 @@
                 android:layout_marginBottom="24dp"
                 android:minHeight="56dp" />
 
-            <!-- Accuracy Filter -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -106,61 +163,15 @@
                 android:layout_marginBottom="24dp"
                 android:minHeight="56dp" />
 
-            <!-- Extended Parameters: off = GVLM minimal (position + time only) to minimize data usage -->
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/extendedParamsSwitch"
+            <!-- HR between logging/filter and connection details -->
+            <View
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="@string/extended_params_label"
-                android:textSize="16sp"
-                android:textColor="@color/text_primary"
-                android:layout_marginBottom="8dp" />
-
-            <!-- Significant Motion -->
-            <FrameLayout
-                android:id="@+id/significantMotionRow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp">
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/significantMotionSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="56dp"
-                    android:text="Only log if motion detected"
-                    android:textSize="16sp"
-                    android:textColor="@color/text_primary" />
-            </FrameLayout>
-
-            <!-- Start on Boot -->
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/startOnBootSwitch"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="Start tracking on boot"
-                android:textSize="16sp"
-                android:textColor="@color/text_primary"
-                android:layout_marginBottom="8dp" />
-
-            <!-- Restart tracking if app killed -->
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/restartTrackingIfKilledSwitch"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="@string/restart_tracking_if_killed_label"
-                android:textSize="16sp"
-                android:textColor="@color/text_primary"
-                android:layout_marginBottom="8dp" />
-
-            <!-- Start tracking when app is launched -->
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/startTrackingOnLaunchSwitch"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="@string/start_tracking_on_launch_label"
-                android:textSize="16sp"
-                android:textColor="@color/text_primary"
+                android:layout_height="1dp"
+                android:background="@color/divider"
+                android:layout_marginTop="8dp"
                 android:layout_marginBottom="24dp" />
 
+            <!-- Connection details -->
             <!-- Server URL -->
             <TextView
                 android:layout_width="match_parent"

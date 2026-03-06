@@ -31,3 +31,9 @@ data class TrackerUpdateRequest(
     val name: String? = null,
     val color: String? = null
 )
+
+/** Response from GET trackers/<id>/coordinates/ — latest 100 coordinates + point_params. */
+data class TrackerCoordinatesResponse(
+    val coordinates: List<List<Double>> = emptyList(),
+    val point_params: List<Map<String, Any?>>? = null
+)

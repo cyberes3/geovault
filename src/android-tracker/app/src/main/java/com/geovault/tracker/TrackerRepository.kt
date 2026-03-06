@@ -42,12 +42,47 @@ object TrackerRepository {
 
         api.getTrackers().enqueue(object : Callback<List<Tracker>> {
             override fun onResponse(call: Call<List<Tracker>>, response: Response<List<Tracker>>) {
-                isFetching = false
-                if (response.isSuccessful) {
-                    trackersCache = response.body()
-                    notifyListeners(trackersCache)
-                } else {
+                if (!response.isSuccessful) {
+                    isFetching = false
                     notifyListeners(null)
+                    return
+                }
+                val list = response.body() ?: emptyList()
+                if (list.isEmpty()) {
+                    isFetching = false
+                    trackersCache = emptyList()
+                    notifyListeners(emptyList())
+                    return
+                }
+                val merged = MutableList(list.size) { list[it] }
+                var pending = list.size
+                val lock = Any()
+                fun maybeDone() {
+                    synchronized(lock) {
+                        if (--pending != 0) return
+                    }
+                    isFetching = false
+                    trackersCache = merged
+                    notifyListeners(merged)
+                }
+                list.forEachIndexed { index, tracker ->
+                    api.getTrackerCoordinates(tracker.id).enqueue(object : Callback<TrackerCoordinatesResponse> {
+                        override fun onResponse(c: Call<TrackerCoordinatesResponse>, r: Response<TrackerCoordinatesResponse>) {
+                            val coords = if (r.isSuccessful) r.body()?.coordinates else null
+                            val params = r.body()?.point_params
+                            merged[index] = tracker.copy(
+                                geometry = if (!coords.isNullOrEmpty())
+                                    GeoJsonLineString("LineString", coords)
+                                else null,
+                                point_params = params
+                            )
+                            maybeDone()
+                        }
+                        override fun onFailure(c: Call<TrackerCoordinatesResponse>, t: Throwable) {
+                            Log.e("TrackerRepository", "Failed to fetch coordinates for ${tracker.id}", t)
+                            maybeDone()
+                        }
+                    })
                 }
             }
 
@@ -74,7 +109,9 @@ object TrackerRepository {
     }
 
     fun getTracker(context: Context, id: String, callback: (Tracker?) -> Unit) {
-        if (id == currentTrackerId && currentTrackerCache != null) {
+        val defaultId = context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+            .getString("selected_tracker_id", "") ?: ""
+        if (id == defaultId && id == currentTrackerId && currentTrackerCache != null) {
             callback(currentTrackerCache)
             return
         }
@@ -88,7 +125,7 @@ object TrackerRepository {
         api.getTracker(id).enqueue(object : Callback<Tracker> {
             override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
                 val tracker = if (response.isSuccessful) response.body() else null
-                if (tracker != null) {
+                if (tracker != null && id == defaultId) {
                     currentTrackerId = id
                     currentTrackerCache = tracker
                 }
@@ -101,10 +138,22 @@ object TrackerRepository {
         })
     }
 
+    private var geometryCall: Call<Tracker>? = null
+
+    /**
+     * Cancels any in-flight full geometry request. Call when the map reset is tapped so the
+     * previous request does not overwrite the track after switching back to the default track.
+     */
+    fun cancelGeometryRequest() {
+        geometryCall?.cancel()
+        geometryCall = null
+    }
+
     /**
      * Fetches full track geometry and point_params (for map, params table). Use this when geometry is needed.
      */
     fun getTrackerGeometry(context: Context, id: String, callback: (Tracker?) -> Unit) {
+        cancelGeometryRequest()
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
         if (serverUrl.isEmpty()) {
             callback(null)
@@ -112,11 +161,16 @@ object TrackerRepository {
         }
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
-        api.getTrackerGeometry(id).enqueue(object : Callback<Tracker> {
+        val call = api.getTrackerGeometry(id)
+        geometryCall = call
+        call.enqueue(object : Callback<Tracker> {
             override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
+                geometryCall = null
                 callback(if (response.isSuccessful) response.body() else null)
             }
             override fun onFailure(call: Call<Tracker>, t: Throwable) {
+                geometryCall = null
+                if (call.isCanceled()) return
                 Log.e("TrackerRepository", "Failed to fetch tracker geometry", t)
                 callback(null)
             }
@@ -147,7 +201,10 @@ object TrackerRepository {
                 override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
                     val tracker = if (response.isSuccessful) response.body() else null
                     if (tracker != null) {
-                        if (id == currentTrackerId) {
+                        val defaultId = context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+                            .getString("selected_tracker_id", "") ?: ""
+                        if (id == defaultId) {
+                            currentTrackerId = id
                             currentTrackerCache = tracker
                         }
                         trackersCache = null

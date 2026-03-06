@@ -13,6 +13,7 @@ import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
@@ -28,6 +29,8 @@ class TrackersFragment : Fragment() {
     private lateinit var trackerListDivider: View
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var recyclerView: RecyclerView
+    private lateinit var loadingOverlay: View
+    private lateinit var loadingSpinner: LoadingSpinner
     private var adapter: TrackersAdapter? = null
 
     override fun onCreateView(
@@ -44,6 +47,8 @@ class TrackersFragment : Fragment() {
         trackerListDivider = view.findViewById(R.id.trackerListDivider)
         swipeRefresh = view.findViewById(R.id.trackersSwipeRefresh)
         recyclerView = view.findViewById(R.id.trackersRecyclerView)
+        loadingOverlay = view.findViewById(R.id.trackersLoadingOverlay)
+        loadingSpinner = view.findViewById(R.id.trackersLoadingSpinner)
 
         swipeRefresh.setOnRefreshListener { loadTrackers() }
 
@@ -82,31 +87,53 @@ class TrackersFragment : Fragment() {
             }
         }
         recyclerView.adapter = adapter
-        loadTrackers()
+        loadingOverlay.visibility = View.VISIBLE
+        loadingSpinner.start()
+        TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { list ->
+            if (isAdded) {
+                requireActivity().runOnUiThread {
+                    loadingSpinner.stop(hide = false)
+                    loadingOverlay.visibility = View.GONE
+                    adapter?.setTrackers(list ?: emptyList())
+                }
+            }
+        }
 
         requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_REFRESH_LIST, viewLifecycleOwner) { _, _ ->
             loadTrackers()
         }
+        requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_UPDATE_TRACKER, viewLifecycleOwner) { _, bundle ->
+            val updated = bundle.getParcelable<Tracker>("tracker", Tracker::class.java)
+            if (updated != null) {
+                adapter?.updateTracker(updated)
+            }
+        }
         // Params fragment refreshes trackers in background; when done we update list from cache
         requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_UPDATE_LIST_FROM_CACHE, viewLifecycleOwner) { _, _ ->
-            loadTrackersFromCache()
+            TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { list ->
+                if (isAdded) {
+                    requireActivity().runOnUiThread {
+                        adapter?.setTrackers(list ?: emptyList())
+                    }
+                }
+            }
         }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        loadTrackers()
     }
 
     companion object {
         const val REQUEST_REFRESH_LIST = "tracker_list_refresh"
+        const val REQUEST_UPDATE_TRACKER = "tracker_list_update_tracker"
         const val REQUEST_UPDATE_LIST_FROM_CACHE = "tracker_list_update_from_cache"
     }
 
     private fun loadTrackers() {
+        loadingOverlay.visibility = View.VISIBLE
+        loadingSpinner.start()
         TrackerRepository.getTrackers(requireContext(), forceRefresh = true) { list ->
             if (isAdded) {
                 requireActivity().runOnUiThread {
+                    loadingSpinner.stop(hide = false)
+                    loadingOverlay.visibility = View.GONE
                     adapter?.setTrackers(list ?: emptyList())
                     swipeRefresh.isRefreshing = false
                 }
@@ -125,11 +152,9 @@ class TrackersFragment : Fragment() {
     }
 
     private fun viewOnMap(tracker: Tracker) {
-        requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
-            .putString("selected_tracker_id", tracker.id)
-            .putString("selected_tracker_name", tracker.name)
-            .apply()
+        // Do not change default track; only show this track on the map. Reset will load the default.
         TrackerRepository.clearCurrentTrackerCache()
+        (activity as? MainActivity)?.setInitialTrackForMap(tracker)
         (activity as? MainActivity)?.setCurrentTab(1, forceRefreshMap = true)
     }
 
@@ -143,6 +168,17 @@ class TrackersFragment : Fragment() {
         fun setTrackers(list: List<Tracker>) {
             trackers = list
             notifyDataSetChanged()
+        }
+
+        fun updateTracker(updated: Tracker) {
+            val index = trackers.indexOfFirst { it.id == updated.id }
+            if (index >= 0) {
+                val existing = trackers[index]
+                trackers = trackers.toMutableList().apply {
+                    set(index, existing.copy(name = updated.name, color = updated.color))
+                }
+                notifyItemChanged(index)
+            }
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {

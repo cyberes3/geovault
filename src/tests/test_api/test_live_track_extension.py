@@ -209,6 +209,98 @@ class TestLiveTrackAPI(TestCase):
         self.assertIn("point_params", data)
         self.assertNotIn("tracker_secret", data)
 
+    def test_get_track_coordinates_geometry(self):
+        """GET trackers/<id>/coordinates/ returns latest 100 coordinates with correct geometry."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Coords Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        tracker_secret = create_resp.json()["tracker_secret"]
+        auth = _basic_auth_header("trackuser@example.com", tracker_secret)
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                for i in range(3):
+                    self.client.post(
+                        "/api/extensions/live-track/ingress/",
+                        data=json.dumps({
+                            "lat": 37.0 + i * 0.1,
+                            "lon": -122.0 - i * 0.1,
+                            "timestamp": 1705312800 + i,
+                        }),
+                        content_type="application/json",
+                        HTTP_AUTHORIZATION=auth,
+                    )
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/trackers/{track_id}/coordinates/"
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("coordinates", data)
+        self.assertIn("point_params", data)
+        coords = data["coordinates"]
+        self.assertEqual(len(coords), 3)
+        self.assertEqual(coords[0], [-122.0, 37.0, 1705312800000])
+        self.assertEqual(coords[1], [-122.1, 37.1, 1705312801000])
+        self.assertEqual(coords[2], [-122.2, 37.2, 1705312802000])
+
+    def test_get_track_coordinates_params(self):
+        """GET trackers/<id>/coordinates/ returns point_params aligned with coordinates."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Params Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        tracker_secret = create_resp.json()["tracker_secret"]
+        auth = _basic_auth_header("trackuser@example.com", tracker_secret)
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps({
+                        "lat": 38.0,
+                        "lon": -121.0,
+                        "timestamp": 1705312800,
+                        "alt": 100.5,
+                        "acc": 10,
+                    }),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps({
+                        "lat": 39.0,
+                        "lon": -120.0,
+                        "timestamp": 1705312801,
+                        "alt": 200.0,
+                        "spd_kph": 5.0,
+                    }),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/trackers/{track_id}/coordinates/"
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        coords = data["coordinates"]
+        params = data.get("point_params") or []
+        self.assertEqual(len(params), len(coords), "point_params length must match coordinates")
+        self.assertEqual(len(coords), 2)
+        self.assertEqual(params[0].get("alt"), 100.5)
+        self.assertEqual(params[0].get("acc"), 10)
+        self.assertEqual(params[1].get("alt"), 200.0)
+        self.assertEqual(params[1].get("spd_kph"), 5.0)
+
     def test_get_track_404_other_user(self):
         """GET trackers/<id>/ for another user's track returns 404."""
         with _patch_live_track_enabled():
