@@ -16,6 +16,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
@@ -42,6 +43,12 @@ class MainActivity : AppCompatActivity() {
     /** True while validation/setup is in progress after user tapped Start; tapping Stop clears this and aborts. */
     private var isPreparingToTrack = false
     private var importantMessageSnackbar: ImportantMessageSnackbar? = null
+    /** Tab indices we came from; back pops and navigates to the previous tab. */
+    private val tabBackStack = ArrayDeque<Int>()
+    /** Last selected tab index; pushed onto tabBackStack when user navigates to another tab. */
+    private var lastSelectedTabIndex = -1
+    /** True when handling back so we don't push the current tab onto tabBackStack. */
+    private var isHandlingTabBack = false
 
     private val locationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -156,14 +163,18 @@ class MainActivity : AppCompatActivity() {
         viewPager.adapter = pagerAdapter
         
         viewPager.isUserInputEnabled = false
-        viewPager.offscreenPageLimit = 2  // Keep all 3 pages in memory
-        
-        val savedTab = savedInstanceState?.getInt(KEY_CURRENT_TAB, 0) ?: 0
+        viewPager.offscreenPageLimit = 3  // Keep all 4 pages in memory
+
+        val savedTab = (savedInstanceState?.getInt(KEY_CURRENT_TAB, 0) ?: 0).coerceIn(0, 3)
         viewPager.setCurrentItem(savedTab, false)
         
         viewPager.registerOnPageChangeCallback(object : androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 super.onPageSelected(position)
+                if (!isHandlingTabBack && lastSelectedTabIndex >= 0) {
+                    tabBackStack.addLast(lastSelectedTabIndex)
+                }
+                lastSelectedTabIndex = position
                 updateNavTabBackground(position)
             }
         })
@@ -174,12 +185,33 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.navMap).setOnClickListener {
             viewPager.setCurrentItem(1, false)
         }
-        findViewById<View>(R.id.navSettings).setOnClickListener {
+        findViewById<View>(R.id.navTrackers).setOnClickListener {
             viewPager.setCurrentItem(2, false)
+        }
+        findViewById<View>(R.id.navSettings).setOnClickListener {
+            viewPager.setCurrentItem(3, false)
         }
 
         updateNavTabBackground(savedTab)
         updatePermissionsState()
+
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    if (supportFragmentManager.backStackEntryCount > 0) {
+                        supportFragmentManager.popBackStack()
+                    } else if (tabBackStack.isNotEmpty()) {
+                        isHandlingTabBack = true
+                        viewPager.setCurrentItem(tabBackStack.removeLast(), false)
+                        isHandlingTabBack = false
+                    } else {
+                        isEnabled = false
+                        onBackPressedDispatcher.onBackPressed()
+                    }
+                }
+            }
+        )
 
         // Show "Connected as ..." toast after layout so it appears in the correct position (bottom)
         intent?.getStringExtra(EXTRA_SIGNED_IN_EMAIL)?.let { email ->
@@ -285,17 +317,16 @@ class MainActivity : AppCompatActivity() {
     private fun updateNavTabBackground(position: Int) {
         val navHome = findViewById<View>(R.id.navHome)
         val navMap = findViewById<View>(R.id.navMap)
+        val navTrackers = findViewById<View>(R.id.navTrackers)
         val navSettings = findViewById<View>(R.id.navSettings)
-        
+
         val yellowColor = ContextCompat.getColor(this, R.color.warning_yellow)
         val whiteColor = ContextCompat.getColor(this, R.color.content_on_primary)
-        
-        // Home tab
+
         updateNavTabColors(navHome, position == 0, yellowColor, whiteColor)
-        // Map tab
         updateNavTabColors(navMap, position == 1, yellowColor, whiteColor)
-        // Settings tab
-        updateNavTabColors(navSettings, position == 2, yellowColor, whiteColor)
+        updateNavTabColors(navTrackers, position == 2, yellowColor, whiteColor)
+        updateNavTabColors(navSettings, position == 3, yellowColor, whiteColor)
     }
     
     private fun updateNavTabColors(navView: View, isSelected: Boolean, selectedColor: Int, defaultColor: Int) {
@@ -306,22 +337,73 @@ class MainActivity : AppCompatActivity() {
             when (navView.id) {
                 R.id.navHome -> R.id.navHomeIcon
                 R.id.navMap -> R.id.navMapIcon
+                R.id.navTrackers -> R.id.navTrackersIcon
                 R.id.navSettings -> R.id.navSettingsIcon
                 else -> return
             }
         )
         icon?.setColorFilter(color, android.graphics.PorterDuff.Mode.SRC_IN)
-        
+
         // Update text color
         val text = navView.findViewById<android.widget.TextView>(
             when (navView.id) {
                 R.id.navHome -> R.id.navHomeText
                 R.id.navMap -> R.id.navMapText
+                R.id.navTrackers -> R.id.navTrackersText
                 R.id.navSettings -> R.id.navSettingsText
                 else -> return
             }
         )
         text?.setTextColor(color)
+    }
+
+    fun setCurrentTab(index: Int, forceRefreshMap: Boolean = false) {
+        viewPager.setCurrentItem(index, false)
+        if (forceRefreshMap && index == 1) {
+            val mapFragment = pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.MapFragment
+            mapFragment?.refreshTrackForSelectedTracker()
+        }
+    }
+
+    fun showNewTrackerFragment() {
+        supportFragmentManager.beginTransaction()
+            .add(R.id.fragment_overlay_container, com.geovault.tracker.fragments.NewTrackerFragment(), "new_tracker")
+            .addToBackStack("new_tracker")
+            .commit()
+    }
+
+    fun showEditTrackerFragment(tracker: com.geovault.tracker.Tracker) {
+        val fragment = com.geovault.tracker.fragments.EditTrackerFragment().apply {
+            arguments = android.os.Bundle().apply {
+                putParcelable(com.geovault.tracker.fragments.EditTrackerFragment.ARG_TRACKER, tracker)
+            }
+        }
+        supportFragmentManager.beginTransaction()
+            .add(R.id.fragment_overlay_container, fragment, "edit_tracker")
+            .addToBackStack("edit_tracker")
+            .commit()
+    }
+
+    fun showTrackerParamsFragment(
+        trackerId: String,
+        trackerName: String? = null,
+        lastUpdateMs: Long? = null,
+        positionLat: Double? = null,
+        positionLon: Double? = null
+    ) {
+        val fragment = com.geovault.tracker.fragments.TrackerParamsFragment().apply {
+            arguments = android.os.Bundle().apply {
+                putString(com.geovault.tracker.fragments.TrackerParamsFragment.ARG_TRACKER_ID, trackerId)
+                trackerName?.let { putString(com.geovault.tracker.fragments.TrackerParamsFragment.ARG_TRACKER_NAME, it) }
+                lastUpdateMs?.let { putLong(com.geovault.tracker.fragments.TrackerParamsFragment.ARG_LAST_UPDATE_MS, it) }
+                positionLat?.let { putDouble(com.geovault.tracker.fragments.TrackerParamsFragment.ARG_POSITION_LAT, it) }
+                positionLon?.let { putDouble(com.geovault.tracker.fragments.TrackerParamsFragment.ARG_POSITION_LON, it) }
+            }
+        }
+        supportFragmentManager.beginTransaction()
+            .add(R.id.fragment_overlay_container, fragment, "tracker_params")
+            .addToBackStack("tracker_params")
+            .commit()
     }
     
     /** Show an important dismissable message. Use for errors and blocking issues. */

@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
+import okhttp3.ResponseBody
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -103,6 +104,65 @@ object TrackerRepository {
     fun clearCurrentTrackerCache() {
         currentTrackerId = null
         currentTrackerCache = null
+    }
+
+    fun updateTracker(
+        context: Context,
+        id: String,
+        name: String?,
+        color: String?,
+        callback: (Tracker?) -> Unit
+    ) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(null)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.updateTracker(id, TrackerUpdateRequest(name = name, color = color))
+            .enqueue(object : Callback<Tracker> {
+                override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
+                    val tracker = if (response.isSuccessful) response.body() else null
+                    if (tracker != null) {
+                        if (id == currentTrackerId) {
+                            currentTrackerCache = tracker
+                        }
+                        trackersCache = null
+                    }
+                    callback(tracker)
+                }
+                override fun onFailure(call: Call<Tracker>, t: Throwable) {
+                    Log.e("TrackerRepository", "Failed to update tracker", t)
+                    callback(null)
+                }
+            })
+    }
+
+    fun deleteTracker(context: Context, id: String, callback: (Boolean) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(false)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.deleteTracker(id).enqueue(object : Callback<ResponseBody> {
+            override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                if (response.isSuccessful) {
+                    trackersCache = null
+                    if (id == currentTrackerId) {
+                        currentTrackerId = null
+                        currentTrackerCache = null
+                    }
+                }
+                callback(response.isSuccessful)
+            }
+            override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
+                Log.e("TrackerRepository", "Failed to delete tracker", t)
+                callback(false)
+            }
+        })
     }
 
     /**

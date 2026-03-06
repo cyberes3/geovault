@@ -81,14 +81,13 @@
                     android:orientation="vertical"
                     android:gravity="center">
 
-                    <androidx.appcompat.widget.AppCompatImageView
+                    <com.geovault.common.LoadingSpinner
                         android:id="@+id/validationSpinner"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginBottom="16dp"
-                        android:src="@drawable/gv_common_ic_spinner"
-                        app:tint="@color/gv_common_spinner_blue"
-                        android:visibility="gone" />
+                        android:visibility="gone"
+                        app:spinnerSize="48dp" />
 
                     <TextView
                         android:id="@+id/validationStatusText"
@@ -206,15 +205,14 @@
                     android:orientation="vertical"
                     android:gravity="center">
 
-                    <androidx.appcompat.widget.AppCompatImageView
+                    <com.geovault.common.LoadingSpinner
                         android:id="@+id/uploadSpinner"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_gravity="center"
                         android:layout_marginTop="24dp"
-                        android:src="@drawable/gv_common_ic_spinner"
-                        app:tint="@color/gv_common_spinner_blue"
-                        android:visibility="gone" />
+                        android:visibility="gone"
+                        app:spinnerSize="48dp" />
 
                     <TextView
                         android:id="@+id/statusText"

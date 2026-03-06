@@ -66,8 +66,8 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
     private lateinit var saveButton: MaterialButton
     private lateinit var useMyLocationButton: MaterialButton
     private lateinit var btnLocationIcon: ImageView
-    private lateinit var btnLocationSpinner: ImageView
-    private lateinit var savingSpinner: ImageView
+    private lateinit var btnLocationSpinner: com.geovault.common.LoadingSpinner
+    private lateinit var savingSpinner: com.geovault.common.LoadingSpinner
     private lateinit var titleText: TextView
     private lateinit var locationLoadingOverlay: View
     private lateinit var savingOverlay: View
@@ -79,10 +79,9 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
     private lateinit var searchBarInputRow: View
     private lateinit var searchPlaceInput: EditText
     private lateinit var searchPlaceCloseButton: ImageView
-    private lateinit var searchPlaceSpinner: ImageView
+    private lateinit var searchPlaceSpinner: com.geovault.common.LoadingSpinner
     private lateinit var searchPlaceResults: ListView
     private lateinit var mapContainer: View
-    private lateinit var searchPlaceRotationHelper: RotationHelper
     private lateinit var mapManager: MapLibreManager
 
     private var latitude: Double? = null
@@ -109,8 +108,6 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
     private lateinit var mapSearchAdapter: android.widget.BaseAdapter
     private lateinit var fusedLocationClient: FusedLocationProviderClient
 
-    private lateinit var locationRotationHelper: RotationHelper
-    private lateinit var savingRotationHelper: RotationHelper
 
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private var skipNextCoordinatesValidation = false
@@ -258,9 +255,6 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
         savingText = findViewById(R.id.savingText)
         savingTapHint = findViewById(R.id.savingTapHint)
 
-        locationRotationHelper = RotationHelper(btnLocationSpinner)
-        savingRotationHelper = RotationHelper(savingSpinner)
-
         findViewById<View>(R.id.closeButton).setOnClickListener { tryFinish() }
         findViewById<View>(R.id.cancelButton).setOnClickListener { tryFinish() }
 
@@ -272,8 +266,6 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
         searchPlaceSpinner = findViewById(R.id.searchPlaceSpinner)
         searchPlaceResults = findViewById(R.id.searchPlaceResults)
         mapContainer = findViewById(R.id.mapContainer)
-        searchPlaceRotationHelper = RotationHelper(searchPlaceSpinner)
-
         mapSearchAdapter = object : android.widget.BaseAdapter() {
             override fun getCount(): Int = mapSearchResults.size
             override fun getItem(position: Int): AddressSearchResult = mapSearchResults[position]
@@ -404,7 +396,7 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
                 mapSearchRunnable = null
                 mapSearchCall?.cancel()
                 mapSearchCall = null
-                searchPlaceRotationHelper.stop()
+                searchPlaceSpinner.stop()
                 val query = searchPlaceInput.text.toString().trim()
                 updateSearchCloseButtonVisibility()
                 if (query.isEmpty()) {
@@ -455,11 +447,11 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
         val api = RetrofitClient.getClient(this, baseUrl).create(GeovaultApi::class.java)
         mapSearchCall = api.geocodingSearch(query)
-        searchPlaceRotationHelper.start()
+        searchPlaceSpinner.start()
         mapSearchCall!!.enqueue(object : Callback<AddressSearchResponse> {
             override fun onResponse(call: Call<AddressSearchResponse>, response: Response<AddressSearchResponse>) {
                 mapSearchCall = null
-                searchPlaceRotationHelper.stop()
+                searchPlaceSpinner.stop()
                 if (call.isCanceled) return
                 val features = response.body()?.data?.features
                 mapSearchResults.clear()
@@ -476,7 +468,7 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
             }
             override fun onFailure(call: Call<AddressSearchResponse>, t: Throwable) {
                 mapSearchCall = null
-                searchPlaceRotationHelper.stop()
+                searchPlaceSpinner.stop()
                 if (call.isCanceled) return
                 mapSearchResults.clear()
                 mapSearchAdapter.notifyDataSetChanged()
@@ -755,7 +747,7 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
 
     private fun showSavingOverlay(message: String = "Saving...") {
         savingText.text = message
-        savingSpinner.visibility = View.VISIBLE
+        savingSpinner.start()
         savingOverlay.visibility = View.VISIBLE
         startSavingAnimation()
         saveButton.isEnabled = false
@@ -962,9 +954,9 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
         mapSearchRunnable = null
         mapSearchCall?.cancel()
         mapSearchCall = null
-        searchPlaceRotationHelper.stop()
-        locationRotationHelper.stop()
-        savingRotationHelper.stop(hide = false)
+        searchPlaceSpinner.stop()
+        btnLocationSpinner.stop()
+        savingSpinner.stop(hide = false)
         if (::mapView.isInitialized) mapView.onPause()
     }
 
@@ -990,20 +982,20 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
         if (loading) {
             btnLocationIcon.visibility = View.GONE
             useMyLocationButton.isEnabled = false
-            locationRotationHelper.start()
+            btnLocationSpinner.start()
         } else {
             btnLocationIcon.visibility = View.VISIBLE
-            locationRotationHelper.stop()
+            btnLocationSpinner.stop()
             useMyLocationButton.isEnabled = true
         }
     }
 
     private fun startSavingAnimation() {
-        savingRotationHelper.start()
+        savingSpinner.start()
     }
 
     private fun stopSavingAnimation() {
-        savingRotationHelper.stop(hide = false)
+        savingSpinner.stop(hide = false)
     }
 
     companion object {

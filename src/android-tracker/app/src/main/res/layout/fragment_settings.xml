@@ -39,15 +39,12 @@
                     android:focusable="true"
                     android:background="?attr/selectableItemBackground" />
 
-                <ImageView
+                <com.geovault.common.LoadingSpinner
                     android:id="@+id/trackerSaveProgress"
-                    android:layout_width="16dp"
-                    android:layout_height="16dp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
                     android:layout_marginStart="6dp"
-                    android:src="@drawable/gv_common_ic_spinner"
-                    app:tint="@color/text_secondary"
-                    android:visibility="gone"
-                    android:layerType="hardware" />
+                    app:spinnerSize="16dp" />
             </LinearLayout>
 
             <com.google.android.material.card.MaterialCardView

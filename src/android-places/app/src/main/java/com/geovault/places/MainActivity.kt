@@ -43,7 +43,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var emptyState: View
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var refreshOverlay: View
-    private lateinit var syncSpinner: android.widget.ImageView
+    private lateinit var syncSpinner: com.geovault.common.LoadingSpinner
     private lateinit var syncText: TextView
     private lateinit var searchInput: EditText
     private lateinit var searchClear: View
@@ -56,7 +56,6 @@ class MainActivity : AppCompatActivity() {
     private var initialLoadDone = false
     private var searchQuery: String = ""
     private val handler = Handler(Looper.getMainLooper())
-    private lateinit var rotationHelper: RotationHelper
     private val timeoutRunnable = Runnable {
         if (isDestroyed || !::swipeRefresh.isInitialized) return@Runnable
         if (swipeRefresh.isRefreshing) {
@@ -162,8 +161,6 @@ class MainActivity : AppCompatActivity() {
         fabAdd = findViewById(R.id.fab_add)
         fabMap = findViewById(R.id.fab_map)
         importantMessageSnackbar = findViewById(R.id.importantMessageSnackbar)
-        rotationHelper = RotationHelper(syncSpinner)
-
         adapter = PlacesAdapter(
             emptyList(),
             emptyList(),
@@ -508,11 +505,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startSyncAnimation() {
-        rotationHelper.start()
+        syncSpinner.start()
     }
 
     private fun stopSyncAnimation() {
-        rotationHelper.stop(hide = false)
+        syncSpinner.stop(hide = false)
     }
 
     private fun updateLastSyncUI() {

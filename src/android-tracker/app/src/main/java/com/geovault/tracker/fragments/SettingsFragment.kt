@@ -7,7 +7,6 @@ import android.hardware.SensorManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -36,7 +35,7 @@ class SettingsFragment : Fragment() {
     private lateinit var loggedInUserText: TextView
     private lateinit var trackerSelectorCard: View
     private lateinit var selectedTrackerText: TextView
-    private lateinit var trackerSaveProgress: View
+    private lateinit var trackerSaveProgress: com.geovault.common.LoadingSpinner
     private lateinit var trackerSpinner: Spinner
     private lateinit var createTrackerButton: MaterialButton
     private lateinit var intervalEdit: EditText
@@ -62,12 +61,8 @@ class SettingsFragment : Fragment() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var trackerOperationTimeoutRunnable: Runnable? = null
     private var trackerOperationTimedOut = false
-    private var trackerSaveRotationRunnable: Runnable? = null
-    private var trackerSaveRotationStartTime = 0L
     private companion object {
         const val TRACKER_OPERATION_TIMEOUT_MS = 30_000L
-        const val SPINNER_ROTATION_PERIOD_MS = 1000L
-        const val SPINNER_FRAME_DELAY_MS = 16L
     }
 
     private fun setTrackerOperationInProgress(inProgress: Boolean) {
@@ -75,26 +70,10 @@ class SettingsFragment : Fragment() {
         trackerSelectorCard.isClickable = !inProgress
         view?.findViewById<View>(R.id.selectedTrackerLabel)?.isClickable = !inProgress
         if (inProgress) {
-            trackerSaveProgress.visibility = View.VISIBLE
-            trackerSaveProgress.rotation = 0f
-            trackerSaveRotationStartTime = SystemClock.elapsedRealtime()
-            scheduleNextSpinnerFrame()
+            trackerSaveProgress.start()
         } else {
-            trackerSaveRotationRunnable?.let { mainHandler.removeCallbacks(it) }
-            trackerSaveRotationRunnable = null
-            trackerSaveProgress.visibility = View.GONE
+            trackerSaveProgress.stop()
         }
-    }
-
-    private fun scheduleNextSpinnerFrame() {
-        if (trackerSaveProgress.visibility != View.VISIBLE) return
-        val elapsed = SystemClock.elapsedRealtime() - trackerSaveRotationStartTime
-        val fraction = (elapsed % SPINNER_ROTATION_PERIOD_MS).toFloat() / SPINNER_ROTATION_PERIOD_MS
-        trackerSaveProgress.rotation = fraction * 360f
-        trackerSaveRotationRunnable = Runnable {
-            scheduleNextSpinnerFrame()
-        }
-        mainHandler.postDelayed(trackerSaveRotationRunnable!!, SPINNER_FRAME_DELAY_MS)
     }
 
     private fun scheduleTrackerOperationTimeout(onTimeout: () -> Unit) {
@@ -512,7 +491,7 @@ class SettingsFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
-        trackerSaveRotationRunnable?.let { mainHandler.removeCallbacks(it) }
+        trackerSaveProgress.stop()
         trackerOperationTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
     }
 }

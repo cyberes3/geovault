@@ -166,15 +166,13 @@
                     android:orientation="horizontal"
                     android:gravity="center_vertical">
 
-                    <ImageView
+                    <com.geovault.common.LoadingSpinner
                         android:id="@+id/searchPlaceSpinner"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:src="@drawable/gv_common_ic_spinner"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:contentDescription="Searching"
                         android:visibility="gone"
-                        app:tint="@color/gv_common_spinner_blue"
-                        android:padding="8dp" />
+                        app:spinnerSize="40dp" />
 
                     <ImageView
                         android:id="@+id/searchPlaceCloseButton"
@@ -340,13 +338,12 @@
                             android:src="@drawable/ic_location"
                             app:tint="@color/primary_blue" />
 
-                        <androidx.appcompat.widget.AppCompatImageView
+                        <com.geovault.common.LoadingSpinner
                             android:id="@+id/btnLocationSpinner"
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"
-                            android:src="@drawable/gv_common_ic_spinner"
-                            android:tint="@color/gv_common_spinner_blue"
-                            android:visibility="gone" />
+                            android:visibility="gone"
+                            app:spinnerSize="20dp" />
                     </FrameLayout>
 
                     <TextView
@@ -429,12 +426,10 @@
             android:background="@drawable/bg_modal"
             android:elevation="12dp">
 
-            <androidx.appcompat.widget.AppCompatImageView
+            <com.geovault.common.LoadingSpinner
                 android:id="@+id/savingSpinner"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:src="@drawable/gv_common_ic_spinner"
-                android:tint="@color/gv_common_spinner_blue" />
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
 
             <TextView
                 android:id="@+id/savingText"

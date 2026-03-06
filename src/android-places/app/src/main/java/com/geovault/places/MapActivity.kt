@@ -76,6 +76,19 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_map)
+        val rootView = findViewById<View>(R.id.rootLayout)
+        val headerView = findViewById<View>(R.id.headerLayout)
+        ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            headerView.updatePadding(top = insets.top + 20)
+            view.updatePadding(bottom = insets.bottom)
+            WindowInsetsCompat.CONSUMED
+        }
+        mapView = findViewById(R.id.map)
+        mapView.foreground = android.graphics.drawable.ColorDrawable(ContextCompat.getColor(this, R.color.map_underlay))
+        mapView.addOnDidFailLoadingMapListener(this)
+        mapView.onCreate(savedInstanceState)
         mapManager = MapLibreManager(this, mapView)
         mapManager.onStyleLoaded = { map, style ->
             applyStyleLoaded(map)

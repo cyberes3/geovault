@@ -245,12 +245,10 @@
             android:background="@drawable/bg_sync_overlay"
             android:elevation="12dp">
 
-            <androidx.appcompat.widget.AppCompatImageView
+            <com.geovault.common.LoadingSpinner
                 android:id="@+id/syncSpinner"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:src="@drawable/gv_common_ic_spinner"
-                android:tint="@color/gv_common_spinner_blue" />
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
 
             <TextView
                 android:id="@+id/syncText"

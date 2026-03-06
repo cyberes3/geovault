@@ -37,12 +37,24 @@
 
         </LinearLayout>
 
-        <!-- ViewPager2 for Home and Map fragments -->
-        <androidx.viewpager2.widget.ViewPager2
-            android:id="@+id/viewPager"
+        <!-- Content area: ViewPager2 + overlay (overlay only covers this area so header and nav stay visible) -->
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1" />
+            android:layout_weight="1">
+
+            <androidx.viewpager2.widget.ViewPager2
+                android:id="@+id/viewPager"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <FrameLayout
+                android:id="@+id/fragment_overlay_container"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clickable="false"
+                android:focusable="false" />
+        </FrameLayout>
 
         <!-- Bottom Navigation (elevation so it stays above map content and receives touches correctly) -->
         <FrameLayout
@@ -103,6 +115,30 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Map"
+                    android:textSize="12sp"
+                    android:textColor="@color/content_on_primary" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/navTrackers"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:clickable="true"
+                android:focusable="true">
+                <ImageView
+                    android:id="@+id/navTrackersIcon"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_radio"
+                    app:tint="@color/content_on_primary" />
+                <TextView
+                    android:id="@+id/navTrackersText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/trackers_tab"
                     android:textSize="12sp"
                     android:textColor="@color/content_on_primary" />
             </LinearLayout>

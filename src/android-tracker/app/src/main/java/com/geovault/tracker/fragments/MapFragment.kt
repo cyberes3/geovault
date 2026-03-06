@@ -9,6 +9,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.util.Log
 import android.widget.ImageView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
@@ -21,6 +22,7 @@ import com.geovault.tracker.TrackerRepository
 import kotlinx.coroutines.*
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.plugins.annotation.LineManager
@@ -38,12 +40,19 @@ class MapFragment : Fragment() {
     private var trackPoints: MutableList<LatLng> = mutableListOf()
     
     private lateinit var mapLoadingOverlay: View
+    private lateinit var trackerLabelCard: View
+    private lateinit var trackerNameLabel: TextView
+    private lateinit var resetToTrackerButton: View
     private lateinit var mapToggle: View
     private lateinit var zoomToLatestButton: View
     private lateinit var zoomToLatestButtonIcon: ImageView
 
     private var mapReady = false
     private var followLockEnabled = false
+    /** When true, fetchHistory() will zoom the camera to fit the loaded track (e.g. after "View on map"). */
+    private var zoomToTrackAfterLoad = false
+    /** When true, fetchHistory() will not move the camera (restore track only). */
+    private var restoreOnlyNoZoom = false
 
     private val mainScope = CoroutineScope(Dispatchers.Main + Job())
 
@@ -86,9 +95,17 @@ class MapFragment : Fragment() {
 
         mapView = view.findViewById(R.id.mapView)
         mapLoadingOverlay = view.findViewById(R.id.mapLoadingOverlay)
+        trackerLabelCard = view.findViewById(R.id.trackerLabelCard)
+        trackerNameLabel = view.findViewById(R.id.trackerNameLabel)
+        resetToTrackerButton = view.findViewById(R.id.resetToTrackerButton)
         mapToggle = view.findViewById(R.id.mapToggle)
         zoomToLatestButton = view.findViewById(R.id.zoomToLatestButton)
         zoomToLatestButtonIcon = view.findViewById(R.id.zoomToLatestButtonIcon)
+
+        updateTrackerLabel()
+        resetToTrackerButton.setOnClickListener {
+            restoreTrackForSelectedTracker()
+        }
 
         followLockEnabled = savedInstanceState?.getBoolean(KEY_FOLLOW_LOCK, false) ?: false
         updateFollowLockButton()
@@ -163,7 +180,8 @@ class MapFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         mapView.onResume()
-        
+        updateTrackerLabel()
+
         ContextCompat.registerReceiver(
             requireContext(),
             locationReceiver,
@@ -222,6 +240,20 @@ class MapFragment : Fragment() {
         zoomToLatestButton.alpha = if (hasTrack) 1f else 0.4f
     }
 
+    private fun updateTrackerLabel() {
+        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+        val trackerId = prefs.getString("selected_tracker_id", "") ?: ""
+        val trackerName = prefs.getString("selected_tracker_name", "") ?: ""
+        if (trackerId.isEmpty()) {
+            trackerLabelCard.visibility = View.GONE
+        } else {
+            trackerLabelCard.visibility = View.VISIBLE
+            trackerNameLabel.text = trackerName.ifEmpty { getString(R.string.select_tracker) }
+            // Show reset only when we have a selected tracker but no track loaded yet
+            resetToTrackerButton.visibility = if (trackPoints.isEmpty()) View.VISIBLE else View.GONE
+        }
+    }
+
     private fun updateLocationOnMap(location: Location) {
         val map = maplibreMap ?: return
         val latLng = LatLng(location.latitude, location.longitude)
@@ -236,11 +268,35 @@ class MapFragment : Fragment() {
         }
     }
 
+    /**
+     * Clear the map track and refetch only the currently selected tracker.
+     * Call this when switching to the map from "View on map" so only that tracker is shown.
+     */
+    fun refreshTrackForSelectedTracker() {
+        trackPoints.clear()
+        updateTrackLine()
+        updatePositionSymbol()
+        zoomToTrackAfterLoad = true
+        fetchHistory()
+    }
+
+    /**
+     * Refetch and redraw the selected tracker's track without moving the camera.
+     */
+    private fun restoreTrackForSelectedTracker() {
+        trackPoints.clear()
+        updateTrackLine()
+        updatePositionSymbol()
+        restoreOnlyNoZoom = true
+        fetchHistory()
+    }
+
     private fun fetchHistory() {
         val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val trackerId = prefs.getString("selected_tracker_id", "") ?: ""
         if (trackerId.isEmpty()) {
             updateZoomToLatestButtonState()
+            updateTrackerLabel()
             return
         }
 
@@ -251,11 +307,26 @@ class MapFragment : Fragment() {
                     trackPoints.clear()
                     trackPoints.addAll(coords.map { LatLng(it[1], it[0]) }.takeLast(1000))
                     updateTrackLine()
-                    if (trackPoints.isNotEmpty()) {
-                        maplibreMap?.animateCamera(CameraUpdateFactory.newLatLng(trackPoints.last()))
+                    val map = maplibreMap
+                    val shouldZoom = zoomToTrackAfterLoad
+                    zoomToTrackAfterLoad = false
+                    if (shouldZoom && map != null && trackPoints.isNotEmpty()) {
+                        if (trackPoints.size >= 2) {
+                            val bounds = LatLngBounds.Builder().apply {
+                                trackPoints.forEach { include(it) }
+                            }.build()
+                            val paddingPx = (48 * resources.displayMetrics.density).toInt()
+                            map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+                        } else {
+                            map.animateCamera(CameraUpdateFactory.newLatLngZoom(trackPoints.single(), 14.0))
+                        }
+                    } else if (!restoreOnlyNoZoom && map != null && trackPoints.isNotEmpty()) {
+                        map.animateCamera(CameraUpdateFactory.newLatLng(trackPoints.last()))
                     }
                 }
+                restoreOnlyNoZoom = false
                 updateZoomToLatestButtonState()
+                updateTrackerLabel()
             }
         }
     }

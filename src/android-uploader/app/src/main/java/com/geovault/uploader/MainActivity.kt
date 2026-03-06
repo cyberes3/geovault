@@ -38,19 +38,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var suffixText: TextView
     private lateinit var uploadButton: MaterialButton
     private lateinit var cancelButton: MaterialButton
-    private lateinit var uploadSpinner: ImageView
+    private lateinit var uploadSpinner: com.geovault.common.LoadingSpinner
     private lateinit var statusText: TextView
     
     private lateinit var validationLayout: androidx.core.widget.NestedScrollView
     private lateinit var uploaderLayout: androidx.core.widget.NestedScrollView
-    private lateinit var validationSpinner: ImageView
+    private lateinit var validationSpinner: com.geovault.common.LoadingSpinner
     private lateinit var validationStatusText: TextView
     private lateinit var validationTitleText: TextView
     private lateinit var settingsButton: MaterialButton
     private lateinit var menuButton: ImageButton
     
-    private lateinit var uploadRotationHelper: RotationHelper
-    private lateinit var validationRotationHelper: RotationHelper
     
     private var fileUri: Uri? = null
     private var originalFilename: String? = null
@@ -109,9 +107,6 @@ class MainActivity : AppCompatActivity() {
         validationTitleText = findViewById(R.id.validationTitleText)
         settingsButton = findViewById(R.id.settingsButton)
         menuButton = findViewById(R.id.menuButton)
-        
-        uploadRotationHelper = RotationHelper(uploadSpinner)
-        validationRotationHelper = RotationHelper(validationSpinner)
         
         // Set up header menu button (always visible) and settings button click listeners
         menuButton.setOnClickListener {
@@ -275,8 +270,7 @@ class MainActivity : AppCompatActivity() {
         }
         
         // Show progress
-        uploadSpinner.visibility = View.VISIBLE
-        uploadRotationHelper.start()
+        uploadSpinner.start()
         uploadButton.isEnabled = false
         cancelButton.isEnabled = false
         statusText.visibility = View.VISIBLE
@@ -323,8 +317,7 @@ class MainActivity : AppCompatActivity() {
                 override fun onFailure(call: Call, e: java.io.IOException) {
                     runOnUiThread {
                         if (isDestroyed) return@runOnUiThread
-                        uploadRotationHelper.stop()
-                        uploadSpinner.visibility = View.GONE
+                        uploadSpinner.stop()
                         uploadButton.isEnabled = true
                         cancelButton.isEnabled = true
                         val errorMsg = e.message ?: "Unknown error"
@@ -346,8 +339,7 @@ class MainActivity : AppCompatActivity() {
                     
                     runOnUiThread {
                         if (isDestroyed) return@runOnUiThread
-                        uploadRotationHelper.stop()
-                        uploadSpinner.visibility = View.GONE
+                        uploadSpinner.stop()
                         uploadButton.isEnabled = true
                         cancelButton.isEnabled = true
                         
@@ -398,8 +390,7 @@ class MainActivity : AppCompatActivity() {
                 }
             })
         } catch (e: Exception) {
-            uploadRotationHelper.stop()
-            uploadSpinner.visibility = View.GONE
+            uploadSpinner.stop()
             uploadButton.isEnabled = true
             cancelButton.isEnabled = true
             showError("Error: ${e.message}")
@@ -416,14 +407,12 @@ class MainActivity : AppCompatActivity() {
         if (serverUrl.isEmpty() || !GeovaultAuthManager.isLoggedIn(this)) {
             validationTitleText.text = getString(R.string.config_required)
             validationStatusText.text = getString(R.string.config_settings_first)
-            validationRotationHelper.stop()
-            validationSpinner.visibility = android.view.View.GONE
+            validationSpinner.stop()
             return
         }
 
         validationTitleText.text = getString(R.string.validating_key)
-        validationSpinner.visibility = android.view.View.VISIBLE
-        validationRotationHelper.start()
+        validationSpinner.start()
         validationStatusText.text = getString(R.string.connecting_server)
 
         val client = RetrofitClient.getAuthenticatedOkHttpClient(this)
@@ -441,8 +430,7 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     if (isDestroyed) return@runOnUiThread
                     validationTitleText.text = getString(R.string.validation_failed)
-                    validationRotationHelper.stop()
-                    validationSpinner.visibility = android.view.View.GONE
+                    validationSpinner.stop()
                     val errorMsg = e.message ?: "Unknown error"
                     val cleanErrorMsg = errorMsg.replace(Regex("^Failed to connect to /"), "Failed to connect to ")
                     val displayMsg = if (cleanErrorMsg.contains("end of stream", ignoreCase = true)) {
@@ -459,8 +447,7 @@ class MainActivity : AppCompatActivity() {
                 val statusCode = response.code
                 runOnUiThread {
                     if (isDestroyed) return@runOnUiThread
-                    validationRotationHelper.stop()
-                    validationSpinner.visibility = android.view.View.GONE
+                    validationSpinner.stop()
                     if (response.isSuccessful) {
                         validationTitleText.text = getString(R.string.api_key_valid)
                         validationStatusText.text = getString(R.string.api_key_valid_msg)

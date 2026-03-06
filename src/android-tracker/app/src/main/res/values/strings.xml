@@ -15,12 +15,14 @@
     <string name="api_key_hint">API Key</string>
     <string name="settings_title">Settings</string>
     <string name="loading_trackers">Loading trackers…</string>
+    <string name="loading_params">Loading…</string>
     <string name="select_tracker">Select a tracker</string>
     <string name="no_trackers_found">No trackers found</string>
     <string name="no_trackers_found_message">No trackers yet. Create one to start tracking.</string>
     <string name="no_tracker_selected_go_to_settings">No tracker selected. Go to Settings and pick one.</string>
     <string name="tracker_validation_failed_go_to_settings">This tracker is no longer valid. Go to Settings and pick a new one.</string>
     <string name="create_new_tracker">Create New Tracker</string>
+    <string name="trackers_tab">Trackers</string>
     <string name="could_not_save_tracker_selection">Could not save tracker selection</string>
     <string name="tracker_operation_timeout">Request timed out. Please try again.</string>
     <string name="not_tracking">Not Tracking</string>
@@ -45,6 +47,13 @@
     <string name="stat_distance_miles">%1$.2f mi</string>
     <string name="stat_accuracy_meters">±%1$d m</string>
     <string name="stat_accuracy_feet">±%1$d ft</string>
+    <!-- Param value units (for localization / imperial) -->
+    <string name="unit_m">m</string>
+    <string name="unit_ft">ft</string>
+    <string name="unit_km">km</string>
+    <string name="unit_mi">mi</string>
+    <string name="unit_kmh">km/h</string>
+    <string name="unit_mph">mph</string>
 
     <!-- Places strings -->
     <string name="no_places">No places found</string>
@@ -75,6 +84,7 @@
     <string name="no_description">No description</string>
     <string name="map_style_unavailable_fallback_osm">Map style unavailable, using OpenStreetMap</string>
     <string name="map_toggle_description">Toggle street or satellite map</string>
+    <string name="recenter_to_tracker">Return to selected tracker</string>
     <string name="zoom_to_latest_description">Lock camera to follow latest track point</string>
     <string name="follow_lock_on_description">Unlock camera (stop following track)</string>
     <string name="map_select_place">Select a place</string>
@@ -103,5 +113,33 @@
     <string name="start_tracking_on_launch_label">Start tracking when app is launched</string>
     <string name="resuming_tracking">Resuming tracking</string>
     <string name="tracking_started">Tracking started</string>
+
+    <!-- Tracker management -->
+    <string name="view_on_map">View on map</string>
+    <string name="view_params">View params</string>
+    <string name="button_params">Params</string>
+    <string name="button_map">Map</string>
+    <string name="edit">Edit</string>
+    <string name="edit_tracker">Edit tracker</string>
+    <string name="delete_tracker">Delete tracker</string>
+    <string name="tracker_params_title">Tracker parameters</string>
+    <string name="latest_params_title">Latest Parameters</string>
+    <string name="last_update_label">Last Update</string>
+    <string name="no_points_yet">No points yet. Waiting for data…</string>
+    <string name="position_label">Position</string>
+    <string name="waiting_for_data">Waiting for data</string>
+    <string name="tracker_secret_label">Tracker secret</string>
+    <string name="created_at_label">Created at</string>
+    <string name="updated_at_label">Updated at</string>
+    <string name="track_points_count">Track points: %1$d</string>
+    <string name="delete_tracker_confirm_title">Delete tracker?</string>
+    <string name="delete_tracker_confirm_message">This cannot be undone. The track history will be lost.</string>
+    <string name="save">Save</string>
+    <string name="create">Create</string>
+    <string name="new_tracker_title">New track</string>
+    <string name="edit_tracker_title">Edit track</string>
+    <string name="tracker_deleted">Tracker deleted</string>
+    <string name="pick_color">Pick color</string>
+    <string name="choose_color">Choose color</string>
 </resources>
 

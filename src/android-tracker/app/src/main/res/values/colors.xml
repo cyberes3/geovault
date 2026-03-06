@@ -20,6 +20,7 @@
     <color name="surface">#FFFFFF</color>
     <color name="content_on_primary">#FFFFFF</color>
     <color name="border_light">#C4D2ED</color>      <!-- blue-200 -->
+    <color name="divider">#E5E7EB</color>           <!-- gray-200, for cards -->
 
     <!-- Error state (for error_background drawable) -->
     <color name="error_light">#FFF5F5</color>
