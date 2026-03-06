@@ -291,18 +291,22 @@ class TrackingService : Service() {
 
                 // Limit to 50 locations per payload to avoid massive payloads
                 val batch = locationsToPush.take(50)
-                val sessionStart = sessionStartTimeMs
-                val (batteryLevel, isCharging) = getBatteryStatus()
-                val buildSerial = getBuildSerial()
-
-                val payload = BinaryPayloadBuilder.buildPayload(
-                    batch,
-                    trackerId,
-                    sessionStart,
-                    batteryLevel,
-                    isCharging,
-                    buildSerial
-                )
+                val useExtendedParams = prefs.getBoolean(PREF_EXTENDED_PARAMS, true)
+                val payload = if (useExtendedParams) {
+                    val sessionStart = sessionStartTimeMs
+                    val (batteryLevel, isCharging) = getBatteryStatus()
+                    val buildSerial = getBuildSerial()
+                    BinaryPayloadBuilder.buildPayload(
+                        batch,
+                        trackerId,
+                        sessionStart,
+                        batteryLevel,
+                        isCharging,
+                        buildSerial
+                    )
+                } else {
+                    BinaryPayloadBuilder.buildPayloadMinimal(batch, trackerId)
+                }
                 val compressedBody = gzipCompress(payload)
                 val requestBody = compressedBody.toRequestBody("application/octet-stream".toMediaTypeOrNull())
 

@@ -130,6 +130,33 @@ _MAX_DESC_BYTES = 256
 _MAX_POINTS_PER_PAYLOAD = 5000
 
 
+def _parse_gvlm_minimal(body):
+    """
+    Parse GVLM minimal payload: magic "GVLM" (4) + uuid (16) + points.
+    Each point: 17 bytes (flag, time int64, lat float32, lon float32). No extended fields.
+    Returns (tracker_uuid, points, err). Points have only lat, lon, timestamp.
+    """
+    if not body.startswith(b"GVLM"):
+        return None, None, "Invalid magic bytes"
+    if len(body) < 20:
+        return None, None, "Invalid magic bytes"
+    try:
+        tracker_uuid = uuid.UUID(bytes=bytes(body[4:20]))
+    except (ValueError, TypeError):
+        return None, None, "Invalid tracker ID"
+    offset = 20
+    points = []
+    while offset < len(body):
+        if len(points) >= _MAX_POINTS_PER_PAYLOAD:
+            return None, None, "Too many points"
+        if offset + 17 > len(body):
+            return None, None, "Incomplete base point"
+        _flag, ts_ms, lat, lon = struct.unpack_from(">Bqff", body, offset)
+        offset += 17
+        points.append({"lat": float(lat), "lon": float(lon), "timestamp": ts_ms})
+    return tracker_uuid, points, None
+
+
 def _parse_gvlt_points(body):
     """
     Parse GVLT binary: magic(4) + uuid(16) + batch_block(8+1+ser) then per-point.
@@ -249,7 +276,12 @@ def app_ingress(request):
     body = _get_request_body_decompressed(request)
     if body is None:
         return error_response("Invalid or unsupported Content-Encoding", 400)
-    tracker_uuid, points, err = _parse_gvlt_points(body)
+    if body.startswith(b"GVLM"):
+        tracker_uuid, points, err = _parse_gvlm_minimal(body)
+    elif body.startswith(b"GVLT"):
+        tracker_uuid, points, err = _parse_gvlt_points(body)
+    else:
+        return error_response("Invalid magic bytes", 400)
     if err is not None:
         return error_response(err, 400)
     if tracker_uuid is None or points is None:

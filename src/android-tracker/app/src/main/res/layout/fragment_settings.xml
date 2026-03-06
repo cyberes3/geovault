@@ -190,12 +190,12 @@
                 android:layout_marginBottom="24dp"
                 android:minHeight="56dp" />
 
-            <!-- Extended Parameters -->
+            <!-- Extended Parameters: off = GVLM minimal (position + time only) to minimize data usage -->
             <androidx.appcompat.widget.SwitchCompat
                 android:id="@+id/extendedParamsSwitch"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
-                android:text="Send extended data"
+                android:text="@string/extended_params_label"
                 android:textSize="16sp"
                 android:textColor="@color/text_primary"
                 android:layout_marginBottom="8dp" />

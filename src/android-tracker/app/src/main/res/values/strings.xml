@@ -80,6 +80,9 @@
     <string name="map_select_place">Select a place</string>
     <string name="map_tap_marker_hint">Tap a marker to view details</string>
 
+    <!-- Extended params: when on, sends full data; when off, sends only position + time to minimize data usage -->
+    <string name="extended_params_label">Send extended data</string>
+
     <!-- Logging settings help -->
     <string name="logging_help_button">Tips for logging settings</string>
     <string name="logging_help_title">Logging &amp; distance tips</string>

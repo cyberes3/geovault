@@ -7,6 +7,7 @@ import java.util.UUID
 
 object BinaryPayloadBuilder {
     private val MAGIC_BYTES = byteArrayOf('G'.code.toByte(), 'V'.code.toByte(), 'L'.code.toByte(), 'T'.code.toByte())
+    private val MAGIC_MINIMAL_BYTES = byteArrayOf('G'.code.toByte(), 'V'.code.toByte(), 'L'.code.toByte(), 'M'.code.toByte())
 
     private const val MAX_PROV_BYTES = 64
     private const val MAX_SER_BYTES = 64
@@ -45,6 +46,30 @@ object BinaryPayloadBuilder {
             writePoint(buffer, loc, batteryLevel, isCharging)
         }
 
+        val result = ByteArray(buffer.position())
+        buffer.rewind()
+        buffer.get(result)
+        return result
+    }
+
+    /**
+     * Builds minimal GVLM payload (extended params off): magic "GVLM" (4) + tracker_id (16) + points.
+     * Each point: flag (1) + time (8) + lat float32 (4) + lon float32 (4) = 17 bytes. No batch block, no extended fields.
+     * Use when user disables "extended params" to minimize data usage.
+     */
+    fun buildPayloadMinimal(locations: List<QueuedLocation>, trackerId: UUID): ByteArray {
+        val capacity = 20 + locations.size * 17
+        val buffer = ByteBuffer.allocate(capacity)
+        buffer.order(ByteOrder.BIG_ENDIAN)
+        buffer.put(MAGIC_MINIMAL_BYTES)
+        buffer.putLong(trackerId.mostSignificantBits)
+        buffer.putLong(trackerId.leastSignificantBits)
+        for (loc in locations) {
+            buffer.put(0)
+            buffer.putLong(loc.time)
+            buffer.putFloat(loc.latitude.toFloat())
+            buffer.putFloat(loc.longitude.toFloat())
+        }
         val result = ByteArray(buffer.position())
         buffer.rewind()
         buffer.get(result)

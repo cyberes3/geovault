@@ -78,6 +78,20 @@ def encode_gvlt_payload(tracker_id_uuid, points, starttimestamp_ms=0, ser=""):
     return bytes(out)
 
 
+def encode_gvlm_minimal_payload(tracker_id_uuid, points):
+    """
+    GVLM minimal format: magic "GVLM" (4) + tracker_id (16) + points.
+    Each point: 17 bytes (flag 1 + time 8 + lat float32 4 + lon float32 4). No extended data.
+    """
+    out = bytearray(b"GVLM")
+    out.extend(tracker_id_uuid.bytes)
+    for p in points:
+        ts_ms = int(p["timestamp"] * 1000) if isinstance(p["timestamp"], float) else int(p["timestamp"])
+        lat, lon = float(p["lat"]), float(p["lon"])
+        out.extend(struct.pack(">Bqff", 0, ts_ms, lat, lon))
+    return bytes(out)
+
+
 class TestLiveTrackAppIngress(TestCase):
     """Test app_ingress endpoint (POST only, OAuth + GVLT binary, no version byte)."""
 
@@ -213,6 +227,32 @@ class TestLiveTrackAppIngress(TestCase):
         self.assertEqual(coords[2][2], 1705312820000)
         self.assertAlmostEqual(params[1].get("alt"), 50.0, places=1)
         self.assertAlmostEqual(params[1].get("bearing"), 90.0, places=1)
+
+    def test_app_ingress_success_gvlm_minimal(self):
+        """POST with GVLM minimal payload (extended params off) returns 200, stores coords only."""
+        payload = encode_gvlm_minimal_payload(
+            self.tracker_uuid,
+            [
+                {"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000},
+                {"lat": 37.01, "lon": -122.01, "timestamp": 1705312860000},
+            ],
+        )
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                response = self._ingress_post(payload)
+        self.assertEqual(response.status_code, 200)
+        track = LiveTrack.objects.get(id=self.track_id)
+        coords = (track.geometry or {}).get("coordinates", [])
+        params = track.point_params or []
+        self.assertEqual(len(coords), 2)
+        self.assertEqual(len(params), 2)
+        self.assertEqual(coords[0], [-122.0, 37.0, 1705312800000])
+        self.assertAlmostEqual(coords[1][0], -122.01, places=4)
+        self.assertAlmostEqual(coords[1][1], 37.01, places=4)
+        self.assertEqual(coords[1][2], 1705312860000)
+        self.assertEqual(params[0], {})
+        self.assertEqual(params[1], {})
 
     def test_app_ingress_404_wrong_user(self):
         """POST with another user's tracker ID returns 404."""
