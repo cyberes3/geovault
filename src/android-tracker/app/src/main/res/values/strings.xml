@@ -84,5 +84,6 @@
     <string name="grant_notification_permission">Grant Notification Permission</string>
     <string name="disable_battery_optimization">Disable Battery Optimization</string>
     <string name="location_permission_needed_first">Please grant location permission first</string>
+    <string name="motion_sensor_unavailable_toast">Motion detection isn\'t available on this device</string>
 </resources>
 

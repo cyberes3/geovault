@@ -4,6 +4,7 @@ Ingress endpoints: POST-only, Basic Auth or OAuth, rate limit, insert point by t
 
 import base64
 import bisect
+import gzip
 import struct
 import uuid
 
@@ -122,25 +123,137 @@ def ingress(request):
     return JsonResponse({"ok": True}, status=200)
 
 
+# Max string lengths for GVLT extended block (match Android encoder caps)
+_MAX_PROV_BYTES = 64
+_MAX_SER_BYTES = 64
+_MAX_DESC_BYTES = 256
+_MAX_POINTS_PER_PAYLOAD = 5000
+
+
+def _parse_gvlt_points(body):
+    """
+    Parse GVLT binary: magic(4) + uuid(16) + batch_block(8+1+ser) then per-point.
+    Per-point: base 17 bytes (flag, time, lat float32, lon float32), extended (sat, alt, spd_kph,
+    bearing, acc, batt, ischarging, dist_m, prov, desc). starttimestamp and ser come from batch.
+    Returns (tracker_uuid, points, err). Uses bearing only (not dir).
+    """
+    if not body.startswith(b"GVLT"):
+        return None, None, "Invalid magic bytes"
+    if len(body) < 20:
+        return None, None, "Invalid magic bytes"
+    try:
+        tracker_uuid = uuid.UUID(bytes=bytes(body[4:20]))
+    except (ValueError, TypeError):
+        return None, None, "Invalid tracker ID"
+
+    if len(body) < 29:
+        return None, None, "Incomplete batch block"
+    starttimestamp_ms, = struct.unpack_from(">q", body, 20)
+    ser_len = body[28]
+    if len(body) < 29 + ser_len:
+        return None, None, "Incomplete batch block"
+    ser_str = ""
+    if ser_len > 0:
+        read_len = min(ser_len, _MAX_SER_BYTES)
+        ser_str = body[29 : 29 + read_len].decode("utf-8", errors="replace")
+
+    offset = 29 + ser_len
+    points = []
+    while offset < len(body):
+        if len(points) >= _MAX_POINTS_PER_PAYLOAD:
+            return None, None, "Too many points"
+        if offset + 17 > len(body):
+            return None, None, "Incomplete base point"
+
+        _flag, ts_ms, lat, lon = struct.unpack_from(">Bqff", body, offset)
+        offset += 17
+
+        point_data = {"lat": float(lat), "lon": float(lon), "timestamp": ts_ms}
+        point_data["starttimestamp"] = starttimestamp_ms
+        if ser_str:
+            point_data["ser"] = ser_str
+
+        if offset + 2 + 4 * 4 + 1 + 1 + 4 > len(body):
+            return None, None, "Incomplete extended data"
+        sat, = struct.unpack_from(">H", body, offset)
+        offset += 2
+        alt, spd_kph, bearing, acc = struct.unpack_from(">ffff", body, offset)
+        offset += 16
+        batt, ischarging = struct.unpack_from(">Bb", body, offset)
+        offset += 2
+        dist_m, = struct.unpack_from(">f", body, offset)
+        offset += 4
+
+        if sat > 0:
+            point_data["sat"] = sat
+        point_data["alt"] = alt
+        point_data["spd_kph"] = spd_kph
+        point_data["bearing"] = bearing
+        point_data["acc"] = acc
+        point_data["batt"] = batt
+        point_data["ischarging"] = bool(ischarging)
+        point_data["dist"] = dist_m
+
+        if offset + 1 > len(body):
+            return None, None, "Incomplete extended data"
+        prov_len = body[offset]
+        offset += 1
+        if offset + prov_len > len(body):
+            return None, None, "Incomplete extended data"
+        if prov_len > 0:
+            read_len = min(prov_len, _MAX_PROV_BYTES)
+            point_data["prov"] = body[offset : offset + read_len].decode("utf-8", errors="replace")
+        offset += prov_len
+
+        if offset + 2 > len(body):
+            return None, None, "Incomplete extended data"
+        desc_len, = struct.unpack_from(">H", body, offset)
+        offset += 2
+        if offset + desc_len > len(body):
+            return None, None, "Incomplete extended data"
+        if desc_len > 0:
+            read_len = min(desc_len, _MAX_DESC_BYTES)
+            point_data["desc"] = body[offset : offset + read_len].decode("utf-8", errors="replace")
+        offset += desc_len
+
+        points.append(point_data)
+
+    return tracker_uuid, points, None
+
+
+def _get_request_body_decompressed(request):
+    """Return request body, decompressing if Content-Encoding is gzip or deflate."""
+    body = request.body
+    encoding = (request.META.get("HTTP_CONTENT_ENCODING") or "").strip().lower()
+    if encoding == "gzip":
+        try:
+            return gzip.decompress(body)
+        except (OSError, ValueError) as e:
+            logger.warning("app_ingress: gzip decompress failed: %s", e)
+            return None
+    if encoding == "deflate":
+        try:
+            import zlib
+            return zlib.decompress(body)
+        except zlib.error as e:
+            logger.warning("app_ingress: deflate decompress failed: %s", e)
+            return None
+    return body
+
+
 @api_or_login_required_401()
 @handle_404
 @require_http_methods(["POST"])
 @csrf_exempt
 def app_ingress(request):
-    body = request.body
-    if not body.startswith(b"GVLT"):
-        return error_response("Invalid magic bytes", 400)
-    if len(body) < 5:
-        return error_response("Invalid magic bytes", 400)
-    version = body[4]
-    if version != 0x02:
-        return error_response("Unsupported version", 400)
-    if len(body) < 21:
-        return error_response("Missing tracker ID", 400)
-    try:
-        tracker_uuid = uuid.UUID(bytes=bytes(body[5:21]))
-    except (ValueError, TypeError):
-        return error_response("Invalid tracker ID", 400)
+    body = _get_request_body_decompressed(request)
+    if body is None:
+        return error_response("Invalid or unsupported Content-Encoding", 400)
+    tracker_uuid, points, err = _parse_gvlt_points(body)
+    if err is not None:
+        return error_response(err, 400)
+    if tracker_uuid is None or points is None:
+        return error_response("Invalid payload", 400)
 
     track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_uuid)
 
@@ -152,26 +265,6 @@ def app_ingress(request):
         if last is not None and (now_ts - last) < 1.0:
             return error_response("Rate limit exceeded", 429)
         cache.set(rate_key, now_ts, timeout=2)
-
-    offset = 21
-    points = []
-    while offset < len(body):
-        if offset + 25 > len(body):
-            return error_response("Incomplete base point", 400)
-
-        flag, ts_ms, lat, lon = struct.unpack_from(">Bqdd", body, offset)
-        offset += 25
-
-        point_data = {"lat": lat, "lon": lon, "timestamp": ts_ms}
-
-        if flag & 1:
-            if offset + 16 > len(body):
-                return error_response("Incomplete extended data", 400)
-            alt, spd, bearing, acc = struct.unpack_from(">ffff", body, offset)
-            offset += 16
-            point_data.update({"alt": alt, "spd_kph": spd, "bearing": bearing, "acc": acc})
-
-        points.append(point_data)
 
     if not points:
         return JsonResponse({"ok": True}, status=200)

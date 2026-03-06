@@ -4,10 +4,13 @@ import android.annotation.SuppressLint
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.location.Location
+import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import android.content.pm.ServiceInfo
+import android.os.BatteryManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.geovault.common.GeovaultAuthManager
@@ -20,6 +23,8 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.ByteArrayOutputStream
+import java.util.zip.GZIPOutputStream
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.hardware.TriggerEvent
@@ -89,6 +94,7 @@ class TrackingService : Service() {
     private var isGpsPaused = false
     private var consecutiveStationaryPoints = 0
     private var lastLocation: Location? = null
+    private var totalDistanceMeters = 0f
     private var sigMotionSensorStartTime = 0L
     private var watchdogJob: Job? = null
     private var retryJob: Job? = null
@@ -136,6 +142,7 @@ class TrackingService : Service() {
         sessionStartTimeMs = System.currentTimeMillis()
         pointsSentThisSession = 0
         lastPointSentAtMs = 0
+        totalDistanceMeters = 0f
         sendBroadcast(Intent(SESSION_STATS_UPDATE))
 
         runBlocking(Dispatchers.IO) {
@@ -212,6 +219,7 @@ class TrackingService : Service() {
             }
         }
         
+        totalDistanceMeters += lastLocation?.distanceTo(location) ?: 0f
         lastLocation = location
 
         // Notify MainActivity if it's visible
@@ -220,7 +228,7 @@ class TrackingService : Service() {
         sendBroadcast(intent)
 
         serviceScope.launch {
-            val queued = QueuedLocation.fromLocation(location)
+            val queued = QueuedLocation.fromLocation(location, totalDistanceMeters)
             database.locationDao().insert(queued)
             pushLocations()
         }
@@ -265,14 +273,24 @@ class TrackingService : Service() {
 
                 // Limit to 50 locations per payload to avoid massive payloads
                 val batch = locationsToPush.take(50)
-                val androidLocations = batch.map { it.toLocation() }
+                val sessionStart = sessionStartTimeMs
+                val (batteryLevel, isCharging) = getBatteryStatus()
+                val buildSerial = getBuildSerial()
 
-                val includeExtended = prefs.getBoolean(PREF_EXTENDED_PARAMS, true)
-                val payload = BinaryPayloadBuilder.buildPayload(androidLocations, trackerId, includeExtended)
-                val requestBody = payload.toRequestBody("application/octet-stream".toMediaTypeOrNull())
+                val payload = BinaryPayloadBuilder.buildPayload(
+                    batch,
+                    trackerId,
+                    sessionStart,
+                    batteryLevel,
+                    isCharging,
+                    buildSerial
+                )
+                val compressedBody = gzipCompress(payload)
+                val requestBody = compressedBody.toRequestBody("application/octet-stream".toMediaTypeOrNull())
 
                 val request = Request.Builder()
                     .url(ingressUrl)
+                    .addHeader("Content-Encoding", "gzip")
                     .post(requestBody)
                     .build()
 
@@ -441,6 +459,37 @@ class TrackingService : Service() {
     private fun cancelSignificantMotion() {
         if (significantMotionSensor != null && triggerEventListener != null) {
             sensorManager?.cancelTriggerSensor(triggerEventListener, significantMotionSensor)
+        }
+    }
+
+    private fun getBatteryStatus(): Pair<Int, Boolean> {
+        val intent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return 0 to false
+        val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, 0)
+        val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100)
+        val batteryPct = if (scale > 0) (level * 100 / scale).coerceIn(0, 100) else 0
+        val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
+        val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
+        return batteryPct to isCharging
+    }
+
+    private fun gzipCompress(data: ByteArray): ByteArray {
+        ByteArrayOutputStream().use { baos ->
+            GZIPOutputStream(baos).use { gzip ->
+                gzip.write(data)
+            }
+            return baos.toByteArray()
+        }
+    }
+
+    private fun getBuildSerial(): String {
+        return try {
+            if (Build.V.SDK_INT >= Build.VERSION_CODES.O) {
+                Build.getSerial() ?: ""
+            } else {
+                ""
+            }
+        } catch (e: SecurityException) {
+            ""
         }
     }
 }

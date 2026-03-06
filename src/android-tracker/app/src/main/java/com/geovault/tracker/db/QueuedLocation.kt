@@ -13,10 +13,13 @@ data class QueuedLocation(
     val altitude: Double?,
     val speed: Float?,
     val bearing: Float?,
-    val accuracy: Float?
+    val accuracy: Float?,
+    val sat: Int? = null,
+    val prov: String? = null,
+    val dist: Float? = null
 ) {
     fun toLocation(): Location {
-        val loc = Location("geovault")
+        val loc = Location(prov ?: "geovault")
         loc.time = time
         loc.latitude = latitude
         loc.longitude = longitude
@@ -26,9 +29,12 @@ data class QueuedLocation(
         if (accuracy != null) loc.accuracy = accuracy
         return loc
     }
-    
+
     companion object {
-        fun fromLocation(loc: Location): QueuedLocation {
+        private const val EXTRAS_KEY_SATELLITES = "satellites"
+
+        fun fromLocation(loc: Location, totalDistanceMeters: Float? = null): QueuedLocation {
+            val sat = loc.extras?.getInt(EXTRAS_KEY_SATELLITES, 0)?.takeIf { it > 0 } ?: 0
             return QueuedLocation(
                 time = loc.time,
                 latitude = loc.latitude,
@@ -36,7 +42,10 @@ data class QueuedLocation(
                 altitude = if (loc.hasAltitude()) loc.altitude else null,
                 speed = if (loc.hasSpeed()) loc.speed else null,
                 bearing = if (loc.hasBearing()) loc.bearing else null,
-                accuracy = if (loc.hasAccuracy()) loc.accuracy else null
+                accuracy = if (loc.hasAccuracy()) loc.accuracy else null,
+                sat = if (sat > 0) sat else null,
+                prov = loc.provider,
+                dist = totalDistanceMeters
             )
         }
     }

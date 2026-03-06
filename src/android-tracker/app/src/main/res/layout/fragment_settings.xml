@@ -255,14 +255,19 @@
                 android:layout_marginBottom="8dp" />
 
             <!-- Significant Motion -->
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/significantMotionSwitch"
+            <FrameLayout
+                android:id="@+id/significantMotionRow"
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="Only log if motion detected"
-                android:textSize="16sp"
-                android:textColor="@color/text_primary"
-                android:layout_marginBottom="8dp" />
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp">
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/significantMotionSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:text="Only log if motion detected"
+                    android:textSize="16sp"
+                    android:textColor="@color/text_primary" />
+            </FrameLayout>
 
             <!-- Start on Boot -->
             <androidx.appcompat.widget.SwitchCompat

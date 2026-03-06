@@ -1,6 +1,8 @@
 package com.geovault.tracker.fragments
 
 import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -41,6 +43,7 @@ class SettingsFragment : Fragment() {
     private lateinit var accuracyEdit: EditText
     private lateinit var extendedParamsSwitch: SwitchCompat
     private lateinit var significantMotionSwitch: SwitchCompat
+    private lateinit var significantMotionRow: View
     private lateinit var startOnBootSwitch: SwitchCompat
 
     private fun normalizeServerUrl(url: String): String {
@@ -141,9 +144,11 @@ class SettingsFragment : Fragment() {
         accuracyEdit = view.findViewById(R.id.accuracyEdit)
         extendedParamsSwitch = view.findViewById(R.id.extendedParamsSwitch)
         significantMotionSwitch = view.findViewById(R.id.significantMotionSwitch)
+        significantMotionRow = view.findViewById(R.id.significantMotionRow)
         startOnBootSwitch = view.findViewById(R.id.startOnBootSwitch)
 
         loadSettings()
+        applyMotionSensorAvailability()
         updateUi()
 
         connectButton.setOnClickListener { onConnectClicked() }
@@ -157,7 +162,9 @@ class SettingsFragment : Fragment() {
         }
 
         significantMotionSwitch.setOnCheckedChangeListener { _, isChecked ->
-            saveSetting("significant_motion_only", isChecked)
+            if (significantMotionSwitch.isEnabled) {
+                saveSetting("significant_motion_only", isChecked)
+            }
         }
 
         startOnBootSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -173,6 +180,23 @@ class SettingsFragment : Fragment() {
             .setMessage(getString(R.string.logging_help_message))
             .setPositiveButton(getString(R.string.close), null)
             .show()
+    }
+
+    private fun applyMotionSensorAvailability() {
+        val sensorManager = requireContext().getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        val motionSensorAvailable = sensorManager?.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION) != null
+
+        if (!motionSensorAvailable) {
+            significantMotionSwitch.isChecked = false
+            significantMotionSwitch.isEnabled = false
+            saveSetting("significant_motion_only", false)
+            significantMotionRow.setOnClickListener {
+                Toast.makeText(requireContext(), getString(R.string.motion_sensor_unavailable_toast), Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            significantMotionSwitch.isEnabled = true
+            significantMotionRow.setOnClickListener(null)
+        }
     }
 
     private fun loadSettings() {
