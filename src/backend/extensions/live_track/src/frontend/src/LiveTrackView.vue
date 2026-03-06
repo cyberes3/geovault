@@ -649,6 +649,7 @@ export default {
             },
             layers: [
               { id: BASE_LAYER_ID, type: 'raster', source: BASE_SOURCE_ID, minzoom: clientConfig.minzoom ?? 0, maxzoom: layerMaxZoom },
+              lineBlackOutlineLayerSpec,
               lineOutlineLayerSpec,
               lineLayerSpec
             ]
@@ -774,6 +775,7 @@ export default {
         },
         layers: [
           { id: BASE_LAYER_ID, type: 'raster', source: BASE_SOURCE_ID, minzoom: clientConfig.minzoom ?? 0, maxzoom: layerMaxZoom },
+          lineBlackOutlineLayerSpec,
           lineOutlineLayerSpec,
           lineLayerSpec
         ]
