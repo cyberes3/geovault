@@ -1,7 +1,10 @@
 package com.geovault.tracker.fragments
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -14,6 +17,7 @@ import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
+import com.geovault.tracker.TrackingService
 import com.geovault.tracker.showHueColorPickerDialog
 import com.geovault.tracker.updateColorPreview
 import com.google.android.material.button.MaterialButton
@@ -76,12 +80,20 @@ class EditTrackerFragment : Fragment() {
                     .apply()
                 requireActivity().supportFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
                 TrackerRepository.getTrackerGeometry(requireContext(), trackerId) { }
+                if (TrackingService.isRunning) {
+                    val ctx = requireContext()
+                    ctx.startService(Intent(ctx, TrackingService::class.java).apply { action = TrackingService.ACTION_STOP })
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        ctx.startForegroundService(Intent(ctx, TrackingService::class.java).apply { action = TrackingService.ACTION_START })
+                    }, 400)
+                }
             } else {
                 if (prefs.getString("selected_tracker_id", null) == trackerId) {
                     prefs.edit()
                         .remove("selected_tracker_id")
                         .remove("selected_tracker_name")
                         .apply()
+                    TrackerRepository.clearGeometryCache()
                     requireActivity().supportFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
                 }
             }

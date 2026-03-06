@@ -359,15 +359,17 @@ export default {
       const geom = track.geometry || { type: 'LineString', coordinates: [] };
       const coords = geom.coordinates || [];
       const last = coords[coords.length - 1];
-      const { point_params, ...rest } = track;
+      // Use last_point from metadata when geometry has no coordinates (e.g. list or failed geometry fetch)
+      const lastPoint = last ?? track.last_point;
+      const { point_params, last_point: _lp, ...rest } = track;
       const latestPointParams = (point_params && point_params.length)
         ? point_params[point_params.length - 1]
         : {};
       return {
         ...rest,
         geometry: geom,
-        last_position: last && last.length >= 2 ? { lon: last[0], lat: last[1] } : null,
-        last_timestamp_ms: last && last.length >= 3 ? last[2] : null,
+        last_position: lastPoint && lastPoint.length >= 2 ? { lon: lastPoint[0], lat: lastPoint[1] } : null,
+        last_timestamp_ms: lastPoint && lastPoint.length >= 3 ? lastPoint[2] : null,
         latestPointParams
       };
     }
@@ -377,7 +379,18 @@ export default {
       try {
         const res = await api.get('/trackers/');
         const raw = Array.isArray(res.data) ? res.data : [];
-        trackers.value = raw.map(normalizeTrackForMemory);
+        // Fetch full geometry for each tracker (list endpoint returns metadata only)
+        const withGeometry = await Promise.all(
+          raw.map(async (t) => {
+            try {
+              const geomRes = await api.get(`/trackers/${t.id}/geometry/`);
+              return normalizeTrackForMemory(geomRes.data);
+            } catch {
+              return normalizeTrackForMemory({ ...t, geometry: { type: 'LineString', coordinates: [] } });
+            }
+          })
+        );
+        trackers.value = withGeometry;
         updateMapFeatures();
       } catch (e) {
         const err = api.handleError && api.handleError(e);

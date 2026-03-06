@@ -139,6 +139,8 @@ object TrackerRepository {
     }
 
     private var geometryCall: Call<Tracker>? = null
+    /** Cached full geometry for the selected tracker; used when default track is changed so the map can show full track without a second fetch. */
+    private var geometryCache: Pair<String, Tracker>? = null
 
     /**
      * Cancels any in-flight full geometry request. Call when the map reset is tapped so the
@@ -150,15 +152,30 @@ object TrackerRepository {
     }
 
     /**
+     * Clears the cached full geometry. Call when the default track is unset so stale data is not shown.
+     */
+    fun clearGeometryCache() {
+        geometryCache = null
+    }
+
+    /**
      * Fetches full track geometry and point_params (for map, params table). Use this when geometry is needed.
+     * Returns cached geometry when available for the requested tracker (e.g. after changing default track).
      */
     fun getTrackerGeometry(context: Context, id: String, callback: (Tracker?) -> Unit) {
+        val cached = geometryCache
+        if (cached != null && cached.first == id) {
+            callback(cached.second)
+            return
+        }
         cancelGeometryRequest()
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
         if (serverUrl.isEmpty()) {
             callback(null)
             return
         }
+        val selectedId = context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+            .getString("selected_tracker_id", "") ?: ""
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
         val call = api.getTrackerGeometry(id)
@@ -166,7 +183,11 @@ object TrackerRepository {
         call.enqueue(object : Callback<Tracker> {
             override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
                 geometryCall = null
-                callback(if (response.isSuccessful) response.body() else null)
+                val tracker = if (response.isSuccessful) response.body() else null
+                if (tracker != null && tracker.id == selectedId) {
+                    geometryCache = tracker.id to tracker
+                }
+                callback(tracker)
             }
             override fun onFailure(call: Call<Tracker>, t: Throwable) {
                 geometryCall = null
@@ -180,6 +201,7 @@ object TrackerRepository {
     fun clearCurrentTrackerCache() {
         currentTrackerId = null
         currentTrackerCache = null
+        geometryCache = null
     }
 
     fun updateTracker(

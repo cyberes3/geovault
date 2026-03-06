@@ -24,6 +24,7 @@ import kotlinx.coroutines.*
 class HomeFragment : Fragment() {
 
     private lateinit var trackingStatusText: TextView
+    private lateinit var trackingTrackNameText: TextView
     private lateinit var queueCountText: TextView
     private lateinit var sessionStatsContainer: View
     private lateinit var trackingDurationText: TextView
@@ -85,6 +86,7 @@ class HomeFragment : Fragment() {
         radarDishIcon = view.findViewById(R.id.radarDishIcon)
         
         trackingStatusText = view.findViewById(R.id.trackingStatusText)
+        trackingTrackNameText = view.findViewById(R.id.trackingTrackNameText)
         queueCountText = view.findViewById(R.id.queueCountText)
         sessionStatsContainer = view.findViewById(R.id.sessionStatsContainer)
         trackingDurationText = view.findViewById(R.id.trackingDurationText)
@@ -217,6 +219,20 @@ class HomeFragment : Fragment() {
             ContextCompat.getColor(requireContext(), R.color.primary_blue)
         )
         startStopButton.text = getString(R.string.stop_tracking)
+        updateTrackingTrackName()
+    }
+
+    private fun updateTrackingTrackName() {
+        if (!::trackingTrackNameText.isInitialized) return
+        val name = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+            .getString("selected_tracker_name", null)?.takeIf { it.isNotBlank() }
+        if (name != null) {
+            trackingTrackNameText.text = name
+            trackingTrackNameText.setTextColor(ContextCompat.getColor(requireContext(), R.color.text_secondary))
+        } else {
+            trackingTrackNameText.text = getString(R.string.no_tracker_selected).uppercase()
+            trackingTrackNameText.setTextColor(ContextCompat.getColor(requireContext(), R.color.error_red))
+        }
     }
 
     fun updateTrackingUi() {
@@ -230,7 +246,8 @@ class HomeFragment : Fragment() {
             )
         )
         startStopButton.text = getString(if (running) R.string.stop_tracking else R.string.start_tracking)
-        
+        updateTrackingTrackName()
+
         // Change radar dish color based on tracking state
         if (running) {
             radarDishIcon.setColorFilter(

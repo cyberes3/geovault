@@ -15,7 +15,7 @@
         <span class="font-medium text-gray-900">Last Update</span>
         <span class="block text-gray-900 truncate" :title="formatTimeLocal(track.last_timestamp_ms)">{{ formatTimeLocal(track.last_timestamp_ms) }}</span>
       </div>
-      <div v-else class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900">
+      <div v-else class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500">
         No points yet. Waiting for data…
       </div>
       <div
@@ -36,8 +36,8 @@
           <div class="text-sm text-gray-900 break-all mt-0.5">{{ formatParamDisplay(key, value) }}</div>
         </div>
       </div>
-      <div v-else-if="track?.last_timestamp_ms || track?.last_position" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900">
-        Waiting for data…
+      <div v-else-if="track?.last_timestamp_ms || track?.last_position" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500">
+        No extended parameters for the latest point.
       </div>
     </div>
     <template #actions>

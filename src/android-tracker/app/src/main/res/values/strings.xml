@@ -17,6 +17,7 @@
     <string name="loading_trackers">Loading trackers…</string>
     <string name="loading_params">Loading…</string>
     <string name="select_tracker">Select a tracker</string>
+    <string name="no_tracker_selected">No tracker selected</string>
     <string name="no_trackers_found">No trackers found</string>
     <string name="no_trackers_found_message">No trackers yet. Create one to start tracking.</string>
     <string name="no_tracker_selected_go_to_settings">No tracker selected. Go to Trackers → tap a tracker → Edit → turn on \"Default track\".</string>
