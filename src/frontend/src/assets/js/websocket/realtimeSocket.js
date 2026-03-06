@@ -7,15 +7,17 @@ class RealtimeSocket {
         this.socket = null;
         this.isConnected = false;
         this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 5;
         this.reconnectInterval = 1000; // Start with 1 second
         this.maxReconnectInterval = 30000; // Max 30 seconds
         this.moduleHandlers = new Map(); // Map of module -> event -> handlers
+        this.durableSubscriptions = []; // { module, event, handler }[] restored on reconnect
         this.globalHandlers = new Map(); // Global event handlers
         this.modules = new Map(); // Registered modules
         this.pingInterval = null;
         this.pingTimeout = null;
         this.shouldStayConnected = false; // Track if we should maintain connection
+        this.visibilityListenerBound = false;
+        this._onVisibilityChange = this._onVisibilityChange.bind(this);
     }
 
     /**
@@ -41,10 +43,43 @@ class RealtimeSocket {
         try {
             this.socket = new WebSocket(wsUrl);
             this.setupEventHandlers();
+            this._bindVisibilityListener();
         } catch (error) {
             console.error('Failed to create Realtime WebSocket connection:', error);
             this.scheduleReconnect();
         }
+    }
+
+    /**
+     * Bind Page Visibility listener once so we reconnect when user returns to the tab
+     * (e.g. after putting the browser in background on mobile).
+     */
+    _bindVisibilityListener() {
+        if (this.visibilityListenerBound || typeof document === 'undefined') return;
+        document.addEventListener('visibilitychange', this._onVisibilityChange);
+        this.visibilityListenerBound = true;
+    }
+
+    _onVisibilityChange() {
+        if (document.visibilityState !== 'visible' || !this.shouldStayConnected) return;
+        // User returned to the tab; ensure we have a live connection (mobile often drops WS when backgrounded)
+        this.reconnectWhenVisible();
+    }
+
+    /**
+     * Reconnect when the page becomes visible again (e.g. after background).
+     * Closes any existing socket and opens a fresh one, resetting reconnect count.
+     */
+    reconnectWhenVisible() {
+        if (!this.shouldStayConnected) return;
+        this.stopPing();
+        if (this.socket) {
+            this.socket.close(1000, 'Reconnecting after visibility');
+            this.socket = null;
+        }
+        this.isConnected = false;
+        this.reconnectAttempts = 0;
+        this.connect();
     }
 
     /**
@@ -57,6 +92,7 @@ class RealtimeSocket {
             this.reconnectInterval = 1000;
             this.startPing();
             this.initializeModules(); // Initialize all registered modules
+            this._restoreSubscriptions(); // Re-subscribe all module handlers after reconnect
             this.emit('connected', event);
         };
 
@@ -70,11 +106,14 @@ class RealtimeSocket {
         };
 
         this.socket.onclose = (event) => {
+            // Ignore close from a socket we've already replaced (e.g. after reconnectWhenVisible)
+            if (event.target !== this.socket) return;
+
             this.isConnected = false;
             this.stopPing();
             this.cleanupModules(); // Cleanup all registered modules
             this.emit('disconnected', event);
-            
+
             // Attempt to reconnect if we should stay connected
             if (this.shouldStayConnected) {
                 if (event.code === 1000) {
@@ -194,12 +233,6 @@ class RealtimeSocket {
         if (!this.shouldStayConnected) {
             return;
         }
-        
-        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            console.error('Max reconnection attempts reached');
-            this.emit('max_reconnect_attempts_reached');
-            return;
-        }
 
         this.reconnectAttempts++;
         const delay = Math.min(this.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1), this.maxReconnectInterval);
@@ -226,18 +259,24 @@ class RealtimeSocket {
         this.shouldStayConnected = false;
         this.stopPing();
         this.cleanupModules(); // Cleanup all registered modules
-        
+        this.durableSubscriptions = []; // Clear so next login subscribes fresh
+
+        if (typeof document !== 'undefined' && this.visibilityListenerBound) {
+            document.removeEventListener('visibilitychange', this._onVisibilityChange);
+            this.visibilityListenerBound = false;
+        }
+
         if (this.socket) {
             this.socket.close(1000, 'Force disconnect');
             this.socket = null;
         }
-        
+
         this.isConnected = false;
         this.reconnectAttempts = 0;
     }
 
     /**
-     * Subscribe to module events
+     * Subscribe to module events. Stored durably so handlers are re-applied on reconnect.
      */
     subscribe(module, event, handler) {
         if (!this.moduleHandlers.has(module)) {
@@ -250,6 +289,13 @@ class RealtimeSocket {
         }
 
         moduleHandlers.get(event).push(handler);
+
+        const hasDurable = this.durableSubscriptions.some(
+            (s) => s.module === module && s.event === event && s.handler === handler
+        );
+        if (!hasDurable) {
+            this.durableSubscriptions.push({ module, event, handler });
+        }
     }
 
     /**
@@ -265,6 +311,28 @@ class RealtimeSocket {
                     handlers.splice(index, 1);
                 }
             }
+        }
+        const durableIdx = this.durableSubscriptions.findIndex(
+            (s) => s.module === module && s.event === event && s.handler === handler
+        );
+        if (durableIdx > -1) {
+            this.durableSubscriptions.splice(durableIdx, 1);
+        }
+    }
+
+    /**
+     * Re-apply all durable subscriptions into moduleHandlers (called on connect/reconnect).
+     */
+    _restoreSubscriptions() {
+        for (const { module, event, handler } of this.durableSubscriptions) {
+            if (!this.moduleHandlers.has(module)) {
+                this.moduleHandlers.set(module, new Map());
+            }
+            const moduleHandlers = this.moduleHandlers.get(module);
+            if (!moduleHandlers.has(event)) {
+                moduleHandlers.set(event, []);
+            }
+            moduleHandlers.get(event).push(handler);
         }
     }
 

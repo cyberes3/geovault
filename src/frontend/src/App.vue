@@ -484,11 +484,6 @@ export default {
       realtimeSocket.on('disconnected', () => {
         this.$store.dispatch('setWebSocketConnected', false);
       });
-
-      realtimeSocket.on('max_reconnect_attempts_reached', () => {
-        console.error('Realtime WebSocket max reconnection attempts reached');
-        this.$store.dispatch('setWebSocketReconnectAttempts', realtimeSocket.maxReconnectAttempts);
-      });
     },
     handleLogout() {
       realtimeSocket.forceDisconnect();
