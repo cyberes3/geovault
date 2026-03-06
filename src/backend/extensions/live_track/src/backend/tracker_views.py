@@ -18,7 +18,7 @@ from geo_lib.website.auth import api_or_login_required_401
 
 from pydantic import ValidationError as PydanticValidationError
 
-from .helpers import track_to_response
+from .helpers import track_to_response, track_to_response_metadata_only
 from .models import LiveTrack
 from .validation import (
     PARAM_PRETTY_NAMES,
@@ -105,7 +105,7 @@ def tracker_list_create(request):
 def tracker_get_patch_delete(request, tracker_id):
     track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
     if request.method == "GET":
-        return JsonResponse(track_to_response(track, include_secret=True))
+        return JsonResponse(track_to_response_metadata_only(track, include_secret=True))
     if request.method == "DELETE":
         track.delete()
         return JsonResponse({"message": "Deleted"}, status=204)
@@ -122,7 +122,17 @@ def tracker_get_patch_delete(request, tracker_id):
     if "color" in data and data["color"]:
         track.color = data["color"].strip()
     track.save()
-    return JsonResponse(track_to_response(track, include_secret=True))
+    return JsonResponse(track_to_response_metadata_only(track, include_secret=True))
+
+
+@api_or_login_required_401()
+@require_http_methods(["GET"])
+@handle_404
+@csrf_exempt
+def tracker_get_geometry(request, tracker_id):
+    """GET trackers/<id>/geometry/ — full geometry + all point_params (for map, params table, etc.)."""
+    track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
+    return JsonResponse(track_to_response(track, include_secret=False))
 
 
 @require_http_methods(["GET"])

@@ -17,6 +17,7 @@ import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.showHueColorPickerDialog
 import com.geovault.tracker.updateColorPreview
 import com.google.android.material.button.MaterialButton
+import androidx.appcompat.widget.SwitchCompat
 
 class EditTrackerFragment : Fragment() {
 
@@ -24,6 +25,7 @@ class EditTrackerFragment : Fragment() {
     private lateinit var colorEdit: EditText
     private lateinit var colorPreview: View
     private lateinit var pickColorButton: MaterialButton
+    private lateinit var defaultTrackSwitch: SwitchCompat
     private lateinit var saveButton: MaterialButton
     private lateinit var cancelButton: MaterialButton
     private lateinit var deleteButton: MaterialButton
@@ -42,6 +44,7 @@ class EditTrackerFragment : Fragment() {
         colorEdit = view.findViewById(R.id.editTrackerColor)
         colorPreview = view.findViewById(R.id.colorPreview)
         pickColorButton = view.findViewById(R.id.pickColorButton)
+        defaultTrackSwitch = view.findViewById(R.id.editTrackerDefaultSwitch)
         saveButton = view.findViewById(R.id.editTrackerSave)
         cancelButton = view.findViewById(R.id.editTrackerCancel)
         deleteButton = view.findViewById(R.id.editTrackerDelete)
@@ -62,6 +65,26 @@ class EditTrackerFragment : Fragment() {
 
         val tracker = arguments?.getParcelable<Tracker>(ARG_TRACKER, Tracker::class.java)
         val trackerId: String = tracker?.id ?: arguments?.getString(ARG_TRACKER_ID) ?: return
+        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+        defaultTrackSwitch.isChecked = prefs.getString("selected_tracker_id", null) == trackerId
+        defaultTrackSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                val name = tracker?.name ?: nameEdit.text?.toString()?.takeIf { it.isNotBlank() } ?: ""
+                prefs.edit()
+                    .putString("selected_tracker_id", trackerId)
+                    .putString("selected_tracker_name", name)
+                    .apply()
+                requireActivity().supportFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
+            } else {
+                if (prefs.getString("selected_tracker_id", null) == trackerId) {
+                    prefs.edit()
+                        .remove("selected_tracker_id")
+                        .remove("selected_tracker_name")
+                        .apply()
+                    requireActivity().supportFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
+                }
+            }
+        }
         if (tracker != null) {
             val color = tracker.color ?: "#3388ff"
             nameEdit.setText(tracker.name)
@@ -75,6 +98,11 @@ class EditTrackerFragment : Fragment() {
                         nameEdit.setText(fetched.name)
                         colorEdit.setText(color)
                         updateColorPreview(colorPreview, color)
+                        if (requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).getString("selected_tracker_id", null) == trackerId) {
+                            requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
+                                .putString("selected_tracker_name", fetched.name)
+                                .apply()
+                        }
                     }
                 }
             }

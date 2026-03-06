@@ -2,6 +2,7 @@ package com.geovault.tracker.fragments
 
 import android.content.Context
 import android.graphics.Color
+import android.widget.ImageView
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -160,6 +161,7 @@ class TrackersFragment : Fragment() {
             private val onAction: (Tracker, TrackerAction) -> Unit
         ) : RecyclerView.ViewHolder(itemView) {
             private val trackerName: TextView = itemView.findViewById(R.id.trackerName)
+            private val trackerSelectedCheck: ImageView = itemView.findViewById(R.id.trackerSelectedCheck)
             private val colorBar: View = itemView.findViewById(R.id.trackerColorBar)
             private val trackerLastUpdate: TextView = itemView.findViewById(R.id.trackerLastUpdate)
             private val trackerSeparator: TextView = itemView.findViewById(R.id.trackerSeparator)
@@ -169,6 +171,9 @@ class TrackersFragment : Fragment() {
             private val btnViewOnMap: MaterialButton = itemView.findViewById(R.id.btnViewOnMap)
 
             fun bind(tracker: Tracker) {
+                val selectedId = itemView.context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+                    .getString("selected_tracker_id", "") ?: ""
+                trackerSelectedCheck.visibility = if (tracker.id == selectedId) View.VISIBLE else View.GONE
                 trackerName.text = tracker.name
                 try {
                     val color = Color.parseColor(tracker.color ?: "#3388ff")

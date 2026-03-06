@@ -101,6 +101,28 @@ object TrackerRepository {
         })
     }
 
+    /**
+     * Fetches full track geometry and point_params (for map, params table). Use this when geometry is needed.
+     */
+    fun getTrackerGeometry(context: Context, id: String, callback: (Tracker?) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(null)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.getTrackerGeometry(id).enqueue(object : Callback<Tracker> {
+            override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
+                callback(if (response.isSuccessful) response.body() else null)
+            }
+            override fun onFailure(call: Call<Tracker>, t: Throwable) {
+                Log.e("TrackerRepository", "Failed to fetch tracker geometry", t)
+                callback(null)
+            }
+        })
+    }
+
     fun clearCurrentTrackerCache() {
         currentTrackerId = null
         currentTrackerCache = null

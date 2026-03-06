@@ -1,5 +1,6 @@
 package com.geovault.tracker.fragments
 
+import android.graphics.Color
 import android.content.*
 import android.location.Location
 import android.os.Bundle
@@ -16,9 +17,11 @@ import androidx.core.content.IntentCompat
 import androidx.fragment.app.Fragment
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.map.MapLibreManager
+import com.geovault.common.map.MapMarkerUtils
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.TrackerRepository
+import com.geovault.tracker.TrackingService
 import kotlinx.coroutines.*
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -38,7 +41,9 @@ class MapFragment : Fragment() {
     private var symbolManager: SymbolManager? = null
     private var lineManager: LineManager? = null
     private var trackPoints: MutableList<LatLng> = mutableListOf()
-    
+    /** Tracker color (hex e.g. "#3388ff") for trail and icon; set when loading tracker in fetchHistory. */
+    private var currentTrackerColor: String? = null
+
     private lateinit var mapLoadingOverlay: View
     private lateinit var trackerLabelCard: View
     private lateinit var trackerNameLabel: TextView
@@ -115,7 +120,15 @@ class MapFragment : Fragment() {
         mapManager.onStyleLoaded = { map, style ->
             maplibreMap = map
             mapManager.addMarkerIcon(style, "marker-default", R.drawable.ic_marker_default)
-            mapManager.addMarkerIcon(style, "track-direction-arrow", R.drawable.ic_track_direction_arrow)
+            MapMarkerUtils.getMarkerBitmapWithTintedForeground(
+                requireContext(),
+                R.drawable.ic_track_direction_arrow_circle,
+                R.drawable.ic_track_direction_arrow_chevron_fill,
+                R.drawable.ic_track_direction_arrow_chevron_stroke,
+                Color.parseColor("#3388ff")
+            )?.let { bitmap ->
+                style.addImage("track-direction-arrow", bitmap)
+            }
             lineManager = LineManager(mapView, map, style)
             symbolManager = SymbolManager(mapView, map, style)
             mapReady = true
@@ -166,7 +179,7 @@ class MapFragment : Fragment() {
         zoomToLatestButton.setOnClickListener {
             followLockEnabled = !followLockEnabled
             if (followLockEnabled && trackPoints.isNotEmpty()) {
-                maplibreMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(trackPoints.last(), 16.0))
+                maplibreMap?.moveCamera(CameraUpdateFactory.newLatLngZoom(trackPoints.last(), 16.0))
             }
             updateFollowLockButton()
         }
@@ -249,22 +262,24 @@ class MapFragment : Fragment() {
         } else {
             trackerLabelCard.visibility = View.VISIBLE
             trackerNameLabel.text = trackerName.ifEmpty { getString(R.string.select_tracker) }
-            // Show reset only when we have a selected tracker but no track loaded yet
+            // Show reset only when we're not viewing the selected tracker's track (no track loaded yet)
             resetToTrackerButton.visibility = if (trackPoints.isEmpty()) View.VISIBLE else View.GONE
         }
     }
 
     private fun updateLocationOnMap(location: Location) {
-        val map = maplibreMap ?: return
         val latLng = LatLng(location.latitude, location.longitude)
         trackPoints.add(latLng)
         if (trackPoints.size > 1000) {
             trackPoints.removeAt(0)
         }
-        updateTrackLine()
-        updateZoomToLatestButtonState()
-        if (followLockEnabled) {
-            map.animateCamera(CameraUpdateFactory.newLatLng(latLng))
+        val map = maplibreMap
+        if (map != null) {
+            updateTrackLine()
+            updateZoomToLatestButtonState()
+            if (followLockEnabled) {
+                map.moveCamera(CameraUpdateFactory.newLatLng(latLng))
+            }
         }
     }
 
@@ -300,12 +315,18 @@ class MapFragment : Fragment() {
             return
         }
 
-        TrackerRepository.getTracker(requireContext(), trackerId) { tracker ->
+        TrackerRepository.getTrackerGeometry(requireContext(), trackerId) { tracker ->
             mainScope.launch {
+                if (tracker != null) {
+                    currentTrackerColor = (tracker.color ?: "#3388ff").let { if (it.startsWith("#")) it else "#$it" }
+                }
                 val coords = tracker?.geometry?.coordinates
                 if (coords != null) {
-                    trackPoints.clear()
-                    trackPoints.addAll(coords.map { LatLng(it[1], it[0]) }.takeLast(1000))
+                    // Don't overwrite with server data while actively tracking; live points are more current
+                    if (!TrackingService.isRunning || trackPoints.isEmpty()) {
+                        trackPoints.clear()
+                        trackPoints.addAll(coords.map { LatLng(it[1], it[0]) }.takeLast(1000))
+                    }
                     updateTrackLine()
                     val map = maplibreMap
                     val shouldZoom = zoomToTrackAfterLoad
@@ -316,12 +337,12 @@ class MapFragment : Fragment() {
                                 trackPoints.forEach { include(it) }
                             }.build()
                             val paddingPx = (48 * resources.displayMetrics.density).toInt()
-                            map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+                            map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
                         } else {
-                            map.animateCamera(CameraUpdateFactory.newLatLngZoom(trackPoints.single(), 14.0))
+                            map.moveCamera(CameraUpdateFactory.newLatLngZoom(trackPoints.single(), 14.0))
                         }
                     } else if (!restoreOnlyNoZoom && map != null && trackPoints.isNotEmpty()) {
-                        map.animateCamera(CameraUpdateFactory.newLatLng(trackPoints.last()))
+                        map.moveCamera(CameraUpdateFactory.newLatLng(trackPoints.last()))
                     }
                 }
                 restoreOnlyNoZoom = false
@@ -334,6 +355,7 @@ class MapFragment : Fragment() {
     private fun updateTrackLine() {
         val manager = lineManager ?: return
         manager.deleteAll()
+        val lineColor = currentTrackerColor ?: "#3388ff"
         if (trackPoints.size >= 2) {
             val outlineColorInt = ContextCompat.getColor(requireContext(), R.color.track_line_outline)
             val outlineColor = String.format("#%06X", 0xFFFFFF and outlineColorInt)
@@ -347,7 +369,7 @@ class MapFragment : Fragment() {
                 )
                 manager.create(LineOptions()
                     .withLatLngs(segment)
-                    .withLineColor("#3388ff")
+                    .withLineColor(lineColor)
                     .withLineWidth(3f)
                 )
             }
@@ -361,9 +383,27 @@ class MapFragment : Fragment() {
         if (trackPoints.isEmpty()) return
         val last = trackPoints.last()
         val rotation = getTrackDirectionDegrees(trackPoints)
+        val hexColor = currentTrackerColor ?: "#3388ff"
+        val style = maplibreMap?.style ?: return
+        val imageId = "track-direction-arrow-${hexColor.replace("#", "")}"
+        val tintedBitmap = MapMarkerUtils.getMarkerBitmapWithTintedForeground(
+            requireContext(),
+            R.drawable.ic_track_direction_arrow_circle,
+            R.drawable.ic_track_direction_arrow_chevron_fill,
+            R.drawable.ic_track_direction_arrow_chevron_stroke,
+            Color.parseColor(hexColor)
+        )
+        val symbolIconId = if (tintedBitmap != null) {
+            try {
+                style.addImage(imageId, tintedBitmap)
+            } catch (_: Exception) { /* id may already exist */ }
+            imageId
+        } else {
+            "track-direction-arrow"
+        }
         symManager.create(SymbolOptions()
             .withLatLng(last)
-            .withIconImage("track-direction-arrow")
+            .withIconImage(symbolIconId)
             .withIconSize(0.75f)
             .withIconRotate(rotation)
         )

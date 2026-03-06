@@ -95,8 +95,8 @@ class TrackerParamsFragment : Fragment() {
         // Clear cache to force fresh data
         TrackerRepository.clearCurrentTrackerCache()
         
-        // Important: only the single-tracker call drives the params UI. Start it first.
-        TrackerRepository.getTracker(requireContext(), id) { tracker ->
+        // Important: only the single-tracker call drives the params UI. Use geometry endpoint for full track + params.
+        TrackerRepository.getTrackerGeometry(requireContext(), id) { tracker ->
             if (isAdded) {
                 requireActivity().runOnUiThread {
                     swipeRefresh.isRefreshing = false

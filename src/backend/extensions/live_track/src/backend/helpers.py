@@ -29,6 +29,27 @@ def track_to_response(track: LiveTrack, include_secret: bool = False) -> dict:
     return out
 
 
+def track_to_response_metadata_only(track: LiveTrack, include_secret: bool = False) -> dict:
+    """Tracker metadata + latest point params only (no full geometry). For GET trackers/<id>/."""
+    point_params = track.point_params or []
+    latest_params = [copy.deepcopy(point_params[-1])] if point_params else []
+    geom = track.geometry or {"type": "LineString", "coordinates": []}
+    coords = geom.get("coordinates") or []
+    last_point = coords[-1] if coords else None  # [lon, lat, timestamp_ms] or None
+    out = {
+        "id": str(track.id),
+        "name": track.name,
+        "color": track.color,
+        "point_params": latest_params,
+        "created_at": track.created_at.isoformat() if track.created_at else None,
+        "updated_at": track.updated_at.isoformat() if track.updated_at else None,
+        "last_point": last_point,
+    }
+    if include_secret:
+        out["tracker_secret"] = track.tracker_secret
+    return out
+
+
 def parse_ingress_body(request) -> dict:
     """Parse POST body as form or JSON into a flat dict for Pydantic."""
     ct = (request.content_type or "").split(";")[0].strip().lower()

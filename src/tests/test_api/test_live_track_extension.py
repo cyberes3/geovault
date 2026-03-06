@@ -168,7 +168,7 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(names, ["Alpha", "Bravo", "Charlie"])
 
     def test_get_track(self):
-        """GET trackers/<id>/ returns 200 with track, geometry, point_params."""
+        """GET trackers/<id>/ returns 200 with metadata and latest params only (no geometry)."""
         with _patch_live_track_enabled():
             create_resp = self.client.post(
                 "/api/extensions/live-track/trackers/",
@@ -182,8 +182,32 @@ class TestLiveTrackAPI(TestCase):
         data = response.json()
         self.assertEqual(data["id"], track_id)
         self.assertEqual(data["name"], "Get Me")
-        self.assertIn("geometry", data)
+        self.assertNotIn("geometry", data)
         self.assertIn("point_params", data)
+        self.assertIn("last_point", data)
+        self.assertIn("created_at", data)
+        self.assertIn("updated_at", data)
+
+    def test_get_track_geometry(self):
+        """GET trackers/<id>/geometry/ returns 200 with full geometry and point_params."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Full Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/geometry/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["id"], track_id)
+        self.assertEqual(data["name"], "Full Track")
+        self.assertIn("geometry", data)
+        self.assertEqual(data["geometry"].get("type"), "LineString")
+        self.assertIn("coordinates", data["geometry"])
+        self.assertIn("point_params", data)
+        self.assertNotIn("tracker_secret", data)
 
     def test_get_track_404_other_user(self):
         """GET trackers/<id>/ for another user's track returns 404."""

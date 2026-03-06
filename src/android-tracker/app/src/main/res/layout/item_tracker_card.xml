@@ -43,6 +43,16 @@
                 android:textColor="@color/text_primary"
                 android:textIsSelectable="true"
                 tools:text="My Tracker" />
+
+            <ImageView
+                android:id="@+id/trackerSelectedCheck"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginStart="8dp"
+                android:visibility="gone"
+                android:contentDescription="@null"
+                app:srcCompat="@drawable/ic_check"
+                app:tint="@color/primary_blue" />
         </LinearLayout>
 
         <LinearLayout

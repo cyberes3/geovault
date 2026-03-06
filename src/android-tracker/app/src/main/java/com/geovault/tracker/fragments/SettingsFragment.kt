@@ -1,13 +1,9 @@
 package com.geovault.tracker.fragments
 
 import android.content.Context
-import android.graphics.Typeface
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -20,12 +16,9 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import com.geovault.common.GeovaultAuthManager
-import com.geovault.common.RetrofitClient
-import com.geovault.tracker.*
+import com.geovault.tracker.MainActivity
+import com.geovault.tracker.R
 import com.google.android.material.button.MaterialButton
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
 
 class SettingsFragment : Fragment() {
 
@@ -33,11 +26,6 @@ class SettingsFragment : Fragment() {
     private lateinit var connectButton: MaterialButton
     private lateinit var disconnectButton: MaterialButton
     private lateinit var loggedInUserText: TextView
-    private lateinit var trackerSelectorCard: View
-    private lateinit var selectedTrackerText: TextView
-    private lateinit var trackerSaveProgress: com.geovault.common.LoadingSpinner
-    private lateinit var trackerSpinner: Spinner
-    private lateinit var createTrackerButton: MaterialButton
     private lateinit var intervalEdit: EditText
     private lateinit var distanceEdit: EditText
     private lateinit var accuracyEdit: EditText
@@ -54,42 +42,6 @@ class SettingsFragment : Fragment() {
             serverUrl = "https://$serverUrl"
         }
         return serverUrl
-    }
-
-    private var trackers: List<Tracker> = emptyList()
-
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private var trackerOperationTimeoutRunnable: Runnable? = null
-    private var trackerOperationTimedOut = false
-    private companion object {
-        const val TRACKER_OPERATION_TIMEOUT_MS = 30_000L
-    }
-
-    private fun setTrackerOperationInProgress(inProgress: Boolean) {
-        createTrackerButton.isEnabled = !inProgress
-        trackerSelectorCard.isClickable = !inProgress
-        view?.findViewById<View>(R.id.selectedTrackerLabel)?.isClickable = !inProgress
-        if (inProgress) {
-            trackerSaveProgress.start()
-        } else {
-            trackerSaveProgress.stop()
-        }
-    }
-
-    private fun scheduleTrackerOperationTimeout(onTimeout: () -> Unit) {
-        cancelTrackerOperationTimeout()
-        trackerOperationTimedOut = false
-        trackerOperationTimeoutRunnable = Runnable {
-            trackerOperationTimeoutRunnable = null
-            trackerOperationTimedOut = true
-            onTimeout()
-        }
-        mainHandler.postDelayed(trackerOperationTimeoutRunnable!!, TRACKER_OPERATION_TIMEOUT_MS)
-    }
-
-    private fun cancelTrackerOperationTimeout() {
-        trackerOperationTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
-        trackerOperationTimeoutRunnable = null
     }
 
     override fun onCreateView(
@@ -116,11 +68,6 @@ class SettingsFragment : Fragment() {
         connectButton = view.findViewById(R.id.connectButton)
         disconnectButton = view.findViewById(R.id.disconnectButton)
         loggedInUserText = view.findViewById(R.id.loggedInUserText)
-        trackerSelectorCard = view.findViewById(R.id.trackerSelectorCard)
-        selectedTrackerText = view.findViewById(R.id.selectedTrackerText)
-        trackerSaveProgress = view.findViewById(R.id.trackerSaveProgress)
-        trackerSpinner = view.findViewById(R.id.trackerSpinner)
-        createTrackerButton = view.findViewById(R.id.createTrackerButton)
         intervalEdit = view.findViewById(R.id.intervalEdit)
         distanceEdit = view.findViewById(R.id.distanceEdit)
         accuracyEdit = view.findViewById(R.id.accuracyEdit)
@@ -137,9 +84,6 @@ class SettingsFragment : Fragment() {
 
         connectButton.setOnClickListener { onConnectClicked() }
         disconnectButton.setOnClickListener { onDisconnectClicked() }
-        createTrackerButton.setOnClickListener { onCreateTrackerClicked() }
-        trackerSelectorCard.setOnClickListener { showTrackerSelectionDialog() }
-        view.findViewById<View>(R.id.selectedTrackerLabel).setOnClickListener { showTrackerSelectionDialog() }
 
         extendedParamsSwitch.setOnCheckedChangeListener { _, isChecked ->
             saveSetting("extended_params", isChecked)
@@ -244,27 +188,14 @@ class SettingsFragment : Fragment() {
         requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit().putBoolean(key, value).apply()
     }
 
-    private fun saveSelectedTracker(trackerId: String, trackerName: String) {
-        requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
-            .putString("selected_tracker_id", trackerId)
-            .putString("selected_tracker_name", trackerName)
-            .commit()
-    }
-
     private fun updateUi() {
         val isLoggedIn = GeovaultAuthManager.isLoggedIn(requireContext())
         connectButton.visibility = if (isLoggedIn) View.GONE else View.VISIBLE
         disconnectButton.visibility = if (isLoggedIn) View.VISIBLE else View.GONE
         loggedInUserText.visibility = if (isLoggedIn) View.VISIBLE else View.GONE
-        createTrackerButton.visibility = if (isLoggedIn) View.VISIBLE else View.GONE
-        
+
         val email = GeovaultAuthManager.getCachedUserEmail(requireContext())
         loggedInUserText.text = if (email != null) "Logged in as $email" else "Logged in"
-
-        if (isLoggedIn) {
-            showTrackerSpinnerPlaceholder()
-            fetchTrackers()
-        }
     }
 
     private fun onConnectClicked() {
@@ -304,194 +235,11 @@ class SettingsFragment : Fragment() {
         )
     }
 
-    private fun onCreateTrackerClicked() {
-        val input = EditText(requireContext()).apply {
-            hint = "Tracker name"
-            setPadding(48, 32, 48, 32)
-        }
-
-        val dialog = AlertDialog.Builder(requireContext())
-            .setTitle("Create New Tracker")
-            .setView(input)
-            .setPositiveButton("Create") { _, _ ->
-                val name = input.text.toString().trim()
-                if (name.isNotEmpty()) {
-                    createTracker(name)
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .create()
-        dialog.show()
-        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(
-            ContextCompat.getColor(requireContext(), com.geovault.common.R.color.gv_common_dialog_negative_button)
-        )
-    }
-
-    private fun createTracker(name: String) {
-        val serverUrl = GeovaultAuthManager.getServerUrl(requireContext())
-        if (serverUrl.isEmpty()) return
-
-        setTrackerOperationInProgress(true)
-                scheduleTrackerOperationTimeout {
-            if (isAdded) {
-                requireActivity().runOnUiThread {
-                    setTrackerOperationInProgress(false)
-                    (requireActivity() as? MainActivity)?.showSnackbar(getString(R.string.tracker_operation_timeout))
-                }
-            }
-        }
-
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(requireContext(), baseUrl).create(TrackerApi::class.java)
-
-        api.createTracker(TrackerCreateRequest(name)).enqueue(object : Callback<Tracker> {
-            override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
-                if (isAdded) {
-                    requireActivity().runOnUiThread {
-                        if (response.isSuccessful) {
-                            val newTracker = response.body()
-                            if (newTracker != null) {
-                                saveSelectedTracker(newTracker.id, newTracker.name)
-                                TrackerRepository.clearCurrentTrackerCache()
-                                setSelectedTrackerDisplay(newTracker.name, isPlaceholder = false)
-                                Toast.makeText(requireContext(), "Tracker '${newTracker.name}' created", Toast.LENGTH_SHORT).show()
-                                fetchTrackers(forceRefresh = true) {
-                                    cancelTrackerOperationTimeout()
-                                    setTrackerOperationInProgress(false)
-                                }
-                            } else {
-                                cancelTrackerOperationTimeout()
-                                setTrackerOperationInProgress(false)
-                            }
-                        } else {
-                            cancelTrackerOperationTimeout()
-                            setTrackerOperationInProgress(false)
-                            val body = response.errorBody()?.string()?.trim()?.takeIf { it.isNotEmpty() }
-                            val msg = body?.let { it.take(120) + if (it.length > 120) "…" else "" }
-                                ?: "server error ${response.code()}"
-                            (requireActivity() as? MainActivity)?.showSnackbar("Failed to create tracker: $msg")
-                        }
-                    }
-                }
-            }
-            override fun onFailure(call: Call<Tracker>, t: Throwable) {
-                if (isAdded) {
-                    requireActivity().runOnUiThread {
-                        cancelTrackerOperationTimeout()
-                        setTrackerOperationInProgress(false)
-                        Log.e("SettingsFragment", "Failed to create tracker", t)
-                        (requireActivity() as? MainActivity)?.showSnackbar("Failed to create tracker: ${t.message ?: "Network error"}")
-                    }
-                }
-            }
-        })
-    }
-
-    private fun showTrackerSpinnerPlaceholder() {
-        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val savedId = prefs.getString("selected_tracker_id", null)
-        val savedName = prefs.getString("selected_tracker_name", null)
-        val hasSelection = !savedId.isNullOrBlank() && !savedName.isNullOrBlank()
-        if (hasSelection) {
-            setSelectedTrackerDisplay(savedName!!, isPlaceholder = false)
-        } else {
-            setSelectedTrackerDisplay(getString(R.string.loading_trackers), isPlaceholder = true)
-        }
-        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, listOf(selectedTrackerText.text))
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        trackerSpinner.adapter = adapter
-    }
-
-    private fun setSelectedTrackerDisplay(text: String, isPlaceholder: Boolean) {
-        selectedTrackerText.text = text
-        selectedTrackerText.setTextColor(
-            ContextCompat.getColor(requireContext(), if (isPlaceholder) R.color.text_secondary else R.color.text_primary)
-        )
-        val style = if (isPlaceholder) Typeface.ITALIC else Typeface.NORMAL
-        selectedTrackerText.setTypeface(Typeface.create(selectedTrackerText.typeface, style))
-    }
-
-    private fun showTrackerSelectionDialog() {
-        if (trackers.isEmpty()) {
-            val dialog = AlertDialog.Builder(requireContext())
-                .setTitle(R.string.select_tracker)
-                .setMessage(getString(R.string.no_trackers_found_message))
-                .setPositiveButton(android.R.string.ok, null)
-                .setNeutralButton(getString(R.string.create_new_tracker)) { _, _ -> onCreateTrackerClicked() }
-                .create()
-            dialog.show()
-            dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setTextColor(
-                ContextCompat.getColor(requireContext(), com.geovault.common.R.color.gv_common_dialog_negative_button)
-            )
-            return
-        }
-        val names = trackers.map { it.name }.toTypedArray()
-        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val currentId = prefs.getString("selected_tracker_id", null)
-        var selectedIndex = trackers.indexOfFirst { it.id == currentId }
-        if (selectedIndex < 0) selectedIndex = 0
-
-        val selectDialog = AlertDialog.Builder(requireContext())
-            .setTitle(R.string.select_tracker)
-            .setSingleChoiceItems(names, selectedIndex) { dialog, which ->
-                val tracker = trackers.getOrNull(which) ?: return@setSingleChoiceItems
-                setSelectedTrackerDisplay(tracker.name, isPlaceholder = false)
-                dialog.dismiss()
-                saveSelectedTracker(tracker.id, tracker.name)
-                TrackerRepository.clearCurrentTrackerCache()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .create()
-        selectDialog.setOnDismissListener { fetchTrackers(forceRefresh = true) }
-        selectDialog.show()
-        selectDialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(
-            ContextCompat.getColor(requireContext(), com.geovault.common.R.color.gv_common_dialog_negative_button)
-        )
-    }
-
-    private fun fetchTrackers(forceRefresh: Boolean = false, onComplete: (() -> Unit)? = null) {
-        TrackerRepository.getTrackers(requireContext(), forceRefresh) { list ->
-            if (isAdded) {
-                requireActivity().runOnUiThread {
-                    trackers = list ?: emptyList()
-                    setupTrackerSpinner()
-                    onComplete?.invoke()
-                }
-            }
-        }
-    }
-
-    private fun setupTrackerSpinner() {
-        if (trackers.isEmpty()) {
-            setSelectedTrackerDisplay(getString(R.string.no_trackers_found), isPlaceholder = true)
-            val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, listOf(getString(R.string.no_trackers_found)))
-            trackerSpinner.adapter = adapter
-            return
-        }
-
-        val names = trackers.map { it.name }
-        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, names)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        trackerSpinner.adapter = adapter
-
-        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val currentId = prefs.getString("selected_tracker_id", null)
-        val currentIndex = trackers.indexOfFirst { it.id == currentId }
-        if (currentIndex >= 0) {
-            trackerSpinner.setSelection(currentIndex)
-            setSelectedTrackerDisplay(trackers[currentIndex].name, isPlaceholder = false)
-        } else {
-            setSelectedTrackerDisplay(getString(R.string.select_tracker), isPlaceholder = true)
-        }
-    }
-
     override fun onResume() {
         super.onResume()
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
-        trackerSaveProgress.stop()
-        trackerOperationTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
     }
 }
