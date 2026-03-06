@@ -126,6 +126,7 @@ class HomeFragment : Fragment() {
     }
     
     fun updatePermissionsUi() {
+        if (!::trackingContentContainer.isInitialized) return
         val mainActivity = requireActivity() as MainActivity
         
         if (mainActivity.hasAllRequiredPermissions()) {
@@ -219,6 +220,7 @@ class HomeFragment : Fragment() {
     }
 
     fun updateTrackingUi() {
+        if (!::trackingStatusText.isInitialized) return
         val running = TrackingService.isRunning
         trackingStatusText.text = getString(if (running) R.string.tracking_active else R.string.not_tracking)
         trackingStatusText.setTextColor(

@@ -137,6 +137,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun updateConnectDisconnectVisibility() {
+        if (!::connectButton.isInitialized) return
         val loggedIn = GeovaultAuthManager.isLoggedIn(this)
         serverUrlEdit.isEnabled = !loggedIn
         connectButton.visibility = if (loggedIn) View.GONE else View.VISIBLE

@@ -198,6 +198,7 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun showValidationScreen() {
+        if (!::validationLayout.isInitialized || isDestroyed) return
         validationLayout.visibility = android.view.View.VISIBLE
         uploaderLayout.visibility = android.view.View.GONE
         // Ensure settings button is clickable
@@ -206,6 +207,7 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun showUploaderScreen() {
+        if (!::validationLayout.isInitialized || isDestroyed) return
         validationLayout.visibility = android.view.View.GONE
         uploaderLayout.visibility = android.view.View.VISIBLE
     }

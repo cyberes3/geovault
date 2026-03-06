@@ -186,6 +186,7 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
     override fun onDidFailLoadingMap(errorMessage: String) {
         Log.e(TAG, "Map style load failed: $errorMessage")
         runOnUiThread {
+            if (isDestroyed) return@runOnUiThread
             val map = maplibreMap ?: return@runOnUiThread
             val effectiveId = mapManager.sourceManager.getEffectiveSourceId()
             if (mapManager.sourceManager.isVectorSource(effectiveId)) {
@@ -196,6 +197,7 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
     }
 
     private fun onStyleLoaded(style: Style) {
+        if (isDestroyed || !::nameInput.isInitialized) return
         // Do not call symbolManager.onDestroy() here: the previous style was already replaced
         // by setStyle(), so the old manager's native layer is invalid and onDestroy() can throw
         // (wstring_convert / nativeGetId). Just clear references.

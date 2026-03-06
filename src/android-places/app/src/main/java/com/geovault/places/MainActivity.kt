@@ -58,6 +58,7 @@ class MainActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var rotationHelper: RotationHelper
     private val timeoutRunnable = Runnable {
+        if (isDestroyed || !::swipeRefresh.isInitialized) return@Runnable
         if (swipeRefresh.isRefreshing) {
             cancelRefresh("Refresh timed out (10s)")
         }
@@ -288,6 +289,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        handler.removeCallbacks(timeoutRunnable)
         executor.shutdown()
         super.onDestroy()
     }
@@ -347,6 +349,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun cancelRefresh(message: String) {
+        if (!::swipeRefresh.isInitialized || isDestroyed) return
         refreshCall?.cancel()
         refreshCall = null
         handler.removeCallbacks(timeoutRunnable)
@@ -358,6 +361,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun hideSyncOverlayAndReset() {
+        if (!::refreshOverlay.isInitialized || isDestroyed) return
         refreshOverlay.visibility = View.GONE
         stopSyncAnimation()
         swipeRefresh.isRefreshing = false
@@ -366,6 +370,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshListFromCache() {
+        if (!::recyclerView.isInitialized) return
         val cached = cache.getCachedFeatures()
         val offline = cache.getOfflineFeatures()
         Log.d(TAG, "refreshListFromCache: cached=${cached.size}, offline=${offline.size}")
