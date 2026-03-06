@@ -196,7 +196,7 @@ class TrackingService : Service() {
         isRunning = false
         sessionStartTimeMs = 0
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
-            .remove(PREF_WAS_TRACKING_BEFORE_EXIT).apply()
+            .remove(PREF_WAS_TRACKING_BEFORE_EXIT).commit()
         fusedLocationClient.removeLocationUpdates(locationCallback)
         cancelSignificantMotion()
         stopRetryJob()

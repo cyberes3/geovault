@@ -64,6 +64,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (intent?.action == TrackingService.ACTION_STOP) {
+            getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
+                .remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).commit()
             startService(Intent(this, TrackingService::class.java).apply { action = TrackingService.ACTION_STOP })
         }
         if (!GeovaultAuthManager.isLoggedIn(this)) {
@@ -80,6 +82,8 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         if (intent.action == TrackingService.ACTION_STOP && !isGuestView) {
+            getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
+                .remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).commit()
             startService(Intent(this, TrackingService::class.java).apply { action = TrackingService.ACTION_STOP })
         }
     }
@@ -191,9 +195,9 @@ class MainActivity : AppCompatActivity() {
         val wasTrackingBeforeExit = prefs.getBoolean(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT, false)
         if (!restartIfKilled || TrackingService.isRunning) {
             if (wasTrackingBeforeExit) {
-                prefs.edit().remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).apply()
+                prefs.edit().remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).commit()
             }
-        } else {
+        } else if (wasTrackingBeforeExit) {
             tryResumeTrackingAfterKill()
             return
         }
@@ -206,7 +210,7 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val trackerId = prefs.getString("selected_tracker_id", "") ?: ""
         if (trackerId.isEmpty()) {
-            prefs.edit().remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).apply()
+            prefs.edit().remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).commit()
             return
         }
         tryStartTrackingSilently(
@@ -215,7 +219,7 @@ class MainActivity : AppCompatActivity() {
                     .remove("selected_tracker_id")
                     .remove("selected_tracker_name")
                     .remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT)
-                    .apply()
+                    .commit()
                 TrackerRepository.clearCurrentTrackerCache()
                 TrackerRepository.clearCache()
                 TrackerRepository.getTrackers(this, forceRefresh = true) { }
@@ -410,6 +414,8 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(this, TrackingService::class.java)
         if (TrackingService.isRunning) {
             showStopTrackingConfirmation {
+                getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
+                    .remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).commit()
                 intent.action = TrackingService.ACTION_STOP
                 startService(intent)
                 Handler(Looper.getMainLooper()).postDelayed({
