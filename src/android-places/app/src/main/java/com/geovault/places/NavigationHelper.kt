@@ -1,9 +1,13 @@
 package com.geovault.places
 
+import android.app.Activity
 import android.content.Context
-import com.geovault.common.RetrofitClient
 import android.content.Intent
+import android.content.ActivityNotFoundException
 import android.net.Uri
+import android.widget.Toast
+import com.geovault.common.RetrofitClient
+import com.google.android.material.snackbar.Snackbar
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import retrofit2.Call
@@ -15,7 +19,8 @@ object NavigationHelper {
     private const val PREFS_NAME = "geovault_prefs"
     private const val PENDING_NAVIGATION_IDS_KEY = "pending_navigation_ids"
     private val gson = Gson()
-    private val intListType = object : TypeToken<List<Int>>() {}.type
+    // Use getParameterized so R8 doesn't strip generic signature (anonymous TypeToken fails with ProGuard)
+    private val intListType = TypeToken.getParameterized(List::class.java, Int::class.javaObjectType).type
 
     fun navigateToPlace(context: Context, feature: Feature, serverUrl: String) {
         val coords = feature.geometry.coordinates
@@ -23,11 +28,23 @@ object NavigationHelper {
             val lon = coords[0]
             val lat = coords[1]
             val label = feature.properties.name ?: "Place"
+            val encodedLabel = Uri.encode(label)
 
-            // 1. Launch Map Intent
-            val uri = Uri.parse("geo:$lat,$lon?q=$lat,$lon($label)")
+            // 1. Launch Map Intent (catch when no app can handle geo:)
+            val uri = Uri.parse("geo:$lat,$lon?q=$lat,$lon($encodedLabel)")
             val intent = Intent(Intent.ACTION_VIEW, uri)
-            context.startActivity(intent)
+            try {
+                context.startActivity(intent)
+            } catch (e: ActivityNotFoundException) {
+                val message = context.getString(R.string.no_map_app)
+                val activity = context as? Activity
+                val rootView = activity?.findViewById<android.view.View>(android.R.id.content)
+                if (rootView != null) {
+                    Snackbar.make(rootView, message, Snackbar.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                }
+            }
 
             // 2. Notify backend of navigation (and flush any pending)
             val databaseId = feature.properties.database_id
