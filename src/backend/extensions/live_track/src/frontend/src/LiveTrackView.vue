@@ -173,6 +173,8 @@ const BASE_SOURCE_ID = 'base-raster';
 const BASE_LAYER_ID = 'base-raster-layer';
 const MIN_ZOOM = 0;
 const MAX_ZOOM = 18;
+/** Do not draw track across jumps larger than this (meters). 100 miles. Same as Android tracker. */
+const MAX_JUMP_METERS = 100 * 1609.344;
 const LAYER_MAX_ZOOM = MAX_ZOOM + 1;
 const TILE_SOURCES_API_URL = '/api/tiles/sources/';
 const DEFAULT_MAP_KEY = 'extensions.live_track.default_map';
@@ -387,21 +389,61 @@ export default {
       }
     }
 
+    /** Distance in meters between two [lon, lat] points (Haversine). */
+    function distanceMeters(lon1, lat1, lon2, lat2) {
+      const R = 6371000;
+      const dLat = ((lat2 - lat1) * Math.PI) / 180;
+      const dLon = ((lon2 - lon1) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    /**
+     * Split track coordinates into segments so that no segment spans more than MAX_JUMP_METERS.
+     * Consecutive points farther apart than that start a new segment (the jump is not drawn).
+     * coords: array of [lon, lat]. Returns array of segments (each segment is [lon, lat][]).
+     */
+    function splitTrackIntoSegments(coords) {
+      if (coords.length < 2) return [];
+      const segments = [];
+      let current = [coords[0]];
+      for (let i = 1; i < coords.length; i++) {
+        const prev = coords[i - 1];
+        const curr = coords[i];
+        const dist = distanceMeters(prev[0], prev[1], curr[0], curr[1]);
+        if (dist > MAX_JUMP_METERS) {
+          if (current.length >= 2) segments.push(current);
+          current = [curr];
+        } else {
+          current.push(curr);
+        }
+      }
+      if (current.length >= 2) segments.push(current);
+      return segments;
+    }
+
     function buildLinesGeoJSON() {
       const features = [];
       for (const track of trackers.value) {
         const geom = track.geometry || {};
         const coords = (geom.coordinates || []).map((c) => [c[0], c[1]]);
         if (coords.length < 2) continue;
-        features.push({
-          type: 'Feature',
-          properties: {
-            trackId: track.id,
-            color: track.color || '#3388ff',
-            selected: selectedId.value === track.id
-          },
-          geometry: { type: 'LineString', coordinates: coords }
-        });
+        const segments = splitTrackIntoSegments(coords);
+        const props = {
+          trackId: track.id,
+          color: track.color || '#3388ff',
+          selected: selectedId.value === track.id
+        };
+        for (const segment of segments) {
+          features.push({
+            type: 'Feature',
+            properties: props,
+            geometry: { type: 'LineString', coordinates: segment }
+          });
+        }
       }
       return { type: 'FeatureCollection', features };
     }
@@ -817,9 +859,19 @@ export default {
           selectedId.value = null;
         }
       });
+      const TRACK_LAYER_IDS = [
+        POINTS_LAYER_ID,
+        LINES_LAYER_ID,
+        `${LINES_LAYER_ID}-outline`,
+        `${LINES_LAYER_ID}-black-outline`
+      ];
+      function getClickableTrackLayers() {
+        return TRACK_LAYER_IDS.filter((id) => map.getLayer(id));
+      }
       map.on('click', (e) => {
-        if (!map.getLayer(POINTS_LAYER_ID)) return;
-        const features = map.queryRenderedFeatures(e.point, { layers: [POINTS_LAYER_ID] });
+        const layers = getClickableTrackLayers();
+        if (layers.length === 0) return;
+        const features = map.queryRenderedFeatures(e.point, { layers });
         const feature = features[0];
         if (feature?.properties?.trackId) {
           const trackId = feature.properties.trackId;
@@ -835,11 +887,12 @@ export default {
       map.on('mousemove', (e) => {
         const canvas = map.getCanvas();
         if (!canvas) return;
-        if (!map.getLayer(POINTS_LAYER_ID)) {
+        const layers = getClickableTrackLayers();
+        if (layers.length === 0) {
           canvas.style.cursor = '';
           return;
         }
-        const features = map.queryRenderedFeatures(e.point, { layers: [POINTS_LAYER_ID] });
+        const features = map.queryRenderedFeatures(e.point, { layers });
         canvas.style.cursor = features.length ? 'pointer' : '';
       });
     }
@@ -865,7 +918,8 @@ export default {
       const lastPoint = getLastNCoords(track, 1);
       if (map && lastPoint.length > 0) {
         isAutoMoving.value = true;
-        map.jumpTo({ center: lastPoint[0], zoom: 14, duration: 0 });
+        const zoom = Math.max(map.getZoom(), 14);
+        map.jumpTo({ center: lastPoint[0], zoom, duration: 0 });
         setTimeout(() => {
           isAutoMoving.value = false;
         }, 100);

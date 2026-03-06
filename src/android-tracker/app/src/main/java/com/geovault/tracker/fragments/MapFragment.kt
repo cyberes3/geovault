@@ -266,17 +266,20 @@ class MapFragment : Fragment() {
         if (trackPoints.size >= 2) {
             val outlineColorInt = ContextCompat.getColor(requireContext(), R.color.track_line_outline)
             val outlineColor = String.format("#%06X", 0xFFFFFF and outlineColorInt)
-            // Outline for all track lines (black in day, light grey in night)
-            manager.create(LineOptions()
-                .withLatLngs(trackPoints)
-                .withLineColor(outlineColor)
-                .withLineWidth(5f)
-            )
-            manager.create(LineOptions()
-                .withLatLngs(trackPoints)
-                .withLineColor("#3388ff")
-                .withLineWidth(3f)
-            )
+            val segments = splitTrackIntoSegments(trackPoints)
+            for (segment in segments) {
+                // Outline for each segment (black in day, light grey in night)
+                manager.create(LineOptions()
+                    .withLatLngs(segment)
+                    .withLineColor(outlineColor)
+                    .withLineWidth(5f)
+                )
+                manager.create(LineOptions()
+                    .withLatLngs(segment)
+                    .withLineColor("#3388ff")
+                    .withLineWidth(3f)
+                )
+            }
         }
         updatePositionSymbol()
     }
@@ -305,8 +308,35 @@ class MapFragment : Fragment() {
         return (Math.atan2(dLon, dLat) * 180 / Math.PI).toFloat()
     }
 
+    /**
+     * Split track points into segments so that no segment spans more than MAX_JUMP_METERS.
+     * Consecutive points farther apart than that start a new segment (the jump is not drawn).
+     */
+    private fun splitTrackIntoSegments(points: List<LatLng>): List<List<LatLng>> {
+        if (points.size < 2) return emptyList()
+        val segments = mutableListOf<MutableList<LatLng>>()
+        var current = mutableListOf(points[0])
+        for (i in 1 until points.size) {
+            val prev = points[i - 1]
+            val curr = points[i]
+            val results = FloatArray(3)
+            Location.distanceBetween(prev.latitude, prev.longitude, curr.latitude, curr.longitude, results)
+            val distanceMeters = results[2]
+            if (distanceMeters > MAX_JUMP_METERS) {
+                if (current.size >= 2) segments.add(current)
+                current = mutableListOf(curr)
+            } else {
+                current.add(curr)
+            }
+        }
+        if (current.size >= 2) segments.add(current)
+        return segments
+    }
+
     companion object {
         private const val TAG = "MapFragment"
         private const val KEY_FOLLOW_LOCK = "follow_lock"
+        /** Do not draw track across jumps larger than this (meters). 100 miles. */
+        private const val MAX_JUMP_METERS = 100f * 1609.344f
     }
 }
