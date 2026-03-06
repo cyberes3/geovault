@@ -58,6 +58,7 @@
               :color="track.color || '#3388ff'"
               :angle="getTrackDirectionAngle(track)"
               :size="24"
+              :selected="selectedId === track.id"
             />
           </div>
           <div class="flex-1 min-w-0">
@@ -180,19 +181,26 @@ const VALID_SORT_VALUES = new Set(['alphabetical', 'last_updated', 'num_points',
 const ARROW_PATH_D =
   'M29.9,28.6l-13-26c-0.3-0.7-1.4-0.7-1.8,0l-13,26c-0.2,0.4-0.1,0.8,0.2,1.1C2.5,30,3,30.1,3.4,29.9L16,25.1l12.6,4.9c0.1,0,0.2,0.1,0.4,0.1c0.3,0,0.5-0.1,0.7-0.3C30,29.4,30.1,28.9,29.9,28.6z';
 
-function getArrowImageId(color) {
-  return 'track-arrow-' + (color || '#3388ff').replace('#', '');
+function getArrowImageId(color, selected) {
+  const base = (color || '#3388ff').replace('#', '');
+  return 'track-arrow-' + (selected ? 'selected-' : '') + base;
 }
 
 /** 96px gives more source pixels for MapLibre's LINEAR sampling so scaled-down icons look cleaner (see draw_symbol.ts). */
 const ARROW_RASTER_SIZE = 96;
 
-/** SVG data URL for the direction arrow. Use width/height so decode is at desired size. */
-function getTrackArrowDataURL(color) {
+/** SVG data URL for the direction arrow. selected: white circle with black border around the chevron. */
+function getTrackArrowDataURL(color, selected) {
   const fill = color || '#3388ff';
+  const circle =
+    selected
+      ? '<circle cx="16" cy="16" r="15" fill="white" stroke="#000" stroke-width="1.5"/>'
+      : '';
+  const pathTransform = selected ? ' transform="translate(16,2.6) scale(0.8) translate(-16,-2.6)"' : '';
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="' + ARROW_RASTER_SIZE + '" height="' + ARROW_RASTER_SIZE + '" shape-rendering="geometricPrecision">' +
-    '<path fill="' + fill + '" stroke="#000" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" shape-rendering="geometricPrecision" d="' + ARROW_PATH_D + '"/>' +
+    circle +
+    '<path' + pathTransform + ' fill="' + fill + '" stroke="#000" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" shape-rendering="geometricPrecision" d="' + ARROW_PATH_D + '"/>' +
     '</svg>';
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
@@ -201,7 +209,7 @@ function getTrackArrowDataURL(color) {
  * Rasterize arrow SVG and return MapLibre image spec { width, height, data } so sprite size stays consistent.
  * Passing a canvas can cause "mismatched image size" when the sprite reads dimensions; explicit data avoids that.
  */
-function rasterizeArrowToImageData(color) {
+function rasterizeArrowToImageData(color, selected) {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
@@ -224,7 +232,7 @@ function rasterizeArrowToImageData(color) {
       });
     };
     img.onerror = () => resolve(null);
-    img.src = getTrackArrowDataURL(color);
+    img.src = getTrackArrowDataURL(color, selected);
   });
 }
 
@@ -407,14 +415,15 @@ export default {
         const pos = track.last_position ? [track.last_position.lon, track.last_position.lat] : (last && last.length >= 2 ? [last[0], last[1]] : null);
         if (!pos) continue;
         const color = track.color || '#3388ff';
+        const selected = selectedId.value === track.id;
         features.push({
           type: 'Feature',
           properties: {
             trackId: track.id,
             color,
-            selected: selectedId.value === track.id,
+            selected,
             rotation: getTrackDirectionAngle(track),
-            iconImage: getArrowImageId(color)
+            iconImage: getArrowImageId(color, selected)
           },
           geometry: { type: 'Point', coordinates: pos }
         });
@@ -422,10 +431,10 @@ export default {
       return { type: 'FeatureCollection', features };
     }
 
-    function ensureArrowImage(color) {
-      const id = getArrowImageId(color);
+    function ensureArrowImage(color, selected) {
+      const id = getArrowImageId(color, selected);
       if (map.hasImage(id)) return Promise.resolve();
-      return rasterizeArrowToImageData(color).then((imageData) => {
+      return rasterizeArrowToImageData(color, selected).then((imageData) => {
         if (imageData && map && map.getStyle() && !map.hasImage(id)) {
           map.addImage(id, imageData, { pixelRatio: 1 });
         }
@@ -439,8 +448,15 @@ export default {
       if (lineSource) lineSource.setData(buildLinesGeoJSON());
       if (!pointSource) return;
       const pointsGeoJSON = buildPointsGeoJSON();
-      const colors = [...new Set(pointsGeoJSON.features.map((f) => f.properties.color))];
-      await Promise.all(colors.map((c) => ensureArrowImage(c)));
+      const imageKeys = [...new Set(pointsGeoJSON.features.map((f) => `${f.properties.color}:${f.properties.selected}`))];
+      await Promise.all(
+        imageKeys.map((key) => {
+          const lastColon = key.lastIndexOf(':');
+          const color = key.slice(0, lastColon);
+          const selected = key.slice(lastColon + 1) === 'true';
+          return ensureArrowImage(color, selected);
+        })
+      );
       pointSource.setData(pointsGeoJSON);
     }
 
@@ -465,6 +481,13 @@ export default {
       return Math.max(clientConfig?.maxzoom ?? MAX_ZOOM, LAYER_MAX_ZOOM);
     }
 
+    const lineBlackOutlineLayerSpec = {
+      id: `${LINES_LAYER_ID}-black-outline`,
+      type: 'line',
+      source: LINES_SOURCE_ID,
+      paint: { 'line-color': '#000', 'line-width': 4, 'line-opacity': 1 },
+      layout: { 'line-join': 'round', 'line-cap': 'round' }
+    };
     const lineOutlineLayerSpec = {
       id: `${LINES_LAYER_ID}-outline`,
       type: 'line',
@@ -510,8 +533,8 @@ export default {
       }
       if (!map.getLayer(POINTS_LAYER_ID)) {
         const defaultColor = '#3388ff';
-        const defaultId = getArrowImageId(defaultColor);
-        const imageData = await rasterizeArrowToImageData(defaultColor);
+        const defaultId = getArrowImageId(defaultColor, false);
+        const imageData = await rasterizeArrowToImageData(defaultColor, false);
         if (imageData && !map.hasImage(defaultId)) map.addImage(defaultId, imageData, { pixelRatio: 1 });
         map.addLayer(pointsLayerSpec);
       }
@@ -520,6 +543,9 @@ export default {
       }
       if (!map.getLayer(LINES_LAYER_ID)) {
         map.addLayer(lineLayerSpec, POINTS_LAYER_ID);
+      }
+      if (!map.getLayer(`${LINES_LAYER_ID}-black-outline`)) {
+        map.addLayer(lineBlackOutlineLayerSpec, LINES_LAYER_ID);
       }
       await updateMapFeatures();
     }

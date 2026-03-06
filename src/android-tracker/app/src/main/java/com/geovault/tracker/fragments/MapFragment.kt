@@ -92,6 +92,7 @@ class MapFragment : Fragment() {
 
         followLockEnabled = savedInstanceState?.getBoolean(KEY_FOLLOW_LOCK, false) ?: false
         updateFollowLockButton()
+        updateZoomToLatestButtonState()
 
         mapManager = MapLibreManager(requireActivity(), mapView)
         mapManager.onStyleLoaded = { map, style ->
@@ -215,6 +216,12 @@ class MapFragment : Fragment() {
         }
     }
 
+    private fun updateZoomToLatestButtonState() {
+        val hasTrack = trackPoints.isNotEmpty()
+        zoomToLatestButton.isEnabled = hasTrack
+        zoomToLatestButton.alpha = if (hasTrack) 1f else 0.4f
+    }
+
     private fun updateLocationOnMap(location: Location) {
         val map = maplibreMap ?: return
         val latLng = LatLng(location.latitude, location.longitude)
@@ -223,6 +230,7 @@ class MapFragment : Fragment() {
             trackPoints.removeAt(0)
         }
         updateTrackLine()
+        updateZoomToLatestButtonState()
         if (followLockEnabled) {
             map.animateCamera(CameraUpdateFactory.newLatLng(latLng))
         }
@@ -231,7 +239,10 @@ class MapFragment : Fragment() {
     private fun fetchHistory() {
         val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val trackerId = prefs.getString("selected_tracker_id", "") ?: ""
-        if (trackerId.isEmpty()) return
+        if (trackerId.isEmpty()) {
+            updateZoomToLatestButtonState()
+            return
+        }
 
         TrackerRepository.getTracker(requireContext(), trackerId) { tracker ->
             mainScope.launch {
@@ -244,6 +255,7 @@ class MapFragment : Fragment() {
                         maplibreMap?.animateCamera(CameraUpdateFactory.newLatLng(trackPoints.last()))
                     }
                 }
+                updateZoomToLatestButtonState()
             }
         }
     }
@@ -252,6 +264,14 @@ class MapFragment : Fragment() {
         val manager = lineManager ?: return
         manager.deleteAll()
         if (trackPoints.size >= 2) {
+            val outlineColorInt = ContextCompat.getColor(requireContext(), R.color.track_line_outline)
+            val outlineColor = String.format("#%06X", 0xFFFFFF and outlineColorInt)
+            // Outline for all track lines (black in day, light grey in night)
+            manager.create(LineOptions()
+                .withLatLngs(trackPoints)
+                .withLineColor(outlineColor)
+                .withLineWidth(5f)
+            )
             manager.create(LineOptions()
                 .withLatLngs(trackPoints)
                 .withLineColor("#3388ff")

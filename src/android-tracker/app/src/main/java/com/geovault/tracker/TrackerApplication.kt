@@ -5,6 +5,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.map.MapStyleCache
@@ -50,6 +51,12 @@ class TrackerApplication : Application() {
     }
 
     private fun createNotificationChannels() {
+        // Delete old channel so Samsung (and others) get a fresh channel with correct importance.
+        // Channel importance is immutable after first creation; Samsung may have created it with different defaults.
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            manager.deleteNotificationChannel("tracker_service")
+        }
         // IMPORTANCE_LOW (not MIN): on Android P+ this compacts the notification to a single line.
         // IMPORTANCE_MIN with a foreground service causes the system to show an extra high-priority
         // "app running in background" notification.
@@ -66,7 +73,6 @@ class TrackerApplication : Application() {
             setLockscreenVisibility(Notification.VISIBILITY_SECRET)
             setBypassDnd(false)
         }
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(channel)
     }
 

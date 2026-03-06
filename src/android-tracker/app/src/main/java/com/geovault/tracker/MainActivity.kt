@@ -13,7 +13,9 @@ import android.provider.Settings
 import android.view.View
 import android.widget.EditText
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
@@ -37,6 +39,8 @@ class MainActivity : AppCompatActivity() {
     lateinit var database: AppDatabase
         private set
     private var isMainContentSetup = false
+    /** True while validation/setup is in progress after user tapped Start; tapping Stop clears this and aborts. */
+    private var isPreparingToTrack = false
     private var importantMessageSnackbar: ImportantMessageSnackbar? = null
 
     private val locationPermissionLauncher = registerForActivityResult(
@@ -136,7 +140,6 @@ class MainActivity : AppCompatActivity() {
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             headerLayout.updatePadding(top = insets.top + 20)
             mainContentLayout.updatePadding(bottom = insets.bottom)
-            view.findViewById<View>(R.id.importantMessageSnackbar)?.updatePadding(bottom = insets.bottom)
             WindowInsetsCompat.CONSUMED
         }
         ViewCompat.requestApplyInsets(rootView)
@@ -173,6 +176,106 @@ class MainActivity : AppCompatActivity() {
 
         updateNavTabBackground(savedTab)
         updatePermissionsState()
+
+        // Show "Connected as ..." toast after layout so it appears in the correct position (bottom)
+        intent?.getStringExtra(EXTRA_SIGNED_IN_EMAIL)?.let { email ->
+            rootView.post {
+                Toast.makeText(this, "Connected as $email", Toast.LENGTH_SHORT).show()
+            }
+            intent.removeExtra(EXTRA_SIGNED_IN_EMAIL)
+        }
+
+        // Restart-if-killed and start-on-launch
+        val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+        val restartIfKilled = prefs.getBoolean("restart_tracking_if_killed", true)
+        val wasTrackingBeforeExit = prefs.getBoolean(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT, false)
+        if (!restartIfKilled || TrackingService.isRunning) {
+            if (wasTrackingBeforeExit) {
+                prefs.edit().remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).apply()
+            }
+        } else {
+            tryResumeTrackingAfterKill()
+            return
+        }
+        if (!TrackingService.isRunning && prefs.getBoolean("start_tracking_on_launch", false)) {
+            tryStartTrackingOnLaunch()
+        }
+    }
+
+    private fun tryResumeTrackingAfterKill() {
+        val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+        val trackerId = prefs.getString("selected_tracker_id", "") ?: ""
+        if (trackerId.isEmpty()) {
+            prefs.edit().remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).apply()
+            return
+        }
+        tryStartTrackingSilently(
+            onInvalid = {
+                prefs.edit()
+                    .remove("selected_tracker_id")
+                    .remove("selected_tracker_name")
+                    .remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT)
+                    .apply()
+                TrackerRepository.clearCurrentTrackerCache()
+                TrackerRepository.clearCache()
+                TrackerRepository.getTrackers(this, forceRefresh = true) { }
+                showSnackbar(getString(R.string.tracker_validation_failed_go_to_settings))
+                val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
+                hf?.updateTrackingUi()
+            },
+            onValid = {
+                val intent = Intent(this, TrackingService::class.java).apply { action = TrackingService.ACTION_START }
+                startForegroundService(intent)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
+                    hf?.updateTrackingUi()
+                }, 300)
+                Toast.makeText(this, getString(R.string.resuming_tracking), Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
+    private fun tryStartTrackingOnLaunch() {
+        val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+        val trackerId = prefs.getString("selected_tracker_id", "") ?: ""
+        if (trackerId.isEmpty()) return
+        tryStartTrackingSilently(
+            onInvalid = {
+                prefs.edit()
+                    .remove("selected_tracker_id")
+                    .remove("selected_tracker_name")
+                    .apply()
+                TrackerRepository.clearCurrentTrackerCache()
+                TrackerRepository.clearCache()
+                TrackerRepository.getTrackers(this, forceRefresh = true) { }
+                showSnackbar(getString(R.string.tracker_validation_failed_go_to_settings))
+                val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
+                hf?.updateTrackingUi()
+            },
+            onValid = {
+                val intent = Intent(this, TrackingService::class.java).apply { action = TrackingService.ACTION_START }
+                startForegroundService(intent)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
+                    hf?.updateTrackingUi()
+                }, 300)
+                Toast.makeText(this, getString(R.string.tracking_started), Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
+    private fun tryStartTrackingSilently(
+        onInvalid: () -> Unit,
+        onValid: () -> Unit
+    ) {
+        val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+        val trackerId = prefs.getString("selected_tracker_id", "") ?: ""
+        if (trackerId.isEmpty()) return
+        TrackerRepository.checkTracker(this, trackerId) { valid ->
+            runOnUiThread {
+                if (valid) onValid() else onInvalid()
+            }
+        }
     }
     
     private fun updateNavTabBackground(position: Int) {
@@ -281,15 +384,38 @@ class MainActivity : AppCompatActivity() {
         homeFragment?.updatePermissionsUi()
     }
 
+    private fun showStopTrackingConfirmation(onConfirm: () -> Unit) {
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(getString(R.string.stop_tracking_confirm_title))
+            .setPositiveButton(getString(R.string.stop_tracking)) { _, _ -> onConfirm() }
+            .setNegativeButton(getString(R.string.cancel_button), null)
+            .show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(
+            ContextCompat.getColor(this, com.geovault.common.R.color.gv_common_dialog_positive_button)
+        )
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(
+            ContextCompat.getColor(this, com.geovault.common.R.color.gv_common_dialog_negative_button)
+        )
+    }
+
     fun toggleTracking() {
+        val homeFragment = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
+        if (isPreparingToTrack) {
+            showStopTrackingConfirmation {
+                isPreparingToTrack = false
+                homeFragment?.updateTrackingUi()
+            }
+            return
+        }
         val intent = Intent(this, TrackingService::class.java)
         if (TrackingService.isRunning) {
-            intent.action = TrackingService.ACTION_STOP
-            startService(intent)
-            Handler(Looper.getMainLooper()).postDelayed({
-                val homeFragment = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
-                homeFragment?.updateTrackingUi()
-            }, 300)
+            showStopTrackingConfirmation {
+                intent.action = TrackingService.ACTION_STOP
+                startService(intent)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    homeFragment?.updateTrackingUi()
+                }, 300)
+            }
             return
         }
         val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
@@ -298,10 +424,12 @@ class MainActivity : AppCompatActivity() {
             showSnackbar(getString(R.string.no_tracker_selected_go_to_settings))
             return
         }
-        val homeFragment = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
+        isPreparingToTrack = true
         homeFragment?.showPreparingState()
         TrackerRepository.checkTracker(this, trackerId) { valid ->
             runOnUiThread {
+                if (!isPreparingToTrack) return@runOnUiThread
+                isPreparingToTrack = false
                 if (!valid) {
                     prefs.edit()
                         .remove("selected_tracker_id")
@@ -311,15 +439,15 @@ class MainActivity : AppCompatActivity() {
                     TrackerRepository.clearCache()
                     TrackerRepository.getTrackers(this@MainActivity, forceRefresh = true) { }
                     showSnackbar(getString(R.string.tracker_validation_failed_go_to_settings))
-                    val homeFragment = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
-                    homeFragment?.updateTrackingUi()
+                    val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
+                    hf?.updateTrackingUi()
                     return@runOnUiThread
                 }
                 intent.action = TrackingService.ACTION_START
                 startForegroundService(intent)
                 Handler(Looper.getMainLooper()).postDelayed({
-                    val homeFragment = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
-                    homeFragment?.updateTrackingUi()
+                    val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
+                    hf?.updateTrackingUi()
                 }, 300)
             }
         }
@@ -363,5 +491,6 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val KEY_CURRENT_TAB = "current_tab"
+        const val EXTRA_SIGNED_IN_EMAIL = "signed_in_email"
     }
 }

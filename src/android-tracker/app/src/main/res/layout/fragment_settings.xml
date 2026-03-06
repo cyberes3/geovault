@@ -129,9 +129,10 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Select a tracker"
+                        android:text="@string/select_tracker"
                         android:textSize="16sp"
-                        android:textColor="@color/text_primary" />
+                        android:textColor="@color/text_secondary"
+                        android:textStyle="italic" />
 
                     <ImageView
                         android:layout_width="24dp"
@@ -277,9 +278,27 @@
                 android:text="Start tracking on boot"
                 android:textSize="16sp"
                 android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Restart tracking if app killed -->
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/restartTrackingIfKilledSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="@string/restart_tracking_if_killed_label"
+                android:textSize="16sp"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Start tracking when app is launched -->
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/startTrackingOnLaunchSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="@string/start_tracking_on_launch_label"
+                android:textSize="16sp"
+                android:textColor="@color/text_primary"
                 android:layout_marginBottom="16dp" />
-
-
 
         </LinearLayout>
 

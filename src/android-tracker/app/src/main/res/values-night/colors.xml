@@ -17,4 +17,7 @@
 
     <!-- Map underlay: pure black in dark mode -->
     <color name="map_underlay">#000000</color>
+
+    <!-- Track line outline: light grey in night mode -->
+    <color name="track_line_outline">#9ca3af</color>
 </resources>

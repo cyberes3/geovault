@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Direction arrow with white circle and black border (current/selected track style). Matches website LiveTrackView. -->
+<!-- Night mode: dark grey circle with darker border, arrow stroke darker for less glare on dark map. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="32dp"
     android:height="32dp"
     android:viewportWidth="32"
     android:viewportHeight="32">
-    <!-- White circle with black outer border -->
+    <!-- Dark grey circle with dark grey outer border -->
     <path
-        android:fillColor="#FFFFFF"
-        android:strokeColor="#000000"
+        android:fillColor="#3a3a3a"
+        android:strokeColor="#6b7280"
         android:strokeWidth="1.5"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
@@ -20,7 +20,7 @@
         android:pivotY="2.6">
         <path
             android:fillColor="#3388ff"
-            android:strokeColor="#000000"
+            android:strokeColor="#6b7280"
             android:strokeWidth="1.2"
             android:strokeLineCap="round"
             android:strokeLineJoin="round"

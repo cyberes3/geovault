@@ -60,8 +60,7 @@ class OAuthCallbackActivity : AppCompatActivity() {
                             TrackerApplication.prefetchIfNeeded(applicationContext)
                             GeovaultAuthManager.fetchUserStatus(this@OAuthCallbackActivity) { email ->
                                 runOnUiThread {
-                                    Toast.makeText(this@OAuthCallbackActivity, "Connected as $email", Toast.LENGTH_SHORT).show()
-                                    finish()
+                                    finish(signedInEmail = email)
                                 }
                             }
                         }
@@ -89,8 +88,14 @@ class OAuthCallbackActivity : AppCompatActivity() {
     }
 
     override fun finish() {
-        // Return to MainActivity which should then refresh status
-        startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
+        finish(signedInEmail = null)
+    }
+
+    private fun finish(signedInEmail: String?) {
+        val mainIntent = Intent(this, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        signedInEmail?.let { mainIntent.putExtra(MainActivity.EXTRA_SIGNED_IN_EMAIL, it) }
+        startActivity(mainIntent)
         super.finish()
     }
 }

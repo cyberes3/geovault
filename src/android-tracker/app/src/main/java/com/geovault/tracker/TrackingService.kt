@@ -40,7 +40,10 @@ class TrackingService : Service() {
         const val ACTION_START = "com.geovault.tracker.ACTION_START"
         const val ACTION_STOP = "com.geovault.tracker.ACTION_STOP"
         const val NOTIFICATION_ID = 101
-        const val CHANNEL_ID = "tracker_service"
+        /** Use v2 so Samsung (and others) get a fresh channel with IMPORTANCE_LOW; channel importance cannot be changed after first creation. */
+        const val CHANNEL_ID = "tracker_service_v2"
+        /** Group key so the notification can display collapsed on some devices (e.g. Samsung). */
+        private const val NOTIFICATION_GROUP_KEY = "tracker_service_group"
         const val SESSION_STATS_UPDATE = "com.geovault.tracker.SESSION_STATS_UPDATE"
 
         @Volatile
@@ -58,12 +61,21 @@ class TrackingService : Service() {
         @Volatile
         var lastPointSentAtMs: Long = 0
 
+        /** Total distance (meters) traveled this session. 0 when not tracking. */
+        @Volatile
+        var sessionTotalDistanceMeters: Float = 0f
+
+        /** Accuracy (meters) of the most recent location; null if unknown. */
+        @Volatile
+        var lastAccuracyMeters: Float? = null
+
         // Settings keys
         const val PREF_INTERVAL = "logging_interval"
         const val PREF_DISTANCE = "logging_distance"
         const val PREF_ACCURACY = "logging_accuracy"
         const val PREF_EXTENDED_PARAMS = "extended_params"
         const val PREF_SIGNIFICANT_MOTION = "significant_motion_only"
+        const val PREF_WAS_TRACKING_BEFORE_EXIT = "was_tracking_before_exit"
 
         /** Interval between retry attempts when the queue has failed-to-send items. */
         const val RETRY_INTERVAL_MS = 60_000L
@@ -138,11 +150,15 @@ class TrackingService : Service() {
         isTracking = true
         isRunning = true
         Log.d(TAG, "Starting tracking")
+        getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
+            .putBoolean(PREF_WAS_TRACKING_BEFORE_EXIT, true).apply()
 
         sessionStartTimeMs = System.currentTimeMillis()
         pointsSentThisSession = 0
         lastPointSentAtMs = 0
         totalDistanceMeters = 0f
+        sessionTotalDistanceMeters = 0f
+        lastAccuracyMeters = null
         sendBroadcast(Intent(SESSION_STATS_UPDATE))
 
         runBlocking(Dispatchers.IO) {
@@ -179,6 +195,8 @@ class TrackingService : Service() {
         isTracking = false
         isRunning = false
         sessionStartTimeMs = 0
+        getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
+            .remove(PREF_WAS_TRACKING_BEFORE_EXIT).apply()
         fusedLocationClient.removeLocationUpdates(locationCallback)
         cancelSignificantMotion()
         stopRetryJob()
@@ -191,11 +209,15 @@ class TrackingService : Service() {
     }
 
     private fun onLocationReceived(location: Location) {
+        // Always update last accuracy from the most recent fix so the UI shows current GPS fix quality
+        lastAccuracyMeters = if (location.hasAccuracy()) location.accuracy else null
+
         val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val accuracyFilter = prefs.getString(PREF_ACCURACY, "50")?.toFloatOrNull() ?: 50f
-        
+
         if (location.hasAccuracy() && location.accuracy > accuracyFilter) {
             Log.d(TAG, "Location discarded (accuracy ${location.accuracy} > $accuracyFilter)")
+            sendBroadcast(Intent(SESSION_STATS_UPDATE))
             return
         }
 
@@ -220,6 +242,7 @@ class TrackingService : Service() {
         }
         
         totalDistanceMeters += lastLocation?.distanceTo(location) ?: 0f
+        sessionTotalDistanceMeters = totalDistanceMeters
         lastLocation = location
 
         // Notify MainActivity if it's visible
@@ -359,12 +382,13 @@ class TrackingService : Service() {
             .setContentIntent(pendingIntent)
             .addAction(R.drawable.ic_close, getString(R.string.stop_tracking), stopPendingIntent)
             .setOngoing(true)
-            .setCategory(Notification.CATEGORY_SERVICE)
+            .setCategory(Notification.CATEGORY_SYSTEM)  // Helps Samsung show under "Silent" / minimized
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
             .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .setSortKey("\uFFFF")
+            .setGroup(NOTIFICATION_GROUP_KEY)  // Single-line / collapsed on some UIs (e.g. Samsung)
             .build()
     }
 
@@ -483,7 +507,7 @@ class TrackingService : Service() {
 
     private fun getBuildSerial(): String {
         return try {
-            if (Build.V.SDK_INT >= Build.VERSION_CODES.O) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 Build.getSerial() ?: ""
             } else {
                 ""

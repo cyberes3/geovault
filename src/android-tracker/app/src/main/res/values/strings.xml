@@ -28,6 +28,7 @@
     <string name="preparing">Preparing</string>
     <string name="start_tracking">Start Tracking</string>
     <string name="stop_tracking">Stop Tracking</string>
+    <string name="stop_tracking_confirm_title">Stop tracking?</string>
     <string name="tracking_duration">Tracking for %1$s</string>
     <string name="last_point_sent">Last point sent %1$s</string>
     <string name="points_sent_session">%1$d points sent this session</string>
@@ -36,6 +37,14 @@
     <string name="stat_label_sent">Sent</string>
     <string name="stat_label_last">Last</string>
     <string name="stat_label_queued">Queued</string>
+    <string name="stat_label_distance">Distance</string>
+    <string name="stat_label_accuracy">Accuracy</string>
+    <string name="stat_distance_meters">%1$d m</string>
+    <string name="stat_distance_km">%1$.1f km</string>
+    <string name="stat_distance_feet">%1$d ft</string>
+    <string name="stat_distance_miles">%1$.2f mi</string>
+    <string name="stat_accuracy_meters">±%1$d m</string>
+    <string name="stat_accuracy_feet">±%1$d ft</string>
 
     <!-- Places strings -->
     <string name="no_places">No places found</string>
@@ -85,5 +94,11 @@
     <string name="disable_battery_optimization">Disable Battery Optimization</string>
     <string name="location_permission_needed_first">Please grant location permission first</string>
     <string name="motion_sensor_unavailable_toast">Motion detection isn\'t available on this device</string>
+
+    <!-- Restart / start on launch -->
+    <string name="restart_tracking_if_killed_label">Restart tracking if app killed while tracking</string>
+    <string name="start_tracking_on_launch_label">Start tracking when app is launched</string>
+    <string name="resuming_tracking">Resuming tracking</string>
+    <string name="tracking_started">Tracking started</string>
 </resources>
 

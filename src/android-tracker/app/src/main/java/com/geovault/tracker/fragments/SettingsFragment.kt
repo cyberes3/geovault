@@ -1,6 +1,7 @@
 package com.geovault.tracker.fragments
 
 import android.content.Context
+import android.graphics.Typeface
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.os.Bundle
@@ -45,6 +46,8 @@ class SettingsFragment : Fragment() {
     private lateinit var significantMotionSwitch: SwitchCompat
     private lateinit var significantMotionRow: View
     private lateinit var startOnBootSwitch: SwitchCompat
+    private lateinit var restartTrackingIfKilledSwitch: SwitchCompat
+    private lateinit var startTrackingOnLaunchSwitch: SwitchCompat
 
     private fun normalizeServerUrl(url: String): String {
         var serverUrl = url.trim().trimStart('/').trimEnd('/')
@@ -146,6 +149,8 @@ class SettingsFragment : Fragment() {
         significantMotionSwitch = view.findViewById(R.id.significantMotionSwitch)
         significantMotionRow = view.findViewById(R.id.significantMotionRow)
         startOnBootSwitch = view.findViewById(R.id.startOnBootSwitch)
+        restartTrackingIfKilledSwitch = view.findViewById(R.id.restartTrackingIfKilledSwitch)
+        startTrackingOnLaunchSwitch = view.findViewById(R.id.startTrackingOnLaunchSwitch)
 
         loadSettings()
         applyMotionSensorAvailability()
@@ -169,6 +174,14 @@ class SettingsFragment : Fragment() {
 
         startOnBootSwitch.setOnCheckedChangeListener { _, isChecked ->
             saveSetting("start_on_boot", isChecked)
+        }
+
+        restartTrackingIfKilledSwitch.setOnCheckedChangeListener { _, isChecked ->
+            saveSetting("restart_tracking_if_killed", isChecked)
+        }
+
+        startTrackingOnLaunchSwitch.setOnCheckedChangeListener { _, isChecked ->
+            saveSetting("start_tracking_on_launch", isChecked)
         }
 
         view.findViewById<View>(R.id.loggingHelpButton).setOnClickListener { showLoggingHelpDialog() }
@@ -216,6 +229,8 @@ class SettingsFragment : Fragment() {
         extendedParamsSwitch.isChecked = prefs.getBoolean("extended_params", true)
         significantMotionSwitch.isChecked = prefs.getBoolean("significant_motion_only", true)
         startOnBootSwitch.isChecked = prefs.getBoolean("start_on_boot", false)
+        restartTrackingIfKilledSwitch.isChecked = prefs.getBoolean("restart_tracking_if_killed", true)
+        startTrackingOnLaunchSwitch.isChecked = prefs.getBoolean("start_tracking_on_launch", false)
 
         intervalEdit.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) {
@@ -359,7 +374,7 @@ class SettingsFragment : Fragment() {
                             if (newTracker != null) {
                                 saveSelectedTracker(newTracker.id, newTracker.name)
                                 TrackerRepository.clearCurrentTrackerCache()
-                                selectedTrackerText.text = newTracker.name
+                                setSelectedTrackerDisplay(newTracker.name, isPlaceholder = false)
                                 Toast.makeText(requireContext(), "Tracker '${newTracker.name}' created", Toast.LENGTH_SHORT).show()
                                 fetchTrackers(forceRefresh = true) {
                                     cancelTrackerOperationTimeout()
@@ -395,14 +410,26 @@ class SettingsFragment : Fragment() {
 
     private fun showTrackerSpinnerPlaceholder() {
         val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+        val savedId = prefs.getString("selected_tracker_id", null)
         val savedName = prefs.getString("selected_tracker_name", null)
-        selectedTrackerText.text = when {
-            !savedName.isNullOrBlank() -> savedName
-            else -> getString(R.string.loading_trackers)
+        val hasSelection = !savedId.isNullOrBlank() && !savedName.isNullOrBlank()
+        if (hasSelection) {
+            setSelectedTrackerDisplay(savedName!!, isPlaceholder = false)
+        } else {
+            setSelectedTrackerDisplay(getString(R.string.loading_trackers), isPlaceholder = true)
         }
         val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, listOf(selectedTrackerText.text))
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         trackerSpinner.adapter = adapter
+    }
+
+    private fun setSelectedTrackerDisplay(text: String, isPlaceholder: Boolean) {
+        selectedTrackerText.text = text
+        selectedTrackerText.setTextColor(
+            ContextCompat.getColor(requireContext(), if (isPlaceholder) R.color.text_secondary else R.color.text_primary)
+        )
+        val style = if (isPlaceholder) Typeface.ITALIC else Typeface.NORMAL
+        selectedTrackerText.setTypeface(Typeface.create(selectedTrackerText.typeface, style))
     }
 
     private fun showTrackerSelectionDialog() {
@@ -429,7 +456,7 @@ class SettingsFragment : Fragment() {
             .setTitle(R.string.select_tracker)
             .setSingleChoiceItems(names, selectedIndex) { dialog, which ->
                 val tracker = trackers.getOrNull(which) ?: return@setSingleChoiceItems
-                selectedTrackerText.text = tracker.name
+                setSelectedTrackerDisplay(tracker.name, isPlaceholder = false)
                 dialog.dismiss()
                 saveSelectedTracker(tracker.id, tracker.name)
                 TrackerRepository.clearCurrentTrackerCache()
@@ -457,7 +484,7 @@ class SettingsFragment : Fragment() {
 
     private fun setupTrackerSpinner() {
         if (trackers.isEmpty()) {
-            selectedTrackerText.text = getString(R.string.no_trackers_found)
+            setSelectedTrackerDisplay(getString(R.string.no_trackers_found), isPlaceholder = true)
             val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, listOf(getString(R.string.no_trackers_found)))
             trackerSpinner.adapter = adapter
             return
@@ -473,9 +500,9 @@ class SettingsFragment : Fragment() {
         val currentIndex = trackers.indexOfFirst { it.id == currentId }
         if (currentIndex >= 0) {
             trackerSpinner.setSelection(currentIndex)
-            selectedTrackerText.text = trackers[currentIndex].name
+            setSelectedTrackerDisplay(trackers[currentIndex].name, isPlaceholder = false)
         } else {
-            selectedTrackerText.text = trackers.firstOrNull()?.name ?: getString(R.string.select_tracker)
+            setSelectedTrackerDisplay(getString(R.string.select_tracker), isPlaceholder = true)
         }
     }
 

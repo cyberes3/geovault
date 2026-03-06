@@ -1,6 +1,10 @@
 package com.geovault.tracker.fragments
 
-import android.content.*
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -27,7 +31,9 @@ class HomeFragment : Fragment() {
     private lateinit var pointsSentSessionText: TextView
     private lateinit var startStopButton: MaterialButton
     private lateinit var currentLocationText: TextView
-    
+    private lateinit var distanceText: TextView
+    private lateinit var accuracyText: TextView
+
     private lateinit var trackingContentContainer: View
     private lateinit var permissionsContainer: View
     private lateinit var radarDishIcon: android.widget.ImageView
@@ -86,6 +92,8 @@ class HomeFragment : Fragment() {
         pointsSentSessionText = view.findViewById(R.id.pointsSentSessionText)
         startStopButton = view.findViewById(R.id.startStopButton)
         currentLocationText = view.findViewById(R.id.currentLocationText)
+        distanceText = view.findViewById(R.id.distanceText)
+        accuracyText = view.findViewById(R.id.accuracyText)
 
         startStopButton.setOnClickListener {
             (requireActivity() as MainActivity).toggleTracking()
@@ -201,19 +209,23 @@ class HomeFragment : Fragment() {
         }
     }
 
-    /** Show "Preparing" while pre-tracking validation/setup is in progress. */
+    /** Show "Preparing" and "Stop Tracking" button while pre-tracking validation/setup is in progress. */
     fun showPreparingState() {
         trackingStatusText.text = getString(R.string.preparing)
         trackingStatusText.setTextColor(
             ContextCompat.getColor(requireContext(), R.color.primary_blue)
         )
+        startStopButton.text = getString(R.string.stop_tracking)
     }
 
     fun updateTrackingUi() {
         val running = TrackingService.isRunning
         trackingStatusText.text = getString(if (running) R.string.tracking_active else R.string.not_tracking)
         trackingStatusText.setTextColor(
-            ContextCompat.getColor(requireContext(), R.color.primary_blue)
+            ContextCompat.getColor(
+                requireContext(),
+                if (running) R.color.warning_yellow else R.color.primary_blue
+            )
         )
         startStopButton.text = getString(if (running) R.string.stop_tracking else R.string.start_tracking)
         
@@ -243,6 +255,9 @@ class HomeFragment : Fragment() {
             trackingDurationText.text = "—"
             lastPointSentText.text = "—"
             pointsSentSessionText.text = "—"
+            queueCountText.text = "—"
+            distanceText.text = "—"
+            accuracyText.text = "—"
             return
         }
         val startMs = TrackingService.sessionStartTimeMs
@@ -251,9 +266,49 @@ class HomeFragment : Fragment() {
         val lastAgo = formatTimeAgo(TrackingService.lastPointSentAtMs)
         lastPointSentText.text = if (lastAgo == "now") lastAgo else "-$lastAgo"
         pointsSentSessionText.text = TrackingService.pointsSentThisSession.toString()
+        val useImperial = usesImperialUnits(requireContext())
+        distanceText.text = formatDistance(TrackingService.sessionTotalDistanceMeters, useImperial)
+        val acc = TrackingService.lastAccuracyMeters
+        accuracyText.text = if (acc != null) formatAccuracy(acc, useImperial) else "—"
+    }
+
+    private fun usesImperialUnits(context: Context): Boolean {
+        val country = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val locales = context.resources.configuration.locales
+            if (locales.size() > 0) locales.get(0).country else null
+        } else {
+            @Suppress("DEPRECATION")
+            context.resources.configuration.locale.country
+        }
+        return country in setOf("US", "LR", "MM")
+    }
+
+    private fun formatDistance(meters: Float, imperial: Boolean): String {
+        if (imperial) {
+            val feet = meters * 3.28084f
+            return if (feet < 5280f) {
+                getString(R.string.stat_distance_feet, feet.toInt())
+            } else {
+                getString(R.string.stat_distance_miles, feet / 5280f)
+            }
+        }
+        return when {
+            meters < 1000f -> getString(R.string.stat_distance_meters, meters.toInt())
+            else -> getString(R.string.stat_distance_km, meters / 1000f)
+        }
+    }
+
+    private fun formatAccuracy(meters: Float, imperial: Boolean): String {
+        val value = if (imperial) (meters * 3.28084f).toInt() else meters.toInt()
+        val resId = if (imperial) R.string.stat_accuracy_feet else R.string.stat_accuracy_meters
+        return getString(resId, value)
     }
 
     private fun updateQueueCount() {
+        if (!TrackingService.isRunning) {
+            queueCountText.text = "—"
+            return
+        }
         val mainActivity = activity as? MainActivity ?: return
         mainActivity.updateQueueCountFromFragment(queueCountText)
     }

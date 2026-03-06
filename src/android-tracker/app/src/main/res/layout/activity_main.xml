@@ -45,14 +45,19 @@
             android:layout_weight="1" />
 
         <!-- Bottom Navigation (elevation so it stays above map content and receives touches correctly) -->
-        <LinearLayout
-            android:id="@+id/bottomNavBar"
+        <FrameLayout
+            android:id="@+id/bottomNavContainer"
             android:layout_width="match_parent"
             android:layout_height="64dp"
             android:elevation="8dp"
-            android:orientation="horizontal"
-            android:background="@color/primary_blue"
-            android:gravity="center">
+            android:background="@color/primary_blue">
+
+            <LinearLayout
+                android:id="@+id/bottomNavBar"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:gravity="center">
 
             <LinearLayout
                 android:id="@+id/navHome"
@@ -126,18 +131,19 @@
                     android:textColor="@color/content_on_primary" />
             </LinearLayout>
 
-        </LinearLayout>
+            </LinearLayout>
+
+            <!-- Important message bar: vertically centered in nav bar -->
+            <com.geovault.common.ImportantMessageSnackbar
+                android:id="@+id/importantMessageSnackbar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp" />
+
+        </FrameLayout>
 
     </LinearLayout>
-
-    <!-- Important message bar from common: tap to dismiss, auto-dismisses after 15s -->
-    <com.geovault.common.ImportantMessageSnackbar
-        android:id="@+id/importantMessageSnackbar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="16dp" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
