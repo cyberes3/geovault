@@ -170,10 +170,11 @@ class TrackingService : Service() {
         val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val intervalSec = prefs.getString(PREF_INTERVAL, "15")?.toLongOrNull() ?: 15L
         val distanceFilter = prefs.getString(PREF_DISTANCE, "10")?.toFloatOrNull() ?: 10f
+        val (intervalMs, minUpdateMs) = TrackingLocationPolicy.locationRequestIntervalFromSec(intervalSec)
 
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalSec * 1000)
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
             .setMinUpdateDistanceMeters(distanceFilter)
-            .setMinUpdateIntervalMillis((intervalSec * 1000) / 2)
+            .setMinUpdateIntervalMillis(minUpdateMs)
             .build()
 
         isGpsPaused = false
@@ -215,7 +216,7 @@ class TrackingService : Service() {
         val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val accuracyFilter = prefs.getString(PREF_ACCURACY, "50")?.toFloatOrNull() ?: 50f
 
-        if (location.hasAccuracy() && location.accuracy > accuracyFilter) {
+        if (!TrackingLocationPolicy.acceptByAccuracy(location, accuracyFilter)) {
             Log.d(TAG, "Location discarded (accuracy ${location.accuracy} > $accuracyFilter)")
             sendBroadcast(Intent(SESSION_STATS_UPDATE))
             return
@@ -223,22 +224,16 @@ class TrackingService : Service() {
 
         Log.d(TAG, "Location received: ${location.latitude}, ${location.longitude}")
         val sigMotionOnly = prefs.getBoolean(PREF_SIGNIFICANT_MOTION, true)
+        val distanceFilter = prefs.getString(PREF_DISTANCE, "10")?.toFloatOrNull() ?: 10f
 
-        if (sigMotionOnly) {
-            val dist = lastLocation?.distanceTo(location) ?: Float.MAX_VALUE
-            val distanceFilter = prefs.getString(PREF_DISTANCE, "10")?.toFloatOrNull() ?: 10f
-            
-            if (dist < distanceFilter) {
-                consecutiveStationaryPoints++
-                Log.d(TAG, "Stationary point count: $consecutiveStationaryPoints")
-            } else {
-                consecutiveStationaryPoints = 0
-            }
-
-            if (consecutiveStationaryPoints >= 3) {
-                Log.d(TAG, "User stationary for 3 points, pausing GPS")
-                pauseGps()
-            }
+        val (newConsecutive, shouldPause) = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation, location, distanceFilter, consecutiveStationaryPoints, sigMotionOnly
+        )
+        consecutiveStationaryPoints = newConsecutive
+        if (newConsecutive > 0) Log.d(TAG, "Stationary point count: $consecutiveStationaryPoints")
+        if (shouldPause) {
+            Log.d(TAG, "User stationary for 3 points, pausing GPS")
+            pauseGps()
         }
         
         totalDistanceMeters += lastLocation?.distanceTo(location) ?: 0f
@@ -457,10 +452,11 @@ class TrackingService : Service() {
             val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
             val intervalSec = prefs.getString(PREF_INTERVAL, "15")?.toLongOrNull() ?: 15L
             val distanceFilter = prefs.getString(PREF_DISTANCE, "10")?.toFloatOrNull() ?: 10f
+            val (intervalMs, minUpdateMs) = TrackingLocationPolicy.locationRequestIntervalFromSec(intervalSec)
 
-            val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalSec * 1000)
+            val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
                 .setMinUpdateDistanceMeters(distanceFilter)
-                .setMinUpdateIntervalMillis((intervalSec * 1000) / 2)
+                .setMinUpdateIntervalMillis(minUpdateMs)
                 .build()
 
             try {
