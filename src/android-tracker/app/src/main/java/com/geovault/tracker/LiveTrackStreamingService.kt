@@ -54,6 +54,12 @@ class LiveTrackStreamingService : Service() {
         private const val WS_PING_INTERVAL_SEC = 30L
         private const val MAX_BUFFERED_POINTS = 1000
 
+        /** True while the service is actively running in foreground. */
+        @Volatile
+        @JvmStatic
+        var isRunning = false
+            private set
+
         /**
          * In-memory buffer of streamed points. Points are added by the service
          * and drained by MapFragment on resume so no data is lost when the
@@ -85,7 +91,6 @@ class LiveTrackStreamingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -93,28 +98,44 @@ class LiveTrackStreamingService : Service() {
             ACTION_START -> {
                 val trackerId = intent.getStringExtra(EXTRA_TRACKER_ID)
                 val trackerName = intent.getStringExtra(EXTRA_TRACKER_NAME)
+
+                // Show notification immediately to satisfy Android 14+ contract
+                val notification = createNotification(trackerName)
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                isRunning = true
+
                 if (!trackerId.isNullOrBlank()) {
+                    // Debounce: If already streaming this tracker, don't restart WebSocket
+                    if (trackerId == currentTrackerId && webSocket != null) {
+                        Log.d(TAG, "Already streaming tracker $trackerId, skipping reset")
+                        return START_NOT_STICKY
+                    }
+
                     // Close previous WebSocket if switching trackers
-                    disconnect()
+                    disconnectWebSocket()
                     pointBuffer.clear()
                     currentTrackerId = trackerId
                     currentTrackerName = trackerName
                     reconnectAttempts = 0
-                    val notification = createNotification(trackerName)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-                    } else {
-                        startForeground(NOTIFICATION_ID, notification)
-                    }
+                    
                     connectJob?.cancel()
                     connectJob = serviceScope.launch { connect(trackerName) }
                 } else {
+                    Log.w(TAG, "ACTION_START received with null/empty trackerId")
+                    isRunning = false
+                    stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                 }
             }
             ACTION_STOP -> {
-                disconnect()
+                disconnectWebSocket()
+                isRunning = false
                 stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
+            else -> {
+                // Service was created by startService() without a valid action
+                // (e.g. spurious stop when not running). Just stop immediately.
                 stopSelf()
             }
         }
@@ -125,30 +146,18 @@ class LiveTrackStreamingService : Service() {
 
     override fun onDestroy() {
         connectJob?.cancel()
-        disconnect()
+        disconnectWebSocket()
+        isRunning = false
         super.onDestroy()
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         Log.d(TAG, "Task removed, stopping streaming service")
-        disconnect()
+        disconnectWebSocket()
+        isRunning = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
         super.onTaskRemoved(rootIntent)
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.live_track_streaming_channel),
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                setShowBadge(false)
-            }
-            (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
-                .createNotificationChannel(channel)
-        }
     }
 
     private fun createNotification(trackerName: String?): Notification {
@@ -156,6 +165,12 @@ class LiveTrackStreamingService : Service() {
             this, 0,
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val stopIntent = Intent(this, MainActivity::class.java).apply {
+            action = ACTION_STOP
+        }
+        val stopPendingIntent = PendingIntent.getActivity(
+            this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val title = getString(R.string.live_track_streaming_title)
         val text = trackerName?.takeIf { it.isNotBlank() }?.let {
@@ -166,9 +181,16 @@ class LiveTrackStreamingService : Service() {
             .setContentText(text)
             .setSmallIcon(R.drawable.ic_radio)
             .setContentIntent(pendingIntent)
+            .addAction(R.drawable.ic_close, getString(R.string.stop_streaming), stopPendingIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(Notification.CATEGORY_SERVICE)
+            .setCategory(Notification.CATEGORY_SYSTEM)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+            .setSortKey("\uFFFF")
+            .setGroup("geovault_service_group")
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
 
@@ -183,9 +205,9 @@ class LiveTrackStreamingService : Service() {
                 }
             }
             if (token.isNullOrBlank()) {
-                Log.w(TAG, "No token, stopping streaming")
-                stopSelf()
-                return
+                Log.w(TAG, "No token, retrying in 5s")
+                delay(5000L)
+                continue
             }
             val serverUrl = GeovaultAuthManager.getServerUrl(applicationContext).trimEnd('/')
             if (serverUrl.isEmpty()) {
@@ -258,7 +280,11 @@ class LiveTrackStreamingService : Service() {
         }
     }
 
-    private fun disconnect() {
+    /**
+     * Close WebSocket and cancel reconnect jobs.
+     * Does NOT update isRunning (the caller is responsible for that).
+     */
+    private fun disconnectWebSocket() {
         currentTrackerId = null
         currentTrackerName = null
         connectJob?.cancel()

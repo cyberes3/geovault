@@ -40,10 +40,9 @@ class TrackingService : Service() {
         const val ACTION_START = "com.geovault.tracker.ACTION_START"
         const val ACTION_STOP = "com.geovault.tracker.ACTION_STOP"
         const val NOTIFICATION_ID = 101
-        /** Use v2 so Samsung (and others) get a fresh channel with IMPORTANCE_LOW; channel importance cannot be changed after first creation. */
-        const val CHANNEL_ID = "tracker_service_v2"
-        /** Group key so the notification can display collapsed on some devices (e.g. Samsung). */
-        private const val NOTIFICATION_GROUP_KEY = "tracker_service_group"
+        const val CHANNEL_ID = "tracker_service"
+        /** Group key so both services can collapse together on some devices (e.g. Samsung). */
+        private const val NOTIFICATION_GROUP_KEY = "geovault_service_group"
         const val SESSION_STATS_UPDATE = "com.geovault.tracker.SESSION_STATS_UPDATE"
 
         @Volatile
@@ -425,6 +424,7 @@ class TrackingService : Service() {
             .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .setSortKey("\uFFFF")
             .setGroup(NOTIFICATION_GROUP_KEY)  // Single-line / collapsed on some UIs (e.g. Samsung)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
 
@@ -545,11 +545,7 @@ class TrackingService : Service() {
 
     private fun getBuildSerial(): String {
         return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                Build.getSerial() ?: ""
-            } else {
-                ""
-            }
+            Build.getSerial() ?: ""
         } catch (e: SecurityException) {
             ""
         }

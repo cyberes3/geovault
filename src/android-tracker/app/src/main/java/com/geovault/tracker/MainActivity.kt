@@ -70,11 +70,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (intent?.action == TrackingService.ACTION_STOP) {
-            getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
-                .remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).commit()
-            startService(Intent(this, TrackingService::class.java).apply { action = TrackingService.ACTION_STOP })
-        }
+        handleIntentAction(intent)
         if (!GeovaultAuthManager.isLoggedIn(this)) {
             isGuestView = true
             setContentView(R.layout.activity_main_guest)
@@ -88,10 +84,22 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent.action == TrackingService.ACTION_STOP && !isGuestView) {
+        if (!isGuestView) {
+            handleIntentAction(intent)
+        }
+    }
+
+    private fun handleIntentAction(intent: Intent?) {
+        val action = intent?.action ?: return
+        if (action == TrackingService.ACTION_STOP) {
             getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
                 .remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).commit()
-            startService(Intent(this, TrackingService::class.java).apply { action = TrackingService.ACTION_STOP })
+            startService(Intent(this, TrackingService::class.java).apply { this.action = action })
+        } else if (action == LiveTrackStreamingService.ACTION_STOP) {
+            startService(Intent(this, LiveTrackStreamingService::class.java).apply { this.action = action })
+            if (isMainContentSetup) {
+                (pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.MapFragment)?.restoreTrackForSelectedTracker()
+            }
         }
     }
 
@@ -494,9 +502,6 @@ class MainActivity : AppCompatActivity() {
     }
     
     fun hasNotificationPermission(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            return true
-        }
         return ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     }
     
@@ -526,9 +531,7 @@ class MainActivity : AppCompatActivity() {
     }
     
     fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
+        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
     
     fun requestBatteryOptimizationExemption() {

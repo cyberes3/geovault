@@ -61,6 +61,8 @@ class MapFragment : Fragment() {
     private lateinit var mapToggle: View
     private lateinit var zoomToLatestButton: View
     private lateinit var zoomToLatestButtonIcon: ImageView
+    private lateinit var zoomInButton: View
+    private lateinit var zoomOutButton: View
     private lateinit var geometryLoadingSpinner: LoadingSpinner
     private lateinit var lastUpdatedLabel: TextView
 
@@ -157,6 +159,8 @@ class MapFragment : Fragment() {
         mapToggle = view.findViewById(R.id.mapToggle)
         zoomToLatestButton = view.findViewById(R.id.zoomToLatestButton)
         zoomToLatestButtonIcon = view.findViewById(R.id.zoomToLatestButtonIcon)
+        zoomInButton = view.findViewById(R.id.zoomInButton)
+        zoomOutButton = view.findViewById(R.id.zoomOutButton)
         geometryLoadingSpinner = view.findViewById(R.id.geometryLoadingSpinner)
         lastUpdatedLabel = view.findViewById(R.id.lastUpdatedLabel)
 
@@ -286,6 +290,13 @@ class MapFragment : Fragment() {
                 maplibreMap?.moveCamera(CameraUpdateFactory.newLatLngZoom(trackPoints.last(), 16.0))
             }
             updateFollowLockButton()
+        }
+
+        zoomInButton.setOnClickListener {
+            maplibreMap?.animateCamera(CameraUpdateFactory.zoomBy(1.0), 200)
+        }
+        zoomOutButton.setOnClickListener {
+            maplibreMap?.animateCamera(CameraUpdateFactory.zoomBy(-1.0), 200)
         }
     }
 
@@ -642,7 +653,6 @@ class MapFragment : Fragment() {
             
             if (trackPoints.isNotEmpty()) {
                 updateTrackLine()
-                startLiveTrackStreamingForDisplayedTracker()
                 
                 // Show layers once we have some data (either initial or full)
                 setAnnotationLayersVisibility(true)
@@ -676,13 +686,15 @@ class MapFragment : Fragment() {
         }
 
         updateTrackerLabel()
+        // Start streaming immediately — don't wait for full geometry to load
+        startLiveTrackStreamingForDisplayedTracker()
         fetchFullGeometryAndApply(loadTrackerId)
     }
 
     /**
      * Refetch and redraw the selected tracker's track without moving the camera.
      */
-    private fun restoreTrackForSelectedTracker() {
+    fun restoreTrackForSelectedTracker() {
         stopLiveTrackStreaming()
         trackPoints.clear()
         trackTimestamps.clear()
@@ -801,6 +813,7 @@ class MapFragment : Fragment() {
     }
 
     private fun stopLiveTrackStreaming() {
+        if (!LiveTrackStreamingService.isRunning) return
         val intent = Intent(requireContext(), LiveTrackStreamingService::class.java).apply {
             action = LiveTrackStreamingService.ACTION_STOP
         }

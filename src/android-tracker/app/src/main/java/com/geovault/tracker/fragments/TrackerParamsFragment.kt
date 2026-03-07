@@ -200,13 +200,8 @@ class TrackerParamsFragment : Fragment() {
 }
 
 private fun usesImperialUnits(context: Context): Boolean {
-    val country = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-        val locales = context.resources.configuration.locales
-        if (locales.size() > 0) locales.get(0).country else null
-    } else {
-        @Suppress("DEPRECATION")
-        context.resources.configuration.locale.country
-    }
+    val locales = context.resources.configuration.locales
+    val country = if (locales.size() > 0) locales.get(0).country else null
     return country in setOf("US", "LR", "MM")
 }
 

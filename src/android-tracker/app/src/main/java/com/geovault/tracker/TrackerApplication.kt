@@ -51,16 +51,12 @@ class TrackerApplication : Application() {
     }
 
     private fun createNotificationChannels() {
-        // Delete old channel so Samsung (and others) get a fresh channel with correct importance.
-        // Channel importance is immutable after first creation; Samsung may have created it with different defaults.
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.deleteNotificationChannel("tracker_service")
-        }
+        // Add channel for Location Tracking Service (GPS)
         // IMPORTANCE_LOW (not MIN): on Android P+ this compacts the notification to a single line.
         // IMPORTANCE_MIN with a foreground service causes the system to show an extra high-priority
         // "app running in background" notification.
-        val channel = NotificationChannel(
+        val trackerChannel = NotificationChannel(
             TrackingService.CHANNEL_ID,
             "Location Tracking Service",
             NotificationManager.IMPORTANCE_LOW
@@ -73,7 +69,23 @@ class TrackerApplication : Application() {
             setLockscreenVisibility(Notification.VISIBILITY_SECRET)
             setBypassDnd(false)
         }
-        manager.createNotificationChannel(channel)
+        manager.createNotificationChannel(trackerChannel)
+
+        // Add channel for Live Track Streaming (WebSocket)
+        val streamingChannel = NotificationChannel(
+            "live_track_streaming",
+            "Live Track Streaming",
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = "Persistent notification for live tracker streaming"
+            setShowBadge(false)
+            enableVibration(false)
+            setSound(null, null)
+            enableLights(false)
+            setLockscreenVisibility(Notification.VISIBILITY_SECRET)
+            setBypassDnd(false)
+        }
+        manager.createNotificationChannel(streamingChannel)
     }
 
     private fun isMapTilerHost(host: String?): Boolean =

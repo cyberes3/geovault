@@ -92,6 +92,8 @@
     <string name="recenter_to_tracker">Return to selected tracker</string>
     <string name="zoom_to_latest_description">Lock camera to follow latest track point</string>
     <string name="follow_lock_on_description">Unlock camera (stop following track)</string>
+    <string name="zoom_in_description">Zoom in</string>
+    <string name="zoom_out_description">Zoom out</string>
     <string name="map_select_place">Select a place</string>
     <string name="map_tap_marker_hint">Tap a marker to view details</string>
 
@@ -176,5 +178,6 @@
     <string name="live_track_streaming_text">%1$s</string>
     <string name="live_track_streaming_text_anon">Track updates</string>
     <string name="live_track_streaming_channel">Track streaming</string>
+    <string name="stop_streaming">Stop Streaming</string>
 </resources>
 

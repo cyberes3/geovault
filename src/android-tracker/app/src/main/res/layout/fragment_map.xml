@@ -93,11 +93,33 @@
     </com.google.android.material.card.MaterialCardView>
 
     <com.google.android.material.card.MaterialCardView
-        android:id="@+id/mapToggle"
+        android:id="@+id/zoomToLatestButton"
         android:layout_width="44dp"
         android:layout_height="44dp"
         android:layout_gravity="top|end"
         android:layout_marginTop="16dp"
+        android:layout_marginEnd="16dp"
+        android:clickable="true"
+        android:focusable="true"
+        app:cardCornerRadius="22dp"
+        app:cardElevation="6dp"
+        app:cardBackgroundColor="@color/primary_blue">
+        <ImageView
+            android:id="@+id/zoomToLatestButtonIcon"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:src="@drawable/ic_crosshair"
+            android:contentDescription="@string/zoom_to_latest_description"
+            app:tint="@color/content_on_primary"
+            android:padding="10dp" />
+    </com.google.android.material.card.MaterialCardView>
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/mapToggle"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="68dp"
         android:layout_marginEnd="16dp"
         android:clickable="true"
         android:focusable="true"
@@ -114,11 +136,11 @@
     </com.google.android.material.card.MaterialCardView>
 
     <com.google.android.material.card.MaterialCardView
-        android:id="@+id/zoomToLatestButton"
+        android:id="@+id/zoomInButton"
         android:layout_width="44dp"
         android:layout_height="44dp"
         android:layout_gravity="top|end"
-        android:layout_marginTop="68dp"
+        android:layout_marginTop="120dp"
         android:layout_marginEnd="16dp"
         android:clickable="true"
         android:focusable="true"
@@ -126,11 +148,31 @@
         app:cardElevation="6dp"
         app:cardBackgroundColor="@color/primary_blue">
         <ImageView
-            android:id="@+id/zoomToLatestButtonIcon"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:src="@drawable/ic_crosshair"
-            android:contentDescription="@string/zoom_to_latest_description"
+            android:src="@drawable/ic_add"
+            android:contentDescription="@string/zoom_in_description"
+            app:tint="@color/content_on_primary"
+            android:padding="10dp" />
+    </com.google.android.material.card.MaterialCardView>
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/zoomOutButton"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="168dp"
+        android:layout_marginEnd="16dp"
+        android:clickable="true"
+        android:focusable="true"
+        app:cardCornerRadius="22dp"
+        app:cardElevation="6dp"
+        app:cardBackgroundColor="@color/primary_blue">
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:src="@drawable/ic_remove"
+            android:contentDescription="@string/zoom_out_description"
             app:tint="@color/content_on_primary"
             android:padding="10dp" />
     </com.google.android.material.card.MaterialCardView>
