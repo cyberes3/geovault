@@ -123,7 +123,14 @@ def track_to_response(
 
 def track_to_response_metadata_only(track: LiveTrack, include_secret: bool = False) -> dict:
     """Tracker metadata + latest point params only (no full geometry). For GET trackers/<id>/."""
+    geom = track.geometry or {"type": "LineString", "coordinates": []}
+    coords = geom.get("coordinates") or []
     point_params = track.point_params or []
+    
+    window_key = (track.settings or {}).get("recent_data_window")
+    if window_key:
+        coords, point_params = _filter_coords_by_recent_window(coords, point_params, window_key)
+
     latest_params = [copy.deepcopy(point_params[-1])] if point_params else []
     for p in latest_params:
         if "acc" in p and isinstance(p["acc"], (int, float)):
@@ -136,9 +143,6 @@ def track_to_response_metadata_only(track: LiveTrack, include_secret: bool = Fal
                     p[k] = int(round(v / 1000.0))
                 else:
                     p[k] = int(round(v))
-    
-    geom = track.geometry or {"type": "LineString", "coordinates": []}
-    coords = geom.get("coordinates") or []
     last_point = None
     if coords:
         lp = coords[-1]

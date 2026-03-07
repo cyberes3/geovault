@@ -74,16 +74,16 @@ class TrackersFragment : Fragment() {
                 TrackerAction.VIEW_PARAMS -> (activity as? MainActivity)?.showTrackerParamsFragment(
                     tracker.id,
                     tracker.name,
-                    lastUpdateMs = (tracker.geometry?.coordinates?.lastOrNull() ?: tracker.last_point)?.let { c ->
+                    lastUpdateMs = tracker.last_point?.let { c ->
                         if (c.size >= 3) {
                             val t = (c[2] as? Number)?.toLong() ?: return@let null
                             if (t < 1e12) t * 1000 else t
                         } else null
                     },
-                    positionLat = (tracker.geometry?.coordinates?.lastOrNull() ?: tracker.last_point)?.let { c ->
+                    positionLat = tracker.last_point?.let { c ->
                         if (c.size >= 2) (c[1] as? Number)?.toDouble() else null
                     },
-                    positionLon = (tracker.geometry?.coordinates?.lastOrNull() ?: tracker.last_point)?.let { c ->
+                    positionLon = tracker.last_point?.let { c ->
                         if (c.size >= 2) (c[0] as? Number)?.toDouble() else null
                     }
                 )
@@ -270,8 +270,7 @@ class TrackersFragment : Fragment() {
                 } catch (_: Exception) {
                     colorBar.setBackgroundColor(ContextCompat.getColor(itemView.context, R.color.primary_blue))
                 }
-                val coords = tracker.geometry?.coordinates.orEmpty()
-                val lastCoord = coords.lastOrNull() ?: tracker.last_point
+                val lastCoord = tracker.last_point
                 val lastUpdateMs = when {
                     lastCoord != null && lastCoord.size >= 3 -> {
                         val t = lastCoord[2]

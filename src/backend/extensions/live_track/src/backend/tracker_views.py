@@ -75,10 +75,9 @@ def tracker_check(request):
 @csrf_exempt
 def tracker_list_create(request):
     if request.method == "GET":
-        all_data = request.GET.get("all", "").lower() == "true"
         tracks = LiveTrack.objects.filter(user=request.user).order_by("name")
         return JsonResponse(
-            [track_to_response(t, include_secret=False, all_data=all_data) for t in tracks],
+            [track_to_response_metadata_only(t, include_secret=False) for t in tracks],
             safe=False,
         )
 
@@ -110,7 +109,12 @@ def tracker_list_create(request):
 def tracker_get_patch_delete(request, tracker_id):
     track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
     if request.method == "GET":
-        return JsonResponse(track_to_response_metadata_only(track, include_secret=True))
+        resp = track_to_response_metadata_only(track, include_secret=True)
+        coords = list((track.geometry or {}).get("coordinates") or [])
+        take = min(LATEST_COORDINATES_LIMIT, len(coords))
+        latest = coords[-take:] if take else []
+        resp["geometry"] = {"type": "LineString", "coordinates": latest}
+        return JsonResponse(resp)
     if request.method == "DELETE":
         track.delete()
         return JsonResponse({"message": "Deleted"}, status=204)

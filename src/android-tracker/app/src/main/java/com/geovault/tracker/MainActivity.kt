@@ -49,6 +49,8 @@ class MainActivity : AppCompatActivity() {
     private var lastSelectedTabIndex = -1
     /** True when handling back so we don't push the current tab onto tabBackStack. */
     private var isHandlingTabBack = false
+    var isServerAccessible = true
+        private set
 
     private val locationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -325,7 +327,9 @@ class MainActivity : AppCompatActivity() {
                     .commit()
                 TrackerRepository.clearCurrentTrackerCache()
                 TrackerRepository.clearCache()
-                TrackerRepository.getTrackers(this, forceRefresh = true) { }
+                TrackerRepository.getTrackers(this, forceRefresh = true) { list ->
+                    runOnUiThread { setServerAccessibility(list != null) }
+                }
                 showSnackbar(getString(R.string.tracker_validation_failed_go_to_settings))
                 val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
                 hf?.updateTrackingUi()
@@ -354,7 +358,9 @@ class MainActivity : AppCompatActivity() {
                     .apply()
                 TrackerRepository.clearCurrentTrackerCache()
                 TrackerRepository.clearCache()
-                TrackerRepository.getTrackers(this, forceRefresh = true) { }
+                TrackerRepository.getTrackers(this, forceRefresh = true) { list ->
+                    runOnUiThread { setServerAccessibility(list != null) }
+                }
                 showSnackbar(getString(R.string.tracker_validation_failed_go_to_settings))
                 val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
                 hf?.updateTrackingUi()
@@ -426,11 +432,52 @@ class MainActivity : AppCompatActivity() {
 
         val yellowColor = ContextCompat.getColor(this, R.color.warning_yellow)
         val whiteColor = ContextCompat.getColor(this, R.color.content_on_primary)
+        val grayColor = ContextCompat.getColor(this, R.color.text_secondary)
 
         updateNavTabColors(navHome, position == 0, yellowColor, whiteColor)
-        updateNavTabColors(navMap, position == 1, yellowColor, whiteColor)
-        updateNavTabColors(navTrackers, position == 2, yellowColor, whiteColor)
+        updateNavTabColors(navMap, position == 1, yellowColor, if (isServerAccessible) whiteColor else grayColor)
+        updateNavTabColors(navTrackers, position == 2, yellowColor, if (isServerAccessible) whiteColor else grayColor)
         updateNavTabColors(navSettings, position == 3, yellowColor, whiteColor)
+    }
+
+    private fun setServerAccessibility(accessible: Boolean) {
+        if (isServerAccessible == accessible) return
+        isServerAccessible = accessible
+        
+        val navMap = findViewById<View>(R.id.navMap)
+        val navTrackers = findViewById<View>(R.id.navTrackers)
+        
+        val grayColor = ContextCompat.getColor(this, R.color.text_secondary)
+        val yellowColor = ContextCompat.getColor(this, R.color.warning_yellow)
+        val whiteColor = ContextCompat.getColor(this, R.color.content_on_primary)
+        
+        if (!accessible) {
+            // Disable Map and Trackers tabs
+            navMap.isEnabled = false
+            navMap.isClickable = false
+            navTrackers.isEnabled = false
+            navTrackers.isClickable = false
+            
+            updateNavTabColors(navMap, false, yellowColor, grayColor)
+            updateNavTabColors(navTrackers, false, yellowColor, grayColor)
+            
+            // If we are on Map or Trackers, switch to Home
+            if (viewPager.currentItem == 1 || viewPager.currentItem == 2) {
+                viewPager.setCurrentItem(0, false)
+            }
+        } else {
+            // Re-enable Map and Trackers tabs
+            navMap.isEnabled = true
+            navMap.isClickable = true
+            navTrackers.isEnabled = true
+            navTrackers.isClickable = true
+            
+            updateNavTabBackground(viewPager.currentItem)
+        }
+        
+        // Notify HomeFragment
+        val homeFragment = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
+        homeFragment?.updateServerAccessibilityUi(accessible)
     }
     
     private fun updateNavTabColors(navView: View, isSelected: Boolean, selectedColor: Int, defaultColor: Int) {
@@ -654,7 +701,9 @@ class MainActivity : AppCompatActivity() {
                         .apply()
                     TrackerRepository.clearCurrentTrackerCache()
                     TrackerRepository.clearCache()
-                    TrackerRepository.getTrackers(this@MainActivity, forceRefresh = true) { }
+                    TrackerRepository.getTrackers(this@MainActivity, forceRefresh = true) { list ->
+                        runOnUiThread { setServerAccessibility(list != null) }
+                    }
                     showSnackbar(getString(R.string.tracker_validation_failed_go_to_settings))
                     val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
                     hf?.updateTrackingUi()
@@ -690,7 +739,11 @@ class MainActivity : AppCompatActivity() {
         }
         GeovaultAuthManager.fetchUserStatus(this)
         if (!isGuestView && isMainContentSetup) {
-            TrackerRepository.getTrackers(this, forceRefresh = true) { }
+            TrackerRepository.getTrackers(this, forceRefresh = true) { list ->
+                runOnUiThread {
+                    setServerAccessibility(list != null)
+                }
+            }
         }
         updatePermissionsState()
     }

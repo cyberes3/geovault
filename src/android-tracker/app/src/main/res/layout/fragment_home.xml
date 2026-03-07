@@ -431,4 +431,60 @@
         </LinearLayout>
 
     </FrameLayout>
+    
+    <!-- Server Failure Overlay -->
+    <FrameLayout
+        android:id="@+id/serverFailureOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#A0000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+        
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="280dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="8dp"
+            app:strokeWidth="3dp"
+            app:strokeColor="@color/error_red">
+            
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="24dp"
+                android:background="@color/error_light">
+                
+                <ImageView
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:src="@drawable/ic_radar_dish"
+                    app:tint="@color/error_red"
+                    android:layout_marginBottom="16dp" />
+                
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Connection Error"
+                    android:textSize="22sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/error_red"
+                    android:layout_marginBottom="8dp" />
+                
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Unable to connect to the server. Check connection status."
+                    android:textSize="14sp"
+                    android:textColor="@color/text_primary"
+                    android:gravity="center"
+                    android:lineSpacingExtra="2dp" />
+                
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </FrameLayout>
 </FrameLayout>

@@ -39,6 +39,7 @@ class HomeFragment : Fragment() {
     private lateinit var trackingContentContainer: View
     private lateinit var permissionsContainer: View
     private lateinit var radarDishIcon: android.widget.ImageView
+    private lateinit var serverFailureOverlay: View
     private var isAccuracyRed = false
 
     private val homeScope = CoroutineScope(Dispatchers.Main + Job())
@@ -87,6 +88,7 @@ class HomeFragment : Fragment() {
         trackingContentContainer = view.findViewById(R.id.trackingContentContainer)
         permissionsContainer = view.findViewById(R.id.permissionsContainer)
         radarDishIcon = view.findViewById(R.id.radarDishIcon)
+        serverFailureOverlay = view.findViewById(R.id.serverFailureOverlay)
         
         trackingStatusText = view.findViewById(R.id.trackingStatusText)
         trackingTrackNameText = view.findViewById(R.id.trackingTrackNameText)
@@ -108,6 +110,7 @@ class HomeFragment : Fragment() {
         setupPermissionButtons(view)
         updatePermissionsUi()
         updateTrackingUi()
+        updateServerAccessibilityUi((requireActivity() as MainActivity).isServerAccessible)
         updateDebugTrackMode()
         updateQueueCount()
     }
@@ -231,6 +234,11 @@ class HomeFragment : Fragment() {
         )
         startStopButton.text = getString(R.string.stop_tracking)
         updateTrackingTrackName()
+    }
+
+    fun updateServerAccessibilityUi(accessible: Boolean) {
+        if (!::serverFailureOverlay.isInitialized) return
+        serverFailureOverlay.visibility = if (accessible) View.GONE else View.VISIBLE
     }
 
     private fun updateDebugTrackMode() {

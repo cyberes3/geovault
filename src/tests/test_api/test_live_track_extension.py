@@ -169,7 +169,7 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(names, ["Alpha", "Bravo", "Charlie"])
 
     def test_get_track(self):
-        """GET trackers/<id>/ returns 200 with metadata and latest params only (no geometry)."""
+        """GET trackers/<id>/ returns 200 with metadata, latest params, and latest 100 coordinates as geometry."""
         with _patch_live_track_enabled():
             create_resp = self.client.post(
                 "/api/extensions/live-track/trackers/",
@@ -183,7 +183,9 @@ class TestLiveTrackAPI(TestCase):
         data = response.json()
         self.assertEqual(data["id"], track_id)
         self.assertEqual(data["name"], "Get Me")
-        self.assertNotIn("geometry", data)
+        self.assertIn("geometry", data)
+        self.assertEqual(data["geometry"]["type"], "LineString")
+        self.assertEqual(len(data["geometry"]["coordinates"]), 0)
         self.assertIn("point_params", data)
         self.assertIn("last_point", data)
         self.assertIn("created_at", data)
@@ -346,6 +348,52 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(coords[0][0], -121.0)
         self.assertEqual(coords[0][1], 38.0)
         self.assertEqual(len(data.get("point_params", [])), 1)
+
+    def test_metadata_filtered_by_recent_data_window(self):
+        """GET trackers/ returns bbox and last_point for only points within the window."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Filtered Metadata"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        tracker_secret = create_resp.json()["tracker_secret"]
+        auth = _basic_auth_header("trackuser@example.com", tracker_secret)
+        now_sec = int(time.time())
+        old_ts = now_sec - 7200  # 2 hours ago
+        recent_ts = now_sec - 300  # 5 minutes ago
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps({"lat": 37.0, "lon": -122.0, "timestamp": old_ts}),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps({"lat": 38.0, "lon": -121.0, "timestamp": recent_ts}),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"recent_data_window": "1h"}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            response = self.client.get("/api/extensions/live-track/trackers/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        track = data[0]
+        # Should only include properties of the recent (-121.0, 38.0) point, not the old (-122.0, 37.0) point
+        self.assertListEqual(track["bbox"], [-121.0, 38.0, -121.0, 38.0])
+        self.assertEqual(track["last_point"][0], -121.0)
+        self.assertEqual(track["last_point"][1], 38.0)
 
     def test_geometry_all_true_bypasses_recent_filter(self):
         """GET geometry?all=true returns full geometry ignoring recent_data_window."""
@@ -733,8 +781,8 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"-122.5,37.5,0", response.content)
 
-    def test_list_returns_geometry_last_point_not_deduped_fields(self):
-        """GET trackers/ returns geometry with coordinates; list omits last_position, last_timestamp_ms, tracker_secret."""
+    def test_list_returns_metadata_only(self):
+        """GET trackers/ returns metadata-only (last_point, bbox); no geometry."""
         with _patch_live_track_enabled():
             create_resp = self.client.post(
                 "/api/extensions/live-track/trackers/",
@@ -757,13 +805,11 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(response.status_code, 200)
         tracks = response.json()
         self.assertEqual(len(tracks), 1)
-        coords = tracks[0].get("geometry", {}).get("coordinates", [])
-        self.assertEqual(len(coords), 1)
-        self.assertEqual(coords[0][0], -121.0)
-        self.assertEqual(coords[0][1], 38.0)
-        self.assertEqual(coords[0][2], 1705312800000)
-        self.assertNotIn("last_position", tracks[0])
-        self.assertNotIn("last_timestamp_ms", tracks[0])
+        self.assertNotIn("geometry", tracks[0])
+        self.assertIn("last_point", tracks[0])
+        self.assertEqual(tracks[0]["last_point"][0], -121.0)
+        self.assertEqual(tracks[0]["last_point"][1], 38.0)
+        self.assertIn("bbox", tracks[0])
         self.assertNotIn("tracker_secret", tracks[0])
 
     def test_kml_404_other_user(self):

@@ -685,45 +685,29 @@ class MapFragment : Fragment() {
             lastCachedUpdateTimeMs = trackerLastUpdateMs(initial)
             currentTrackerColor = (initial.color ?: "#3388ff").let { if (it.startsWith("#")) it else "#$it" }
             
-            val initialCoords = initial.geometry?.coordinates
-            if (!initialCoords.isNullOrEmpty()) {
-                val mapped = initialCoords.map { LatLng(it[1], it[0]) to it[2].toLong() }
-                trackPoints.addAll(mapped.map { it.first })
-                trackTimestamps.addAll(mapped.map { it.second })
-            } else if (initial.last_point != null && initial.last_point.size >= 2) {
-                trackPoints.add(LatLng(initial.last_point[1], initial.last_point[0]))
-                trackTimestamps.add(initial.updated_at ?: System.currentTimeMillis())
-            }
-            
             (initial.point_params?.lastOrNull()?.get("acc") as? Number)?.toFloat()?.takeIf { it > 0f }
                 ?.let { lastStreamedAccuracyMeters = it }
 
-            if (trackPoints.isNotEmpty()) {
-                updateTrackLine()
-                
-                // Show layers once we have some data (either initial or full)
-                setAnnotationLayersVisibility(true)
-                
-                val map = maplibreMap
-                if (map != null) {
-                    val bbox = initial.bbox
-                    if (bbox != null && bbox.size == 4) {
-                        val bounds = LatLngBounds.Builder()
-                            .include(LatLng(bbox[1], bbox[0]))
-                            .include(LatLng(bbox[3], bbox[2]))
-                            .build()
-                        val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                        map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
-                        zoomToTrackAfterLoad = false
-                    } else if (trackPoints.size >= 2) {
-                        val bounds = LatLngBounds.Builder().apply { trackPoints.forEach { include(it) } }.build()
-                        val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                        map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
-                        zoomToTrackAfterLoad = false
-                    }
+            // Position camera using bbox or last_point; track line will be drawn by fetchFullGeometryAndApply
+            val map = maplibreMap
+            if (map != null) {
+                val bbox = initial.bbox
+                if (bbox != null && bbox.size == 4) {
+                    val bounds = LatLngBounds.Builder()
+                        .include(LatLng(bbox[1], bbox[0]))
+                        .include(LatLng(bbox[3], bbox[2]))
+                        .build()
+                    val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
+                    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+                    zoomToTrackAfterLoad = false
+                } else if (initial.last_point != null && initial.last_point.size >= 2) {
+                    map.moveCamera(CameraUpdateFactory.newLatLngZoom(
+                        LatLng(initial.last_point[1], initial.last_point[0]), 14.0
+                    ))
+                    zoomToTrackAfterLoad = false
                 }
-                updateZoomToLatestButtonState()
             }
+            updateZoomToLatestButtonState()
         } else {
             // Fallback to default
             displayedTrackerId = defaultTrackerId
@@ -809,8 +793,25 @@ class MapFragment : Fragment() {
                 }
                 val coords = tracker?.geometry?.coordinates
                 if (coords != null) {
-                    val shouldReplace = forceReplace || !TrackingService.isRunning || trackPoints.isEmpty()
-                    if (shouldReplace) {
+                    val defaultId = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+                        .getString("selected_tracker_id", "") ?: ""
+                    val isExternalStreaming = !forceReplace && trackPoints.isNotEmpty() &&
+                        displayedTrackerId != null && displayedTrackerId != defaultId
+
+                    if (isExternalStreaming) {
+                        // Merge: keep streaming points newer than geometry's latest timestamp
+                        val lastCoords = coords.takeLast(TrackUpdateHelper.MAX_POINTS)
+                        val geomLatestTs = lastCoords.lastOrNull()?.get(2)?.toLong() ?: Long.MAX_VALUE
+                        val streamedAfterGeom = trackPoints.zip(trackTimestamps)
+                            .filter { it.second > geomLatestTs }
+                        trackPoints.clear()
+                        trackTimestamps.clear()
+                        trackPoints.addAll(lastCoords.map { LatLng(it[1], it[0]) })
+                        trackTimestamps.addAll(lastCoords.map { it[2].toLong() })
+                        for ((pt, ts) in streamedAfterGeom) {
+                            TrackUpdateHelper.updateTrack(trackPoints, trackTimestamps, pt, ts)
+                        }
+                    } else if (forceReplace || trackPoints.isEmpty()) {
                         trackPoints.clear()
                         trackTimestamps.clear()
                         val lastCoords = coords.takeLast(TrackUpdateHelper.MAX_POINTS)
@@ -820,9 +821,8 @@ class MapFragment : Fragment() {
                     updateTrackLine()
                     setAnnotationLayersVisibility(true)
                     val map = maplibreMap
-                    val shouldZoom = zoomToTrackAfterLoad
                     zoomToTrackAfterLoad = false
-                    if (shouldZoom && map != null && trackPoints.isNotEmpty()) {
+                    if (map != null && trackPoints.isNotEmpty()) {
                         val bbox = tracker?.bbox
                         if (bbox != null && bbox.size == 4) {
                             val bounds = LatLngBounds.Builder()
@@ -1028,7 +1028,7 @@ class MapFragment : Fragment() {
         private const val MAX_JUMP_METERS = 100f * 1609.344f
         /** Content padding (dp) so overlays (name card, buttons, spinner) don't cut off the track. */
         private const val MAP_PADDING_LEFT_DP = 216
-        private const val MAP_PADDING_TOP_DP = 86
+        private const val MAP_PADDING_TOP_DP = 130
         private const val MAP_PADDING_RIGHT_DP = 60
         private const val MAP_PADDING_BOTTOM_DP = 48
         /** Extra padding (dp) when fitting bounds inside the content-padded viewport. */
