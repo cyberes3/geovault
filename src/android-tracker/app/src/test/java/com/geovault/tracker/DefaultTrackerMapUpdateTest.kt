@@ -11,8 +11,8 @@ import org.robolectric.annotation.Config
  *
  * CONTRACT (see .cursor/rules/android-tracker-default-tracker-map.mdc):
  * - Map must show latest default-tracker data when switching to Map tab (refetch on resume, clear geometry cache).
- * - Live updates: LiveTrackStreamingService runs for the displayed tracker (including default); LOCATION_UPDATE
- *   is only applied when the map is showing the default tracker.
+ * - Live updates: LiveTrackStreamingService runs only for a non-default displayed tracker (default track data is local).
+ *   LOCATION_UPDATE is applied when the map is showing the default tracker.
  * - When no default tracker: map is cleared on resume. When selected tracker is deleted: clear repository cache.
  * - All in-app broadcasts use setPackage(packageName).
  *

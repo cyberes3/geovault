@@ -16,9 +16,9 @@
     <color name="gv_common_warning_yellow">#F4AC45</color>
     <color name="gv_common_spinner_blue">#4B6BAB</color>
 
-    <!-- Error background (light red for error state) -->
-    <color name="gv_common_error_light">#FFF5F5</color>
-    <color name="gv_common_error_stroke">#FFE0E0</color>
+    <!-- Error background (light red for error state); matches frontend red-50 / red-200 -->
+    <color name="gv_common_error_light">#FCF2F2</color>
+    <color name="gv_common_error_stroke">#F5BCBD</color>
 
     <!-- Basic colors -->
     <color name="gv_common_white">#FFFFFF</color>

@@ -584,6 +584,10 @@ class MapFragment : Fragment() {
             updateTrackerLabel()
             return
         }
+        // Zoom to default tracker extent on first load (e.g. app launch with Map tab) when we have no points yet
+        if (trackerId == defaultTrackerId && trackPoints.isEmpty()) {
+            zoomToTrackAfterLoad = true
+        }
         fetchFullGeometryAndApply(trackerId)
     }
 
@@ -638,9 +642,12 @@ class MapFragment : Fragment() {
         }
     }
 
-    /** Start live track streaming for the currently displayed tracker (default or not) so the map updates as points arrive. */
+    /** Start live track streaming only when the displayed tracker is not the default. The default track is local (this device); only non-default tracks need server streaming. */
     private fun startLiveTrackStreamingForDisplayedTracker() {
         val id = displayedTrackerId ?: return
+        val defaultId = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+            .getString("selected_tracker_id", "") ?: ""
+        if (defaultId.isEmpty() || id == defaultId) return
         val intent = Intent(requireContext(), LiveTrackStreamingService::class.java).apply {
             action = LiveTrackStreamingService.ACTION_START
             putExtra(LiveTrackStreamingService.EXTRA_TRACKER_ID, id)

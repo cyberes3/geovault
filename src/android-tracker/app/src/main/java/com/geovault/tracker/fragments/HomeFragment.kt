@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import androidx.preference.PreferenceManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -54,6 +55,7 @@ class HomeFragment : Fragment() {
     private lateinit var radarDishIcon: android.widget.ImageView
     private lateinit var testAddPointButton: MaterialButton
     private var testAddPointJob: Job? = null
+    private var isAccuracyRed = false
 
     private val homeScope = CoroutineScope(Dispatchers.Main + Job())
     private val sessionStatsHandler = Handler(Looper.getMainLooper())
@@ -382,11 +384,22 @@ class HomeFragment : Fragment() {
     fun updateTrackingUi() {
         if (!::trackingStatusText.isInitialized) return
         val running = TrackingService.isRunning
-        trackingStatusText.text = getString(if (running) R.string.tracking_active else R.string.not_tracking)
+        val acc = TrackingService.lastAccuracyMeters
+        val isWaiting = running && acc != null && acc > 152.4f
+
+        trackingStatusText.text = getString(when {
+            isWaiting -> R.string.waiting_for_lock
+            running -> R.string.tracking_active
+            else -> R.string.not_tracking
+        })
         trackingStatusText.setTextColor(
             ContextCompat.getColor(
                 requireContext(),
-                if (running) R.color.warning_yellow else R.color.primary_blue
+                when {
+                    isWaiting -> R.color.error_red
+                    running -> R.color.warning_yellow
+                    else -> R.color.primary_blue
+                }
             )
         )
         startStopButton.text = getString(if (running) R.string.stop_tracking else R.string.start_tracking)
@@ -421,6 +434,7 @@ class HomeFragment : Fragment() {
             queueCountText.text = "—"
             distanceText.text = "—"
             accuracyText.text = "—"
+            accuracyText.setTextColor(ContextCompat.getColor(requireContext(), R.color.text_primary))
             return
         }
         val startMs = TrackingService.sessionStartTimeMs
@@ -432,7 +446,35 @@ class HomeFragment : Fragment() {
         val useImperial = usesImperialUnits(requireContext())
         distanceText.text = formatDistance(TrackingService.sessionTotalDistanceMeters, useImperial)
         val acc = TrackingService.lastAccuracyMeters
-        accuracyText.text = if (acc != null) formatAccuracy(acc, useImperial) else "—"
+        val isNoLock = acc != null && acc > 152.4f
+        
+        if (isNoLock) {
+            accuracyText.text = "—"
+            accuracyText.setTextColor(ContextCompat.getColor(requireContext(), R.color.error_red))
+            isAccuracyRed = true
+        } else {
+            accuracyText.text = if (acc != null) formatAccuracy(acc, useImperial) else "—"
+            val accuracyFilter = PreferenceManager.getDefaultSharedPreferences(requireContext())
+                .getString(TrackingService.PREF_ACCURACY, "50")?.toFloatOrNull() ?: 50f
+            
+            // Hysteresis: turn red if > filter, stay red until < filter * 0.85
+            if (acc != null) {
+                if (acc > accuracyFilter) {
+                    isAccuracyRed = true
+                } else if (acc < accuracyFilter * 0.85f) {
+                    isAccuracyRed = false
+                }
+            } else {
+                isAccuracyRed = false
+            }
+
+            accuracyText.setTextColor(
+                ContextCompat.getColor(
+                    requireContext(),
+                    if (isAccuracyRed) R.color.error_red else R.color.text_primary
+                )
+            )
+        }
     }
 
     private fun usesImperialUnits(context: Context): Boolean {

@@ -168,7 +168,21 @@ class MainActivity : AppCompatActivity() {
 
         val savedTab = (savedInstanceState?.getInt(KEY_CURRENT_TAB, 0) ?: 0).coerceIn(0, 3)
         viewPager.setCurrentItem(savedTab, false)
-        
+
+        // When launching on the Map tab, pre-fetch default tracker so the map can zoom to its extent
+        if (savedTab == 1) {
+            val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+            val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
+            if (defaultTrackerId.isNotEmpty()) {
+                TrackerRepository.getTrackers(this, forceRefresh = false) { list ->
+                    val defaultTracker = list?.find { it.id == defaultTrackerId }
+                    if (defaultTracker != null) {
+                        setInitialTrackForMap(defaultTracker)
+                    }
+                }
+            }
+        }
+
         viewPager.registerOnPageChangeCallback(object : androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 super.onPageSelected(position)

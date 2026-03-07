@@ -44,7 +44,6 @@ class TrackerApplication : Application() {
             redirectUri,
             GeovaultAuthManager.OAUTH_CLIENT_ID_TRACKER
         )
-        GeovaultAuthManager.fetchUserStatus(this)
         prefetchIfNeeded(applicationContext)
         setMapLibreHttpClient()
         MapStyleCache.preloadMapTilerStyles(applicationContext)

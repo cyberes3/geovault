@@ -30,6 +30,7 @@
     <string name="not_tracking">Not Tracking</string>
     <string name="tracking_active">Tracking Active</string>
     <string name="preparing">Preparing</string>
+    <string name="waiting_for_lock">Waiting for lock</string>
     <string name="start_tracking">Start Tracking</string>
     <string name="stop_tracking">Stop Tracking</string>
     <string name="stop_tracking_confirm_title">Stop tracking?</string>

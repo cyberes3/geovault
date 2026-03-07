@@ -21,9 +21,9 @@
     <color name="content_on_primary">#FFFFFF</color>
     <color name="border_light">#C4D2ED</color>      <!-- blue-200 -->
 
-    <!-- Error state (for error_background drawable) -->
-    <color name="error_light">#FFF5F5</color>
-    <color name="error_stroke">#FFE0E0</color>
+    <!-- Error state (for error_background drawable); matches frontend red-50 / red-200 -->
+    <color name="error_light">#FCF2F2</color>
+    <color name="error_stroke">#F5BCBD</color>
 
     <!-- List/container background (same as container in day; pure black in night) -->
     <color name="list_background">@color/blue_extra_light</color>

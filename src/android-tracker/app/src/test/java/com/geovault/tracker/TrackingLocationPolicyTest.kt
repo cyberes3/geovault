@@ -199,28 +199,6 @@ class TrackingLocationPolicyTest {
         assertTrue(pause)
     }
 
-    // --- Speeds (stationary count depends on distance, not speed) ---
-
-    @Test
-    fun stationaryUpdate_highSpeedButWithinDistance_stillCountsStationary() {
-        val a = location(0.0, 0.0, 0L, speed = 0f)
-        val b = locationNear(a, 0.00005)
-        b.speed = 28f // ~100 km/h
-        val (count, _) = TrackingLocationPolicy.stationaryUpdate(a, b, 10f, 0, true)
-        assertEquals(1, count)
-    }
-
-    @Test
-    fun stationaryUpdate_zeroSpeedButMovedBeyondThreshold_resets() {
-        val a = location(0.0, 0.0, 0L, speed = 0f)
-        val b = locationNear(a, 0.0002) // moved >10m
-        b.speed = 0f
-        val (count, _) = TrackingLocationPolicy.stationaryUpdate(a, b, 10f, 1, true)
-        assertEquals(0, count)
-    }
-
-    // --- Combined (interval + distance + accuracy) ---
-
     @Test
     fun combined_interval30_distance20_accuracy80() {
         val (intervalMs, minMs) = TrackingLocationPolicy.locationRequestIntervalFromSec(30L)
@@ -232,5 +210,44 @@ class TrackingLocationPolicyTest {
         val b = locationNear(a, 0.00017) // ~19m, within 20m filter
         val (count, _) = TrackingLocationPolicy.stationaryUpdate(a, b, 20f, 0, true)
         assertEquals(1, count)
+    }
+
+    // --- Jump Filtering ---
+
+    @Test
+    fun isJump_reasonableSpeed_returnsFalse() {
+        val a = location(0.0, 0.0, 0L)
+        val b = location(0.0001, 0.0001, 1000L) // Normal move
+        assertFalse(TrackingLocationPolicy.isJump(a, b))
+    }
+
+    @Test
+    fun isJump_unrealisticSpeed_returnsTrue() {
+        val a = location(0.0, 0.0, 0L)
+        val b = location(1.0, 1.0, 1000L) // Huge teleport in 1 second
+        assertTrue(TrackingLocationPolicy.isJump(a, b))
+    }
+
+    // --- Smoothing ---
+
+    @Test
+    fun smooth_averagesCoordinates() {
+        val a = location(0.0, 0.0, 0L)
+        val b = location(1.0, 1.0, 1000L)
+        val smoothed = TrackingLocationPolicy.smooth(a, b, 0.5f)
+        assertEquals(0.5, smoothed.latitude, 0.000001)
+        assertEquals(0.5, smoothed.longitude, 0.000001)
+    }
+
+    // --- Speed-Aware Stationary ---
+
+    @Test
+    fun stationaryUpdate_highSpeed_resetsCountEvenIfWithinDistance() {
+        val a = location(0.0, 0.0, 0L, speed = 0f)
+        val b = locationNear(a, 0.00005)
+        b.speed = 10f // ~22 mph
+        val (count, pause) = TrackingLocationPolicy.stationaryUpdate(a, b, 10f, 1, true)
+        assertEquals(0, count)
+        assertFalse(pause)
     }
 }

@@ -12,6 +12,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.RetrofitClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -56,11 +57,18 @@ class LiveTrackStreamingService : Service() {
     private var currentTrackerId: String? = null
     private var currentTrackerName: String? = null
     private var connectJob: Job? = null
-    private val client = OkHttpClient.Builder()
-        .readTimeout(WS_READ_TIMEOUT_SEC, TimeUnit.SECONDS)
-        .writeTimeout(10, TimeUnit.SECONDS)
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .build()
+    private var client: OkHttpClient? = null
+
+    private fun getHttpClient(): OkHttpClient {
+        if (client == null) {
+            client = RetrofitClient.getAuthenticatedOkHttpClient(applicationContext).newBuilder()
+                .readTimeout(WS_READ_TIMEOUT_SEC, TimeUnit.SECONDS)
+                .writeTimeout(10, TimeUnit.SECONDS)
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .build()
+        }
+        return client!!
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -176,7 +184,7 @@ class LiveTrackStreamingService : Service() {
                 onDisconnect = { scheduleReconnect() }
             )
             try {
-                webSocket = client.newWebSocket(request, listener)
+                webSocket = getHttpClient().newWebSocket(request, listener)
                 break
             } catch (e: Exception) {
                 Log.e(TAG, "WebSocket connect failed", e)

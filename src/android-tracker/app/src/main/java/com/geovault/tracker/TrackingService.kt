@@ -92,19 +92,26 @@ class TrackingService : Service() {
     private lateinit var locationCallback: LocationCallback
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
     private lateinit var database: AppDatabase
-    private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .writeTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
-        .build()
+    private var httpClient: OkHttpClient? = null
 
-    private fun getAuthenticatedHttpClient(): OkHttpClient = RetrofitClient.getAuthenticatedOkHttpClient(applicationContext)
+    private fun getAuthenticatedHttpClient(): OkHttpClient {
+        if (httpClient == null) {
+            httpClient = RetrofitClient.getAuthenticatedOkHttpClient(applicationContext).newBuilder()
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .writeTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .build()
+        }
+        return httpClient!!
+    }
 
     private var sensorManager: SensorManager? = null
     private var significantMotionSensor: Sensor? = null
     private var triggerEventListener: TriggerEventListener? = null
     private var isGpsPaused = false
+    private var isWaitingForGpsLock = false
     private var consecutiveStationaryPoints = 0
+    private var consecutiveBadAccuracyPoints = 0
     private var lastLocation: Location? = null
     private var totalDistanceMeters = 0f
     private var sigMotionSensorStartTime = 0L
@@ -165,7 +172,7 @@ class TrackingService : Service() {
             database.locationDao().deleteAll()
         }
 
-        startForeground(NOTIFICATION_ID, createNotification(0), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        startForeground(NOTIFICATION_ID, createNotification(0, 0), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
 
         val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val intervalSec = prefs.getString(PREF_INTERVAL, "15")?.toLongOrNull() ?: 15L
@@ -178,7 +185,10 @@ class TrackingService : Service() {
             .build()
 
         isGpsPaused = false
+        isWaitingForGpsLock = false
         consecutiveStationaryPoints = 0
+        consecutiveBadAccuracyPoints = 0
+        lastLocation = null
         fusedLocationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
         
         // Push any existing queued locations immediately when tracking starts
@@ -218,16 +228,34 @@ class TrackingService : Service() {
 
         if (!TrackingLocationPolicy.acceptByAccuracy(location, accuracyFilter)) {
             Log.d(TAG, "Location discarded (accuracy ${location.accuracy} > $accuracyFilter)")
+            consecutiveBadAccuracyPoints++
+            if (consecutiveBadAccuracyPoints >= 3) {
+                isWaitingForGpsLock = true
+                updateNotificationCount()
+            }
             broadcastSessionStats()
             return
         }
 
-        Log.d(TAG, "Location received: ${location.latitude}, ${location.longitude}")
+        // Jump Filtering: Discard points implying speeds > 100 m/s (~220 mph)
+        if (TrackingLocationPolicy.isJump(lastLocation, location)) {
+            Log.d(TAG, "Location discarded (Jump detected)")
+            return
+        }
+
+        consecutiveBadAccuracyPoints = 0
+        isWaitingForGpsLock = false
+        
+        // EWMA Smoothing to stabilize coordinates
+        val smoothedLocation = TrackingLocationPolicy.smooth(lastLocation, location)
+        
+        Log.d(TAG, "Location received: ${smoothedLocation.latitude}, ${smoothedLocation.longitude}")
         val sigMotionOnly = prefs.getBoolean(PREF_SIGNIFICANT_MOTION, true)
         val distanceFilter = prefs.getString(PREF_DISTANCE, "10")?.toFloatOrNull() ?: 10f
 
+        // Speed-Aware Stationary: Trust hardware speed attributes to avoid false pauses
         val (newConsecutive, shouldPause) = TrackingLocationPolicy.stationaryUpdate(
-            lastLocation, location, distanceFilter, consecutiveStationaryPoints, sigMotionOnly
+            lastLocation, smoothedLocation, distanceFilter, consecutiveStationaryPoints, sigMotionOnly
         )
         consecutiveStationaryPoints = newConsecutive
         if (newConsecutive > 0) Log.d(TAG, "Stationary point count: $consecutiveStationaryPoints")
@@ -236,18 +264,18 @@ class TrackingService : Service() {
             pauseGps()
         }
         
-        totalDistanceMeters += lastLocation?.distanceTo(location) ?: 0f
+        totalDistanceMeters += lastLocation?.distanceTo(smoothedLocation) ?: 0f
         sessionTotalDistanceMeters = totalDistanceMeters
-        lastLocation = location
+        lastLocation = smoothedLocation
 
         val intent = Intent("com.geovault.tracker.LOCATION_UPDATE").apply {
             setPackage(packageName)
-            putExtra("location", location)
+            putExtra("location", smoothedLocation)
         }
         sendBroadcast(intent)
 
         serviceScope.launch {
-            val queued = QueuedLocation.fromLocation(location, totalDistanceMeters)
+            val queued = QueuedLocation.fromLocation(smoothedLocation, totalDistanceMeters)
             database.locationDao().insert(queued)
             pushLocations()
         }
@@ -286,17 +314,17 @@ class TrackingService : Service() {
             val ingressUrl = "${baseUrl}api/extensions/live-track/app-ingress/"
 
             var batchesSent = 0
-            while (batchesSent < MAX_BATCHES_PER_PUSH) {
-                val locationsToPush = database.locationDao().getAll()
-                if (locationsToPush.isEmpty()) break
+            val useExtendedParams = prefs.getBoolean(PREF_EXTENDED_PARAMS, true)
+            
+            // Fetch these once per push to avoid high-cost IPC calls in loop
+            val (batteryLevel, isCharging) = if (useExtendedParams) getBatteryStatus() else Pair(0, false)
+            val buildSerial = if (useExtendedParams) getBuildSerial() else ""
+            val sessionStart = sessionStartTimeMs
 
-                // Limit to 50 locations per payload to avoid massive payloads
-                val batch = locationsToPush.take(50)
-                val useExtendedParams = prefs.getBoolean(PREF_EXTENDED_PARAMS, true)
+            while (batchesSent < MAX_BATCHES_PER_PUSH) {
+                val batch = database.locationDao().getOldest(50)
+                if (batch.isEmpty()) break
                 val payload = if (useExtendedParams) {
-                    val sessionStart = sessionStartTimeMs
-                    val (batteryLevel, isCharging) = getBatteryStatus()
-                    val buildSerial = getBuildSerial()
                     BinaryPayloadBuilder.buildPayload(
                         batch,
                         trackerId,
@@ -359,11 +387,11 @@ class TrackingService : Service() {
         serviceScope.launch {
             val count = database.locationDao().getCount()
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.notify(NOTIFICATION_ID, createNotification(count))
+            notificationManager.notify(NOTIFICATION_ID, createNotification(pointsSentThisSession, count))
         }
     }
 
-    private fun createNotification(queuedCount: Int): Notification {
+    private fun createNotification(sentCount: Int, queuedCount: Int): Notification {
         val pendingIntent = Intent(this, MainActivity::class.java).let { notificationIntent ->
             PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
         }
@@ -374,11 +402,14 @@ class TrackingService : Service() {
         }
         val stopPendingIntent = PendingIntent.getActivity(this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE)
 
-        val text = when {
+        val status = when {
             isGpsPaused -> "GPS Paused (waiting for motion)"
-            queuedCount > 0 -> "Tracking location ($queuedCount points queued)"
+            lastAccuracyMeters != null && lastAccuracyMeters!! > 152.4f -> "Waiting for lock"
+            isWaitingForGpsLock -> "Waiting for GPS lock"
             else -> "Tracking location"
         }
+        val counts = "Sent: $sentCount - Queued: $queuedCount"
+        val text = "$status\n$counts"
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.live_tracker_title))
@@ -456,6 +487,7 @@ class TrackingService : Service() {
     private fun resumeGps() {
         if (isGpsPaused && isTracking) {
             isGpsPaused = false
+            isWaitingForGpsLock = false
             consecutiveStationaryPoints = 0
             watchdogJob?.cancel()
             

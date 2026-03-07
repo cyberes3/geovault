@@ -109,17 +109,4 @@ class MapSourceManager(private val context: Context) {
         }
         return "$baseUrl$url"
     }
-
-    /** Fetches available map sources from the server and updates the manager. */
-    fun fetchSources(api: MapApi, onComplete: () -> Unit = {}) {
-        api.getTileSources().enqueue(object : retrofit2.Callback<TileSourceResponse> {
-            override fun onResponse(call: retrofit2.Call<TileSourceResponse>, response: retrofit2.Response<TileSourceResponse>) {
-                response.body()?.sources?.let { setSources(it) }
-                onComplete()
-            }
-            override fun onFailure(call: retrofit2.Call<TileSourceResponse>, t: Throwable) {
-                onComplete()
-            }
-        })
-    }
 }

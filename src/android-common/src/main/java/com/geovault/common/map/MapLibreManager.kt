@@ -5,7 +5,6 @@ import android.content.Context
 import android.util.Log
 import android.widget.Toast
 import com.geovault.common.GeovaultAuthManager
-import com.geovault.common.RetrofitClient
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
@@ -61,17 +60,14 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
     }
 
     /**
-     * Fetch the available tile sources from the Geovault Server.
+     * Fetch the available tile sources from the Geovault Server (or use cache).
      * When completed, if the map is ready, it applies the selected source.
      */
     fun fetchMapSources(onFetched: () -> Unit = {}) {
-        val serverUrl = GeovaultAuthManager.getServerUrl(activity)
-        if (serverUrl.isEmpty()) return
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(activity, baseUrl).create(MapApi::class.java)
-        sourceManager.fetchSources(api) {
+        TileSourceCache.getTileSources(activity) { sources ->
             activity.runOnUiThread {
                 if (!activity.isDestroyed) {
+                    if (sources != null) sourceManager.setSources(sources)
                     sourcesFetched = true
                     onFetched()
                 }

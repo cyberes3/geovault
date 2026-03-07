@@ -7,9 +7,6 @@ import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -102,23 +99,17 @@ object MapStyleCache {
      * configured and provides them. Call from app start so layer switching is instant.
      */
     fun preloadMapTilerStyles(context: Context) {
-        val serverUrl = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
-        if (serverUrl.isEmpty()) return
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(MapApi::class.java)
-        api.getTileSources().enqueue(object : Callback<TileSourceResponse> {
-            override fun onResponse(call: Call<TileSourceResponse>, response: Response<TileSourceResponse>) {
-                val sources = response.body()?.sources ?: return
-                for (source in sources) {
-                    if (source.id != SOURCE_MAPTILER_STREETS && source.id != SOURCE_MAPTILER_HYBRID) continue
-                    val styleUrl = source.client_config.style_url ?: continue
-                    val resolved = if (styleUrl.startsWith("/")) "$serverUrl$styleUrl" else styleUrl
-                    val isOurServer = resolved == serverUrl || resolved.startsWith("$serverUrl/")
-                    val serverBase = if (isOurServer) java.net.URI.create(resolved).let { "${it.scheme}://${it.host}" } else null
-                    getStyleJson(context, resolved, isOurServer, serverBase) { }
-                }
+        TileSourceCache.getTileSources(context) { sources ->
+            if (sources == null) return@getTileSources
+            val serverUrl = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
+            for (source in sources) {
+                if (source.id != SOURCE_MAPTILER_STREETS && source.id != SOURCE_MAPTILER_HYBRID) continue
+                val styleUrl = source.client_config.style_url ?: continue
+                val resolved = if (styleUrl.startsWith("/")) "$serverUrl$styleUrl" else styleUrl
+                val isOurServer = resolved == serverUrl || resolved.startsWith("$serverUrl/")
+                val serverBase = if (isOurServer) java.net.URI.create(resolved).let { "${it.scheme}://${it.host}" } else null
+                getStyleJson(context, resolved, isOurServer, serverBase) { }
             }
-            override fun onFailure(call: Call<TileSourceResponse>, t: Throwable) { }
-        })
+        }
     }
 }
