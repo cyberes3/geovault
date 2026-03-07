@@ -12,6 +12,7 @@ class TrackersLiveSocket {
     this.reconnectMaxDelayMs = 30000;
     this.reconnectTimeoutId = null;
     this.shouldConnect = false;
+    this.onReconnect = null;
   }
 
   getWsUrl() {
@@ -31,7 +32,15 @@ class TrackersLiveSocket {
     try {
       this.socket = new WebSocket(url);
       this.socket.onopen = () => {
+        const wasReconnect = this.reconnectAttempts > 0;
         this.reconnectAttempts = 0;
+        if (wasReconnect && typeof this.onReconnect === 'function') {
+          try {
+            this.onReconnect();
+          } catch (err) {
+            console.error('TrackersLiveSocket onReconnect error:', err);
+          }
+        }
       };
       this.socket.onmessage = (event) => {
         try {
@@ -74,6 +83,7 @@ class TrackersLiveSocket {
 
   disconnect() {
     this.shouldConnect = false;
+    this.onReconnect = null;
     if (this.reconnectTimeoutId) {
       clearTimeout(this.reconnectTimeoutId);
       this.reconnectTimeoutId = null;

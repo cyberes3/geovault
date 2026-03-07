@@ -181,6 +181,7 @@ const TILE_SOURCES_API_URL = '/api/tiles/sources/';
 const DEFAULT_MAP_KEY = 'extensions.live_track.default_map';
 const DEFAULT_SORT_KEY = 'extensions.live_track.default_sort';
 const VALID_SORT_VALUES = new Set(['alphabetical', 'last_updated', 'num_points', 'newest']);
+const CENTER_DEBOUNCE_MS = 220;
 const ARROW_PATH_D =
   'M29.9,28.6l-13-26c-0.3-0.7-1.4-0.7-1.8,0l-13,26c-0.2,0.4-0.1,0.8,0.2,1.1C2.5,30,3,30.1,3.4,29.9L16,25.1l12.6,4.9c0.1,0,0.2,0.1,0.4,0.1c0.3,0,0.5-0.1,0.7-0.3C30,29.4,30.1,28.9,29.9,28.6z';
 
@@ -285,6 +286,7 @@ export default {
     const selectedLayer = ref('osm');
     let map = null;
     let trackUpdatedHandler = null;
+    let centerDebounceId = null;
 
     async function fetchTileSources() {
       try {
@@ -1058,6 +1060,14 @@ export default {
         requestAnimationFrame(() => initMap());
       });
 
+      function scheduleCenterOnSelectedTrack() {
+        if (centerDebounceId) clearTimeout(centerDebounceId);
+        centerDebounceId = setTimeout(() => {
+          centerDebounceId = null;
+          if (followLocked.value && selectedId.value && map) centerOnSelectedTrackLastPoint();
+        }, CENTER_DEBOUNCE_MS);
+      }
+
       trackUpdatedHandler = (data) => {
         if (!data || !data.track_id || !Array.isArray(data.point)) return;
         const idx = trackers.value.findIndex((t) => t.id === data.track_id);
@@ -1065,6 +1075,25 @@ export default {
         const track = trackers.value[idx];
         const geom = track.geometry ? { ...track.geometry, coordinates: [...(track.geometry.coordinates || [])] } : { type: 'LineString', coordinates: [] };
         if (!geom.coordinates) geom.coordinates = [];
+
+        const indexOutOfBounds =
+          typeof data.index === 'number' &&
+          Number.isInteger(data.index) &&
+          (data.index < 0 || data.index > geom.coordinates.length);
+        if (indexOutOfBounds) {
+          api.get(`/trackers/${data.track_id}/geometry/`).then((geomRes) => {
+            const normalized = normalizeTrackForMemory(geomRes.data);
+            const trackIdx = trackers.value.findIndex((t) => t.id === data.track_id);
+            if (trackIdx < 0) return;
+            trackers.value = trackers.value.slice(0, trackIdx).concat(normalized).concat(trackers.value.slice(trackIdx + 1));
+            updateMapFeatures();
+            if (data.track_id === selectedId.value && followLocked.value && map) {
+              scheduleCenterOnSelectedTrack();
+            }
+          }).catch(() => {});
+          return;
+        }
+
         if (typeof data.index === 'number' && Number.isInteger(data.index)) {
           geom.coordinates.splice(data.index, 0, data.point);
         } else {
@@ -1079,8 +1108,13 @@ export default {
         trackers.value = trackers.value.slice(0, idx).concat(updated).concat(trackers.value.slice(idx + 1));
         updateMapFeatures();
         if (data.track_id === selectedId.value && followLocked.value && map) {
-          centerOnSelectedTrackLastPoint();
+          scheduleCenterOnSelectedTrack();
         }
+      };
+      trackersLiveSocket.onReconnect = () => {
+        fetchTrackers().then(() => {
+          if (followLocked.value && selectedId.value && map) centerOnSelectedTrackLastPoint();
+        });
       };
       trackersLiveSocket.connect();
       trackersLiveSocket.subscribe('track_updated', trackUpdatedHandler);
@@ -1108,6 +1142,11 @@ export default {
     );
 
     onBeforeUnmount(() => {
+      if (centerDebounceId) {
+        clearTimeout(centerDebounceId);
+        centerDebounceId = null;
+      }
+      trackersLiveSocket.onReconnect = null;
       if (trackUpdatedHandler) {
         trackersLiveSocket.unsubscribe('track_updated', trackUpdatedHandler);
       }
