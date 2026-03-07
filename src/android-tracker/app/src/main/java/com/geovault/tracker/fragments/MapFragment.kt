@@ -231,7 +231,8 @@ class MapFragment : Fragment() {
             // camera move so the circle both shows and scales with zoom (zoom-based expressions in circle-radius
             // can make the circle disappear on MapLibre Android).
             val initialZoom = map.cameraPosition?.zoom ?: 15.0
-            val initialPixelsPerMeter = 256.0 * Math.pow(2.0, initialZoom) / 40075000.0
+            val initialLat = map.cameraPosition?.target?.latitude ?: 0.0
+            val initialPixelsPerMeter = (256.0 * Math.pow(2.0, initialZoom)) / (40075016.686 * Math.cos(initialLat * Math.PI / 180.0)).coerceAtLeast(1.0)
             val accuracyCircleLayer = CircleLayer("track-position-accuracy-layer", "track-position-source").apply {
                 setFilter(org.maplibre.android.style.expressions.Expression.gt(org.maplibre.android.style.expressions.Expression.get("accuracy"), org.maplibre.android.style.expressions.Expression.literal(0)))
                 setProperties(
@@ -244,7 +245,9 @@ class MapFragment : Fragment() {
                             )
                         )
                     ),
-                    PropertyFactory.circleColor(Color.argb(64, 51, 136, 255))
+                    PropertyFactory.circleColor(Color.argb(64, 51, 136, 255)),
+                    PropertyFactory.circleStrokeColor(Color.parseColor("#3388ff")),
+                    PropertyFactory.circleStrokeWidth(1f)
                 )
             }
             // Add SymbolLayer
@@ -259,9 +262,9 @@ class MapFragment : Fragment() {
                 )
             }
             
+            style.addLayer(accuracyCircleLayer)
             style.addLayer(outlineLayer)
             style.addLayer(fillLayer)
-            style.addLayer(accuracyCircleLayer)
             style.addLayer(symbolLayer)
             mapReady = true
             mapLoadingOverlay.visibility = View.GONE
@@ -303,12 +306,16 @@ class MapFragment : Fragment() {
         mapView.getMapAsync { map ->
             maplibreMap = map
             mapManager.setupBaseMapSettings(map)
-            map.addOnCameraMoveStartedListener { reason ->
-                if (reason == 1 && followLockEnabled) {
-                    followLockEnabled = false
-                    updateFollowLockButton()
+            map.addOnMoveListener(object : MapLibreMap.OnMoveListener {
+                override fun onMoveBegin(detector: org.maplibre.android.gestures.MoveGestureDetector) {
+                    if (followLockEnabled) {
+                        followLockEnabled = false
+                        updateFollowLockButton()
+                    }
                 }
-            }
+                override fun onMove(detector: org.maplibre.android.gestures.MoveGestureDetector) { }
+                override fun onMoveEnd(detector: org.maplibre.android.gestures.MoveGestureDetector) { }
+            })
             map.addOnCameraMoveListener { updateAccuracyCircleRadiusFromZoom() }
             val serverUrl = GeovaultAuthManager.getServerUrl(requireContext())
             if (mapManager.sourcesFetched || serverUrl.isEmpty()) {
@@ -907,7 +914,8 @@ class MapFragment : Fragment() {
         val style = map.style ?: return
         val layer = style.getLayer("track-position-accuracy-layer") as? CircleLayer ?: return
         val zoom = map.cameraPosition?.zoom ?: return
-        val pixelsPerMeter = 256.0 * Math.pow(2.0, zoom) / 40075000.0
+        val lat = map.cameraPosition?.target?.latitude ?: 0.0
+        val pixelsPerMeter = (256.0 * Math.pow(2.0, zoom)) / (40075016.686 * Math.cos(lat * Math.PI / 180.0)).coerceAtLeast(1.0)
         layer.setProperties(
             PropertyFactory.circleRadius(
                 org.maplibre.android.style.expressions.Expression.max(
@@ -973,15 +981,6 @@ class MapFragment : Fragment() {
         feature.addNumberProperty("accuracy", accuracyValue)
 
         source.setGeoJson(feature)
-
-        val accuracyLayer = style.getLayer("track-position-accuracy-layer") as? CircleLayer
-        if (accuracyLayer != null) {
-            try {
-                val colorInt = Color.parseColor(hexColor)
-                val alphaColor = Color.argb((0.2 * 255).toInt(), Color.red(colorInt), Color.green(colorInt), Color.blue(colorInt))
-                accuracyLayer.setProperties(PropertyFactory.circleColor(alphaColor))
-            } catch (_: Exception) { }
-        }
     }
 
     private fun getTrackDirectionDegrees(points: List<LatLng>): Float {

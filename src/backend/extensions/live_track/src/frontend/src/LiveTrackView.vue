@@ -502,6 +502,7 @@ export default {
           accuracy
         };
         if (accuracy > 0) props.colorRgb = hexToRgb(color);
+        props.latitude = pos[1];
         features.push({
           type: 'Feature',
           properties: props,
@@ -583,9 +584,9 @@ export default {
       },
       layout: { 'line-join': 'round', 'line-cap': 'round' }
     };
-    // Meters-to-pixels factor: 256*2^zoom/40075000. Zoom must be input to interpolate/step per MapLibre spec.
-    const METERS_TO_PIXELS_ZOOM_0 = 256 / 40075000;
-    const METERS_TO_PIXELS_ZOOM_24 = (256 * Math.pow(2, 24)) / 40075000;
+    // Meters-to-pixels factor: 256*2^zoom / (40075016.686 * cos(lat * pi / 180)). Zoom must be input to interpolate/step per MapLibre spec.
+    const METERS_TO_PIXELS_ZOOM_0_EQ = 256 / 40075016.686;
+    const METERS_TO_PIXELS_ZOOM_24_EQ = (256 * Math.pow(2, 24)) / 40075016.686;
     const accuracyCircleLayerSpec = {
       id: ACCURACY_CIRCLE_LAYER_ID,
       type: 'circle',
@@ -593,14 +594,16 @@ export default {
       filter: ['all', ['>', ['get', 'accuracy'], 0]],
       paint: {
         'circle-color': ['rgba', 51, 136, 255, 0.25],
+        'circle-stroke-color': '#3388ff',
+        'circle-stroke-width': 1,
         'circle-radius': [
-          'max',
-          6,
-          [
-            '*',
-            ['get', 'accuracy'],
-            ['interpolate', ['exponential', 2], ['zoom'], 0, METERS_TO_PIXELS_ZOOM_0, 24, METERS_TO_PIXELS_ZOOM_24]
-          ]
+          'interpolate',
+          ['exponential', 2],
+          ['zoom'],
+          0,
+          ['max', 6, ['*', ['get', 'accuracy'], ['/', METERS_TO_PIXELS_ZOOM_0_EQ, ['max', 0.001, ['cos', ['*', ['get', 'latitude'], Math.PI / 180]]]]]],
+          24,
+          ['max', 6, ['*', ['get', 'accuracy'], ['/', METERS_TO_PIXELS_ZOOM_24_EQ, ['max', 0.001, ['cos', ['*', ['get', 'latitude'], Math.PI / 180]]]]]]
         ]
       }
     };
@@ -629,9 +632,6 @@ export default {
       if (!map.getSource(POINTS_SOURCE_ID)) {
         map.addSource(POINTS_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       }
-      if (!map.getLayer(ACCURACY_CIRCLE_LAYER_ID)) {
-        map.addLayer(accuracyCircleLayerSpec);
-      }
       if (!map.getLayer(POINTS_LAYER_ID)) {
         const defaultColor = '#3388ff';
         const defaultId = getArrowImageId(defaultColor, false);
@@ -639,11 +639,14 @@ export default {
         if (imageData && !map.hasImage(defaultId)) map.addImage(defaultId, imageData, { pixelRatio: 1 });
         map.addLayer(pointsLayerSpec);
       }
+      if (!map.getLayer(`${LINES_LAYER_ID}-black-outline`)) {
+        map.addLayer(lineBlackOutlineLayerSpec, POINTS_LAYER_ID);
+      }
       if (!map.getLayer(LINES_LAYER_ID)) {
         map.addLayer(lineLayerSpec, POINTS_LAYER_ID);
       }
-      if (!map.getLayer(`${LINES_LAYER_ID}-black-outline`)) {
-        map.addLayer(lineBlackOutlineLayerSpec, LINES_LAYER_ID);
+      if (!map.getLayer(ACCURACY_CIRCLE_LAYER_ID)) {
+        map.addLayer(accuracyCircleLayerSpec, `${LINES_LAYER_ID}-black-outline`);
       }
       await updateMapFeatures();
     }
@@ -692,9 +695,9 @@ export default {
             },
             layers: [
               { id: BASE_LAYER_ID, type: 'raster', source: BASE_SOURCE_ID, minzoom: clientConfig.minzoom ?? 0, maxzoom: layerMaxZoom },
+              accuracyCircleLayerSpec,
               lineBlackOutlineLayerSpec,
-              lineLayerSpec,
-              accuracyCircleLayerSpec
+              lineLayerSpec
             ]
           };
           map = new maplibregl.Map({
@@ -744,7 +747,7 @@ export default {
           const spec = getRasterSourceSpec(layerValue, tileSource);
           const layerMaxZoom = getRasterLayerMaxZoom(clientConfig);
           map.addSource(BASE_SOURCE_ID, spec);
-          const firstTrackLayerId = `${LINES_LAYER_ID}-black-outline`;
+          const firstTrackLayerId = ACCURACY_CIRCLE_LAYER_ID;
           map.addLayer(
             {
               id: BASE_LAYER_ID,
@@ -818,9 +821,9 @@ export default {
         },
         layers: [
           { id: BASE_LAYER_ID, type: 'raster', source: BASE_SOURCE_ID, minzoom: clientConfig.minzoom ?? 0, maxzoom: layerMaxZoom },
+          accuracyCircleLayerSpec,
           lineBlackOutlineLayerSpec,
-          lineLayerSpec,
-          accuracyCircleLayerSpec
+          lineLayerSpec
         ]
       };
 
@@ -895,25 +898,26 @@ export default {
       }, 600);
     }
 
-    /** Only unlock when the user pans (center changes). Zoom-only changes (e.g. map controls) keep the lock. */
-    const CENTER_TOLERANCE = 1e-6;
-
     function setupMapFollowListeners() {
       if (!map) return;
-      map.on('move', () => {
-        if (!followLocked.value || isAutoMoving.value) return;
-        const center = map.getCenter();
-        const trackPoint = getSelectedTrackLastPoint();
-        if (!trackPoint) {
+      
+      const breakLock = () => {
+        if (followLocked.value) {
           followLocked.value = false;
           selectedId.value = null;
-          return;
         }
-        const dLon = Math.abs(center.lng - trackPoint[0]);
-        const dLat = Math.abs(center.lat - trackPoint[1]);
-        if (dLon > CENTER_TOLERANCE || dLat > CENTER_TOLERANCE) {
-          followLocked.value = false;
-          selectedId.value = null;
+      };
+
+      // Only unlock when the user explicitly interacts with the map (drag, wheel, pinch).
+      // Map +/- controls keep the lock.
+      map.on('dragstart', breakLock);
+      map.on('wheel', breakLock);
+      map.on('dblclick', breakLock);
+      map.on('zoomstart', (e) => {
+        const type = e.originalEvent?.type;
+        // Break lock for touch pinch or mouse wheel zoom, but ignore click on +/- buttons
+        if (type === 'touchstart' || type === 'touchmove' || type === 'wheel') {
+          breakLock();
         }
       });
       const TRACK_LAYER_IDS = [
