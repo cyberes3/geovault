@@ -159,6 +159,7 @@ import { ref, computed, onMounted, onActivated, onBeforeUnmount, inject, watch, 
 import { PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon } from '@heroicons/vue/24/outline';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
 import { getIngressBodyTemplate } from './ingressBodyTemplateCache.js';
+import { trackersLiveSocket } from './trackersLiveSocket.js';
 import TrackModal from './TrackModal.vue';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
 import LatestParamsModal from './LatestParamsModal.vue';
@@ -1057,7 +1058,6 @@ export default {
         requestAnimationFrame(() => initMap());
       });
 
-      const socket = window.gv_core?.realtimeSocket;
       trackUpdatedHandler = (data) => {
         if (!data || !data.track_id || !Array.isArray(data.point)) return;
         const idx = trackers.value.findIndex((t) => t.id === data.track_id);
@@ -1082,9 +1082,8 @@ export default {
           centerOnSelectedTrackLastPoint();
         }
       };
-      if (socket && socket.subscribe) {
-        socket.subscribe('live_track', 'track_updated', trackUpdatedHandler);
-      }
+      trackersLiveSocket.connect();
+      trackersLiveSocket.subscribe('track_updated', trackUpdatedHandler);
     });
 
     onActivated(() => {
@@ -1109,10 +1108,10 @@ export default {
     );
 
     onBeforeUnmount(() => {
-      const socket = window.gv_core?.realtimeSocket;
-      if (socket && socket.unsubscribe && trackUpdatedHandler) {
-        socket.unsubscribe('live_track', 'track_updated', trackUpdatedHandler);
+      if (trackUpdatedHandler) {
+        trackersLiveSocket.unsubscribe('track_updated', trackUpdatedHandler);
       }
+      trackersLiveSocket.disconnect();
       if (map && mapContainer.value) {
         map.remove();
         map = null;

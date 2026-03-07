@@ -161,5 +161,4 @@ def broadcast_track_updated(
         if index is not None:
             data["index"] = index
         message = {"type": "live_track_track_updated", "data": data}
-        async_to_sync(channel_layer.group_send)(f"realtime_{user_id}", message)
         async_to_sync(channel_layer.group_send)(f"live_track_{user_id}", message)

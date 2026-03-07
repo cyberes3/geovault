@@ -1348,9 +1348,9 @@ class TestLiveTrackAppIngress(TestCase):
 
 
 class TestBroadcastTrackUpdated(TestCase):
-    """Test that broadcast_track_updated sends to both realtime and live_track channel groups."""
+    """Test that broadcast_track_updated sends to live_track channel group only (standalone trackers-live WS)."""
 
-    def test_broadcast_track_updated_sends_to_realtime_and_live_track_groups(self):
+    def test_broadcast_track_updated_sends_to_live_track_group(self):
         from extensions.live_track.src.backend.helpers import broadcast_track_updated
 
         sent = []
@@ -1370,12 +1370,10 @@ class TestBroadcastTrackUpdated(TestCase):
                 index=0,
             )
 
-        self.assertEqual(len(sent), 2, "group_send should be called twice (realtime and live_track)")
-        groups = {s[0] for s in sent}
-        self.assertIn("realtime_42", groups)
-        self.assertIn("live_track_42", groups)
-        for _group, message in sent:
-            self.assertEqual(message["type"], "live_track_track_updated")
-            self.assertEqual(message["data"]["track_id"], "track-123")
-            self.assertEqual(message["data"]["point"], [10.0, 45.0, 1700000000000])
-            self.assertEqual(message["data"]["index"], 0)
+        self.assertEqual(len(sent), 1, "group_send should be called once (live_track only)")
+        self.assertEqual(sent[0][0], "live_track_42")
+        message = sent[0][1]
+        self.assertEqual(message["type"], "live_track_track_updated")
+        self.assertEqual(message["data"]["track_id"], "track-123")
+        self.assertEqual(message["data"]["point"], [10.0, 45.0, 1700000000000])
+        self.assertEqual(message["data"]["index"], 0)

@@ -886,3 +886,101 @@ class TestImportHistoryWebSocket(TransactionTestCase):
         rest_item_ids = {item['id'] for item in rest_data['items']}
         self.assertEqual(len(ws_item_ids.intersection(rest_item_ids)), 0)  # No overlap
 
+
+class TestRealtimeConsumerExtensionIntegration(TransactionTestCase):
+    """Integration tests: extensions registering WebSocket modules with the realtime consumer."""
+
+    async def test_registered_extension_module_sends_initial_state(self):
+        """A module registered via get_registered_websocket_modules is loaded and send_initial_state is sent to client."""
+        user = await database_sync_to_async(User.objects.create_user)(
+            email="extmod@example.com",
+            password="testpass123",
+            username="extmoduser",
+        )
+
+        class TestExtModule:
+            def __init__(self, consumer):
+                self.consumer = consumer
+
+            @property
+            def module_name(self):
+                return "_test_ext_mod"
+
+            async def handle_message(self, message_type, data):
+                pass
+
+            async def send_initial_state(self):
+                await self.consumer.send(text_data=json.dumps({
+                    "module": "_test_ext_mod",
+                    "type": "initial_state",
+                    "data": {"extension_test": True},
+                }))
+
+        with patch(
+            "api.ws_consumers.realtime_consumer.get_registered_websocket_modules",
+            return_value=[("_test_ext_mod", TestExtModule)],
+        ):
+            communicator = WebsocketCommunicator(
+                RealtimeConsumer.as_asgi(),
+                "/ws/realtime/",
+            )
+            communicator.scope["user"] = user
+
+            connected, _ = await communicator.connect()
+            self.assertTrue(connected)
+
+            found = False
+            for _ in range(20):
+                try:
+                    msg = await communicator.receive_json_from(timeout=2)
+                    if msg.get("module") == "_test_ext_mod" and msg.get("type") == "initial_state":
+                        self.assertEqual(msg.get("data", {}).get("extension_test"), True)
+                        found = True
+                        break
+                except Exception:
+                    break
+            self.assertTrue(found, "Should receive _test_ext_mod initial_state from registered extension module")
+
+            await communicator.disconnect()
+
+    async def test_channel_event_routed_to_registered_extension_module_handler(self):
+        """Consumer's __getattr__ routes channel event names to the registered extension module's handler."""
+        sent = []
+
+        class TestExtModuleWithEvent:
+            def __init__(self, consumer):
+                self.consumer = consumer
+
+            @property
+            def module_name(self):
+                return "_test_ext_mod"
+
+            async def handle_message(self, message_type, data):
+                pass
+
+            async def send_initial_state(self):
+                pass
+
+            async def some_event(self, event):
+                await self.consumer.send(text_data=json.dumps({
+                    "module": "_test_ext_mod",
+                    "type": "some_event",
+                    "data": event.get("data", {}),
+                }))
+
+        consumer = RealtimeConsumer()
+        consumer.send = AsyncMock(side_effect=lambda **kw: sent.append(kw))
+        consumer.modules = {"_test_ext_mod": TestExtModuleWithEvent(consumer)}
+
+        handler = getattr(consumer, "_test_ext_mod_some_event")
+        self.assertTrue(callable(handler))
+
+        event = {"type": "_test_ext_mod_some_event", "data": {"payload": "from_channel"}}
+        await handler(event)
+
+        self.assertEqual(len(sent), 1)
+        payload = json.loads(sent[0]["text_data"])
+        self.assertEqual(payload.get("module"), "_test_ext_mod")
+        self.assertEqual(payload.get("type"), "some_event")
+        self.assertEqual(payload.get("data", {}).get("payload"), "from_channel")
+
