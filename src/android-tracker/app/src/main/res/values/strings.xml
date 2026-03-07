@@ -103,7 +103,15 @@
     <!-- Logging settings help -->
     <string name="logging_help_button">Tips for logging settings</string>
     <string name="logging_help_title">Logging &amp; distance tips</string>
-    <string name="logging_help_message">Logging interval – seconds between points. Suggested: 30 for walking, 15 for biking, 10 for driving. Use 0 for maximum frequency (more battery use).\n\nDistance filter – minimum meters between points. Suggested: 10 for walking, 30 for biking, 100 for driving. Use 0 to log as often as the interval allows.\n\nOnly log if significant motion – when on, the app logs only after your device detects significant activity (e.g. walking, biking, driving). The device uses its built-in motion sensor; no points are recorded while you stay still, which saves battery. On some devices this option may be disabled if the sensor is not available.</string>
+    <string name="logging_help_message">Logging interval – seconds between points. Suggested: 30 for walking, 15 for biking, 10 for driving. Use 0 for maximum frequency (more battery use).\n\nDistance filter – minimum meters between points. Suggested: 10 for walking, 30 for biking, 100 for driving. Use 0 to log as often as the interval allows.\n\nOnly log if significant motion – when on, the app logs only after your device detects significant activity (e.g. walking, biking, driving). The device uses its built-in motion sensor; no points are recorded while you stay still, which saves battery. On some devices this option may be disabled if the sensor is not available.\n\nBiking mode is good for driving if you aren\'t needing super high accuracy and is a little more battery efficient.</string>
+
+    <!-- Tracking profiles -->
+    <string name="auto_tracking_label">Auto tracking mode</string>
+    <string name="tracking_profile_label">Tracking Profile</string>
+    <string name="profile_walking">Walking</string>
+    <string name="profile_biking">Biking</string>
+    <string name="profile_driving">Driving</string>
+    <string name="profile_custom">Custom</string>
     
     <!-- Permissions -->
     <string name="permissions_required_title">Permissions Required</string>
@@ -156,13 +164,6 @@
     <string name="tracker_deleted">Tracker deleted</string>
     <string name="pick_color">Pick color</string>
     <string name="choose_color">Choose color</string>
-
-    <!-- Test button: add points to default tracker (for map update testing) -->
-    <string name="test_add_point_button">Start test loop (1/s)</string>
-    <string name="test_stop_loop_button">Stop test loop</string>
-    <string name="test_add_point_select_tracker">Select a default tracker first</string>
-    <string name="test_add_point_success">Test point added</string>
-    <string name="test_add_point_error">Failed: %1$s</string>
 
     <!-- Live track streaming (non-default track on map) -->
     <string name="last_updated_streaming">Updated %1$d %2$s ago</string>

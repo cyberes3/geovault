@@ -29,12 +29,14 @@ class SettingsFragment : Fragment() {
     private lateinit var intervalEdit: EditText
     private lateinit var distanceEdit: EditText
     private lateinit var accuracyEdit: EditText
+    private lateinit var profileSpinner: Spinner
     private lateinit var extendedParamsSwitch: SwitchCompat
     private lateinit var significantMotionSwitch: SwitchCompat
     private lateinit var significantMotionRow: View
     private lateinit var startOnBootSwitch: SwitchCompat
     private lateinit var restartTrackingIfKilledSwitch: SwitchCompat
     private lateinit var startTrackingOnLaunchSwitch: SwitchCompat
+    private lateinit var autoTrackingSwitch: SwitchCompat
 
     private fun normalizeServerUrl(url: String): String {
         var serverUrl = url.trim().trimStart('/').trimEnd('/')
@@ -71,12 +73,14 @@ class SettingsFragment : Fragment() {
         intervalEdit = view.findViewById(R.id.intervalEdit)
         distanceEdit = view.findViewById(R.id.distanceEdit)
         accuracyEdit = view.findViewById(R.id.accuracyEdit)
+        profileSpinner = view.findViewById(R.id.profileSpinner)
         extendedParamsSwitch = view.findViewById(R.id.extendedParamsSwitch)
         significantMotionSwitch = view.findViewById(R.id.significantMotionSwitch)
         significantMotionRow = view.findViewById(R.id.significantMotionRow)
         startOnBootSwitch = view.findViewById(R.id.startOnBootSwitch)
         restartTrackingIfKilledSwitch = view.findViewById(R.id.restartTrackingIfKilledSwitch)
         startTrackingOnLaunchSwitch = view.findViewById(R.id.startTrackingOnLaunchSwitch)
+        autoTrackingSwitch = view.findViewById(R.id.autoTrackingSwitch)
 
         loadSettings()
         applyMotionSensorAvailability()
@@ -107,7 +111,77 @@ class SettingsFragment : Fragment() {
             saveSetting("start_tracking_on_launch", isChecked)
         }
 
+        autoTrackingSwitch.setOnCheckedChangeListener { _, isChecked ->
+            saveSetting("auto_tracking_enabled", isChecked)
+            updateAutoTrackingUi(isChecked)
+        }
+
         view.findViewById<View>(R.id.loggingHelpButton).setOnClickListener { showLoggingHelpDialog() }
+        
+        setupProfileSpinner()
+    }
+
+    private var isUpdatingFromSpinner = false
+
+    private val profiles = listOf(
+        Triple("walking", "30", Pair("10", "50")),
+        Triple("biking", "15", Pair("30", "100")),
+        Triple("driving", "10", Pair("100", "200")),
+        Triple("custom", "", Pair("", ""))
+    )
+
+    private fun setupProfileSpinner() {
+        val adapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_spinner_item,
+            listOf(
+                getString(R.string.profile_walking),
+                getString(R.string.profile_biking),
+                getString(R.string.profile_driving),
+                getString(R.string.profile_custom)
+            )
+        )
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        profileSpinner.adapter = adapter
+
+        profileSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (position < 3) {
+                    val profile = profiles[position]
+                    isUpdatingFromSpinner = true
+                    intervalEdit.setText(profile.second)
+                    distanceEdit.setText(profile.third.first)
+                    accuracyEdit.setText(profile.third.second)
+                    isUpdatingFromSpinner = false
+                    saveSetting("tracking_profile", position.toString())
+                } else if (position == 3) {
+                    saveSetting("tracking_profile", "3")
+                }
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+        
+        // Load saved profile
+        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+        val savedProfile = prefs.getString("tracking_profile", "1")?.toIntOrNull() ?: 1
+        profileSpinner.setSelection(savedProfile)
+    }
+
+    private fun updateAutoTrackingUi(enabled: Boolean) {
+        val alpha = if (enabled) 0.5f else 1.0f
+        profileSpinner.isEnabled = !enabled
+        profileSpinner.alpha = alpha
+        intervalEdit.isEnabled = !enabled
+        intervalEdit.alpha = alpha
+        distanceEdit.isEnabled = !enabled
+        distanceEdit.alpha = alpha
+    }
+
+    private fun updateProfileToCustom() {
+        if (isUpdatingFromSpinner) return
+        if (profileSpinner.selectedItemPosition != 3) {
+            profileSpinner.setSelection(3)
+        }
     }
 
     private fun showLoggingHelpDialog() {
@@ -149,6 +223,9 @@ class SettingsFragment : Fragment() {
         intervalEdit.setText(prefs.getString("logging_interval", "15"))
         distanceEdit.setText(prefs.getString("logging_distance", "10"))
         accuracyEdit.setText(prefs.getString("logging_accuracy", "50"))
+        autoTrackingSwitch.isChecked = prefs.getBoolean("auto_tracking_enabled", false)
+        updateAutoTrackingUi(autoTrackingSwitch.isChecked)
+        
         extendedParamsSwitch.isChecked = prefs.getBoolean("extended_params", true)
         significantMotionSwitch.isChecked = prefs.getBoolean("significant_motion_only", true)
         startOnBootSwitch.isChecked = prefs.getBoolean("start_on_boot", false)
@@ -157,7 +234,9 @@ class SettingsFragment : Fragment() {
 
         intervalEdit.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) {
-                saveSetting("logging_interval", s?.toString() ?: "15")
+                val value = s?.toString() ?: "15"
+                saveSetting("logging_interval", value)
+                updateProfileToCustom()
             }
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
@@ -165,7 +244,9 @@ class SettingsFragment : Fragment() {
 
         distanceEdit.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) {
-                saveSetting("logging_distance", s?.toString() ?: "10")
+                val value = s?.toString() ?: "10"
+                saveSetting("logging_distance", value)
+                updateProfileToCustom()
             }
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
@@ -173,7 +254,9 @@ class SettingsFragment : Fragment() {
 
         accuracyEdit.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) {
-                saveSetting("logging_accuracy", s?.toString() ?: "50")
+                val value = s?.toString() ?: "50"
+                saveSetting("logging_accuracy", value)
+                updateProfileToCustom()
             }
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}

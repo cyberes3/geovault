@@ -72,6 +72,8 @@ class TrackingService : Service() {
         const val PREF_ACCURACY = "logging_accuracy"
         const val PREF_EXTENDED_PARAMS = "extended_params"
         const val PREF_SIGNIFICANT_MOTION = "significant_motion_only"
+        const val PREF_AUTO_TRACKING = "auto_tracking_enabled"
+        const val PREF_TRACKING_PROFILE = "tracking_profile"
         const val PREF_WAS_TRACKING_BEFORE_EXIT = "was_tracking_before_exit"
 
         /** Interval between retry attempts when the queue has failed-to-send items. */
@@ -113,6 +115,9 @@ class TrackingService : Service() {
     private var watchdogJob: Job? = null
     private var retryJob: Job? = null
     private val pushMutex = kotlinx.coroutines.sync.Mutex()
+    
+    private var currentActiveProfileIndex = -1
+    private var lastSpeedMps: Float = 0f
 
     override fun onCreate() {
         super.onCreate()
@@ -166,8 +171,26 @@ class TrackingService : Service() {
         startForeground(NOTIFICATION_ID, createNotification(0, 0), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
 
         val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val intervalSec = prefs.getString(PREF_INTERVAL, "15")?.toLongOrNull() ?: 15L
-        val distanceFilter = prefs.getString(PREF_DISTANCE, "10")?.toFloatOrNull() ?: 10f
+        val isAuto = prefs.getBoolean(PREF_AUTO_TRACKING, false)
+        
+        currentActiveProfileIndex = if (isAuto) {
+            prefs.getString(PREF_TRACKING_PROFILE, "1")?.toIntOrNull() ?: 1
+        } else {
+            -1 // Manual mode
+        }
+
+        val intervalSec: Long
+        val distanceFilter: Float
+        
+        if (isAuto) {
+            val params = TrackingLocationPolicy.getProfileParams(currentActiveProfileIndex)
+            intervalSec = params.first
+            distanceFilter = params.second
+        } else {
+            intervalSec = prefs.getString(PREF_INTERVAL, "15")?.toLongOrNull() ?: 15L
+            distanceFilter = prefs.getString(PREF_DISTANCE, "10")?.toFloatOrNull() ?: 10f
+        }
+        
         val (intervalMs, minUpdateMs) = TrackingLocationPolicy.locationRequestIntervalFromSec(intervalSec)
 
         val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
@@ -257,6 +280,28 @@ class TrackingService : Service() {
         
         totalDistanceMeters += lastLocation?.distanceTo(smoothedLocation) ?: 0f
         sessionTotalDistanceMeters = totalDistanceMeters
+        
+        // Auto-profile switching logic
+        if (prefs.getBoolean(PREF_AUTO_TRACKING, false)) {
+            val speed = if (location.hasSpeed()) location.speed else {
+                // Fallback to calculated speed if hardware speed is missing
+                val dist = lastLocation?.distanceTo(location) ?: 0f
+                val timeSec = (location.time - (lastLocation?.time ?: location.time)) / 1000f
+                if (timeSec > 0) dist / timeSec else 0f
+            }
+            
+            // Simple smoothing for auto-mode speed detection
+            lastSpeedMps = (0.7f * lastSpeedMps) + (0.3f * speed)
+            
+            val recommended = TrackingLocationPolicy.getRecommendedProfile(lastSpeedMps, currentActiveProfileIndex)
+            if (recommended != currentActiveProfileIndex) {
+                Log.d(TAG, "Auto-switching profile from $currentActiveProfileIndex to $recommended (speed: ${lastSpeedMps}m/s)")
+                currentActiveProfileIndex = recommended
+                prefs.edit().putString(PREF_TRACKING_PROFILE, recommended.toString()).apply()
+                updateLocationRequest(recommended)
+            }
+        }
+
         lastLocation = smoothedLocation
 
         val intent = Intent("com.geovault.tracker.LOCATION_UPDATE").apply {
@@ -529,5 +574,23 @@ class TrackingService : Service() {
         } catch (e: SecurityException) {
             ""
         }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun updateLocationRequest(profileIndex: Int) {
+        if (!isTracking) return
+        
+        val params = TrackingLocationPolicy.getProfileParams(profileIndex)
+        val intervalSec = params.first
+        val distanceFilter = params.second
+        val (intervalMs, minUpdateMs) = TrackingLocationPolicy.locationRequestIntervalFromSec(intervalSec)
+
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
+            .setMinUpdateDistanceMeters(distanceFilter)
+            .setMinUpdateIntervalMillis(minUpdateMs)
+            .build()
+            
+        fusedLocationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
+        Log.d(TAG, "Updated LocationRequest: interval=${intervalSec}s, distance=${distanceFilter}m")
     }
 }

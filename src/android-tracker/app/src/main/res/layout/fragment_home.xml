@@ -121,6 +121,15 @@
             android:textColor="@color/text_secondary"
             android:layout_marginBottom="16dp" />
 
+        <TextView
+            android:id="@+id/debugTrackModeText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textColor="@color/text_secondary"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone" />
+
         <LinearLayout
             android:id="@+id/sessionStatsContainer"
             android:layout_width="match_parent"
@@ -409,15 +418,6 @@
             android:layout_height="64dp"
             android:text="@string/start_tracking"
             android:textSize="18sp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/testAddPointButton"
-            style="@style/gv_common_ButtonOutlined"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="@string/test_add_point_button"
-            android:textSize="14sp" />
 
         <TextView
             android:id="@+id/currentLocationText"

@@ -203,16 +203,24 @@ class MainActivity : AppCompatActivity() {
         })
 
         findViewById<View>(R.id.navHome).setOnClickListener {
+            if (isParamsOverlayOnTop()) {
+                supportFragmentManager.popBackStack()
+                viewPager.setCurrentItem(0, false)
+                return@setOnClickListener
+            }
             viewPager.setCurrentItem(0, false)
         }
         findViewById<View>(R.id.navMap).setOnClickListener {
+            if (isParamsOverlayOnTop()) {
+                supportFragmentManager.popBackStack()
+            }
             val mapFragment = pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.MapFragment
             val isStreaming = mapFragment?.isShowingStreamedTrack() ?: false
-            
+
             // Predict what tracker to load on the map and pass metadata instantly
             val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
             val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
-            
+
             if (defaultTrackerId.isNotEmpty() && initialTrackForMap == null && !isStreaming) {
                 TrackerRepository.getTrackers(this, forceRefresh = false) { list ->
                     val defaultTracker = list?.find { it.id == defaultTrackerId }
@@ -237,13 +245,25 @@ class MainActivity : AppCompatActivity() {
             }
         }
         findViewById<View>(R.id.navTrackers).setOnClickListener {
+            if (isParamsOverlayOnTop()) {
+                supportFragmentManager.popBackStack()
+                viewPager.setCurrentItem(2, false)
+                return@setOnClickListener
+            }
             viewPager.setCurrentItem(2, false)
         }
         findViewById<View>(R.id.navSettings).setOnClickListener {
+            if (isParamsOverlayOnTop()) {
+                supportFragmentManager.popBackStack()
+                viewPager.setCurrentItem(3, false)
+                return@setOnClickListener
+            }
             viewPager.setCurrentItem(3, false)
         }
 
         updateNavTabBackground(savedTab)
+        supportFragmentManager.addOnBackStackChangedListener { updateBottomNavForOverlay() }
+        updateBottomNavForOverlay()
         updatePermissionsState()
 
         onBackPressedDispatcher.addCallback(
@@ -365,6 +385,39 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
+    private fun isParamsOverlayOnTop(): Boolean {
+        if (supportFragmentManager.backStackEntryCount == 0) return false
+        return supportFragmentManager.getBackStackEntryAt(supportFragmentManager.backStackEntryCount - 1).name == "tracker_params"
+    }
+
+    private fun updateBottomNavForOverlay() {
+        val navHome = findViewById<View>(R.id.navHome)
+        val navMap = findViewById<View>(R.id.navMap)
+        val navTrackers = findViewById<View>(R.id.navTrackers)
+        val navSettings = findViewById<View>(R.id.navSettings)
+        val topName = if (supportFragmentManager.backStackEntryCount > 0) {
+            supportFragmentManager.getBackStackEntryAt(supportFragmentManager.backStackEntryCount - 1).name
+        } else null
+        val disableNav = topName == "new_tracker" || topName == "edit_tracker"
+        navHome.isEnabled = !disableNav
+        navHome.isClickable = !disableNav
+        navMap.isEnabled = !disableNav
+        navMap.isClickable = !disableNav
+        navTrackers.isEnabled = !disableNav
+        navTrackers.isClickable = !disableNav
+        navSettings.isEnabled = !disableNav
+        navSettings.isClickable = !disableNav
+        if (disableNav) {
+            val grayColor = ContextCompat.getColor(this, R.color.text_secondary)
+            updateNavTabColors(navHome, false, grayColor, grayColor)
+            updateNavTabColors(navMap, false, grayColor, grayColor)
+            updateNavTabColors(navTrackers, false, grayColor, grayColor)
+            updateNavTabColors(navSettings, false, grayColor, grayColor)
+        } else {
+            updateNavTabBackground(viewPager.currentItem)
+        }
+    }
+
     private fun updateNavTabBackground(position: Int) {
         val navHome = findViewById<View>(R.id.navHome)
         val navMap = findViewById<View>(R.id.navMap)

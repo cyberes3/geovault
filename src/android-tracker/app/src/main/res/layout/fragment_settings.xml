@@ -78,6 +78,38 @@
                 android:layout_marginTop="8dp"
                 android:layout_marginBottom="24dp" />
 
+            <!-- Auto Tracking Toggle -->
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/autoTrackingSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="@string/auto_tracking_label"
+                android:textSize="16sp"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Tracking Profile Selector -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/tracking_profile_label"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <Spinner
+                android:id="@+id/profileSpinner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="56dp"
+                android:background="@drawable/bg_spinner_selector"
+                android:paddingStart="14dp"
+                android:paddingEnd="40dp"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp"
+                android:layout_marginBottom="24dp" />
+
             <!-- Logging / filter fields section -->
             <LinearLayout
                 android:layout_width="match_parent"

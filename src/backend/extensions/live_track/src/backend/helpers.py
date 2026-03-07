@@ -154,7 +154,10 @@ def broadcast_track_updated(
     props: dict,
     index: int | None = None,
 ):
-    """Broadcast new point so client can insert or append. point = [lon, lat, timestamp_ms]; props = point_params; index = insertion index when not append."""
+    """Broadcast new point so client can insert or append. point = [lon, lat, timestamp_ms]; props = point_params; index = insertion index when not append.
+    Only sent to live_track_{user_id} (standalone trackers-live WS). Do not send to realtime_{user_id};
+    RealtimeConsumer no longer has a live_track module and would raise 'No handler for message type live_track_track_updated'.
+    """
     channel_layer = get_channel_layer()
     if channel_layer:
         data = {"track_id": track_id, "point": point, "props": props}

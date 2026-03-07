@@ -70,7 +70,7 @@ class LiveTrackOnlyConsumer(AsyncWebsocketConsumer):
         )
 
     async def live_track_track_updated(self, event):
-        """Forward track_updated to the client (same JSON shape as full realtime)."""
+        """Forward track_updated to the client (module/type/data JSON shape)."""
         data = event.get("data") or {}
         await self.send(text_data=json.dumps({
             "module": "live_track",
