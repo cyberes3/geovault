@@ -402,10 +402,10 @@ class TrackingService : Service() {
         }
         val stopPendingIntent = PendingIntent.getActivity(this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE)
 
+        val noGoodFix = lastAccuracyMeters == null || lastAccuracyMeters!! > 152.4f
         val status = when {
             isGpsPaused -> "GPS Paused (waiting for motion)"
-            lastAccuracyMeters != null && lastAccuracyMeters!! > 152.4f -> "Waiting for lock"
-            isWaitingForGpsLock -> "Waiting for GPS lock"
+            noGoodFix -> getString(R.string.locking)
             else -> "Tracking location"
         }
         val counts = "Sent: $sentCount - Queued: $queuedCount"

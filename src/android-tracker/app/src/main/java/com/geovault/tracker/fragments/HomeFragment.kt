@@ -385,10 +385,11 @@ class HomeFragment : Fragment() {
         if (!::trackingStatusText.isInitialized) return
         val running = TrackingService.isRunning
         val acc = TrackingService.lastAccuracyMeters
-        val isWaiting = running && acc != null && acc > 152.4f
+        val noGoodFix = acc == null || acc > 152.4f
+        val isLocking = running && noGoodFix
 
         trackingStatusText.text = getString(when {
-            isWaiting -> R.string.waiting_for_lock
+            isLocking -> R.string.waiting_for_gps_lock
             running -> R.string.tracking_active
             else -> R.string.not_tracking
         })
@@ -396,7 +397,7 @@ class HomeFragment : Fragment() {
             ContextCompat.getColor(
                 requireContext(),
                 when {
-                    isWaiting -> R.color.error_red
+                    isLocking -> R.color.warning_yellow
                     running -> R.color.warning_yellow
                     else -> R.color.primary_blue
                 }

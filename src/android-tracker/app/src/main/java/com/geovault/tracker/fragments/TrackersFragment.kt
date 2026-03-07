@@ -18,6 +18,7 @@ import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
+import com.google.android.material.card.MaterialCardView
 import com.google.android.material.button.MaterialButton
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -32,6 +33,7 @@ class TrackersFragment : Fragment() {
     private lateinit var loadingOverlay: View
     private lateinit var loadingSpinner: LoadingSpinner
     private var adapter: TrackersAdapter? = null
+    private var pendingScrollToTrackerId: String? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -62,6 +64,7 @@ class TrackersFragment : Fragment() {
                 super.onScrolled(recyclerView, dx, dy)
                 val canScrollUp = recyclerView.canScrollVertically(-1)
                 trackerListDivider.visibility = if (canScrollUp) View.VISIBLE else View.INVISIBLE
+                if (dx != 0 || dy != 0) clearHighlight()
             }
         })
         adapter = TrackersAdapter(emptyList()) { tracker, action ->
@@ -95,6 +98,7 @@ class TrackersFragment : Fragment() {
                     loadingSpinner.stop(hide = false)
                     loadingOverlay.visibility = View.GONE
                     adapter?.setTrackers(list ?: emptyList())
+                    applyScrollAndHighlightIfPending()
                 }
             }
         }
@@ -120,6 +124,11 @@ class TrackersFragment : Fragment() {
         }
     }
 
+    override fun onPause() {
+        super.onPause()
+        clearHighlight()
+    }
+
     companion object {
         const val REQUEST_REFRESH_LIST = "tracker_list_refresh"
         const val REQUEST_UPDATE_TRACKER = "tracker_list_update_tracker"
@@ -127,6 +136,7 @@ class TrackersFragment : Fragment() {
     }
 
     private fun loadTrackers() {
+        clearHighlight()
         loadingOverlay.visibility = View.VISIBLE
         loadingSpinner.start()
         TrackerRepository.getTrackers(requireContext(), forceRefresh = true) { list ->
@@ -151,6 +161,30 @@ class TrackersFragment : Fragment() {
         }
     }
 
+    /** Called when user taps the name chip on the map: switch to this tab and scroll to the given tracker (or just open list if null). */
+    fun requestScrollToTrackerId(trackerId: String?) {
+        pendingScrollToTrackerId = trackerId
+        if ((adapter?.itemCount ?: 0) > 0) {
+            applyScrollAndHighlightIfPending()
+        }
+    }
+
+    private fun clearHighlight() {
+        adapter?.setHighlightedTrackerId(null)
+    }
+
+    private fun applyScrollAndHighlightIfPending() {
+        val id = pendingScrollToTrackerId ?: return
+        pendingScrollToTrackerId = null
+        val ad = adapter ?: return
+        val index = ad.indexOfTrackerId(id)
+        if (index < 0) return
+        val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return
+        val offset = recyclerView.height / 3
+        layoutManager.scrollToPositionWithOffset(index, offset)
+        ad.setHighlightedTrackerId(id)
+    }
+
     private fun viewOnMap(tracker: Tracker) {
         // Do not change default track; only show this track on the map. Reset will load the default.
         TrackerRepository.clearCurrentTrackerCache()
@@ -164,6 +198,25 @@ class TrackersFragment : Fragment() {
         private var trackers: List<Tracker>,
         private val onAction: (Tracker, TrackerAction) -> Unit
     ) : RecyclerView.Adapter<TrackersAdapter.ViewHolder>() {
+
+        var highlightedTrackerId: String? = null
+            private set
+
+        fun indexOfTrackerId(id: String): Int = trackers.indexOfFirst { it.id == id }
+
+        fun setHighlightedTrackerId(id: String?) {
+            if (highlightedTrackerId == id) return
+            val oldId = highlightedTrackerId
+            highlightedTrackerId = id
+            if (oldId != null) {
+                val oldIndex = indexOfTrackerId(oldId)
+                if (oldIndex >= 0) notifyItemChanged(oldIndex)
+            }
+            if (id != null) {
+                val newIndex = indexOfTrackerId(id)
+                if (newIndex >= 0) notifyItemChanged(newIndex)
+            }
+        }
 
         fun setTrackers(list: List<Tracker>) {
             trackers = list
@@ -187,7 +240,7 @@ class TrackersFragment : Fragment() {
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            holder.bind(trackers[position])
+            holder.bind(trackers[position], highlightedTrackerId)
         }
 
         override fun getItemCount(): Int = trackers.size
@@ -206,7 +259,7 @@ class TrackersFragment : Fragment() {
             private val btnEdit: MaterialButton = itemView.findViewById(R.id.btnEdit)
             private val btnViewOnMap: MaterialButton = itemView.findViewById(R.id.btnViewOnMap)
 
-            fun bind(tracker: Tracker) {
+            fun bind(tracker: Tracker, highlightedId: String?) {
                 val selectedId = itemView.context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
                     .getString("selected_tracker_id", "") ?: ""
                 trackerSelectedCheck.visibility = if (tracker.id == selectedId) View.VISIBLE else View.GONE
@@ -249,6 +302,16 @@ class TrackersFragment : Fragment() {
                 btnViewParams.setOnClickListener { onAction(tracker, TrackerAction.VIEW_PARAMS) }
                 btnEdit.setOnClickListener { onAction(tracker, TrackerAction.EDIT) }
                 btnViewOnMap.setOnClickListener { onAction(tracker, TrackerAction.VIEW_ON_MAP) }
+                (itemView as? MaterialCardView)?.let { card ->
+                    val highlight = tracker.id == highlightedId
+                    val strokePx = if (highlight) (2 * itemView.resources.displayMetrics.density).toInt() else 0
+                    card.setStrokeWidth(strokePx)
+                    card.strokeColor = if (strokePx > 0) {
+                        ContextCompat.getColor(itemView.context, R.color.primary_blue)
+                    } else {
+                        android.graphics.Color.TRANSPARENT
+                    }
+                }
             }
         }
 

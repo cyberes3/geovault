@@ -25,6 +25,7 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit
 
 /**
@@ -47,9 +48,32 @@ class LiveTrackStreamingService : Service() {
         const val EXTRA_POINT_LON = "point_lon"
         const val EXTRA_POINT_LAT = "point_lat"
         const val EXTRA_POINT_TS_MS = "point_ts_ms"
-        const val EXTRA_INDEX = "index"
-        private const val RECONNECT_DELAY_MS = 3000L
+        private const val RECONNECT_BASE_DELAY_MS = 3000L
+        private const val RECONNECT_MAX_DELAY_MS = 60000L
         private const val WS_READ_TIMEOUT_SEC = 90L
+        private const val WS_PING_INTERVAL_SEC = 30L
+        private const val MAX_BUFFERED_POINTS = 1000
+
+        /**
+         * In-memory buffer of streamed points. Points are added by the service
+         * and drained by MapFragment on resume so no data is lost when the
+         * map tab is not visible.
+         */
+        private val pointBuffer = ConcurrentLinkedQueue<TrackPointBroadcast>()
+
+        /**
+         * Drain all buffered points and return them as a list.
+         * Call from MapFragment.onResume() to catch up on missed points.
+         */
+        @JvmStatic
+        fun drainBufferedPoints(): List<TrackPointBroadcast> {
+            val result = mutableListOf<TrackPointBroadcast>()
+            while (true) {
+                val p = pointBuffer.poll() ?: break
+                result.add(p)
+            }
+            return result
+        }
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
@@ -57,18 +81,7 @@ class LiveTrackStreamingService : Service() {
     private var currentTrackerId: String? = null
     private var currentTrackerName: String? = null
     private var connectJob: Job? = null
-    private var client: OkHttpClient? = null
-
-    private fun getHttpClient(): OkHttpClient {
-        if (client == null) {
-            client = RetrofitClient.getAuthenticatedOkHttpClient(applicationContext).newBuilder()
-                .readTimeout(WS_READ_TIMEOUT_SEC, TimeUnit.SECONDS)
-                .writeTimeout(10, TimeUnit.SECONDS)
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .build()
-        }
-        return client!!
-    }
+    private var reconnectAttempts = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -81,8 +94,12 @@ class LiveTrackStreamingService : Service() {
                 val trackerId = intent.getStringExtra(EXTRA_TRACKER_ID)
                 val trackerName = intent.getStringExtra(EXTRA_TRACKER_NAME)
                 if (!trackerId.isNullOrBlank()) {
+                    // Close previous WebSocket if switching trackers
+                    disconnect()
+                    pointBuffer.clear()
                     currentTrackerId = trackerId
                     currentTrackerName = trackerName
+                    reconnectAttempts = 0
                     val notification = createNotification(trackerName)
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                         startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
@@ -101,7 +118,7 @@ class LiveTrackStreamingService : Service() {
                 stopSelf()
             }
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -110,6 +127,14 @@ class LiveTrackStreamingService : Service() {
         connectJob?.cancel()
         disconnect()
         super.onDestroy()
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.d(TAG, "Task removed, stopping streaming service")
+        disconnect()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        super.onTaskRemoved(rootIntent)
     }
 
     private fun createNotificationChannel() {
@@ -180,27 +205,43 @@ class LiveTrackStreamingService : Service() {
                 .build()
             val listener = TrackersWebSocketListener(
                 currentTrackerId!!,
-                onPoint = { sendBroadcast(it) },
+                onPoint = { bufferAndBroadcast(it) },
                 onDisconnect = { scheduleReconnect() }
             )
+            val wsClient = RetrofitClient.getAuthenticatedOkHttpClient(applicationContext).newBuilder()
+                .readTimeout(WS_READ_TIMEOUT_SEC, TimeUnit.SECONDS)
+                .writeTimeout(10, TimeUnit.SECONDS)
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .pingInterval(WS_PING_INTERVAL_SEC, TimeUnit.SECONDS)
+                .build()
             try {
-                webSocket = getHttpClient().newWebSocket(request, listener)
+                webSocket = wsClient.newWebSocket(request, listener)
+                reconnectAttempts = 0
                 break
             } catch (e: Exception) {
                 Log.e(TAG, "WebSocket connect failed", e)
             }
-            delay(RECONNECT_DELAY_MS)
+            val delayMs = (RECONNECT_BASE_DELAY_MS * (1L shl reconnectAttempts.coerceAtMost(4)))
+                .coerceAtMost(RECONNECT_MAX_DELAY_MS)
+            reconnectAttempts++
+            delay(delayMs)
         }
     }
 
-    private fun sendBroadcast(point: TrackPointBroadcast) {
+    private fun bufferAndBroadcast(point: TrackPointBroadcast) {
+        // Buffer the point so MapFragment can catch up on resume
+        pointBuffer.add(point)
+        while (pointBuffer.size > MAX_BUFFERED_POINTS) {
+            pointBuffer.poll()
+        }
+
+        // Also broadcast for the live case (map is visible right now)
         val intent = Intent(BROADCAST_TRACK_POINT).apply {
             setPackage(packageName)
             putExtra(EXTRA_TRACK_ID, point.trackId)
             putExtra(EXTRA_POINT_LON, point.lon)
             putExtra(EXTRA_POINT_LAT, point.lat)
             putExtra(EXTRA_POINT_TS_MS, point.timestampMs)
-            point.index?.let { putExtra(EXTRA_INDEX, it) }
         }
         sendBroadcast(intent)
     }
@@ -209,7 +250,10 @@ class LiveTrackStreamingService : Service() {
         if (currentTrackerId == null) return
         connectJob?.cancel()
         connectJob = serviceScope.launch {
-            delay(RECONNECT_DELAY_MS)
+            val delayMs = (RECONNECT_BASE_DELAY_MS * (1L shl reconnectAttempts.coerceAtMost(4)))
+                .coerceAtMost(RECONNECT_MAX_DELAY_MS)
+            reconnectAttempts++
+            delay(delayMs)
             if (currentTrackerId != null) connect(currentTrackerName)
         }
     }
@@ -223,14 +267,14 @@ class LiveTrackStreamingService : Service() {
             webSocket?.close(1000, null)
         } catch (_: Exception) { }
         webSocket = null
+        pointBuffer.clear()
     }
 
-    private data class TrackPointBroadcast(
+    data class TrackPointBroadcast(
         val trackId: String,
         val lon: Double,
         val lat: Double,
-        val timestampMs: Long,
-        val index: Int? = null
+        val timestampMs: Long
     )
 
     private class TrackersWebSocketListener(
@@ -253,8 +297,7 @@ class LiveTrackStreamingService : Service() {
                 val lon = pointArr.getDouble(0)
                 val lat = pointArr.getDouble(1)
                 val ts = if (pointArr.length() >= 3) pointArr.getLong(2) else 0L
-                val index = if (data.has("index")) data.optInt("index", -1).takeIf { it >= 0 } else null
-                onPoint(TrackPointBroadcast(trackId, lon, lat, ts, index))
+                onPoint(TrackPointBroadcast(trackId, lon, lat, ts))
             } catch (e: Exception) {
                 Log.e(TAG, "Parse track_updated failed", e)
             }

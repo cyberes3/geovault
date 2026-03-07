@@ -309,14 +309,15 @@ def app_ingress(request):
         coords = list(geom.get("coordinates") or [])
         point_params = list(track_locked.point_params or [])
 
+        ts_list = [c[2] for c in coords]
         for point_data in points:
             new_point = [point_data["lon"], point_data["lat"], point_data["timestamp"]]
             extra = {k: v for k, v in point_data.items() if k not in ("lat", "lon", "timestamp")}
 
-            ts_list = [c[2] for c in coords]
             idx = bisect.bisect_right(ts_list, point_data["timestamp"])
             coords.insert(idx, new_point)
             point_params.insert(idx, extra)
+            ts_list.insert(idx, point_data["timestamp"])
 
         if len(coords) > max_points:
             n_removed = len(coords) - max_points

@@ -25,6 +25,7 @@ import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.TrackingService
+import com.geovault.tracker.TrackUpdateHelper
 import kotlinx.coroutines.*
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -49,6 +50,7 @@ class MapFragment : Fragment() {
     private lateinit var mapManager: MapLibreManager
     private var maplibreMap: MapLibreMap? = null
     private var trackPoints: MutableList<LatLng> = mutableListOf()
+    private var trackTimestamps: MutableList<Long> = mutableListOf()
     /** Tracker color (hex e.g. "#3388ff") for trail and icon; set when loading tracker in fetchHistory. */
     private var currentTrackerColor: String? = null
 
@@ -60,6 +62,15 @@ class MapFragment : Fragment() {
     private lateinit var zoomToLatestButton: View
     private lateinit var zoomToLatestButtonIcon: ImageView
     private lateinit var geometryLoadingSpinner: LoadingSpinner
+    private lateinit var lastUpdatedLabel: TextView
+
+    /** True while fetchFullGeometryAndApply is in progress; used so bottom-right spinner stays visible if streaming starts. */
+    private var geometryLoadingInProgress = false
+
+    /** Last streamed point timestamp (ms); only set when viewing a non-default track. Cleared when stopping streaming or switching tracker. */
+    private var lastStreamedPointTimeMs: Long? = null
+    /** Cached last-update time (ms) from loaded tracker/initial data; used to prefill "Updated" chip before first network point. */
+    private var lastCachedUpdateTimeMs: Long? = null
 
     private var mapReady = false
     private var followLockEnabled = false
@@ -71,6 +82,8 @@ class MapFragment : Fragment() {
     private var displayedTrackerId: String? = null
     /** Name of the tracker currently shown on the map; used for the label in the upper left. */
     private var displayedTrackerName: String? = null
+    /** Dirty flag for debounced track line updates. */
+    private var trackLineDirty = false
 
     private val mainScope = CoroutineScope(Dispatchers.Main + Job())
 
@@ -107,19 +120,17 @@ class MapFragment : Fragment() {
             if (intent.action != LiveTrackStreamingService.BROADCAST_TRACK_POINT) return
             val trackId = intent.getStringExtra(LiveTrackStreamingService.EXTRA_TRACK_ID) ?: return
             if (trackId != displayedTrackerId) return
+            val tsMs = intent.getLongExtra(LiveTrackStreamingService.EXTRA_POINT_TS_MS, 0L)
+            if (tsMs > 0L) {
+                lastStreamedPointTimeMs = tsMs
+                val defaultTrackerId = context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+                    .getString("selected_tracker_id", "") ?: ""
+                if (isAdded) updateStreamingUi(defaultTrackerId)
+            }
             val lat = intent.getDoubleExtra(LiveTrackStreamingService.EXTRA_POINT_LAT, 0.0)
             val lon = intent.getDoubleExtra(LiveTrackStreamingService.EXTRA_POINT_LON, 0.0)
-            val index = if (intent.hasExtra(LiveTrackStreamingService.EXTRA_INDEX)) {
-                intent.getIntExtra(LiveTrackStreamingService.EXTRA_INDEX, -1).takeIf { it >= 0 }
-            } else null
-            val latLng = LatLng(lat, lon)
-            if (index != null && index <= trackPoints.size) {
-                trackPoints.add(index, latLng)
-            } else {
-                trackPoints.add(latLng)
-            }
-            if (trackPoints.size > 1000) trackPoints.removeAt(0)
-            updateTrackLine()
+            TrackUpdateHelper.updateTrack(trackPoints, trackTimestamps, LatLng(lat, lon), tsMs.takeIf { it > 0L } ?: System.currentTimeMillis())
+            scheduleTrackLineUpdate()
             updateZoomToLatestButtonState()
             if (followLockEnabled && trackPoints.isNotEmpty()) {
                 centerCameraOnTrackLocked(trackPoints.last())
@@ -147,8 +158,12 @@ class MapFragment : Fragment() {
         zoomToLatestButton = view.findViewById(R.id.zoomToLatestButton)
         zoomToLatestButtonIcon = view.findViewById(R.id.zoomToLatestButtonIcon)
         geometryLoadingSpinner = view.findViewById(R.id.geometryLoadingSpinner)
+        lastUpdatedLabel = view.findViewById(R.id.lastUpdatedLabel)
 
         updateTrackerLabel()
+        trackerLabelCard.setOnClickListener {
+            (activity as? MainActivity)?.openTrackersAndScrollTo(displayedTrackerId)
+        }
         resetToTrackerButton.setOnClickListener {
             TrackerRepository.cancelGeometryRequest()
             restoreTrackForSelectedTracker()
@@ -298,6 +313,21 @@ class MapFragment : Fragment() {
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
 
+        // Drain any points buffered while the map was not visible
+        val buffered = LiveTrackStreamingService.drainBufferedPoints()
+        if (buffered.isNotEmpty()) {
+            for (p in buffered) {
+                TrackUpdateHelper.updateTrack(trackPoints, trackTimestamps, LatLng(p.lat, p.lon), p.timestampMs)
+            }
+            val lastTs = buffered.last().timestampMs
+            if (lastTs > 0L) lastStreamedPointTimeMs = lastTs
+            scheduleTrackLineUpdate()
+            updateZoomToLatestButtonState()
+            if (followLockEnabled && trackPoints.isNotEmpty()) {
+                centerCameraOnTrackLocked(trackPoints.last())
+            }
+        }
+
         if (mapReady) {
             val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
             val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
@@ -312,10 +342,10 @@ class MapFragment : Fragment() {
                 updateTrackerLabel()
             } else {
                 val showingDefault = displayedTrackerId == null || displayedTrackerId == defaultTrackerId
-                if (showingDefault) {
+                if (showingDefault && trackPoints.isEmpty()) {
                     TrackerRepository.clearGeometryCache()
                     restoreOnlyNoZoom = true
-                    fetchFullGeometryAndApply(defaultTrackerId, forceReplace = true)
+                    fetchFullGeometryAndApply(defaultTrackerId, forceReplace = false)
                 }
             }
         }
@@ -381,9 +411,31 @@ class MapFragment : Fragment() {
             trackerLabelCard.visibility = View.GONE
             displayedTrackerId = null
             displayedTrackerName = null
+            lastCachedUpdateTimeMs = null
+            updateStreamingUi("")
         } else {
             trackerLabelCard.visibility = View.VISIBLE
-            trackerNameLabel.maxWidth = resources.displayMetrics.widthPixels / 2
+            val density = resources.displayMetrics.density
+            val maxAllowedWidth = (resources.displayMetrics.widthPixels * 2) / 3
+            
+            // Card wraps to its ConstraintLayout content
+            trackerLabelCard.layoutParams = trackerLabelCard.layoutParams.apply {
+                width = ViewGroup.LayoutParams.WRAP_CONTENT
+            }
+            
+            // Constrain text widths so the card doesn't exceed 2/3 screen width
+            // Top row overhead: paddingStart(14) + paddingEnd(8) + ResetButton(28) + marginEnd(8) = 58dp
+            trackerNameLabel.maxWidth = maxAllowedWidth - (58 * density).toInt()
+
+            // Bottom row overhead: paddingStart(14) + lastUpdatedPaddingEnd(12) + paddingEnd(8) = 34dp
+            // Use a fixed width for the lastUpdatedLabel so it doesn't jitter the card width!
+            val updatedFixedDesiredWidth = (160 * density).toInt()
+            val cappedUpdatedWidth = updatedFixedDesiredWidth.coerceAtMost(maxAllowedWidth - (34 * density).toInt())
+            lastUpdatedLabel.layoutParams = lastUpdatedLabel.layoutParams.apply {
+                width = cappedUpdatedWidth
+            }
+            lastUpdatedLabel.maxWidth = cappedUpdatedWidth
+
             val labelName = displayedTrackerName?.takeIf { it.isNotBlank() }
                 ?: defaultTrackerName.takeIf { it.isNotBlank() }
                 ?: getString(R.string.select_tracker)
@@ -392,18 +444,81 @@ class MapFragment : Fragment() {
             resetToTrackerButton.visibility = if (
                 displayedTrackerId != null && displayedTrackerId != defaultTrackerId
             ) View.VISIBLE else View.GONE
+            updateStreamingUi(defaultTrackerId)
         }
+    }
+
+    /** Return true if we are currently viewing a track that is NOT the default one. */
+    fun isShowingStreamedTrack(): Boolean {
+        if (!isAdded) return false
+        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+        val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
+        return isStreaming(defaultTrackerId)
+    }
+
+    /** True when the displayed track is a non-default (streamed) track. */
+    private fun isStreaming(defaultTrackerId: String): Boolean {
+        return displayedTrackerId != null && defaultTrackerId.isNotEmpty() && displayedTrackerId != defaultTrackerId
+    }
+
+    private fun updateStreamingUi(defaultTrackerId: String) {
+        if (isStreaming(defaultTrackerId)) {
+            val effectiveTs = lastStreamedPointTimeMs ?: lastCachedUpdateTimeMs
+            effectiveTs?.let { ts ->
+                lastUpdatedLabel.visibility = View.VISIBLE
+                val diffMs = System.currentTimeMillis() - ts
+                val diffSec = (diffMs / 1000).coerceAtLeast(0)
+                val (n, unitResId) = when {
+                    diffSec < 60 -> {
+                        val n = diffSec.toInt()
+                        n to if (n == 1) R.string.last_updated_second else R.string.last_updated_seconds
+                    }
+                    diffSec < 3600 -> {
+                        val n = (diffSec / 60).toInt()
+                        n to if (n == 1) R.string.last_updated_minute else R.string.last_updated_minutes
+                    }
+                    diffSec < 86400 -> {
+                        val n = (diffSec / 3600).toInt()
+                        n to if (n == 1) R.string.last_updated_hour else R.string.last_updated_hours
+                    }
+                    else -> {
+                        val n = (diffSec / 86400).toInt()
+                        n to if (n == 1) R.string.last_updated_day else R.string.last_updated_days
+                    }
+                }
+                lastUpdatedLabel.text = getString(R.string.last_updated_streaming, n, getString(unitResId))
+            } ?: run {
+                lastUpdatedLabel.visibility = View.GONE
+            }
+        } else {
+            lastStreamedPointTimeMs = null
+            lastCachedUpdateTimeMs = null
+            lastUpdatedLabel.visibility = View.GONE
+        }
+        updateBottomRightSpinner(defaultTrackerId)
+    }
+
+    /** Extract last update timestamp (ms) from tracker geometry or last_point; same convention as TrackersFragment. */
+    private fun trackerLastUpdateMs(tracker: Tracker?): Long? {
+        if (tracker == null) return null
+        val coord = tracker.geometry?.coordinates?.lastOrNull() ?: tracker.last_point ?: return null
+        if (coord.size < 3) return null
+        val t = (coord[2] as? Number)?.toLong() ?: return null
+        return if (t < 1e12) t * 1000 else t
+    }
+
+    /** Show bottom-right spinner when loading geometry or when streaming a non-default track. */
+    private fun updateBottomRightSpinner(defaultTrackerId: String) {
+        val show = geometryLoadingInProgress || isStreaming(defaultTrackerId)
+        if (show) geometryLoadingSpinner.show() else geometryLoadingSpinner.hide()
     }
 
     private fun updateLocationOnMap(location: Location) {
         val latLng = LatLng(location.latitude, location.longitude)
-        trackPoints.add(latLng)
-        if (trackPoints.size > 1000) {
-            trackPoints.removeAt(0)
-        }
+        TrackUpdateHelper.updateTrack(trackPoints, trackTimestamps, latLng, location.time)
         val map = maplibreMap
         if (map != null) {
-            updateTrackLine()
+            scheduleTrackLineUpdate()
             updateZoomToLatestButtonState()
             if (followLockEnabled) {
                 centerCameraOnTrackLocked(latLng)
@@ -419,6 +534,21 @@ class MapFragment : Fragment() {
             CameraPosition.Builder().target(target).zoom(zoom).build()
         )
         map.animateCamera(update, FOLLOW_LOCK_ANIMATION_MS)
+    }
+
+    /**
+     * Coalesce rapid track line updates into one GeoJSON rebuild per vsync frame.
+     * Prevents redundant work when multiple points arrive within the same frame.
+     */
+    private fun scheduleTrackLineUpdate() {
+        if (trackLineDirty) return
+        trackLineDirty = true
+        Choreographer.getInstance().postFrameCallback {
+            if (trackLineDirty) {
+                trackLineDirty = false
+                updateTrackLine()
+            }
+        }
     }
 
     /**
@@ -442,6 +572,7 @@ class MapFragment : Fragment() {
         }
 
         trackPoints.clear()
+        trackTimestamps.clear()
         updateTrackLine()
         zoomToTrackAfterLoad = true
         followLockEnabled = false
@@ -492,16 +623,21 @@ class MapFragment : Fragment() {
         prefs: android.content.SharedPreferences
     ) {
         // Set metadata and initial points immediately
+        lastStreamedPointTimeMs = null
         if (initial != null) {
             displayedTrackerId = initial.id
             displayedTrackerName = initial.name
+            lastCachedUpdateTimeMs = trackerLastUpdateMs(initial)
             currentTrackerColor = (initial.color ?: "#3388ff").let { if (it.startsWith("#")) it else "#$it" }
             
             val initialCoords = initial.geometry?.coordinates
             if (!initialCoords.isNullOrEmpty()) {
-                trackPoints.addAll(initialCoords.map { LatLng(it[1], it[0]) })
+                val mapped = initialCoords.map { LatLng(it[1], it[0]) to it[2].toLong() }
+                trackPoints.addAll(mapped.map { it.first })
+                trackTimestamps.addAll(mapped.map { it.second })
             } else if (initial.last_point != null && initial.last_point.size >= 2) {
                 trackPoints.add(LatLng(initial.last_point[1], initial.last_point[0]))
+                trackTimestamps.add(initial.updated_at ?: System.currentTimeMillis())
             }
             
             if (trackPoints.isNotEmpty()) {
@@ -536,6 +672,7 @@ class MapFragment : Fragment() {
             displayedTrackerId = defaultTrackerId
             val defaultName = prefs.getString("selected_tracker_name", "") ?: ""
             displayedTrackerName = defaultName.ifEmpty { null }
+            lastCachedUpdateTimeMs = null
         }
 
         updateTrackerLabel()
@@ -548,10 +685,11 @@ class MapFragment : Fragment() {
     private fun restoreTrackForSelectedTracker() {
         stopLiveTrackStreaming()
         trackPoints.clear()
-        updateTrackLine()
+        trackTimestamps.clear()
         restoreOnlyNoZoom = true
         followLockEnabled = false
         updateFollowLockButton()
+        lastCachedUpdateTimeMs = null
         val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val defaultId = prefs.getString("selected_tracker_id", "") ?: ""
         val defaultName = prefs.getString("selected_tracker_name", "") ?: ""
@@ -592,12 +730,15 @@ class MapFragment : Fragment() {
     }
 
     private fun fetchFullGeometryAndApply(trackerId: String, forceReplace: Boolean = false) {
-        geometryLoadingSpinner.show()
+        geometryLoadingInProgress = true
+        updateBottomRightSpinner(requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).getString("selected_tracker_id", "") ?: "")
         TrackerRepository.getTrackerGeometry(requireContext(), trackerId) { tracker ->
             mainScope.launch {
-                geometryLoadingSpinner.hide()
+                geometryLoadingInProgress = false
+                updateBottomRightSpinner(requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).getString("selected_tracker_id", "") ?: "")
                 displayedTrackerId = trackerId
                 displayedTrackerName = tracker?.name
+                lastCachedUpdateTimeMs = trackerLastUpdateMs(tracker)
                 if (tracker != null) {
                     currentTrackerColor = (tracker.color ?: "#3388ff").let { if (it.startsWith("#")) it else "#$it" }
                 }
@@ -606,7 +747,10 @@ class MapFragment : Fragment() {
                     val shouldReplace = forceReplace || !TrackingService.isRunning || trackPoints.isEmpty()
                     if (shouldReplace) {
                         trackPoints.clear()
-                        trackPoints.addAll(coords.map { LatLng(it[1], it[0]) }.takeLast(1000))
+                        trackTimestamps.clear()
+                        val lastCoords = coords.takeLast(TrackUpdateHelper.MAX_POINTS)
+                        trackPoints.addAll(lastCoords.map { LatLng(it[1], it[0]) })
+                        trackTimestamps.addAll(lastCoords.map { it[2].toLong() })
                     }
                     updateTrackLine()
                     setAnnotationLayersVisibility(true)

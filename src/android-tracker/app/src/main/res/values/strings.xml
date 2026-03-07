@@ -31,6 +31,8 @@
     <string name="tracking_active">Tracking Active</string>
     <string name="preparing">Preparing</string>
     <string name="waiting_for_lock">Waiting for lock</string>
+    <string name="locking">Locking</string>
+    <string name="waiting_for_gps_lock">Waiting for GPS lock</string>
     <string name="start_tracking">Start Tracking</string>
     <string name="stop_tracking">Stop Tracking</string>
     <string name="stop_tracking_confirm_title">Stop tracking?</string>
@@ -161,6 +163,15 @@
     <string name="test_add_point_error">Failed: %1$s</string>
 
     <!-- Live track streaming (non-default track on map) -->
+    <string name="last_updated_streaming">Updated %1$d %2$s ago</string>
+    <string name="last_updated_seconds">seconds</string>
+    <string name="last_updated_second">second</string>
+    <string name="last_updated_minutes">minutes</string>
+    <string name="last_updated_minute">minute</string>
+    <string name="last_updated_hours">hrs</string>
+    <string name="last_updated_hour">hr</string>
+    <string name="last_updated_days">days</string>
+    <string name="last_updated_day">day</string>
     <string name="live_track_streaming_title">Streaming track</string>
     <string name="live_track_streaming_text">%1$s</string>
     <string name="live_track_streaming_text_anon">Track updates</string>

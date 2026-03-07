@@ -12,6 +12,7 @@ object TrackingLocationPolicy {
      * Returns true if the location passes the accuracy filter (should be queued).
      * Accept when location has no accuracy or when accuracy <= threshold.
      */
+    @JvmStatic
     fun acceptByAccuracy(location: Location, accuracyFilter: Float): Boolean {
         if (!location.hasAccuracy()) return true
         return location.accuracy <= accuracyFilter
@@ -20,6 +21,7 @@ object TrackingLocationPolicy {
     /**
      * Returns true if the change in location implies an unrealistic speed (> 100 m/s / ~223 mph).
      */
+    @JvmStatic
     fun isJump(lastLocation: Location?, newLocation: Location): Boolean {
         if (lastLocation == null) return false
         val dist = lastLocation.distanceTo(newLocation)
@@ -33,6 +35,8 @@ object TrackingLocationPolicy {
      * Applies Exponential Weighted Moving Average to smooth the coordinates.
      * alpha = 0.5 means 50% last, 50% new.
      */
+    @JvmStatic
+    @JvmOverloads
     fun smooth(lastLocation: Location?, newLocation: Location, alpha: Float = 0.5f): Location {
         if (lastLocation == null) return newLocation
         val smoothed = Location(newLocation)
@@ -50,6 +54,7 @@ object TrackingLocationPolicy {
      *
      * @return Pair(newConsecutiveStationaryCount, shouldPauseGps)
      */
+    @JvmStatic
     fun stationaryUpdate(
         lastLocation: Location?,
         location: Location,
@@ -74,6 +79,7 @@ object TrackingLocationPolicy {
      * Returns (intervalMillis, minUpdateIntervalMillis) for LocationRequest from interval in seconds.
      * Used so we can unit test that prefs interval is correctly converted.
      */
+    @JvmStatic
     fun locationRequestIntervalFromSec(intervalSec: Long): Pair<Long, Long> {
         val intervalMs = intervalSec * 1000L
         val minUpdateMs = intervalMs / 2

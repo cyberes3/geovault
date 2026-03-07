@@ -198,10 +198,14 @@ class MainActivity : AppCompatActivity() {
             viewPager.setCurrentItem(0, false)
         }
         findViewById<View>(R.id.navMap).setOnClickListener {
+            val mapFragment = pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.MapFragment
+            val isStreaming = mapFragment?.isShowingStreamedTrack() ?: false
+            
             // Predict what tracker to load on the map and pass metadata instantly
             val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
             val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
-            if (defaultTrackerId.isNotEmpty() && initialTrackForMap == null) {
+            
+            if (defaultTrackerId.isNotEmpty() && initialTrackForMap == null && !isStreaming) {
                 TrackerRepository.getTrackers(this, forceRefresh = false) { list ->
                     val defaultTracker = list?.find { it.id == defaultTrackerId }
                     if (defaultTracker != null) {
@@ -215,7 +219,10 @@ class MainActivity : AppCompatActivity() {
                 }
             } else {
                 if (viewPager.currentItem != 1) { // If not already on map
-                    setCurrentTab(1, forceRefreshMap = true, delayMs = 0)
+                    // If we have an initial track set (from "View on map"), force refresh.
+                    // Otherwise, just switch and let MapFragment.onResume handle its own state.
+                    val forceRefresh = initialTrackForMap != null
+                    setCurrentTab(1, forceRefreshMap = forceRefresh, delayMs = 0)
                 } else {
                     viewPager.setCurrentItem(1, false)
                 }
@@ -419,6 +426,15 @@ class MainActivity : AppCompatActivity() {
             }, delayMs)
         } else {
             viewPager.setCurrentItem(index, false)
+        }
+    }
+
+    /** Switch to the Trackers tab and scroll the list to the given tracker (e.g. when user taps the name chip on the map). */
+    fun openTrackersAndScrollTo(trackerId: String?) {
+        viewPager.setCurrentItem(2, false)
+        viewPager.post {
+            (pagerAdapter.getFragment(2) as? com.geovault.tracker.fragments.TrackersFragment)
+                ?.requestScrollToTrackerId(trackerId)
         }
     }
 
