@@ -363,7 +363,7 @@ class MainActivity : AppCompatActivity() {
                             }
                             
                             if (statusCode == 401) {
-                                resetOnAuthFailure(this@MainActivity)
+                                GeovaultAuthManager.handleAuthFailure(this@MainActivity)
                                 return@runOnUiThread
                             }
                             val errorMessage = when (statusCode) {
@@ -454,7 +454,7 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         if (statusCode == 401) {
                             response.close()
-                            resetOnAuthFailure(this@MainActivity)
+                            GeovaultAuthManager.handleAuthFailure(this@MainActivity)
                             return@runOnUiThread
                         }
                         validationTitleText.text = getString(R.string.validation_failed)

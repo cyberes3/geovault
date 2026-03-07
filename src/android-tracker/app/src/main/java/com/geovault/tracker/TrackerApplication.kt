@@ -17,7 +17,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Route
 import java.util.concurrent.TimeUnit
 
-class TrackerApplication : Application() {
+class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListener {
 
     companion object {
         private const val TAG = "GeoVaultTracker"
@@ -44,10 +44,32 @@ class TrackerApplication : Application() {
             redirectUri,
             GeovaultAuthManager.OAUTH_CLIENT_ID_TRACKER
         )
+        GeovaultAuthManager.setAuthFailureListener(this)
         prefetchIfNeeded(applicationContext)
         setMapLibreHttpClient()
         MapStyleCache.preloadMapTilerStyles(applicationContext)
         createNotificationChannels()
+    }
+
+    override fun onAuthFailure(context: Context) {
+        Log.w(TAG, "Unrecoverable auth failure detected. Resetting app.")
+        
+        // 1. Clear tokens
+        GeovaultAuthManager.clearTokens(context)
+        
+        // 2. Stop services
+        context.startService(Intent(context, TrackingService::class.java).apply { action = TrackingService.ACTION_STOP })
+        context.startService(Intent(context, LiveTrackStreamingService::class.java).apply { action = LiveTrackStreamingService.ACTION_STOP })
+        
+        // 3. Clear repository cache
+        TrackerRepository.clearCache()
+        TrackerRepository.clearCurrentTrackerCache()
+        
+        // 4. Return to login/guest screen
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        context.startActivity(intent)
     }
 
     private fun createNotificationChannels() {
@@ -124,6 +146,18 @@ class TrackerApplication : Application() {
                 chain.proceed(request)
             }
         }
+        val authFailureInterceptor = Interceptor { chain ->
+            val response = chain.proceed(chain.request())
+            if (response.code == 403) {
+                GeovaultAuthManager.handleAuthFailure(appContext)
+            } else if (response.code == 401) {
+                val isRetry = response.request.header("X-Geovault-Retry") != null
+                if (isRetry) {
+                    GeovaultAuthManager.handleAuthFailure(appContext)
+                }
+            }
+            response
+        }
         val tokenAuthenticator = Authenticator { _: Route?, response: okhttp3.Response ->
             if (response.priorResponse?.code == 401) return@Authenticator null
             val serverUrl = GeovaultAuthManager.getServerUrl(appContext).trimEnd('/')
@@ -135,11 +169,15 @@ class TrackerApplication : Application() {
                 return@Authenticator null
             }
             if (newToken.isNullOrBlank()) return@Authenticator null
-            response.request.newBuilder().header("Authorization", "Bearer $newToken").build()
+            response.request.newBuilder()
+                .header("Authorization", "Bearer $newToken")
+                .header("X-Geovault-Retry", "true")
+                .build()
         }
         val client = OkHttpClient.Builder()
             .addInterceptor(originInterceptor)
             .addInterceptor(authInterceptor)
+            .addInterceptor(authFailureInterceptor)
             .authenticator(tokenAuthenticator)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)

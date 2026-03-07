@@ -53,6 +53,24 @@ object GeovaultAuthManager {
 
     private var encryptedPrefs: android.content.SharedPreferences? = null
     private val refreshLock = Object()
+    private var authFailureListener: AuthFailureListener? = null
+
+    interface AuthFailureListener {
+        fun onAuthFailure(context: Context)
+    }
+
+    @JvmStatic
+    fun setAuthFailureListener(listener: AuthFailureListener?) {
+        this.authFailureListener = listener
+    }
+
+    /**
+     * Notify the listener that an unrecoverable authentication failure (401/403) has occurred.
+     * The listener (Application) should then clear tokens and reset the app state.
+     */
+    fun handleAuthFailure(context: Context) {
+        authFailureListener?.onAuthFailure(context)
+    }
 
     /**
      * Initialize the auth manager with the application context and the app's OAuth redirect URI.

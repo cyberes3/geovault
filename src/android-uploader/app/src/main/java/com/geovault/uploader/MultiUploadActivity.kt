@@ -477,7 +477,7 @@ class MultiUploadActivity : AppCompatActivity() {
                     runOnUiThread {
                         if (isDestroyed) return@runOnUiThread
                         if (statusCode == 401) {
-                            resetOnAuthFailure(this@MultiUploadActivity)
+                            GeovaultAuthManager.handleAuthFailure(this@MultiUploadActivity)
                         }
                         if (isCancelled) {
                             adapter.updateFileStatus(index, FileStatus.PENDING)

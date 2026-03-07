@@ -483,7 +483,7 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     hideSyncOverlayAndReset()
                     if (response.code() == 401) {
-                        exportThenResetOnAuthFailure(this@MainActivity)
+                        GeovaultAuthManager.handleAuthFailure(this@MainActivity)
                         return
                     }
                     showSnackbar("Server Error: ${response.code()}")

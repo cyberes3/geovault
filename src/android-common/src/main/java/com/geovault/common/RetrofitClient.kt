@@ -39,6 +39,26 @@ object RetrofitClient {
     }
 
     /**
+     * Monitors 401 and 403 responses.
+     * For 403, it triggers auth failure immediately.
+     * For 401, it only triggers if it was already retried (via Authenticator) and still failed.
+     * Initial 401s that fail refresh are handled in [tokenAuthenticator].
+     */
+    private fun authFailureInterceptor(appContext: Context): Interceptor = Interceptor { chain ->
+        val response = chain.proceed(chain.request())
+        if (response.code == 403) {
+            GeovaultAuthManager.handleAuthFailure(appContext)
+        } else if (response.code == 401) {
+            // Check if this was already a retry attempt
+            val isRetry = response.request.header("X-Geovault-Retry") != null
+            if (isRetry) {
+                GeovaultAuthManager.handleAuthFailure(appContext)
+            }
+        }
+        response
+    }
+
+    /**
      * Handles 401 by refreshing the token and retrying once. Return null to stop retries (e.g. refresh failed).
      * OkHttp calls this on a worker thread, so blocking refresh is acceptable.
      */
@@ -65,11 +85,13 @@ object RetrofitClient {
         }
         
         if (newToken.isNullOrBlank()) {
-            GeovaultAuthManager.clearTokens(appContext)
+            // Refresh failed or was not possible (no refresh token). Trigger auth failure.
+            GeovaultAuthManager.handleAuthFailure(appContext)
             return@Authenticator null
         }
         response.request.newBuilder()
             .header("Authorization", "Bearer $newToken")
+            .header("X-Geovault-Retry", "true") // Mark as retry so interceptor knows
             .build()
     }
 
@@ -82,6 +104,7 @@ object RetrofitClient {
         val appContext = context.applicationContext
         return OkHttpClient.Builder()
             .addInterceptor(authTokenInterceptor(appContext))
+            .addInterceptor(authFailureInterceptor(appContext))
             .authenticator(tokenAuthenticator(appContext))
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
@@ -93,6 +116,7 @@ object RetrofitClient {
         val appContext = context.applicationContext
         val client = OkHttpClient.Builder()
             .addInterceptor(authTokenInterceptor(appContext))
+            .addInterceptor(authFailureInterceptor(appContext))
             .authenticator(tokenAuthenticator(appContext))
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)

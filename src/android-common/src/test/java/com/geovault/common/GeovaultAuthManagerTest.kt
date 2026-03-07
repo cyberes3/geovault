@@ -67,4 +67,16 @@ class GeovaultAuthManagerTest {
         assertTrue(url.contains("scope=api"))
     }
 
+    @Test
+    fun handleAuthFailure_notifiesListener() {
+        var notified = false
+        val listener = object : GeovaultAuthManager.AuthFailureListener {
+            override fun onAuthFailure(context: Context) {
+                notified = true
+            }
+        }
+        GeovaultAuthManager.setAuthFailureListener(listener)
+        GeovaultAuthManager.handleAuthFailure(context)
+        assertTrue("Listener should have been notified", notified)
+    }
 }
