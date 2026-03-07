@@ -17,6 +17,8 @@ import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
 import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.db.QueuedLocation
+import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
+import com.geovault.tracker.sensor.SignificantMotionResumeBridge
 import com.google.android.gms.location.*
 import kotlinx.coroutines.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -25,10 +27,6 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPOutputStream
-import android.hardware.Sensor
-import android.hardware.SensorManager
-import android.hardware.TriggerEvent
-import android.hardware.TriggerEventListener
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
 import kotlin.random.Random
@@ -104,9 +102,7 @@ class TrackingService : Service() {
         return httpClient!!
     }
 
-    private var sensorManager: SensorManager? = null
-    private var significantMotionSensor: Sensor? = null
-    private var triggerEventListener: TriggerEventListener? = null
+    private var significantMotionBridge: SignificantMotionResumeBridge? = null
     private var isGpsPaused = false
     private var isWaitingForGpsLock = false
     private var consecutiveStationaryPoints = 0
@@ -123,16 +119,12 @@ class TrackingService : Service() {
         Log.d(TAG, "onCreate")
         database = AppDatabase.getDatabase(this)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        significantMotionSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION)
-
-        triggerEventListener = object : TriggerEventListener() {
-            override fun onTrigger(event: TriggerEvent?) {
-                Log.d(TAG, "Significant motion detected, resuming GPS")
-                resumeGps()
-            }
+        val significantMotionTrigger = SensorManagerSignificantMotionTrigger(applicationContext)
+        significantMotionBridge = SignificantMotionResumeBridge(significantMotionTrigger) {
+            Log.d(TAG, "Significant motion detected, resuming GPS")
+            resumeGps()
         }
-        
+
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 for (location in locationResult.locations) {
@@ -208,7 +200,7 @@ class TrackingService : Service() {
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
             .remove(PREF_WAS_TRACKING_BEFORE_EXIT).commit()
         fusedLocationClient.removeLocationUpdates(locationCallback)
-        cancelSignificantMotion()
+        significantMotionBridge?.cancel()
         stopRetryJob()
         runBlocking(Dispatchers.IO) {
             database.locationDao().deleteAll()
@@ -434,7 +426,7 @@ class TrackingService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        cancelSignificantMotion()
+        significantMotionBridge?.cancel()
         stopRetryJob()
         serviceScope.cancel()
     }
@@ -463,7 +455,8 @@ class TrackingService : Service() {
         if (!isGpsPaused && isTracking) {
             isGpsPaused = true
             fusedLocationClient.removeLocationUpdates(locationCallback)
-            requestSignificantMotion()
+            significantMotionBridge?.request()
+            sigMotionSensorStartTime = System.currentTimeMillis()
             startSensorWatchdog()
             updateNotificationCount()
         }
@@ -477,8 +470,9 @@ class TrackingService : Service() {
                 val age = System.currentTimeMillis() - sigMotionSensorStartTime
                 if (age > 5 * 60 * 1000) { // 5 minutes (gpslogger R&D wisdom)
                     Log.d(TAG, "Significant motion sensor is $age ms old, resetting to prevent staleness")
-                    cancelSignificantMotion()
-                    requestSignificantMotion()
+                    significantMotionBridge?.cancel()
+                    significantMotionBridge?.request()
+                    sigMotionSensorStartTime = System.currentTimeMillis()
                 }
             }
         }
@@ -507,20 +501,6 @@ class TrackingService : Service() {
                 Log.e(TAG, "Permission lost during resume", e)
             }
             updateNotificationCount()
-        }
-    }
-
-    private fun requestSignificantMotion() {
-        if (significantMotionSensor != null && triggerEventListener != null) {
-            sensorManager?.requestTriggerSensor(triggerEventListener, significantMotionSensor)
-            sigMotionSensorStartTime = System.currentTimeMillis()
-            Log.d(TAG, "Requested significant motion trigger")
-        }
-    }
-
-    private fun cancelSignificantMotion() {
-        if (significantMotionSensor != null && triggerEventListener != null) {
-            sensorManager?.cancelTriggerSensor(triggerEventListener, significantMotionSensor)
         }
     }
 
