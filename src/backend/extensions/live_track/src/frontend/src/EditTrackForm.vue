@@ -38,6 +38,10 @@
     <div class="flex flex-wrap gap-2">
       <BaseButton variant="white" size="sm" @click="$emit('open-instructions')">GPSLogger Instructions</BaseButton>
       <BaseButton variant="white" size="sm" @click="$emit('download-kml')">Download KML</BaseButton>
+      <BaseButton variant="white" size="sm" :disabled="clearHistoryDisabled" @click="$emit('clear-history')">
+        <Loader v-if="clearing" size="sm" layout="inline" :show-message="false" class="mr-1" />
+        Clear history
+      </BaseButton>
       <BaseButton variant="secondary" color="red" size="sm" :disabled="deleting" @click="$emit('delete')">
         <Loader v-if="deleting" size="sm" layout="inline" :show-message="false" class="mr-1" />
         Delete
@@ -58,8 +62,11 @@ export default {
     color: { type: String, default: '#3388ff' },
     error: { type: String, default: '' },
     deleting: { type: Boolean, default: false },
+    clearing: { type: Boolean, default: false },
+    /** When true, Clear history button is disabled (e.g. after clear succeeded until modal is closed). */
+    clearHistoryDisabled: { type: Boolean, default: false },
     copy: { type: Function, required: true }
   },
-  emits: ['update:name', 'update:color', 'reset-color', 'open-instructions', 'download-kml', 'delete']
+  emits: ['update:name', 'update:color', 'reset-color', 'open-instructions', 'download-kml', 'clear-history', 'delete']
 };
 </script>

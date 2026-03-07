@@ -410,6 +410,15 @@
             android:text="@string/start_tracking"
             android:textSize="18sp" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/testAddPointButton"
+            style="@style/gv_common_ButtonOutlined"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/test_add_point_button"
+            android:textSize="14sp" />
+
         <TextView
             android:id="@+id/currentLocationText"
             android:layout_width="wrap_content"

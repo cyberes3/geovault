@@ -9,17 +9,31 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.LayoutInflater
+import com.google.android.gms.location.LocationServices
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import androidx.fragment.app.Fragment
+import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.RetrofitClient
+import com.geovault.tracker.BinaryPayloadBuilder
+import com.geovault.tracker.LiveTrackStreamingService
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.TrackingService
+import com.geovault.tracker.db.QueuedLocation
 import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.*
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.ByteArrayOutputStream
+import java.util.UUID
+import java.util.zip.GZIPOutputStream
+import kotlin.random.Random
 
 class HomeFragment : Fragment() {
 
@@ -38,7 +52,10 @@ class HomeFragment : Fragment() {
     private lateinit var trackingContentContainer: View
     private lateinit var permissionsContainer: View
     private lateinit var radarDishIcon: android.widget.ImageView
+    private lateinit var testAddPointButton: MaterialButton
+    private var testAddPointJob: Job? = null
 
+    private val homeScope = CoroutineScope(Dispatchers.Main + Job())
     private val sessionStatsHandler = Handler(Looper.getMainLooper())
     private val sessionStatsTickerIntervalMs = 1000L
 
@@ -100,7 +117,10 @@ class HomeFragment : Fragment() {
         startStopButton.setOnClickListener {
             (requireActivity() as MainActivity).toggleTracking()
         }
-        
+
+        testAddPointButton = view.findViewById(R.id.testAddPointButton)
+        testAddPointButton.setOnClickListener { addRandomTestPoint() }
+
         setupPermissionButtons(view)
         updatePermissionsUi()
         updateTrackingUi()
@@ -201,14 +221,138 @@ class HomeFragment : Fragment() {
 
     override fun onPause() {
         super.onPause()
-        
+
         sessionStatsHandler.removeCallbacks(sessionStatsTicker)
-        
+
         try {
             requireContext().unregisterReceiver(locationReceiver)
             requireContext().unregisterReceiver(sessionStatsReceiver)
         } catch (e: IllegalArgumentException) {
             // Already unregistered
+        }
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        testAddPointJob?.cancel()
+        testAddPointJob = null
+        homeScope.cancel()
+    }
+
+    /**
+     * Toggles the test point loop: when not running, gets base location and starts adding one point
+     * per second; when running, stops the loop.
+     */
+    private fun addRandomTestPoint() {
+        if (testAddPointJob?.isActive == true) {
+            testAddPointJob?.cancel()
+            testAddPointJob = null
+            testAddPointButton.text = getString(R.string.test_add_point_button)
+            return
+        }
+        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+        val trackerIdStr = prefs.getString("selected_tracker_id", "") ?: ""
+        if (trackerIdStr.isBlank()) {
+            Toast.makeText(requireContext(), getString(R.string.test_add_point_select_tracker), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val trackerId = try {
+            UUID.fromString(trackerIdStr)
+        } catch (e: IllegalArgumentException) {
+            Toast.makeText(requireContext(), getString(R.string.test_add_point_select_tracker), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val fusedClient = LocationServices.getFusedLocationProviderClient(requireContext())
+        fusedClient.lastLocation.addOnSuccessListener { location ->
+            val (baseLat, baseLon) = if (location != null) {
+                Pair(location.latitude, location.longitude)
+            } else {
+                Pair(50.0, 8.0)
+            }
+            testAddPointButton.text = getString(R.string.test_stop_loop_button)
+            testAddPointJob = homeScope.launch {
+                while (isActive) {
+                    val lat = baseLat + Random.nextDouble(-0.001, 0.001)
+                    val lon = baseLon + Random.nextDouble(-0.001, 0.001)
+                    sendTestPointToServer(trackerIdStr, trackerId, lat, lon, silent = true)
+                    delay(1000L)
+                }
+            }
+        }.addOnFailureListener {
+            Toast.makeText(requireContext(), getString(R.string.test_add_point_error, it.message ?: "No location"), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun sendTestPointToServer(trackerIdStr: String, trackerId: UUID, lat: Double, lon: Double, silent: Boolean = false) {
+        val time = System.currentTimeMillis()
+        val point = QueuedLocation(
+            time = time,
+            latitude = lat,
+            longitude = lon,
+            altitude = null,
+            speed = null,
+            bearing = null,
+            accuracy = null,
+            sat = null,
+            prov = "test",
+            dist = null
+        )
+        homeScope.launch {
+            try {
+                val serverUrl = withContext(Dispatchers.IO) {
+                    GeovaultAuthManager.getServerUrl(requireContext()).trimEnd('/')
+                }
+                if (serverUrl.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        if (!silent) testAddPointButton.isEnabled = true
+                        Toast.makeText(requireContext(), getString(R.string.test_add_point_error, "No server URL"), Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+                val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+                val ingressUrl = "${baseUrl}api/extensions/live-track/app-ingress/"
+                val payload = BinaryPayloadBuilder.buildPayloadMinimal(listOf(point), trackerId)
+                val compressed = ByteArrayOutputStream().use { baos ->
+                    GZIPOutputStream(baos).use { it.write(payload) }
+                    baos.toByteArray()
+                }
+                val requestBody = compressed.toRequestBody("application/octet-stream".toMediaTypeOrNull())
+                val request = Request.Builder()
+                    .url(ingressUrl)
+                    .addHeader("Content-Encoding", "gzip")
+                    .post(requestBody)
+                    .build()
+                val client = RetrofitClient.getAuthenticatedOkHttpClient(requireContext())
+                val response = withContext(Dispatchers.IO) {
+                    client.newCall(request).execute()
+                }
+                withContext(Dispatchers.Main) {
+                    if (!silent) testAddPointButton.isEnabled = true
+                    if (!isAdded) return@withContext
+                    if (response.isSuccessful) {
+                        val intent = Intent(LiveTrackStreamingService.BROADCAST_TRACK_POINT).apply {
+                            setPackage(requireContext().packageName)
+                            putExtra(LiveTrackStreamingService.EXTRA_TRACK_ID, trackerIdStr)
+                            putExtra(LiveTrackStreamingService.EXTRA_POINT_LAT, lat)
+                            putExtra(LiveTrackStreamingService.EXTRA_POINT_LON, lon)
+                            putExtra(LiveTrackStreamingService.EXTRA_POINT_TS_MS, time)
+                        }
+                        requireContext().sendBroadcast(intent)
+                        if (!silent) {
+                            Toast.makeText(requireContext(), getString(R.string.test_add_point_success), Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        Toast.makeText(requireContext(), getString(R.string.test_add_point_error, "${response.code} ${response.message}"), Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    if (!silent) testAddPointButton.isEnabled = true
+                    if (isAdded) {
+                        Toast.makeText(requireContext(), getString(R.string.test_add_point_error, e.message ?: "Unknown error"), Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
         }
     }
 

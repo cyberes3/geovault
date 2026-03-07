@@ -445,6 +445,61 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertTrue(LiveTrack.objects.filter(id=track_id).exists())
 
+    def test_clear_history(self):
+        """POST trackers/<id>/clear-history/ keeps only the latest point."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Clear Me"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        track.geometry = {
+            "type": "LineString",
+            "coordinates": [
+                [-122.0, 37.0, 1705312800000],
+                [-122.1, 37.1, 1705312801000],
+                [-122.2, 37.2, 1705312802000],
+            ],
+        }
+        track.point_params = [{"speed": 1}, {"speed": 2}, {"speed": 3}]
+        track.save(update_fields=["geometry", "point_params", "updated_at"])
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/clear-history/"
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["id"], track_id)
+        self.assertIn("last_point", data)
+        self.assertEqual(data["last_point"], [-122.2, 37.2, 1705312802000])
+        track.refresh_from_db()
+        coords = (track.geometry or {}).get("coordinates", [])
+        params = track.point_params or []
+        self.assertEqual(len(coords), 1)
+        self.assertEqual(coords[0], [-122.2, 37.2, 1705312802000])
+        self.assertEqual(len(params), 1)
+        self.assertEqual(params[0], {"speed": 3})
+
+    def test_clear_history_empty_track(self):
+        """POST clear-history/ on track with no points leaves it empty."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Empty Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/clear-history/"
+            )
+        self.assertEqual(response.status_code, 200)
+        track = LiveTrack.objects.get(id=track_id)
+        self.assertEqual((track.geometry or {}).get("coordinates", []), [])
+        self.assertEqual(track.point_params or [], [])
+
     def test_kml_download(self):
         """GET trackers/<id>/kml/ returns 200 with KML and Content-Disposition."""
         with _patch_live_track_enabled():
@@ -1290,3 +1345,37 @@ class TestLiveTrackAppIngress(TestCase):
                 content_type="application/octet-stream",
             )
         self.assertEqual(response.status_code, 401)
+
+
+class TestBroadcastTrackUpdated(TestCase):
+    """Test that broadcast_track_updated sends to both realtime and live_track channel groups."""
+
+    def test_broadcast_track_updated_sends_to_realtime_and_live_track_groups(self):
+        from extensions.live_track.src.backend.helpers import broadcast_track_updated
+
+        sent = []
+
+        async def mock_group_send(group, message):
+            sent.append((group, message))
+
+        mock_layer = MagicMock()
+        mock_layer.group_send = mock_group_send
+
+        with patch("extensions.live_track.src.backend.helpers.get_channel_layer", return_value=mock_layer):
+            broadcast_track_updated(
+                user_id=42,
+                track_id="track-123",
+                point=[10.0, 45.0, 1700000000000],
+                props={"accuracy": 10},
+                index=0,
+            )
+
+        self.assertEqual(len(sent), 2, "group_send should be called twice (realtime and live_track)")
+        groups = {s[0] for s in sent}
+        self.assertIn("realtime_42", groups)
+        self.assertIn("live_track_42", groups)
+        for _group, message in sent:
+            self.assertEqual(message["type"], "live_track_track_updated")
+            self.assertEqual(message["data"]["track_id"], "track-123")
+            self.assertEqual(message["data"]["point"], [10.0, 45.0, 1700000000000])
+            self.assertEqual(message["data"]["index"], 0)

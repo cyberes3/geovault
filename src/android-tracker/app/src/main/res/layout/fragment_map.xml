@@ -48,7 +48,6 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
-                android:maxWidth="160dp"
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:textSize="14sp"
@@ -109,5 +108,15 @@
             app:tint="@color/content_on_primary"
             android:padding="10dp" />
     </com.google.android.material.card.MaterialCardView>
+
+    <com.geovault.common.LoadingSpinner
+        android:id="@+id/geometryLoadingSpinner"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginBottom="16dp"
+        android:layout_marginEnd="16dp"
+        android:elevation="6dp"
+        app:spinnerSize="32dp" />
 
 </FrameLayout>

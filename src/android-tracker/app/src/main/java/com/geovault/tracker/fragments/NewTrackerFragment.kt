@@ -6,6 +6,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.geovault.common.RetrofitClient
 import com.geovault.tracker.MainActivity
@@ -29,6 +31,10 @@ class NewTrackerFragment : Fragment() {
     private lateinit var createButton: MaterialButton
     private lateinit var cancelButton: MaterialButton
 
+    /** Snapshot when form was loaded; used to detect unsaved changes. */
+    private var initialName: String = ""
+    private var initialColor: String = "#3388ff"
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -48,6 +54,8 @@ class NewTrackerFragment : Fragment() {
 
         colorEdit.setText("#3388ff")
         updateColorPreview(colorPreview, "#3388ff")
+        initialName = ""
+        initialColor = "#3388ff"
 
         pickColorButton.setOnClickListener {
             showHueColorPickerDialog(
@@ -59,9 +67,7 @@ class NewTrackerFragment : Fragment() {
             }
         }
 
-        cancelButton.setOnClickListener {
-            requireActivity().supportFragmentManager.popBackStack()
-        }
+        cancelButton.setOnClickListener { tryClose() }
 
         createButton.setOnClickListener {
             val name = nameEdit.text.toString().trim()
@@ -70,11 +76,11 @@ class NewTrackerFragment : Fragment() {
                 (activity as? MainActivity)?.showSnackbar("Name is required")
                 return@setOnClickListener
             }
-            createButton.isEnabled = false
+            setActionButtonsEnabled(false)
             val serverUrl = com.geovault.common.GeovaultAuthManager.getServerUrl(requireContext())
             if (serverUrl.isEmpty()) {
                 (activity as? MainActivity)?.showSnackbar("Not connected")
-                createButton.isEnabled = true
+                setActionButtonsEnabled(true)
                 return@setOnClickListener
             }
             val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
@@ -87,7 +93,7 @@ class NewTrackerFragment : Fragment() {
                     ) {
                         if (isAdded) {
                             requireActivity().runOnUiThread {
-                                createButton.isEnabled = true
+                                setActionButtonsEnabled(true)
                                 if (response.isSuccessful && response.body() != null) {
                                     TrackerRepository.clearCache()
                                     requireActivity().supportFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
@@ -103,12 +109,52 @@ class NewTrackerFragment : Fragment() {
                     override fun onFailure(call: Call<com.geovault.tracker.Tracker>, t: Throwable) {
                         if (isAdded) {
                             requireActivity().runOnUiThread {
-                                createButton.isEnabled = true
+                                setActionButtonsEnabled(true)
                                 (activity as? MainActivity)?.showSnackbar(t.message ?: "Network error")
                             }
                         }
                     }
                 })
         }
+    }
+
+    private fun normalizeColorForCompare(color: String?): String? {
+        val t = color?.trim()?.ifEmpty { null } ?: return null
+        return if (t.startsWith("#")) t else "#$t"
+    }
+
+    private fun hasUnsavedChanges(): Boolean {
+        val currentName = nameEdit.text?.toString()?.trim() ?: ""
+        val currentColorNorm = normalizeColorForCompare(colorEdit.text?.toString()?.trim()?.ifEmpty { null }) ?: "#3388ff"
+        val initialColorNorm = normalizeColorForCompare(initialColor) ?: "#3388ff"
+        return currentName != initialName || currentColorNorm != initialColorNorm
+    }
+
+    private fun popBackStack() {
+        requireActivity().supportFragmentManager.popBackStack()
+    }
+
+    private fun tryClose() {
+        if (!hasUnsavedChanges()) {
+            popBackStack()
+            return
+        }
+        val discardDialog = AlertDialog.Builder(requireContext())
+            .setTitle(getString(R.string.discard_changes_confirm_title))
+            .setMessage(getString(R.string.discard_changes_confirm_message))
+            .setPositiveButton(getString(R.string.discard)) { _, _ -> popBackStack() }
+            .setNegativeButton(getString(R.string.cancel_button), null)
+            .show()
+        discardDialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(
+            ContextCompat.getColor(requireContext(), R.color.error_red)
+        )
+    }
+
+    private fun setActionButtonsEnabled(enabled: Boolean) {
+        createButton.isEnabled = enabled
+        cancelButton.isEnabled = enabled
+        val alpha = if (enabled) 1f else 0.4f
+        createButton.alpha = alpha
+        cancelButton.alpha = alpha
     }
 }

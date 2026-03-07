@@ -22,4 +22,4 @@ We have a bunch of common frontend components in the `parts/` folder. Please use
 
 Android apps should be built with `./build-android.sh` located in the root of each app src dir. These apps share visual styles so make sure that changes are made in both places.
 
-External repos are provided for your reference in the `external sources/` directory. This folder is read-only.
+External repos are provided for you in the `external sources/` directory. This folder is read-only. If you need to reference the source code of a library please check here before fetching GitHub.

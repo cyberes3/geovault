@@ -12,34 +12,42 @@ import android.util.Log
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import com.geovault.common.LoadingSpinner
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import androidx.fragment.app.Fragment
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.map.MapLibreManager
 import com.geovault.common.map.MapMarkerUtils
+import com.geovault.tracker.LiveTrackStreamingService
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
+import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.TrackingService
 import kotlinx.coroutines.*
+import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
-import org.maplibre.android.plugins.annotation.LineManager
-import org.maplibre.android.plugins.annotation.LineOptions
-import org.maplibre.android.plugins.annotation.SymbolManager
-import org.maplibre.android.plugins.annotation.SymbolOptions
+import org.maplibre.android.style.layers.Property
+import org.maplibre.android.style.layers.PropertyFactory
+import org.maplibre.android.style.layers.LineLayer
+import org.maplibre.android.style.layers.SymbolLayer
+import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.geojson.Feature
+import org.maplibre.geojson.FeatureCollection
+import org.maplibre.geojson.LineString
+import org.maplibre.geojson.MultiLineString
+import org.maplibre.geojson.Point
 
 class MapFragment : Fragment() {
 
     private lateinit var mapView: MapView
     private lateinit var mapManager: MapLibreManager
     private var maplibreMap: MapLibreMap? = null
-    private var symbolManager: SymbolManager? = null
-    private var lineManager: LineManager? = null
     private var trackPoints: MutableList<LatLng> = mutableListOf()
     /** Tracker color (hex e.g. "#3388ff") for trail and icon; set when loading tracker in fetchHistory. */
     private var currentTrackerColor: String? = null
@@ -51,6 +59,7 @@ class MapFragment : Fragment() {
     private lateinit var mapToggle: View
     private lateinit var zoomToLatestButton: View
     private lateinit var zoomToLatestButtonIcon: ImageView
+    private lateinit var geometryLoadingSpinner: LoadingSpinner
 
     private var mapReady = false
     private var followLockEnabled = false
@@ -85,8 +94,35 @@ class MapFragment : Fragment() {
     private val locationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val location = IntentCompat.getParcelableExtra(intent, "location", Location::class.java)
-            if (location != null) {
-                updateLocationOnMap(location)
+            if (location == null) return
+            val prefs = context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+            val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
+            if (defaultTrackerId.isEmpty() || displayedTrackerId != defaultTrackerId) return
+            updateLocationOnMap(location)
+        }
+    }
+
+    private val liveTrackPointReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != LiveTrackStreamingService.BROADCAST_TRACK_POINT) return
+            val trackId = intent.getStringExtra(LiveTrackStreamingService.EXTRA_TRACK_ID) ?: return
+            if (trackId != displayedTrackerId) return
+            val lat = intent.getDoubleExtra(LiveTrackStreamingService.EXTRA_POINT_LAT, 0.0)
+            val lon = intent.getDoubleExtra(LiveTrackStreamingService.EXTRA_POINT_LON, 0.0)
+            val index = if (intent.hasExtra(LiveTrackStreamingService.EXTRA_INDEX)) {
+                intent.getIntExtra(LiveTrackStreamingService.EXTRA_INDEX, -1).takeIf { it >= 0 }
+            } else null
+            val latLng = LatLng(lat, lon)
+            if (index != null && index <= trackPoints.size) {
+                trackPoints.add(index, latLng)
+            } else {
+                trackPoints.add(latLng)
+            }
+            if (trackPoints.size > 1000) trackPoints.removeAt(0)
+            updateTrackLine()
+            updateZoomToLatestButtonState()
+            if (followLockEnabled && trackPoints.isNotEmpty()) {
+                centerCameraOnTrackLocked(trackPoints.last())
             }
         }
     }
@@ -110,6 +146,7 @@ class MapFragment : Fragment() {
         mapToggle = view.findViewById(R.id.mapToggle)
         zoomToLatestButton = view.findViewById(R.id.zoomToLatestButton)
         zoomToLatestButtonIcon = view.findViewById(R.id.zoomToLatestButtonIcon)
+        geometryLoadingSpinner = view.findViewById(R.id.geometryLoadingSpinner)
 
         updateTrackerLabel()
         resetToTrackerButton.setOnClickListener {
@@ -134,11 +171,68 @@ class MapFragment : Fragment() {
             )?.let { bitmap ->
                 style.addImage("track-direction-arrow", bitmap)
             }
-            lineManager = LineManager(mapView, map, style)
-            symbolManager = SymbolManager(mapView, map, style)
+            // Add GeoJSON sources
+            style.addSource(GeoJsonSource("track-source"))
+            style.addSource(GeoJsonSource("track-position-source"))
+
+            // Add standard LineLayers instead of using LineManager
+            val outlineLayer = LineLayer("track-outline-layer", "track-source").apply {
+                setProperties(
+                    PropertyFactory.lineWidth(5f),
+                    PropertyFactory.lineColor(org.maplibre.android.style.expressions.Expression.get("outlineColor")),
+                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
+                )
+            }
+            val fillLayer = LineLayer("track-fill-layer", "track-source").apply {
+                setProperties(
+                    PropertyFactory.lineWidth(3f),
+                    PropertyFactory.lineColor(org.maplibre.android.style.expressions.Expression.get("lineColor")),
+                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
+                )
+            }
+            // Add SymbolLayer
+            val symbolLayer = SymbolLayer("track-position-layer", "track-position-source").apply {
+                setProperties(
+                    PropertyFactory.iconImage(org.maplibre.android.style.expressions.Expression.get("icon")),
+                    PropertyFactory.iconSize(0.75f),
+                    PropertyFactory.iconRotate(org.maplibre.android.style.expressions.Expression.get("rotate")),
+                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(true)
+                )
+            }
+            
+            style.addLayer(outlineLayer)
+            style.addLayer(fillLayer)
+            style.addLayer(symbolLayer)
             mapReady = true
             mapLoadingOverlay.visibility = View.GONE
-            mapView.post { fetchHistory() }
+            
+            // Draw any points we already have (e.g. from View on Map)
+            updateTrackLine()
+            
+            // If we have an immediate zoom pending and points are ready, do it now
+            if (zoomToTrackAfterLoad && trackPoints.isNotEmpty()) {
+                val bbox = (activity as? MainActivity)?.initialTrackForMap?.bbox
+                if (bbox != null && bbox.size == 4) {
+                    val bounds = LatLngBounds.Builder()
+                        .include(LatLng(bbox[1], bbox[0]))
+                        .include(LatLng(bbox[3], bbox[2]))
+                        .build()
+                    val paddingPx = (48 * resources.displayMetrics.density).toInt()
+                    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+                    zoomToTrackAfterLoad = false
+                } else if (trackPoints.size >= 2) {
+                    val bounds = LatLngBounds.Builder().apply { trackPoints.forEach { include(it) } }.build()
+                    val paddingPx = (48 * resources.displayMetrics.density).toInt()
+                    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+                    zoomToTrackAfterLoad = false
+                }
+            }
+            
+            fetchHistory()
         }
         
         mapView.onCreate(savedInstanceState)
@@ -146,12 +240,7 @@ class MapFragment : Fragment() {
 
         mapManager.fetchMapSources {
             maplibreMap?.let { map ->
-                Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
-                    override fun doFrame(frameTimeNanos: Long) {
-                        if (!isAdded) return
-                        mapManager.applySelectedSource(map)
-                    }
-                })
+                if (isAdded) mapManager.applySelectedSource(map)
             }
         }
         
@@ -166,12 +255,7 @@ class MapFragment : Fragment() {
             }
             val serverUrl = GeovaultAuthManager.getServerUrl(requireContext())
             if (mapManager.sourcesFetched || serverUrl.isEmpty()) {
-                Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
-                    override fun doFrame(frameTimeNanos: Long) {
-                        if (!isAdded) return
-                        mapManager.applySelectedSource(map)
-                    }
-                })
+                if (isAdded) mapManager.applySelectedSource(map)
             }
         }
 
@@ -197,6 +281,7 @@ class MapFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        view?.keepScreenOn = true
         mapView.onResume()
         updateTrackerLabel()
 
@@ -206,17 +291,47 @@ class MapFragment : Fragment() {
             IntentFilter("com.geovault.tracker.LOCATION_UPDATE"),
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
+        ContextCompat.registerReceiver(
+            requireContext(),
+            liveTrackPointReceiver,
+            IntentFilter(LiveTrackStreamingService.BROADCAST_TRACK_POINT),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+
+        if (mapReady) {
+            val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+            val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
+            if (defaultTrackerId.isEmpty()) {
+                // No default tracker (e.g. was deleted or unset): clear map so we don't show a stale track.
+                trackPoints.clear()
+                displayedTrackerId = null
+                displayedTrackerName = null
+                stopLiveTrackStreaming()
+                updateTrackLine()
+                updateZoomToLatestButtonState()
+                updateTrackerLabel()
+            } else {
+                val showingDefault = displayedTrackerId == null || displayedTrackerId == defaultTrackerId
+                if (showingDefault) {
+                    TrackerRepository.clearGeometryCache()
+                    restoreOnlyNoZoom = true
+                    fetchFullGeometryAndApply(defaultTrackerId, forceReplace = true)
+                }
+            }
+        }
     }
 
     override fun onPause() {
         super.onPause()
+        view?.keepScreenOn = false
         mapView.onPause()
         
         try {
             requireContext().unregisterReceiver(locationReceiver)
-        } catch (e: IllegalArgumentException) {
-            // Already unregistered
-        }
+        } catch (e: IllegalArgumentException) { }
+        try {
+            requireContext().unregisterReceiver(liveTrackPointReceiver)
+        } catch (e: IllegalArgumentException) { }
     }
 
     override fun onStop() {
@@ -268,6 +383,7 @@ class MapFragment : Fragment() {
             displayedTrackerName = null
         } else {
             trackerLabelCard.visibility = View.VISIBLE
+            trackerNameLabel.maxWidth = resources.displayMetrics.widthPixels / 2
             val labelName = displayedTrackerName?.takeIf { it.isNotBlank() }
                 ?: defaultTrackerName.takeIf { it.isNotBlank() }
                 ?: getString(R.string.select_tracker)
@@ -290,9 +406,19 @@ class MapFragment : Fragment() {
             updateTrackLine()
             updateZoomToLatestButtonState()
             if (followLockEnabled) {
-                map.moveCamera(CameraUpdateFactory.newLatLng(latLng))
+                centerCameraOnTrackLocked(latLng)
             }
         }
+    }
+
+    /** Keeps the map centered on the given point when follow lock is on; preserves zoom and uses a short animation. */
+    private fun centerCameraOnTrackLocked(target: LatLng) {
+        val map = maplibreMap ?: return
+        val zoom = map.cameraPosition.zoom
+        val update = CameraUpdateFactory.newCameraPosition(
+            CameraPosition.Builder().target(target).zoom(zoom).build()
+        )
+        map.animateCamera(update, FOLLOW_LOCK_ANIMATION_MS)
     }
 
     /**
@@ -301,44 +427,118 @@ class MapFragment : Fragment() {
      * If the list provided an initial track (latest 100 points), shows it immediately then loads full geometry in background.
      */
     fun refreshTrackForSelectedTracker() {
-        trackPoints.clear()
-        updateTrackLine()
-        updatePositionSymbol()
-        zoomToTrackAfterLoad = true
+        val initial = (activity as? MainActivity)?.getAndClearInitialTrackForMap()
         val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
+        val loadTrackerId = if (initial != null) initial.id else defaultTrackerId
+
+        val isSwitching = displayedTrackerId != null && displayedTrackerId != loadTrackerId
+
+        // Immediate visual clear: hide annotation layers so old data doesn't flash.
+        if (isSwitching) {
+            setAnnotationLayersVisibility(false)
+            mapView.alpha = 0f
+            mapView.animate().alpha(1f).setDuration(200).setStartDelay(50).start()
+        }
+
+        trackPoints.clear()
+        updateTrackLine()
+        zoomToTrackAfterLoad = true
+        followLockEnabled = false
+        updateFollowLockButton()
+
         if (defaultTrackerId.isEmpty()) {
             displayedTrackerId = null
             displayedTrackerName = null
+            stopLiveTrackStreaming()
             updateZoomToLatestButtonState()
             updateTrackerLabel()
             return
         }
-        val initial = (activity as? MainActivity)?.getAndClearInitialTrackForMap()
-        val loadTrackerId = if (initial != null) initial.id else defaultTrackerId
-        if (initial != null && !initial.geometry?.coordinates.isNullOrEmpty()) {
+        if (isSwitching) {
+            // Give MapLibre's async GL renderer a tiny moment to erase the old tracker's
+            // GeoJSON source from the screen before we jump the camera to the new BBox.
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                if (isAdded) {
+                    applyInitialTargetTracker(initial, loadTrackerId, defaultTrackerId, prefs)
+                }
+            }, 50)
+        } else {
+            applyInitialTargetTracker(initial, loadTrackerId, defaultTrackerId, prefs)
+        }
+    }
+
+    private fun setAnnotationLayersVisibility(visible: Boolean) {
+        val style = maplibreMap?.style ?: return
+        val visibility = if (visible) Property.VISIBLE else Property.NONE
+        
+        style.getLayer("track-outline-layer")?.setProperties(PropertyFactory.visibility(visibility))
+        style.getLayer("track-fill-layer")?.setProperties(PropertyFactory.visibility(visibility))
+        style.getLayer("track-position-layer")?.setProperties(PropertyFactory.visibility(visibility))
+        
+        style.layers.forEach { layer ->
+            // Annotation plugin layers start with this prefix.
+            val id = layer.id
+            if (id.startsWith("mapbox-android-") || id.startsWith("org.maplibre.annotations")) {
+                layer.setProperties(PropertyFactory.visibility(visibility))
+            }
+        }
+    }
+
+    private fun applyInitialTargetTracker(
+        initial: Tracker?,
+        loadTrackerId: String,
+        defaultTrackerId: String,
+        prefs: android.content.SharedPreferences
+    ) {
+        // Set metadata and initial points immediately
+        if (initial != null) {
             displayedTrackerId = initial.id
             displayedTrackerName = initial.name
             currentTrackerColor = (initial.color ?: "#3388ff").let { if (it.startsWith("#")) it else "#$it" }
-            trackPoints.addAll(initial.geometry!!.coordinates.map { LatLng(it[1], it[0]) })
-            updateTrackLine()
-            updatePositionSymbol()
-            mainScope.launch {
+            
+            val initialCoords = initial.geometry?.coordinates
+            if (!initialCoords.isNullOrEmpty()) {
+                trackPoints.addAll(initialCoords.map { LatLng(it[1], it[0]) })
+            } else if (initial.last_point != null && initial.last_point.size >= 2) {
+                trackPoints.add(LatLng(initial.last_point[1], initial.last_point[0]))
+            }
+            
+            if (trackPoints.isNotEmpty()) {
+                updateTrackLine()
+                startLiveTrackStreamingForDisplayedTracker()
+                
+                // Show layers once we have some data (either initial or full)
+                setAnnotationLayersVisibility(true)
+                
                 val map = maplibreMap
-                if (map != null && trackPoints.isNotEmpty()) {
-                    if (trackPoints.size >= 2) {
+                if (map != null) {
+                    val bbox = initial.bbox
+                    if (bbox != null && bbox.size == 4) {
+                        val bounds = LatLngBounds.Builder()
+                            .include(LatLng(bbox[1], bbox[0]))
+                            .include(LatLng(bbox[3], bbox[2]))
+                            .build()
+                        val paddingPx = (48 * resources.displayMetrics.density).toInt()
+                        map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+                        zoomToTrackAfterLoad = false
+                    } else if (trackPoints.size >= 2) {
                         val bounds = LatLngBounds.Builder().apply { trackPoints.forEach { include(it) } }.build()
                         val paddingPx = (48 * resources.displayMetrics.density).toInt()
                         map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
-                    } else {
-                        map.moveCamera(CameraUpdateFactory.newLatLngZoom(trackPoints.single(), 14.0))
+                        zoomToTrackAfterLoad = false
                     }
                 }
-                zoomToTrackAfterLoad = false
                 updateZoomToLatestButtonState()
-                updateTrackerLabel()
             }
+        } else {
+            // Fallback to default
+            displayedTrackerId = defaultTrackerId
+            val defaultName = prefs.getString("selected_tracker_name", "") ?: ""
+            displayedTrackerName = defaultName.ifEmpty { null }
         }
+
+        updateTrackerLabel()
         fetchFullGeometryAndApply(loadTrackerId)
     }
 
@@ -346,10 +546,12 @@ class MapFragment : Fragment() {
      * Refetch and redraw the selected tracker's track without moving the camera.
      */
     private fun restoreTrackForSelectedTracker() {
+        stopLiveTrackStreaming()
         trackPoints.clear()
         updateTrackLine()
-        updatePositionSymbol()
         restoreOnlyNoZoom = true
+        followLockEnabled = false
+        updateFollowLockButton()
         val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val defaultId = prefs.getString("selected_tracker_id", "") ?: ""
         val defaultName = prefs.getString("selected_tracker_name", "") ?: ""
@@ -362,8 +564,21 @@ class MapFragment : Fragment() {
     }
 
     private fun fetchHistory() {
+        if ((activity as? MainActivity)?.initialTrackForMap != null) {
+            refreshTrackForSelectedTracker()
+            return
+        }
+        
         val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val trackerId = prefs.getString("selected_tracker_id", "") ?: ""
+        val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
+        
+        // Use displayedTrackerId if it's already set (e.g. we just switched to a specific tracker)
+        val trackerId = if (displayedTrackerId != null && displayedTrackerId!!.isNotEmpty()) {
+            displayedTrackerId!!
+        } else {
+            defaultTrackerId
+        }
+
         if (trackerId.isEmpty()) {
             updateZoomToLatestButtonState()
             updateTrackerLabel()
@@ -372,9 +587,11 @@ class MapFragment : Fragment() {
         fetchFullGeometryAndApply(trackerId)
     }
 
-    private fun fetchFullGeometryAndApply(trackerId: String) {
+    private fun fetchFullGeometryAndApply(trackerId: String, forceReplace: Boolean = false) {
+        geometryLoadingSpinner.show()
         TrackerRepository.getTrackerGeometry(requireContext(), trackerId) { tracker ->
             mainScope.launch {
+                geometryLoadingSpinner.hide()
                 displayedTrackerId = trackerId
                 displayedTrackerName = tracker?.name
                 if (tracker != null) {
@@ -382,90 +599,132 @@ class MapFragment : Fragment() {
                 }
                 val coords = tracker?.geometry?.coordinates
                 if (coords != null) {
-                    if (!TrackingService.isRunning || trackPoints.isEmpty()) {
+                    val shouldReplace = forceReplace || !TrackingService.isRunning || trackPoints.isEmpty()
+                    if (shouldReplace) {
                         trackPoints.clear()
                         trackPoints.addAll(coords.map { LatLng(it[1], it[0]) }.takeLast(1000))
                     }
                     updateTrackLine()
+                    setAnnotationLayersVisibility(true)
                     val map = maplibreMap
                     val shouldZoom = zoomToTrackAfterLoad
                     zoomToTrackAfterLoad = false
                     if (shouldZoom && map != null && trackPoints.isNotEmpty()) {
-                        if (trackPoints.size >= 2) {
+                        val bbox = tracker?.bbox
+                        if (bbox != null && bbox.size == 4) {
+                            val bounds = LatLngBounds.Builder()
+                                .include(LatLng(bbox[1], bbox[0]))
+                                .include(LatLng(bbox[3], bbox[2]))
+                                .build()
+                            val paddingPx = (48 * resources.displayMetrics.density).toInt()
+                            map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+                        } else if (trackPoints.size >= 2) {
                             val bounds = LatLngBounds.Builder().apply {
                                 trackPoints.forEach { include(it) }
                             }.build()
                             val paddingPx = (48 * resources.displayMetrics.density).toInt()
                             map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
-                        } else {
-                            map.moveCamera(CameraUpdateFactory.newLatLngZoom(trackPoints.single(), 14.0))
                         }
-                    } else if (!restoreOnlyNoZoom && map != null && trackPoints.isNotEmpty()) {
-                        map.moveCamera(CameraUpdateFactory.newLatLng(trackPoints.last()))
+                    }
+                    if (followLockEnabled && trackPoints.isNotEmpty()) {
+                        centerCameraOnTrackLocked(trackPoints.last())
                     }
                 }
                 restoreOnlyNoZoom = false
                 updateZoomToLatestButtonState()
                 updateTrackerLabel()
+                startLiveTrackStreamingForDisplayedTracker()
             }
         }
+    }
+
+    /** Start live track streaming for the currently displayed tracker (default or not) so the map updates as points arrive. */
+    private fun startLiveTrackStreamingForDisplayedTracker() {
+        val id = displayedTrackerId ?: return
+        val intent = Intent(requireContext(), LiveTrackStreamingService::class.java).apply {
+            action = LiveTrackStreamingService.ACTION_START
+            putExtra(LiveTrackStreamingService.EXTRA_TRACKER_ID, id)
+            putExtra(LiveTrackStreamingService.EXTRA_TRACKER_NAME, displayedTrackerName)
+        }
+        ContextCompat.startForegroundService(requireContext(), intent)
+    }
+
+    private fun stopLiveTrackStreaming() {
+        val intent = Intent(requireContext(), LiveTrackStreamingService::class.java).apply {
+            action = LiveTrackStreamingService.ACTION_STOP
+        }
+        requireContext().startService(intent)
     }
 
     private fun updateTrackLine() {
-        val manager = lineManager ?: return
-        manager.deleteAll()
+        val style = maplibreMap?.style ?: return
+        val source = style.getSourceAs<GeoJsonSource>("track-source") ?: return
+        
         val lineColor = currentTrackerColor ?: "#3388ff"
-        if (trackPoints.size >= 2) {
-            val outlineColorInt = ContextCompat.getColor(requireContext(), R.color.track_line_outline)
-            val outlineColor = String.format("#%06X", 0xFFFFFF and outlineColorInt)
-            val segments = splitTrackIntoSegments(trackPoints)
-            for (segment in segments) {
-                // Outline for each segment (black in day, light grey in night)
-                manager.create(LineOptions()
-                    .withLatLngs(segment)
-                    .withLineColor(outlineColor)
-                    .withLineWidth(5f)
-                )
-                manager.create(LineOptions()
-                    .withLatLngs(segment)
-                    .withLineColor(lineColor)
-                    .withLineWidth(3f)
-                )
-            }
+        if (trackPoints.size < 2) {
+            source.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+            applyPositionSymbolUpdate()
+            return
         }
-        updatePositionSymbol()
+        
+        val outlineColorInt = ContextCompat.getColor(requireContext(), R.color.track_line_outline)
+        val outlineColor = String.format("#%06X", 0xFFFFFF and outlineColorInt)
+        val segments = splitTrackIntoSegments(trackPoints)
+        
+        val lineStrings = segments.map { segment ->
+            LineString.fromLngLats(segment.map { org.maplibre.geojson.Point.fromLngLat(it.longitude, it.latitude) })
+        }
+        
+        val multiLineString = MultiLineString.fromLineStrings(lineStrings)
+        val feature = Feature.fromGeometry(multiLineString)
+        feature.addStringProperty("outlineColor", outlineColor)
+        feature.addStringProperty("lineColor", lineColor)
+        
+        source.setGeoJson(feature)
+        applyPositionSymbolUpdate()
     }
 
-    private fun updatePositionSymbol() {
-        val symManager = symbolManager ?: return
-        symManager.deleteAll()
-        if (trackPoints.isEmpty()) return
-        val last = trackPoints.last()
-        val rotation = getTrackDirectionDegrees(trackPoints)
-        val hexColor = currentTrackerColor ?: "#3388ff"
+    private fun applyPositionSymbolUpdate() {
+        if (!isAdded) return
         val style = maplibreMap?.style ?: return
-        val imageId = "track-direction-arrow-${hexColor.replace("#", "")}"
-        val tintedBitmap = MapMarkerUtils.getMarkerBitmapWithTintedForeground(
-            requireContext(),
-            R.drawable.ic_track_direction_arrow_circle,
-            R.drawable.ic_track_direction_arrow_chevron_fill,
-            R.drawable.ic_track_direction_arrow_chevron_stroke,
-            Color.parseColor(hexColor)
-        )
-        val symbolIconId = if (tintedBitmap != null) {
-            try {
-                style.addImage(imageId, tintedBitmap)
-            } catch (_: Exception) { /* id may already exist */ }
-            imageId
-        } else {
-            "track-direction-arrow"
+        val source = style.getSourceAs<GeoJsonSource>("track-position-source") ?: return
+        
+        if (trackPoints.isEmpty()) {
+            source.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+            return
         }
-        symManager.create(SymbolOptions()
-            .withLatLng(last)
-            .withIconImage(symbolIconId)
-            .withIconSize(0.75f)
-            .withIconRotate(rotation)
-        )
+        
+        val toLatLng = trackPoints.last()
+        val toRotation = getTrackDirectionDegrees(trackPoints)
+        val hexColor = currentTrackerColor ?: "#3388ff"
+        
+        val imageId = "track-direction-arrow-${hexColor.replace("#", "")}"
+        var symbolIconId = imageId
+        
+        // Cache the directional arrow bitmap inside the MapLibre style instead of recreating it via Canvas every second
+        if (style.getImage(imageId) == null) {
+            val tintedBitmap = MapMarkerUtils.getMarkerBitmapWithTintedForeground(
+                requireContext(),
+                R.drawable.ic_track_direction_arrow_circle,
+                R.drawable.ic_track_direction_arrow_chevron_fill,
+                R.drawable.ic_track_direction_arrow_chevron_stroke,
+                Color.parseColor(hexColor)
+            )
+            if (tintedBitmap != null) {
+                try {
+                    style.addImage(imageId, tintedBitmap)
+                } catch (_: Exception) { /* id may already exist gracefully */ }
+            } else {
+                symbolIconId = "track-direction-arrow" // Fallback name
+            }
+        }
+        
+        val point = Point.fromLngLat(toLatLng.longitude, toLatLng.latitude)
+        val feature = Feature.fromGeometry(point)
+        feature.addStringProperty("icon", symbolIconId)
+        feature.addNumberProperty("rotate", toRotation)
+        
+        source.setGeoJson(feature)
     }
 
     private fun getTrackDirectionDegrees(points: List<LatLng>): Float {
@@ -486,12 +745,12 @@ class MapFragment : Fragment() {
         if (points.size < 2) return emptyList()
         val segments = mutableListOf<MutableList<LatLng>>()
         var current = mutableListOf(points[0])
+        val results = FloatArray(3) // Hoist array allocation outside the up-to-1000 iteration loop!
         for (i in 1 until points.size) {
             val prev = points[i - 1]
             val curr = points[i]
-            val results = FloatArray(3)
             Location.distanceBetween(prev.latitude, prev.longitude, curr.latitude, curr.longitude, results)
-            val distanceMeters = results[2]
+            val distanceMeters = results[0]
             if (distanceMeters > MAX_JUMP_METERS) {
                 if (current.size >= 2) segments.add(current)
                 current = mutableListOf(curr)
@@ -506,6 +765,8 @@ class MapFragment : Fragment() {
     companion object {
         private const val TAG = "MapFragment"
         private const val KEY_FOLLOW_LOCK = "follow_lock"
+        /** Duration (ms) for animating the camera when follow lock is on and the track moves. */
+        private const val FOLLOW_LOCK_ANIMATION_MS = 300
         /** Do not draw track across jumps larger than this (meters). 100 miles. */
         private const val MAX_JUMP_METERS = 100f * 1609.344f
     }

@@ -1,10 +1,12 @@
 package com.geovault.tracker
 
+import android.content.res.Configuration
 import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.widget.EditText
+import androidx.appcompat.app.AlertDialog
 import com.flask.colorpicker.ColorPickerView
 import com.flask.colorpicker.builder.ColorPickerDialogBuilder
 
@@ -44,7 +46,7 @@ fun showHueColorPickerDialog(
     onColorPicked: ((String) -> Unit)? = null
 ) {
     val initialColor = parseHexToColor(initialHex)
-    ColorPickerDialogBuilder
+    val dialog = ColorPickerDialogBuilder
         .with(context)
         .setTitle(context.getString(R.string.choose_color))
         .initialColor(initialColor)
@@ -57,7 +59,15 @@ fun showHueColorPickerDialog(
         }
         .setNegativeButton(context.getString(android.R.string.cancel), null)
         .build()
-        .show()
+    val isDarkTheme = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+    if (isDarkTheme) {
+        dialog.setOnShowListener {
+            val buttonColor = context.getColor(R.color.text_primary)
+            (dialog as? AlertDialog)?.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(buttonColor)
+            (dialog as? AlertDialog)?.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(buttonColor)
+        }
+    }
+    dialog.show()
 }
 
 /**

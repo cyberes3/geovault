@@ -16,7 +16,9 @@ from website.extensions.extension_hooks import (
     get_registered_hooks,
     unregister_hook,
     set_extension_context,
-    clear_extension_context
+    clear_extension_context,
+    register_websocket_route,
+    get_registered_websocket_routes,
 )
 import website.extensions.extension_hooks as extension_hooks_module
 from geo_lib.processing.hooks import register_import_hook, execute_import_hooks
@@ -40,6 +42,55 @@ class TestExtensionHooks:
         """Clear extension context after each test."""
         clear_extension_context()
         extension_hooks_module._hook_registry.clear()
+
+    def test_register_websocket_route_with_context(self):
+        """Registering a WebSocket route with extension context adds it to the registry."""
+        class FakeConsumer:
+            pass
+
+        set_extension_context("test_extension")
+        try:
+            register_websocket_route(r"ws/extensions/test-ext/fake/$", FakeConsumer)
+            routes = get_registered_websocket_routes()
+            path_consumer_pairs = [(p, c) for p, c in routes]
+            assert (r"ws/extensions/test-ext/fake/$", FakeConsumer) in path_consumer_pairs
+        finally:
+            clear_extension_context()
+            # Remove the route we added so other tests are unaffected
+            extension_hooks_module._websocket_routes[:] = [
+                (p, c, e) for p, c, e in extension_hooks_module._websocket_routes
+                if p != r"ws/extensions/test-ext/fake/$"
+            ]
+
+    def test_register_websocket_route_without_context_raises(self):
+        """Registering a WebSocket route without extension context raises ValueError."""
+        class FakeConsumer:
+            pass
+
+        with pytest.raises(ValueError, match="Cannot register WebSocket route outside of extension context"):
+            register_websocket_route(r"ws/extensions/test-ext/fake/$", FakeConsumer)
+
+    def test_register_websocket_route_invalid_path_raises(self):
+        """Registering a WebSocket route with path not under ws/extensions/ raises ValueError."""
+        class FakeConsumer:
+            pass
+
+        set_extension_context("test_extension")
+        try:
+            with pytest.raises(ValueError, match="WebSocket path must start with 'ws/extensions/'"):
+                register_websocket_route(r"ws/other/path/$", FakeConsumer)
+        finally:
+            clear_extension_context()
+
+    def test_get_registered_websocket_routes_returns_tuples(self):
+        """get_registered_websocket_routes returns a list of (path_regex, consumer_class) tuples."""
+        routes = get_registered_websocket_routes()
+        assert isinstance(routes, list)
+        for item in routes:
+            assert isinstance(item, tuple)
+            assert len(item) == 2
+            assert isinstance(item[0], str)
+            assert item[0].startswith("ws/extensions/")
     
     def test_set_extension_context(self):
         """Test setting extension context."""

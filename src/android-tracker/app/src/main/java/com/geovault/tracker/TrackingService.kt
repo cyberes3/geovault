@@ -159,7 +159,7 @@ class TrackingService : Service() {
         totalDistanceMeters = 0f
         sessionTotalDistanceMeters = 0f
         lastAccuracyMeters = null
-        sendBroadcast(Intent(SESSION_STATS_UPDATE))
+        broadcastSessionStats()
 
         runBlocking(Dispatchers.IO) {
             database.locationDao().deleteAll()
@@ -204,7 +204,7 @@ class TrackingService : Service() {
         runBlocking(Dispatchers.IO) {
             database.locationDao().deleteAll()
         }
-        sendBroadcast(Intent(SESSION_STATS_UPDATE))
+        broadcastSessionStats()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -218,7 +218,7 @@ class TrackingService : Service() {
 
         if (!TrackingLocationPolicy.acceptByAccuracy(location, accuracyFilter)) {
             Log.d(TAG, "Location discarded (accuracy ${location.accuracy} > $accuracyFilter)")
-            sendBroadcast(Intent(SESSION_STATS_UPDATE))
+            broadcastSessionStats()
             return
         }
 
@@ -240,9 +240,10 @@ class TrackingService : Service() {
         sessionTotalDistanceMeters = totalDistanceMeters
         lastLocation = location
 
-        // Notify MainActivity if it's visible
-        val intent = Intent("com.geovault.tracker.LOCATION_UPDATE")
-        intent.putExtra("location", location)
+        val intent = Intent("com.geovault.tracker.LOCATION_UPDATE").apply {
+            setPackage(packageName)
+            putExtra("location", location)
+        }
         sendBroadcast(intent)
 
         serviceScope.launch {
@@ -322,7 +323,7 @@ class TrackingService : Service() {
                         Log.d(TAG, "Successfully pushed ${batch.size} locations")
                         pointsSentThisSession += batch.size
                         lastPointSentAtMs = System.currentTimeMillis()
-                        sendBroadcast(Intent(SESSION_STATS_UPDATE))
+                        broadcastSessionStats()
                         database.locationDao().delete(batch)
                         batchesSent++
                     } else {
@@ -347,6 +348,11 @@ class TrackingService : Service() {
         } finally {
             pushMutex.unlock()
         }
+    }
+
+    private fun broadcastSessionStats() {
+        val intent = Intent(SESSION_STATS_UPDATE).apply { setPackage(packageName) }
+        sendBroadcast(intent)
     }
 
     private fun updateNotificationCount() {

@@ -37,6 +37,9 @@ interface TrackerApi {
     @DELETE("/api/extensions/live-track/trackers/{id}/")
     fun deleteTracker(@Path("id") id: String): Call<ResponseBody>
 
+    @POST("/api/extensions/live-track/trackers/{id}/clear-history/")
+    fun clearTrackerHistory(@Path("id") id: String): Call<ResponseBody>
+
     @POST("/api/extensions/live-track/tracker-check/")
     fun checkTracker(@Body request: TrackerCheckRequest): Call<TrackerCheckResponse>
 }

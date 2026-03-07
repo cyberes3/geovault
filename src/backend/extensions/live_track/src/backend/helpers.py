@@ -15,14 +15,52 @@ from .models import LiveTrack
 def track_to_response(track: LiveTrack, include_secret: bool = False) -> dict:
     geom = copy.deepcopy(track.geometry or {"type": "LineString", "coordinates": []})
     point_params = copy.deepcopy(track.point_params or [])
+    for p in point_params:
+        if "acc" in p and isinstance(p["acc"], (int, float)):
+            p["acc"] = round(float(p["acc"]), 1)
+        if "alt" in p and isinstance(p["alt"], (int, float)):
+            p["alt"] = int(round(float(p["alt"])))
+        for k, v in list(p.items()):
+            if "timestamp" in k.lower() and isinstance(v, (int, float)):
+                if v > 1e11:
+                    p[k] = int(round(v / 1000.0))
+                else:
+                    p[k] = int(round(v))
+    
+    coords = geom.get("coordinates") or []
+    rounded_coords = []
+    for c in coords:
+        if len(c) >= 2:
+            pt = [round(c[0], 5), round(c[1], 5)]
+            if len(c) >= 3 and isinstance(c[2], (int, float)):
+                if c[2] > 1e11:
+                    pt.append(int(round(c[2] / 1000.0)))
+                else:
+                    pt.append(int(round(c[2])))
+            elif len(c) >= 3:
+                pt.append(c[2])
+            if len(c) > 3:
+                pt.extend(c[3:])
+            rounded_coords.append(pt)
+        else:
+            rounded_coords.append(c)
+    geom["coordinates"] = rounded_coords
+    
+    bbox = None
+    if rounded_coords:
+        lons = [c[0] for c in rounded_coords]
+        lats = [c[1] for c in rounded_coords]
+        bbox = [round(min(lons), 5), round(min(lats), 5), round(max(lons), 5), round(max(lats), 5)]
+    
     out = {
         "id": str(track.id),
         "name": track.name,
         "color": track.color,
         "geometry": geom,
         "point_params": point_params,
-        "created_at": track.created_at.isoformat() if track.created_at else None,
-        "updated_at": track.updated_at.isoformat() if track.updated_at else None,
+        "bbox": bbox,
+        "created_at": int(track.created_at.timestamp()) if track.created_at else None,
+        "updated_at": int(track.updated_at.timestamp()) if track.updated_at else None,
     }
     if include_secret:
         out["tracker_secret"] = track.tracker_secret
@@ -33,16 +71,48 @@ def track_to_response_metadata_only(track: LiveTrack, include_secret: bool = Fal
     """Tracker metadata + latest point params only (no full geometry). For GET trackers/<id>/."""
     point_params = track.point_params or []
     latest_params = [copy.deepcopy(point_params[-1])] if point_params else []
+    for p in latest_params:
+        if "acc" in p and isinstance(p["acc"], (int, float)):
+            p["acc"] = round(float(p["acc"]), 1)
+        if "alt" in p and isinstance(p["alt"], (int, float)):
+            p["alt"] = int(round(float(p["alt"])))
+        for k, v in list(p.items()):
+            if "timestamp" in k.lower() and isinstance(v, (int, float)):
+                if v > 1e11:
+                    p[k] = int(round(v / 1000.0))
+                else:
+                    p[k] = int(round(v))
+    
     geom = track.geometry or {"type": "LineString", "coordinates": []}
     coords = geom.get("coordinates") or []
-    last_point = coords[-1] if coords else None  # [lon, lat, timestamp_ms] or None
+    last_point = None
+    if coords:
+        lp = coords[-1]
+        last_point = [round(lp[0], 5), round(lp[1], 5)]
+        if len(lp) >= 3 and isinstance(lp[2], (int, float)):
+            if lp[2] > 1e11:
+                last_point.append(int(round(lp[2] / 1000.0)))
+            else:
+                last_point.append(int(round(lp[2])))
+        elif len(lp) >= 3:
+            last_point.append(lp[2])
+        if len(lp) > 3:
+            last_point.extend(lp[3:])
+    
+    bbox = None
+    if coords:
+        lons = [c[0] for c in coords]
+        lats = [c[1] for c in coords]
+        bbox = [round(min(lons), 5), round(min(lats), 5), round(max(lons), 5), round(max(lats), 5)]
+        
     out = {
         "id": str(track.id),
         "name": track.name,
         "color": track.color,
         "point_params": latest_params,
-        "created_at": track.created_at.isoformat() if track.created_at else None,
-        "updated_at": track.updated_at.isoformat() if track.updated_at else None,
+        "bbox": bbox,
+        "created_at": int(track.created_at.timestamp()) if track.created_at else None,
+        "updated_at": int(track.updated_at.timestamp()) if track.updated_at else None,
         "last_point": last_point,
     }
     if include_secret:
@@ -90,7 +160,6 @@ def broadcast_track_updated(
         data = {"track_id": track_id, "point": point, "props": props}
         if index is not None:
             data["index"] = index
-        async_to_sync(channel_layer.group_send)(
-            f"realtime_{user_id}",
-            {"type": "live_track_track_updated", "data": data},
-        )
+        message = {"type": "live_track_track_updated", "data": data}
+        async_to_sync(channel_layer.group_send)(f"realtime_{user_id}", message)
+        async_to_sync(channel_layer.group_send)(f"live_track_{user_id}", message)

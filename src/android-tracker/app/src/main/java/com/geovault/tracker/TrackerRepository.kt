@@ -48,42 +48,9 @@ object TrackerRepository {
                     return
                 }
                 val list = response.body() ?: emptyList()
-                if (list.isEmpty()) {
-                    isFetching = false
-                    trackersCache = emptyList()
-                    notifyListeners(emptyList())
-                    return
-                }
-                val merged = MutableList(list.size) { list[it] }
-                var pending = list.size
-                val lock = Any()
-                fun maybeDone() {
-                    synchronized(lock) {
-                        if (--pending != 0) return
-                    }
-                    isFetching = false
-                    trackersCache = merged
-                    notifyListeners(merged)
-                }
-                list.forEachIndexed { index, tracker ->
-                    api.getTrackerCoordinates(tracker.id).enqueue(object : Callback<TrackerCoordinatesResponse> {
-                        override fun onResponse(c: Call<TrackerCoordinatesResponse>, r: Response<TrackerCoordinatesResponse>) {
-                            val coords = if (r.isSuccessful) r.body()?.coordinates else null
-                            val params = r.body()?.point_params
-                            merged[index] = tracker.copy(
-                                geometry = if (!coords.isNullOrEmpty())
-                                    GeoJsonLineString("LineString", coords)
-                                else null,
-                                point_params = params
-                            )
-                            maybeDone()
-                        }
-                        override fun onFailure(c: Call<TrackerCoordinatesResponse>, t: Throwable) {
-                            Log.e("TrackerRepository", "Failed to fetch coordinates for ${tracker.id}", t)
-                            maybeDone()
-                        }
-                    })
-                }
+                isFetching = false
+                trackersCache = list
+                notifyListeners(list)
             }
 
             override fun onFailure(call: Call<List<Tracker>>, t: Throwable) {
@@ -113,6 +80,15 @@ object TrackerRepository {
             .getString("selected_tracker_id", "") ?: ""
         if (id == defaultId && id == currentTrackerId && currentTrackerCache != null) {
             callback(currentTrackerCache)
+            return
+        }
+        val cached = trackersCache?.find { it.id == id }
+        if (cached != null) {
+            if (id == defaultId) {
+                currentTrackerId = id
+                currentTrackerCache = cached
+            }
+            callback(cached)
             return
         }
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
@@ -261,6 +237,32 @@ object TrackerRepository {
             }
             override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
                 Log.e("TrackerRepository", "Failed to delete tracker", t)
+                callback(false)
+            }
+        })
+    }
+
+    fun clearTrackerHistory(context: Context, trackerId: String, callback: (Boolean) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(false)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.clearTrackerHistory(trackerId).enqueue(object : Callback<ResponseBody> {
+            override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                if (response.isSuccessful) {
+                    if (geometryCache?.first == trackerId) {
+                        geometryCache = null
+                    }
+                    clearGeometryCache()
+                    trackersCache = null
+                }
+                callback(response.isSuccessful)
+            }
+            override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
+                Log.e("TrackerRepository", "Failed to clear tracker history", t)
                 callback(false)
             }
         })

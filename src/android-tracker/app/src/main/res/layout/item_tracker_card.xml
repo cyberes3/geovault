@@ -42,6 +42,8 @@
                 android:textStyle="bold"
                 android:textColor="@color/text_primary"
                 android:textIsSelectable="true"
+                android:maxLines="1"
+                android:ellipsize="end"
                 tools:text="My Tracker" />
 
             <ImageView

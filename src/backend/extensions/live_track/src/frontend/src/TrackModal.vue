@@ -32,12 +32,15 @@
       :color="color"
       :error="error"
       :deleting="deleting"
+      :clearing="clearing"
+      :clear-history-disabled="clearing || historyClearedThisSession"
       :copy="copy"
       @update:name="name = $event"
       @update:color="color = $event"
       @reset-color="resetColorToDeterministic"
       @open-instructions="showInstructions = true"
       @download-kml="downloadKml"
+      @clear-history="confirmClearHistory"
       @delete="confirmDelete"
     />
 
@@ -104,6 +107,9 @@ export default {
     const error = ref('');
     const saving = ref(false);
     const deleting = ref(false);
+    const clearing = ref(false);
+    /** After clear history succeeds, keep the clear button disabled until the modal is closed. */
+    const historyClearedThisSession = ref(false);
     const createdTrack = ref(null);
     const showInstructions = ref(false);
 
@@ -249,6 +255,22 @@ export default {
       }
     }
 
+    function confirmClearHistory() {
+      if (!props.track || clearing.value) return;
+      if (!confirm('Clear all track history except the latest point? This cannot be undone.')) return;
+      clearing.value = true;
+      api.post(`/trackers/${props.track.id}/clear-history/`).then(() => {
+        historyClearedThisSession.value = true;
+        emit('saved');
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('History cleared');
+      }).catch((e) => {
+        const err = api.handleError?.(e);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Clear history failed');
+      }).finally(() => {
+        clearing.value = false;
+      });
+    }
+
     function confirmDelete() {
       if (!props.track || deleting.value) return;
       if (!confirm('Delete this track? This cannot be undone.')) return;
@@ -283,6 +305,8 @@ export default {
       error,
       saving,
       deleting,
+      clearing,
+      historyClearedThisSession,
       createdTrack,
       showInstructions,
       modalTitle,
@@ -295,6 +319,7 @@ export default {
       create,
       save,
       downloadKml,
+      confirmClearHistory,
       confirmDelete
     };
   }

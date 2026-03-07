@@ -184,7 +184,28 @@ class MainActivity : AppCompatActivity() {
             viewPager.setCurrentItem(0, false)
         }
         findViewById<View>(R.id.navMap).setOnClickListener {
-            viewPager.setCurrentItem(1, false)
+            // Predict what tracker to load on the map and pass metadata instantly
+            val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+            val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
+            if (defaultTrackerId.isNotEmpty() && initialTrackForMap == null) {
+                TrackerRepository.getTrackers(this, forceRefresh = false) { list ->
+                    val defaultTracker = list?.find { it.id == defaultTrackerId }
+                    if (defaultTracker != null) {
+                        setInitialTrackForMap(defaultTracker)
+                    }
+                    if (viewPager.currentItem != 1) { // If not already on map
+                        setCurrentTab(1, forceRefreshMap = true, delayMs = 0)
+                    } else {
+                        viewPager.setCurrentItem(1, false)
+                    }
+                }
+            } else {
+                if (viewPager.currentItem != 1) { // If not already on map
+                    setCurrentTab(1, forceRefreshMap = true, delayMs = 0)
+                } else {
+                    viewPager.setCurrentItem(1, false)
+                }
+            }
         }
         findViewById<View>(R.id.navTrackers).setOnClickListener {
             viewPager.setCurrentItem(2, false)
@@ -372,11 +393,18 @@ class MainActivity : AppCompatActivity() {
         return t
     }
 
-    fun setCurrentTab(index: Int, forceRefreshMap: Boolean = false) {
-        viewPager.setCurrentItem(index, false)
+    fun setCurrentTab(index: Int, forceRefreshMap: Boolean = false, delayMs: Long = 0) {
         if (forceRefreshMap && index == 1) {
             val mapFragment = pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.MapFragment
             mapFragment?.refreshTrackForSelectedTracker()
+        }
+        
+        if (delayMs > 0) {
+            Handler(Looper.getMainLooper()).postDelayed({
+                viewPager.setCurrentItem(index, false)
+            }, delayMs)
+        } else {
+            viewPager.setCurrentItem(index, false)
         }
     }
 

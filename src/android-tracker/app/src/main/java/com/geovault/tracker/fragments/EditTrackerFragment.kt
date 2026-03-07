@@ -9,6 +9,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
@@ -32,7 +33,16 @@ class EditTrackerFragment : Fragment() {
     private lateinit var defaultTrackSwitch: SwitchCompat
     private lateinit var saveButton: MaterialButton
     private lateinit var cancelButton: MaterialButton
-    private lateinit var deleteButton: MaterialButton
+    private lateinit var clearHistoryButton: MaterialButton
+    private lateinit var deleteButton: ImageButton
+
+    /** After clear history succeeds, keep the clear button disabled until this fragment is closed. */
+    private var historyClearedThisSession = false
+
+    /** Snapshot when form was loaded; used to detect unsaved changes. */
+    private var initialName: String? = null
+    private var initialColor: String? = null
+    private var initialDefaultTrack: Boolean = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -51,11 +61,10 @@ class EditTrackerFragment : Fragment() {
         defaultTrackSwitch = view.findViewById(R.id.editTrackerDefaultSwitch)
         saveButton = view.findViewById(R.id.editTrackerSave)
         cancelButton = view.findViewById(R.id.editTrackerCancel)
+        clearHistoryButton = view.findViewById(R.id.editTrackerClearHistory)
         deleteButton = view.findViewById(R.id.editTrackerDelete)
 
-        cancelButton.setOnClickListener {
-            requireActivity().supportFragmentManager.popBackStack()
-        }
+        cancelButton.setOnClickListener { tryClose() }
 
         pickColorButton.setOnClickListener {
             showHueColorPickerDialog(
@@ -103,6 +112,9 @@ class EditTrackerFragment : Fragment() {
             nameEdit.setText(tracker.name)
             colorEdit.setText(color)
             updateColorPreview(colorPreview, color)
+            initialName = tracker.name
+            initialColor = normalizeColorForCompare(color)
+            initialDefaultTrack = defaultTrackSwitch.isChecked
         } else {
             TrackerRepository.getTracker(requireContext(), trackerId) { fetched ->
                 if (isAdded && fetched != null) {
@@ -111,6 +123,9 @@ class EditTrackerFragment : Fragment() {
                         nameEdit.setText(fetched.name)
                         colorEdit.setText(color)
                         updateColorPreview(colorPreview, color)
+                        initialName = fetched.name
+                        initialColor = normalizeColorForCompare(color)
+                        initialDefaultTrack = defaultTrackSwitch.isChecked
                         if (requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).getString("selected_tracker_id", null) == trackerId) {
                             requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
                                 .putString("selected_tracker_name", fetched.name)
@@ -148,6 +163,31 @@ class EditTrackerFragment : Fragment() {
             }
         }
 
+        clearHistoryButton.setOnClickListener {
+            AlertDialog.Builder(requireContext())
+                .setTitle(getString(R.string.clear_history_confirm_title))
+                .setMessage(getString(R.string.clear_history_confirm_message))
+                .setPositiveButton(getString(R.string.clear_history_tracker)) { _, _ ->
+                    setAllInputsEnabled(false)
+                    TrackerRepository.clearTrackerHistory(requireContext(), trackerId) { success ->
+                        if (isAdded) {
+                            requireActivity().runOnUiThread {
+                                if (success) {
+                                    historyClearedThisSession = true
+                                    requireActivity().supportFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
+                                    Toast.makeText(requireContext(), getString(R.string.history_cleared), Toast.LENGTH_SHORT).show()
+                                } else {
+                                    (activity as? MainActivity)?.showSnackbar("Failed to clear history")
+                                }
+                                setAllInputsEnabled(true)
+                            }
+                        }
+                    }
+                }
+                .setNegativeButton(getString(R.string.cancel_button), null)
+                .show()
+        }
+
         deleteButton.setOnClickListener {
             val confirmDialog = AlertDialog.Builder(requireContext())
                 .setTitle(getString(R.string.delete_tracker_confirm_title))
@@ -165,6 +205,7 @@ class EditTrackerFragment : Fragment() {
                                             .remove("selected_tracker_id")
                                             .remove("selected_tracker_name")
                                             .apply()
+                                        TrackerRepository.clearCurrentTrackerCache()
                                     }
                                     requireActivity().supportFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
                                     requireActivity().supportFragmentManager.popBackStack()
@@ -188,12 +229,49 @@ class EditTrackerFragment : Fragment() {
         }
     }
 
+    private fun normalizeColorForCompare(color: String?): String? {
+        val t = color?.trim()?.ifEmpty { null } ?: return null
+        return if (t.startsWith("#")) t else "#$t"
+    }
+
+    private fun hasUnsavedChanges(): Boolean {
+        if (initialName == null) return false
+        val currentName = nameEdit.text?.toString()?.trim() ?: ""
+        val currentColorNorm = normalizeColorForCompare(colorEdit.text?.toString()?.trim()?.ifEmpty { null }) ?: "#3388ff"
+        val initialColorNorm = initialColor ?: "#3388ff"
+        val currentDefault = defaultTrackSwitch.isChecked
+        return currentName != initialName || currentColorNorm != initialColorNorm || currentDefault != initialDefaultTrack
+    }
+
+    private fun popBackStack() {
+        requireActivity().supportFragmentManager.popBackStack()
+    }
+
+    private fun tryClose() {
+        if (!hasUnsavedChanges()) {
+            popBackStack()
+            return
+        }
+        val discardDialog = AlertDialog.Builder(requireContext())
+            .setTitle(getString(R.string.discard_changes_confirm_title))
+            .setMessage(getString(R.string.discard_changes_confirm_message))
+            .setPositiveButton(getString(R.string.discard)) { _, _ -> popBackStack() }
+            .setNegativeButton(getString(R.string.cancel_button), null)
+            .show()
+        discardDialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(
+            ContextCompat.getColor(requireContext(), R.color.error_red)
+        )
+    }
+
     private fun setActionButtonsEnabled(enabled: Boolean) {
         val alpha = if (enabled) 1f else 0.4f
         saveButton.isEnabled = enabled
         saveButton.alpha = alpha
         cancelButton.isEnabled = enabled
         cancelButton.alpha = alpha
+        val clearEnabled = enabled && !historyClearedThisSession
+        clearHistoryButton.isEnabled = clearEnabled
+        clearHistoryButton.alpha = if (clearEnabled) 1f else 0.4f
         deleteButton.isEnabled = enabled
         deleteButton.alpha = alpha
     }

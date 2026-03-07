@@ -166,8 +166,12 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
                     if (activity.isDestroyed) return@post
                     val s = map.style ?: return@post
                     try {
-                        // Attempt to place below annotations
-                        s.addLayerBelow(rasterLayer, ANNOTATIONS_LAYER_ID)
+                        // Attempt to place below our direct track layer or annotations
+                        try {
+                            s.addLayerBelow(rasterLayer, "track-outline-layer")
+                        } catch (e: Exception) {
+                            s.addLayerBelow(rasterLayer, ANNOTATIONS_LAYER_ID)
+                        }
                     } catch (e: Exception) {
                         try {
                             // First, try adding below first symbol layer

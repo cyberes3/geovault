@@ -30,13 +30,16 @@ from api.routing import websocket_urlpatterns
 
 # Wrap the ASGI application with exception handling middleware
 from website.exception_handler import ASGIExceptionMiddleware
+from website.websocket_token_auth import WebSocketTokenAuthMiddleware
 
-# Create the base application
+# Create the base application. WebSocket: token auth (for native apps) then session auth.
 base_application = ProtocolTypeRouter({
     "http": django_asgi_app,
-    "websocket": AuthMiddlewareStack(
-        URLRouter(
-            websocket_urlpatterns
+    "websocket": WebSocketTokenAuthMiddleware(
+        AuthMiddlewareStack(
+            URLRouter(
+                websocket_urlpatterns
+            )
         )
     ),
 })

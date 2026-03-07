@@ -17,7 +17,7 @@ Example usage:
 """
 import logging
 from threading import Lock
-from typing import Callable, Dict, List, Tuple, Optional
+from typing import Callable, Dict, List, Tuple, Optional, Type, Any
 
 logger = logging.getLogger('website.extension_hooks')
 
@@ -25,6 +25,8 @@ logger = logging.getLogger('website.extension_hooks')
 _hook_registry: Dict[str, List[Tuple[str, Callable, str]]] = {}
 # Registry: well_known_path -> (callback, extension_name)
 _well_known_registry: Dict[str, Tuple[Callable, str]] = {}
+# Registry: (path_regex, consumer_class) for extension WebSocket routes (base path ws/extensions/)
+_websocket_routes: List[Tuple[str, Type[Any], str]] = []  # (path_regex, consumer_class, extension_name)
 _registry_lock = Lock()
 
 # Track current extension name during registration (set by ExtensionAppConfig)
@@ -238,3 +240,40 @@ def unregister_hook(hook_type: str, hook_id: str) -> bool:
             logger.debug(f"Unregistered {hook_type} hook: {hook_id}")
 
         return removed
+
+
+def register_websocket_route(path_regex: str, consumer_class: Type[Any]) -> None:
+    """
+    Register a WebSocket route for an extension. Call from extension_ready().
+
+    Path must be under the extension WebSocket base: ws/extensions/<extension_name>/...
+    The path_regex is used as-is in Django's re_path (e.g. r'ws/extensions/live-track/trackers-live/$').
+
+    Args:
+        path_regex: Regex pattern for the WebSocket path (e.g. r'ws/extensions/live-track/trackers-live/$').
+        consumer_class: ASGI consumer class (e.g. AsyncWebsocketConsumer subclass).
+
+    Raises:
+        ValueError: If called outside of extension context.
+    """
+    if _current_extension_name is None:
+        raise ValueError(
+            "Cannot register WebSocket route outside of extension context. "
+            "Register in the extension_ready() method of your AppConfig."
+        )
+    if not path_regex.startswith("ws/extensions/"):
+        raise ValueError(
+            f"WebSocket path must start with 'ws/extensions/'; got {path_regex!r}"
+        )
+    with _registry_lock:
+        _websocket_routes.append((path_regex, consumer_class, _current_extension_name))
+        logger.debug(f"Registered WebSocket route: {path_regex} (extension: {_current_extension_name})")
+
+
+def get_registered_websocket_routes() -> List[Tuple[str, Type[Any]]]:
+    """
+    Return all registered extension WebSocket routes as (path_regex, consumer_class) tuples.
+    Used by api.routing to build websocket_urlpatterns.
+    """
+    with _registry_lock:
+        return [(path_regex, consumer_class) for path_regex, consumer_class, _ in _websocket_routes]

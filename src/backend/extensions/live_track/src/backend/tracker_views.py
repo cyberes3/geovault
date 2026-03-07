@@ -135,6 +135,24 @@ def tracker_get_geometry(request, tracker_id):
     return JsonResponse(track_to_response(track, include_secret=False))
 
 
+@api_or_login_required_401()
+@require_http_methods(["POST"])
+@handle_404
+@csrf_exempt
+def tracker_clear_history(request, tracker_id):
+    """POST trackers/<id>/clear-history/ — keep only the latest point (or none if empty)."""
+    track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
+    geom = track.geometry or {"type": "LineString", "coordinates": []}
+    coords = geom.get("coordinates") or []
+    point_params = track.point_params or []
+    new_coords = [coords[-1]] if coords else []
+    new_params = [point_params[-1]] if point_params else []
+    track.geometry = {"type": "LineString", "coordinates": new_coords}
+    track.point_params = new_params
+    track.save(update_fields=["geometry", "point_params", "updated_at"])
+    return JsonResponse(track_to_response_metadata_only(track, include_secret=False), status=200)
+
+
 LATEST_COORDINATES_LIMIT = 100
 
 

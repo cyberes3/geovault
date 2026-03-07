@@ -11,9 +11,11 @@ data class Tracker(
     val color: String?,
     val geometry: GeoJsonLineString? = null,
     @IgnoredOnParcel val point_params: List<Map<String, Any?>>? = null,
+    val last_point: List<Double>? = null,
+    val bbox: List<Double>? = null,
     val tracker_secret: String? = null,
-    val created_at: String? = null,
-    val updated_at: String? = null
+    val created_at: Long? = null,
+    val updated_at: Long? = null
 ) : Parcelable
 
 @Parcelize

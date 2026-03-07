@@ -141,8 +141,28 @@
     <string name="create">Create</string>
     <string name="new_tracker_title">New track</string>
     <string name="edit_tracker_title">Edit track</string>
+    <string name="discard_changes_confirm_title">Discard changes?</string>
+    <string name="discard_changes_confirm_message">You have unsaved changes. Close without saving?</string>
+    <string name="discard">Discard</string>
+    <string name="clear_history_tracker">Clear track history</string>
+    <string name="clear_history_confirm_title">Clear history?</string>
+    <string name="clear_history_confirm_message">Clear all track history except the latest point? This cannot be undone.</string>
+    <string name="history_cleared">History cleared</string>
     <string name="tracker_deleted">Tracker deleted</string>
     <string name="pick_color">Pick color</string>
     <string name="choose_color">Choose color</string>
+
+    <!-- Test button: add points to default tracker (for map update testing) -->
+    <string name="test_add_point_button">Start test loop (1/s)</string>
+    <string name="test_stop_loop_button">Stop test loop</string>
+    <string name="test_add_point_select_tracker">Select a default tracker first</string>
+    <string name="test_add_point_success">Test point added</string>
+    <string name="test_add_point_error">Failed: %1$s</string>
+
+    <!-- Live track streaming (non-default track on map) -->
+    <string name="live_track_streaming_title">Streaming track</string>
+    <string name="live_track_streaming_text">%1$s</string>
+    <string name="live_track_streaming_text_anon">Track updates</string>
+    <string name="live_track_streaming_channel">Track streaming</string>
 </resources>
 

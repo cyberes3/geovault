@@ -71,16 +71,16 @@ class TrackersFragment : Fragment() {
                 TrackerAction.VIEW_PARAMS -> (activity as? MainActivity)?.showTrackerParamsFragment(
                     tracker.id,
                     tracker.name,
-                    lastUpdateMs = tracker.geometry?.coordinates?.lastOrNull()?.let { c ->
+                    lastUpdateMs = (tracker.geometry?.coordinates?.lastOrNull() ?: tracker.last_point)?.let { c ->
                         if (c.size >= 3) {
                             val t = (c[2] as? Number)?.toLong() ?: return@let null
                             if (t < 1e12) t * 1000 else t
                         } else null
                     },
-                    positionLat = tracker.geometry?.coordinates?.lastOrNull()?.let { c ->
+                    positionLat = (tracker.geometry?.coordinates?.lastOrNull() ?: tracker.last_point)?.let { c ->
                         if (c.size >= 2) (c[1] as? Number)?.toDouble() else null
                     },
-                    positionLon = tracker.geometry?.coordinates?.lastOrNull()?.let { c ->
+                    positionLon = (tracker.geometry?.coordinates?.lastOrNull() ?: tracker.last_point)?.let { c ->
                         if (c.size >= 2) (c[0] as? Number)?.toDouble() else null
                     }
                 )
@@ -155,7 +155,7 @@ class TrackersFragment : Fragment() {
         // Do not change default track; only show this track on the map. Reset will load the default.
         TrackerRepository.clearCurrentTrackerCache()
         (activity as? MainActivity)?.setInitialTrackForMap(tracker)
-        (activity as? MainActivity)?.setCurrentTab(1, forceRefreshMap = true)
+        (activity as? MainActivity)?.setCurrentTab(1, forceRefreshMap = true, delayMs = 50)
     }
 
     private enum class TrackerAction { EDIT, VIEW_ON_MAP, VIEW_PARAMS }
@@ -218,7 +218,7 @@ class TrackersFragment : Fragment() {
                     colorBar.setBackgroundColor(ContextCompat.getColor(itemView.context, R.color.primary_blue))
                 }
                 val coords = tracker.geometry?.coordinates.orEmpty()
-                val lastCoord = coords.lastOrNull()
+                val lastCoord = coords.lastOrNull() ?: tracker.last_point
                 val lastUpdateMs = when {
                     lastCoord != null && lastCoord.size >= 3 -> {
                         val t = lastCoord[2]

@@ -25,11 +25,12 @@ class TrackerApplication : Application() {
         /** Call from app start or after login to prefetch trackers and selected tracker in background. */
         fun prefetchIfNeeded(context: Context) {
             if (!GeovaultAuthManager.isLoggedIn(context)) return
-            TrackerRepository.getTrackers(context, forceRefresh = true) { }
-            val prefs = context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-            val trackerId = prefs.getString("selected_tracker_id", null)
-            if (!trackerId.isNullOrBlank()) {
-                TrackerRepository.getTracker(context, trackerId) { }
+            TrackerRepository.getTrackers(context, forceRefresh = true) {
+                val prefs = context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+                val trackerId = prefs.getString("selected_tracker_id", null)
+                if (!trackerId.isNullOrBlank()) {
+                    TrackerRepository.getTracker(context, trackerId) { }
+                }
             }
         }
     }
