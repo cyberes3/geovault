@@ -12,5 +12,6 @@ from .tracker_views import (
     tracker_get_patch_delete,
     tracker_kml,
     tracker_list_create,
+    tracker_post_settings,
     tracker_profile_properties,
 )

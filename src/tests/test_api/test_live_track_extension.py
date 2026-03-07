@@ -3,6 +3,7 @@ Tests for the Live Track extension API and ingress.
 """
 import base64
 import json
+import time
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
@@ -301,6 +302,97 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(params[1].get("alt"), 200.0)
         self.assertEqual(params[1].get("spd_kph"), 5.0)
 
+    def test_geometry_filtered_by_recent_data_window(self):
+        """GET geometry with recent_data_window setting returns only points within the window."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Filtered Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        tracker_secret = create_resp.json()["tracker_secret"]
+        auth = _basic_auth_header("trackuser@example.com", tracker_secret)
+        now_sec = int(time.time())
+        old_ts = now_sec - 7200  # 2 hours ago
+        recent_ts = now_sec - 300  # 5 minutes ago
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps({"lat": 37.0, "lon": -122.0, "timestamp": old_ts}),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps({"lat": 38.0, "lon": -121.0, "timestamp": recent_ts}),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"recent_data_window": "1h"}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/geometry/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        coords = data["geometry"].get("coordinates", [])
+        self.assertEqual(len(coords), 1, "Only the point within 1h should be returned")
+        self.assertEqual(coords[0][0], -121.0)
+        self.assertEqual(coords[0][1], 38.0)
+        self.assertEqual(len(data.get("point_params", [])), 1)
+
+    def test_geometry_all_true_bypasses_recent_filter(self):
+        """GET geometry?all=true returns full geometry ignoring recent_data_window."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "AllData Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        tracker_secret = create_resp.json()["tracker_secret"]
+        auth = _basic_auth_header("trackuser@example.com", tracker_secret)
+        now_sec = int(time.time())
+        old_ts = now_sec - 7200
+        recent_ts = now_sec - 300
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps({"lat": 37.0, "lon": -122.0, "timestamp": old_ts}),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps({"lat": 38.0, "lon": -121.0, "timestamp": recent_ts}),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"recent_data_window": "1h"}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/trackers/{track_id}/geometry/",
+                {"all": "true"},
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        coords = data["geometry"].get("coordinates", [])
+        self.assertEqual(len(coords), 2, "?all=true should return both points")
+        self.assertEqual(len(data.get("point_params", [])), 2)
+
     def test_get_track_404_other_user(self):
         """GET trackers/<id>/ for another user's track returns 404."""
         with _patch_live_track_enabled():
@@ -323,8 +415,8 @@ class TestLiveTrackAPI(TestCase):
             )
         self.assertEqual(response.status_code, 404)
 
-    def test_patch_track(self):
-        """PATCH trackers/<id>/ updates name and color."""
+    def test_patch_track_not_allowed(self):
+        """PATCH trackers/<id>/ is not allowed; returns 405."""
         with _patch_live_track_enabled():
             create_resp = self.client.post(
                 "/api/extensions/live-track/trackers/",
@@ -335,15 +427,64 @@ class TestLiveTrackAPI(TestCase):
         with _patch_live_track_enabled():
             response = self.client.patch(
                 f"/api/extensions/live-track/trackers/{track_id}/",
-                data=json.dumps({"name": "Updated", "color": "#00ff00"}),
+                data=json.dumps({"name": "Updated"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 405)
+
+    def test_post_settings_updates_name_and_color(self):
+        """POST trackers/<id>/settings/ updates name (column) and color/recent_data_window (in settings)."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Original"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"name": "Updated", "color": "#00ff00", "recent_data_window": "1h"}),
                 content_type="application/json",
             )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["name"], "Updated")
-        self.assertEqual(response.json()["color"], "#00ff00")
+        data = response.json()
+        self.assertEqual(data["name"], "Updated")
+        self.assertEqual(data["color"], "#00ff00")
+        self.assertEqual(data["settings"]["color"], "#00ff00")
+        self.assertEqual(data["settings"]["recent_data_window"], "1h")
 
-    def test_patch_track_empty_name_rejected(self):
-        """PATCH with empty name returns 400."""
+    def test_post_settings_recent_data_window_null_clears_setting(self):
+        """POST settings with recent_data_window=null clears it (show all); reopen shows All."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "ClearRecent"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"recent_data_window": "1h"}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"name": "ClearRecent", "recent_data_window": None}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertNotIn("recent_data_window", data["settings"])
+        with _patch_live_track_enabled():
+            get_resp = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/")
+        self.assertEqual(get_resp.status_code, 200)
+        self.assertNotIn("recent_data_window", get_resp.json().get("settings", {}))
+
+    def test_post_settings_empty_name_rejected(self):
+        """POST settings with empty name returns 400."""
         with _patch_live_track_enabled():
             create_resp = self.client.post(
                 "/api/extensions/live-track/trackers/",
@@ -352,42 +493,59 @@ class TestLiveTrackAPI(TestCase):
             )
         track_id = create_resp.json()["id"]
         with _patch_live_track_enabled():
-            response = self.client.patch(
-                f"/api/extensions/live-track/trackers/{track_id}/",
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
                 data=json.dumps({"name": "  "}),
                 content_type="application/json",
             )
         self.assertEqual(response.status_code, 400)
 
-    def test_patch_track_404_not_found(self):
-        """PATCH trackers/<id>/ with non-existent UUID returns 404."""
+    def test_post_settings_404_not_found(self):
+        """POST settings with non-existent UUID returns 404."""
         with _patch_live_track_enabled():
-            response = self.client.patch(
-                "/api/extensions/live-track/trackers/00000000-0000-0000-0000-000000000000/",
+            response = self.client.post(
+                "/api/extensions/live-track/trackers/00000000-0000-0000-0000-000000000000/settings/",
                 data=json.dumps({"name": "New"}),
                 content_type="application/json",
             )
         self.assertEqual(response.status_code, 404)
 
-    def test_patch_track_invalid_json(self):
-        """PATCH with invalid JSON body returns 400."""
+    def test_post_settings_invalid_json(self):
+        """POST settings with invalid JSON body returns 400."""
         with _patch_live_track_enabled():
             create_resp = self.client.post(
                 "/api/extensions/live-track/trackers/",
-                data=json.dumps({"name": "PatchMe"}),
+                data=json.dumps({"name": "SettingsMe"}),
                 content_type="application/json",
             )
         track_id = create_resp.json()["id"]
         with _patch_live_track_enabled():
-            response = self.client.patch(
-                f"/api/extensions/live-track/trackers/{track_id}/",
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
                 data="not json",
                 content_type="application/json",
             )
         self.assertEqual(response.status_code, 400)
 
-    def test_patch_track_409_duplicate_name(self):
-        """PATCH with name that another track of same user has returns 409."""
+    def test_post_settings_invalid_recent_data_window_returns_400(self):
+        """POST settings with invalid recent_data_window value returns 400."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"recent_data_window": "2h"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 400)
+
+    def test_post_settings_409_duplicate_name(self):
+        """POST settings with name that another track of same user has returns 409."""
         with _patch_live_track_enabled():
             self.client.post(
                 "/api/extensions/live-track/trackers/",
@@ -401,12 +559,30 @@ class TestLiveTrackAPI(TestCase):
             )
         track_b_id = create_b.json()["id"]
         with _patch_live_track_enabled():
-            response = self.client.patch(
-                f"/api/extensions/live-track/trackers/{track_b_id}/",
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_b_id}/settings/",
                 data=json.dumps({"name": "First"}),
                 content_type="application/json",
             )
         self.assertEqual(response.status_code, 409)
+
+    def test_post_settings_unauthenticated_returns_401(self):
+        """POST settings without auth returns 401."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        self.client.logout()
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"color": "#ff0000"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 401)
 
     def test_delete_track(self):
         """DELETE trackers/<id>/ returns 204 and removes track."""

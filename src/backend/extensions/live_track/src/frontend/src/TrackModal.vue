@@ -30,6 +30,7 @@
       :track="track"
       :name="name"
       :color="color"
+      :recent-data-window="recentDataWindow"
       :error="error"
       :deleting="deleting"
       :clearing="clearing"
@@ -37,6 +38,7 @@
       :copy="copy"
       @update:name="name = $event"
       @update:color="color = $event"
+      @update:recentDataWindow="recentDataWindow = $event"
       @reset-color="resetColorToDeterministic"
       @open-instructions="showInstructions = true"
       @download-kml="downloadKml"
@@ -103,6 +105,7 @@ export default {
     const api = inject('extensionApi');
     const name = ref('');
     const color = ref('#3388ff');
+    const recentDataWindow = ref('');
     const userPickedColor = ref(false);
     const error = ref('');
     const saving = ref(false);
@@ -222,7 +225,11 @@ export default {
       error.value = '';
       saving.value = true;
       try {
-        await api.patch(`/trackers/${props.track.id}/`, { name: name.value.trim(), color: color.value });
+        await api.post(`/trackers/${props.track.id}/settings/`, {
+          name: name.value.trim(),
+          color: color.value,
+          recent_data_window: recentDataWindow.value || null
+        });
         emit('saved');
       } catch (e) {
         const err = api.handleError?.(e);
@@ -289,16 +296,19 @@ export default {
       if (t) {
         name.value = t.name || '';
         color.value = t.color || '#3388ff';
+        recentDataWindow.value = t.settings?.recent_data_window ?? '';
         userPickedColor.value = true;
       } else {
         userPickedColor.value = false;
         color.value = '#3388ff';
+        recentDataWindow.value = '';
       }
     }, { immediate: true });
 
     return {
       name,
       color,
+      recentDataWindow,
       displayColor,
       onColorPicked,
       resetColorToDeterministic,

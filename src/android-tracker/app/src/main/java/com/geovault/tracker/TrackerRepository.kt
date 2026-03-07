@@ -75,21 +75,23 @@ object TrackerRepository {
         trackersCache = null
     }
 
-    fun getTracker(context: Context, id: String, callback: (Tracker?) -> Unit) {
+    fun getTracker(context: Context, id: String, forceRefresh: Boolean = false, callback: (Tracker?) -> Unit) {
         val defaultId = context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
             .getString("selected_tracker_id", "") ?: ""
-        if (id == defaultId && id == currentTrackerId && currentTrackerCache != null) {
-            callback(currentTrackerCache)
-            return
-        }
-        val cached = trackersCache?.find { it.id == id }
-        if (cached != null) {
-            if (id == defaultId) {
-                currentTrackerId = id
-                currentTrackerCache = cached
+        if (!forceRefresh) {
+            if (id == defaultId && id == currentTrackerId && currentTrackerCache != null) {
+                callback(currentTrackerCache)
+                return
             }
-            callback(cached)
-            return
+            val cached = trackersCache?.find { it.id == id }
+            if (cached != null) {
+                if (id == defaultId) {
+                    currentTrackerId = id
+                    currentTrackerCache = cached
+                }
+                callback(cached)
+                return
+            }
         }
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
         if (serverUrl.isEmpty()) {
@@ -98,8 +100,12 @@ object TrackerRepository {
         }
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
-        api.getTracker(id).enqueue(object : Callback<Tracker> {
+        trackerCall?.cancel()
+        val call = api.getTracker(id)
+        trackerCall = call
+        call.enqueue(object : Callback<Tracker> {
             override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
+                trackerCall = null
                 val tracker = if (response.isSuccessful) response.body() else null
                 if (tracker != null && id == defaultId) {
                     currentTrackerId = id
@@ -108,10 +114,19 @@ object TrackerRepository {
                 callback(tracker)
             }
             override fun onFailure(call: Call<Tracker>, t: Throwable) {
-                Log.e("TrackerRepository", "Failed to fetch tracker", t)
+                trackerCall = null
+                if (!call.isCanceled()) Log.e("TrackerRepository", "Failed to fetch tracker", t)
                 callback(null)
             }
         })
+    }
+
+    private var trackerCall: Call<Tracker>? = null
+
+    /** Cancels any in-flight GET tracker request. Call when the edit screen is closed so the callback does not run. */
+    fun cancelTrackerRequest() {
+        trackerCall?.cancel()
+        trackerCall = null
     }
 
     private var geometryCall: Call<Tracker>? = null
@@ -180,11 +195,12 @@ object TrackerRepository {
         geometryCache = null
     }
 
-    fun updateTracker(
+    fun updateTrackerSettings(
         context: Context,
         id: String,
-        name: String?,
+        name: String,
         color: String?,
+        recentDataWindow: String?,
         callback: (Tracker?) -> Unit
     ) {
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
@@ -194,7 +210,12 @@ object TrackerRepository {
         }
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
-        api.updateTracker(id, TrackerUpdateRequest(name = name, color = color))
+        val body = TrackerSettingsRequest(
+            name = name,
+            color = color?.takeIf { it.isNotBlank() },
+            recent_data_window = recentDataWindow?.takeIf { it.isNotBlank() }
+        )
+        api.postTrackerSettings(id, body)
             .enqueue(object : Callback<Tracker> {
                 override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
                     val tracker = if (response.isSuccessful) response.body() else null
@@ -206,11 +227,12 @@ object TrackerRepository {
                             currentTrackerCache = tracker
                         }
                         trackersCache = null
+                        geometryCache = null
                     }
                     callback(tracker)
                 }
                 override fun onFailure(call: Call<Tracker>, t: Throwable) {
-                    Log.e("TrackerRepository", "Failed to update tracker", t)
+                    Log.e("TrackerRepository", "Failed to update tracker settings", t)
                     callback(null)
                 }
             })

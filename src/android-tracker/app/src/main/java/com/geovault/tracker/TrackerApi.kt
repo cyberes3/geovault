@@ -5,7 +5,6 @@ import retrofit2.Call
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
-import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
 
@@ -31,8 +30,8 @@ interface TrackerApi {
     @POST("/api/extensions/live-track/trackers/")
     fun createTracker(@Body request: TrackerCreateRequest): Call<Tracker>
 
-    @PATCH("/api/extensions/live-track/trackers/{id}/")
-    fun updateTracker(@Path("id") id: String, @Body request: TrackerUpdateRequest): Call<Tracker>
+    @POST("/api/extensions/live-track/trackers/{id}/settings/")
+    fun postTrackerSettings(@Path("id") id: String, @Body request: TrackerSettingsRequest): Call<Tracker>
 
     @DELETE("/api/extensions/live-track/trackers/{id}/")
     fun deleteTracker(@Path("id") id: String): Call<ResponseBody>

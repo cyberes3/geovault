@@ -1,5 +1,9 @@
 package com.geovault.tracker.fragments
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -7,15 +11,16 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.TextView
+import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.fragment.app.Fragment
-import android.content.Context
-import androidx.recyclerview.widget.GridLayoutManager
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
+import com.geovault.tracker.LiveTrackStreamingService
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -31,8 +36,23 @@ class TrackerParamsFragment : Fragment() {
     private lateinit var paramsLoadingOverlay: View
     private lateinit var paramsLoadingSpinner: LoadingSpinner
     private lateinit var closeButton: ImageButton
-    private lateinit var swipeRefresh: SwipeRefreshLayout
     private var trackerId: String? = null
+
+    private val streamPointReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != LiveTrackStreamingService.BROADCAST_TRACK_POINT) return
+            val trackId = intent.getStringExtra(LiveTrackStreamingService.EXTRA_TRACK_ID) ?: return
+            if (trackId != this@TrackerParamsFragment.trackerId) return
+            if (!isAdded) return
+            val lat = intent.getDoubleExtra(LiveTrackStreamingService.EXTRA_POINT_LAT, Double.NaN)
+            val lon = intent.getDoubleExtra(LiveTrackStreamingService.EXTRA_POINT_LON, Double.NaN)
+            val tsMs = intent.getLongExtra(LiveTrackStreamingService.EXTRA_POINT_TS_MS, 0L)
+            val propsJson = intent.getStringExtra(LiveTrackStreamingService.EXTRA_PROPS_JSON)
+            requireActivity().runOnUiThread {
+                updateFromStreamPoint(lat, lon, tsMs, propsJson)
+            }
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -53,14 +73,9 @@ class TrackerParamsFragment : Fragment() {
         paramsLoadingOverlay = view.findViewById(R.id.paramsLoadingOverlay)
         paramsLoadingSpinner = view.findViewById(R.id.paramsLoadingSpinner)
         closeButton = view.findViewById(R.id.paramsCloseButton)
-        swipeRefresh = view.findViewById(R.id.paramsSwipeRefresh)
 
         closeButton.setOnClickListener {
             requireActivity().supportFragmentManager.popBackStack()
-        }
-
-        swipeRefresh.setOnRefreshListener {
-            loadTrackerData()
         }
 
         // Show name, last update, and position immediately if passed (e.g. from trackers list)
@@ -82,24 +97,66 @@ class TrackerParamsFragment : Fragment() {
         loadTrackerData()
     }
 
+    override fun onStart() {
+        super.onStart()
+        val filter = IntentFilter(LiveTrackStreamingService.BROADCAST_TRACK_POINT)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requireContext().registerReceiver(streamPointReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            requireContext().registerReceiver(streamPointReceiver, filter)
+        }
+        // Start streaming for this tracker when it's not the default (so we receive live updates like the website).
+        val id = trackerId ?: return
+        val defaultId = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+            .getString("selected_tracker_id", "") ?: ""
+        if (defaultId.isNotEmpty() && id != defaultId) {
+            val name = arguments?.getString(ARG_TRACKER_NAME).orEmpty()
+            val intent = Intent(requireContext(), LiveTrackStreamingService::class.java).apply {
+                action = LiveTrackStreamingService.ACTION_START
+                putExtra(LiveTrackStreamingService.EXTRA_TRACKER_ID, id)
+                putExtra(LiveTrackStreamingService.EXTRA_TRACKER_NAME, name)
+            }
+            ContextCompat.startForegroundService(requireContext(), intent)
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        try {
+            requireContext().unregisterReceiver(streamPointReceiver)
+        } catch (_: IllegalArgumentException) { /* already unregistered */ }
+        // Stop streaming when params screen closes so we don't leave the service running.
+        if (LiveTrackStreamingService.isRunning) {
+            val intent = Intent(requireContext(), LiveTrackStreamingService::class.java).apply {
+                action = LiveTrackStreamingService.ACTION_STOP
+            }
+            requireContext().startService(intent)
+        }
+    }
+
     private fun loadTrackerData() {
         val id = trackerId ?: return
-        
+        val defaultId = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+            .getString("selected_tracker_id", "") ?: ""
+
         // Keep the existing name, last update, and position visible
         // Only hide the params grid and show loading spinner
         paramsGrid.visibility = View.GONE
         paramsWaitingCard.visibility = View.GONE
         paramsLoadingOverlay.visibility = View.VISIBLE
         paramsLoadingSpinner.start()
-        
-        // Clear cache to force fresh data
-        TrackerRepository.clearCurrentTrackerCache()
-        
+
+        // Default track: fill from local cache (geometryCache from map, etc.) when available.
+        if (defaultId.isNotEmpty() && id == defaultId) {
+            // Don't clear cache so getTrackerGeometry can return cached geometry/params if available.
+        } else {
+            TrackerRepository.clearCurrentTrackerCache()
+        }
+
         // Important: only the single-tracker call drives the params UI. Use geometry endpoint for full track + params.
         TrackerRepository.getTrackerGeometry(requireContext(), id) { tracker ->
             if (isAdded) {
                 requireActivity().runOnUiThread {
-                    swipeRefresh.isRefreshing = false
                     paramsLoadingSpinner.stop(hide = false)
                     paramsLoadingOverlay.visibility = View.GONE
                     if (tracker != null) bindTracker(tracker)
@@ -125,6 +182,38 @@ class TrackerParamsFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         paramsLoadingSpinner.stop()
+    }
+
+    /**
+     * Update displayed params from a streamed point (same track as this fragment).
+     * Called when we receive BROADCAST_TRACK_POINT for our trackerId so the params modal stays in sync.
+     */
+    private fun updateFromStreamPoint(lat: Double, lon: Double, timestampMs: Long, propsJson: String?) {
+        if (!isAdded) return
+        paramsLastUpdate.text = if (timestampMs > 0) formatTimeLocal(timestampMs) else getString(R.string.no_points_yet)
+        paramsPositionCard.visibility = View.VISIBLE
+        paramsPosition.text = if (!lat.isNaN() && !lon.isNaN()) formatLatLon(lat, lon) else "-"
+        val propsMap = parsePropsJson(propsJson)
+        if (propsMap.isNotEmpty()) {
+            paramsGrid.visibility = View.VISIBLE
+            paramsWaitingCard.visibility = View.GONE
+            val entries = propsMap.entries.sortedBy { it.key }.map { ParamEntry(it.key, it.value) }
+            paramsGrid.layoutManager = GridLayoutManager(requireContext(), 2)
+            paramsGrid.adapter = ParamAdapter(requireContext(), entries)
+        } else {
+            paramsGrid.visibility = View.GONE
+            paramsWaitingCard.visibility = View.VISIBLE
+        }
+    }
+
+    private fun parsePropsJson(json: String?): Map<String, Any?> {
+        if (json.isNullOrBlank()) return emptyMap()
+        return try {
+            val obj = JSONObject(json)
+            obj.keys().asSequence().associateWith { key -> obj.opt(key) }
+        } catch (_: Exception) {
+            emptyMap()
+        }
     }
 
     private fun bindTracker(tracker: Tracker) {

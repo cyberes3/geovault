@@ -24,6 +24,7 @@ from ...helpers import broadcast_track_updated
 MIN_STEP_METERS = 50 * 0.3048
 MAX_STEP_METERS = 1000.0
 EARTH_RADIUS_METERS = 6371000
+FEET_TO_METERS = 0.3048
 
 
 def destination_point(lat_deg: float, lon_deg: float, bearing_deg: float, distance_m: float) -> tuple[float, float]:
@@ -121,7 +122,8 @@ class Command(BaseCommand):
             while True:
                 timestamp_ms = int(timezone.now().timestamp() * 1000)
                 new_point = [round(lon, 6), round(lat, 6), timestamp_ms]
-                extra = {}
+                # acc is stored in meters; UI shows ft by multiplying by 3.28084
+                extra = {"acc": round(random.uniform(1 * FEET_TO_METERS, 1000 * FEET_TO_METERS), 1)}
 
                 with transaction.atomic():
                     track_locked = LiveTrack.objects.select_for_update().get(pk=track.id)

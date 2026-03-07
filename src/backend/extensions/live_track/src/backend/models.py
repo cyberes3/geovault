@@ -16,7 +16,7 @@ class LiveTrack(models.Model):
     tracker_secret = models.CharField(max_length=64, unique=True)
     name = models.CharField(max_length=255)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="live_tracks")
-    color = models.CharField(max_length=7, default="#3388ff")
+    settings = models.JSONField(default=dict)
     geometry = models.JSONField(default=dict)
     point_params = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)

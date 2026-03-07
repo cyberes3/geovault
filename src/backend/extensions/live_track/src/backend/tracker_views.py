@@ -18,12 +18,13 @@ from geo_lib.website.auth import api_or_login_required_401
 
 from pydantic import ValidationError as PydanticValidationError
 
-from .helpers import track_to_response, track_to_response_metadata_only
+from .helpers import _filter_coords_by_recent_window, track_to_response, track_to_response_metadata_only
 from .models import LiveTrack
 from .validation import (
     PARAM_PRETTY_NAMES,
     TrackerCheckRequest,
     TrackerCheckResponse,
+    TrackSettingsRequest,
     get_ingress_body_template,
 )
 
@@ -74,8 +75,12 @@ def tracker_check(request):
 @csrf_exempt
 def tracker_list_create(request):
     if request.method == "GET":
+        all_data = request.GET.get("all", "").lower() == "true"
         tracks = LiveTrack.objects.filter(user=request.user).order_by("name")
-        return JsonResponse([track_to_response_metadata_only(t, include_secret=False) for t in tracks], safe=False)
+        return JsonResponse(
+            [track_to_response(t, include_secret=False, all_data=all_data) for t in tracks],
+            safe=False,
+        )
 
     data, err = _get_json_body(request)
     if err is not None:
@@ -93,13 +98,13 @@ def tracker_list_create(request):
         tracker_secret=tracker_secret,
         name=name,
         user=request.user,
-        color=color,
+        settings={"color": color},
     )
     return JsonResponse(track_to_response(track, include_secret=True), status=201)
 
 
 @api_or_login_required_401()
-@require_http_methods(["GET", "PATCH", "DELETE"])
+@require_http_methods(["GET", "DELETE"])
 @handle_404
 @csrf_exempt
 def tracker_get_patch_delete(request, tracker_id):
@@ -109,19 +114,48 @@ def tracker_get_patch_delete(request, tracker_id):
     if request.method == "DELETE":
         track.delete()
         return JsonResponse({"message": "Deleted"}, status=204)
+    return error_response("Method not allowed", 405)
+
+
+@api_or_login_required_401()
+@require_http_methods(["POST"])
+@handle_404
+@csrf_exempt
+def tracker_post_settings(request, tracker_id):
+    """POST trackers/<id>/settings/ — update name (column), color and recent_data_window (in settings)."""
+    track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
     data, err = _get_json_body(request)
     if err is not None:
         return err
-    if "name" in data:
-        name = (data["name"] or "").strip()
+    try:
+        body = TrackSettingsRequest.model_validate(data or {})
+    except PydanticValidationError as e:
+        errs = e.errors()
+        msg = errs[0].get("msg", "Invalid body") if errs else "Invalid body"
+        return error_response(msg, 400)
+    update_fields = []
+    if body.name is not None:
+        name = body.name.strip()
         if not name:
             return error_response("name cannot be empty", 400)
         if LiveTrack.objects.filter(user=request.user, name=name).exclude(id=track.id).exists():
             return error_response("A track with this name already exists", 409)
         track.name = name
-    if "color" in data and data["color"]:
-        track.color = data["color"].strip()
-    track.save()
+        update_fields.append("name")
+    # Use exclude_unset so client can clear recent_data_window by sending null (show all)
+    settings_dump = {k: v for k, v in body.model_dump(exclude_unset=True).items() if k != "name"}
+    if settings_dump:
+        new_settings = {**(track.settings or {})}
+        for k, v in settings_dump.items():
+            if v is None:
+                new_settings.pop(k, None)
+            else:
+                new_settings[k] = v
+        track.settings = new_settings
+        update_fields.append("settings")
+    if update_fields:
+        update_fields.append("updated_at")
+        track.save(update_fields=update_fields)
     return JsonResponse(track_to_response_metadata_only(track, include_secret=True))
 
 
@@ -130,9 +164,10 @@ def tracker_get_patch_delete(request, tracker_id):
 @handle_404
 @csrf_exempt
 def tracker_get_geometry(request, tracker_id):
-    """GET trackers/<id>/geometry/ — full geometry + all point_params (for map, params table, etc.)."""
+    """GET trackers/<id>/geometry/ — full geometry + all point_params (for map, params table, etc.). ?all=true bypasses recent_data_window filter."""
     track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
-    return JsonResponse(track_to_response(track, include_secret=False))
+    all_data = request.GET.get("all", "").lower() == "true"
+    return JsonResponse(track_to_response(track, include_secret=False, all_data=all_data))
 
 
 @api_or_login_required_401()
@@ -161,12 +196,15 @@ LATEST_COORDINATES_LIMIT = 100
 @handle_404
 @csrf_exempt
 def tracker_get_latest_coordinates(request, tracker_id):
-    """GET trackers/<id>/coordinates/ — latest 100 coordinates + corresponding point_params."""
+    """GET trackers/<id>/coordinates/ — latest 100 coordinates + corresponding point_params. ?all=true bypasses recent_data_window filter."""
     track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
     geom = track.geometry or {"type": "LineString", "coordinates": []}
-    coords = geom.get("coordinates") or []
-    point_params = track.point_params or []
-    # Take last N; point_params[i] corresponds to coords[i]
+    coords = list(geom.get("coordinates") or [])
+    point_params = list(track.point_params or [])
+    all_data = request.GET.get("all", "").lower() == "true"
+    window_key = None if all_data else (track.settings or {}).get("recent_data_window")
+    if window_key:
+        coords, point_params = _filter_coords_by_recent_window(coords, point_params, window_key)
     take = min(LATEST_COORDINATES_LIMIT, len(coords))
     latest_coords = coords[-take:] if take else []
     latest_params = point_params[-take:] if take else []
@@ -246,9 +284,15 @@ def ingress_body_template(request):
 @handle_404
 @csrf_exempt
 def tracker_kml(request, tracker_id):
+    """GET trackers/<id>/kml/. ?all=true bypasses recent_data_window filter."""
     track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
     geom = track.geometry or {"type": "LineString", "coordinates": []}
-    coords = geom.get("coordinates") or []
+    coords = list(geom.get("coordinates") or [])
+    point_params = list(track.point_params or [])
+    all_data = request.GET.get("all", "").lower() == "true"
+    window_key = None if all_data else (track.settings or {}).get("recent_data_window")
+    if window_key:
+        coords, _ = _filter_coords_by_recent_window(coords, point_params, window_key)
     ns = "http://www.opengis.net/kml/2.2"
     ET.register_namespace("", ns)
     kml = ET.Element(ET.QName(ns, "kml"))

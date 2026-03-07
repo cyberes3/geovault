@@ -48,6 +48,9 @@ class LiveTrackStreamingService : Service() {
         const val EXTRA_POINT_LON = "point_lon"
         const val EXTRA_POINT_LAT = "point_lat"
         const val EXTRA_POINT_TS_MS = "point_ts_ms"
+        const val EXTRA_ACCURACY_METERS = "accuracy_meters"
+        /** JSON object string of extended point params (props), so params UI can update live. */
+        const val EXTRA_PROPS_JSON = "props_json"
         private const val RECONNECT_BASE_DELAY_MS = 3000L
         private const val RECONNECT_MAX_DELAY_MS = 60000L
         private const val WS_READ_TIMEOUT_SEC = 90L
@@ -257,13 +260,15 @@ class LiveTrackStreamingService : Service() {
             pointBuffer.poll()
         }
 
-        // Also broadcast for the live case (map is visible right now)
+        // Also broadcast for the live case (map is visible right now; params fragment can update too)
         val intent = Intent(BROADCAST_TRACK_POINT).apply {
             setPackage(packageName)
             putExtra(EXTRA_TRACK_ID, point.trackId)
             putExtra(EXTRA_POINT_LON, point.lon)
             putExtra(EXTRA_POINT_LAT, point.lat)
             putExtra(EXTRA_POINT_TS_MS, point.timestampMs)
+            point.accuracyMeters?.let { putExtra(EXTRA_ACCURACY_METERS, it) }
+            point.propsJson?.let { putExtra(EXTRA_PROPS_JSON, it) }
         }
         sendBroadcast(intent)
     }
@@ -300,7 +305,10 @@ class LiveTrackStreamingService : Service() {
         val trackId: String,
         val lon: Double,
         val lat: Double,
-        val timestampMs: Long
+        val timestampMs: Long,
+        val accuracyMeters: Float? = null,
+        /** JSON object string of extended point params (props) for params UI. */
+        val propsJson: String? = null
     )
 
     private class TrackersWebSocketListener(
@@ -323,7 +331,10 @@ class LiveTrackStreamingService : Service() {
                 val lon = pointArr.getDouble(0)
                 val lat = pointArr.getDouble(1)
                 val ts = if (pointArr.length() >= 3) pointArr.getLong(2) else 0L
-                onPoint(TrackPointBroadcast(trackId, lon, lat, ts))
+                val props = data.optJSONObject("props")
+                val acc = props?.optDouble("acc", Double.NaN)?.takeIf { !it.isNaN() }?.toFloat()
+                val propsJson = props?.takeIf { props.length() > 0 }?.toString()
+                onPoint(TrackPointBroadcast(trackId, lon, lat, ts, acc, propsJson))
             } catch (e: Exception) {
                 Log.e(TAG, "Parse track_updated failed", e)
             }

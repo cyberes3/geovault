@@ -71,7 +71,7 @@
             type="button"
             title="Latest params"
             class="p-1.5 rounded text-gray-500 hover:bg-gray-200"
-            @click.stop="paramsModalTrack = track"
+            @click.stop="paramsModalTrackId = track.id"
           >
             <TableCellsIcon class="h-4 w-4" />
           </button>
@@ -146,10 +146,10 @@
       @deleted="onTrackDeleted"
     />
     <LatestParamsModal
-      v-if="paramsModalTrack"
+      v-if="paramsModalTrackId != null"
       :track="paramsModalTrack"
       :param-labels="paramLabels"
-      @close="paramsModalTrack = null"
+      @close="paramsModalTrackId = null"
     />
   </div>
 </template>
@@ -170,6 +170,7 @@ const LINES_SOURCE_ID = 'live-track-lines';
 const POINTS_SOURCE_ID = 'live-track-points';
 const LINES_LAYER_ID = 'live-track-lines';
 const POINTS_LAYER_ID = 'live-track-points';
+const ACCURACY_CIRCLE_LAYER_ID = 'live-track-accuracy-circle';
 const BASE_SOURCE_ID = 'base-raster';
 const BASE_LAYER_ID = 'base-raster-layer';
 const MIN_ZOOM = 0;
@@ -273,7 +274,13 @@ export default {
     });
     const showModal = ref(false);
     const showLayerModal = ref(false);
-    const paramsModalTrack = ref(null);
+    const paramsModalTrackId = ref(null);
+    const paramsModalTrack = computed(() => {
+      const id = paramsModalTrackId.value;
+      if (id == null) return null;
+      const t = trackers.value.find((tr) => tr.id === id);
+      return t ?? null;
+    });
     const paramLabels = ref({});
     const modalMode = ref('create');
     const modalTrack = ref(null);
@@ -337,21 +344,12 @@ export default {
       return d.toLocaleString();
     }
 
-    /** Degrees from north (0 = up), clockwise. Uses two most recent points by timestamp when present (insert-at-index can put newest mid-array). */
+    /** Degrees from north (0 = up), clockwise. Uses two most recent points by time (sorted so order is reliable). */
     function getTrackDirectionAngle(track) {
-      const geom = track.geometry || {};
-      const coords = geom.coordinates || [];
+      const coords = getCoordsSortedByTime(track);
       if (coords.length < 2) return 0;
-      let prev, last;
-      const withTs = coords.filter((c) => c.length >= 3);
-      if (withTs.length >= 2) {
-        const sorted = [...withTs].sort((a, b) => (b[2] ?? 0) - (a[2] ?? 0));
-        last = sorted[0];
-        prev = sorted[1];
-      } else {
-        prev = coords[coords.length - 2];
-        last = coords[coords.length - 1];
-      }
+      const prev = coords[coords.length - 2];
+      const last = coords[coords.length - 1];
       const dLon = last[0] - prev[0];
       const dLat = last[1] - prev[1];
       if (dLon === 0 && dLat === 0) return 0;
@@ -394,6 +392,7 @@ export default {
           })
         );
         trackers.value = withGeometry;
+        if (withGeometry.length === 1 && !selectedId.value) selectedId.value = withGeometry[0].id;
         updateMapFeatures();
       } catch (e) {
         const err = api.handleError && api.handleError(e);
@@ -415,6 +414,18 @@ export default {
         Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       return R * c;
+    }
+
+    /** Returns track coordinates sorted by timestamp ascending (oldest first) so the track always draws in chronological order. */
+    function getCoordsSortedByTime(track) {
+      const geom = track.geometry || {};
+      const coords = geom.coordinates || [];
+      if (coords.length <= 1) return [...coords];
+      return [...coords].sort((a, b) => {
+        const ta = typeof a[2] === 'number' ? a[2] : 0;
+        const tb = typeof b[2] === 'number' ? b[2] : 0;
+        return ta - tb;
+      });
     }
 
     /**
@@ -444,8 +455,8 @@ export default {
     function buildLinesGeoJSON() {
       const features = [];
       for (const track of trackers.value) {
-        const geom = track.geometry || {};
-        const coords = (geom.coordinates || []).map((c) => [c[0], c[1]]);
+        const coordsSorted = getCoordsSortedByTime(track);
+        const coords = coordsSorted.map((c) => [c[0], c[1]]);
         if (coords.length < 2) continue;
         const segments = splitTrackIntoSegments(coords);
         const props = {
@@ -464,25 +475,36 @@ export default {
       return { type: 'FeatureCollection', features };
     }
 
+    function hexToRgb(hex) {
+      const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '#3388ff');
+      return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [51, 136, 255];
+    }
+
     function buildPointsGeoJSON() {
       const features = [];
       for (const track of trackers.value) {
-        const geom = track.geometry || {};
-        const coords = geom.coordinates || [];
-        const last = coords[coords.length - 1];
-        const pos = track.last_position ? [track.last_position.lon, track.last_position.lat] : (last && last.length >= 2 ? [last[0], last[1]] : null);
+        const coordsSorted = getCoordsSortedByTime(track);
+        const last = coordsSorted.length ? coordsSorted[coordsSorted.length - 1] : null;
+        const pos = (last && last.length >= 2) ? [last[0], last[1]] : (track.last_position ? [track.last_position.lon, track.last_position.lat] : null);
         if (!pos) continue;
         const color = track.color || '#3388ff';
         const selected = selectedId.value === track.id;
+        const acc =
+          track.latestPointParams?.acc ?? track.point_params?.[track.point_params?.length - 1]?.acc;
+        const accuracy =
+          selected && typeof acc === 'number' && Number.isFinite(acc) && acc > 0 ? acc : 0;
+        const props = {
+          trackId: track.id,
+          color,
+          selected,
+          rotation: getTrackDirectionAngle(track),
+          iconImage: getArrowImageId(color, selected),
+          accuracy
+        };
+        if (accuracy > 0) props.colorRgb = hexToRgb(color);
         features.push({
           type: 'Feature',
-          properties: {
-            trackId: track.id,
-            color,
-            selected,
-            rotation: getTrackDirectionAngle(track),
-            iconImage: getArrowImageId(color, selected)
-          },
+          properties: props,
           geometry: { type: 'Point', coordinates: pos }
         });
       }
@@ -561,6 +583,28 @@ export default {
       },
       layout: { 'line-join': 'round', 'line-cap': 'round' }
     };
+    // Meters-to-pixels factor: 256*2^zoom/40075000. Zoom must be input to interpolate/step per MapLibre spec.
+    const METERS_TO_PIXELS_ZOOM_0 = 256 / 40075000;
+    const METERS_TO_PIXELS_ZOOM_24 = (256 * Math.pow(2, 24)) / 40075000;
+    const accuracyCircleLayerSpec = {
+      id: ACCURACY_CIRCLE_LAYER_ID,
+      type: 'circle',
+      source: POINTS_SOURCE_ID,
+      filter: ['all', ['>', ['get', 'accuracy'], 0]],
+      paint: {
+        'circle-color': ['rgba', 51, 136, 255, 0.25],
+        'circle-radius': [
+          'max',
+          6,
+          [
+            '*',
+            ['get', 'accuracy'],
+            ['interpolate', ['exponential', 2], ['zoom'], 0, METERS_TO_PIXELS_ZOOM_0, 24, METERS_TO_PIXELS_ZOOM_24]
+          ]
+        ]
+      }
+    };
+
     const pointsLayerSpec = {
       id: POINTS_LAYER_ID,
       type: 'symbol',
@@ -584,6 +628,9 @@ export default {
       }
       if (!map.getSource(POINTS_SOURCE_ID)) {
         map.addSource(POINTS_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      }
+      if (!map.getLayer(ACCURACY_CIRCLE_LAYER_ID)) {
+        map.addLayer(accuracyCircleLayerSpec);
       }
       if (!map.getLayer(POINTS_LAYER_ID)) {
         const defaultColor = '#3388ff';
@@ -646,7 +693,8 @@ export default {
             layers: [
               { id: BASE_LAYER_ID, type: 'raster', source: BASE_SOURCE_ID, minzoom: clientConfig.minzoom ?? 0, maxzoom: layerMaxZoom },
               lineBlackOutlineLayerSpec,
-              lineLayerSpec
+              lineLayerSpec,
+              accuracyCircleLayerSpec
             ]
           };
           map = new maplibregl.Map({
@@ -663,16 +711,16 @@ export default {
           map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
           setupMapFollowListeners();
           disableMapRotation();
-          map.on('load', () => {
+          map.once('load', () => {
             if (!map) return;
             map.resize();
             const defaultColor = '#3388ff';
-            const defaultId = getArrowImageId(defaultColor);
-            rasterizeArrowToImageData(defaultColor).then((imageData) => {
+            const defaultId = getArrowImageId(defaultColor, false);
+            rasterizeArrowToImageData(defaultColor, false).then((imageData) => {
               if (!map || !map.getStyle()) return;
               if (!imageData) return;
               if (!map.hasImage(defaultId)) map.addImage(defaultId, imageData, { pixelRatio: 1 });
-              map.addLayer(pointsLayerSpec);
+              if (!map.getLayer(POINTS_LAYER_ID)) map.addLayer(pointsLayerSpec);
               updateMapFeatures().then(() => {
                 setTimeout(() => {
                   if (map) {
@@ -771,7 +819,8 @@ export default {
         layers: [
           { id: BASE_LAYER_ID, type: 'raster', source: BASE_SOURCE_ID, minzoom: clientConfig.minzoom ?? 0, maxzoom: layerMaxZoom },
           lineBlackOutlineLayerSpec,
-          lineLayerSpec
+          lineLayerSpec,
+          accuracyCircleLayerSpec
         ]
       };
 
@@ -790,16 +839,16 @@ export default {
       setupMapFollowListeners();
       disableMapRotation();
 
-      map.on('load', () => {
+      map.once('load', () => {
         if (!map) return;
         map.resize();
         const defaultColor = '#3388ff';
-        const defaultId = getArrowImageId(defaultColor);
-        rasterizeArrowToImageData(defaultColor).then((imageData) => {
+        const defaultId = getArrowImageId(defaultColor, false);
+        rasterizeArrowToImageData(defaultColor, false).then((imageData) => {
           if (!map || !map.getStyle()) return;
           if (!imageData) return;
           if (!map.hasImage(defaultId)) map.addImage(defaultId, imageData, { pixelRatio: 1 });
-          map.addLayer(pointsLayerSpec);
+          if (!map.getLayer(POINTS_LAYER_ID)) map.addLayer(pointsLayerSpec);
           updateMapFeatures().then(() => {
             setTimeout(() => {
               if (map) {
@@ -822,8 +871,7 @@ export default {
     const LAST_POINTS_FIT = 10;
 
     function getLastNCoords(track, n) {
-      const geom = track.geometry || {};
-      const coords = geom.coordinates || [];
+      const coords = getCoordsSortedByTime(track);
       const slice = coords.length ? coords.slice(-n) : [];
       return slice.map((c) => [c[0], c[1]]);
     }
@@ -1117,6 +1165,7 @@ export default {
         });
       };
       trackersLiveSocket.connect();
+      trackersLiveSocket.unsubscribe('track_updated', trackUpdatedHandler);
       trackersLiveSocket.subscribe('track_updated', trackUpdatedHandler);
     });
 
@@ -1166,6 +1215,7 @@ export default {
       highlightedId,
       showModal,
       showLayerModal,
+      paramsModalTrackId,
       paramsModalTrack,
       paramLabels,
       modalMode,

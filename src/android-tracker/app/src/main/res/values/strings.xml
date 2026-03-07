@@ -26,6 +26,7 @@
     <string name="create_new_tracker">Create New Tracker</string>
     <string name="trackers_tab">Trackers</string>
     <string name="could_not_save_tracker_selection">Could not save tracker selection</string>
+    <string name="failed_to_load_tracker">Failed to load tracker</string>
     <string name="tracker_operation_timeout">Request timed out. Please try again.</string>
     <string name="not_tracking">Not Tracking</string>
     <string name="tracking_active">Tracking Active</string>
@@ -163,6 +164,13 @@
     <string name="history_cleared">History cleared</string>
     <string name="tracker_deleted">Tracker deleted</string>
     <string name="pick_color">Pick color</string>
+    <string name="show_recent_data">Show recent data</string>
+    <string name="recent_data_all">All</string>
+    <string name="recent_data_1min">1 minute</string>
+    <string name="recent_data_1h">1 hour</string>
+    <string name="recent_data_1d">1 day</string>
+    <string name="recent_data_1w">1 week</string>
+    <string name="recent_data_1m">1 month</string>
     <string name="choose_color">Choose color</string>
 
     <!-- Live track streaming (non-default track on map) -->

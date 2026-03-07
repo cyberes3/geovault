@@ -33,6 +33,7 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
+import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.LineLayer
@@ -71,6 +72,8 @@ class MapFragment : Fragment() {
 
     /** Last streamed point timestamp (ms); only set when viewing a non-default track. Cleared when stopping streaming or switching tracker. */
     private var lastStreamedPointTimeMs: Long? = null
+    /** Last streamed point accuracy (m); only set when viewing a non-default track and props.acc is sent. */
+    private var lastStreamedAccuracyMeters: Float? = null
     /** Cached last-update time (ms) from loaded tracker/initial data; used to prefill "Updated" chip before first network point. */
     private var lastCachedUpdateTimeMs: Long? = null
 
@@ -129,6 +132,9 @@ class MapFragment : Fragment() {
                     .getString("selected_tracker_id", "") ?: ""
                 if (isAdded) updateStreamingUi(defaultTrackerId)
             }
+            if (intent.hasExtra(LiveTrackStreamingService.EXTRA_ACCURACY_METERS)) {
+                lastStreamedAccuracyMeters = intent.getFloatExtra(LiveTrackStreamingService.EXTRA_ACCURACY_METERS, 0f).takeIf { it > 0f }
+            }
             val lat = intent.getDoubleExtra(LiveTrackStreamingService.EXTRA_POINT_LAT, 0.0)
             val lon = intent.getDoubleExtra(LiveTrackStreamingService.EXTRA_POINT_LON, 0.0)
             TrackUpdateHelper.updateTrack(trackPoints, trackTimestamps, LatLng(lat, lon), tsMs.takeIf { it > 0L } ?: System.currentTimeMillis())
@@ -180,6 +186,16 @@ class MapFragment : Fragment() {
         mapManager = MapLibreManager(requireActivity(), mapView)
         mapManager.onStyleLoaded = { map, style ->
             maplibreMap = map
+            val density = resources.displayMetrics.density
+            val left = (MAP_PADDING_LEFT_DP * density).toDouble()
+            val top = (MAP_PADDING_TOP_DP * density).toDouble()
+            val right = (MAP_PADDING_RIGHT_DP * density).toDouble()
+            val bottom = (MAP_PADDING_BOTTOM_DP * density).toDouble()
+            val current = map.cameraPosition
+            val padded = CameraPosition.Builder(current)
+                .padding(left, top, right, bottom)
+                .build()
+            map.moveCamera(CameraUpdateFactory.newCameraPosition(padded))
             mapManager.addMarkerIcon(style, "marker-default", R.drawable.ic_marker_default)
             MapMarkerUtils.getMarkerBitmapWithTintedForeground(
                 requireContext(),
@@ -211,6 +227,26 @@ class MapFragment : Fragment() {
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
                 )
             }
+            // Circle radius: accuracy (m) * meters-to-pixels at current zoom. Use a literal factor and update it on
+            // camera move so the circle both shows and scales with zoom (zoom-based expressions in circle-radius
+            // can make the circle disappear on MapLibre Android).
+            val initialZoom = map.cameraPosition?.zoom ?: 15.0
+            val initialPixelsPerMeter = 256.0 * Math.pow(2.0, initialZoom) / 40075000.0
+            val accuracyCircleLayer = CircleLayer("track-position-accuracy-layer", "track-position-source").apply {
+                setFilter(org.maplibre.android.style.expressions.Expression.gt(org.maplibre.android.style.expressions.Expression.get("accuracy"), org.maplibre.android.style.expressions.Expression.literal(0)))
+                setProperties(
+                    PropertyFactory.circleRadius(
+                        org.maplibre.android.style.expressions.Expression.max(
+                            org.maplibre.android.style.expressions.Expression.literal(6),
+                            org.maplibre.android.style.expressions.Expression.product(
+                                org.maplibre.android.style.expressions.Expression.get("accuracy"),
+                                org.maplibre.android.style.expressions.Expression.literal(initialPixelsPerMeter)
+                            )
+                        )
+                    ),
+                    PropertyFactory.circleColor(Color.argb(64, 51, 136, 255))
+                )
+            }
             // Add SymbolLayer
             val symbolLayer = SymbolLayer("track-position-layer", "track-position-source").apply {
                 setProperties(
@@ -225,6 +261,7 @@ class MapFragment : Fragment() {
             
             style.addLayer(outlineLayer)
             style.addLayer(fillLayer)
+            style.addLayer(accuracyCircleLayer)
             style.addLayer(symbolLayer)
             mapReady = true
             mapLoadingOverlay.visibility = View.GONE
@@ -240,12 +277,12 @@ class MapFragment : Fragment() {
                         .include(LatLng(bbox[1], bbox[0]))
                         .include(LatLng(bbox[3], bbox[2]))
                         .build()
-                    val paddingPx = (48 * resources.displayMetrics.density).toInt()
+                    val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
                     map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
                     zoomToTrackAfterLoad = false
                 } else if (trackPoints.size >= 2) {
                     val bounds = LatLngBounds.Builder().apply { trackPoints.forEach { include(it) } }.build()
-                    val paddingPx = (48 * resources.displayMetrics.density).toInt()
+                    val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
                     map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
                     zoomToTrackAfterLoad = false
                 }
@@ -272,6 +309,7 @@ class MapFragment : Fragment() {
                     updateFollowLockButton()
                 }
             }
+            map.addOnCameraMoveListener { updateAccuracyCircleRadiusFromZoom() }
             val serverUrl = GeovaultAuthManager.getServerUrl(requireContext())
             if (mapManager.sourcesFetched || serverUrl.isEmpty()) {
                 if (isAdded) mapManager.applySelectedSource(map)
@@ -329,6 +367,7 @@ class MapFragment : Fragment() {
         if (buffered.isNotEmpty()) {
             for (p in buffered) {
                 TrackUpdateHelper.updateTrack(trackPoints, trackTimestamps, LatLng(p.lat, p.lon), p.timestampMs)
+                p.accuracyMeters?.let { lastStreamedAccuracyMeters = it }
             }
             val lastTs = buffered.last().timestampMs
             if (lastTs > 0L) lastStreamedPointTimeMs = lastTs
@@ -357,6 +396,9 @@ class MapFragment : Fragment() {
                     TrackerRepository.clearGeometryCache()
                     restoreOnlyNoZoom = true
                     fetchFullGeometryAndApply(defaultTrackerId, forceReplace = false)
+                } else if (!showingDefault && displayedTrackerId != null) {
+                    // Re-start streaming when returning to Map (e.g. after closing Params overlay).
+                    startLiveTrackStreamingForDisplayedTracker()
                 }
             }
         }
@@ -616,6 +658,7 @@ class MapFragment : Fragment() {
         
         style.getLayer("track-outline-layer")?.setProperties(PropertyFactory.visibility(visibility))
         style.getLayer("track-fill-layer")?.setProperties(PropertyFactory.visibility(visibility))
+        style.getLayer("track-position-accuracy-layer")?.setProperties(PropertyFactory.visibility(visibility))
         style.getLayer("track-position-layer")?.setProperties(PropertyFactory.visibility(visibility))
         
         style.layers.forEach { layer ->
@@ -635,6 +678,7 @@ class MapFragment : Fragment() {
     ) {
         // Set metadata and initial points immediately
         lastStreamedPointTimeMs = null
+        lastStreamedAccuracyMeters = null
         if (initial != null) {
             displayedTrackerId = initial.id
             displayedTrackerName = initial.name
@@ -651,6 +695,9 @@ class MapFragment : Fragment() {
                 trackTimestamps.add(initial.updated_at ?: System.currentTimeMillis())
             }
             
+            (initial.point_params?.lastOrNull()?.get("acc") as? Number)?.toFloat()?.takeIf { it > 0f }
+                ?.let { lastStreamedAccuracyMeters = it }
+
             if (trackPoints.isNotEmpty()) {
                 updateTrackLine()
                 
@@ -665,12 +712,12 @@ class MapFragment : Fragment() {
                             .include(LatLng(bbox[1], bbox[0]))
                             .include(LatLng(bbox[3], bbox[2]))
                             .build()
-                        val paddingPx = (48 * resources.displayMetrics.density).toInt()
+                        val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
                         map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
                         zoomToTrackAfterLoad = false
                     } else if (trackPoints.size >= 2) {
                         val bounds = LatLngBounds.Builder().apply { trackPoints.forEach { include(it) } }.build()
-                        val paddingPx = (48 * resources.displayMetrics.density).toInt()
+                        val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
                         map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
                         zoomToTrackAfterLoad = false
                     }
@@ -753,6 +800,12 @@ class MapFragment : Fragment() {
                 lastCachedUpdateTimeMs = trackerLastUpdateMs(tracker)
                 if (tracker != null) {
                     currentTrackerColor = (tracker.color ?: "#3388ff").let { if (it.startsWith("#")) it else "#$it" }
+                    val defaultId = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+                        .getString("selected_tracker_id", "") ?: ""
+                    if (trackerId != defaultId) {
+                        (tracker.point_params?.lastOrNull()?.get("acc") as? Number)?.toFloat()?.takeIf { it > 0f }
+                            ?.let { lastStreamedAccuracyMeters = it }
+                    }
                 }
                 val coords = tracker?.geometry?.coordinates
                 if (coords != null) {
@@ -776,13 +829,13 @@ class MapFragment : Fragment() {
                                 .include(LatLng(bbox[1], bbox[0]))
                                 .include(LatLng(bbox[3], bbox[2]))
                                 .build()
-                            val paddingPx = (48 * resources.displayMetrics.density).toInt()
+                            val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
                             map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
                         } else if (trackPoints.size >= 2) {
                             val bounds = LatLngBounds.Builder().apply {
                                 trackPoints.forEach { include(it) }
                             }.build()
-                            val paddingPx = (48 * resources.displayMetrics.density).toInt()
+                            val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
                             map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
                         }
                     }
@@ -848,6 +901,26 @@ class MapFragment : Fragment() {
         applyPositionSymbolUpdate()
     }
 
+    /** Updates the accuracy circle radius from current zoom so it scales with the map (avoids zoom() in style). */
+    private fun updateAccuracyCircleRadiusFromZoom() {
+        val map = maplibreMap ?: return
+        val style = map.style ?: return
+        val layer = style.getLayer("track-position-accuracy-layer") as? CircleLayer ?: return
+        val zoom = map.cameraPosition?.zoom ?: return
+        val pixelsPerMeter = 256.0 * Math.pow(2.0, zoom) / 40075000.0
+        layer.setProperties(
+            PropertyFactory.circleRadius(
+                org.maplibre.android.style.expressions.Expression.max(
+                    org.maplibre.android.style.expressions.Expression.literal(6),
+                    org.maplibre.android.style.expressions.Expression.product(
+                        org.maplibre.android.style.expressions.Expression.get("accuracy"),
+                        org.maplibre.android.style.expressions.Expression.literal(pixelsPerMeter)
+                    )
+                )
+            )
+        )
+    }
+
     private fun applyPositionSymbolUpdate() {
         if (!isAdded) return
         val style = maplibreMap?.style ?: return
@@ -883,12 +956,32 @@ class MapFragment : Fragment() {
             }
         }
         
+        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+        val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
+        val showingDefault = displayedTrackerId == null || displayedTrackerId == defaultTrackerId
+        val accuracyMeters = if (showingDefault) {
+            TrackingService.lastAccuracyMeters
+        } else {
+            lastStreamedAccuracyMeters
+        }
+        val accuracyValue = (accuracyMeters?.takeIf { it > 0f } ?: 0f).toDouble()
+
         val point = Point.fromLngLat(toLatLng.longitude, toLatLng.latitude)
         val feature = Feature.fromGeometry(point)
         feature.addStringProperty("icon", symbolIconId)
         feature.addNumberProperty("rotate", toRotation)
-        
+        feature.addNumberProperty("accuracy", accuracyValue)
+
         source.setGeoJson(feature)
+
+        val accuracyLayer = style.getLayer("track-position-accuracy-layer") as? CircleLayer
+        if (accuracyLayer != null) {
+            try {
+                val colorInt = Color.parseColor(hexColor)
+                val alphaColor = Color.argb((0.2 * 255).toInt(), Color.red(colorInt), Color.green(colorInt), Color.blue(colorInt))
+                accuracyLayer.setProperties(PropertyFactory.circleColor(alphaColor))
+            } catch (_: Exception) { }
+        }
     }
 
     private fun getTrackDirectionDegrees(points: List<LatLng>): Float {
@@ -933,5 +1026,12 @@ class MapFragment : Fragment() {
         private const val FOLLOW_LOCK_ANIMATION_MS = 300
         /** Do not draw track across jumps larger than this (meters). 100 miles. */
         private const val MAX_JUMP_METERS = 100f * 1609.344f
+        /** Content padding (dp) so overlays (name card, buttons, spinner) don't cut off the track. */
+        private const val MAP_PADDING_LEFT_DP = 216
+        private const val MAP_PADDING_TOP_DP = 86
+        private const val MAP_PADDING_RIGHT_DP = 60
+        private const val MAP_PADDING_BOTTOM_DP = 48
+        /** Extra padding (dp) when fitting bounds inside the content-padded viewport. */
+        private const val BOUNDS_PADDING_DP = 24
     }
 }

@@ -3,7 +3,7 @@ Pydantic models for live_track request validation.
 Ingress body: only GPSLogger-supported params we accept (no profile, filename, act, timeoffset, spd, aid).
 """
 
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,6 +20,19 @@ class TrackerCheckResponse(BaseModel):
 
     valid: bool = Field(..., description="Whether the tracker exists and (if password given) secret matches")
     name: Optional[str] = Field(default=None, description="Tracker name when valid")
+
+
+class TrackSettingsRequest(BaseModel):
+    """Request body for POST trackers/<id>/settings/. Name updates the column; color and recent_data_window go into settings JSON."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: Optional[str] = Field(default=None, description="Track name (stored in name column)")
+    color: Optional[str] = Field(default=None, description="Display color (stored in settings)")
+    recent_data_window: Optional[Literal["1min", "1h", "1d", "1w", "1m"]] = Field(
+        default=None, description="Show only points within this window (stored in settings); null = show all"
+    )
+
 
 # Optional params we accept (subset of GPSLogger; exclude profile, filename, act, timeoffset, spd, aid)
 

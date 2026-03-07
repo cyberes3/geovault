@@ -32,6 +32,21 @@
         </button>
       </div>
     </div>
+    <div class="space-y-2">
+      <label class="text-sm font-medium text-gray-700">Show recent data</label>
+      <select
+        :value="recentDataWindow"
+        class="w-full border border-gray-300 px-3 py-2 rounded-lg bg-white"
+        @change="$emit('update:recentDataWindow', ($event.target && $event.target.value) || '')"
+      >
+        <option value="">All</option>
+        <option value="1min">1 minute</option>
+        <option value="1h">1 hour</option>
+        <option value="1d">1 day</option>
+        <option value="1w">1 week</option>
+        <option value="1m">1 month</option>
+      </select>
+    </div>
     <p class="text-sm text-amber-800 bg-amber-50 p-2 rounded">
       Anyone with the tracker password can send location data to this track.
     </p>
@@ -60,6 +75,7 @@ export default {
     track: { type: Object, default: null },
     name: { type: String, default: '' },
     color: { type: String, default: '#3388ff' },
+    recentDataWindow: { type: String, default: '' },
     error: { type: String, default: '' },
     deleting: { type: Boolean, default: false },
     clearing: { type: Boolean, default: false },
@@ -67,6 +83,6 @@ export default {
     clearHistoryDisabled: { type: Boolean, default: false },
     copy: { type: Function, required: true }
   },
-  emits: ['update:name', 'update:color', 'reset-color', 'open-instructions', 'download-kml', 'clear-history', 'delete']
+  emits: ['update:name', 'update:color', 'update:recentDataWindow', 'reset-color', 'open-instructions', 'download-kml', 'clear-history', 'delete']
 };
 </script>

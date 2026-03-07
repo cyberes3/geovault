@@ -6,6 +6,7 @@ urlpatterns = [
     path("trackers/", views.tracker_list_create),
     path("tracker-check/", views.tracker_check),
     path("trackers/<str:tracker_id>/clear-history/", views.tracker_clear_history),
+    path("trackers/<str:tracker_id>/settings/", views.tracker_post_settings),
     path("trackers/<str:tracker_id>/", views.tracker_get_patch_delete),
     path("trackers/<str:tracker_id>/geometry/", views.tracker_get_geometry),
     path("trackers/<str:tracker_id>/coordinates/", views.tracker_get_latest_coordinates),
