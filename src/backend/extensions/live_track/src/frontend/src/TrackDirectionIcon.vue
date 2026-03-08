@@ -10,16 +10,17 @@
     aria-hidden="true"
   >
     <g :transform="`rotate(${angle}, 16, 16)`">
+      <!-- Visible circle for selected; transparent circle when reserveCircle to keep same padding -->
       <circle
-        v-if="selected"
+        v-if="selected || reserveCircle"
         cx="16"
         cy="16"
         r="15"
-        fill="white"
-        stroke="#000"
+        :fill="selected ? 'white' : 'transparent'"
+        :stroke="selected ? '#000' : 'transparent'"
         stroke-width="1.5"
       />
-      <g :transform="selected ? 'translate(16,2.6) scale(0.8) translate(-16,-2.6)' : ''">
+      <g transform="translate(16,2.6) scale(0.8) translate(-16,-2.6)">
         <path
           :fill="color"
           stroke="#000"
@@ -55,6 +56,11 @@ export default {
     },
     /** When true, show a white circle with black border around the chevron (current/selected track). */
     selected: {
+      type: Boolean,
+      default: false
+    },
+    /** When true, reserve circle space (transparent circle) so padding matches the selected style. Use in lists. */
+    reserveCircle: {
       type: Boolean,
       default: false
     }

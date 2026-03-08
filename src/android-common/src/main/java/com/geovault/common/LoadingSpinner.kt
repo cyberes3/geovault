@@ -1,6 +1,7 @@
 package com.geovault.common
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
@@ -92,6 +93,13 @@ class LoadingSpinner @JvmOverloads constructor(
      */
     fun hide() {
         stop(hide = true)
+    }
+
+    /**
+     * Set the spinner drawable tint color (e.g. to match surrounding icon color).
+     */
+    fun setTintColor(color: Int) {
+        spinnerView.imageTintList = ColorStateList.valueOf(color)
     }
 
     override fun onDetachedFromWindow() {

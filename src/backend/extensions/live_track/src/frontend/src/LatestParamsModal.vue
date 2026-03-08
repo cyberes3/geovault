@@ -10,7 +10,7 @@
       </div>
       <div
         v-if="track?.last_timestamp_ms"
-        class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm"
+        class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
       >
         <span class="font-medium text-gray-900">Last Update</span>
         <span class="block text-gray-900 truncate" :title="formatTimeLocal(track.last_timestamp_ms)">{{ formatTimeLocal(track.last_timestamp_ms) }}</span>
@@ -20,7 +20,7 @@
       </div>
       <div
         v-if="track?.last_position"
-        class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm"
+        class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
       >
         <span class="font-medium text-gray-900">Position</span>
         <span class="block text-gray-900 mt-0.5">{{ formatLatLon(track.last_position) }}</span>
@@ -29,7 +29,7 @@
         <div
           v-for="[key, value] in sortedParamEntries"
           :key="key"
-          class="rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm min-w-0"
+          class="rounded-lg border border-gray-200 bg-white px-3 py-2 min-w-0"
           :title="key === 'starttimestamp' ? formatDurationRunning(value) : undefined"
         >
           <div class="text-xs font-medium text-gray-900 truncate" :title="key === 'starttimestamp' ? undefined : ((paramLabels && paramLabels[key]) || key)">{{ (paramLabels && paramLabels[key]) || key }}</div>

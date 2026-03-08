@@ -1,18 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Night mode: dark grey circle with darker border, arrow stroke darker for less glare on dark map. -->
+<!-- Same chevron as selected but without the outer circle. Dark stroke for night map. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="32dp"
     android:height="32dp"
     android:viewportWidth="32"
     android:viewportHeight="32">
-    <!-- Dark grey circle with dark grey outer border -->
-    <path
-        android:fillColor="#3a3a3a"
-        android:strokeColor="#6b7280"
-        android:strokeWidth="1.5"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M 16,1 A 15,15 0 0,1 31,16 A 15,15 0 0,1 16,31 A 15,15 0 0,1 1,16 A 15,15 0 0,1 16,1 Z" />
     <group
         android:scaleX="0.8"
         android:scaleY="0.8"

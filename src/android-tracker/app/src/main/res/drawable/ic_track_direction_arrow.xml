@@ -1,18 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Default (light): light circle with grey border for visibility on light map. -->
+<!-- Same chevron as selected (circle+chevron) but without the outer circle. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="32dp"
     android:height="32dp"
     android:viewportWidth="32"
     android:viewportHeight="32">
-    <!-- Light circle with grey outer border -->
-    <path
-        android:fillColor="#f3f4f6"
-        android:strokeColor="#9ca3af"
-        android:strokeWidth="1.5"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M 16,1 A 15,15 0 0,1 31,16 A 15,15 0 0,1 16,31 A 15,15 0 0,1 1,16 A 15,15 0 0,1 16,1 Z" />
     <group
         android:scaleX="0.8"
         android:scaleY="0.8"
@@ -20,7 +12,7 @@
         android:pivotY="2.6">
         <path
             android:fillColor="#3388ff"
-            android:strokeColor="#9ca3af"
+            android:strokeColor="#000000"
             android:strokeWidth="1.2"
             android:strokeLineCap="round"
             android:strokeLineJoin="round"

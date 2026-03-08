@@ -19,7 +19,7 @@ ANDROID_APPS = (
         "client_id": "geovault-android-places",
         "name": "GeoVault Android Places",
         "redirect_uris": (
-            "com.geovault.places://oauth/callback "
+            "com.geovault.places://oauth/callback\n"
             "com.geovault.places.debug://oauth/callback"
         ),
     },
@@ -27,7 +27,7 @@ ANDROID_APPS = (
         "client_id": "geovault-android-uploader",
         "name": "GeoVault Android Uploader",
         "redirect_uris": (
-            "com.geovault.uploader://oauth/callback "
+            "com.geovault.uploader://oauth/callback\n"
             "com.geovault.uploader.debug://oauth/callback"
         ),
     },
@@ -35,8 +35,16 @@ ANDROID_APPS = (
         "client_id": "geovault-android-tracker",
         "name": "GeoVault Android Tracker",
         "redirect_uris": (
-            "com.geovault.tracker://oauth/callback "
+            "com.geovault.tracker://oauth/callback\n"
             "com.geovault.tracker.debug://oauth/callback"
+        ),
+    },
+    {
+        "client_id": "geovault-android-survey",
+        "name": "GeoVault Android Survey",
+        "redirect_uris": (
+            "com.geovault.survey://oauth/callback\n"
+            "com.geovault.survey.debug://oauth/callback"
         ),
     },
 )

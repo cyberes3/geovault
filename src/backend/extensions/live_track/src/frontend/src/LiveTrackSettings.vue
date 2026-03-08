@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+  <div class="bg-white rounded-lg border border-gray-200 p-6">
     <h2 class="text-lg font-semibold text-gray-900 mb-6">Live Track Settings</h2>
 
     <div class="space-y-6">

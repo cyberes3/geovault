@@ -33,29 +33,29 @@
       </div>
     </div>
     <div class="space-y-2">
-      <label class="text-sm font-medium text-gray-700">Show recent data</label>
+      <label class="text-sm font-medium text-gray-700">Visibility Window</label>
       <select
         :value="recentDataWindow"
-        class="w-full border border-gray-300 px-3 py-2 rounded-lg bg-white"
+        class="select-custom w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
         @change="$emit('update:recentDataWindow', ($event.target && $event.target.value) || '')"
       >
-        <option value="">All</option>
-        <option value="1min">1 minute</option>
-        <option value="1h">1 hour</option>
-        <option value="1d">1 day</option>
-        <option value="1w">1 week</option>
-        <option value="1m">1 month</option>
+        <option value="">All History</option>
+        <option value="1min">Last Minute</option>
+        <option value="1h">Last Hour</option>
+        <option value="1d">Last Day</option>
+        <option value="1w">Last Week</option>
+        <option value="1m">Last Month</option>
       </select>
     </div>
-    <p class="text-sm text-amber-800 bg-amber-50 p-2 rounded">
-      Anyone with the tracker password can send location data to this track.
+    <p class="text-sm text-amber-800 bg-amber-50 p-3 rounded">
+      Anyone with the secret can broadcast data to this track. Keep it private.
     </p>
-    <div class="flex flex-wrap gap-2">
-      <BaseButton variant="white" size="sm" @click="$emit('open-instructions')">GPSLogger Instructions</BaseButton>
+    <div class="grid grid-cols-2 gap-3 pb-2">
+      <BaseButton variant="white" size="sm" @click="$emit('open-instructions')">GPSLogger Setup</BaseButton>
       <BaseButton variant="white" size="sm" @click="$emit('download-kml')">Download KML</BaseButton>
       <BaseButton variant="white" size="sm" :disabled="clearHistoryDisabled" @click="$emit('clear-history')">
         <Loader v-if="clearing" size="sm" layout="inline" :show-message="false" class="mr-1" />
-        Clear history
+        Clear track
       </BaseButton>
       <BaseButton variant="secondary" color="red" size="sm" :disabled="deleting" @click="$emit('delete')">
         <Loader v-if="deleting" size="sm" layout="inline" :show-message="false" class="mr-1" />

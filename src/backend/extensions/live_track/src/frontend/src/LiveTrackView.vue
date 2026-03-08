@@ -1,115 +1,148 @@
 <template>
-  <div class="h-full min-h-0 grid grid-cols-1 grid-rows-[auto_minmax(0,1fr)] sm:grid-cols-[1fr_3fr] bg-gray-50">
-    <!-- Row 1 col 1: Title left, Sort + right -->
-    <div class="h-12 px-3 py-2 flex items-center justify-between gap-2 flex-shrink-0 bg-gray-50 border-b border-gray-200 order-1">
-      <h2 class="text-lg font-semibold text-gray-900 truncate min-w-0">Live Trackers</h2>
+  <div class="h-full min-h-0 relative flex flex-col sm:grid sm:grid-cols-[1fr_3fr] sm:grid-rows-[auto_1fr] bg-gray-50 overflow-hidden">
+    <!-- Header: Absolute on mobile, static on desktop -->
+    <header class="z-30 h-16 px-4 py-2 flex items-center justify-between gap-3 flex-shrink-0 bg-white border-b border-gray-200 sm:bg-gray-50 sm:col-span-1">
+      <h2 class="text-xl font-bold text-gray-900 truncate min-w-0 tracking-tight">Trackers</h2>
       <div class="flex items-center gap-2 flex-shrink-0">
         <select
           v-model="sortBy"
-          class="text-sm border border-gray-300 rounded-md px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          class="select-custom text-sm px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
           title="Sort by"
         >
-          <option value="alphabetical">Alphabetical</option>
-          <option value="last_updated">Last updated</option>
-          <option value="num_points">Number of points</option>
-          <option value="newest">Newest</option>
+          <option value="alphabetical">Name</option>
+          <option value="last_updated">Activity</option>
+          <option value="num_points">Points</option>
+          <option value="newest">Created</option>
         </select>
         <button
           type="button"
           title="Add track"
-          class="p-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+          class="px-2.5 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
           @click="openCreateModal"
         >
           <PlusIcon class="h-5 w-5" />
         </button>
       </div>
-    </div>
-    <!-- Row 1 col 2: empty (aligns with map column on desktop) -->
-    <div class="hidden sm:block h-12 flex-shrink-0 bg-gray-50 border-b border-gray-200 order-2" aria-hidden="true" />
+    </header>
 
-    <!-- Row 2 col 1: List (order-3 on mobile so it appears after map) -->
-    <div class="w-full min-w-0 min-h-0 flex flex-col bg-white relative overflow-hidden order-3 sm:order-3 border-r-0 sm:border-r border-gray-200">
-        <div v-if="loading" class="flex-1 flex items-center justify-center p-4">
-        <Loader size="md" message="Loading trackers..." />
-      </div>
-      <div
-        ref="listScrollContainer"
-        class="flex-1 overflow-y-auto p-2 border-t sm:border-t-0 border-gray-200"
-        @click.self="highlightedId = null"
-      >
-        <div v-if="!loading && sortedTrackers.length === 0" class="text-center py-8 text-gray-500 text-sm">
-          No trackers yet. Tap + to create one.
-        </div>
-        <div
-          v-for="track in sortedTrackers"
-          :key="track.id"
-          :data-track-id="track.id"
-          :class="[
-            'flex items-center gap-2 p-3 rounded-lg cursor-pointer border transition-all mt-2 first:mt-0',
-            selectedId === track.id
-              ? 'border-blue-500 bg-blue-100 shadow-sm'
-              : 'border border-gray-200 bg-white hover:border-blue-200 hover:bg-blue-50 hover:shadow-sm',
-            highlightedId === track.id && selectedId !== track.id ? 'ring-2 ring-blue-500' : ''
-          ]"
-          @click="onTrackListClick(track)"
+    <!-- Main Content (Map) -->
+    <main class="flex-1 relative min-h-0 sm:col-start-2 sm:row-start-1 sm:row-span-2">
+      <div ref="mapContainer" class="absolute inset-0 w-full h-full bg-gray-100" />
+      
+      <!-- In-Map Overlays (Bottom Left) -->
+      <div class="absolute z-10 bottom-4 left-4 flex flex-col gap-2 bg-white border border-gray-200 rounded overflow-hidden">
+        <button
+          type="button"
+          class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
+          title="Map Settings"
+          @click="showLayerModal = true"
         >
-          <div class="flex-shrink-0 min-w-[36px] min-h-[36px] w-[36px] h-[36px] flex items-center justify-center overflow-hidden" aria-hidden="true">
-            <TrackDirectionIcon
-              :color="track.color || '#3388ff'"
-              :angle="getTrackDirectionAngle(track)"
-              :size="24"
-              :selected="selectedId === track.id"
-            />
+          <Square3Stack3DIcon class="w-5 h-5" />
+        </button>
+        <button
+          type="button"
+          class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
+          title="Go to home extent"
+          @click="goHome"
+        >
+          <HomeIcon class="w-5 h-5" />
+        </button>
+      </div>
+    </main>
+
+    <!-- Tracker List (Bottom Sheet / Sidebar) -->
+    <aside 
+      :class="[
+        'z-20 flex flex-col transition-all duration-500 ease-[cubic-bezier(0.16, 1, 0.3, 1)]',
+        'fixed inset-x-0 bottom-0 bg-white border-t border-gray-200 rounded-t-xl',
+        'sm:static sm:inset-auto sm:border-t-0 sm:border-r sm:border-r-gray-200 sm:rounded-none sm:w-full sm:h-full sm:min-h-0',
+        isSheetExpanded ? 'h-[75vh]' : 'h-20 sm:h-full'
+      ]"
+    >
+      <!-- Mobile Drag Handle -->
+      <div class="sm:hidden flex flex-col items-center pt-3 pb-1 cursor-pointer" @click="isSheetExpanded = !isSheetExpanded">
+        <div class="w-12 h-1.5 bg-gray-300 rounded-full mb-1"></div>
+        <div class="text-[10px] font-medium text-gray-500 uppercase tracking-wide">{{ isSheetExpanded ? 'Collapse' : 'Expand' }}</div>
+      </div>
+
+      <div class="flex-1 min-h-0 overflow-hidden flex flex-col px-4 sm:px-2 pt-2 pb-6 sm:pb-2">
+        <div v-if="loading" class="flex-1 flex flex-col items-center justify-center p-4">
+          <Loader size="md" :show-message="false" layout="inline" />
+          <p class="text-sm text-black mt-4">Loading...</p>
+        </div>
+
+        <div v-else-if="sortedTrackers.length === 0" class="flex-1 flex flex-col items-center justify-center py-12 px-6 text-center">
+          <div class="w-16 h-16 bg-gray-50 rounded-lg flex items-center justify-center mb-4 text-gray-400">
+            <PlusIcon class="w-8 h-8" />
           </div>
-          <div class="flex-1 min-w-0">
-            <div class="font-medium text-gray-900 truncate" :title="track.name">{{ track.name }}</div>
-            <div class="text-xs text-gray-500">
-              {{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'No points' }}
+          <h3 class="text-base font-semibold text-gray-900 mb-1">No trackers yet</h3>
+          <p class="text-sm text-gray-500 max-w-xs">Start by creating your first tracker to begin recording data.</p>
+        </div>
+
+        <div
+          v-else
+          ref="listScrollContainer"
+          class="flex-1 min-h-0 overflow-y-auto space-y-3 px-1 py-1 custom-scrollbar"
+          @click.self="highlightedId = null"
+        >
+          <div
+            v-for="track in sortedTrackers"
+            :key="track.id"
+            :data-track-id="track.id"
+            :class="[
+              'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-all',
+              selectedId === track.id
+                ? 'border-blue-500 bg-blue-100'
+                : 'border-blue-100 bg-white hover:bg-blue-50 hover:border-blue-300',
+              highlightedId === track.id && selectedId !== track.id ? 'ring-2 ring-blue-500' : ''
+            ]"
+            @click="onTrackListClick(track)"
+          >
+            <div 
+              class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-white border border-gray-100 transition-colors"
+              :style="{ borderLeftColor: track.color || '#3388ff', borderLeftWidth: '4px' }"
+            >
+              <TrackDirectionIcon
+                :color="track.color || '#3388ff'"
+                :angle="getTrackDirectionAngle(track)"
+                :size="26"
+                :selected="selectedId === track.id"
+                reserve-circle
+              />
+            </div>
+            
+            <div class="flex-1 min-w-0">
+              <div class="font-bold text-gray-900 truncate tracking-tight break-all" :title="track.name">{{ track.name }}</div>
+              <div class="flex items-center gap-1.5 mt-0.5">
+                <div class="text-xs font-medium text-gray-500 truncate">
+                  {{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'Waiting for data...' }}
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 sm:opacity-60 focus-within:opacity-100 transition-opacity">
+              <button
+                type="button"
+                title="Latest params"
+                class="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
+                @click.stop="paramsModalTrackId = track.id"
+              >
+                <TableCellsIcon class="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                title="Edit"
+                class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
+                @click.stop="openEditModal(track)"
+              >
+                <PencilIcon class="h-5 w-5" />
+              </button>
             </div>
           </div>
-          <button
-            type="button"
-            title="Latest params"
-            class="p-1.5 rounded text-gray-500 hover:bg-gray-200"
-            @click.stop="paramsModalTrackId = track.id"
-          >
-            <TableCellsIcon class="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            title="Edit"
-            class="p-1.5 rounded text-gray-500 hover:bg-gray-200"
-            @click.stop="openEditModal(track)"
-          >
-            <PencilIcon class="h-4 w-4" />
-          </button>
         </div>
       </div>
-    </div>
-    <!-- Row 2 col 2: Map (order-2 on mobile so it appears under header, above list) -->
-    <div class="w-full flex-shrink-0 h-[40vh] min-h-[220px] sm:h-auto sm:min-h-0 min-w-0 flex flex-col order-2 sm:order-4">
-        <div class="flex-1 min-h-0 relative">
-          <div ref="mapContainer" class="absolute inset-0 w-full h-full bg-gray-200" />
-          <div class="absolute z-10 bottom-4 left-4 flex flex-col gap-2 bg-white border border-gray-200 rounded shadow-md overflow-hidden">
-            <button
-              type="button"
-              class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
-              title="Map Settings"
-              @click="showLayerModal = true"
-            >
-              <Square3Stack3DIcon class="w-5 h-5" />
-            </button>
-            <button
-              type="button"
-              class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
-              title="Go to home extent"
-              @click="goHome"
-            >
-              <HomeIcon class="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      </div>
+    </aside>
+
     <BaseModal
       :is-open="showLayerModal"
       title="Map Settings"
@@ -135,6 +168,7 @@
         </BaseButton>
       </template>
     </BaseModal>
+
     <TrackModal
       v-if="showModal"
       :mode="modalMode"
@@ -183,6 +217,8 @@ const DEFAULT_MAP_KEY = 'extensions.live_track.default_map';
 const DEFAULT_SORT_KEY = 'extensions.live_track.default_sort';
 const VALID_SORT_VALUES = new Set(['alphabetical', 'last_updated', 'num_points', 'newest']);
 const CENTER_DEBOUNCE_MS = 220;
+/** Duration (ms) for minimal map snap animations. */
+const MAP_SNAP_DURATION = 200;
 const ARROW_PATH_D =
   'M29.9,28.6l-13-26c-0.3-0.7-1.4-0.7-1.8,0l-13,26c-0.2,0.4-0.1,0.8,0.2,1.1C2.5,30,3,30.1,3.4,29.9L16,25.1l12.6,4.9c0.1,0,0.2,0.1,0.4,0.1c0.3,0,0.5-0.1,0.7-0.3C30,29.4,30.1,28.9,29.9,28.6z';
 
@@ -194,14 +230,14 @@ function getArrowImageId(color, selected) {
 /** 96px gives more source pixels for MapLibre's LINEAR sampling so scaled-down icons look cleaner (see draw_symbol.ts). */
 const ARROW_RASTER_SIZE = 96;
 
-/** SVG data URL for the direction arrow. selected: white circle with black border around the chevron. */
+/** SVG data URL for the direction arrow. Same chevron for both; selected adds white circle with black border. */
 function getTrackArrowDataURL(color, selected) {
   const fill = color || '#3388ff';
   const circle =
     selected
       ? '<circle cx="16" cy="16" r="15" fill="white" stroke="#000" stroke-width="1.5"/>'
       : '';
-  const pathTransform = selected ? ' transform="translate(16,2.6) scale(0.8) translate(-16,-2.6)"' : '';
+  const pathTransform = ' transform="translate(16,2.6) scale(0.8) translate(-16,-2.6)"';
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="' + ARROW_RASTER_SIZE + '" height="' + ARROW_RASTER_SIZE + '" shape-rendering="geometricPrecision">' +
     circle +
@@ -252,6 +288,13 @@ export default {
     const selectedId = ref(null);
     const followLocked = ref(false);
     const isAutoMoving = ref(false);
+    const isSheetExpanded = ref(false);
+
+    function isRecentlyUpdated(track) {
+      if (!track.last_timestamp_ms) return false;
+      const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+      return track.last_timestamp_ms > fiveMinutesAgo;
+    }
 
     const sortedTrackers = computed(() => {
       const list = [...trackers.value];
@@ -892,10 +935,10 @@ export default {
       const center = getSelectedTrackLastPoint();
       if (!center) return;
       isAutoMoving.value = true;
-      map.panTo(center, { duration: 300 });
+      map.panTo(center, { duration: MAP_SNAP_DURATION });
       setTimeout(() => {
         isAutoMoving.value = false;
-      }, 600);
+      }, MAP_SNAP_DURATION + 50);
     }
 
     function setupMapFollowListeners() {
@@ -979,10 +1022,10 @@ export default {
       if (map && lastPoint.length > 0) {
         isAutoMoving.value = true;
         const zoom = Math.max(map.getZoom(), 14);
-        map.jumpTo({ center: lastPoint[0], zoom, duration: 0 });
+        map.easeTo({ center: lastPoint[0], zoom, duration: MAP_SNAP_DURATION });
         setTimeout(() => {
           isAutoMoving.value = false;
-        }, 100);
+        }, MAP_SNAP_DURATION + 50);
       }
     }
 
@@ -1002,7 +1045,7 @@ export default {
       map.fitBounds([[minLon, minLat], [maxLon, maxLat]], {
         padding: { top: 50, bottom: 80, left: 80, right: 80 },
         maxZoom: 15,
-        duration: 0
+        duration: MAP_SNAP_DURATION
       });
     }
 
@@ -1031,7 +1074,7 @@ export default {
       if (trackers.value.length > 0) {
         fitMapToTracks();
       } else if (map) {
-        map.flyTo({ center: [0, 0], zoom: 2, duration: 0 });
+        map.easeTo({ center: [0, 0], zoom: 2, duration: MAP_SNAP_DURATION });
       }
     }
 
@@ -1236,8 +1279,41 @@ export default {
       openCreateModal,
       openEditModal,
       onModalSaved,
-      onTrackDeleted
+      onTrackDeleted,
+      isRecentlyUpdated,
+      isSheetExpanded
     };
   }
 };
 </script>
+
+<style scoped>
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* Ensure smooth transition for the bottom sheet */
+aside {
+  will-change: height;
+}
+
+/* Hide navigation control on mobile to avoid overlap with sheet handle */
+@media (max-width: 639px) {
+  :deep(.maplibregl-ctrl-top-right) {
+    top: 70px !important;
+  }
+}
+</style>
