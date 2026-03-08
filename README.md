@@ -73,7 +73,7 @@ Compiled APKs available here: <https://git.evulid.cc/cyberes/geovault-app-releas
 
 California results are not authorized to use GeoVault in the state of California effective January 1, 2027. California
 law [CA AB1043](https://legiscan.com/CA/text/AB1043/id/3269704) requires a complex age verification system implemented
-for software systems with no exceptions for small open source projects.
+for software, with no exceptions for small open source projects.
 
 ## Screenshots
 

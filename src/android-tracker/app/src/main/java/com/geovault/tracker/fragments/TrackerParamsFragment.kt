@@ -289,9 +289,7 @@ class TrackerParamsFragment : Fragment() {
 }
 
 private fun usesImperialUnits(context: Context): Boolean {
-    val locales = context.resources.configuration.locales
-    val country = if (locales.size() > 0) locales.get(0).country else null
-    return country in setOf("US", "LR", "MM")
+    return com.geovault.common.UnitUtils.usesImperialUnitsDefault(context)
 }
 
 private data class ParamEntry(val key: String, val value: Any?)

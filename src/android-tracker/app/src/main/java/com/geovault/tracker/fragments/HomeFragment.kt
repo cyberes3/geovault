@@ -250,13 +250,14 @@ class HomeFragment : Fragment() {
             return
         }
         val profileIndex = prefs.getString(TrackingService.PREF_TRACKING_PROFILE, "1")?.toIntOrNull() ?: 1
-        val modeName = when (profileIndex) {
-            0 -> "Walking"
-            1 -> "Biking"
-            2 -> "Driving"
-            else -> "Unknown"
+        val modeResId = when (profileIndex) {
+            0 -> R.string.profile_walking
+            1 -> R.string.profile_biking
+            2 -> R.string.profile_driving
+            else -> R.string.unknown
         }
-        debugTrackModeText.text = "Track mode: $modeName"
+        val modeName = getString(modeResId)
+        debugTrackModeText.text = getString(R.string.track_mode_label, modeName)
         debugTrackModeText.visibility = View.VISIBLE
     }
 
@@ -372,9 +373,7 @@ class HomeFragment : Fragment() {
     }
 
     private fun usesImperialUnits(context: Context): Boolean {
-        val locales = context.resources.configuration.locales
-        val country = if (locales.size() > 0) locales.get(0).country else null
-        return country in setOf("US", "LR", "MM")
+        return com.geovault.common.UnitUtils.usesImperialUnitsDefault(context)
     }
 
     private fun formatDistance(meters: Float, imperial: Boolean): String {

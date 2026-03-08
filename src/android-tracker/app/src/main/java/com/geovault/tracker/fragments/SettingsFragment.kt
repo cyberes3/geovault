@@ -37,6 +37,8 @@ class SettingsFragment : Fragment() {
     private lateinit var restartTrackingIfKilledSwitch: SwitchCompat
     private lateinit var startTrackingOnLaunchSwitch: SwitchCompat
     private lateinit var autoTrackingSwitch: SwitchCompat
+    private lateinit var distanceLabel: TextView
+    private lateinit var accuracyLabel: TextView
 
     private fun normalizeServerUrl(url: String): String {
         var serverUrl = url.trim().trimStart('/').trimEnd('/')
@@ -81,6 +83,8 @@ class SettingsFragment : Fragment() {
         restartTrackingIfKilledSwitch = view.findViewById(R.id.restartTrackingIfKilledSwitch)
         startTrackingOnLaunchSwitch = view.findViewById(R.id.startTrackingOnLaunchSwitch)
         autoTrackingSwitch = view.findViewById(R.id.autoTrackingSwitch)
+        distanceLabel = view.findViewById(R.id.distanceLabel)
+        accuracyLabel = view.findViewById(R.id.accuracyLabel)
 
         loadSettings()
         applyMotionSensorAvailability()
@@ -119,6 +123,21 @@ class SettingsFragment : Fragment() {
         view.findViewById<View>(R.id.loggingHelpButton).setOnClickListener { showLoggingHelpDialog() }
         
         setupProfileSpinner()
+    }
+
+
+    private fun toDisplay(meters: Float, isImperial: Boolean): Int {
+        return if (isImperial) (meters * 3.28084f).toInt() else meters.toInt()
+    }
+
+    private fun fromDisplay(displayVal: Float, isImperial: Boolean): Float {
+        return if (isImperial) displayVal / 3.28084f else displayVal
+    }
+
+    private fun updateUnitLabels(isImperial: Boolean) {
+        val unit = getString(if (isImperial) R.string.unit_ft else R.string.unit_m)
+        distanceLabel.text = getString(R.string.distance_filter_label, unit)
+        accuracyLabel.text = getString(R.string.accuracy_filter_label, unit)
     }
 
     private var isUpdatingFromSpinner = false
@@ -220,9 +239,18 @@ class SettingsFragment : Fragment() {
                 serverUrlEdit.setText(otherUrls.single())
             }
         }
-        intervalEdit.setText(prefs.getString("logging_interval", "15"))
-        distanceEdit.setText(prefs.getString("logging_distance", "10"))
-        accuracyEdit.setText(prefs.getString("logging_accuracy", "50"))
+        
+        val isImperial = com.geovault.common.UnitUtils.usesImperialUnitsDefault(requireContext())
+        updateUnitLabels(isImperial)
+        
+        val interval = prefs.getString("logging_interval", "15") ?: "15"
+        val distance = prefs.getString("logging_distance", "10")?.toFloatOrNull() ?: 10f
+        val accuracy = prefs.getString("logging_accuracy", "50")?.toFloatOrNull() ?: 50f
+        
+        intervalEdit.setText(interval)
+        distanceEdit.setText(toDisplay(distance, isImperial).toString())
+        accuracyEdit.setText(toDisplay(accuracy, isImperial).toString())
+        
         autoTrackingSwitch.isChecked = prefs.getBoolean("auto_tracking_enabled", false)
         updateAutoTrackingUi(autoTrackingSwitch.isChecked)
         
@@ -244,8 +272,10 @@ class SettingsFragment : Fragment() {
 
         distanceEdit.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) {
-                val value = s?.toString() ?: "10"
-                saveSetting("logging_distance", value)
+                val isImperial = com.geovault.common.UnitUtils.usesImperialUnitsDefault(requireContext())
+                val displayValue = s?.toString()?.toFloatOrNull() ?: (if (isImperial) 33f else 10f)
+                val metersValue = fromDisplay(displayValue, isImperial)
+                saveSetting("logging_distance", metersValue.toString())
                 updateProfileToCustom()
             }
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -254,8 +284,10 @@ class SettingsFragment : Fragment() {
 
         accuracyEdit.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) {
-                val value = s?.toString() ?: "50"
-                saveSetting("logging_accuracy", value)
+                val isImperial = com.geovault.common.UnitUtils.usesImperialUnitsDefault(requireContext())
+                val displayValue = s?.toString()?.toFloatOrNull() ?: (if (isImperial) 164f else 50f)
+                val metersValue = fromDisplay(displayValue, isImperial)
+                saveSetting("logging_accuracy", metersValue.toString())
                 updateProfileToCustom()
             }
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -278,13 +310,13 @@ class SettingsFragment : Fragment() {
         loggedInUserText.visibility = if (isLoggedIn) View.VISIBLE else View.GONE
 
         val email = GeovaultAuthManager.getCachedUserEmail(requireContext())
-        loggedInUserText.text = if (email != null) "Logged in as $email" else "Logged in"
+        loggedInUserText.text = if (email != null) getString(R.string.logged_in_as, email) else getString(R.string.logged_in)
     }
 
     private fun onConnectClicked() {
         val url = normalizeServerUrl(serverUrlEdit.text.toString())
         if (url.isEmpty()) {
-            (requireActivity() as? MainActivity)?.showSnackbar("Please enter server URL")
+            (requireActivity() as? MainActivity)?.showSnackbar(getString(R.string.error_enter_server_url))
             return
         }
         GeovaultAuthManager.setServerUrl(requireContext(), url)

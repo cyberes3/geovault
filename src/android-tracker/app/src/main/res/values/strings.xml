@@ -60,6 +60,9 @@
     <string name="unit_mi">mi</string>
     <string name="unit_kmh">km/h</string>
     <string name="unit_mph">mph</string>
+    <string name="distance_filter_label">Distance Filter (%1$s)</string>
+    <string name="accuracy_filter_label">Accuracy Filter (%1$s)</string>
+
 
     <!-- Places strings -->
     <string name="no_places">No places found</string>
@@ -104,7 +107,7 @@
     <!-- Logging settings help -->
     <string name="logging_help_button">Tips for logging settings</string>
     <string name="logging_help_title">Logging &amp; distance tips</string>
-    <string name="logging_help_message">Logging interval – seconds between points. Suggested: 30 for walking, 15 for biking, 10 for driving. Use 0 for maximum frequency (more battery use).\n\nDistance filter – minimum meters between points. Suggested: 10 for walking, 30 for biking, 100 for driving. Use 0 to log as often as the interval allows.\n\nOnly log if significant motion – when on, the app logs only after your device detects significant activity (e.g. walking, biking, driving). The device uses its built-in motion sensor; no points are recorded while you stay still, which saves battery. On some devices this option may be disabled if the sensor is not available.\n\nBiking mode is good for driving if you aren\'t needing super high accuracy and is a little more battery efficient.</string>
+    <string name="logging_help_message">Logging interval – seconds between points. Suggested: 30 for walking, 15 for biking, 10 for driving. Use 0 for maximum frequency (more battery use).\n\nDistance filter – minimum distance between points. Suggested: 10m/30ft for walking, 30m/100ft for biking, 100m/330ft for driving. Use 0 to log as often as the interval allows.\n\nOnly log if significant motion – when on, the app logs only after your device detects significant activity (e.g. walking, biking, driving). The device uses its built-in motion sensor; no points are recorded while you stay still, which saves battery. On some devices this option may be disabled if the sensor is not available.\n\nBiking mode is good for driving if you aren\'t needing super high accuracy and is a little more battery efficient.</string>
 
     <!-- Tracking profiles -->
     <string name="auto_tracking_label">Auto tracking mode</string>
@@ -129,6 +132,9 @@
     <string name="start_tracking_on_launch_label">Start tracking when app is launched</string>
     <string name="resuming_tracking">Resuming tracking</string>
     <string name="tracking_started">Tracking started</string>
+    <string name="status_tracking">Tracking location</string>
+    <string name="status_gps_paused">GPS Paused (waiting for motion)</string>
+    <string name="stat_label_sent_queued">Sent: %1$d - Queued: %2$d</string>
 
     <!-- Tracker management -->
     <string name="view_on_map">View on map</string>
@@ -188,5 +194,13 @@
     <string name="live_track_streaming_text_anon">Track updates</string>
     <string name="live_track_streaming_channel">Track streaming</string>
     <string name="stop_streaming">Stop Streaming</string>
+    <string name="connected_as">Connected as %1$s</string>
+    <string name="error_enter_server_url">Please enter server URL</string>
+    <string name="track_mode_label">Track mode: %1$s</string>
+    <string name="unknown">Unknown</string>
+    <string name="logged_in_as">Logged in as %1$s</string>
+    <string name="logged_in">Logged in</string>
+    <string name="server_connection_error_title">Connection Error</string>
+    <string name="server_connection_error_message">Unable to connect to the server. Check connection status.</string>
 </resources>
 

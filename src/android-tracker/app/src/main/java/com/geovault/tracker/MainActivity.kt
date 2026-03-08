@@ -137,7 +137,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.guestConnectButton).setOnClickListener {
             val url = normalizeServerUrl(serverUrlEdit.text.toString())
             if (url.isEmpty()) {
-                showSnackbar("Please enter server URL")
+                showSnackbar(getString(R.string.error_enter_server_url))
                 return@setOnClickListener
             }
             GeovaultAuthManager.setServerUrl(this, url)
@@ -289,7 +289,7 @@ class MainActivity : AppCompatActivity() {
         // Show "Connected as ..." toast after layout so it appears in the correct position (bottom)
         intent?.getStringExtra(EXTRA_SIGNED_IN_EMAIL)?.let { email ->
             rootView.post {
-                Toast.makeText(this, "Connected as $email", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.connected_as, email), Toast.LENGTH_SHORT).show()
             }
             intent.removeExtra(EXTRA_SIGNED_IN_EMAIL)
         }

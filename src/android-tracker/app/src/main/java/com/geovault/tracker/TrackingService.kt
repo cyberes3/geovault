@@ -440,11 +440,11 @@ class TrackingService : Service() {
 
         val noGoodFix = lastAccuracyMeters == null || lastAccuracyMeters!! > 152.4f
         val status = when {
-            isGpsPaused -> "GPS Paused (waiting for motion)"
+            isGpsPaused -> getString(R.string.status_gps_paused)
             noGoodFix -> getString(R.string.locking)
-            else -> "Tracking location"
+            else -> getString(R.string.status_tracking)
         }
-        val counts = "Sent: $sentCount - Queued: $queuedCount"
+        val counts = getString(R.string.stat_label_sent_queued, sentCount, queuedCount)
         val text = "$status\n$counts"
 
         return NotificationCompat.Builder(this, CHANNEL_ID)

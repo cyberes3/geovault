@@ -469,7 +469,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Connection Error"
+                    android:text="@string/server_connection_error_title"
                     android:textSize="22sp"
                     android:textStyle="bold"
                     android:textColor="@color/error_red"
@@ -478,7 +478,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Unable to connect to the server. Check connection status."
+                    android:text="@string/server_connection_error_message"
                     android:textSize="14sp"
                     android:textColor="@color/text_primary"
                     android:gravity="center"

@@ -110,6 +110,7 @@
                 android:paddingBottom="14dp"
                 android:layout_marginBottom="24dp" />
 
+
             <!-- Logging / filter fields section -->
             <LinearLayout
                 android:layout_width="match_parent"
@@ -152,6 +153,7 @@
                 android:minHeight="56dp" />
 
             <TextView
+                android:id="@+id/distanceLabel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Distance Filter (meters)"
@@ -174,6 +176,7 @@
                 android:minHeight="56dp" />
 
             <TextView
+                android:id="@+id/accuracyLabel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Accuracy Filter (meters)"
