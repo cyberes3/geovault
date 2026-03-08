@@ -3,9 +3,15 @@
     <style name="gv_common_Theme.GeoVault" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">@color/gv_common_primary_blue</item>
         <item name="colorPrimaryDark">@color/gv_common_primary_blue_dark</item>
-        <item name="android:windowBackground">@color/gv_common_surface</item>
-        <item name="android:colorBackground">@color/gv_common_surface</item>
-        <item name="android:navigationBarColor">@color/gv_common_surface</item>
+        <item name="colorAccent">@color/gv_common_primary_blue</item>
+        <item name="android:textColorPrimary">@color/gv_common_text_primary</item>
+        <item name="android:textColorSecondary">@color/gv_common_text_secondary</item>
+        <!-- Blue status bar with light content -->
+        <item name="android:statusBarColor">@color/gv_common_primary_blue</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <!-- Blue navigation bar with light content -->
+        <item name="android:navigationBarColor">@color/gv_common_primary_blue</item>
+        <item name="android:windowLightNavigationBar">false</item>
         <item name="materialAlertDialogTheme">@style/gv_common_AlertDialogTheme</item>
         <item name="alertDialogTheme">@style/gv_common_AlertDialogTheme</item>
     </style>

@@ -9,8 +9,10 @@ failures.txt
 .kotlin
 *.swp
 todo.txt
+build_log.txt
 
 external sources/
+src/android-survey-data-viewer
 
 # ---> Python
 # Byte-compiled / optimized / DLL files

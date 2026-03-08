@@ -58,12 +58,15 @@ if [ -f "app/src/main/res/drawable/ic_launcher_foreground.xml" ]; then
     rm -f app/src/main/res/drawable/ic_launcher_foreground.xml
 fi
 
-# Parse arguments: [debug|release] and optional --skip-minify
+# Parse arguments: [debug|release] and optional --skip-minify/--install
 BUILD_TYPE=""
 SKIP_MINIFY=false
+INSTALL=false
 for arg in "$@"; do
     if [ "$arg" = "--skip-minify" ]; then
         SKIP_MINIFY=true
+    elif [ "$arg" = "--install" ]; then
+        INSTALL=true
     elif [ -z "$BUILD_TYPE" ] && { [ "$arg" = "debug" ] || [ "$arg" = "release" ]; }; then
         BUILD_TYPE="$arg"
     fi
@@ -72,7 +75,7 @@ BUILD_TYPE=${BUILD_TYPE:-debug}
 
 if [ "$BUILD_TYPE" != "debug" ] && [ "$BUILD_TYPE" != "release" ]; then
     echo "Error: Build type must be 'debug' or 'release'"
-    echo "Usage: ./build-android.sh [debug|release] [--skip-minify]"
+    echo "Usage: ./build-android.sh [debug|release] [--skip-minify] [--install]"
     exit 1
 fi
 
@@ -140,6 +143,12 @@ if [ -n "$APK_PATH" ]; then
     echo ""
     echo "To install on a connected device:"
     echo "  adb install $SCRIPT_DIR/$APK_PATH"
+
+    if [ "$INSTALL" = true ]; then
+        echo ""
+        echo "Installing APK..."
+        adb install -r "$SCRIPT_DIR/$APK_PATH"
+    fi
 else
     echo "Error: APK not found after build"
     exit 1

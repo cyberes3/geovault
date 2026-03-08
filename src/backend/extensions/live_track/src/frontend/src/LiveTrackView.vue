@@ -50,22 +50,11 @@
       </div>
     </main>
 
-    <!-- Tracker List (Bottom Sheet / Sidebar) -->
-    <aside 
-      :class="[
-        'z-20 flex flex-col transition-all duration-500 ease-[cubic-bezier(0.16, 1, 0.3, 1)]',
-        'fixed inset-x-0 bottom-0 bg-white border-t border-gray-200 rounded-t-xl',
-        'sm:static sm:inset-auto sm:border-t-0 sm:border-r sm:border-r-gray-200 sm:rounded-none sm:w-full sm:h-full sm:min-h-0',
-        isSheetExpanded ? 'h-[75vh]' : 'h-20 sm:h-full'
-      ]"
+    <!-- Tracker List: Desktop sidebar (hidden on small viewports via hidden sm:flex) -->
+    <aside
+      class="hidden sm:flex z-20 flex flex-col w-full h-full min-h-0 border-r border-gray-200 bg-white"
     >
-      <!-- Mobile Drag Handle -->
-      <div class="sm:hidden flex flex-col items-center pt-3 pb-1 cursor-pointer" @click="isSheetExpanded = !isSheetExpanded">
-        <div class="w-12 h-1.5 bg-gray-300 rounded-full mb-1"></div>
-        <div class="text-[10px] font-medium text-gray-500 uppercase tracking-wide">{{ isSheetExpanded ? 'Collapse' : 'Expand' }}</div>
-      </div>
-
-      <div class="flex-1 min-h-0 overflow-hidden flex flex-col px-4 sm:px-2 pt-2 pb-6 sm:pb-2">
+      <div class="flex-1 min-h-0 overflow-hidden flex flex-col px-2 pt-2 pb-2">
         <div v-if="loading" class="flex-1 flex flex-col items-center justify-center p-4">
           <Loader size="md" :show-message="false" layout="inline" />
           <p class="text-sm text-black mt-4">Loading...</p>
@@ -81,7 +70,7 @@
 
         <div
           v-else
-          ref="listScrollContainer"
+          ref="listScrollContainerDesktop"
           class="flex-1 min-h-0 overflow-y-auto space-y-3 px-1 py-1 custom-scrollbar"
           @click.self="highlightedId = null"
         >
@@ -143,6 +132,95 @@
       </div>
     </aside>
 
+    <!-- Tracker List: Mobile bottom sheet -->
+    <BottomSheet
+      v-model="isSheetOpen"
+      :blocking="true"
+      :can-swipe-close="false"
+      :snap-points="[80, '60%']"
+      :initial-snap-point="0"
+      :swipe-close-threshold="0.9"
+    >
+      <template #header>
+        <div class="w-full flex justify-center py-4 cursor-grab active:cursor-grabbing">
+          <!-- The handle is automatically injected by :before, but we add space for it -->
+          <div class="h-1" />
+        </div>
+      </template>
+      <div class="flex-1 min-h-0 overflow-hidden flex flex-col px-2 pb-2 h-full">
+        <div v-if="loading" class="flex-1 flex flex-col items-center justify-center p-4">
+          <Loader size="md" :show-message="false" layout="inline" />
+          <p class="text-sm text-black mt-4">Loading...</p>
+        </div>
+        <div v-else-if="sortedTrackers.length === 0" class="flex-1 flex flex-col items-center justify-center py-12 px-6 text-center">
+          <div class="w-16 h-16 bg-gray-50 rounded-lg flex items-center justify-center mb-4 text-gray-400">
+            <PlusIcon class="w-8 h-8" />
+          </div>
+          <h3 class="text-base font-semibold text-gray-900 mb-1">No trackers yet</h3>
+          <p class="text-sm text-gray-500 max-w-xs">Start by creating your first tracker to begin recording data.</p>
+        </div>
+        <div
+          v-else
+          ref="listScrollContainerMobile"
+          class="flex-1 min-h-0 overflow-y-auto space-y-3 px-1 py-1 custom-scrollbar"
+          @click.self="highlightedId = null"
+        >
+          <div
+            v-for="track in sortedTrackers"
+            :key="track.id"
+            :data-track-id="track.id"
+            :class="[
+              'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-all',
+              selectedId === track.id
+                ? 'border-blue-500 bg-blue-100'
+                : 'border-blue-100 bg-white hover:bg-blue-50 hover:border-blue-300',
+              highlightedId === track.id && selectedId !== track.id ? 'ring-2 ring-blue-500' : ''
+            ]"
+            @click="onTrackListClick(track)"
+          >
+            <div
+              class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-white border border-gray-100 transition-colors"
+              :style="{ borderLeftColor: track.color || '#3388ff', borderLeftWidth: '4px' }"
+            >
+              <TrackDirectionIcon
+                :color="track.color || '#3388ff'"
+                :angle="getTrackDirectionAngle(track)"
+                :size="26"
+                :selected="selectedId === track.id"
+                reserve-circle
+              />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-bold text-gray-900 truncate tracking-tight break-all" :title="track.name">{{ track.name }}</div>
+              <div class="flex items-center gap-1.5 mt-0.5">
+                <div class="text-xs font-medium text-gray-500 truncate">
+                  {{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'Waiting for data...' }}
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 sm:opacity-60 focus-within:opacity-100 transition-opacity">
+              <button
+                type="button"
+                title="Latest params"
+                class="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
+                @click.stop="paramsModalTrackId = track.id"
+              >
+                <TableCellsIcon class="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                title="Edit"
+                class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
+                @click.stop="openEditModal(track)"
+              >
+                <PencilIcon class="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </BottomSheet>
+
     <BaseModal
       :is-open="showLayerModal"
       title="Map Settings"
@@ -197,6 +275,8 @@ import { trackersLiveSocket } from './trackersLiveSocket.js';
 import TrackModal from './TrackModal.vue';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
 import LatestParamsModal from './LatestParamsModal.vue';
+import BottomSheet from '@douxcode/vue-spring-bottom-sheet';
+import '@douxcode/vue-spring-bottom-sheet/dist/style.css';
 
 const maplibregl = window.gv_core?.maplibre || window.maplibregl;
 
@@ -279,7 +359,7 @@ function rasterizeArrowToImageData(color, selected) {
 
 export default {
   name: 'LiveTrackView',
-  components: { BaseModal, TrackModal, TrackDirectionIcon, LatestParamsModal, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon },
+  components: { BaseModal, TrackModal, TrackDirectionIcon, LatestParamsModal, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, BottomSheet },
   setup() {
     const api = inject('extensionApi');
     const trackers = ref([]);
@@ -288,7 +368,11 @@ export default {
     const selectedId = ref(null);
     const followLocked = ref(false);
     const isAutoMoving = ref(false);
-    const isSheetExpanded = ref(false);
+    const isMobileView = ref(
+      typeof window !== 'undefined' ? window.matchMedia('(max-width: 639px)').matches : false
+    );
+    const isSheetOpen = ref(false);
+    let mobileQueryListener = null;
 
     function isRecentlyUpdated(track) {
       if (!track.last_timestamp_ms) return false;
@@ -329,7 +413,11 @@ export default {
     const modalTrack = ref(null);
     const modalTrackLoading = ref(false);
     const mapContainer = ref(null);
-    const listScrollContainer = ref(null);
+    const listScrollContainerDesktop = ref(null);
+    const listScrollContainerMobile = ref(null);
+    const listScrollContainer = computed(() =>
+      isMobileView.value ? listScrollContainerMobile.value : listScrollContainerDesktop.value
+    );
     const highlightedId = ref(null);
     const userLogin = ref('');
     const tileSources = ref([]);
@@ -1214,6 +1302,15 @@ export default {
       trackersLiveSocket.connect();
       trackersLiveSocket.unsubscribe('track_updated', trackUpdatedHandler);
       trackersLiveSocket.subscribe('track_updated', trackUpdatedHandler);
+
+      const mq = window.matchMedia('(max-width: 639px)');
+      isMobileView.value = mq.matches;
+      isSheetOpen.value = mq.matches;
+      mobileQueryListener = (e) => { 
+        isMobileView.value = e.matches; 
+        isSheetOpen.value = e.matches;
+      };
+      mq.addEventListener('change', mobileQueryListener);
     });
 
     onActivated(() => {
@@ -1238,6 +1335,10 @@ export default {
     );
 
     onBeforeUnmount(() => {
+      if (mobileQueryListener && typeof window !== 'undefined') {
+        window.matchMedia('(max-width: 639px)').removeEventListener('change', mobileQueryListener);
+        mobileQueryListener = null;
+      }
       if (centerDebounceId) {
         clearTimeout(centerDebounceId);
         centerDebounceId = null;
@@ -1271,6 +1372,8 @@ export default {
       userLogin,
       tileSources,
       selectedLayer,
+      isMobileView,
+      isSheetOpen,
       formatTime,
       getTrackDirectionAngle,
       goHome,
@@ -1280,14 +1383,15 @@ export default {
       openEditModal,
       onModalSaved,
       onTrackDeleted,
-      isRecentlyUpdated,
-      isSheetExpanded
+      isRecentlyUpdated
     };
   }
 };
 </script>
 
 <style scoped>
+
+
 .custom-scrollbar::-webkit-scrollbar {
   width: 5px;
 }
@@ -1310,10 +1414,37 @@ aside {
   will-change: height;
 }
 
-/* Hide navigation control on mobile to avoid overlap with sheet handle */
+/* Hide navigation control on mobile to avoid overlap with sheet */
 @media (max-width: 639px) {
   :deep(.maplibregl-ctrl-top-right) {
     top: 70px !important;
   }
+}
+
+/* Ensure handle is visible and root is not blocking */
+:deep([data-vsbs-backdrop]) {
+  background: transparent !important;
+  pointer-events: none !important;
+}
+
+:deep([data-vsbs-sheet]) {
+  z-index: 40 !important;
+  border: none !important;
+  box-shadow: none !important;
+  --vsbs-outer-border-color: transparent !important;
+  --vsbs-border-color: transparent !important;
+  --vsbs-shadow-color: transparent !important;
+}
+
+:deep([data-vsbs-shadow="true"]::before) {
+  box-shadow: none !important;
+}
+
+/* Fix for handle being draggable and not maximized */
+:deep([data-vsbs-header]) {
+  cursor: grab !important;
+  touch-action: none !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
 }
 </style>

@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@douxcode/vue-spring-bottom-sheet": "^3.0.0",
     "qrcode": "^1.5.4",
     "vue": "^3.5.26"
   },

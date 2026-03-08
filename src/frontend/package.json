@@ -14,6 +14,7 @@
     "type-check:watch": "vue-tsc --noEmit --watch"
   },
   "dependencies": {
+    "@douxcode/vue-spring-bottom-sheet": "^3.0.0",
     "@heroicons/vue": "^2.2.0",
     "@turf/turf": "^7.3.1",
     "@types/geojson": "^7946.0.14",
