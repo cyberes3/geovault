@@ -3,23 +3,41 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:minHeight="0dp"
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:background="@color/gv_common_snackbar_background"
     android:elevation="8dp"
-    android:paddingStart="16dp"
-    android:paddingEnd="16dp"
-    android:paddingTop="14dp"
-    android:paddingBottom="14dp"
-    android:minHeight="48dp">
+    android:paddingStart="12dp"
+    android:paddingEnd="12dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
 
     <TextView
         android:id="@+id/gv_common_important_message_snackbar_text"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
+        android:minHeight="0dp"
         android:textSize="14sp"
         android:textColor="@color/gv_common_content_on_primary"
         android:maxLines="3"
         android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/gv_common_important_message_snackbar_action"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="@color/gv_common_snackbar_action"
+        android:visibility="gone"
+        android:clickable="true"
+        android:focusable="true"
+        android:background="?attr/selectableItemBackgroundBorderless" />
 </LinearLayout>

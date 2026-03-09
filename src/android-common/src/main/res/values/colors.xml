@@ -34,4 +34,10 @@
 
     <!-- Important message snackbar (dismissable bar) -->
     <color name="gv_common_snackbar_background">#323232</color>
+    <!-- Snackbar action button: primary yellow (same as nav accent) -->
+    <color name="gv_common_snackbar_action">@color/gv_common_warning_yellow</color>
+
+    <!-- Map marker borders: default = white ring, selected = black ring in day -->
+    <color name="gv_common_marker_border">#FFFFFF</color>
+    <color name="gv_common_marker_border_selected">#000000</color>
 </resources>

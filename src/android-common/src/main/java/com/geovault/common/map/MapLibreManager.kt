@@ -77,9 +77,16 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
 
     /**
      * Applies the current [MapSourceManager] selected style/raster to the MapLibreMap.
+     * Preserves camera position and zoom so the view is unchanged when switching layers.
      */
     fun applySelectedSource(map: MapLibreMap = maplibreMap!!) {
         if (activity.isDestroyed) return
+
+        val savedCamera = map.cameraPosition
+
+        fun restoreCamera() {
+            if (!activity.isDestroyed) map.setCameraPosition(savedCamera)
+        }
         
         try {
             val effectiveId = sourceManager.getEffectiveSourceId()
@@ -89,9 +96,14 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
             if (sourceManager.isVectorSource(effectiveId)) {
                 val styleUrl = sourceManager.getResolvedStyleUrl(effectiveId)
                 if (!styleUrl.isNullOrBlank()) {
-                    loadVectorStyle(map, styleUrl)
+                    loadVectorStyle(map, styleUrl) { restoreCamera() }
                 } else {
-                    map.setStyle(Style.Builder()) { style -> if (!activity.isDestroyed) onStyleLoaded?.invoke(map, style) }
+                    map.setStyle(Style.Builder()) { style ->
+                        if (!activity.isDestroyed) {
+                            onStyleLoaded?.invoke(map, style)
+                            restoreCamera()
+                        }
+                    }
                 }
             } else {
                 val rasterUrl = sourceManager.getRasterUrl(effectiveId)
@@ -110,18 +122,31 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
                                 style.addLayer(rasterLayer)
                             }
                         } catch (_: Exception) { /* ignore */ }
-                        if (!activity.isDestroyed) onStyleLoaded?.invoke(map, style)
+                        if (!activity.isDestroyed) {
+                            onStyleLoaded?.invoke(map, style)
+                            restoreCamera()
+                        }
                     }
                 } else {
-                    map.setStyle(Style.Builder()) { style -> if (!activity.isDestroyed) onStyleLoaded?.invoke(map, style) }
+                    map.setStyle(Style.Builder()) { style ->
+                        if (!activity.isDestroyed) {
+                            onStyleLoaded?.invoke(map, style)
+                            restoreCamera()
+                        }
+                    }
                 }
             }
         } catch (_: Exception) {
-            map.setStyle(Style.Builder()) { style -> if (!activity.isDestroyed) onStyleLoaded?.invoke(map, style) }
+            map.setStyle(Style.Builder()) { style ->
+                if (!activity.isDestroyed) {
+                    onStyleLoaded?.invoke(map, style)
+                    restoreCamera()
+                }
+            }
         }
     }
 
-    private fun loadVectorStyle(map: MapLibreMap, styleUrl: String) {
+    private fun loadVectorStyle(map: MapLibreMap, styleUrl: String, restoreCamera: () -> Unit = {}) {
         val serverUrl = GeovaultAuthManager.getServerUrl(activity).trimEnd('/')
         val isOurServer = serverUrl.isNotEmpty() && (styleUrl == serverUrl || styleUrl.startsWith("$serverUrl/"))
         val serverBase = if (isOurServer) java.net.URI.create(styleUrl).let { "${it.scheme}://${it.host}" } else null
@@ -130,11 +155,14 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
             if (activity.isDestroyed) return@getStyleJson
             if (!json.isNullOrBlank()) {
                 map.setStyle(Style.Builder().fromJson(json)) { style ->
-                    if (!activity.isDestroyed) onStyleLoaded?.invoke(map, style)
+                    if (!activity.isDestroyed) {
+                        onStyleLoaded?.invoke(map, style)
+                        restoreCamera()
+                    }
                 }
             } else {
                 Toast.makeText(activity, "Map style unavailable, falling back to basic map.", Toast.LENGTH_SHORT).show()
-                loadOsmFallback(map)
+                loadOsmFallback(map, restoreCamera)
             }
         }
     }
@@ -143,10 +171,15 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
      * Load OSM raster as fallback when vector (MapTiler) street style fails. 
      * Handles adding the raster layer below point annotations if present.
      */
-    fun loadOsmFallback(map: MapLibreMap) {
+    fun loadOsmFallback(map: MapLibreMap, restoreCamera: () -> Unit = {}) {
         val rasterUrl = sourceManager.getStreetFallbackRasterUrl()
         if (rasterUrl.isNullOrBlank()) {
-            map.setStyle(Style.Builder()) { style -> if (!activity.isDestroyed) onStyleLoaded?.invoke(map, style) }
+            map.setStyle(Style.Builder()) { style ->
+                if (!activity.isDestroyed) {
+                    onStyleLoaded?.invoke(map, style)
+                    restoreCamera()
+                }
+            }
             return
         }
         
@@ -156,7 +189,10 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
             try {
                 style.addSource(RasterSource(RASTER_SOURCE_ID, TileSet("2.1.0", rasterUrl).apply { maxZoom = MAX_ZOOM_LEVEL.toFloat() }, 256))
                 val rasterLayer = RasterLayer(RASTER_LAYER_ID, RASTER_SOURCE_ID)
-                if (!activity.isDestroyed) onStyleLoaded?.invoke(map, style)
+                if (!activity.isDestroyed) {
+                    onStyleLoaded?.invoke(map, style)
+                    restoreCamera()
+                }
                 
                 mapView.post {
                     if (activity.isDestroyed) return@post

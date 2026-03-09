@@ -1,7 +1,7 @@
 <template>
-  <div :class="isMapRoute ? 'h-screen bg-gray-50 overflow-hidden' : 'min-h-screen bg-gray-50'">
+  <div :class="isMapRoute ? 'fixed inset-0 w-full h-[100dvh] sm:h-screen flex flex-col bg-gray-50 overflow-hidden' : 'min-h-screen bg-gray-50'">
     <!-- Navigation Header -->
-    <nav class="bg-white shadow-sm border-b border-gray-200 relative z-50">
+    <nav :class="['bg-white shadow-sm border-b border-gray-200 relative z-50', isMapRoute ? 'flex-shrink-0 h-16' : '']">
       <div class="w-full px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16">
           
@@ -43,7 +43,7 @@
             v-if="!userInfoLoading"
             :class="[
               'md:flex md:items-center md:ml-6 md:flex-1 md:h-full',
-              mobileMenuOpen && userInfo ? 'fixed inset-x-0 top-16 z-50 flex flex-col bg-white shadow-lg p-4 sm:p-6 space-y-4 rounded-b-lg overflow-y-auto border-b border-gray-200' : 'hidden'
+              mobileMenuOpen && userInfo ? 'fixed inset-x-0 top-16 bottom-0 z-50 flex flex-col bg-white shadow-lg p-4 sm:p-6 space-y-4 rounded-b-lg overflow-y-auto border-b border-gray-200 max-h-[calc(100dvh-4rem)]' : 'hidden'
             ]"
           >
             
@@ -249,7 +249,7 @@
 
     <!-- Main Content -->
     <main
-        :class="isMapRoute ? 'w-full h-[calc(100vh-4rem)] overflow-auto sm:overflow-hidden flex flex-col' : 'max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8'">
+        :class="isMapRoute ? 'w-full flex-1 min-h-0 overflow-hidden flex flex-col' : 'max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8'">
       <!-- Show error state if loading failed -->
       <div v-if="loadingError" class="flex items-center justify-center min-h-[400px]">
         <div class="bg-red-50 border border-red-200 rounded-lg shadow-md p-8 max-w-md w-full mx-4">
@@ -280,7 +280,7 @@
         <Loader layout="centered" />
       </div>
       <!-- Render router-view only after auth check completes (or immediately for public routes) and no error occurred -->
-      <div v-else-if="!userInfoLoading || isPublicShareRoute" :class="isMapRoute ? 'flex-1 min-h-0 flex flex-col overflow-auto sm:overflow-hidden' : ''">
+      <div v-else-if="!userInfoLoading || isPublicShareRoute" :class="isMapRoute ? 'flex-1 min-h-0 flex flex-col overflow-hidden' : ''">
         <router-view v-slot="{ Component }">
           <keep-alive>
             <component :is="Component"/>
@@ -397,6 +397,19 @@ export default {
         }
       },
       immediate: false
+    },
+    isMapRoute: {
+      handler(isMap) {
+        if (typeof document === 'undefined') return;
+        if (isMap) {
+          document.body.style.overflow = 'hidden';
+          document.documentElement.style.overflow = 'hidden';
+        } else {
+          document.body.style.overflow = '';
+          document.documentElement.style.overflow = '';
+        }
+      },
+      immediate: true
     }
   },
   methods: {
@@ -608,8 +621,9 @@ export default {
     // Don't disconnect WebSocket here - let it stay connected across the app lifecycle
     // Remove click outside listener
     document.removeEventListener('click', this.handleClickOutside);
-    // Restore body scroll in case menu was open
+    // Restore body scroll in case menu was open or we were on a map route
     document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
   }
 };
 </script>

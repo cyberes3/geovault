@@ -1,6 +1,7 @@
 package com.geovault.places
 
 import android.app.Application
+import android.content.Context
 import android.util.Log
 import android.content.ContentValues
 import android.content.Intent
@@ -57,7 +58,7 @@ class PlacesApplication : Application(), GeovaultAuthManager.AuthFailureListener
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             // Signal to MainActivity that an export might have been saved
-            putExtra("show_export_saved_message", true)
+            putExtra(MainActivity.EXTRA_SHOW_EXPORT_SAVED_MESSAGE, true)
         }
         context.startActivity(intent)
     }

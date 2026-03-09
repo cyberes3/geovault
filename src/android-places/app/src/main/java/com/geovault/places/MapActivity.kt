@@ -2,6 +2,7 @@ package com.geovault.places
 
 import android.content.Intent
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.R as CommonR
 import com.geovault.common.map.*
 import android.os.Bundle
 import android.view.View
@@ -315,8 +316,8 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
         selectionSymbol = null
         symbolManager = null
         selectionSymbolManager = null
-        val defaultBitmap = MapMarkerUtils.getMarkerBitmap(this, R.drawable.ic_marker_default)
-        val selectedBitmap = MapMarkerUtils.getMarkerBitmap(this, R.drawable.ic_marker_selected)
+        val defaultBitmap = MapMarkerUtils.getMarkerBitmap(this, CommonR.drawable.gv_common_ic_marker_default)
+        val selectedBitmap = MapMarkerUtils.getMarkerBitmap(this, CommonR.drawable.gv_common_ic_marker_selected)
         if (defaultBitmap == null || selectedBitmap == null) {
             Log.e(TAG, "addMarkersIfReady: failed to load marker bitmaps")
             return

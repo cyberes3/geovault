@@ -37,6 +37,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "MainActivity"
         const val EXTRA_SELECTED_ID_FROM_MAP = "selected_id_from_map"
+        const val EXTRA_SHOW_EXPORT_SAVED_MESSAGE = "show_export_saved_message"
     }
 
     private lateinit var recyclerView: RecyclerView

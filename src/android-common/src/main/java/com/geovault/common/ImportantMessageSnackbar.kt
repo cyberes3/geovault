@@ -6,6 +6,7 @@ import android.os.Looper
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 
@@ -21,32 +22,84 @@ class ImportantMessageSnackbar @JvmOverloads constructor(
 ) : FrameLayout(context, attrs, defStyleAttr) {
 
     private val messageText: TextView
+    private val actionButton: TextView
     private val handler = Handler(Looper.getMainLooper())
     private val dismissRunnable = Runnable { visibility = View.GONE }
 
     init {
         val root = LayoutInflater.from(context).inflate(R.layout.gv_common_view_important_message_snackbar, this, true)
         messageText = root.findViewById(R.id.gv_common_important_message_snackbar_text)
+        actionButton = root.findViewById(R.id.gv_common_important_message_snackbar_action)
         visibility = View.GONE
         isClickable = true
         isFocusable = true
+        minimumHeight = 0
+        setPadding(0, 0, 0, 0)
         setOnClickListener {
             handler.removeCallbacks(dismissRunnable)
             visibility = View.GONE
         }
+        actionButton.setOnClickListener {
+            // Don't propagate to parent; action callback is set in showMessage
+            handler.removeCallbacks(dismissRunnable)
+            visibility = View.GONE
+        }
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val child = if (childCount > 0) getChildAt(0) else null
+        if (child != null && layoutParams?.height == ViewGroup.LayoutParams.WRAP_CONTENT) {
+            child.layoutParams = child.layoutParams?.apply { height = ViewGroup.LayoutParams.WRAP_CONTENT }
+            val maxHeightPx = (MAX_HEIGHT_DP * resources.displayMetrics.density).toInt()
+            val maxChildHeight = (maxHeightPx - paddingTop - paddingBottom).coerceAtLeast(0)
+            measureChild(
+                child,
+                widthMeasureSpec,
+                MeasureSpec.makeMeasureSpec(maxChildHeight, MeasureSpec.AT_MOST)
+            )
+            val contentHeight = (child.measuredHeight + paddingTop + paddingBottom).coerceIn(0, maxHeightPx)
+            setMeasuredDimension(
+                resolveSize(child.measuredWidth + paddingLeft + paddingRight, widthMeasureSpec),
+                resolveSize(contentHeight, heightMeasureSpec)
+            )
+            return
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     }
 
     /**
      * Show the given message. Cancels any pending auto-dismiss and schedules a new one (15s).
      */
     fun showMessage(message: CharSequence) {
+        showMessage(message, null, null)
+    }
+
+    /**
+     * Show the given message with an optional action button.
+     * @param actionLabel label for the action button (e.g. "Open"); if null, no button is shown
+     * @param action callback when the action button is tapped; dismissed after running
+     */
+    fun showMessage(message: CharSequence, actionLabel: CharSequence?, action: (() -> Unit)?) {
         handler.removeCallbacks(dismissRunnable)
         messageText.text = message
+        if (!actionLabel.isNullOrBlank() && action != null) {
+            actionButton.text = actionLabel
+            actionButton.visibility = View.VISIBLE
+            actionButton.setOnClickListener {
+                handler.removeCallbacks(dismissRunnable)
+                visibility = View.GONE
+                action()
+            }
+        } else {
+            actionButton.visibility = View.GONE
+            actionButton.setOnClickListener(null)
+        }
         visibility = View.VISIBLE
         handler.postDelayed(dismissRunnable, DISMISS_DELAY_MS)
     }
 
     companion object {
         private const val DISMISS_DELAY_MS = 15_000L
+        private const val MAX_HEIGHT_DP = 64f
     }
 }

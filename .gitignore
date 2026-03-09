@@ -12,6 +12,8 @@ todo.txt
 build_log.txt
 
 external sources/
+
+# symlinked from other repository source
 src/android-survey-data-viewer
 
 # ---> Python

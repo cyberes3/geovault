@@ -2,6 +2,7 @@ package com.geovault.places
 
 import com.geovault.common.CoordinateParser
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.R as CommonR
 import com.geovault.common.map.*
 import com.geovault.common.RetrofitClient
 import android.Manifest
@@ -201,7 +202,7 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
         Log.d(TAG, "onStyleLoaded: clearing old refs, style.uri=${style.uri}")
         symbolManager = null
         placeSymbol = null
-        val bitmap = MapMarkerUtils.getMarkerBitmap(this, R.drawable.ic_marker_default)
+        val bitmap = MapMarkerUtils.getMarkerBitmap(this, CommonR.drawable.gv_common_ic_marker_default)
         Log.d(TAG, "onStyleLoaded: bitmap=${if (bitmap != null) "${bitmap.width}x${bitmap.height}" else "null"}, iconId=$ICON_MARKER_PLACE")
         if (bitmap != null) {
             style.addImage(ICON_MARKER_PLACE, bitmap, false)

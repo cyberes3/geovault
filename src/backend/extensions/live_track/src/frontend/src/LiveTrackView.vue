@@ -1,7 +1,7 @@
 <template>
-  <div class="h-full min-h-0 relative flex flex-col sm:grid sm:grid-cols-[1fr_3fr] sm:grid-rows-[auto_1fr] bg-gray-50 overflow-hidden">
-    <!-- Header: Absolute on mobile, static on desktop -->
-    <header class="z-30 h-16 px-4 py-2 flex items-center justify-between gap-3 flex-shrink-0 bg-white border-b border-gray-200 sm:bg-gray-50 sm:col-span-1">
+  <div ref="rootContainer" class="flex-1 min-h-0 flex flex-col bg-gray-50 overflow-hidden">
+    <!-- Header: Explicitly static on mobile to avoid covering global nav -->
+    <header class="z-50 h-16 px-4 py-2 flex items-center justify-between gap-3 flex-shrink-0 bg-white border-b border-gray-200 sm:col-span-1">
       <h2 class="text-xl font-bold text-gray-900 truncate min-w-0 tracking-tight">Trackers</h2>
       <div class="flex items-center gap-2 flex-shrink-0">
         <select
@@ -25,35 +25,13 @@
       </div>
     </header>
 
-    <!-- Main Content (Map) -->
-    <main class="flex-1 relative min-h-0 sm:col-start-2 sm:row-start-1 sm:row-span-2">
-      <div ref="mapContainer" class="absolute inset-0 w-full h-full bg-gray-100" />
-      
-      <!-- In-Map Overlays (Bottom Left) -->
-      <div class="absolute z-10 bottom-4 left-4 flex flex-col gap-2 bg-white border border-gray-200 rounded overflow-hidden">
-        <button
-          type="button"
-          class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
-          title="Map Settings"
-          @click="showLayerModal = true"
-        >
-          <Square3Stack3DIcon class="w-5 h-5" />
-        </button>
-        <button
-          type="button"
-          class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
-          title="Go to home extent"
-          @click="goHome"
-        >
-          <HomeIcon class="w-5 h-5" />
-        </button>
-      </div>
-    </main>
-
-    <!-- Tracker List: Desktop sidebar (hidden on small viewports via hidden sm:flex) -->
-    <aside
-      class="hidden sm:flex z-20 flex flex-col w-full h-full min-h-0 border-r border-gray-200 bg-white"
-    >
+    <!-- Desktop: 25% sidebar + 75% map. Mobile: full-width map only. -->
+    <div class="flex-1 min-h-0 flex flex-col sm:flex-row">
+      <!-- Tracker List: Desktop sidebar (hidden on mobile) -->
+      <aside
+        v-if="!isMobileView"
+        class="flex flex-col min-h-0 border-r border-gray-200 bg-white sm:w-1/4 sm:flex-shrink-0"
+      >
       <div class="flex-1 min-h-0 overflow-hidden flex flex-col px-2 pt-2 pb-2">
         <div v-if="loading" class="flex-1 flex flex-col items-center justify-center p-4">
           <Loader size="md" :show-message="false" layout="inline" />
@@ -109,7 +87,7 @@
               </div>
             </div>
 
-            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 sm:opacity-60 focus-within:opacity-100 transition-opacity">
+            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
               <button
                 type="button"
                 title="Latest params"
@@ -132,94 +110,135 @@
       </div>
     </aside>
 
-    <!-- Tracker List: Mobile bottom sheet -->
-    <BottomSheet
-      v-model="isSheetOpen"
-      :blocking="true"
-      :can-swipe-close="false"
-      :snap-points="[80, '60%']"
-      :initial-snap-point="0"
-      :swipe-close-threshold="0.9"
-    >
-      <template #header>
-        <div class="w-full flex justify-center py-4 cursor-grab active:cursor-grabbing">
-          <!-- The handle is automatically injected by :before, but we add space for it -->
-          <div class="h-1" />
-        </div>
-      </template>
-      <div class="flex-1 min-h-0 overflow-hidden flex flex-col px-2 pb-2 h-full">
-        <div v-if="loading" class="flex-1 flex flex-col items-center justify-center p-4">
-          <Loader size="md" :show-message="false" layout="inline" />
-          <p class="text-sm text-black mt-4">Loading...</p>
-        </div>
-        <div v-else-if="sortedTrackers.length === 0" class="flex-1 flex flex-col items-center justify-center py-12 px-6 text-center">
-          <div class="w-16 h-16 bg-gray-50 rounded-lg flex items-center justify-center mb-4 text-gray-400">
-            <PlusIcon class="w-8 h-8" />
-          </div>
-          <h3 class="text-base font-semibold text-gray-900 mb-1">No trackers yet</h3>
-          <p class="text-sm text-gray-500 max-w-xs">Start by creating your first tracker to begin recording data.</p>
-        </div>
-        <div
-          v-else
-          ref="listScrollContainerMobile"
-          class="flex-1 min-h-0 overflow-y-auto space-y-3 px-1 py-1 custom-scrollbar"
-          @click.self="highlightedId = null"
+    <!-- Map: 75% on desktop, full width on mobile -->
+    <main class="flex-1 relative min-h-0">
+      <div ref="mapContainer" class="absolute inset-0 w-full h-full bg-gray-100" />
+      <!-- In-Map Overlays: top-left on mobile, bottom-right on desktop -->
+      <div class="absolute z-10 top-4 left-4 sm:top-auto sm:left-auto sm:bottom-4 sm:right-4 flex flex-col gap-2 bg-white border border-gray-200 rounded overflow-hidden">
+        <button
+          type="button"
+          class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
+          title="Map Settings"
+          @click="showLayerModal = true"
         >
+          <Square3Stack3DIcon class="w-5 h-5" />
+        </button>
+        <button
+          type="button"
+          class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
+          title="Go to home extent"
+          @click="goHome"
+        >
+          <HomeIcon class="w-5 h-5" />
+        </button>
+      </div>
+    </main>
+    </div>
+
+    <!-- Tracker List: Mobile – custom drawer (no third-party sheet). Collapse = set height to 25%, no close animation. -->
+    <Teleport v-if="isMobileView" to="body">
+      <div
+        v-if="isMobileView && isSheetOpen"
+        ref="mobileDrawerEl"
+        :class="['mobile-tracker-drawer', { 'mobile-tracker-drawer--dragging': isDrawerDragging }]"
+        :style="{ height: (mobileDrawerHeightPx || mobileDrawerSnapPx[0] || 200) + 'px' }"
+      >
+        <div
+          class="mobile-drawer-handle"
+          role="button"
+          tabindex="0"
+          aria-label="Drag to resize"
+          @touchstart.passive="onDrawerDragStart"
+          @touchmove.prevent="onDrawerDragMove"
+          @touchend="onDrawerDragEnd"
+          @mousedown="onDrawerDragStart"
+        >
+          <div class="mobile-drawer-handle-bar" />
+        </div>
+        <div class="flex-1 min-h-0 overflow-hidden flex flex-col px-2 pb-2 relative">
+          <!-- When at peek, whole content area is a drag target (no scroll, drag to expand) -->
           <div
-            v-for="track in sortedTrackers"
-            :key="track.id"
-            :data-track-id="track.id"
-            :class="[
-              'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-all',
-              selectedId === track.id
-                ? 'border-blue-500 bg-blue-100'
-                : 'border-blue-100 bg-white hover:bg-blue-50 hover:border-blue-300',
-              highlightedId === track.id && selectedId !== track.id ? 'ring-2 ring-blue-500' : ''
-            ]"
-            @click="onTrackListClick(track)"
+            v-if="isDrawerAtPeek"
+            class="mobile-drawer-drag-overlay"
+            aria-label="Drag to expand"
+            @touchstart.passive="onDrawerDragStart"
+            @touchmove.prevent="onDrawerDragMove"
+            @touchend="onDrawerDragEnd"
+            @mousedown="onDrawerDragStart"
+          />
+          <div v-if="loading" class="flex-1 flex flex-col items-center justify-center p-4">
+            <Loader size="md" :show-message="false" layout="inline" />
+            <p class="text-sm text-black mt-4">Loading...</p>
+          </div>
+          <div v-else-if="sortedTrackers.length === 0" class="flex-1 flex flex-col items-center justify-center py-12 px-6 text-center">
+            <div class="w-16 h-16 bg-gray-50 rounded-lg flex items-center justify-center mb-4 text-gray-400">
+              <PlusIcon class="w-8 h-8" />
+            </div>
+            <h3 class="text-base font-semibold text-gray-900 mb-1">No trackers yet</h3>
+            <p class="text-sm text-gray-500 max-w-xs">Start by creating your first tracker to begin recording data.</p>
+          </div>
+          <div
+            v-else
+            ref="listScrollContainerMobile"
+            :class="['flex-1 min-h-0 space-y-3 px-1 py-1', isDrawerAtPeek ? 'mobile-drawer-content--no-scroll' : 'overflow-y-auto custom-scrollbar']"
+            @click.self="highlightedId = null"
           >
             <div
-              class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-white border border-gray-100 transition-colors"
-              :style="{ borderLeftColor: track.color || '#3388ff', borderLeftWidth: '4px' }"
+              v-for="track in sortedTrackers"
+              :key="track.id"
+              :data-track-id="track.id"
+              :class="[
+                'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-all',
+                selectedId === track.id
+                  ? 'border-blue-500 bg-blue-100'
+                  : 'border-blue-100 bg-white hover:bg-blue-50 hover:border-blue-300',
+                highlightedId === track.id && selectedId !== track.id ? 'ring-2 ring-blue-500' : ''
+              ]"
+              @click="onTrackListClick(track)"
             >
-              <TrackDirectionIcon
-                :color="track.color || '#3388ff'"
-                :angle="getTrackDirectionAngle(track)"
-                :size="26"
-                :selected="selectedId === track.id"
-                reserve-circle
-              />
-            </div>
-            <div class="flex-1 min-w-0">
-              <div class="font-bold text-gray-900 truncate tracking-tight break-all" :title="track.name">{{ track.name }}</div>
-              <div class="flex items-center gap-1.5 mt-0.5">
-                <div class="text-xs font-medium text-gray-500 truncate">
-                  {{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'Waiting for data...' }}
+              <div
+                class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-white border border-gray-100 transition-colors"
+                :style="{ borderLeftColor: track.color || '#3388ff', borderLeftWidth: '4px' }"
+              >
+                <TrackDirectionIcon
+                  :color="track.color || '#3388ff'"
+                  :angle="getTrackDirectionAngle(track)"
+                  :size="26"
+                  :selected="selectedId === track.id"
+                  reserve-circle
+                />
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="font-bold text-gray-900 truncate tracking-tight break-all" :title="track.name">{{ track.name }}</div>
+                <div class="flex items-center gap-1.5 mt-0.5">
+                  <div class="text-xs font-medium text-gray-500 truncate">
+                    {{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'Waiting for data...' }}
+                  </div>
                 </div>
               </div>
-            </div>
-            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 sm:opacity-60 focus-within:opacity-100 transition-opacity">
-              <button
-                type="button"
-                title="Latest params"
-                class="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
-                @click.stop="paramsModalTrackId = track.id"
-              >
-                <TableCellsIcon class="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                title="Edit"
-                class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
-                @click.stop="openEditModal(track)"
-              >
-                <PencilIcon class="h-5 w-5" />
-              </button>
+              <div class="flex items-center gap-1 opacity-60 focus-within:opacity-100 transition-opacity">
+                <button
+                  type="button"
+                  title="Latest params"
+                  class="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
+                  @click.stop="paramsModalTrackId = track.id"
+                >
+                  <TableCellsIcon class="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  title="Edit"
+                  class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
+                  @click.stop="openEditModal(track)"
+                >
+                  <PencilIcon class="h-5 w-5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </BottomSheet>
+    </Teleport>
 
     <BaseModal
       :is-open="showLayerModal"
@@ -269,14 +288,13 @@
 <script>
 import { ref, computed, onMounted, onActivated, onBeforeUnmount, inject, watch, nextTick } from 'vue';
 import { PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon } from '@heroicons/vue/24/outline';
+import { useWindowSize, useScrollLock } from '@vueuse/core';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
 import { getIngressBodyTemplate } from './ingressBodyTemplateCache.js';
 import { trackersLiveSocket } from './trackersLiveSocket.js';
 import TrackModal from './TrackModal.vue';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
 import LatestParamsModal from './LatestParamsModal.vue';
-import BottomSheet from '@douxcode/vue-spring-bottom-sheet';
-import '@douxcode/vue-spring-bottom-sheet/dist/style.css';
 
 const maplibregl = window.gv_core?.maplibre || window.maplibregl;
 
@@ -359,7 +377,7 @@ function rasterizeArrowToImageData(color, selected) {
 
 export default {
   name: 'LiveTrackView',
-  components: { BaseModal, TrackModal, TrackDirectionIcon, LatestParamsModal, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, BottomSheet },
+  components: { BaseModal, TrackModal, TrackDirectionIcon, LatestParamsModal, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon },
   setup() {
     const api = inject('extensionApi');
     const trackers = ref([]);
@@ -373,6 +391,55 @@ export default {
     );
     const isSheetOpen = ref(false);
     let mobileQueryListener = null;
+
+    const mobileDrawerEl = ref(null);
+    const mobileDrawerHeightPx = ref(0);
+    const isDrawerDragging = ref(false);
+    const mobileDrawerDrag = ref({ active: false, startY: 0, startHeight: 0 });
+    let drawerMouseUpListener = null;
+    let drawerMouseMoveListener = null;
+    let drawerRafId = null;
+    let pendingDragY = null;
+
+    const { height: windowHeight } = useWindowSize();
+    const rootContainer = ref(null);
+    const bodyScrollLock = useScrollLock(typeof document !== 'undefined' ? document.body : null);
+
+    watch([isMobileView, isSheetOpen], ([mobile, open]) => {
+      if (typeof document === 'undefined') return;
+      bodyScrollLock.value = mobile && open;
+    }, { immediate: true });
+
+    onBeforeUnmount(() => {
+      bodyScrollLock.value = false;
+    });
+
+    const trackerMaxHeight = computed(() => {
+      // App nav = 64px, tracker title bar = 64px, small buffer = 4px.
+      // Max sheet height = viewport minus those so sheet stops at bottom of tracker title.
+      const APP_NAV_PX = 64;
+      const TRACKER_HEADER_PX = 64;
+      const BUFFER_PX = 4;
+      return Math.max(65, windowHeight.value - APP_NAV_PX - TRACKER_HEADER_PX - BUFFER_PX);
+    });
+
+    const trackerSheetSnapPoints = computed(() => {
+      return ['25%', trackerMaxHeight.value];
+    });
+
+    const mobileDrawerSnapPx = computed(() => {
+      const h = windowHeight.value;
+      return [
+        Math.round(h * 0.25),
+        trackerMaxHeight.value
+      ];
+    });
+
+    const isDrawerAtPeek = computed(() => {
+      const current = mobileDrawerHeightPx.value || mobileDrawerSnapPx.value[0];
+      const peek = mobileDrawerSnapPx.value[0];
+      return current <= peek + 2;
+    });
 
     function isRecentlyUpdated(track) {
       if (!track.last_timestamp_ms) return false;
@@ -1101,6 +1168,7 @@ export default {
       if (selectedId.value === track.id) {
         selectedId.value = null;
         followLocked.value = false;
+        if (isMobileView.value) collapseDrawerToPeek();
         return;
       }
       selectedId.value = track.id;
@@ -1115,6 +1183,75 @@ export default {
           isAutoMoving.value = false;
         }, MAP_SNAP_DURATION + 50);
       }
+      if (isMobileView.value) collapseDrawerToPeek();
+    }
+
+    /** Collapse drawer to 25% – just set height; no close animation, no bounce. */
+    function collapseDrawerToPeek() {
+      if (!isMobileView.value) return;
+      const snaps = mobileDrawerSnapPx.value;
+      if (snaps[0] != null) mobileDrawerHeightPx.value = snaps[0];
+    }
+
+    function onDrawerDragStart(e) {
+      const y = e.touches ? e.touches[0].clientY : e.clientY;
+      mobileDrawerDrag.value = { active: true, startY: y, startHeight: mobileDrawerHeightPx.value };
+      isDrawerDragging.value = true;
+      if (!e.touches) {
+        drawerMouseMoveListener = (e2) => onDrawerDragMove(e2);
+        drawerMouseUpListener = () => onDrawerDragEnd();
+        document.addEventListener('mousemove', drawerMouseMoveListener);
+        document.addEventListener('mouseup', drawerMouseUpListener);
+      }
+    }
+
+    function applyDrawerHeightFromDrag(y) {
+      const drag = mobileDrawerDrag.value;
+      if (!drag.active) return;
+      const deltaY = drag.startY - y;
+      const snaps = mobileDrawerSnapPx.value;
+      const minH = snaps[0];
+      const maxH = snaps[1];
+      let h = Math.round(drag.startHeight + deltaY);
+      h = Math.max(minH, Math.min(maxH, h));
+      mobileDrawerHeightPx.value = h;
+    }
+
+    function onDrawerDragMove(e) {
+      if (!mobileDrawerDrag.value.active) return;
+      const y = e.touches ? e.touches[0].clientY : e.clientY;
+      pendingDragY = y;
+      if (drawerRafId == null) {
+        drawerRafId = requestAnimationFrame(() => {
+          drawerRafId = null;
+          if (pendingDragY != null) {
+            applyDrawerHeightFromDrag(pendingDragY);
+            pendingDragY = null;
+          }
+        });
+      }
+    }
+
+    function onDrawerDragEnd() {
+      if (!mobileDrawerDrag.value.active) return;
+      if (drawerRafId != null) {
+        cancelAnimationFrame(drawerRafId);
+        drawerRafId = null;
+      }
+      if (pendingDragY != null) applyDrawerHeightFromDrag(pendingDragY);
+      pendingDragY = null;
+      mobileDrawerDrag.value = { active: false, startY: 0, startHeight: 0 };
+      isDrawerDragging.value = false;
+      if (drawerMouseMoveListener) {
+        document.removeEventListener('mousemove', drawerMouseMoveListener);
+        document.removeEventListener('mouseup', drawerMouseUpListener);
+        drawerMouseUpListener = null;
+        drawerMouseMoveListener = null;
+      }
+      const snaps = mobileDrawerSnapPx.value;
+      const current = mobileDrawerHeightPx.value;
+      const mid = (snaps[0] + snaps[1]) / 2;
+      mobileDrawerHeightPx.value = current >= mid ? snaps[1] : snaps[0];
     }
 
     function fitBoundsFromCoords(coords) {
@@ -1130,8 +1267,9 @@ export default {
       const pad = 0.002;
       if (maxLon <= minLon) { minLon -= pad; maxLon += pad; }
       if (maxLat <= minLat) { minLat -= pad; maxLat += pad; }
+      const paddingPx = 80;
       map.fitBounds([[minLon, minLat], [maxLon, maxLat]], {
-        padding: { top: 50, bottom: 80, left: 80, right: 80 },
+        padding: { top: paddingPx, bottom: paddingPx, left: paddingPx, right: paddingPx },
         maxZoom: 15,
         duration: MAP_SNAP_DURATION
       });
@@ -1306,9 +1444,11 @@ export default {
       const mq = window.matchMedia('(max-width: 639px)');
       isMobileView.value = mq.matches;
       isSheetOpen.value = mq.matches;
+      if (mq.matches) mobileDrawerHeightPx.value = mobileDrawerSnapPx.value[0];
       mobileQueryListener = (e) => { 
         isMobileView.value = e.matches; 
         isSheetOpen.value = e.matches;
+        if (e.matches && mobileDrawerHeightPx.value === 0) mobileDrawerHeightPx.value = mobileDrawerSnapPx.value[0];
       };
       mq.addEventListener('change', mobileQueryListener);
     });
@@ -1335,6 +1475,11 @@ export default {
     );
 
     onBeforeUnmount(() => {
+      if (drawerRafId != null) cancelAnimationFrame(drawerRafId);
+      if (drawerMouseMoveListener) {
+        document.removeEventListener('mousemove', drawerMouseMoveListener);
+        document.removeEventListener('mouseup', drawerMouseUpListener);
+      }
       if (mobileQueryListener && typeof window !== 'undefined') {
         window.matchMedia('(max-width: 639px)').removeEventListener('change', mobileQueryListener);
         mobileQueryListener = null;
@@ -1374,6 +1519,14 @@ export default {
       selectedLayer,
       isMobileView,
       isSheetOpen,
+      mobileDrawerEl,
+      mobileDrawerHeightPx,
+      mobileDrawerSnapPx,
+      isDrawerAtPeek,
+      isDrawerDragging,
+      onDrawerDragStart,
+      onDrawerDragMove,
+      onDrawerDragEnd,
       formatTime,
       getTrackDirectionAngle,
       goHome,
@@ -1383,14 +1536,72 @@ export default {
       openEditModal,
       onModalSaved,
       onTrackDeleted,
-      isRecentlyUpdated
+      isRecentlyUpdated,
+      rootContainer,
+      trackerMaxHeight,
+      trackerSheetSnapPoints
     };
   }
 };
 </script>
 
 <style scoped>
+.mobile-tracker-drawer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  background: #fff;
+  border: 1px solid #3b82f6;
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: v-bind("trackerMaxHeight + 'px'");
+  transition: height 0.25s ease;
+}
+.mobile-tracker-drawer--dragging {
+  transition: none;
+  will-change: height;
+}
 
+.mobile-drawer-handle {
+  flex-shrink: 0;
+  padding: 14px 16px 10px;
+  cursor: grab;
+  touch-action: none;
+  display: flex;
+  justify-content: center;
+}
+.mobile-drawer-handle:active {
+  cursor: grabbing;
+}
+
+.mobile-drawer-handle-bar {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.mobile-drawer-drag-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  cursor: grab;
+}
+
+.mobile-drawer-drag-overlay:active {
+  cursor: grabbing;
+}
+
+.mobile-drawer-content--no-scroll {
+  overflow: hidden;
+  touch-action: none;
+}
 
 .custom-scrollbar::-webkit-scrollbar {
   width: 5px;
@@ -1417,8 +1628,12 @@ aside {
 /* Hide navigation control on mobile to avoid overlap with sheet */
 @media (max-width: 639px) {
   :deep(.maplibregl-ctrl-top-right) {
-    top: 70px !important;
+    top: 10px !important;
   }
+}
+
+.mobile-header-z {
+  z-index: 50 !important;
 }
 
 /* Ensure handle is visible and root is not blocking */
@@ -1427,13 +1642,24 @@ aside {
   pointer-events: none !important;
 }
 
-:deep([data-vsbs-sheet]) {
+:deep([data-vsbs-sheet]),
+:deep([data-vsbs-sheet]:focus),
+:deep([data-vsbs-sheet]:focus-visible),
+:deep([data-vsbs-sheet]:focus-within) {
   z-index: 40 !important;
-  border: none !important;
-  box-shadow: none !important;
-  --vsbs-outer-border-color: transparent !important;
+  border: 1px solid #3b82f6 !important;
+  border-bottom: none !important;
+  outline: none !important;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.1) !important;
+  --vsbs-outer-border-color: #3b82f6 !important;
   --vsbs-border-color: transparent !important;
   --vsbs-shadow-color: transparent !important;
+  max-height: v-bind("trackerMaxHeight + 'px'") !important;
+  overflow: hidden !important;
+}
+
+:deep(*) {
+  -webkit-tap-highlight-color: transparent !important;
 }
 
 :deep([data-vsbs-shadow="true"]::before) {
@@ -1445,6 +1671,18 @@ aside {
   cursor: grab !important;
   touch-action: none !important;
   border-bottom: none !important;
+  border-top: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+:deep([data-vsbs-scroll]), :deep([data-vsbs-content-wrapper]), :deep([data-vsbs-content]) {
+  outline: none !important;
+}
+
+
+:deep([data-vsbs-sheet] *) {
+  outline: none !important;
   box-shadow: none !important;
 }
 </style>

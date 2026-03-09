@@ -19,4 +19,8 @@
 
     <color name="gv_common_dialog_positive_button">@color/gv_common_primary_blue</color>
     <color name="gv_common_dialog_negative_button">@color/gv_common_text_secondary</color>
+
+    <!-- Map marker borders: light grey in night for both default and selected -->
+    <color name="gv_common_marker_border">#9ca3af</color>
+    <color name="gv_common_marker_border_selected">#9ca3af</color>
 </resources>
