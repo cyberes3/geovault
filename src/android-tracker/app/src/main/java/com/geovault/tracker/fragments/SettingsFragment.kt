@@ -305,6 +305,7 @@ class SettingsFragment : Fragment() {
 
     private fun updateUi() {
         val isLoggedIn = GeovaultAuthManager.isLoggedIn(requireContext())
+        serverUrlEdit.isEnabled = !isLoggedIn
         connectButton.visibility = if (isLoggedIn) View.GONE else View.VISIBLE
         disconnectButton.visibility = if (isLoggedIn) View.VISIBLE else View.GONE
         loggedInUserText.visibility = if (isLoggedIn) View.VISIBLE else View.GONE

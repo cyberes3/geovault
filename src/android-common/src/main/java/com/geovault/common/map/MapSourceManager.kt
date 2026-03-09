@@ -37,6 +37,13 @@ class MapSourceManager(private val context: Context) {
         availableSources = baseSources
     }
 
+    /** Force OSM-only sources (e.g. guest mode with no server). Uses default OSM tile URL. */
+    fun setOsmOnly() {
+        availableSources = listOf(
+            TileSource(SOURCE_OSM, "OpenStreetMap", "xyz", client_config = TileClientConfig(url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"))
+        )
+    }
+
     /** User-selected option: "street" or "satellite". */
     fun getSelectedSourceId(): String {
         val raw = prefs.getString("selected_map_source", OPTION_STREET) ?: OPTION_STREET
