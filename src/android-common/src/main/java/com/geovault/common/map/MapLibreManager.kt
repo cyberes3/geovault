@@ -11,6 +11,9 @@ import org.maplibre.android.maps.Style
 import org.maplibre.android.style.layers.RasterLayer
 import org.maplibre.android.style.sources.RasterSource
 import org.maplibre.android.style.sources.TileSet
+import org.maplibre.android.camera.CameraPosition
+import org.maplibre.android.camera.CameraUpdate
+import org.maplibre.android.camera.CameraUpdateFactory
 
 /**
  * Handles shared MapLibre setup, style loading, and OSM fallback.
@@ -221,6 +224,43 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
             } catch (e: Exception) {
                 Log.e(TAG, "loadOsmFallback exception", e)
             }
+        }
+    }
+
+    /**
+     * Animate camera to a new position while ensuring specific viewport padding is applied.
+     * This prevents CameraUpdate objects (like newLatLngBounds) from resetting padding to zero.
+     */
+    fun animateCameraWithPadding(
+        map: MapLibreMap,
+        update: CameraUpdate,
+        padding: DoubleArray,
+        durationMs: Int = 300,
+        callback: MapLibreMap.CancelableCallback? = null
+    ) {
+        val position = update.getCameraPosition(map)
+        if (position != null) {
+            val paddedPosition = CameraPosition.Builder(position)
+                .padding(padding)
+                .build()
+            map.animateCamera(CameraUpdateFactory.newCameraPosition(paddedPosition), durationMs, callback)
+        }
+    }
+
+    /**
+     * Move camera to a new position while ensuring specific viewport padding is applied.
+     */
+    fun moveCameraWithPadding(
+        map: MapLibreMap,
+        update: CameraUpdate,
+        padding: DoubleArray
+    ) {
+        val position = update.getCameraPosition(map)
+        if (position != null) {
+            val paddedPosition = CameraPosition.Builder(position)
+                .padding(padding)
+                .build()
+            map.moveCamera(CameraUpdateFactory.newCameraPosition(paddedPosition))
         }
     }
 }

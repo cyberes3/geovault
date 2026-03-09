@@ -186,14 +186,15 @@ class MapFragment : Fragment() {
         mapManager = MapLibreManager(requireActivity(), mapView)
         mapManager.onStyleLoaded = { map, style ->
             maplibreMap = map
-            val density = resources.displayMetrics.density
-            val left = (MAP_PADDING_LEFT_DP * density).toDouble()
-            val top = (MAP_PADDING_TOP_DP * density).toDouble()
-            val right = (MAP_PADDING_RIGHT_DP * density).toDouble()
-            val bottom = (MAP_PADDING_BOTTOM_DP * density).toDouble()
             val current = map.cameraPosition
+            val padding = doubleArrayOf(
+                (MAP_PADDING_LEFT_DP * density).toDouble(),
+                (MAP_PADDING_TOP_DP * density).toDouble(),
+                (MAP_PADDING_RIGHT_DP * density).toDouble(),
+                (MAP_PADDING_BOTTOM_DP * density).toDouble()
+            )
             val padded = CameraPosition.Builder(current)
-                .padding(left, top, right, bottom)
+                .padding(padding)
                 .build()
             map.moveCamera(CameraUpdateFactory.newCameraPosition(padded))
             mapManager.addMarkerIcon(style, "marker-default", R.drawable.ic_marker_default)
@@ -281,12 +282,12 @@ class MapFragment : Fragment() {
                         .include(LatLng(bbox[3], bbox[2]))
                         .build()
                     val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+                    mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
                     zoomToTrackAfterLoad = false
                 } else if (trackPoints.size >= 2) {
                     val bounds = LatLngBounds.Builder().apply { trackPoints.forEach { include(it) } }.build()
                     val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+                    mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
                     zoomToTrackAfterLoad = false
                 }
             }
@@ -332,16 +333,22 @@ class MapFragment : Fragment() {
         zoomToLatestButton.setOnClickListener {
             followLockEnabled = !followLockEnabled
             if (followLockEnabled && trackPoints.isNotEmpty()) {
-                maplibreMap?.moveCamera(CameraUpdateFactory.newLatLngZoom(trackPoints.last(), 16.0))
+                maplibreMap?.let { map ->
+                    mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(trackPoints.last(), 16.0), getMapPaddingArray())
+                }
             }
             updateFollowLockButton()
         }
 
         zoomInButton.setOnClickListener {
-            maplibreMap?.animateCamera(CameraUpdateFactory.zoomBy(1.0), 200)
+            maplibreMap?.let { map ->
+                mapManager.animateCameraWithPadding(map, CameraUpdateFactory.zoomBy(1.0), getMapPaddingArray(), 200)
+            }
         }
         zoomOutButton.setOnClickListener {
-            maplibreMap?.animateCamera(CameraUpdateFactory.zoomBy(-1.0), 200)
+            maplibreMap?.let { map ->
+                mapManager.animateCameraWithPadding(map, CameraUpdateFactory.zoomBy(-1.0), getMapPaddingArray(), 200)
+            }
         }
     }
 
@@ -593,7 +600,17 @@ class MapFragment : Fragment() {
         val update = CameraUpdateFactory.newCameraPosition(
             CameraPosition.Builder().target(target).zoom(zoom).build()
         )
-        map.animateCamera(update, FOLLOW_LOCK_ANIMATION_MS)
+        mapManager.animateCameraWithPadding(map, update, getMapPaddingArray(), FOLLOW_LOCK_ANIMATION_MS)
+    }
+
+    private fun getMapPaddingArray(): DoubleArray {
+        val density = resources.displayMetrics.density
+        return doubleArrayOf(
+            (MAP_PADDING_LEFT_DP * density).toDouble(),
+            (MAP_PADDING_TOP_DP * density).toDouble(),
+            (MAP_PADDING_RIGHT_DP * density).toDouble(),
+            (MAP_PADDING_BOTTOM_DP * density).toDouble()
+        )
     }
 
     /**
@@ -705,12 +722,12 @@ class MapFragment : Fragment() {
                         .include(LatLng(bbox[3], bbox[2]))
                         .build()
                     val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+                    mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
                     zoomToTrackAfterLoad = false
                 } else if (initial.last_point != null && initial.last_point.size >= 2) {
-                    map.moveCamera(CameraUpdateFactory.newLatLngZoom(
+                    mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(
                         LatLng(initial.last_point[1], initial.last_point[0]), 14.0
-                    ))
+                    ), getMapPaddingArray())
                     zoomToTrackAfterLoad = false
                 }
             }
@@ -837,13 +854,13 @@ class MapFragment : Fragment() {
                                 .include(LatLng(bbox[3], bbox[2]))
                                 .build()
                             val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                            map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+                            mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
                         } else if (trackPoints.size >= 2) {
                             val bounds = LatLngBounds.Builder().apply {
                                 trackPoints.forEach { include(it) }
                             }.build()
                             val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                            map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+                            mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
                         }
                     }
                     if (followLockEnabled && trackPoints.isNotEmpty()) {
