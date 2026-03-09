@@ -2510,7 +2510,6 @@ export default {
 
       // Navigate to the page if not already there
       if (this.pagination.currentPage !== targetPage) {
-        console.log(`Navigating to page ${targetPage}`);
         await this.goToPage(targetPage);
         await this.waitForPageLoad();
         await this.waitForItems();

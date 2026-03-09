@@ -359,7 +359,8 @@ export default {
           const hash = window.location.hash || '';
           const isPublicShare = hash.startsWith('#/mapshare');
           if (!isPublicShare) {
-            window.location.href = '/accounts/login/';
+            const loginUrl = window.location.origin + '/accounts/login/';
+            window.location.replace(loginUrl);
           }
         }
         // If user becomes authorized (userInfo is set), ensure WebSocket is connected
@@ -381,7 +382,8 @@ export default {
         }
         // Redirect to login if userInfo is null and not on a public share route
         if (to.path !== '/mapshare' && !this.userInfo) {
-          window.location.href = '/accounts/login/';
+          const loginUrl = window.location.origin + '/accounts/login/';
+          window.location.replace(loginUrl);
           return;
         }
         
@@ -431,8 +433,8 @@ export default {
           this.userInfoLoading = false;
           return;
         }
-        // On other routes, redirect to login
-        window.location.href = '/accounts/login/';
+        const loginUrl = window.location.origin + '/accounts/login/';
+        window.location.replace(loginUrl);
         return;
       }
 
@@ -511,10 +513,10 @@ export default {
         const csrfToken = getCookie('csrftoken');
         if (!csrfToken) {
           console.error('CSRF token not found');
-          // Even if CSRF token is missing, clear local state and redirect
           this.$store.commit('userInfo', null);
           this.$store.commit('userSettings', null);
-          window.location.href = '/accounts/login/';
+          const loginUrl = window.location.origin + '/accounts/login/';
+          window.location.replace(loginUrl);
           return;
         }
 
@@ -530,18 +532,17 @@ export default {
           }
         });
 
-        // Clear user info and settings from store
         this.$store.commit('userInfo', null);
         this.$store.commit('userSettings', null);
 
-        // Redirect to login page
-        window.location.href = '/accounts/login/';
+        const loginUrl = window.location.origin + '/accounts/login/';
+        window.location.replace(loginUrl);
       } catch (error) {
         console.error('Logout error:', error);
-        // Even if logout fails, clear local state and redirect
         this.$store.commit('userInfo', null);
         this.$store.commit('userSettings', null);
-        window.location.href = '/accounts/login/';
+        const loginUrl = window.location.origin + '/accounts/login/';
+        window.location.replace(loginUrl);
       }
     },
     toggleUserMenu() {

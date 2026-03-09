@@ -1,13 +1,8 @@
 import './assets/css/main.css'
-import { registerSW } from 'virtual:pwa-register'
 
-registerSW({
-    immediate: true,
-    onNeedRefresh() { console.log('PWA: New content available, please refresh.') },
-    onOfflineReady() { console.log('PWA: App ready for limited offline use.') },
-    onRegistered(r) { console.log('PWA: Service worker registered:', r) },
-    onRegisterError(error) { console.error('PWA: Service worker registration failed:', error) }
-})
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js?v=' + __SW_VERSION__)
+}
 
 // PWA Install Prompt Handling
 window.addEventListener('beforeinstallprompt', (e) => {
