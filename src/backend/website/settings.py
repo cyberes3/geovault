@@ -110,6 +110,7 @@ TEMPLATES = [
         'DIRS': [
             os.path.join(BASE_DIR, '../frontend/dist'),
             os.path.join(BASE_DIR, '../allauth templates'),
+            os.path.join(BASE_DIR, 'website', 'templates'),
         ],
         'APP_DIRS': True,
         'OPTIONS': {

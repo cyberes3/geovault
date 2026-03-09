@@ -12,6 +12,7 @@ from api.views.collections.management import (
     get_collection_features,
 )
 from api.views.app_releases import get_app_releases
+from website.internal_apps import internal_apps_page
 from api.views.config import get_config
 from api.views.features.creation import create_quick_point
 from api.views.features.deletion import delete_feature, bulk_delete_features_by_tag
@@ -113,6 +114,8 @@ urlpatterns = [
 
     # App releases (Android APK download URLs)
     path('app-releases/', get_app_releases),
+    # Internal HTML page: more apps (Gitea releases)
+    path('pages/apps/', internal_apps_page),
 
     # Health check endpoint
     path('health/', health_check),

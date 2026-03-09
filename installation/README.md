@@ -86,9 +86,8 @@ cd src/ && ./build-frontend.sh
 ## MaxMind
 
 MaxMind's GeoIP2 database is used to determine user location based on their IP address. This allows the map to
-automatically center on the their location instead of using a hardcoded default. Not required, but
-see [MaxMind.md](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation/MaxMind.md) for instructions to
-set up.
+automatically center on the their location instead of using a hardcoded default or requesting location permissions. Not
+required, but see [MaxMind.md](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation/MaxMind.md) for instructions to set up.
 
 ## Configuration
 
