@@ -92,6 +92,8 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
         mapView.onCreate(savedInstanceState)
         mapManager = MapLibreManager(this, mapView)
         mapManager.onStyleLoaded = { map, style ->
+            val padding = (50 * resources.displayMetrics.density).toInt()
+            mapManager.defaultPadding = doubleArrayOf(padding.toDouble(), padding.toDouble(), padding.toDouble(), padding.toDouble())
             applyStyleLoaded(map)
         }
         initialCameraApplied = savedInstanceState?.getBoolean(KEY_INITIAL_CAMERA_APPLIED, false) ?: false
@@ -125,7 +127,7 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
         val centerLat = intent.getDoubleExtra("zoom_to_lat", 0.0)
         val centerLon = intent.getDoubleExtra("zoom_to_lon", 0.0)
         val zoomToId = intent.getIntExtra("zoom_to_id", -1)
-        map.setCameraPosition(CameraPosition.Builder().target(LatLng(centerLat, centerLon)).zoom(DEFAULT_POINT_ZOOM).build())
+        mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(LatLng(centerLat, centerLon)).zoom(DEFAULT_POINT_ZOOM).build()))
         if (zoomToId >= 0) {
             val pair = symbolToFeature.entries.find { it.value.properties.database_id == zoomToId }
             pair?.let { (symbol, feature) -> selectMarkerAndUpdateUi(symbol, feature) }
@@ -408,8 +410,8 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
                     mapRef.setCameraPosition(CameraPosition.Builder().target(LatLng(centerLat, centerLon)).zoom(DEFAULT_POINT_ZOOM).build())
                 } else {
                     val padding = (50 * resources.displayMetrics.density).toInt()
-                    val cameraPosition = mapRef.getCameraForLatLngBounds(bounds, intArrayOf(padding, padding, padding, padding))
-                    cameraPosition?.let { mapRef.setCameraPosition(it) }
+                    val update = CameraUpdateFactory.newLatLngBounds(bounds, padding)
+                    mapManager.moveCameraWithPadding(mapRef, update)
                 }
             }
             mapView.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
@@ -420,7 +422,7 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
             })
         } else if (!hasValidPoints && !initialCameraApplied) {
             initialCameraApplied = true
-            mapRef.setCameraPosition(CameraPosition.Builder().target(LatLng(0.0, 0.0)).zoom(2.0).build())
+            mapManager.moveCameraWithPadding(mapRef, CameraUpdateFactory.newLatLngZoom(LatLng(0.0, 0.0), 2.0))
         }
     }
 

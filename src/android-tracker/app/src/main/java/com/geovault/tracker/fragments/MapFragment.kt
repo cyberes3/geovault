@@ -186,15 +186,10 @@ class MapFragment : Fragment() {
         mapManager = MapLibreManager(requireActivity(), mapView)
         mapManager.onStyleLoaded = { map, style ->
             maplibreMap = map
+            mapManager.defaultPadding = getMapPaddingArray()
             val current = map.cameraPosition
-            val padding = doubleArrayOf(
-                (MAP_PADDING_LEFT_DP * density).toDouble(),
-                (MAP_PADDING_TOP_DP * density).toDouble(),
-                (MAP_PADDING_RIGHT_DP * density).toDouble(),
-                (MAP_PADDING_BOTTOM_DP * density).toDouble()
-            )
             val padded = CameraPosition.Builder(current)
-                .padding(padding)
+                .padding(mapManager.defaultPadding!!)
                 .build()
             map.moveCamera(CameraUpdateFactory.newCameraPosition(padded))
             mapManager.addMarkerIcon(style, "marker-default", R.drawable.ic_marker_default)
@@ -334,7 +329,7 @@ class MapFragment : Fragment() {
             followLockEnabled = !followLockEnabled
             if (followLockEnabled && trackPoints.isNotEmpty()) {
                 maplibreMap?.let { map ->
-                    mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(trackPoints.last(), 16.0), getMapPaddingArray())
+                    mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(trackPoints.last(), 16.0))
                 }
             }
             updateFollowLockButton()
@@ -342,12 +337,12 @@ class MapFragment : Fragment() {
 
         zoomInButton.setOnClickListener {
             maplibreMap?.let { map ->
-                mapManager.animateCameraWithPadding(map, CameraUpdateFactory.zoomBy(1.0), getMapPaddingArray(), 200)
+                mapManager.animateCameraWithPadding(map, CameraUpdateFactory.zoomBy(1.0), durationMs = 200)
             }
         }
         zoomOutButton.setOnClickListener {
             maplibreMap?.let { map ->
-                mapManager.animateCameraWithPadding(map, CameraUpdateFactory.zoomBy(-1.0), getMapPaddingArray(), 200)
+                mapManager.animateCameraWithPadding(map, CameraUpdateFactory.zoomBy(-1.0), durationMs = 200)
             }
         }
     }
@@ -854,13 +849,13 @@ class MapFragment : Fragment() {
                                 .include(LatLng(bbox[3], bbox[2]))
                                 .build()
                             val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                            mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
+                            mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
                         } else if (trackPoints.size >= 2) {
                             val bounds = LatLngBounds.Builder().apply {
                                 trackPoints.forEach { include(it) }
                             }.build()
                             val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                            mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
+                            mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
                         }
                     }
                     if (followLockEnabled && trackPoints.isNotEmpty()) {

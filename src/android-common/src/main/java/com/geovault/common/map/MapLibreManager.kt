@@ -32,6 +32,12 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
     var onStyleLoaded: ((MapLibreMap, Style) -> Unit)? = null
 
     /**
+     * Default padding to apply to camera updates if none is provided.
+     * Format: [left, top, right, bottom] in pixels.
+     */
+    var defaultPadding: DoubleArray? = null
+
+    /**
      * Helper to add a marker icon to the map style.
      */
     fun addMarkerIcon(style: Style, id: String, drawableId: Int) {
@@ -230,37 +236,39 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
     /**
      * Animate camera to a new position while ensuring specific viewport padding is applied.
      * This prevents CameraUpdate objects (like newLatLngBounds) from resetting padding to zero.
+     * If [padding] is null, [defaultPadding] is used.
      */
     fun animateCameraWithPadding(
         map: MapLibreMap,
         update: CameraUpdate,
-        padding: DoubleArray,
+        padding: DoubleArray? = null,
         durationMs: Int = 300,
         callback: MapLibreMap.CancelableCallback? = null
     ) {
+        val lastPadding = padding ?: defaultPadding
         val position = update.getCameraPosition(map)
         if (position != null) {
-            val paddedPosition = CameraPosition.Builder(position)
-                .padding(padding)
-                .build()
-            map.animateCamera(CameraUpdateFactory.newCameraPosition(paddedPosition), durationMs, callback)
+            val builder = CameraPosition.Builder(position)
+            if (lastPadding != null) builder.padding(lastPadding)
+            map.animateCamera(CameraUpdateFactory.newCameraPosition(builder.build()), durationMs, callback)
         }
     }
 
     /**
      * Move camera to a new position while ensuring specific viewport padding is applied.
+     * If [padding] is null, [defaultPadding] is used.
      */
     fun moveCameraWithPadding(
         map: MapLibreMap,
         update: CameraUpdate,
-        padding: DoubleArray
+        padding: DoubleArray? = null
     ) {
+        val lastPadding = padding ?: defaultPadding
         val position = update.getCameraPosition(map)
         if (position != null) {
-            val paddedPosition = CameraPosition.Builder(position)
-                .padding(padding)
-                .build()
-            map.moveCamera(CameraUpdateFactory.newCameraPosition(paddedPosition))
+            val builder = CameraPosition.Builder(position)
+            if (lastPadding != null) builder.padding(lastPadding)
+            map.moveCamera(CameraUpdateFactory.newCameraPosition(builder.build()))
         }
     }
 }

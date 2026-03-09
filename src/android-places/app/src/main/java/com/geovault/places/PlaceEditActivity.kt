@@ -212,20 +212,24 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
         }
         val map = maplibreMap ?: return
         val manager = SymbolManager(mapView, map, style, null, null)
-        symbolManager = manager
-        manager.setIconAllowOverlap(true)
-        Log.d(TAG, "onStyleLoaded: new SymbolManager layerId=${manager.layerId}, lat=$latitude lon=$longitude")
-        latitude?.let { lat ->
-            longitude?.let { lon ->
-                Log.d(TAG, "onStyleLoaded: calling updateMarker($lat, $lon)")
-                updateMarker(lat, lon)
-                if (!initialMapCenterApplied) {
-                    initialMapCenterApplied = true
-                    zoomToPoint(lat, lon)
+        mapManager.onStyleLoaded = { map, style ->
+            val padding = (50 * resources.displayMetrics.density).toInt()
+            mapManager.defaultPadding = doubleArrayOf(padding.toDouble(), padding.toDouble(), padding.toDouble(), padding.toDouble())
+            
+            symbolManager = manager
+            manager.setIconAllowOverlap(true)
+            Log.d(TAG, "onStyleLoaded: new SymbolManager layerId=${manager.layerId}, lat=$latitude lon=$longitude")
+            latitude?.let { lat ->
+                longitude?.let { lon ->
+                    Log.d(TAG, "onStyleLoaded: calling updateMarker($lat, $lon)")
+                    updateMarker(lat, lon)
+                    if (!initialMapCenterApplied) {
+                        initialMapCenterApplied = true
+                        zoomToPoint(lat, lon)
+                    }
                 }
             }
         }
-    }
 
     override fun onMapReady(map: MapLibreMap) {
         maplibreMap = map
@@ -323,7 +327,7 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
         // Only set default camera when no place coords; initial center on place happens in onStyleLoaded (once).
         // New place: show entire world (zoom 0).
         if (latitude == null || longitude == null) {
-            map.setCameraPosition(CameraPosition.Builder().target(LatLng(0.0, 0.0)).zoom(0.0).build())
+            mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(LatLng(0.0, 0.0), 0.0))
         }
     }
 
@@ -658,13 +662,14 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
             val displayText = if (!address.isNullOrBlank()) address else null
             updateCoords(coords[1], coords[0], displayText)
             maplibreMap?.let { map ->
-                map.setCameraPosition(CameraPosition.Builder().target(LatLng(coords[1], coords[0])).zoom(zoomLevelPoint).build())
+                mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(LatLng(coords[1], coords[0]), zoomLevelPoint.toDouble()))
             }
         }
     }
 
     private fun zoomToPoint(lat: Double, lon: Double) {
-        maplibreMap?.animateCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(LatLng(lat, lon)).zoom(zoomLevelPoint).build()))
+        val map = maplibreMap ?: return
+        mapManager.animateCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(LatLng(lat, lon), zoomLevelPoint.toDouble()))
     }
 
     private fun updateCoords(lat: Double, lon: Double, displayText: String?) {
