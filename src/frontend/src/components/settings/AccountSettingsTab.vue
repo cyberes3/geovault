@@ -338,6 +338,23 @@
         </div>
       </div>
     </div>
+
+    <!-- More Apps Section -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">More Apps</h2>
+      <p class="text-sm text-gray-600 mb-4">
+        Additional applications beyond those linked on the dashboard.
+      </p>
+      <a
+        href="/api/pages/apps/"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800"
+      >
+        View Geovault App Directory
+        <ArrowTopRightOnSquareIcon class="ml-1 w-4 h-4" />
+      </a>
+    </div>
   </div>
 </template>
 
@@ -350,7 +367,7 @@ import SettingsInput from "./components/SettingsInput.vue";
 import Loader from "@/components/parts/Loader.vue";
 import BaseButton from "@/components/parts/BaseButton.vue";
 import {formatDate} from "@/utils/dateUtils.js";
-import {ClipboardDocumentIcon} from '@heroicons/vue/24/outline';
+import {ClipboardDocumentIcon, ArrowTopRightOnSquareIcon} from '@heroicons/vue/24/outline';
 
 export default {
   name: 'AccountSettingsTab',
@@ -358,7 +375,8 @@ export default {
     SettingsInput,
     Loader,
     BaseButton,
-    ClipboardDocumentIcon
+    ClipboardDocumentIcon,
+    ArrowTopRightOnSquareIcon
   },
   mixins: [SettingsMixin],
   props: {},

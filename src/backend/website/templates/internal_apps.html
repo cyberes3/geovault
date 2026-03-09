@@ -3,45 +3,227 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>More GeoVault Apps</title>
+  <title>App Directory - GeoVault</title>
+  <link rel="icon" type="image/svg+xml" href="/images/logo.svg">
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
-    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
-    .quiet { color: #6b7280; font-size: 0.875rem; margin-bottom: 1.5rem; }
-    section { margin-bottom: 1.5rem; }
-    section h2 { font-size: 1rem; margin-bottom: 0.5rem; }
-    section h2 a { color: #2563eb; text-decoration: none; }
-    section h2 a:hover { text-decoration: underline; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 0.35rem 0.5rem; text-align: left; border-bottom: 1px solid #e5e7eb; }
-    th { font-weight: 500; color: #374151; }
-    a.dl { color: #2563eb; text-decoration: none; }
-    a.dl:hover { text-decoration: underline; }
-    .back { margin-top: 1.5rem; font-size: 0.875rem; }
-    .back a { color: #2563eb; text-decoration: none; }
-    .back a:hover { text-decoration: underline; }
+    /* Base styles matching GeoVault platform (Tailwind-like) */
+    :root {
+      --color-gray-50: #f9fafb;
+      --color-gray-100: #f3f4f6;
+      --color-gray-200: #e5e7eb;
+      --color-gray-500: #6b7280;
+      --color-gray-600: #4b5563;
+      --color-gray-700: #374151;
+      --color-gray-900: #111827;
+      --color-blue-600: #2563eb;
+      --color-blue-700: #1d4ed8;
+      --color-blue-50: #eff6ff;
+    }
+
+    body { 
+      font-family: 'Inter', system-ui, -apple-system, sans-serif; 
+      background-color: var(--color-gray-50);
+      color: var(--color-gray-900);
+      margin: 0;
+      padding: 0;
+      line-height: 1.5;
+    }
+
+    .header {
+      background-color: white;
+      border-bottom: 1px solid var(--color-gray-200);
+      padding: 1rem 1.5rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    }
+
+    .header-content {
+      max-width: 80rem; /* 7xl */
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .header-content img {
+      height: 2rem;
+      width: auto;
+    }
+
+    .header-content h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .container { 
+      max-width: 80rem; /* 7xl */
+      margin: 0 auto;
+      padding: 0 1rem 3rem;
+    }
+
+    .page-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: var(--color-gray-900);
+    }
+
+    .page-description {
+      color: var(--color-gray-500);
+      font-size: 0.875rem;
+      margin-bottom: 2rem;
+    }
+
+    .app-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (min-width: 768px) {
+      .app-grid {
+        grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+      }
+    }
+
+    .app-card {
+      background-color: white;
+      border: 1px solid var(--color-gray-200);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .app-card h2 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      margin: 0 0 0.5rem 0;
+    }
+
+    .app-card h2 a {
+      color: var(--color-gray-900);
+      text-decoration: none;
+    }
+
+    .app-card h2 a:hover {
+      color: var(--color-blue-600);
+    }
+
+    .description {
+      color: var(--color-gray-600);
+      font-size: 0.875rem;
+      margin-bottom: 1.5rem;
+      flex-grow: 1;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-top: auto;
+    }
+
+    .btn-download {
+      background-color: var(--color-blue-600);
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 0.375rem;
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
+
+    .btn-download:hover {
+      background-color: var(--color-blue-700);
+    }
+
+    .link-subtle {
+      color: var(--color-gray-500);
+      text-decoration: none;
+      font-size: 0.875rem;
+    }
+
+    .link-subtle:hover {
+      color: var(--color-gray-700);
+      text-decoration: underline;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 3rem;
+      background-color: white;
+      border: 1px dashed var(--color-gray-200);
+      border-radius: 0.5rem;
+      color: var(--color-gray-500);
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      margin-top: 2rem;
+      color: var(--color-blue-600);
+      text-decoration: none;
+      font-size: 0.875rem;
+    }
+
+    .back-link:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
-  <h1>More apps that work with GeoVault</h1>
-  <br>
-{#  <p class="quiet">Links to additional applications.</p>#}
-  {% for app in app_list %}
-  <section>
-    <h2><a href="{{ app.releases_page_url }}" target="_blank" rel="noopener noreferrer">{{ app.display_name }}</a></h2>
-    <table>
-      <tbody>
-        {% for asset in app.assets %}
-        <tr>
-          <th>{{ asset.name }}</th>
-          <td><a href="{{ asset.url }}" target="_blank" rel="noopener noreferrer" class="dl">Download</a></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </section>
-  {% empty %}
-  <p class="quiet">No apps configured.</p>
-  {% endfor %}
+  <header class="header">
+    <div class="header-content">
+      <img src="/images/logo.svg" alt="GeoVault Logo">
+      <h1>GeoVault</h1>
+    </div>
+  </header>
+
+  <div class="container">
+    <h1 class="page-title">App Directory</h1>
+    <p class="page-description">Additional applications that integrate with the GeoVault platform.</p>
+
+    <div class="app-grid">
+      {% for app in app_list %}
+      <section class="app-card">
+        <h2>
+          <a href="{{ app.repo_url }}" target="_blank" rel="noopener noreferrer">
+            {{ app.display_name }}
+          </a>
+        </h2>
+        
+        <p class="description">
+          {% if app.description %}
+            {{ app.description }}
+          {% else %}
+            No description available for this application.
+          {% endif %}
+        </p>
+        
+        <div class="actions">
+          {% if app.download_url %}
+            <a href="{{ app.download_url }}" class="btn-download">Download</a>
+          {% endif %}
+          
+          {% if app.releases_page_url %}
+            <a href="{{ app.releases_page_url }}" class="link-subtle" target="_blank" rel="noopener noreferrer">
+              {% if app.download_url %}View all releases{% else %}View releases{% endif %}
+            </a>
+          {% endif %}
+        </div>
+      </section>
+      {% empty %}
+      <div class="empty-state">
+        <p>No additional apps are currently configured.</p>
+      </div>
+      {% endfor %}
+    </div>
+
+    <a href="/" class="back-link">&larr; Back to Dashboard</a>
+  </div>
 </body>
 </html>

@@ -32,6 +32,16 @@ def _page_url_to_api_url(page_url: str) -> str:
     return urlunparse((parsed.scheme, parsed.netloc, new_path, "", "", ""))
 
 
+def _page_url_to_repo_api_url(page_url: str) -> str:
+    """Convert a Gitea releases page URL to the base repo API URL."""
+    parsed = urlparse(page_url)
+    path = (parsed.path or "").strip().lstrip("/")
+    if path.endswith("/releases"):
+        path = path[: -len("/releases")]
+    new_path = "api/v1/repos/" + path
+    return urlunparse((parsed.scheme, parsed.netloc, new_path, "", "", ""))
+
+
 def _display_name_from_page_url(page_url: str) -> str:
     """Derive a display name from the repo path, e.g. survey-data-viewer-android -> Survey Data Viewer Android."""
     parsed = urlparse(page_url)
@@ -45,23 +55,64 @@ def _display_name_from_page_url(page_url: str) -> str:
 
 
 def _fetch_gitea_release_data(page_url: str) -> dict:
-    """Fetch latest release and assets from Gitea for one repo. Used for cache miss."""
+    """Fetch latest release, assets, and repo description from Gitea for one repo. Used for cache miss."""
     api_url = _page_url_to_api_url(page_url)
-    if not api_url:
-        return {"releases_page_url": page_url, "tag_name": None, "assets": [], "display_name": _display_name_from_page_url(page_url)}
-    if not is_url_safe_for_fetch(api_url):
+    repo_api_url = _page_url_to_repo_api_url(page_url)
+    
+    display_name = _display_name_from_page_url(page_url)
+    description = ""
+    
+    def make_result(repo_url, download_url=None, tag=None, asset_list=None):
+        return {
+            "releases_page_url": page_url,  # Original URL from config
+            "repo_url": repo_url,
+            "download_url": download_url,
+            "tag_name": tag,
+            "assets": asset_list or [],
+            "display_name": display_name,
+            "description": description,
+        }
+
+    # If a repo URL in the list does not end with /releases just link to the repo
+    repo_page_url = page_url
+    if page_url.strip().endswith("/releases"):
+        repo_page_url = page_url.strip()[:-len("/releases")]
+
+    if not page_url.strip().endswith("/releases"):
+        if repo_api_url and is_url_safe_for_fetch(repo_api_url):
+            try:
+                repo_resp = requests.get(repo_api_url, timeout=RELEASES_REQUEST_TIMEOUT)
+                repo_resp.raise_for_status()
+                description = repo_resp.json().get("description") or ""
+            except Exception:
+                pass
+        return make_result(page_url)
+
+    if not api_url or not repo_api_url:
+        return make_result(page_url)
+    
+    if not is_url_safe_for_fetch(api_url) or not is_url_safe_for_fetch(repo_api_url):
         _logger.warning("admin_apps: Gitea URL failed SSRF check: %s", page_url)
-        return {"releases_page_url": page_url, "tag_name": None, "assets": [], "display_name": _display_name_from_page_url(page_url)}
+        return make_result(page_url)
+
+    # Fetch Repo Info for description
+    try:
+        repo_resp = requests.get(repo_api_url, timeout=RELEASES_REQUEST_TIMEOUT)
+        repo_resp.raise_for_status()
+        repo_data = repo_resp.json()
+        description = repo_data.get("description") or ""
+    except Exception as e:
+        _logger.warning("admin_apps: failed to fetch repo info %s: %s", repo_api_url, e)
+
+    # Fetch Releases
     try:
         resp = requests.get(api_url, params={"limit": 5}, timeout=RELEASES_REQUEST_TIMEOUT)
         resp.raise_for_status()
         releases = resp.json()
-    except requests.RequestException as e:
-        _logger.warning("admin_apps: failed to fetch %s: %s", page_url, e)
-        return {"releases_page_url": page_url, "tag_name": None, "assets": [], "display_name": _display_name_from_page_url(page_url)}
-    except (ValueError, TypeError) as e:
-        _logger.warning("admin_apps: invalid JSON from %s: %s", page_url, e)
-        return {"releases_page_url": page_url, "tag_name": None, "assets": [], "display_name": _display_name_from_page_url(page_url)}
+    except Exception as e:
+        _logger.warning("admin_apps: failed to fetch releases %s: %s", page_url, e)
+        return make_result(page_url)
+    
     tag_name = None
     assets = []
     if isinstance(releases, list) and releases:
@@ -70,14 +121,21 @@ def _fetch_gitea_release_data(page_url: str) -> dict:
         for a in release.get("assets") or []:
             name = (a.get("name") or "").strip()
             url = (a.get("browser_download_url") or "").strip()
+            
+            # exclude source code zip and tar.gz
+            if name.lower().endswith((".zip", ".tar.gz")):
+                continue
+                
             if name and url and is_url_safe_for_fetch(url):
                 assets.append({"name": name, "url": url})
-    return {
-        "releases_page_url": page_url,
-        "tag_name": tag_name,
-        "assets": assets,
-        "display_name": _display_name_from_page_url(page_url),
-    }
+    
+    # Logic for download_url:
+    # if a repo has exactly one file in its release then link to the first available file
+    download_url = None
+    if len(assets) == 1:
+        download_url = assets[0]["url"]
+    
+    return make_result(repo_page_url, download_url, tag_name, assets)
 
 
 def internal_apps_page(request):
