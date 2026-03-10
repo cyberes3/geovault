@@ -1,8 +1,8 @@
 <template>
-  <BaseModal
-    :is-open="true"
-    :title="modalTitle"
-    :close-on-escape="false"
+  <LiveTrackSidebar
+    v-if="!embedded"
+    :title="sidebarTitle"
+    :container-ref="containerRef"
     @close="$emit('close')"
   >
     <CreateSuccessView
@@ -23,7 +23,7 @@
       @color-picked="onColorPicked"
     />
     <div v-else-if="mode === 'edit' && (loading || !track)" class="flex items-center justify-center py-12">
-      <Loader size="md" message="Loading track..." />
+      <Loader size="md" message="Loading tracker..." />
     </div>
     <EditTrackForm
       v-else
@@ -31,19 +31,31 @@
       :name="name"
       :color="color"
       :recent-data-window="recentDataWindow"
+      :visibility="visibility"
+      :share-params-with-recipients="shareParamsWithRecipients"
+      :shared-with-emails="sharedWithEmails"
+      :is-owner="isOwner"
       :error="error"
       :deleting="deleting"
       :clearing="clearing"
+      :unsubscribing="unsubscribing"
       :clear-history-disabled="clearing || historyClearedThisSession"
       :copy="copy"
+      :world-share-enabled="worldShareEnabled"
+      :world-share-url="worldShareUrl"
       @update:name="name = $event"
       @update:color="color = $event"
       @update:recentDataWindow="recentDataWindow = $event"
+      @update:visibility="visibility = $event"
+      @update:shareParamsWithRecipients="shareParamsWithRecipients = $event"
+      @update:sharedWithEmails="sharedWithEmails = $event"
+      @update:worldShareEnabled="setWorldShareEnabled"
       @reset-color="resetColorToDeterministic"
       @open-instructions="showInstructions = true"
       @download-kml="downloadKml"
       @clear-history="confirmClearHistory"
       @delete="confirmDelete"
+      @unsubscribe="confirmUnsubscribe"
     />
 
     <template #actions>
@@ -62,7 +74,7 @@
       </template>
       <template v-else>
         <BaseButton variant="white" size="sm" @click="$emit('close')">Close</BaseButton>
-        <BaseButton variant="primary" color="blue" size="sm" :disabled="saving || !name.trim()" @click="save">
+        <BaseButton v-if="isOwner" variant="primary" color="blue" size="sm" :disabled="saving || !name.trim()" @click="save">
           <Loader v-if="saving" size="sm" layout="inline" :show-message="false" class="mr-1" />
           Save
         </BaseButton>
@@ -78,12 +90,105 @@
       :profile-url="profileUrl"
       @close="showInstructions = false"
     />
-  </BaseModal>
+  </LiveTrackSidebar>
+  <!-- Embedded: content + footer only (shell is provided by parent) -->
+  <div v-else class="flex-1 min-h-0 flex flex-col">
+    <div class="flex-1 overflow-y-auto min-h-0 px-4 sm:px-5 py-4">
+      <CreateSuccessView
+        v-if="mode === 'create' && createdTrack"
+        :ingress-url="ingressUrl"
+        :body-template="bodyTemplate"
+        :user-login="userLogin"
+        :tracker-secret="createdTrack?.tracker_secret ?? ''"
+        :copy="copy"
+        @open-instructions="showInstructions = true"
+      />
+      <CreateTrackForm
+        v-else-if="mode === 'create'"
+        :name="name"
+        :display-color="displayColor"
+        :error="error"
+        @update:name="name = $event"
+        @color-picked="onColorPicked"
+      />
+      <div v-else-if="mode === 'edit' && (loading || !track)" class="flex justify-center py-12">
+        <Loader size="md" message="Loading tracker..." />
+      </div>
+      <EditTrackForm
+        v-else
+        :track="track"
+        :name="name"
+        :color="color"
+        :recent-data-window="recentDataWindow"
+        :visibility="visibility"
+        :share-params-with-recipients="shareParamsWithRecipients"
+        :shared-with-emails="sharedWithEmails"
+        :is-owner="isOwner"
+        :error="error"
+        :deleting="deleting"
+        :clearing="clearing"
+        :unsubscribing="unsubscribing"
+        :clear-history-disabled="clearing || historyClearedThisSession"
+        :copy="copy"
+        :public-share-enabled="publicShareEnabled"
+        :public-share-url="publicShareUrl"
+        @update:name="name = $event"
+        @update:color="color = $event"
+        @update:recentDataWindow="recentDataWindow = $event"
+        @update:visibility="visibility = $event"
+        @update:shareParamsWithRecipients="shareParamsWithRecipients = $event"
+        @update:sharedWithEmails="sharedWithEmails = $event"
+        @update:worldShareEnabled="setWorldShareEnabled"
+        @reset-color="resetColorToDeterministic"
+        @open-instructions="showInstructions = true"
+        @download-kml="downloadKml"
+        @clear-history="confirmClearHistory"
+        @delete="confirmDelete"
+        @unsubscribe="confirmUnsubscribe"
+      />
+      <div
+        v-if="(mode === 'create' && !createdTrack) || (mode === 'edit' && track && !loading && isOwner)"
+        class="mt-6 pt-4 border-t border-gray-200 flex items-center justify-end gap-3 flex-shrink-0"
+      >
+        <BaseButton
+          v-if="mode === 'create'"
+          variant="primary"
+          color="blue"
+          size="sm"
+          :disabled="saving || !name.trim()"
+          @click="create"
+        >
+          <Loader v-if="saving" size="sm" layout="inline" :show-message="false" class="mr-1" />
+          Create
+        </BaseButton>
+        <BaseButton
+          v-else
+          variant="primary"
+          color="blue"
+          size="sm"
+          :disabled="saving || !name.trim()"
+          @click="save"
+        >
+          <Loader v-if="saving" size="sm" layout="inline" :show-message="false" class="mr-1" />
+          Save
+        </BaseButton>
+      </div>
+    </div>
+    <GpsLoggerInstructionsModal
+      v-if="showInstructions && instructionsPassword"
+      :ingress-url="instructionsIngressUrl"
+      :body-template="bodyTemplate"
+      :username="userLogin"
+      :password="instructionsPassword"
+      :profile-url="profileUrl"
+      @close="showInstructions = false"
+    />
+  </div>
 </template>
 
 <script>
 import { ref, watch, computed, inject, onMounted } from 'vue';
-import BaseModal from 'platform/components/parts/BaseModal.vue';
+import LiveTrackSidebar from './LiveTrackSidebar.vue';
 import Loader from 'platform/components/parts/Loader.vue';
 import { getIngressBodyTemplate } from './ingressBodyTemplateCache.js';
 import CreateTrackForm from './CreateTrackForm.vue';
@@ -92,31 +197,41 @@ import EditTrackForm from './EditTrackForm.vue';
 import GpsLoggerInstructionsModal from './GpsLoggerInstructionsModal.vue';
 
 export default {
-  name: 'TrackModal',
-  components: { BaseModal, Loader, CreateTrackForm, CreateSuccessView, EditTrackForm, GpsLoggerInstructionsModal },
+  name: 'TrackSidebar',
+  components: { LiveTrackSidebar, Loader, CreateTrackForm, CreateSuccessView, EditTrackForm, GpsLoggerInstructionsModal },
   props: {
     mode: { type: String, required: true },
     track: { type: Object, default: null },
     loading: { type: Boolean, default: false },
-    userLogin: { type: String, default: '' }
+    userLogin: { type: String, default: '' },
+    containerRef: { type: Object, default: null },
+    /** When true, render only content + footer (no sidebar shell); parent provides the shell. */
+    embedded: { type: Boolean, default: false },
   },
-  emits: ['close', 'saved', 'deleted'],
+  emits: ['close', 'saved', 'deleted', 'unsubscribed'],
   setup(props, { emit }) {
     const api = inject('extensionApi');
     const name = ref('');
     const color = ref('#3388ff');
     const recentDataWindow = ref('');
+    const visibility = ref('private');
+    const shareParamsWithRecipients = ref(false);
+    const sharedWithEmails = ref([]);
     const userPickedColor = ref(false);
+    const unsubscribing = ref(false);
     const error = ref('');
     const saving = ref(false);
     const deleting = ref(false);
     const clearing = ref(false);
-    /** After clear history succeeds, keep the clear button disabled until the modal is closed. */
+    /** After clear history succeeds, keep the clear button disabled until the sidebar is closed. */
     const historyClearedThisSession = ref(false);
+    const worldShareEnabled = ref(false);
+    const worldShareUrl = ref('');
     const createdTrack = ref(null);
     const showInstructions = ref(false);
 
-    const modalTitle = computed(() => (props.mode === 'create' ? 'New track' : 'Edit track'));
+    const sidebarTitle = computed(() => (props.mode === 'create' ? 'New tracker' : 'Edit tracker'));
+    const isOwner = computed(() => props.track?.is_owner !== false);
 
     /** Deterministic hex color from string (high S, high V so not too dark). */
     function colorFromName(str) {
@@ -214,7 +329,7 @@ export default {
         createdTrack.value = res.data;
       } catch (e) {
         const err = api.handleError?.(e);
-        error.value = err?.message || 'Failed to create track';
+        error.value = err?.message || 'Failed to create tracker';
       } finally {
         saving.value = false;
       }
@@ -228,7 +343,10 @@ export default {
         await api.post(`/trackers/${props.track.id}/settings/`, {
           name: name.value.trim(),
           color: color.value,
-          recent_data_window: recentDataWindow.value || null
+          recent_data_window: recentDataWindow.value || null,
+          visibility: visibility.value,
+          share_params_with_recipients: shareParamsWithRecipients.value,
+          shared_with_emails: visibility.value === 'shared' ? sharedWithEmails.value : undefined
         });
         emit('saved');
       } catch (e) {
@@ -264,7 +382,7 @@ export default {
 
     function confirmClearHistory() {
       if (!props.track || clearing.value) return;
-      if (!confirm('Clear all track history except the latest point? This cannot be undone.')) return;
+      if (!confirm('Clear all tracker history except the latest point? This cannot be undone.')) return;
       clearing.value = true;
       api.post(`/trackers/${props.track.id}/clear-history/`).then(() => {
         historyClearedThisSession.value = true;
@@ -280,7 +398,7 @@ export default {
 
     function confirmDelete() {
       if (!props.track || deleting.value) return;
-      if (!confirm('Delete this track? This cannot be undone.')) return;
+      if (!confirm('Delete this tracker? This cannot be undone.')) return;
       deleting.value = true;
       api.delete(`/trackers/${props.track.id}/`).then(() => {
         emit('deleted');
@@ -297,18 +415,73 @@ export default {
         name.value = t.name || '';
         color.value = t.color || '#3388ff';
         recentDataWindow.value = t.settings?.recent_data_window ?? '';
+        visibility.value = t.visibility || 'private';
+        shareParamsWithRecipients.value = t.share_params_with_recipients === true;
+        sharedWithEmails.value = Array.isArray(t.shared_with_emails) ? [...t.shared_with_emails] : [];
+        worldShareEnabled.value = !!(t.world_share_id);
+        worldShareUrl.value = t.world_share_url || '';
         userPickedColor.value = true;
       } else {
         userPickedColor.value = false;
         color.value = '#3388ff';
         recentDataWindow.value = '';
+        visibility.value = 'private';
+        shareParamsWithRecipients.value = false;
+        sharedWithEmails.value = [];
+        worldShareEnabled.value = false;
+        worldShareUrl.value = '';
       }
     }, { immediate: true });
+
+    async function setWorldShareEnabled(enabled) {
+      if (!api || !props.track?.id || saving.value) return;
+      error.value = '';
+      saving.value = true;
+      try {
+        const res = await api.post(`/trackers/${props.track.id}/settings/`, {
+          world_share_enabled: enabled
+        });
+        const data = res.data;
+        worldShareEnabled.value = !!(data?.world_share_id);
+        worldShareUrl.value = data?.world_share_url || '';
+        // Do not emit('saved') here — parent would close the sidebar; keep sidebar open so user can copy the link
+      } catch (e) {
+        const err = api.handleError?.(e);
+        error.value = err?.message || (enabled ? 'Failed to enable world share link' : 'Failed to disable world share link');
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(error.value);
+      } finally {
+        saving.value = false;
+      }
+    }
+
+    async function confirmUnsubscribe() {
+      if (!props.track?.id || unsubscribing.value) return;
+      if (!confirm('Remove this tracker from your list? You can add it again from Shared with me.')) return;
+      unsubscribing.value = true;
+      try {
+        await api.delete(`/trackers/${props.track.id}/subscribe/`);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Removed from list');
+        emit('unsubscribed', props.track.id);
+      } catch (e) {
+        const err = api.handleError?.(e);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to remove');
+      } finally {
+        unsubscribing.value = false;
+      }
+    }
 
     return {
       name,
       color,
       recentDataWindow,
+      visibility,
+      shareParamsWithRecipients,
+      sharedWithEmails,
+      worldShareEnabled,
+      worldShareUrl,
+      setWorldShareEnabled,
+      isOwner,
+      unsubscribing,
       displayColor,
       onColorPicked,
       resetColorToDeterministic,
@@ -319,7 +492,7 @@ export default {
       historyClearedThisSession,
       createdTrack,
       showInstructions,
-      modalTitle,
+      sidebarTitle,
       ingressUrl,
       bodyTemplate,
       instructionsIngressUrl,
@@ -330,7 +503,8 @@ export default {
       save,
       downloadKml,
       confirmClearHistory,
-      confirmDelete
+      confirmDelete,
+      confirmUnsubscribe
     };
   }
 };

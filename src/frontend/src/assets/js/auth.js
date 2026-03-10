@@ -26,6 +26,9 @@ export async function getUserInfo() {
             const response = await fetch('/api/user/status/')
             
             if (!response.ok) {
+                if (response.status === 401) {
+                    return new UserStatus(false, null, null, 0, [], false)
+                }
                 throw new Error(`HTTP error! status: ${response.status}`)
             }
             const userStatusData = await response.json()

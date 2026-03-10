@@ -98,60 +98,21 @@
 
                 <!-- Features Section -->
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Features
-                  </label>
-                  <p class="text-xs text-gray-500 mb-3">Select individual features to include</p>
-                  
-                  <!-- Feature Search -->
-                  <div class="relative mb-3">
-                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <MagnifyingGlassIcon class="h-5 w-5 text-gray-400" />
-                    </div>
-                    <input
-                      v-model="featureSearchQuery"
-                      type="text"
-                      @keydown.enter.prevent
-                      class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                      placeholder="Search features..."
-                    />
-                  </div>
-
-                  <!-- Features List -->
-                  <div v-if="loadingFeatures" class="text-center py-4">
-                    <Loader size="sm" layout="centered" message="Loading features..." />
-                  </div>
-
-                  <div v-else-if="filteredFeatures.length === 0" class="text-center py-4 text-gray-500 text-sm">
-                    <p>No features available</p>
-                  </div>
-
-                  <div v-else class="max-h-48 overflow-y-auto border border-gray-200 rounded-md p-2">
-                    <div
-                      v-for="feature in filteredFeatures"
-                      :key="feature.properties.database_id"
-                      class="flex items-center px-3 py-2 hover:bg-gray-50 rounded space-x-3"
-                    >
-                      <input
-                        type="checkbox"
-                        :id="`feature-${feature.properties.database_id}`"
-                        class="checkbox-custom"
-                        :checked="isFeatureSelected(feature)"
-                        @change="onFeatureCheckboxChange(feature, $event.target.checked)"
-                      />
-                      <label
-                        :for="`feature-${feature.properties.database_id}`"
-                        class="text-sm text-gray-700 truncate"
-                      >
-                        {{ feature.properties.name || 'Unnamed Feature' }}
-                      </label>
-                    </div>
-                  </div>
-
-                  <!-- Selected Features -->
-                  <div class="mt-3">
-                    <p class="text-xs text-gray-500 mb-2">Selected features: {{ formData.feature_ids.length }}</p>
-                  </div>
+                  <SearchableCheckboxList
+                    label="Features"
+                    description="Select individual features to include"
+                    :items="availableFeatures"
+                    :model-value="formData.feature_ids"
+                    @update:model-value="formData.feature_ids = $event"
+                    :get-item-id="(f) => String(f.properties.database_id)"
+                    :get-item-label="(f) => f.properties.name || 'Unnamed Feature'"
+                    search-placeholder="Search features..."
+                    :loading="loadingFeatures"
+                    loading-message="Loading features..."
+                    empty-message="No features available"
+                    selected-count-label="Selected features"
+                    :filter-fn="featureFilterFn"
+                  />
                 </div>
               </div>
 
@@ -193,6 +154,7 @@ import { getCookie } from "@/assets/js/auth.js";
 import BaseModal from '@/components/parts/BaseModal.vue'
 import BaseButton from '@/components/parts/BaseButton.vue'
 import Loader from "@/components/parts/Loader.vue";
+import SearchableCheckboxList from '@/components/parts/SearchableCheckboxList.vue';
 import { MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from "@/utils/tagUtils.js";
 
@@ -202,7 +164,8 @@ export default {
     BaseModal,
     BaseButton,
     Loader,
-    MagnifyingGlassIcon
+    MagnifyingGlassIcon,
+    SearchableCheckboxList
   },
   props: {
     isOpen: {
@@ -224,7 +187,6 @@ export default {
         feature_ids: []
       },
       tagSearchQuery: '',
-      featureSearchQuery: '',
       availableTags: [],
       availableFeatures: [],
       loadingTags: false,
@@ -250,17 +212,6 @@ export default {
       const sortedUserTags = sortUserTagsAlphabetically(userTags);
       const sortedSystemTags = sortTagsByPriority(systemTags);
       return [...sortedUserTags, ...sortedSystemTags];
-    },
-    filteredFeatures() {
-      if (!this.featureSearchQuery.trim()) {
-        return this.availableFeatures;
-      }
-      const query = this.featureSearchQuery.toLowerCase();
-      return this.availableFeatures.filter(f => {
-        const name = (f.properties.name || '').toLowerCase();
-        const description = (f.properties.description || '').toLowerCase();
-        return name.includes(query) || description.includes(query);
-      });
     }
   },
   methods: {
@@ -272,18 +223,11 @@ export default {
         this.formData.tags.splice(index, 1);
       }
     },
-    isFeatureSelected(feature) {
-      const featureId = String(feature.properties.database_id);
-      return this.formData.feature_ids.includes(featureId);
-    },
-    onFeatureCheckboxChange(feature, checked) {
-      const featureId = String(feature.properties.database_id);
-      const index = this.formData.feature_ids.indexOf(featureId);
-      if (checked && index === -1) {
-        this.formData.feature_ids.push(featureId);
-      } else if (!checked && index > -1) {
-        this.formData.feature_ids.splice(index, 1);
-      }
+    featureFilterFn(query, feature) {
+      const q = query.toLowerCase();
+      const name = (feature.properties.name || '').toLowerCase();
+      const description = (feature.properties.description || '').toLowerCase();
+      return name.includes(q) || description.includes(q);
     },
     async fetchTags() {
       this.loadingTags = true;

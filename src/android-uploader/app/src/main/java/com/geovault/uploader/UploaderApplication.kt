@@ -1,6 +1,8 @@
 package com.geovault.uploader
 
 import android.app.Application
+import android.content.Context
+import android.content.Intent
 import com.geovault.common.GeovaultAuthManager
 
 class UploaderApplication : Application(), GeovaultAuthManager.AuthFailureListener {

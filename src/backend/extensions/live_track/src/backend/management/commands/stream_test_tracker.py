@@ -145,7 +145,7 @@ class Command(BaseCommand):
                     broadcast_idx = next((i for i, c in enumerate(coords) if c == new_point), None)
 
                 if broadcast_idx is not None:
-                    broadcast_track_updated(user.id, str(track.id), new_point, extra, index=broadcast_idx)
+                    broadcast_track_updated(track_locked, new_point, extra, index=broadcast_idx)
 
                 count += 1
                 if count % 10 == 0 or count == 1:

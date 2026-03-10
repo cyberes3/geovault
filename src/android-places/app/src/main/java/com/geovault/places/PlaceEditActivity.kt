@@ -230,6 +230,7 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
                 }
             }
         }
+    }
 
     override fun onMapReady(map: MapLibreMap) {
         maplibreMap = map

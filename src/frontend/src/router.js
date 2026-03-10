@@ -57,12 +57,8 @@ const routes = [
         name: 'Admin',
         component: () => import('./components/admin/AdminPanelPage.vue'),
         meta: { requiresAdmin: true }
-    },
-    {
-        path: '/:pathMatch(.*)*',
-        name: 'NotFound',
-        component: () => import('./components/NotFoundPage.vue'),
     }
+    // Catch-all (NotFound) is added in main.js after extension routes so /extensions/* is matched first
 ]
 
 

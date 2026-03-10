@@ -20,6 +20,7 @@
     <color name="surface">#FFFFFF</color>
     <color name="content_on_primary">#FFFFFF</color>
     <color name="border_light">#C4D2ED</color>      <!-- blue-200 -->
+    <color name="divider">#E5E7EB</color>         <!-- light theme divider (gray-200) -->
 
     <!-- Error state (for error_background drawable); matches frontend red-50 / red-200 -->
     <color name="error_light">#FCF2F2</color>

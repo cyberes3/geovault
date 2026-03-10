@@ -313,6 +313,8 @@ class ExtensionRegistry:
         icon = getattr(manifest, 'icon', None)
         # If True, frontend uses full-height map layout for this extension's routes
         map_route = getattr(manifest, 'map_route', False)
+        # If True, frontend treats /extensions/<kebab-name>/share as a public (no-auth) share route
+        public_share_route = getattr(manifest, 'public_share_route', False)
 
         # Store extension metadata (internal use includes urls_module and file paths for fresh ?v= in API)
         self.loaded_extensions[ext_name] = {
@@ -322,6 +324,7 @@ class ExtensionRegistry:
             'frontend_css': frontend_css,
             'icon': icon,  # Optional icon field
             'map_route': map_route,
+            'public_share_route': public_share_route,
             '_urls_module': urls_module,  # Internal only, prefixed with underscore
             '_frontend_entry_path': frontend_entry_path,
             '_frontend_css_path': frontend_css_path,

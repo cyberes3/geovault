@@ -54,11 +54,11 @@ def _apply_cache_headers(response, cache_control, etag=None):
         del response['Set-Cookie']
 
 
-@api_or_login_required_401()
 def tile_proxy(request, service, z, x, y):
     """
     Proxy tile requests to external tile servers to avoid CORS issues.
     Supports disk caching to avoid repeatedly fetching the same tiles.
+    Public (no auth) so public tracker share view can use proxied layers.
 
     Args:
         service: The tile service name (e.g., 'mb-topo')
@@ -191,12 +191,12 @@ def tile_proxy(request, service, z, x, y):
         return HttpResponse(f'Unexpected error', status=500)
 
 
-@api_or_login_required_401()
 def get_tile_sources(request):
     """
     API endpoint to get all available tile sources with their configurations.
 
     Returns JSON response with tile source configurations for the client.
+    Public (no auth) so the public tracker share view can offer layer switching.
     Not cached so clients always get current server config.
     """
     sources = get_tile_sources_for_client()
@@ -206,11 +206,11 @@ def get_tile_sources(request):
     return response
 
 
-@api_or_login_required_401()
 def style_proxy(request, map_id):
     """
     Proxy MapTiler style.json requests and modify tile URLs to use proxy endpoints.
-    
+    Public (no auth) so the public tracker share view can use MapTiler base layers.
+
     Args:
         map_id: The MapTiler map ID (e.g., 'topo-v4')
     """

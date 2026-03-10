@@ -25,7 +25,7 @@ from api.utils.responses import error_response
 from api.utils.responses import handle_404
 from website.config_loader import get_config_loader
 
-from .helpers import broadcast_track_updated, parse_ingress_body, parse_time_to_ms
+from .helpers import broadcast_track_updated, parse_ingress_body, parse_time_to_ms, queue_broadcast_track_updated
 from .models import LiveTrack
 from .validation import LiveTrackIngressBody
 
@@ -119,7 +119,8 @@ def ingress(request):
         broadcast_idx = next((i for i, c in enumerate(coords) if c == new_point), None)
 
     if broadcast_idx is not None:
-        broadcast_track_updated(user.id, str(track.id), new_point, extra, index=broadcast_idx)
+        if not queue_broadcast_track_updated(track, new_point, extra, index=broadcast_idx):
+            broadcast_track_updated(track, new_point, extra, index=broadcast_idx)
     return JsonResponse({"ok": True}, status=200)
 
 
@@ -338,6 +339,7 @@ def app_ingress(request):
             broadcast_idx = None
 
     if broadcast_idx is not None:
-        broadcast_track_updated(track.user.id, str(track.id), last_new_point, last_extra, index=broadcast_idx)
+        if not queue_broadcast_track_updated(track, last_new_point, last_extra, index=broadcast_idx):
+            broadcast_track_updated(track, last_new_point, last_extra, index=broadcast_idx)
 
     return JsonResponse({"ok": True}, status=200)

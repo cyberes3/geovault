@@ -3,6 +3,7 @@ from django.urls import re_path, path
 from users.views import dashboard, check_auth, get_user_storage, change_password_api, get_email_status_api, resend_verification_api
 from users.views.admin_users import list_all_users
 from users.views.api_keys import list_api_keys, create_api_key, delete_api_key, validate_api_key_endpoint
+from users.views.list_users import list_users
 from users.views.oauth_authorized import list_authorized_oauth_tokens, revoke_oauth_token
 
 urlpatterns = [
@@ -19,4 +20,5 @@ urlpatterns = [
     path("api/user/oauth-authorized-tokens/", list_authorized_oauth_tokens, name="api_oauth_authorized_tokens"),
     path("api/user/oauth-authorized-tokens/<int:token_id>/", revoke_oauth_token, name="api_oauth_revoke_token"),
     path("api/admin/users/", list_all_users, name="api_admin_users"),
+    path("api/users/", list_users, name="api_users_list"),
 ]

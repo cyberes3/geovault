@@ -1,7 +1,8 @@
 <template>
-  <BaseModal
-    :is-open="true"
+  <LiveTrackSidebar
+    v-if="!embedded"
     title="Latest Parameters"
+    :container-ref="containerRef"
     @close="$emit('close')"
   >
     <div class="p-4 sm:p-5 space-y-3">
@@ -43,17 +44,58 @@
     <template #actions>
       <BaseButton variant="white" size="sm" @click="$emit('close')">Close</BaseButton>
     </template>
-  </BaseModal>
+  </LiveTrackSidebar>
+  <!-- Embedded: content + footer only (shell is provided by parent) -->
+  <div v-else class="flex-1 min-h-0 flex flex-col">
+    <div class="flex-1 overflow-y-auto min-h-0">
+      <div class="p-4 sm:p-5 space-y-3">
+        <div v-if="track?.name" class="text-sm font-medium text-gray-900 tracking-wide uppercase truncate min-w-0" :title="track.name">
+          {{ track.name }}
+        </div>
+        <div
+          v-if="track?.last_timestamp_ms"
+          class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+        >
+          <span class="font-medium text-gray-900">Last Update</span>
+          <span class="block text-gray-900 truncate" :title="formatTimeLocal(track.last_timestamp_ms)">{{ formatTimeLocal(track.last_timestamp_ms) }}</span>
+        </div>
+        <div v-else class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500">
+          No points yet. Waiting for data…
+        </div>
+        <div
+          v-if="track?.last_position"
+          class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+        >
+          <span class="font-medium text-gray-900">Position</span>
+          <span class="block text-gray-900 mt-0.5">{{ formatLatLon(track.last_position) }}</span>
+        </div>
+        <div v-if="hasStoredParams && sortedParamEntries.length" class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div
+            v-for="[key, value] in sortedParamEntries"
+            :key="key"
+            class="rounded-lg border border-gray-200 bg-white px-3 py-2 min-w-0"
+            :title="key === 'starttimestamp' ? formatDurationRunning(value) : undefined"
+          >
+            <div class="text-xs font-medium text-gray-900 truncate" :title="key === 'starttimestamp' ? undefined : ((paramLabels && paramLabels[key]) || key)">{{ (paramLabels && paramLabels[key]) || key }}</div>
+            <div class="text-sm text-gray-900 break-all mt-0.5">{{ formatParamDisplay(key, value) }}</div>
+          </div>
+        </div>
+        <div v-else-if="track?.last_timestamp_ms || track?.last_position" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500">
+          No extended parameters for the latest point.
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script>
 import { computed } from 'vue';
-import BaseModal from 'platform/components/parts/BaseModal.vue';
+import LiveTrackSidebar from './LiveTrackSidebar.vue';
 import { formatParamDisplay } from './paramFormatters.js';
 
 export default {
   name: 'LatestParamsModal',
-  components: { BaseModal },
+  components: { LiveTrackSidebar },
   props: {
     track: {
       type: Object,
@@ -62,7 +104,16 @@ export default {
     paramLabels: {
       type: Object,
       default: () => ({})
-    }
+    },
+    containerRef: {
+      type: Object,
+      default: null,
+    },
+    /** When true, render only content + footer (no sidebar shell); parent provides the shell. */
+    embedded: {
+      type: Boolean,
+      default: false,
+    },
   },
   emits: ['close'],
   setup(props) {

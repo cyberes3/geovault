@@ -2,11 +2,11 @@
   <BaseModal :is-open="true" title="Configure GPSLogger" :on-top="true" @close="$emit('close')">
     <div class="p-4 space-y-6 text-sm">
       <p class="text-gray-900">
-        In the GPSLogger app, follow these steps to send your location to this track.
+        In the GPSLogger app, follow these steps to send your location to this tracker.
       </p>
       <div v-if="profileUrl" class="space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
         <p class="font-medium text-gray-900">Import Profile</p>
-        <p class="text-gray-700 text-xs">Scan the QR code or copy the profile URL to load this track’s settings into GPSLogger in one step.</p>
+        <p class="text-gray-700 text-xs">Scan the QR code or copy the profile URL to load this tracker’s settings into GPSLogger in one step.</p>
         <div class="flex flex-col sm:flex-row gap-4 items-start">
           <div v-if="qrDataUrl" class="flex-shrink-0">
             <img :src="qrDataUrl" alt="Open in GPSLogger (gpslogger://)" class="w-32 h-32 rounded border border-gray-300" />

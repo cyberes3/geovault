@@ -7,6 +7,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "$SCRIPT_DIR"
 
+# Load src/.env if present (RELEASE_STORE_FILE, ANDROID_KEY_PASSWORD_FILE)
+if [ -f "$SCRIPT_DIR/../.env" ]; then
+    set -a
+    source "$SCRIPT_DIR/../.env"
+    set +a
+fi
+
 # Check if Gradle wrapper exists, if not, generate it
 if [ ! -f "gradlew" ]; then
     echo "Gradle wrapper not found. Attempting to generate wrapper..."
@@ -85,6 +92,14 @@ if [ "$SKIP_MINIFY" = true ]; then
     GRADLE_ARGS+=("-PSKIP_MINIFY=true")
 fi
 if [ "$BUILD_TYPE" = "release" ]; then
+    # ANDROID_KEY_PASSWORD_FILE: path to file with keystore/key password (use chmod 600, ideally outside repo)
+    if [ -n "$ANDROID_KEY_PASSWORD_FILE" ] && [ -f "$ANDROID_KEY_PASSWORD_FILE" ]; then
+        RELEASE_STORE_PASSWORD=$(head -n 1 "$ANDROID_KEY_PASSWORD_FILE" | tr -d '\r\n')
+        RELEASE_KEY_PASSWORD="$RELEASE_STORE_PASSWORD"
+    fi
+    if [ -n "$RELEASE_STORE_FILE" ]; then
+        GRADLE_ARGS+=("-PRELEASE_STORE_FILE=$RELEASE_STORE_FILE")
+    fi
     # Check if passwords are already set as environment variables
     if [ -z "$RELEASE_STORE_PASSWORD" ]; then
         echo -n "Enter keystore password (used for both keystore and key): "

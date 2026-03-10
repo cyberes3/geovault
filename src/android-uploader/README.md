@@ -72,3 +72,11 @@ To build a signed release APK, you need to set up a keystore file and configure 
    - Your key password
 
    The keystore path and alias are configured in `gradle.properties` (no passwords are stored there for security).
+
+3. **Optional: use `src/.env` for non-interactive release builds**
+
+   Copy `src/.env.example` to `src/.env` and set:
+   - `RELEASE_STORE_FILE` – path to your keystore file (e.g. absolute path).
+   - `ANDROID_KEY_PASSWORD_FILE` – (optional) path to a text file containing the keystore password (one line). Use `chmod 600` and keep it outside the repo.
+
+   Then `./build-android.sh release` will use these without prompting. Without `.env`, you can still pass `RELEASE_STORE_PASSWORD` / `RELEASE_KEY_PASSWORD` via the environment or enter them when prompted.

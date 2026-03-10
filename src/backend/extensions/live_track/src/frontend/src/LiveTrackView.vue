@@ -1,28 +1,23 @@
 <template>
   <div ref="rootContainer" class="flex-1 min-h-0 flex flex-col bg-gray-50 overflow-hidden">
-    <!-- Header: Explicitly static on mobile to avoid covering global nav -->
-    <header class="z-50 h-16 px-4 py-2 flex items-center justify-between gap-3 flex-shrink-0 bg-white border-b border-gray-200 sm:col-span-1">
-      <h2 class="text-xl font-bold text-gray-900 truncate min-w-0 tracking-tight">Trackers</h2>
-      <div class="flex items-center gap-2 flex-shrink-0">
-        <select
-          v-model="sortBy"
-          class="select-custom text-sm px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          title="Sort by"
-        >
-          <option value="alphabetical">Name</option>
-          <option value="last_updated">Activity</option>
-          <option value="num_points">Points</option>
-          <option value="newest">Created</option>
-        </select>
-        <button
-          type="button"
-          title="Add track"
-          class="px-2.5 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
-          @click="openCreateModal"
-        >
-          <PlusIcon class="h-5 w-5" />
-        </button>
+    <!-- Header bar: full width; title/sort/+ constrained to list width on desktop -->
+    <header class="z-40 h-16 flex flex-shrink-0 bg-white border-b border-gray-200 sm:flex-row">
+      <div class="w-full sm:w-1/4 flex-shrink-0 px-4 py-2 flex items-center justify-between gap-3 sm:border-r sm:border-gray-200">
+        <h2 class="text-xl font-bold text-gray-900 truncate min-w-0 tracking-tight">Trackers</h2>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <select
+            v-model="sortBy"
+            class="select-custom text-sm px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            title="Sort by"
+          >
+            <option value="alphabetical">Name</option>
+            <option value="last_updated">Activity</option>
+            <option value="num_points">Points</option>
+            <option value="newest">Created</option>
+          </select>
+        </div>
       </div>
+      <div class="hidden sm:block flex-1 min-w-0" aria-hidden="true" />
     </header>
 
     <!-- Desktop: 25% sidebar + 75% map. Mobile: full-width map only. -->
@@ -38,22 +33,184 @@
           <p class="text-sm text-black mt-4">Loading...</p>
         </div>
 
-        <div v-else-if="sortedTrackers.length === 0" class="flex-1 flex flex-col items-center justify-center py-12 px-6 text-center">
-          <div class="w-16 h-16 bg-gray-50 rounded-lg flex items-center justify-center mb-4 text-gray-400">
-            <PlusIcon class="w-8 h-8" />
+        <template v-else>
+          <div class="flex border-b border-gray-200 mb-2 flex-shrink-0">
+            <button
+              v-for="tab in LIST_TABS"
+              :key="tab.id"
+              type="button"
+              :class="[
+                'flex-1 py-2.5 text-sm font-medium border-b-2 transition-colors',
+                listTab === tab.id
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              ]"
+              @click="listTab = tab.id"
+            >
+              {{ tab.label }}
+            </button>
           </div>
-          <h3 class="text-base font-semibold text-gray-900 mb-1">No trackers yet</h3>
-          <p class="text-sm text-gray-500 max-w-xs">Start by creating your first tracker to begin recording data.</p>
-        </div>
 
-        <div
-          v-else
-          ref="listScrollContainerDesktop"
-          class="flex-1 min-h-0 overflow-y-auto space-y-3 px-1 py-1 custom-scrollbar"
-          @click.self="highlightedId = null"
-        >
+          <div v-if="listEmptyForTab" class="flex-1 flex flex-col items-center justify-center py-12 px-6 text-center">
+            <h3 class="text-base font-semibold text-gray-900 mb-1">{{ listTab === 'trackers' ? 'No trackers yet' : listTab === 'groups' ? 'No groups yet' : 'No shared trackers or groups' }}</h3>
+            <p class="text-sm text-gray-500 max-w-xs">{{ listTab === 'trackers' ? 'Start by creating your first tracker to begin recording data.' : listTab === 'groups' ? 'Create a group to organize trackers and share with others.' : 'Trackers and groups shared with you will appear here.' }}</p>
+          </div>
+
           <div
-            v-for="track in sortedTrackers"
+            v-else
+            ref="listScrollContainerDesktop"
+            class="flex-1 min-h-0 overflow-y-auto space-y-3 px-1 py-1 custom-scrollbar"
+            @click.self="highlightedId = null"
+          >
+          <template v-if="listTab === 'groups'">
+          <div
+            v-for="group in visibleGroupsTab"
+            :key="'group-' + group.id"
+            :class="[
+              'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-colors',
+              activeGroupId != null && String(activeGroupId) === String(group.id) ? 'border-blue-500 bg-blue-100' : 'border-gray-200 bg-white hover:bg-gray-50'
+            ]"
+            @click="onGroupListClick(group)"
+          >
+            <div class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-gray-100 border border-gray-200">
+              <Square3Stack3DIcon class="h-6 w-6 text-gray-500" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-bold text-gray-900 truncate">{{ group.name }}</div>
+              <div class="text-xs text-gray-500">{{ (group.track_ids || []).length }} tracker(s)</div>
+            </div>
+            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                type="button"
+                title="View group"
+                class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white"
+                @click.stop="openGroupQuickView(group)"
+              >
+                <EyeIcon class="h-5 w-5" />
+              </button>
+              <template v-if="group.is_owner">
+                <button
+                  type="button"
+                  title="Edit group"
+                  class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white"
+                  @click.stop="openEditGroupModal(group)"
+                >
+                  <PencilIcon class="h-5 w-5" />
+                </button>
+              </template>
+              <template v-else>
+                <button
+                  type="button"
+                  title="Leave group"
+                  class="p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-white text-sm"
+                  @click.stop="leaveGroup(group)"
+                >
+                  Leave
+                </button>
+              </template>
+            </div>
+          </div>
+          </template>
+          <template v-else-if="listTab === 'shared'">
+          <div
+            v-for="group in visibleSharedGroupsTab"
+            :key="'shared-group-' + group.id"
+            :class="[
+              'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-colors',
+              activeGroupId != null && String(activeGroupId) === String(group.id) ? 'border-blue-500 bg-blue-100' : 'border-gray-200 bg-white hover:bg-gray-50'
+            ]"
+            @click="onGroupListClick(group)"
+          >
+            <div class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-gray-100 border border-gray-200">
+              <Square3Stack3DIcon class="h-6 w-6 text-gray-500" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-bold text-gray-900 tracking-tight break-all flex items-center gap-1.5 min-w-0" :title="group.name">
+                <span class="truncate">{{ group.name }}</span>
+                <CloudIcon class="h-4 w-4 text-gray-500 flex-shrink-0" />
+              </div>
+              <div class="text-xs text-gray-500">{{ (group.track_ids || []).length }} tracker(s)</div>
+            </div>
+            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                type="button"
+                title="View group"
+                class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white"
+                @click.stop="openGroupQuickView(group)"
+              >
+                <EyeIcon class="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                title="Leave group"
+                class="p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-white text-sm"
+                @click.stop="leaveGroup(group)"
+              >
+                Leave
+              </button>
+            </div>
+          </div>
+          <div
+            v-for="track in visibleSharedTab"
+            :key="track.id"
+            :data-track-id="track.id"
+            :class="[
+              'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-all',
+              selectedId === track.id
+                ? 'border-blue-500 bg-blue-100'
+                : 'border-blue-100 bg-white hover:bg-blue-50 hover:border-blue-300',
+              highlightedId === track.id && selectedId !== track.id ? 'ring-2 ring-blue-500' : ''
+            ]"
+            @click="onTrackListClick(track)"
+          >
+            <div
+              class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-white border border-gray-100 transition-colors"
+              :style="{ borderLeftColor: track.color || '#3388ff', borderLeftWidth: '4px' }"
+            >
+              <TrackDirectionIcon
+                :color="track.color || '#3388ff'"
+                :angle="getTrackDirectionAngle(track)"
+                :size="26"
+                :selected="selectedId === track.id"
+                reserve-circle
+              />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-bold text-gray-900 tracking-tight break-all flex items-center gap-1.5 min-w-0" :title="track.name">
+                <span class="truncate">{{ track.name }}</span>
+                <CloudIcon v-if="!track.is_owner && track.visibility === 'shared'" class="h-4 w-4 text-gray-500 flex-shrink-0" />
+              </div>
+              <div class="flex items-center gap-1.5 mt-0.5">
+                <div class="text-xs font-medium text-gray-500 truncate">
+                  {{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'Waiting for data...' }}
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+              <button
+                type="button"
+                title="Latest params"
+                class="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
+                @click.stop="openSidebar('params', track.id)"
+              >
+                <TableCellsIcon class="h-5 w-5" />
+              </button>
+              <template v-if="track.is_owner">
+                <button
+                  type="button"
+                  title="Edit"
+                  class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
+                  @click.stop="openEditTrackSidebar(track)"
+                >
+                  <PencilIcon class="h-5 w-5" />
+                </button>
+              </template>
+            </div>
+          </div>
+          </template>
+          <template v-else>
+          <div
+            v-for="track in visibleTrackersTab"
             :key="track.id"
             :data-track-id="track.id"
             :class="[
@@ -79,7 +236,10 @@
             </div>
             
             <div class="flex-1 min-w-0">
-              <div class="font-bold text-gray-900 truncate tracking-tight break-all" :title="track.name">{{ track.name }}</div>
+              <div class="font-bold text-gray-900 tracking-tight break-all flex items-center gap-1.5 min-w-0" :title="track.name">
+                <span class="truncate">{{ track.name }}</span>
+                <CloudIcon v-if="!track.is_owner && track.visibility === 'shared'" class="h-4 w-4 text-gray-500 flex-shrink-0" />
+              </div>
               <div class="flex items-center gap-1.5 mt-0.5">
                 <div class="text-xs font-medium text-gray-500 truncate">
                   {{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'Waiting for data...' }}
@@ -92,56 +252,231 @@
                 type="button"
                 title="Latest params"
                 class="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
-                @click.stop="paramsModalTrackId = track.id"
+                @click.stop="openSidebar('params', track.id)"
               >
                 <TableCellsIcon class="h-5 w-5" />
               </button>
-              <button
-                type="button"
-                title="Edit"
-                class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
-                @click.stop="openEditModal(track)"
-              >
-                <PencilIcon class="h-5 w-5" />
-              </button>
+              <template v-if="track.is_owner">
+                <button
+                  type="button"
+                  title="Edit"
+                  class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
+                  @click.stop="openEditTrackSidebar(track)"
+                >
+                  <PencilIcon class="h-5 w-5" />
+                </button>
+              </template>
             </div>
           </div>
+          </template>
         </div>
+        </template>
       </div>
     </aside>
 
     <!-- Map: 75% on desktop, full width on mobile -->
-    <main class="flex-1 relative min-h-0">
+    <main ref="mapColumnRef" class="live-track-map-column flex-1 relative min-h-0">
       <div ref="mapContainer" class="absolute inset-0 w-full h-full bg-gray-100" />
-      <!-- In-Map Overlays: top-left on mobile, bottom-right on desktop -->
-      <div class="absolute z-10 top-4 left-4 sm:top-auto sm:left-auto sm:bottom-4 sm:right-4 flex flex-col gap-2 bg-white border border-gray-200 rounded overflow-hidden">
+
+      <!-- Selected item chip: group or tracker name, deselect with X -->
+      <div
+        v-if="selectedItemLabel"
+        class="absolute top-3 left-3 z-20 flex items-center gap-2 rounded-lg border border-blue-200 bg-white/95 px-3 py-2 shadow-sm"
+      >
+        <span class="text-sm font-medium text-gray-900 truncate max-w-[12rem]" :title="selectedItemLabel">{{ selectedItemLabel }}</span>
         <button
           type="button"
-          class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
-          title="Map Settings"
-          @click="showLayerModal = true"
+          title="Deselect"
+          class="flex-shrink-0 p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+          @click="deselectSelection"
         >
-          <Square3Stack3DIcon class="w-5 h-5" />
-        </button>
-        <button
-          type="button"
-          class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
-          title="Go to home extent"
-          @click="goHome"
-        >
-          <HomeIcon class="w-5 h-5" />
+          <XMarkIcon class="h-5 w-5" />
         </button>
       </div>
+
+      <!-- Sidebar panel: in-place inside map column so height = map height (no Teleport) -->
+      <div
+        v-if="isMapSidebarOpen"
+        ref="mapSidebarRef"
+        class="absolute inset-0 overflow-hidden flex justify-end z-40"
+        tabindex="-1"
+      >
+        <MapSidebarPanel
+          :title="mapSidebarTitle"
+          :close-emits-overlay-first="sidebarCloseEmitsOverlayFirst"
+          @close="closeMapSidebar"
+          @close-overlay="onParamsClose"
+        >
+          <TrackSidebar
+            v-if="showTrackSidebar"
+            embedded
+            :mode="trackSidebarMode"
+            :track="trackSidebarTrack"
+            :loading="trackSidebarLoading"
+            :user-login="userLogin"
+            @close="closeMapSidebar"
+            @saved="onTrackSidebarSaved"
+            @deleted="onTrackDeleted"
+            @unsubscribed="onTrackSidebarUnsubscribed"
+          />
+          <LatestParamsModal
+            v-else-if="paramsModalTrackId != null"
+            embedded
+            :track="paramsModalTrack"
+            :param-labels="paramLabels"
+            @close="onParamsClose"
+          />
+          <GroupsSidebarContent
+            v-else-if="showGroupsSidebar"
+            :groups="groups"
+            :trackers="trackers"
+            :api="api"
+            :initial-group-id="groupsSidebarInitialGroupId"
+            @saved="onGroupsSidebarSaved"
+            @refreshed="onGroupsSidebarRefreshed"
+            @leave="onGroupsSidebarLeave"
+          />
+          <div
+            v-else-if="showGroupQuickViewSidebar && groupQuickViewGroup"
+            class="flex-1 min-h-0 flex flex-col p-4 overflow-hidden"
+          >
+            <div class="flex-shrink-0 space-y-3">
+              <BaseButton
+                variant="primary"
+                color="blue"
+                size="sm"
+                class="w-full"
+                :disabled="!(groupQuickViewGroup.track_ids || []).length"
+                @click="onGroupQuickViewFitMap"
+              >
+                Fit map to group
+              </BaseButton>
+            </div>
+            <div class="flex-1 min-h-0 overflow-y-auto mt-3 space-y-2">
+              <p class="text-sm font-medium text-gray-700">Trackers in group</p>
+              <div
+                v-for="track in groupQuickViewTracks"
+                :key="track.id"
+                class="flex items-center gap-2 p-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
+              >
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium text-gray-900 truncate">{{ track.name }}</div>
+                  <div class="text-xs text-gray-500">{{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'No points' }}</div>
+                </div>
+                <div class="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    type="button"
+                    title="Zoom to tracker"
+                    class="p-2 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50"
+                    @click="zoomToTrackInGroup(track)"
+                  >
+                    <EyeIcon class="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Latest params"
+                    class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                    @click="openParamsFromGroupQuickView(track)"
+                  >
+                    <TableCellsIcon class="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+              <p v-if="groupQuickViewTracks.length === 0" class="text-sm text-gray-500 py-2">No trackers in this group</p>
+            </div>
+          </div>
+          <SharedWithMeSidebarContent
+            v-else-if="showSharedWithMeSidebar"
+            :trackers="trackers"
+            :incoming-trackers="incomingSharedTrackers"
+            :adding-incoming-id="addingIncomingId"
+            :leaving-share-id="leavingShareId"
+            :hidden-track-ids="hiddenTrackIds"
+            :unsubscribing-id="unsubscribingId"
+            @toggle-visibility="toggleTrackVisibility"
+            @unsubscribe="onSharedUnsubscribe"
+            @leave-share="onLeaveShare"
+            @add-incoming="onAddIncomingTracker"
+            @open-discover="showDiscoverModal = true"
+          />
+          <MapLayerSidebar
+            v-else-if="showLayerSidebar"
+            :tile-sources="tileSources"
+            :selected-layer="selectedLayer"
+            @update:selected-layer="onLayerSidebarChange"
+          />
+        </MapSidebarPanel>
+      </div>
     </main>
+
+    <!-- Action strip: top bar on mobile (compact), right strip on desktop -->
+    <aside
+      class="flex flex-shrink-0 flex-row sm:flex-col w-full sm:w-12 min-h-0 border-b sm:border-b-0 sm:border-l border-gray-200 bg-white items-center justify-center sm:justify-between py-1.5 sm:py-2 gap-2 sm:gap-1 order-first sm:order-last"
+      aria-label="Actions"
+    >
+      <div class="flex flex-row sm:flex-col items-center gap-2 sm:gap-1">
+        <button
+          type="button"
+          title="New tracker"
+          :class="SIDEBAR_ACTION_BUTTON_CLASS"
+          @click="openCreateTrackSidebar()"
+        >
+          <PlusIcon :class="SIDEBAR_ACTION_ICON_CLASS" />
+        </button>
+        <button
+          type="button"
+          title="Groups"
+          :class="SIDEBAR_ACTION_BUTTON_CLASS"
+          @click="openSidebar('groups')"
+        >
+          <UserGroupIcon :class="SIDEBAR_ACTION_ICON_CLASS" />
+        </button>
+        <button
+          type="button"
+          title="Shared with me"
+          :class="SIDEBAR_ACTION_BUTTON_CLASS"
+          @click="openSidebar('sharedWithMe')"
+        >
+          <span class="relative inline-flex">
+            <ShareIcon :class="SIDEBAR_ACTION_ICON_CLASS" />
+            <span
+              v-if="incomingSharedTrackers.length > 0"
+              class="absolute -top-1 -right-1 min-w-[0.875rem] h-4 px-0.5 flex items-center justify-center rounded-full bg-blue-500 text-white text-[9px] font-semibold leading-none"
+            >
+              {{ incomingSharedTrackers.length > 99 ? '99+' : incomingSharedTrackers.length }}
+            </span>
+          </span>
+        </button>
+      </div>
+      <div class="flex flex-row sm:flex-col items-center gap-2 sm:gap-1">
+        <button
+          type="button"
+          title="Map Settings"
+          :class="SIDEBAR_ACTION_BUTTON_CLASS"
+          @click="openSidebar('layer')"
+        >
+          <Square3Stack3DIcon :class="SIDEBAR_ACTION_ICON_CLASS" />
+        </button>
+        <button
+          type="button"
+          title="Go to home extent"
+          :class="SIDEBAR_ACTION_BUTTON_CLASS"
+          @click="goHome"
+        >
+          <HomeIcon :class="SIDEBAR_ACTION_ICON_CLASS" />
+        </button>
+      </div>
+    </aside>
     </div>
 
     <!-- Tracker List: Mobile – custom drawer (no third-party sheet). Collapse = set height to 25%, no close animation. -->
     <Teleport v-if="isMobileView" to="body">
       <div
-        v-if="isMobileView && isSheetOpen"
+        v-if="isMobileView && isSheetOpen && !isMapSidebarOpen"
         ref="mobileDrawerEl"
         :class="['mobile-tracker-drawer', { 'mobile-tracker-drawer--dragging': isDrawerDragging }]"
         :style="{ height: (mobileDrawerHeightPx || mobileDrawerSnapPx[0] || 200) + 'px' }"
+        class="flex flex-col min-h-0"
       >
         <div
           class="mobile-drawer-handle"
@@ -170,21 +505,158 @@
             <Loader size="md" :show-message="false" layout="inline" />
             <p class="text-sm text-black mt-4">Loading...</p>
           </div>
-          <div v-else-if="sortedTrackers.length === 0" class="flex-1 flex flex-col items-center justify-center py-12 px-6 text-center">
-            <div class="w-16 h-16 bg-gray-50 rounded-lg flex items-center justify-center mb-4 text-gray-400">
-              <PlusIcon class="w-8 h-8" />
+          <template v-else>
+            <div class="flex border-b border-gray-200 mb-2 flex-shrink-0">
+              <button
+                v-for="tab in LIST_TABS"
+                :key="tab.id"
+                type="button"
+                :class="[
+                  'flex-1 py-2.5 text-sm font-medium border-b-2 transition-colors',
+                  listTab === tab.id
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ]"
+                @click="listTab = tab.id"
+              >
+                {{ tab.label }}
+              </button>
             </div>
-            <h3 class="text-base font-semibold text-gray-900 mb-1">No trackers yet</h3>
-            <p class="text-sm text-gray-500 max-w-xs">Start by creating your first tracker to begin recording data.</p>
-          </div>
-          <div
-            v-else
-            ref="listScrollContainerMobile"
-            :class="['flex-1 min-h-0 space-y-3 px-1 py-1', isDrawerAtPeek ? 'mobile-drawer-content--no-scroll' : 'overflow-y-auto custom-scrollbar']"
-            @click.self="highlightedId = null"
-          >
+            <div v-if="listEmptyForTab" class="flex-1 flex flex-col items-center justify-center py-12 px-6 text-center">
+              <h3 class="text-base font-semibold text-gray-900 mb-1">{{ listTab === 'trackers' ? 'No trackers yet' : listTab === 'groups' ? 'No groups yet' : 'No shared trackers or groups' }}</h3>
+              <p class="text-sm text-gray-500 max-w-xs">{{ listTab === 'trackers' ? 'Start by creating your first tracker to begin recording data.' : listTab === 'groups' ? 'Create a group to organize trackers and share with others.' : 'Trackers and groups shared with you will appear here.' }}</p>
+            </div>
             <div
-              v-for="track in sortedTrackers"
+              v-else
+              ref="listScrollContainerMobile"
+              :class="['flex-1 min-h-0 space-y-3 px-1 py-1', isDrawerAtPeek ? 'mobile-drawer-content--no-scroll' : 'overflow-y-auto custom-scrollbar']"
+              @click.self="highlightedId = null"
+            >
+              <template v-if="listTab === 'groups'">
+                <div class="space-y-3">
+                  <div
+                    v-for="group in visibleGroupsTab"
+                    :key="'group-' + group.id"
+                    :class="[
+                      'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-colors',
+                      activeGroupId != null && String(activeGroupId) === String(group.id) ? 'border-blue-500 bg-blue-100' : 'border-gray-200 bg-white hover:bg-gray-50'
+                    ]"
+                    @click="onGroupListClick(group)"
+                  >
+              <div class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-gray-100 border border-gray-200">
+                <Square3Stack3DIcon class="h-6 w-6 text-gray-500" />
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="font-bold text-gray-900 truncate">{{ group.name }}</div>
+                <div class="text-xs text-gray-500">{{ (group.track_ids || []).length }} tracker(s)</div>
+              </div>
+              <div class="flex items-center gap-1 opacity-60">
+                <button type="button" title="View group" class="p-2 rounded-xl text-gray-400 hover:text-blue-600" @click.stop="openGroupQuickView(group)">
+                  <EyeIcon class="h-5 w-5" />
+                </button>
+                <template v-if="group.is_owner">
+                  <button type="button" title="Edit group" class="p-2 rounded-xl text-gray-400 hover:text-blue-600" @click.stop="openEditGroupModal(group)">
+                    <PencilIcon class="h-5 w-5" />
+                  </button>
+                </template>
+                <template v-else>
+                  <button type="button" title="Leave group" class="p-2 rounded-xl text-gray-400 hover:text-red-600 text-sm" @click.stop="leaveGroup(group)">Leave</button>
+                </template>
+              </div>
+            </div>
+                </div>
+              </template>
+              <template v-else-if="listTab === 'shared'">
+                <div class="space-y-3">
+                  <div
+                    v-for="group in visibleSharedGroupsTab"
+                    :key="'shared-group-' + group.id"
+                    :class="[
+                      'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-colors',
+                      activeGroupId != null && String(activeGroupId) === String(group.id) ? 'border-blue-500 bg-blue-100' : 'border-gray-200 bg-white hover:bg-gray-50'
+                    ]"
+                    @click="onGroupListClick(group)"
+                  >
+                    <div class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-gray-100 border border-gray-200">
+                      <Square3Stack3DIcon class="h-6 w-6 text-gray-500" />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="font-bold text-gray-900 tracking-tight break-all flex items-center gap-1.5 min-w-0" :title="group.name">
+                        <span class="truncate">{{ group.name }}</span>
+                        <CloudIcon class="h-4 w-4 text-gray-500 flex-shrink-0" />
+                      </div>
+                      <div class="text-xs text-gray-500">{{ (group.track_ids || []).length }} tracker(s)</div>
+                    </div>
+                    <div class="flex items-center gap-1 opacity-60">
+                      <button type="button" title="View group" class="p-2 rounded-xl text-gray-400 hover:text-blue-600" @click.stop="openGroupQuickView(group)">
+                        <EyeIcon class="h-5 w-5" />
+                      </button>
+                      <button type="button" title="Leave group" class="p-2 rounded-xl text-gray-400 hover:text-red-600 text-sm" @click.stop="leaveGroup(group)">Leave</button>
+                    </div>
+                  </div>
+                  <div
+                    v-for="track in visibleSharedTab"
+                    :key="track.id"
+                    :data-track-id="track.id"
+                    :class="[
+                      'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-all',
+                      selectedId === track.id
+                        ? 'border-blue-500 bg-blue-100'
+                        : 'border-blue-100 bg-white hover:bg-blue-50 hover:border-blue-300',
+                      highlightedId === track.id && selectedId !== track.id ? 'ring-2 ring-blue-500' : ''
+                    ]"
+                    @click="onTrackListClick(track)"
+                  >
+                    <div
+                      class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-white border border-gray-100 transition-colors"
+                      :style="{ borderLeftColor: track.color || '#3388ff', borderLeftWidth: '4px' }"
+                    >
+                      <TrackDirectionIcon
+                        :color="track.color || '#3388ff'"
+                        :angle="getTrackDirectionAngle(track)"
+                        :size="26"
+                        :selected="selectedId === track.id"
+                        reserve-circle
+                      />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="font-bold text-gray-900 tracking-tight break-all flex items-center gap-1.5 min-w-0" :title="track.name">
+                        <span class="truncate">{{ track.name }}</span>
+                        <CloudIcon v-if="!track.is_owner && track.visibility === 'shared'" class="h-4 w-4 text-gray-500 flex-shrink-0" />
+                      </div>
+                      <div class="flex items-center gap-1.5 mt-0.5">
+                        <div class="text-xs font-medium text-gray-500 truncate">
+                          {{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'Waiting for data...' }}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-1 opacity-60 focus-within:opacity-100 transition-opacity">
+                      <button
+                        type="button"
+                        title="Latest params"
+                        class="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
+                        @click.stop="openSidebar('params', track.id)"
+                      >
+                        <TableCellsIcon class="h-5 w-5" />
+                      </button>
+                      <template v-if="track.is_owner">
+                        <button
+                          type="button"
+                          title="Edit"
+                          class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
+                          @click.stop="openEditTrackSidebar(track)"
+                        >
+                          <PencilIcon class="h-5 w-5" />
+                        </button>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+              </template>
+              <template v-else>
+                <div class="space-y-3">
+                  <div
+                    v-for="track in visibleTrackersTab"
               :key="track.id"
               :data-track-id="track.id"
               :class="[
@@ -209,7 +681,10 @@
                 />
               </div>
               <div class="flex-1 min-w-0">
-                <div class="font-bold text-gray-900 truncate tracking-tight break-all" :title="track.name">{{ track.name }}</div>
+                <div class="font-bold text-gray-900 tracking-tight break-all flex items-center gap-1.5 min-w-0" :title="track.name">
+                  <span class="truncate">{{ track.name }}</span>
+                  <CloudIcon v-if="!track.is_owner && track.visibility === 'shared'" class="h-4 w-4 text-gray-500 flex-shrink-0" />
+                </div>
                 <div class="flex items-center gap-1.5 mt-0.5">
                   <div class="text-xs font-medium text-gray-500 truncate">
                     {{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'Waiting for data...' }}
@@ -221,80 +696,54 @@
                   type="button"
                   title="Latest params"
                   class="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
-                  @click.stop="paramsModalTrackId = track.id"
+                  @click.stop="openSidebar('params', track.id)"
                 >
                   <TableCellsIcon class="h-5 w-5" />
                 </button>
-                <button
-                  type="button"
-                  title="Edit"
-                  class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
-                  @click.stop="openEditModal(track)"
-                >
-                  <PencilIcon class="h-5 w-5" />
-                </button>
+                <template v-if="track.is_owner">
+                  <button
+                    type="button"
+                    title="Edit"
+                    class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
+                    @click.stop="openEditTrackSidebar(track)"
+                  >
+                    <PencilIcon class="h-5 w-5" />
+                  </button>
+                </template>
               </div>
             </div>
-          </div>
-        </div>
+                </div>
+              </template>
+            </div>
+        </template>
+      </div>
       </div>
     </Teleport>
 
-    <BaseModal
-      :is-open="showLayerModal"
-      title="Map Settings"
-      @close="showLayerModal = false"
-    >
-      <div class="p-4">
-        <label for="live-track-layer-select" class="block text-sm font-medium text-gray-700 mb-2">Layer</label>
-        <select
-          id="live-track-layer-select"
-          v-model="selectedLayer"
-          class="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          title="Map layer"
-          @change="onLayerChange"
-        >
-          <option v-for="source in tileSources" :key="source.id" :value="source.id">
-            {{ source.name }}
-          </option>
-        </select>
-      </div>
-      <template #actions>
-        <BaseButton variant="white" size="sm" @click="showLayerModal = false">
-          Close
-        </BaseButton>
-      </template>
-    </BaseModal>
-
-    <TrackModal
-      v-if="showModal"
-      :mode="modalMode"
-      :track="modalTrack"
-      :loading="modalTrackLoading"
-      :user-login="userLogin"
-      @close="showModal = false"
-      @saved="onModalSaved"
-      @deleted="onTrackDeleted"
-    />
-    <LatestParamsModal
-      v-if="paramsModalTrackId != null"
-      :track="paramsModalTrack"
-      :param-labels="paramLabels"
-      @close="paramsModalTrackId = null"
+    <DiscoverTrackersModal
+      v-if="showDiscoverModal"
+      :api="api"
+      @close="showDiscoverModal = false"
+      @saved="onDiscoverSaved"
     />
   </div>
 </template>
 
 <script>
 import { ref, computed, onMounted, onActivated, onBeforeUnmount, inject, watch, nextTick } from 'vue';
-import { PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon } from '@heroicons/vue/24/outline';
+import { PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon } from '@heroicons/vue/24/outline';
 import { useWindowSize, useScrollLock } from '@vueuse/core';
-import BaseModal from 'platform/components/parts/BaseModal.vue';
 import { getIngressBodyTemplate } from './ingressBodyTemplateCache.js';
 import { trackersLiveSocket } from './trackersLiveSocket.js';
-import TrackModal from './TrackModal.vue';
+import BaseButton from 'platform/components/parts/BaseButton.vue';
+import TrackSidebar from './TrackSidebar.vue';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
 import LatestParamsModal from './LatestParamsModal.vue';
+import GroupsSidebarContent from './GroupsSidebarContent.vue';
+import DiscoverTrackersModal from './DiscoverTrackersModal.vue';
+import MapLayerSidebar from './MapLayerSidebar.vue';
+import MapSidebarPanel from './MapSidebarPanel.vue';
+import SharedWithMeSidebarContent from './SharedWithMeSidebarContent.vue';
 
 const maplibregl = window.gv_core?.maplibre || window.maplibregl;
 
@@ -311,6 +760,10 @@ const MAX_ZOOM = 18;
 const MAX_JUMP_METERS = 100 * 1609.344;
 const LAYER_MAX_ZOOM = MAX_ZOOM + 1;
 const TILE_SOURCES_API_URL = '/api/tiles/sources/';
+/** Shared button class for all right-sidebar action icons. Ring only on focus-visible so tap on mobile doesn't show thick border; no tap highlight. */
+const SIDEBAR_ACTION_BUTTON_CLASS =
+  'p-1.5 sm:p-2 rounded-lg text-blue-600 hover:bg-blue-50 active:bg-blue-100 focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white [-webkit-tap-highlight-color:transparent]';
+const SIDEBAR_ACTION_ICON_CLASS = 'h-5 w-5 sm:h-6 sm:w-6';
 const DEFAULT_MAP_KEY = 'extensions.live_track.default_map';
 const DEFAULT_SORT_KEY = 'extensions.live_track.default_sort';
 const VALID_SORT_VALUES = new Set(['alphabetical', 'last_updated', 'num_points', 'newest']);
@@ -377,13 +830,19 @@ function rasterizeArrowToImageData(color, selected) {
 
 export default {
   name: 'LiveTrackView',
-  components: { BaseModal, TrackModal, TrackDirectionIcon, LatestParamsModal, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon },
+  components: { BaseButton, TrackSidebar, TrackDirectionIcon, LatestParamsModal, GroupsSidebarContent, DiscoverTrackersModal, MapSidebarPanel, MapLayerSidebar, SharedWithMeSidebarContent, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon },
   setup() {
     const api = inject('extensionApi');
     const trackers = ref([]);
+    const groups = ref([]);
     const sortBy = ref('alphabetical');
+    const showDiscoverModal = ref(false);
+    /** Track IDs hidden from the map (eye/eye-slash). Reactive: replace Set to trigger updates. */
+    const hiddenTrackIds = ref(new Set());
+    const unsubscribingId = ref(null);
     const loading = ref(true);
     const selectedId = ref(null);
+    const activeGroupId = ref(null);
     const followLocked = ref(false);
     const isAutoMoving = ref(false);
     const isMobileView = ref(
@@ -447,6 +906,10 @@ export default {
       return track.last_timestamp_ms > fiveMinutesAgo;
     }
 
+    const sortedGroups = computed(() => {
+      return [...groups.value].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    });
+
     const sortedTrackers = computed(() => {
       const list = [...trackers.value];
       switch (sortBy.value) {
@@ -466,8 +929,50 @@ export default {
           return list.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
       }
     });
-    const showModal = ref(false);
-    const showLayerModal = ref(false);
+
+    const listTab = ref('trackers');
+    const LIST_TABS = [
+      { id: 'trackers', label: 'Trackers' },
+      { id: 'groups', label: 'Groups' },
+      { id: 'shared', label: 'Shared' },
+    ];
+    const visibleTrackersTab = computed(() =>
+      sortedTrackers.value.filter((t) => t.is_owner === true)
+    );
+    const visibleSharedTab = computed(() => {
+      const sharedGroups = sortedGroups.value.filter((g) => g.is_owner !== true);
+      const trackIdsInSharedGroups = new Set(
+        sharedGroups.flatMap((g) => (g.track_ids || []).map((id) => String(id)))
+      );
+      return sortedTrackers.value.filter(
+        (t) => t.is_owner !== true && !trackIdsInSharedGroups.has(String(t.id))
+      );
+    });
+    const visibleGroupsTab = computed(() =>
+      sortedGroups.value.filter((g) => g.is_owner === true)
+    );
+    const visibleSharedGroupsTab = computed(() =>
+      sortedGroups.value.filter((g) => g.is_owner !== true)
+    );
+    const activeGroup = computed(() => {
+      const id = activeGroupId.value;
+      if (id == null) return null;
+      return groups.value.find((g) => String(g.id) === String(id)) ?? null;
+    });
+    const selectedItemLabel = computed(() => {
+      if (activeGroup.value) return activeGroup.value.name ?? '';
+      const id = selectedId.value;
+      if (id == null) return null;
+      const track = trackers.value.find((t) => String(t.id) === String(id));
+      return track?.name ?? null;
+    });
+    const listEmptyForTab = computed(() => {
+      if (listTab.value === 'trackers') return visibleTrackersTab.value.length === 0;
+      if (listTab.value === 'groups') return visibleGroupsTab.value.length === 0;
+      if (listTab.value === 'shared') return visibleSharedTab.value.length === 0 && visibleSharedGroupsTab.value.length === 0;
+      return true;
+    });
+    const showTrackSidebar = ref(false);
     const paramsModalTrackId = ref(null);
     const paramsModalTrack = computed(() => {
       const id = paramsModalTrackId.value;
@@ -476,15 +981,69 @@ export default {
       return t ?? null;
     });
     const paramLabels = ref({});
-    const modalMode = ref('create');
-    const modalTrack = ref(null);
-    const modalTrackLoading = ref(false);
+    const trackSidebarMode = ref('create');
+    const trackSidebarTrack = ref(null);
+    const trackSidebarLoading = ref(false);
     const mapContainer = ref(null);
+    const mapColumnRef = ref(null);
+    const mapSidebarRef = ref(null);
     const listScrollContainerDesktop = ref(null);
     const listScrollContainerMobile = ref(null);
     const listScrollContainer = computed(() =>
       isMobileView.value ? listScrollContainerMobile.value : listScrollContainerDesktop.value
     );
+    const showGroupsSidebar = ref(false);
+    const groupsSidebarInitialGroupId = ref(null);
+    const showGroupQuickViewSidebar = ref(false);
+    const groupQuickViewGroup = ref(null);
+    /** When set, closing the params sidebar should return to this group quick view instead of closing the sidebar. */
+    const groupQuickViewReturnAfterParams = ref(null);
+    const showSharedWithMeSidebar = ref(false);
+    const incomingSharedTrackers = ref([]);
+    const addingIncomingId = ref(null);
+    const leavingShareId = ref(null);
+    const showLayerSidebar = ref(false);
+
+    const isMapSidebarOpen = computed(
+      () =>
+        showTrackSidebar.value ||
+        paramsModalTrackId.value != null ||
+        showGroupsSidebar.value ||
+        showGroupQuickViewSidebar.value ||
+        showSharedWithMeSidebar.value ||
+        showLayerSidebar.value
+    );
+
+    const mapSidebarTitle = computed(() => {
+      if (showTrackSidebar.value) return trackSidebarMode.value === 'create' ? 'New tracker' : 'Edit tracker';
+      if (paramsModalTrackId.value != null) return 'Latest Parameters';
+      if (showGroupsSidebar.value) return 'Groups';
+      if (showGroupQuickViewSidebar.value && groupQuickViewGroup.value) return groupQuickViewGroup.value.name || 'Group';
+      if (showSharedWithMeSidebar.value) return 'Shared with me';
+      if (showLayerSidebar.value) return 'Map Settings';
+      return '';
+    });
+
+    /** When true, panel header X emits close-overlay so we pop back to group quick view instead of closing the sidebar. */
+    const sidebarCloseEmitsOverlayFirst = computed(
+      () => paramsModalTrackId.value != null && groupQuickViewReturnAfterParams.value != null
+    );
+
+    const groupQuickViewTracks = computed(() => {
+      const g = groupQuickViewGroup.value;
+      if (!g?.track_ids?.length) return [];
+      return (g.track_ids || [])
+        .map((id) => trackers.value.find((t) => String(t.id) === String(id)))
+        .filter(Boolean);
+    });
+
+    watch(
+      () => isMapSidebarOpen.value,
+      (open) => {
+        if (open) nextTick(() => mapSidebarRef.value?.focus());
+      }
+    );
+
     const highlightedId = ref(null);
     const userLogin = ref('');
     const tileSources = ref([]);
@@ -573,6 +1132,18 @@ export default {
       };
     }
 
+    async function fetchGroups() {
+      try {
+        const res = await api.get('/groups/');
+        groups.value = Array.isArray(res.data) ? res.data : [];
+      } catch (e) {
+        const err = api.handleError && api.handleError(e);
+        if (window.gv_core?.GeoVault?.toast) {
+          window.gv_core.GeoVault.toast.error(err?.message || 'Failed to load groups');
+        }
+      }
+    }
+
     async function fetchTrackers() {
       loading.value = true;
       try {
@@ -583,7 +1154,13 @@ export default {
           raw.map(async (t) => {
             try {
               const geomRes = await api.get(`/trackers/${t.id}/geometry/`);
-              return normalizeTrackForMemory(geomRes.data);
+              // Preserve list-only fields (is_owner, owner_email, visibility) — geometry endpoint doesn't return them
+              return normalizeTrackForMemory({
+                ...geomRes.data,
+                is_owner: t.is_owner,
+                owner_email: t.owner_email,
+                visibility: t.visibility
+              });
             } catch {
               return normalizeTrackForMemory({ ...t, geometry: { type: 'LineString', coordinates: [] } });
             }
@@ -599,6 +1176,20 @@ export default {
         }
       } finally {
         loading.value = false;
+      }
+    }
+
+    async function fetchIncomingShared() {
+      try {
+        const res = await api.get('/trackers/available-to-add/');
+        const data = res.data || {};
+        incomingSharedTrackers.value = Array.isArray(data.shared_with_me) ? data.shared_with_me : [];
+      } catch (e) {
+        const err = api.handleError && api.handleError(e);
+        if (window.gv_core?.GeoVault?.toast) {
+          window.gv_core.GeoVault.toast.error(err?.message || 'Failed to load incoming shares');
+        }
+        incomingSharedTrackers.value = [];
       }
     }
 
@@ -651,8 +1242,10 @@ export default {
     }
 
     function buildLinesGeoJSON() {
+      const hidden = hiddenTrackIds.value;
       const features = [];
       for (const track of trackers.value) {
+        if (hidden.has(track.id)) continue;
         const coordsSorted = getCoordsSortedByTime(track);
         const coords = coordsSorted.map((c) => [c[0], c[1]]);
         if (coords.length < 2) continue;
@@ -679,8 +1272,10 @@ export default {
     }
 
     function buildPointsGeoJSON() {
+      const hidden = hiddenTrackIds.value;
       const features = [];
       for (const track of trackers.value) {
+        if (hidden.has(track.id)) continue;
         const coordsSorted = getCoordsSortedByTime(track);
         const last = coordsSorted.length ? coordsSorted[coordsSorted.length - 1] : null;
         const pos = (last && last.length >= 2) ? [last[0], last[1]] : (track.last_position ? [track.last_position.lon, track.last_position.lat] : null);
@@ -1165,6 +1760,7 @@ export default {
 
     function onTrackListClick(track) {
       highlightedId.value = null;
+      activeGroupId.value = null;
       if (selectedId.value === track.id) {
         selectedId.value = null;
         followLocked.value = false;
@@ -1304,41 +1900,378 @@ export default {
       }
     }
 
-    function openCreateModal() {
-      modalMode.value = 'create';
-      modalTrack.value = null;
-      showModal.value = true;
+    function openCreateTrackSidebar() {
+      if (showTrackSidebar.value && trackSidebarMode.value === 'create') { closeMapSidebar(); return; }
+      trackSidebarMode.value = 'create';
+      trackSidebarTrack.value = null;
+      openSidebar('track');
     }
 
-    function openEditModal(track) {
-      modalMode.value = 'edit';
-      modalTrack.value = null;
-      modalTrackLoading.value = true;
-      showModal.value = true;
+    function openCreateGroupModal() {
+      groupsSidebarInitialGroupId.value = null;
+      openSidebar('groups');
+    }
+
+    function openEditGroupModal(group) {
+      openSidebar('groups', group?.id ?? null);
+    }
+
+    function closeMapSidebar() {
+      showTrackSidebar.value = false;
+      paramsModalTrackId.value = null;
+      groupQuickViewReturnAfterParams.value = null;
+      showGroupsSidebar.value = false;
+      groupsSidebarInitialGroupId.value = null;
+      showGroupQuickViewSidebar.value = false;
+      groupQuickViewGroup.value = null;
+      showSharedWithMeSidebar.value = false;
+      showLayerSidebar.value = false;
+    }
+
+    function onParamsClose() {
+      if (groupQuickViewReturnAfterParams.value) {
+        paramsModalTrackId.value = null;
+        const group = groupQuickViewReturnAfterParams.value;
+        groupQuickViewReturnAfterParams.value = null;
+        showGroupQuickViewSidebar.value = true;
+        groupQuickViewGroup.value = group;
+      } else {
+        closeMapSidebar();
+      }
+    }
+
+    function openParamsFromGroupQuickView(track) {
+      if (!track?.id || !groupQuickViewGroup.value) return;
+      groupQuickViewReturnAfterParams.value = groupQuickViewGroup.value;
+      paramsModalTrackId.value = track.id;
+      showGroupQuickViewSidebar.value = false;
+    }
+
+    /** Open one sidebar and close the others. type: 'track' | 'params' | 'groups' | 'groupQuickView' | 'sharedWithMe' | 'layer'. payload: for 'params' the track id; for 'groups' optional group id; for 'groupQuickView' the group object. Clicking the same menubar icon again closes the sidebar. */
+    function openSidebar(type, payload) {
+      if (type === 'groups' && showGroupsSidebar.value) { closeMapSidebar(); return; }
+      if (type === 'sharedWithMe' && showSharedWithMeSidebar.value) { closeMapSidebar(); return; }
+      if (type === 'layer' && showLayerSidebar.value) { closeMapSidebar(); return; }
+      showTrackSidebar.value = false;
+      paramsModalTrackId.value = null;
+      groupQuickViewReturnAfterParams.value = null;
+      showGroupsSidebar.value = false;
+      groupsSidebarInitialGroupId.value = null;
+      showGroupQuickViewSidebar.value = false;
+      groupQuickViewGroup.value = null;
+      showSharedWithMeSidebar.value = false;
+      showLayerSidebar.value = false;
+      if (type === 'track') showTrackSidebar.value = true;
+      else if (type === 'params') paramsModalTrackId.value = payload ?? null;
+      else if (type === 'groups') {
+        showGroupsSidebar.value = true;
+        if (payload != null && payload !== '') groupsSidebarInitialGroupId.value = payload;
+      } else if (type === 'groupQuickView' && payload) {
+        showGroupQuickViewSidebar.value = true;
+        groupQuickViewGroup.value = payload;
+      } else if (type === 'sharedWithMe') {
+        showSharedWithMeSidebar.value = true;
+        fetchIncomingShared();
+      }
+      else if (type === 'layer') showLayerSidebar.value = true;
+    }
+
+    function onLayerSidebarChange(layerValue) {
+      selectedLayer.value = layerValue;
+      onLayerChange();
+    }
+
+    function onGroupsSidebarSaved() {
+      fetchGroups();
+      fetchTrackers();
+    }
+
+    async function onGroupsSidebarRefreshed() {
+      await fetchGroups();
+      await fetchTrackers();
+    }
+
+    function removeGroupFromLocalState(group) {
+      const groupId = group?.id;
+      if (groupId == null) return;
+      const trackIdsInGroup = new Set((group.track_ids || []).map((id) => String(id)));
+      groups.value = groups.value.filter((g) => String(g.id) !== String(groupId));
+      trackers.value = trackers.value.filter((t) => !trackIdsInGroup.has(String(t.id)));
+      if (String(activeGroupId.value) === String(groupId)) activeGroupId.value = null;
+      if (groupQuickViewGroup.value && String(groupQuickViewGroup.value.id) === String(groupId)) {
+        showGroupQuickViewSidebar.value = false;
+        groupQuickViewGroup.value = null;
+      }
+      if (selectedId.value != null && trackIdsInGroup.has(String(selectedId.value))) selectedId.value = null;
+      updateMapFeatures();
+    }
+
+    async function onGroupsSidebarLeave(group) {
+      if (!group?.id) return;
+      if (!confirm('Leave this group? You will no longer see its trackers on the map or in Shared.')) return;
+      try {
+        await api.delete(`/groups/${group.id}/leave/`);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Left group');
+        removeGroupFromLocalState(group);
+      } catch (e) {
+        const err = api.handleError?.(e);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to leave group');
+      }
+    }
+
+    function fitMapToGroupTracks(group) {
+      if (!map || !group?.track_ids?.length) return;
+      const trackIds = new Set(group.track_ids);
+      const coords = [];
+      for (const track of trackers.value) {
+        if (trackIds.has(track.id)) {
+          coords.push(...getLastNCoords(track, LAST_POINTS_FIT));
+        }
+      }
+      if (coords.length === 0) return;
+      fitBoundsFromCoords(coords);
+    }
+
+    function onGroupListClick(group) {
+      activeGroupId.value = group?.id ?? null;
+      selectedId.value = null;
+      fitMapToGroupTracks(group);
+    }
+
+    function openGroupQuickView(group) {
+      openSidebar('groupQuickView', group);
+    }
+
+    function onGroupQuickViewFitMap() {
+      const g = groupQuickViewGroup.value;
+      if (!g) return;
+      fitMapToGroupTracks(g);
+      activeGroupId.value = g.id ?? null;
+    }
+
+    function zoomToTrackInGroup(track) {
+      highlightedId.value = null;
+      activeGroupId.value = null;
+      selectedId.value = track.id;
+      followLocked.value = true;
+      updateMapFeatures();
+      const lastPoint = getLastNCoords(track, 1);
+      if (map && lastPoint.length > 0) {
+        isAutoMoving.value = true;
+        const zoom = Math.max(map.getZoom(), 14);
+        map.easeTo({ center: lastPoint[0], zoom, duration: MAP_SNAP_DURATION });
+        setTimeout(() => {
+          isAutoMoving.value = false;
+        }, MAP_SNAP_DURATION + 50);
+      }
+      if (isMobileView.value) collapseDrawerToPeek();
+    }
+
+    function deselectGroup() {
+      activeGroupId.value = null;
+    }
+
+    function deselectSelection() {
+      activeGroupId.value = null;
+      selectedId.value = null;
+      if (isMobileView.value) collapseDrawerToPeek();
+    }
+
+    async function leaveGroup(group) {
+      if (!group?.id) return;
+      if (!confirm('Leave this group? You will no longer see its trackers on the map or in Shared.')) return;
+      try {
+        await api.delete(`/groups/${group.id}/leave/`);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Left group');
+        removeGroupFromLocalState(group);
+      } catch (e) {
+        const err = api.handleError?.(e);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to leave group');
+      }
+    }
+
+    function openEditTrackSidebar(track) {
+      trackSidebarMode.value = 'edit';
+      trackSidebarTrack.value = null;
+      trackSidebarLoading.value = true;
+      openSidebar('track');
       nextTick(() => {
         api.get(`/trackers/${track.id}/`)
           .then((res) => {
-            modalTrack.value = res.data;
+            trackSidebarTrack.value = res.data;
           })
           .catch((e) => {
             const err = api.handleError?.(e);
-            if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to load track');
-            showModal.value = false;
+            if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to load tracker');
+            showTrackSidebar.value = false;
           })
           .finally(() => {
-            modalTrackLoading.value = false;
+            trackSidebarLoading.value = false;
           });
       });
     }
 
-    function onModalSaved() {
-      showModal.value = false;
+    function onTrackSidebarSaved() {
+      showTrackSidebar.value = false;
       fetchTrackers();
     }
 
+    function onTrackSidebarUnsubscribed(trackId) {
+      showTrackSidebar.value = false;
+      if (!trackId) return;
+      const idStr = String(trackId);
+      moveTrackToIncoming(trackId);
+      trackers.value = trackers.value.filter((t) => String(t.id) !== idStr);
+      if (String(selectedId.value) === idStr) selectedId.value = null;
+      const s = new Set(hiddenTrackIds.value);
+      s.delete(trackId);
+      hiddenTrackIds.value = s;
+      updateMapFeatures();
+    }
+
     function onTrackDeleted() {
-      showModal.value = false;
+      showTrackSidebar.value = false;
       fetchTrackers();
+    }
+
+    function onCreateGroupSaved() {
+      closeMapSidebar();
+      fetchGroups();
+    }
+
+    function toggleTrackVisibility(trackId) {
+      const s = new Set(hiddenTrackIds.value);
+      if (s.has(trackId)) s.delete(trackId);
+      else s.add(trackId);
+      hiddenTrackIds.value = s;
+    }
+
+    function stubForIncoming(track) {
+      if (!track) return null;
+      return {
+        id: track.id,
+        name: track.name ?? '',
+        owner_email: track.owner_email ?? '',
+      };
+    }
+
+    function moveTrackToIncoming(trackId) {
+      const idStr = String(trackId);
+      const track = trackers.value.find((t) => String(t.id) === idStr);
+      const stub = stubForIncoming(track);
+      if (stub) {
+        incomingSharedTrackers.value = incomingSharedTrackers.value.filter((t) => String(t.id) !== idStr);
+        incomingSharedTrackers.value = [...incomingSharedTrackers.value, stub];
+      }
+    }
+
+    async function onLeaveShare(trackId) {
+      if (!trackId) return;
+      if (!confirm('Remove yourself from this share? The owner will no longer have you as a recipient, and you won\'t see this tracker in Incoming again.')) return;
+      leavingShareId.value = trackId;
+      try {
+        await api.delete(`/trackers/${trackId}/share-with-me/`);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Removed from share');
+        const idStr = String(trackId);
+        trackers.value = trackers.value.filter((t) => String(t.id) !== idStr);
+        incomingSharedTrackers.value = incomingSharedTrackers.value.filter((t) => String(t.id) !== idStr);
+        if (String(selectedId.value) === idStr) selectedId.value = null;
+        const s = new Set(hiddenTrackIds.value);
+        s.delete(trackId);
+        hiddenTrackIds.value = s;
+        updateMapFeatures();
+      } catch (e) {
+        const err = api.handleError?.(e);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to leave share');
+      } finally {
+        leavingShareId.value = null;
+      }
+    }
+
+    async function onSharedUnsubscribe(trackId) {
+      if (!trackId) return;
+      if (!confirm('Remove this tracker from your list? You can add it again from Shared with me.')) return;
+      unsubscribingId.value = trackId;
+      try {
+        await api.delete(`/trackers/${trackId}/subscribe/`);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Tracker removed');
+        const idStr = String(trackId);
+        moveTrackToIncoming(trackId);
+        trackers.value = trackers.value.filter((t) => String(t.id) !== idStr);
+        if (String(selectedId.value) === idStr) selectedId.value = null;
+        const s = new Set(hiddenTrackIds.value);
+        s.delete(trackId);
+        hiddenTrackIds.value = s;
+        updateMapFeatures();
+      } catch (e) {
+        const err = api.handleError?.(e);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to remove');
+      } finally {
+        unsubscribingId.value = null;
+      }
+    }
+
+    function onDiscoverSaved() {
+      showDiscoverModal.value = false;
+      fetchTrackers();
+    }
+
+    function addOptimisticTracker(incoming) {
+      const idStr = String(incoming.id);
+      if (trackers.value.some((t) => String(t.id) === idStr)) return;
+      const stub = normalizeTrackForMemory({
+        id: incoming.id,
+        name: incoming.name ?? '',
+        owner_email: incoming.owner_email ?? '',
+        is_owner: false,
+        visibility: 'shared',
+        geometry: { type: 'LineString', coordinates: [] },
+      });
+      trackers.value = [...trackers.value, stub];
+    }
+
+    async function fetchAndMergeTracker(trackerId) {
+      try {
+        const [metaRes, geomRes] = await Promise.all([
+          api.get(`/trackers/${trackerId}/`),
+          api.get(`/trackers/${trackerId}/geometry/`),
+        ]);
+        const t = metaRes.data;
+        const normalized = normalizeTrackForMemory({
+          ...geomRes.data,
+          is_owner: t.is_owner,
+          owner_email: t.owner_email,
+          visibility: t.visibility,
+        });
+        const idStr = String(trackerId);
+        const idx = trackers.value.findIndex((tr) => String(tr.id) === idStr);
+        if (idx >= 0) {
+          trackers.value = trackers.value.slice(0, idx).concat(normalized).concat(trackers.value.slice(idx + 1));
+        } else {
+          trackers.value = [...trackers.value, normalized];
+        }
+        updateMapFeatures();
+      } catch {
+        // Keep optimistic stub; map may have no geometry for this track
+      }
+    }
+
+    async function onAddIncomingTracker(tracker) {
+      if (!tracker?.id || addingIncomingId.value != null) return;
+      addingIncomingId.value = tracker.id;
+      try {
+        await api.post(`/trackers/${tracker.id}/subscribe/`);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Tracker added');
+        incomingSharedTrackers.value = incomingSharedTrackers.value.filter((t) => String(t.id) !== String(tracker.id));
+        addOptimisticTracker(tracker);
+        updateMapFeatures();
+        fetchAndMergeTracker(tracker.id);
+      } catch (e) {
+        const err = api.handleError?.(e);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to add tracker');
+      } finally {
+        addingIncomingId.value = null;
+      }
     }
 
     watch(selectedId, () => {
@@ -1348,6 +2281,14 @@ export default {
       }
       // When unselecting we only unlock; do not reset zoom (no fitMapToTracks)
     });
+
+    watch(
+      () => hiddenTrackIds.value,
+      () => {
+        updateMapFeatures();
+      },
+      { deep: false }
+    );
 
     function applyDefaultSortFromStore() {
       const store = window.gv_core?.store;
@@ -1377,6 +2318,8 @@ export default {
       if (ingressData?.param_labels && typeof ingressData.param_labels === 'object') {
         paramLabels.value = ingressData.param_labels;
       }
+      fetchGroups();
+      fetchIncomingShared();
       fetchTrackers().finally(() => {
         requestAnimationFrame(() => initMap());
       });
@@ -1390,41 +2333,52 @@ export default {
       }
 
       trackUpdatedHandler = (data) => {
-        if (!data || !data.track_id || !Array.isArray(data.point)) return;
+        if (!data || !data.track_id) return;
+        const updates = Array.isArray(data.updates) ? data.updates : (data.point != null ? [{ point: data.point, props: data.props, index: data.index }] : null);
+        if (!updates?.length) return;
         const idx = trackers.value.findIndex((t) => t.id === data.track_id);
         if (idx < 0) return;
-        const track = trackers.value[idx];
-        const geom = track.geometry ? { ...track.geometry, coordinates: [...(track.geometry.coordinates || [])] } : { type: 'LineString', coordinates: [] };
+        let track = trackers.value[idx];
+        let geom = track.geometry ? { ...track.geometry, coordinates: [...(track.geometry.coordinates || [])] } : { type: 'LineString', coordinates: [] };
         if (!geom.coordinates) geom.coordinates = [];
-
-        const indexOutOfBounds =
-          typeof data.index === 'number' &&
-          Number.isInteger(data.index) &&
-          (data.index < 0 || data.index > geom.coordinates.length);
-        if (indexOutOfBounds) {
-          api.get(`/trackers/${data.track_id}/geometry/`).then((geomRes) => {
-            const normalized = normalizeTrackForMemory(geomRes.data);
-            const trackIdx = trackers.value.findIndex((t) => t.id === data.track_id);
-            if (trackIdx < 0) return;
-            trackers.value = trackers.value.slice(0, trackIdx).concat(normalized).concat(trackers.value.slice(trackIdx + 1));
-            updateMapFeatures();
-            if (data.track_id === selectedId.value && followLocked.value && map) {
-              scheduleCenterOnSelectedTrack();
-            }
-          }).catch(() => {});
-          return;
-        }
-
-        if (typeof data.index === 'number' && Number.isInteger(data.index)) {
-          geom.coordinates.splice(data.index, 0, data.point);
-        } else {
-          geom.coordinates.push(data.point);
+        let latestPointParams = {};
+        for (const u of updates) {
+          const point = u?.point;
+          if (!Array.isArray(point)) continue;
+          const indexOutOfBounds =
+            typeof u.index === 'number' &&
+            Number.isInteger(u.index) &&
+            (u.index < 0 || u.index > geom.coordinates.length);
+          if (indexOutOfBounds) {
+            api.get(`/trackers/${data.track_id}/geometry/`).then((geomRes) => {
+              const trackIdx = trackers.value.findIndex((t) => t.id === data.track_id);
+              if (trackIdx < 0) return;
+              const existing = trackers.value[trackIdx];
+              const normalized = normalizeTrackForMemory({
+                ...geomRes.data,
+                is_owner: existing.is_owner,
+                owner_email: existing.owner_email,
+                visibility: existing.visibility
+              });
+              trackers.value = trackers.value.slice(0, trackIdx).concat(normalized).concat(trackers.value.slice(trackIdx + 1));
+              updateMapFeatures();
+              if (data.track_id === selectedId.value && followLocked.value && map) {
+                scheduleCenterOnSelectedTrack();
+              }
+            }).catch(() => {});
+            return;
+          }
+          if (typeof u.index === 'number' && Number.isInteger(u.index)) {
+            geom.coordinates.splice(u.index, 0, point);
+          } else {
+            geom.coordinates.push(point);
+          }
+          if (u.props && typeof u.props === 'object') latestPointParams = u.props;
         }
         const last = geom.coordinates[geom.coordinates.length - 1];
-        const newPoint = data.point;
+        const newPoint = updates[updates.length - 1]?.point;
         const last_position = newPoint && newPoint.length >= 2 ? { lon: newPoint[0], lat: newPoint[1] } : (last && last.length >= 2 ? { lon: last[0], lat: last[1] } : null);
         const last_timestamp_ms = newPoint && newPoint.length >= 3 ? newPoint[2] : (last && last.length >= 3 ? last[2] : null);
-        const latestPointParams = data.props && typeof data.props === 'object' ? data.props : {};
         const updated = { ...track, geometry: geom, last_position, last_timestamp_ms, latestPointParams };
         trackers.value = trackers.value.slice(0, idx).concat(updated).concat(trackers.value.slice(idx + 1));
         updateMapFeatures();
@@ -1451,6 +2405,7 @@ export default {
         if (e.matches && mobileDrawerHeightPx.value === 0) mobileDrawerHeightPx.value = mobileDrawerSnapPx.value[0];
       };
       mq.addEventListener('change', mobileQueryListener);
+
     });
 
     onActivated(() => {
@@ -1500,20 +2455,61 @@ export default {
     });
 
     return {
+      api,
       trackers,
+      groups,
       sortBy,
       sortedTrackers,
+      sortedGroups,
+      listTab,
+      LIST_TABS,
+      visibleTrackersTab,
+      visibleSharedTab,
+      visibleGroupsTab,
+      visibleSharedGroupsTab,
+      activeGroup,
+      selectedItemLabel,
+      listEmptyForTab,
       loading,
       selectedId,
+      activeGroupId,
       highlightedId,
-      showModal,
-      showLayerModal,
+      showTrackSidebar,
+      SIDEBAR_ACTION_BUTTON_CLASS,
+      SIDEBAR_ACTION_ICON_CLASS,
+      showDiscoverModal,
+      hiddenTrackIds,
+      unsubscribingId,
       paramsModalTrackId,
       paramsModalTrack,
       paramLabels,
-      modalMode,
-      modalTrack,
+      trackSidebarMode,
+      trackSidebarTrack,
+      trackSidebarLoading,
       mapContainer,
+      mapColumnRef,
+      mapSidebarRef,
+      mapSidebarTitle,
+      sidebarCloseEmitsOverlayFirst,
+      closeMapSidebar,
+      openSidebar,
+      showGroupsSidebar,
+      groupsSidebarInitialGroupId,
+      showGroupQuickViewSidebar,
+      groupQuickViewGroup,
+      groupQuickViewTracks,
+      openGroupQuickView,
+      onGroupQuickViewFitMap,
+      openParamsFromGroupQuickView,
+      zoomToTrackInGroup,
+      showSharedWithMeSidebar,
+      incomingSharedTrackers,
+      addingIncomingId,
+      leavingShareId,
+      onAddIncomingTracker,
+      onLeaveShare,
+      showLayerSidebar,
+      isMapSidebarOpen,
       userLogin,
       tileSources,
       selectedLayer,
@@ -1531,10 +2527,25 @@ export default {
       getTrackDirectionAngle,
       goHome,
       onLayerChange,
+      onLayerSidebarChange,
       onTrackListClick,
-      openCreateModal,
-      openEditModal,
-      onModalSaved,
+      openCreateTrackSidebar,
+      openEditTrackSidebar,
+      openCreateGroupModal,
+      openEditGroupModal,
+      onGroupsSidebarSaved,
+      onGroupsSidebarRefreshed,
+      onGroupsSidebarLeave,
+      onDiscoverSaved,
+      toggleTrackVisibility,
+      onSharedUnsubscribe,
+      onGroupListClick,
+      deselectGroup,
+      deselectSelection,
+      fitMapToGroupTracks,
+      leaveGroup,
+      onTrackSidebarSaved,
+      onTrackSidebarUnsubscribed,
       onTrackDeleted,
       isRecentlyUpdated,
       rootContainer,
@@ -1546,6 +2557,19 @@ export default {
 </script>
 
 <style scoped>
+/* No focus ring on map area (e.g. when ESC moves focus from sidebar) */
+.live-track-map-column:focus,
+.live-track-map-column:focus-visible,
+.live-track-map-column:focus-within {
+  outline: none !important;
+  box-shadow: none !important;
+}
+:deep(.live-track-map-column *:focus),
+:deep(.live-track-map-column *:focus-visible) {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .mobile-tracker-drawer {
   position: fixed;
   bottom: 0;

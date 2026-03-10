@@ -558,6 +558,10 @@ async function loadExtensions() {
             .filter(ext => ext && ext.map_route)
             .map(ext => `/extensions/${ext.name.replace(/_/g, '-')}`);
         store.commit('setExtensionMapRoutePrefixes', mapPrefixes);
+        const publicSharePrefixes = (Array.isArray(extensions) ? extensions : [])
+            .filter(ext => ext && ext.public_share_route)
+            .map(ext => `/extensions/${ext.name.replace(/_/g, '-')}/share`);
+        store.commit('setExtensionPublicShareRoutePrefixes', publicSharePrefixes);
         const successfullyLoaded = [];
 
         for (const ext of extensions) {
@@ -645,8 +649,14 @@ async function loadExtensions() {
     }
 }
 
-// Start app after loading extensions
+// Start app after loading extensions (extension routes are added during loadExtensions)
 loadExtensions().then(() => {
+    // Add catch-all last so /extensions/* routes match before NotFound
+    router.addRoute({
+        path: '/:pathMatch(.*)*',
+        name: 'NotFound',
+        component: () => import('./components/NotFoundPage.vue'),
+    });
     app.use(router)
         .use(store)
         .mount('#app');

@@ -9,7 +9,14 @@ from unittest.mock import MagicMock, patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from extensions.live_track.src.backend.models import LiveTrack
+from extensions.live_track.src.backend.models import (
+    LiveTrack,
+    LiveTrackGroup,
+    LiveTrackGroupMember,
+    LiveTrackGroupMembership,
+    LiveTrackShare,
+    LiveTrackSubscription,
+)
 from extensions.live_track.src.backend.validation import get_ingress_body_template
 
 
@@ -167,6 +174,177 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(response.status_code, 200)
         names = [t["name"] for t in response.json()]
         self.assertEqual(names, ["Alpha", "Bravo", "Charlie"])
+
+    def test_list_returns_is_owner_for_owned_tracks(self):
+        """GET trackers/ includes is_owner true and no owner_email for owned tracks."""
+        with _patch_live_track_enabled():
+            self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Mine"}),
+                content_type="application/json",
+            )
+            response = self.client.get("/api/extensions/live-track/trackers/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        self.assertTrue(data[0]["is_owner"])
+        self.assertNotIn("owner_email", data[0])
+
+    def test_subscribe_success(self):
+        """POST trackers/<id>/subscribe/ returns 201 when track is public and user does not own it."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Public Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        track.visibility = "public"
+        track.save(update_fields=["visibility"])
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/subscribe/",
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(LiveTrackSubscription.objects.filter(user=self.other_user, track=track).exists())
+        self.client.force_login(self.user)
+
+    def test_subscribe_own_track_returns_400(self):
+        """POST subscribe to own track returns 400."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Own"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/subscribe/",
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 400)
+
+    def test_unsubscribe_removes_from_list(self):
+        """DELETE trackers/<id>/subscribe/ removes subscription."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Shared"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        track.visibility = "public"
+        track.save(update_fields=["visibility"])
+        LiveTrackSubscription.objects.create(user=self.other_user, track=track)
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.delete(f"/api/extensions/live-track/trackers/{track_id}/subscribe/")
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(LiveTrackSubscription.objects.filter(user=self.other_user, track=track).exists())
+        self.client.force_login(self.user)
+
+    def test_available_to_add_returns_public_and_shared(self):
+        """GET trackers/available-to-add/ returns public and shared_with_me sections."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Public One"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        LiveTrack.objects.filter(id=track_id).update(visibility="public")
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.get("/api/extensions/live-track/trackers/available-to-add/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("public", data)
+        self.assertIn("shared_with_me", data)
+        self.assertEqual(len(data["public"]), 1)
+        self.assertEqual(data["public"][0]["id"], track_id)
+        self.client.force_login(self.user)
+
+    def test_post_settings_visibility_and_share_params(self):
+        """POST settings can update visibility and share_params_with_recipients."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Vis"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "public",
+                    "share_params_with_recipients": True,
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["visibility"], "public")
+        self.assertTrue(data["share_params_with_recipients"])
+
+    def test_post_settings_shared_with_emails_sync(self):
+        """POST settings with visibility=shared and shared_with_emails syncs LiveTrackShare."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Shared Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        self.assertTrue(LiveTrackShare.objects.filter(track=track, shared_with=self.other_user).exists())
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [],
+                }),
+                content_type="application/json",
+            )
+        self.assertFalse(LiveTrackShare.objects.filter(track=track).exists())
+
+    def test_non_owner_never_receives_ser(self):
+        """GET trackers/<id>/geometry/ for subscribed track never includes 'ser' in point_params."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "WithSer"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        track.visibility = "public"
+        track.share_params_with_recipients = True
+        track.point_params = [{"ser": "device-123", "acc": 5.0}]
+        track.save(update_fields=["visibility", "share_params_with_recipients", "point_params"])
+        LiveTrackSubscription.objects.create(user=self.other_user, track=track)
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/geometry/")
+        self.assertEqual(response.status_code, 200)
+        params = response.json().get("point_params", [])
+        self.assertTrue(all("ser" not in p for p in params), "ser must never be sent to non-owner")
+        self.client.force_login(self.user)
 
     def test_get_track(self):
         """GET trackers/<id>/ returns 200 with metadata, latest params, and latest 100 coordinates as geometry."""
@@ -1554,6 +1732,146 @@ class TestLiveTrackIngress(TestCase):
         self.assertEqual(coords[0][2], 1705312800000)
 
 
+class TestLiveTrackGroups(TestCase):
+    """Test group CRUD, add/remove tracks, members, leave."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email="groupuser@example.com",
+            password="testpass123",
+            username="groupuser",
+        )
+        self.other_user = User.objects.create_user(
+            email="othergroup@example.com",
+            password="otherpass123",
+            username="othergroup",
+        )
+        self.client.force_login(self.user)
+
+    def test_group_list_create(self):
+        """GET groups/ returns empty list; POST creates group."""
+        with _patch_live_track_enabled():
+            response = self.client.get("/api/extensions/live-track/groups/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "My Group"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertIn("id", data)
+        self.assertEqual(data["name"], "My Group")
+        self.assertTrue(data["is_owner"])
+        self.assertIn("track_ids", data)
+
+    def test_group_get_patch_delete(self):
+        """GET/PATCH/DELETE groups/<id>/ for owner."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Edit Me"}),
+                content_type="application/json",
+            )
+        group_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.get(f"/api/extensions/live-track/groups/{group_id}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["name"], "Edit Me")
+        with _patch_live_track_enabled():
+            response = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"name": "Updated"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["name"], "Updated")
+        with _patch_live_track_enabled():
+            response = self.client.delete(f"/api/extensions/live-track/groups/{group_id}/")
+        self.assertEqual(response.status_code, 204)
+        with _patch_live_track_enabled():
+            response = self.client.get(f"/api/extensions/live-track/groups/{group_id}/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_group_add_remove_track(self):
+        """POST groups/<id>/tracks/ and DELETE groups/<id>/tracks/<track_id>/."""
+        with _patch_live_track_enabled():
+            track_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Track In Group"}),
+                content_type="application/json",
+            )
+        track_id = track_resp.json()["id"]
+        with _patch_live_track_enabled():
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "With Tracks"}),
+                content_type="application/json",
+            )
+        group_id = group_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/groups/{group_id}/tracks/",
+                data=json.dumps({"track_id": track_id}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(track_id, response.json()["track_ids"])
+        with _patch_live_track_enabled():
+            response = self.client.delete(
+                f"/api/extensions/live-track/groups/{group_id}/tracks/{track_id}/"
+            )
+        self.assertEqual(response.status_code, 204)
+        with _patch_live_track_enabled():
+            data = self.client.get(f"/api/extensions/live-track/groups/{group_id}/").json()
+        self.assertNotIn(track_id, data["track_ids"])
+
+    def test_group_leave(self):
+        """Non-owner can leave group via DELETE groups/<id>/leave/."""
+        with _patch_live_track_enabled():
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Invite Group"}),
+                content_type="application/json",
+            )
+        group_id = group_resp.json()["id"]
+        group = LiveTrackGroup.objects.get(id=group_id)
+        LiveTrackGroupMembership.objects.create(group=group, user=self.other_user)
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.delete(f"/api/extensions/live-track/groups/{group_id}/leave/")
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(
+            LiveTrackGroupMembership.objects.filter(group=group, user=self.other_user).exists()
+        )
+        self.client.force_login(self.user)
+
+    def test_group_list_includes_member_groups(self):
+        """GET groups/ returns groups I own and groups I am a member of."""
+        with _patch_live_track_enabled():
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Owned"}),
+                content_type="application/json",
+            )
+        group_id = group_resp.json()["id"]
+        group = LiveTrackGroup.objects.get(id=group_id)
+        LiveTrackGroupMembership.objects.create(group=group, user=self.other_user)
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.get("/api/extensions/live-track/groups/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["name"], "Owned")
+        self.assertFalse(data[0]["is_owner"])
+        self.assertIn("owner_email", data[0])
+        self.client.force_login(self.user)
+
+
 class TestLiveTrackAppIngress(TestCase):
     """Test app-ingress requires auth."""
 
@@ -1570,11 +1888,25 @@ class TestLiveTrackAppIngress(TestCase):
 
 
 class TestBroadcastTrackUpdated(TestCase):
-    """Test that broadcast_track_updated sends to live_track channel group only (standalone trackers-live WS)."""
+    """Test that broadcast_track_updated sends to owner and subscriber live_track channels."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email="broadcast@example.com",
+            password="testpass123",
+            username="broadcastuser",
+        )
 
     def test_broadcast_track_updated_sends_to_live_track_group(self):
         from extensions.live_track.src.backend.helpers import broadcast_track_updated
 
+        with _patch_live_track_enabled():
+            track = LiveTrack.objects.create(
+                name="Broadcast Track",
+                user=self.user,
+                tracker_secret="secret123",
+            )
         sent = []
 
         async def mock_group_send(group, message):
@@ -1585,17 +1917,18 @@ class TestBroadcastTrackUpdated(TestCase):
 
         with patch("extensions.live_track.src.backend.helpers.get_channel_layer", return_value=mock_layer):
             broadcast_track_updated(
-                user_id=42,
-                track_id="track-123",
+                track,
                 point=[10.0, 45.0, 1700000000000],
                 props={"accuracy": 10},
                 index=0,
             )
 
-        self.assertEqual(len(sent), 1, "group_send should be called once (live_track only)")
-        self.assertEqual(sent[0][0], "live_track_42")
-        message = sent[0][1]
+        self.assertGreaterEqual(len(sent), 1, "group_send called at least for owner")
+        owner_channel = f"live_track_{self.user.id}"
+        owner_sends = [s for s in sent if s[0] == owner_channel]
+        self.assertEqual(len(owner_sends), 1)
+        message = owner_sends[0][1]
         self.assertEqual(message["type"], "live_track_track_updated")
-        self.assertEqual(message["data"]["track_id"], "track-123")
+        self.assertEqual(message["data"]["track_id"], str(track.id))
         self.assertEqual(message["data"]["point"], [10.0, 45.0, 1700000000000])
         self.assertEqual(message["data"]["index"], 0)

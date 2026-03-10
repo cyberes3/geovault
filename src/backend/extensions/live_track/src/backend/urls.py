@@ -1,11 +1,17 @@
 from django.urls import path
 
 from . import views
+from . import public_views
 
 urlpatterns = [
+    path("public/share/<str:share_id>/info/", public_views.public_share_info),
+    path("public/share/<str:share_id>/", public_views.public_share_data),
     path("trackers/", views.tracker_list_create),
+    path("trackers/available-to-add/", views.tracker_available_to_add),
     path("tracker-check/", views.tracker_check),
     path("trackers/<str:tracker_id>/clear-history/", views.tracker_clear_history),
+    path("trackers/<str:tracker_id>/subscribe/", views.tracker_subscribe_delete),
+    path("trackers/<str:tracker_id>/share-with-me/", views.tracker_leave_share),
     path("trackers/<str:tracker_id>/settings/", views.tracker_post_settings),
     path("trackers/<str:tracker_id>/", views.tracker_get_patch_delete),
     path("trackers/<str:tracker_id>/geometry/", views.tracker_get_geometry),
@@ -17,4 +23,11 @@ urlpatterns = [
     path("ingress/", views.ingress),
     path("ingress", views.ingress),  # no slash: GPSLogger may send here; redirect would drop POST body
     path("app-ingress/", views.app_ingress),
+    path("groups/", views.group_list_create),
+    path("groups/<str:group_id>/", views.group_get_patch_delete),
+    path("groups/<str:group_id>/tracks/", views.group_add_track),
+    path("groups/<str:group_id>/tracks/<str:track_id>/", views.group_remove_track),
+    path("groups/<str:group_id>/members/", views.group_add_member),
+    path("groups/<str:group_id>/members/<str:user_id>/", views.group_remove_member),
+    path("groups/<str:group_id>/leave/", views.group_leave),
 ]

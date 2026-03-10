@@ -153,6 +153,14 @@ systemctl enable --now geovault
 systemctl status geovault
 ```
 
+Flusher service for the live track extension:
+```shell
+sudo cp installation/geovault-live-track-flush.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now geovault-live-track-flush
+sudo systemctl status geovault-live-track-flush
+```
+
 ## Overpass Server
 
 You can use a third party [Overpass API server](https://wiki.openstreetmap.org/wiki/Overpass_API) to perform reverse

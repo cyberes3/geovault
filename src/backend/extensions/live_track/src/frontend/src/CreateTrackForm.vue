@@ -5,7 +5,7 @@
       <input
         :value="name"
         type="text"
-        placeholder="Track name"
+        placeholder="Tracker name"
         class="w-full border border-gray-300 px-3 py-2 rounded-lg"
         @input="$emit('update:name', ($event.target && $event.target.value) || '')"
       />

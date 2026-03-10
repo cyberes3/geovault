@@ -1,7 +1,7 @@
 <template>
   <div class="p-4 space-y-4">
     <p class="text-sm text-amber-800 bg-amber-50 p-3 rounded">
-      Keep your tracker password secret. Anyone who has it can send location data to this track.
+      Keep your tracker password secret. Anyone who has it can send location data to this tracker.
     </p>
     <div class="space-y-2">
       <label class="text-sm font-medium text-gray-700">URL</label>

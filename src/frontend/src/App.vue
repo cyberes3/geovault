@@ -344,7 +344,7 @@ export default {
       return prefixes.some(prefix => path.startsWith(prefix));
     },
     isPublicShareRoute() {
-      return this.$route.path === '/mapshare'
+      return this.isPublicSharePath(this.$route.path);
     }
   },
   watch: {
@@ -357,8 +357,8 @@ export default {
           this.$store.commit('userSettings', null);
           // Redirect to login if not on a public share route
           const hash = window.location.hash || '';
-          const isPublicShare = hash.startsWith('#/mapshare');
-          if (!isPublicShare) {
+          const pathFromHash = hash.replace(/^#/, '').split('?')[0];
+          if (!this.isPublicSharePath(pathFromHash)) {
             const loginUrl = window.location.origin + '/accounts/login/';
             window.location.replace(loginUrl);
           }
@@ -381,7 +381,7 @@ export default {
           return;
         }
         // Redirect to login if userInfo is null and not on a public share route
-        if (to.path !== '/mapshare' && !this.userInfo) {
+        if (!this.isPublicShareRoute && !this.userInfo) {
           const loginUrl = window.location.origin + '/accounts/login/';
           window.location.replace(loginUrl);
           return;
@@ -394,7 +394,7 @@ export default {
         }
 
         // When navigating to authenticated routes, ensure WebSocket is connected if user is authorized
-        if (to.path !== '/mapshare' && this.userInfo && !realtimeSocket.isConnected) {
+        if (!this.isPublicShareRoute && this.userInfo && !realtimeSocket.isConnected) {
           this.setupRealtimeConnection();
         }
       },
@@ -415,11 +415,18 @@ export default {
     }
   },
   methods: {
+    isPublicSharePath(path) {
+      if (!path) return false;
+      if (path === '/mapshare') return true;
+      const prefixes = this.$store.state.extensionPublicShareRoutePrefixes || [];
+      return prefixes.some(prefix => path.startsWith(prefix));
+    },
     async checkAuth() {
       // Check if we're on a public share route using window.location.hash
       // since $route might not be ready yet
       const hash = window.location.hash || '';
-      const isPublicShare = hash.startsWith('#/mapshare');
+      const pathFromHash = hash.replace(/^#/, '').split('?')[0];
+      const isPublicShare = this.isPublicSharePath(pathFromHash);
 
       this.userInfoLoading = true;
       

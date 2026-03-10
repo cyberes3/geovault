@@ -1835,27 +1835,30 @@ export default {
     async fetchTileSources() {
       try {
         const response = await fetch(this.TILE_SOURCES_API_URL)
+        if (!response.ok) {
+          throw new Error(`Tile sources failed: ${response.status}`)
+        }
         const data = await response.json()
 
-        if (data.sources && Array.isArray(data.sources)) {
-          // Filter out hidden sources (utility sources like terrain/hillshade)
-          this.tileSources = data.sources.filter(source => !source.hidden)
-
-          const userSettings = this.$store.state.userSettings || {}
-          const defaultBasemap = userSettings.map?.default_basemap
-
-          if (defaultBasemap && this.tileSources.find(s => s.id === defaultBasemap)) {
-            this.selectedLayer = defaultBasemap
-          } else if (!this.selectedLayer || !this.tileSources.find(s => s.id === this.selectedLayer)) {
-            if (this.tileSources.length > 0) {
-              this.selectedLayer = this.tileSources[0].id
-            }
-          }
-          
-          // Return all sources (including hidden ones) for MapTiler config
-          return data.sources
+        if (!data.sources || !Array.isArray(data.sources)) {
+          throw new Error('Tile sources response missing sources array')
         }
-        return []
+        // Filter out hidden sources (utility sources like terrain/hillshade)
+        this.tileSources = data.sources.filter(source => !source.hidden)
+
+        const userSettings = this.$store.state.userSettings || {}
+        const defaultBasemap = userSettings.map?.default_basemap
+
+        if (defaultBasemap && this.tileSources.find(s => s.id === defaultBasemap)) {
+          this.selectedLayer = defaultBasemap
+        } else if (!this.selectedLayer || !this.tileSources.find(s => s.id === this.selectedLayer)) {
+          if (this.tileSources.length > 0) {
+            this.selectedLayer = this.tileSources[0].id
+          }
+        }
+
+        // Return all sources (including hidden ones) for MapTiler config
+        return data.sources
       } catch (error) {
         console.error('Error fetching tile sources:', error)
         // Fallback to OSM if tile sources fail to load

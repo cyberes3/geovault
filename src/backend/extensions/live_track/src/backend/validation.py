@@ -23,14 +23,26 @@ class TrackerCheckResponse(BaseModel):
 
 
 class TrackSettingsRequest(BaseModel):
-    """Request body for POST trackers/<id>/settings/. Name updates the column; color and recent_data_window go into settings JSON."""
+    """Request body for POST trackers/<id>/settings/. Name, visibility, share_params, shared_with_emails; color and recent_data_window in settings JSON."""
 
     model_config = ConfigDict(extra="ignore")
 
-    name: Optional[str] = Field(default=None, description="Track name (stored in name column)")
+    name: Optional[str] = Field(default=None, description="Tracker name (stored in name column)")
     color: Optional[str] = Field(default=None, description="Display color (stored in settings)")
     recent_data_window: Optional[Literal["1min", "1h", "1d", "1w", "1m"]] = Field(
         default=None, description="Show only points within this window (stored in settings); null = show all"
+    )
+    visibility: Optional[Literal["private", "shared", "public"]] = Field(
+        default=None, description="Who can see and subscribe to this track (public = all authenticated users)"
+    )
+    share_params_with_recipients: Optional[bool] = Field(
+        default=None, description="Whether subscribers can view extended parameters (ser never shared)"
+    )
+    shared_with_emails: Optional[list[str]] = Field(
+        default=None, description="When visibility=shared, list of user emails to share with (replaces existing)"
+    )
+    world_share_enabled: Optional[bool] = Field(
+        default=None, description="When True, create or keep world (unauthenticated) share link; when False, remove it"
     )
 
 
