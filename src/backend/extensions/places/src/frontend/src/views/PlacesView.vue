@@ -385,6 +385,7 @@ export default {
 
       vectorSource.value = new window.gv_core.ol.source.Vector();
 
+      // Marker style: keep in sync with android-common (gv_common_ic_marker_default.xml, gv_common_ic_marker_selected.xml) and res/values/colors.xml (gv_common_marker_border, gv_common_primary_blue, gv_common_warning_yellow).
       // Theme: primary blue #163D8A (default) with white border, primary yellow #F4AC45 (selected/hovered) with black border.
       const layer = new window.gv_core.ol.layer.Vector({
         source: vectorSource.value,
