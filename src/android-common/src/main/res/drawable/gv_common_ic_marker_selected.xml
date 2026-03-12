@@ -3,9 +3,9 @@
     android:height="16dp"
     android:viewportWidth="16"
     android:viewportHeight="16">
-    <!-- Thin black outer border (r=8 fits viewport; inner r=7.25 so ring stays circular) -->
+    <!-- Thin white outer border (r=8 fits viewport; inner r=7.25 so ring stays circular) -->
     <path
-        android:fillColor="@color/gv_common_black"
+        android:fillColor="@color/gv_common_white"
         android:pathData="M8,8m-8,0a8,8 0,1,1 16,0a8,8 0,1,1 -16,0" />
     <!-- Border: black in day, light grey in night -->
     <path
