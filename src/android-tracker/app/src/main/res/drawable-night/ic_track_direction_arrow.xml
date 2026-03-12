@@ -11,7 +11,7 @@
         android:pivotX="16"
         android:pivotY="2.6">
         <path
-            android:fillColor="#3388ff"
+            android:fillColor="@color/primary_blue"
             android:strokeColor="#6b7280"
             android:strokeWidth="1.2"
             android:strokeLineCap="round"

@@ -124,17 +124,11 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/viewInListButton"
-                style="@style/Widget.MaterialComponents.Button"
+                style="@style/gv_common_ButtonPrimary"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="1"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
                 android:text="View in List"
-                android:textColor="@color/content_on_primary"
-                app:backgroundTint="@color/primary_blue"
-                app:cornerRadius="8dp"
-                android:textAllCaps="false"
                 android:enabled="false"
                 android:alpha="0.5" />
 
@@ -144,17 +138,11 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/editPlaceButton"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                style="@style/gv_common_ButtonOutlined"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="1"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
                 android:text="Edit"
-                android:textColor="@color/primary_blue"
-                app:strokeColor="@color/primary_blue"
-                app:cornerRadius="8dp"
-                android:textAllCaps="false"
                 android:enabled="false"
                 android:alpha="0.5" />
 
@@ -162,19 +150,11 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/navigateButton"
-            style="@style/Widget.MaterialComponents.Button"
+            style="@style/gv_common_ButtonPrimary"
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:layout_marginTop="8dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:text="Navigate"
-            android:textColor="@color/content_on_primary"
-            app:backgroundTint="@color/primary_blue"
-            app:cornerRadius="8dp"
-            android:textAllCaps="false"
-            android:enabled="false"
-            android:alpha="0.5" />
+            android:text="Navigate" />
 
 
     </LinearLayout>

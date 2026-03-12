@@ -15,6 +15,7 @@ import com.geovault.tracker.R
 import com.geovault.tracker.TrackerApi
 import com.geovault.tracker.showHueColorPickerDialog
 import com.geovault.tracker.updateColorPreview
+import com.geovault.tracker.DEFAULT_TRACKER_COLOR_HEX
 import com.geovault.tracker.TrackerCreateRequest
 import com.geovault.tracker.TrackerRepository
 import com.google.android.material.button.MaterialButton
@@ -33,7 +34,7 @@ class NewTrackerFragment : Fragment() {
 
     /** Snapshot when form was loaded; used to detect unsaved changes. */
     private var initialName: String = ""
-    private var initialColor: String = "#3388ff"
+    private var initialColor: String = DEFAULT_TRACKER_COLOR_HEX
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -52,10 +53,10 @@ class NewTrackerFragment : Fragment() {
         createButton = view.findViewById(R.id.newTrackerCreate)
         cancelButton = view.findViewById(R.id.newTrackerCancel)
 
-        colorEdit.setText("#3388ff")
-        updateColorPreview(colorPreview, "#3388ff")
+        colorEdit.setText(DEFAULT_TRACKER_COLOR_HEX)
+        updateColorPreview(colorPreview, DEFAULT_TRACKER_COLOR_HEX)
         initialName = ""
-        initialColor = "#3388ff"
+        initialColor = DEFAULT_TRACKER_COLOR_HEX
 
         pickColorButton.setOnClickListener {
             showHueColorPickerDialog(
@@ -125,8 +126,8 @@ class NewTrackerFragment : Fragment() {
 
     private fun hasUnsavedChanges(): Boolean {
         val currentName = nameEdit.text?.toString()?.trim() ?: ""
-        val currentColorNorm = normalizeColorForCompare(colorEdit.text?.toString()?.trim()?.ifEmpty { null }) ?: "#3388ff"
-        val initialColorNorm = normalizeColorForCompare(initialColor) ?: "#3388ff"
+        val currentColorNorm = normalizeColorForCompare(colorEdit.text?.toString()?.trim()?.ifEmpty { null }) ?: DEFAULT_TRACKER_COLOR_HEX
+        val initialColorNorm = normalizeColorForCompare(initialColor) ?: DEFAULT_TRACKER_COLOR_HEX
         return currentName != initialName || currentColorNorm != initialColorNorm
     }
 

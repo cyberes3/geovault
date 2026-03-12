@@ -10,18 +10,19 @@ import androidx.appcompat.app.AlertDialog
 import com.flask.colorpicker.ColorPickerView
 import com.flask.colorpicker.builder.ColorPickerDialogBuilder
 
-private const val DEFAULT_HEX = "#3388ff"
+/** Default tracker color (blue-400 from frontend scale). Use this constant for all default color fallbacks. */
+internal const val DEFAULT_TRACKER_COLOR_HEX = "#6C93DE"
 
 /**
  * Parses a hex color string (with or without #) to Android color int.
  * Returns default blue if invalid.
  */
 fun parseHexToColor(hex: String?): Int {
-    val normalized = hex?.trim()?.let { if (it.startsWith("#")) it else "#$it" } ?: return Color.parseColor(DEFAULT_HEX)
+    val normalized = hex?.trim()?.let { if (it.startsWith("#")) it else "#$it" } ?: return Color.parseColor(DEFAULT_TRACKER_COLOR_HEX)
     return try {
         Color.parseColor(normalized)
     } catch (_: Exception) {
-        Color.parseColor(DEFAULT_HEX)
+        Color.parseColor(DEFAULT_TRACKER_COLOR_HEX)
     }
 }
 

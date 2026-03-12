@@ -42,7 +42,7 @@ export default {
     /** Hex or CSS color for the icon fill. */
     color: {
       type: String,
-      default: '#3388ff'
+      default: '#6C93DE'
     },
     /** Rotation in degrees (0 = point up). Clockwise positive. */
     angle: {

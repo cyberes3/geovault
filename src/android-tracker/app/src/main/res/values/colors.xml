@@ -5,6 +5,8 @@
     <color name="primary_blue_dark">#063288</color> <!-- blue-600 -->
     <color name="blue_light">#E4EAF5</color>        <!-- blue-100, for backgrounds -->
     <color name="blue_extra_light">#F3F6FA</color>  <!-- blue-50 -->
+    <color name="blue_300">#99B2E4</color>        <!-- blue-300, frontend scale -->
+    <color name="default_tracker_color">#6C93DE</color>  <!-- blue-400, default for new trackers -->
     
     <!-- Text colors -->
     <color name="text_primary">#061D4A</color>      <!-- blue-800, instead of pure black -->

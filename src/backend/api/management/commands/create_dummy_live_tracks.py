@@ -16,7 +16,7 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 
 DUMMY_TRACKS = [
-    {"name": "Dummy Track A", "color": "#3388ff"},
+    {"name": "Dummy Track A", "color": "#6C93DE"},
     {"name": "Dummy Track B", "color": "#e74c3c"},
     {"name": "Dummy Track C", "color": "#2ecc71"},
 ]

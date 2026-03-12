@@ -117,17 +117,11 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/navigateButton"
-                style="@style/Widget.MaterialComponents.Button"
+                style="@style/gv_common_ButtonPrimary"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="1"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/navigate"
-                android:textColor="@color/content_on_primary"
-                app:backgroundTint="@color/primary_blue"
-                app:cornerRadius="8dp"
-                android:textAllCaps="false" />
+                android:text="@string/navigate" />
 
             <Space
                 android:layout_width="12dp"
@@ -135,17 +129,11 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/editButton"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                style="@style/gv_common_ButtonOutlined"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="1"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="Edit"
-                android:textColor="@color/primary_blue"
-                app:cornerRadius="8dp"
-                app:strokeColor="@color/primary_blue"
-                android:textAllCaps="false" />
+                android:text="Edit" />
 
             <Space
                 android:layout_width="12dp"
@@ -153,17 +141,11 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/deleteButton"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                style="@style/gv_common_ButtonOutlinedDestructive"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="1"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="Delete"
-                android:textColor="@color/error_red"
-                app:cornerRadius="8dp"
-                app:strokeColor="@color/error_red"
-                android:textAllCaps="false" />
+                android:text="Delete" />
 
         </LinearLayout>
 

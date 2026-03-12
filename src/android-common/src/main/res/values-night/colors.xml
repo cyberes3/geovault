@@ -5,6 +5,8 @@
     <color name="gv_common_primary_blue_dark">#063288</color>
     <color name="gv_common_blue_light">#1A1A1A</color>
     <color name="gv_common_blue_extra_light">#1A1A1A</color>
+    <!-- Blue scale (night): chip and light blue surfaces use dark gray -->
+    <color name="gv_common_blue_100">#1A1A1A</color>
 
     <!-- Text colors: Inverted for dark mode (Silver/Gray) -->
     <color name="gv_common_text_primary">#C0C0C0</color>

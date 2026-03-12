@@ -18,7 +18,7 @@ from django.utils import timezone
 
 from website.config_loader import get_config_loader
 
-from ...helpers import broadcast_track_updated
+from ...helpers import DEFAULT_TRACK_COLOR, broadcast_track_updated
 
 # 50 feet and 1 km in meters
 MIN_STEP_METERS = 50 * 0.3048
@@ -100,7 +100,7 @@ class Command(BaseCommand):
                 tracker_secret=secrets.token_urlsafe(32),
                 name=options["name"],
                 user=user,
-                color="#3388ff",
+                settings={"color": DEFAULT_TRACK_COLOR},
                 geometry={"type": "LineString", "coordinates": []},
                 point_params=[],
             )

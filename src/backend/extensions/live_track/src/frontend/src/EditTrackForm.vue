@@ -137,7 +137,7 @@ export default {
   props: {
     track: { type: Object, default: null },
     name: { type: String, default: '' },
-    color: { type: String, default: '#3388ff' },
+    color: { type: String, default: '#6C93DE' },
     recentDataWindow: { type: String, default: '' },
     visibility: { type: String, default: 'private' },
     shareParamsWithRecipients: { type: Boolean, default: false },

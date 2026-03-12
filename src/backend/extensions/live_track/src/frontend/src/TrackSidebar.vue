@@ -212,7 +212,7 @@ export default {
   setup(props, { emit }) {
     const api = inject('extensionApi');
     const name = ref('');
-    const color = ref('#3388ff');
+    const color = ref('#6C93DE');
     const recentDataWindow = ref('');
     const visibility = ref('private');
     const shareParamsWithRecipients = ref(false);
@@ -259,7 +259,7 @@ export default {
     const displayColor = computed(() => {
       if (props.mode !== 'create') return color.value;
       if (userPickedColor.value) return color.value;
-      return name.value.trim() ? colorFromName(name.value.trim()) : '#3388ff';
+      return name.value.trim() ? colorFromName(name.value.trim()) : '#6C93DE';
     });
 
     function onColorPicked(value) {
@@ -268,7 +268,7 @@ export default {
     }
 
     function resetColorToDeterministic() {
-      color.value = name.value.trim() ? colorFromName(name.value.trim()) : '#3388ff';
+      color.value = name.value.trim() ? colorFromName(name.value.trim()) : '#6C93DE';
     }
 
     const baseUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/extensions/live-track` : '';
@@ -413,7 +413,7 @@ export default {
     watch(() => props.track, (t) => {
       if (t) {
         name.value = t.name || '';
-        color.value = t.color || '#3388ff';
+        color.value = t.color || '#6C93DE';
         recentDataWindow.value = t.settings?.recent_data_window ?? '';
         visibility.value = t.visibility || 'private';
         shareParamsWithRecipients.value = t.share_params_with_recipients === true;
@@ -423,7 +423,7 @@ export default {
         userPickedColor.value = true;
       } else {
         userPickedColor.value = false;
-        color.value = '#3388ff';
+        color.value = '#6C93DE';
         recentDataWindow.value = '';
         visibility.value = 'private';
         shareParamsWithRecipients.value = false;

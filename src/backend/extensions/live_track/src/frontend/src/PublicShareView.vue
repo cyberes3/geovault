@@ -130,7 +130,7 @@ function buildLineFeatures(track) {
   const coords = coordsSorted.map((c) => [c[0], c[1]]);
   if (coords.length < 2) return [];
   const segments = splitTrackIntoSegments(coords);
-  const color = track.color || '#3388ff';
+  const color = track.color || '#6C93DE';
   const features = [];
   for (const segment of segments) {
     features.push({
@@ -147,7 +147,7 @@ function buildPointFeature(track) {
   const last = coordsSorted.length ? coordsSorted[coordsSorted.length - 1] : null;
   const pos = last && last.length >= 2 ? [last[0], last[1]] : null;
   if (!pos) return null;
-  const color = track.color || '#3388ff';
+  const color = track.color || '#6C93DE';
   return {
     type: 'Feature',
     properties: { color },

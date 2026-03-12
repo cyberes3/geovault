@@ -19,6 +19,7 @@ import androidx.fragment.app.Fragment
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.map.MapLibreManager
 import com.geovault.common.map.MapMarkerUtils
+import com.geovault.tracker.DEFAULT_TRACKER_COLOR_HEX
 import com.geovault.tracker.LiveTrackStreamingService
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
@@ -52,7 +53,7 @@ class MapFragment : Fragment() {
     private var maplibreMap: MapLibreMap? = null
     private var trackPoints: MutableList<LatLng> = mutableListOf()
     private var trackTimestamps: MutableList<Long> = mutableListOf()
-    /** Tracker color (hex e.g. "#3388ff") for trail and icon; set when loading tracker in fetchHistory. */
+    /** Tracker color (hex e.g. DEFAULT_TRACKER_COLOR_HEX) for trail and icon; set when loading tracker in fetchHistory. */
     private var currentTrackerColor: String? = null
 
     private lateinit var mapLoadingOverlay: View
@@ -198,7 +199,7 @@ class MapFragment : Fragment() {
                 R.drawable.ic_track_direction_arrow_circle,
                 R.drawable.ic_track_direction_arrow_chevron_fill,
                 R.drawable.ic_track_direction_arrow_chevron_stroke,
-                Color.parseColor("#3388ff")
+                Color.parseColor(DEFAULT_TRACKER_COLOR_HEX)
             )?.let { bitmap ->
                 style.addImage("track-direction-arrow", bitmap)
             }
@@ -242,7 +243,7 @@ class MapFragment : Fragment() {
                         )
                     ),
                     PropertyFactory.circleColor(Color.argb(64, 51, 136, 255)),
-                    PropertyFactory.circleStrokeColor(Color.parseColor("#3388ff")),
+                    PropertyFactory.circleStrokeColor(Color.parseColor(DEFAULT_TRACKER_COLOR_HEX)),
                     PropertyFactory.circleStrokeWidth(1f)
                 )
             }
@@ -702,7 +703,7 @@ class MapFragment : Fragment() {
             displayedTrackerId = initial.id
             displayedTrackerName = initial.name
             lastCachedUpdateTimeMs = trackerLastUpdateMs(initial)
-            currentTrackerColor = (initial.color ?: "#3388ff").let { if (it.startsWith("#")) it else "#$it" }
+            currentTrackerColor = (initial.color ?: DEFAULT_TRACKER_COLOR_HEX).let { if (it.startsWith("#")) it else "#$it" }
             
             (initial.point_params?.lastOrNull()?.get("acc") as? Number)?.toFloat()?.takeIf { it > 0f }
                 ?.let { lastStreamedAccuracyMeters = it }
@@ -802,7 +803,7 @@ class MapFragment : Fragment() {
                 displayedTrackerName = tracker?.name
                 lastCachedUpdateTimeMs = trackerLastUpdateMs(tracker)
                 if (tracker != null) {
-                    currentTrackerColor = (tracker.color ?: "#3388ff").let { if (it.startsWith("#")) it else "#$it" }
+                    currentTrackerColor = (tracker.color ?: DEFAULT_TRACKER_COLOR_HEX).let { if (it.startsWith("#")) it else "#$it" }
                     val defaultId = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
                         .getString("selected_tracker_id", "") ?: ""
                     if (trackerId != defaultId) {
@@ -896,7 +897,7 @@ class MapFragment : Fragment() {
         val style = maplibreMap?.style ?: return
         val source = style.getSourceAs<GeoJsonSource>("track-source") ?: return
         
-        val lineColor = currentTrackerColor ?: "#3388ff"
+        val lineColor = currentTrackerColor ?: DEFAULT_TRACKER_COLOR_HEX
         if (trackPoints.size < 2) {
             source.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
             applyPositionSymbolUpdate()
@@ -953,7 +954,7 @@ class MapFragment : Fragment() {
         
         val toLatLng = trackPoints.last()
         val toRotation = getTrackDirectionDegrees(trackPoints)
-        val hexColor = currentTrackerColor ?: "#3388ff"
+        val hexColor = currentTrackerColor ?: DEFAULT_TRACKER_COLOR_HEX
         
         val imageId = "track-direction-arrow-${hexColor.replace("#", "")}"
         var symbolIconId = imageId

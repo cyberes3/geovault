@@ -116,7 +116,7 @@
                         android:background="@drawable/edit_text_background"
                         android:textSize="14sp"
                         android:textColor="@color/text_primary"
-                        android:hint="#3388ff" />
+                        android:hint="#6C93DE" />
                 </LinearLayout>
                 <Space
                     android:layout_width="0dp"

@@ -165,10 +165,10 @@
           >
             <div
               class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-white border border-gray-100 transition-colors"
-              :style="{ borderLeftColor: track.color || '#3388ff', borderLeftWidth: '4px' }"
+              :style="{ borderLeftColor: track.color || '#6C93DE', borderLeftWidth: '4px' }"
             >
               <TrackDirectionIcon
-                :color="track.color || '#3388ff'"
+                :color="track.color || '#6C93DE'"
                 :angle="getTrackDirectionAngle(track)"
                 :size="26"
                 :selected="selectedId === track.id"
@@ -224,10 +224,10 @@
           >
             <div 
               class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-white border border-gray-100 transition-colors"
-              :style="{ borderLeftColor: track.color || '#3388ff', borderLeftWidth: '4px' }"
+              :style="{ borderLeftColor: track.color || '#6C93DE', borderLeftWidth: '4px' }"
             >
               <TrackDirectionIcon
-                :color="track.color || '#3388ff'"
+                :color="track.color || '#6C93DE'"
                 :angle="getTrackDirectionAngle(track)"
                 :size="26"
                 :selected="selectedId === track.id"
@@ -609,10 +609,10 @@
                   >
                     <div
                       class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-white border border-gray-100 transition-colors"
-                      :style="{ borderLeftColor: track.color || '#3388ff', borderLeftWidth: '4px' }"
+                      :style="{ borderLeftColor: track.color || '#6C93DE', borderLeftWidth: '4px' }"
                     >
                       <TrackDirectionIcon
-                        :color="track.color || '#3388ff'"
+                        :color="track.color || '#6C93DE'"
                         :angle="getTrackDirectionAngle(track)"
                         :size="26"
                         :selected="selectedId === track.id"
@@ -670,10 +670,10 @@
             >
               <div
                 class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-white border border-gray-100 transition-colors"
-                :style="{ borderLeftColor: track.color || '#3388ff', borderLeftWidth: '4px' }"
+                :style="{ borderLeftColor: track.color || '#6C93DE', borderLeftWidth: '4px' }"
               >
                 <TrackDirectionIcon
-                  :color="track.color || '#3388ff'"
+                  :color="track.color || '#6C93DE'"
                   :angle="getTrackDirectionAngle(track)"
                   :size="26"
                   :selected="selectedId === track.id"
@@ -774,7 +774,7 @@ const ARROW_PATH_D =
   'M29.9,28.6l-13-26c-0.3-0.7-1.4-0.7-1.8,0l-13,26c-0.2,0.4-0.1,0.8,0.2,1.1C2.5,30,3,30.1,3.4,29.9L16,25.1l12.6,4.9c0.1,0,0.2,0.1,0.4,0.1c0.3,0,0.5-0.1,0.7-0.3C30,29.4,30.1,28.9,29.9,28.6z';
 
 function getArrowImageId(color, selected) {
-  const base = (color || '#3388ff').replace('#', '');
+  const base = (color || '#6C93DE').replace('#', '');
   return 'track-arrow-' + (selected ? 'selected-' : '') + base;
 }
 
@@ -783,7 +783,7 @@ const ARROW_RASTER_SIZE = 96;
 
 /** SVG data URL for the direction arrow. Same chevron for both; selected adds white circle with black border. */
 function getTrackArrowDataURL(color, selected) {
-  const fill = color || '#3388ff';
+  const fill = color || '#6C93DE';
   const circle =
     selected
       ? '<circle cx="16" cy="16" r="15" fill="white" stroke="#000" stroke-width="1.5"/>'
@@ -1252,7 +1252,7 @@ export default {
         const segments = splitTrackIntoSegments(coords);
         const props = {
           trackId: track.id,
-          color: track.color || '#3388ff',
+          color: track.color || '#6C93DE',
           selected: selectedId.value === track.id
         };
         for (const segment of segments) {
@@ -1267,7 +1267,7 @@ export default {
     }
 
     function hexToRgb(hex) {
-      const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '#3388ff');
+      const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '#6C93DE');
       return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [51, 136, 255];
     }
 
@@ -1280,7 +1280,7 @@ export default {
         const last = coordsSorted.length ? coordsSorted[coordsSorted.length - 1] : null;
         const pos = (last && last.length >= 2) ? [last[0], last[1]] : (track.last_position ? [track.last_position.lon, track.last_position.lat] : null);
         if (!pos) continue;
-        const color = track.color || '#3388ff';
+        const color = track.color || '#6C93DE';
         const selected = selectedId.value === track.id;
         const acc =
           track.latestPointParams?.acc ?? track.point_params?.[track.point_params?.length - 1]?.acc;
@@ -1387,7 +1387,7 @@ export default {
       filter: ['all', ['>', ['get', 'accuracy'], 0]],
       paint: {
         'circle-color': ['rgba', 51, 136, 255, 0.25],
-        'circle-stroke-color': '#3388ff',
+        'circle-stroke-color': '#6C93DE',
         'circle-stroke-width': 1,
         'circle-radius': [
           'interpolate',
@@ -1426,7 +1426,7 @@ export default {
         map.addSource(POINTS_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       }
       if (!map.getLayer(POINTS_LAYER_ID)) {
-        const defaultColor = '#3388ff';
+        const defaultColor = '#6C93DE';
         const defaultId = getArrowImageId(defaultColor, false);
         const imageData = await rasterizeArrowToImageData(defaultColor, false);
         if (imageData && !map.hasImage(defaultId)) map.addImage(defaultId, imageData, { pixelRatio: 1 });
@@ -1510,7 +1510,7 @@ export default {
           map.once('load', () => {
             if (!map) return;
             map.resize();
-            const defaultColor = '#3388ff';
+            const defaultColor = '#6C93DE';
             const defaultId = getArrowImageId(defaultColor, false);
             rasterizeArrowToImageData(defaultColor, false).then((imageData) => {
               if (!map || !map.getStyle()) return;
@@ -1638,7 +1638,7 @@ export default {
       map.once('load', () => {
         if (!map) return;
         map.resize();
-        const defaultColor = '#3388ff';
+        const defaultColor = '#6C93DE';
         const defaultId = getArrowImageId(defaultColor, false);
         rasterizeArrowToImageData(defaultColor, false).then((imageData) => {
           if (!map || !map.getStyle()) return;

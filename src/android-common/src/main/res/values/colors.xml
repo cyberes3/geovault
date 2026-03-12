@@ -6,6 +6,18 @@
     <color name="gv_common_blue_light">#E4EAF5</color>
     <color name="gv_common_blue_extra_light">#F3F6FA</color>
 
+    <!-- Blue scale matching frontend (src/assets/css/colors.css / generate-colors.py) -->
+    <color name="gv_common_blue_50">#F3F6FA</color>
+    <color name="gv_common_blue_100">#E4EAF5</color>
+    <color name="gv_common_blue_200">#C4D2ED</color>
+    <color name="gv_common_blue_300">#99B2E4</color>
+    <color name="gv_common_blue_400">#6C93DE</color>
+    <color name="gv_common_blue_500">#163D8A</color>
+    <color name="gv_common_blue_600">#063288</color>
+    <color name="gv_common_blue_700">#052055</color>
+    <color name="gv_common_blue_800">#061D4A</color>
+    <color name="gv_common_blue_900">#051638</color>
+
     <!-- Text colors -->
     <color name="gv_common_text_primary">#061D4A</color>
     <color name="gv_common_text_secondary">#4B5563</color>
@@ -14,7 +26,7 @@
     <color name="gv_common_success_green">#5B8A3C</color>
     <color name="gv_common_error_red">#FF3E41</color>
     <color name="gv_common_warning_yellow">#F4AC45</color>
-    <color name="gv_common_spinner_blue">#4B6BAB</color>
+    <color name="gv_common_spinner_blue">#6C93DE</color>
 
     <!-- Error background (light red for error state); matches frontend red-50 / red-200 -->
     <color name="gv_common_error_light">#FCF2F2</color>

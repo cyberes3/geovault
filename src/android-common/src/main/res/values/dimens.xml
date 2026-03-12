@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compact filter chip (primary blue, removable) -->
+    <dimen name="gv_common_filter_chip_height">28dp</dimen>
+    <dimen name="gv_common_filter_chip_close_icon_size">15dp</dimen>
+</resources>

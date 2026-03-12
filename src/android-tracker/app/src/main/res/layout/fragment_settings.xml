@@ -234,7 +234,7 @@
             <!-- Connect / Disconnect -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/connectButton"
-                style="@style/gv_common_ButtonConnectAccount"
+                style="@style/gv_common_ButtonPrimary"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:text="@string/connect_account"

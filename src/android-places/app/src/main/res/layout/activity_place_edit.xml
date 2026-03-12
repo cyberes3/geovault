@@ -307,7 +307,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/useMyLocationButton"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/gv_common_ButtonOutlined"
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
                     android:text=""
@@ -365,7 +365,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/saveButton"
-                    style="@style/Widget.MaterialComponents.Button"
+                    style="@style/gv_common_ButtonPrimary"
                     android:layout_width="0dp"
                     android:layout_height="48dp"
                     android:layout_weight="1"
@@ -383,7 +383,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/cancelButton"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/gv_common_ButtonOutlined"
                     android:layout_width="0dp"
                     android:layout_height="48dp"
                     android:layout_weight="1"

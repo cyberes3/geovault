@@ -3,6 +3,11 @@ Shared helpers for live_track extension (response building, parsing, broadcast).
 """
 
 import copy
+
+# Default track color (blue-400 from frontend scale); used when no color is set.
+DEFAULT_TRACK_COLOR = "#6C93DE"
+
+
 import json
 import time
 from urllib.parse import parse_qs
@@ -67,7 +72,7 @@ def _filter_coords_by_recent_window(coords, point_params, window_key: str):
 
 
 def _color_from_settings(track: LiveTrack) -> str:
-    return (track.settings or {}).get("color") or "#3388ff"
+    return (track.settings or {}).get("color") or DEFAULT_TRACK_COLOR
 
 
 def _strip_ser_from_params(point_params: list) -> None:

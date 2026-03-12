@@ -24,5 +24,6 @@ Android apps should be built with `./build-android.sh` located in the root of ea
 These apps share visual styles so make sure that changes are made in both places.
 Apps only target the latest Android version and SDK so do not do things like `if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)`.
 YOU ARE NOT ALLOWED TO DO `@Suppress("DEPRECATION")`!!!!!! YOU MUST FIX IT!!!!!!!
+We are using Material Design 2 only.
 
 External repos are provided for you in the `external sources/` directory. This folder is read-only. If you need to reference the source code of a library please check here before fetching GitHub. 

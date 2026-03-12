@@ -103,17 +103,11 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnViewOnMap"
-                style="@style/Widget.MaterialComponents.Button"
+                style="@style/gv_common_ButtonPrimary"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="1"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/button_map"
-                android:textColor="@color/content_on_primary"
-                app:backgroundTint="@color/primary_blue"
-                app:cornerRadius="8dp"
-                android:textAllCaps="false" />
+                android:text="@string/button_map" />
 
             <Space
                 android:layout_width="12dp"
@@ -121,17 +115,11 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnViewParams"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                style="@style/gv_common_ButtonOutlined"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="1"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/button_params"
-                android:textColor="@color/primary_blue"
-                app:cornerRadius="8dp"
-                app:strokeColor="@color/primary_blue"
-                android:textAllCaps="false" />
+                android:text="@string/button_params" />
 
             <Space
                 android:layout_width="12dp"
@@ -139,17 +127,11 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnEdit"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                style="@style/gv_common_ButtonOutlined"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="1"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/edit"
-                android:textColor="@color/primary_blue"
-                app:cornerRadius="8dp"
-                app:strokeColor="@color/primary_blue"
-                android:textAllCaps="false" />
+                android:text="@string/edit" />
         </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

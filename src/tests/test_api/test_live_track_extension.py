@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from extensions.live_track.src.backend.helpers import DEFAULT_TRACK_COLOR
 from extensions.live_track.src.backend.models import (
     LiveTrack,
     LiveTrackGroup,
@@ -109,7 +110,7 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(response.json()["color"], "#ff0000")
 
     def test_create_track_without_color_uses_default_blue(self):
-        """POST without color uses default #3388ff."""
+        """POST without color uses default (blue-400)."""
         with _patch_live_track_enabled():
             response = self.client.post(
                 "/api/extensions/live-track/trackers/",
@@ -117,7 +118,7 @@ class TestLiveTrackAPI(TestCase):
                 content_type="application/json",
             )
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.json()["color"], "#3388ff")
+        self.assertEqual(response.json()["color"], DEFAULT_TRACK_COLOR)
 
     def test_create_track_name_required(self):
         """POST without name or with empty name returns 400."""

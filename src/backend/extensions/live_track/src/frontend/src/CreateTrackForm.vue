@@ -26,7 +26,7 @@ export default {
   name: 'CreateTrackForm',
   props: {
     name: { type: String, default: '' },
-    displayColor: { type: String, default: '#3388ff' },
+    displayColor: { type: String, default: '#6C93DE' },
     error: { type: String, default: '' }
   },
   emits: ['update:name', 'color-picked']

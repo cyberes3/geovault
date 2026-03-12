@@ -80,7 +80,7 @@
                 <!-- Connect / Disconnect -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/connectButton"
-                    style="@style/gv_common_ButtonConnectAccount"
+                    style="@style/gv_common_ButtonPrimary"
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
                     android:text="@string/connect_account"
@@ -88,17 +88,10 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/disconnectButton"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/gv_common_ButtonOutlined"
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
                     android:text="@string/disconnect"
-                    android:textColor="@color/primary_blue"
-                    app:strokeColor="@color/primary_blue"
-                    app:cornerRadius="8dp"
-                    android:textSize="16sp"
-                    android:textAllCaps="false"
                     android:layout_marginBottom="8dp"
                     android:visibility="gone" />
 
@@ -139,7 +132,7 @@
                 <!-- Save Button -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/saveButton"
-                    style="@style/Widget.MaterialComponents.Button"
+                    style="@style/gv_common_ButtonPrimary"
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
                     android:insetTop="0dp"

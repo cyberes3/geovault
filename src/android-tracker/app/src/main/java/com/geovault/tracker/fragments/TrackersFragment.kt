@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
+import com.geovault.tracker.DEFAULT_TRACKER_COLOR_HEX
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
@@ -265,7 +266,7 @@ class TrackersFragment : Fragment() {
                 trackerSelectedCheck.visibility = if (tracker.id == selectedId) View.VISIBLE else View.GONE
                 trackerName.text = tracker.name
                 try {
-                    val color = Color.parseColor(tracker.color ?: "#3388ff")
+                    val color = Color.parseColor(tracker.color ?: DEFAULT_TRACKER_COLOR_HEX)
                     colorBar.setBackgroundColor(color)
                 } catch (_: Exception) {
                     colorBar.setBackgroundColor(ContextCompat.getColor(itemView.context, R.color.primary_blue))

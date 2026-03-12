@@ -22,6 +22,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q
 
 from .helpers import (
+    DEFAULT_TRACK_COLOR,
     _color_from_settings,
     _filter_coords_by_recent_window,
     _strip_ser_from_params,
@@ -171,7 +172,7 @@ def tracker_list_create(request):
     name = (data.get("name") or "").strip()
     if not name:
         return error_response("name is required", 400)
-    color = (data.get("color") or "").strip() or "#3388ff"
+    color = (data.get("color") or "").strip() or DEFAULT_TRACK_COLOR
     if LiveTrack.objects.filter(user=request.user, name=name).exists():
         return error_response("A track with this name already exists", 409)
     tracker_secret = secrets.token_urlsafe(32)
