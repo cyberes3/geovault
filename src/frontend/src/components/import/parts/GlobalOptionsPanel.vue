@@ -28,7 +28,7 @@
           size="md"
           no-wrap
           @click="$emit('recheck-duplicates')"
-          title="Recheck for duplicate features"
+          title="Recheck for Duplicate Features"
         >
           <Loader v-if="isRecheckingDuplicates" size="sm" layout="inline" :showMessage="false" color="#1d4ed8" />
           {{ isRecheckingDuplicates ? 'Rechecking...' : 'Recheck Duplicates' }}

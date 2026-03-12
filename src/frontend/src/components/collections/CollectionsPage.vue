@@ -13,7 +13,7 @@
               variant="primary"
               color="blue"
               size="md"
-              title="Create a new collection"
+              title="Create a New Collection"
           >
             <PlusIcon class="w-5 h-5 mr-2" />
             Create New Collection
@@ -78,7 +78,7 @@
             <div class="flex items-center justify-center sm:justify-end sm:ml-2 space-x-1 order-2">
               <button
                   class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
-                  title="Share collection"
+                  title="Share Collection"
                   type="button"
                   @click.stop.prevent="openShareDialog(collection)"
                   @mousedown.stop.prevent
@@ -96,7 +96,7 @@
               </button>
               <button
                   class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
-                  title="Edit collection"
+                  title="Edit Collection"
                   type="button"
                   @click.stop.prevent="openEditDialog(collection)"
                   @mousedown.stop.prevent
@@ -105,7 +105,7 @@
               </button>
               <button
                   class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
-                  title="Bulk style features in this collection"
+                  title="Bulk Style Features in This Collection"
                   type="button"
                   @click.stop.prevent="openBulkOperationsModal(collection)"
                   @mousedown.stop.prevent
@@ -114,7 +114,7 @@
               </button>
               <button
                   class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
-                  title="Delete collection"
+                  title="Delete Collection"
                   type="button"
                   @click.stop.prevent="deleteCollection(collection)"
                   @mousedown.stop.prevent
@@ -142,7 +142,7 @@
                 variant="primary"
                 color="blue"
                 size="sm"
-                title="View collection on map"
+                title="View Collection on Map"
             >
               <MapIcon class="w-4 h-4 mr-2" />
               View on Map

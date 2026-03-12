@@ -8,7 +8,7 @@
           @click="$emit('zoom')"
           :disabled="isSaving"
           class="text-gray-500 hover:text-blue-600 transition ease-in-out duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Zoom to feature"
+          title="Zoom to Feature"
         >
           <MapPinIcon class="h-5 w-5" />
         </button>
@@ -16,7 +16,7 @@
           @click="$emit('cancel')"
           :disabled="isSaving"
           class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Close edit dialog"
+          title="Close Edit Dialog"
         >
           <BoldXMarkIcon class="h-6 w-6" />
         </button>
@@ -127,7 +127,7 @@
               @click="openCoordinatesDialog"
               :disabled="isSaving"
               class="text-xs text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center font-medium focus:outline-none"
-              title="Edit coordinates manually"
+              title="Edit Coordinates Manually"
             >
               <MapIcon class="w-3 h-3 mr-1" />
               Edit Coords
@@ -137,7 +137,7 @@
               @click="openReplacementDialog"
               :disabled="isSaving"
               class="text-xs text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center font-medium focus:outline-none"
-              title="Update spatial data from file"
+              title="Update Spatial Data from File"
             >
               <ArrowUpTrayIcon class="w-3 h-3 mr-1" />
               Update Geo
@@ -185,7 +185,7 @@
         variant="primary"
         color="red"
         size="sm"
-        title="Delete feature"
+        title="Delete Feature"
       >
         Delete
       </BaseButton>
@@ -197,7 +197,7 @@
           variant="white"
           size="sm"
           class="flex-1 md:flex-none"
-          title="Cancel editing"
+          title="Cancel Editing"
         >
           Cancel
         </BaseButton>
@@ -209,7 +209,7 @@
           color="blue"
           size="sm"
           class="flex-1 md:flex-none"
-          title="Save changes"
+          title="Save Changes"
         >
           {{ isSaving ? 'Saving...' : 'Save' }}
         </BaseButton>

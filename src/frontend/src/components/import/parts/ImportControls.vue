@@ -96,7 +96,7 @@
         <div v-if="hasFeatures && !isLoadingPage" class="flex items-center gap-2 shrink-0 border-r border-gray-200 pr-4">
           <ToggleButton
               :model-value="hideDuplicates"
-              label="Hide duplicates"
+              label="Hide Duplicates"
               :disabled="isLoadingPage"
               size="sm"
               @update:model-value="$emit('toggle-hide-duplicates', $event)"
@@ -112,7 +112,7 @@
               variant="white"
               size="sm"
               @click="$emit('previous-page')"
-              title="Go to previous page"
+              title="Go to Previous Page"
           >
             <ChevronLeftIcon class="w-4 h-4 mr-1" />
             Previous
@@ -122,7 +122,7 @@
               :disabled="!hasNextPage || isLoadingPage || totalPages <= 1"
               class="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               @click="$emit('next-page')"
-              title="Go to next page"
+              title="Go to Next Page"
           >
             Next
             <ChevronRightIcon class="w-4 h-4 ml-1" />
@@ -145,7 +145,7 @@
               :disabled="isLoadingPage || !isValidPageNumber || totalPages <= 1"
               class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               @click="jumpToPage"
-              title="Jump to page"
+              title="Jump to Page"
             >
               Go
             </button>
@@ -157,7 +157,7 @@
             size="sm"
             class="shrink-0 border-l border-gray-200 pl-4 ml-auto"
             @click="$emit('show-map-preview')"
-            title="Preview all features on current page"
+            title="Preview All Features on Current Page"
         >
           <MapIcon class="w-4 h-4 mr-2" />
           Map Preview (Current Page)
@@ -175,7 +175,7 @@
               :disabled="lockButtons || isSaving"
               :class="saveStatus === 'success' ? 'w-full sm:w-[160px] inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200' : (saveStatus === 'error' ? 'w-full sm:w-[160px] inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200' : 'w-full sm:w-[160px] inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200')"
               @click="$emit('save-changes')"
-              title="Save all changes"
+              title="Save All Changes"
           >
           <Loader v-if="isSaving" size="sm" layout="inline" :showMessage="false" color="white" />
           <CheckIcon v-else-if="saveStatus === 'success'" class="w-4 h-4 mr-2" />
@@ -190,7 +190,7 @@
             size="md"
             class="w-full sm:w-[220px]"
             @click="$emit('perform-import')"
-            title="Import selected features"
+            title="Import Selected Features"
         >
           <Loader v-if="isImporting" size="sm" layout="inline" :showMessage="false" color="white" />
           <ArrowUpTrayIcon v-else class="w-4 h-4 mr-2" />

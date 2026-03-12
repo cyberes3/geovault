@@ -56,7 +56,7 @@
                   ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-500'
                   : 'text-gray-900 hover:bg-gray-50'
               ]"
-              title="Users list"
+              title="Users List"
             >
               <div class="flex items-center">
                 <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -110,7 +110,7 @@
         v-if="showEditButton"
         @click="$emit('edit')"
         class="p-1.5 md:p-2 text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all duration-200 shadow-sm hover:shadow"
-        title="Edit feature"
+        title="Edit Feature"
       >
         <PencilSquareIcon class="w-6 h-6 md:w-5 md:h-5" />
       </button>
@@ -118,7 +118,7 @@
         v-if="isLineOrTrack"
         @click="$emit('show-profile')"
         class="p-1.5 md:p-2 text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all duration-200 shadow-sm hover:shadow"
-        title="Show elevation profile"
+        title="Show Elevation Profile"
       >
         <ChartBarIcon class="w-6 h-6 md:w-5 md:h-5" />
       </button>
@@ -134,14 +134,14 @@
         v-if="showShareButton"
         @click="$emit('share')"
         class="p-1.5 md:p-2 text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all duration-200 shadow-sm hover:shadow"
-        title="Share feature"
+        title="Share Feature"
       >
         <ShareIcon class="w-6 h-6 md:w-5 md:h-5" />
       </button>
       <button
         @click="$emit('zoom')"
         class="p-1.5 md:p-2 text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all duration-200 shadow-sm hover:shadow"
-        title="Zoom to feature"
+        title="Zoom to Feature"
       >
         <MapPinIcon class="w-6 h-6 md:w-5 md:h-5" />
       </button>

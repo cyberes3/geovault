@@ -18,7 +18,7 @@
       <!-- Home Button -->
       <button
         class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
-        title="Go to home extent"
+        title="Go to Home Extent"
         @click="$emit('go-home')"
       >
         <HomeIcon class="w-5 h-5" />

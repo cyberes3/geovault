@@ -43,7 +43,7 @@
           <button
             @click="handleClose"
             class="p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition-colors"
-            title="Close dialog (ESC)"
+            title="Close Dialog (ESC)"
           >
             <XMarkIcon class="h-6 w-6" />
           </button>

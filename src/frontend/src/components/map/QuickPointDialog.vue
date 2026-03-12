@@ -85,7 +85,7 @@
                 :disabled="isSaving || isGettingLocation"
                 :style="{ opacity: isSaving ? 0.5 : 1 }"
                 class="px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors flex items-center justify-center min-w-[44px]"
-                title="Use current location"
+                title="Use Current Location"
                 @click="useCurrentLocation"
               >
                 <LocationIcon v-if="!isGettingLocation" class="w-5 h-5 text-gray-700" />
@@ -120,7 +120,7 @@
         variant="primary"
         color="blue"
         size="sm"
-        title="Create point"
+        title="Create Point"
       >
         {{ isSaving ? 'Creating...' : 'Create Point' }}
       </BaseButton>

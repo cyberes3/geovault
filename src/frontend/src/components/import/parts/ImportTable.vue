@@ -16,7 +16,7 @@
           variant="primary"
           color="green"
           size="md"
-          title="Import all selected items"
+          title="Import All Selected Items"
         >
           <Loader v-if="isBulkImporting" size="sm" layout="inline" :showMessage="false" />
           <ArrowUpTrayIcon v-else class="w-4 h-4 mr-2" />
@@ -29,7 +29,7 @@
           variant="primary"
           color="red"
           size="md"
-          title="Delete all selected items"
+          title="Delete All Selected Items"
         >
           <Loader v-if="isBulkDeleting" size="sm" layout="inline" :showMessage="false" color="white" />
           <TrashIcon v-else class="w-4 h-4 mr-2" />
@@ -203,7 +203,7 @@
                 color="green"
                 size="sm"
                 @click="importItem(item, index)"
-                title="Import this item"
+                title="Import This Item"
               >
                 <ArrowUpTrayIcon class="w-4 h-4 mr-2" />
                 Import
@@ -215,7 +215,7 @@
                 color="red"
                 size="sm"
                 @click="deleteItem(item, index)"
-                title="Delete this item"
+                title="Delete This Item"
               >
                 <TrashIcon class="w-4 h-4 mr-2" />
                 Delete

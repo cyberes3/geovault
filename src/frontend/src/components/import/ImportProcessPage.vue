@@ -50,7 +50,7 @@
               variant="primary"
               color="blue"
               size="sm"
-              title="Clear search"
+              title="Clear Search"
           >
             <XMarkIcon class="w-4 h-4" />
           </BaseButton>
@@ -302,7 +302,7 @@
                 :class="isItemSkipped(entry.item, entry.originalIndex) ? 'inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-400 bg-gray-100 cursor-not-allowed' : 'inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'"
                 :disabled="isItemSkipped(entry.item, entry.originalIndex)"
                 @click="showFeatureMap(entry.originalIndex)"
-                title="View feature on map"
+                title="View Feature on Map"
             >
               <MapIcon class="w-3 h-3 mr-1" />
               View on Map
@@ -338,7 +338,7 @@
                   :disabled="!isItemEditable(entry.item, entry.originalIndex)"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
                   @click="resetNestedField(entry.originalIndex, 'properties', 'name')"
-                  title="Reset to original name"
+                  title="Reset to Original Name"
               >
                 <ArrowPathIcon class="w-4 h-4" />
               </button>
@@ -364,7 +364,7 @@
                   :disabled="!isItemEditable(entry.item, entry.originalIndex)"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white mt-1"
                   @click="resetNestedField(entry.originalIndex, 'properties', 'description')"
-                  title="Reset to original description"
+                  title="Reset to Original Description"
               >
                 <ArrowPathIcon class="w-4 h-4" />
               </button>
@@ -388,7 +388,7 @@
                     :disabled="!isItemEditable(entry.item, entry.originalIndex)"
                     class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
                     @click="resetNestedField(entry.originalIndex, 'properties', 'created')"
-                    title="Reset to original date"
+                    title="Reset to Original Date"
                 >
                   <ArrowPathIcon class="w-4 h-4" />
                 </button>

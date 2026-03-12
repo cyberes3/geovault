@@ -67,7 +67,7 @@
                 <button
                   @click="clearFileSelection"
                   class="ml-3 text-gray-400 hover:text-gray-600 focus:outline-none"
-                  title="Remove file"
+                  title="Remove File"
                 >
                   <XMarkIcon class="h-5 w-5" />
                 </button>
@@ -171,7 +171,7 @@
                       <button
                         @click.stop="expandMap(index)"
                         class="absolute top-1 right-1 bg-white bg-opacity-90 hover:bg-opacity-100 rounded p-1 shadow-sm border border-gray-300 transition-all"
-                        title="Expand map preview"
+                        title="Expand Map Preview"
                       >
                         <ArrowsPointingOutIcon class="w-4 h-4 text-gray-700" />
                       </button>
@@ -235,7 +235,7 @@
         variant="primary"
         color="blue"
         size="sm"
-        title="Close dialog"
+        title="Close Dialog"
       >
         Close
       </BaseButton>
@@ -247,7 +247,7 @@
         variant="primary"
         color="blue"
         size="sm"
-        title="Upload and process file"
+        title="Upload and Process File"
       >
         <ArrowUpTrayIcon class="h-4 w-4 mr-2" />
         Upload & Process
@@ -261,7 +261,7 @@
         variant="primary"
         color="blue"
         size="sm"
-        title="Apply selected feature's spatial data"
+        title="Apply Selected Feature's Spatial Data"
       >
         <CheckIcon v-if="!applying" class="h-4 w-4 mr-2" />
         <Loader v-if="applying" size="sm" layout="inline" :showMessage="false" color="white" />

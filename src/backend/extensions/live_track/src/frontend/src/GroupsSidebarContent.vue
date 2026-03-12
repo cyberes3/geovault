@@ -26,7 +26,7 @@
             <template v-if="g.is_owner">
               <button
                 type="button"
-                title="Edit group"
+                title="Edit Group"
                 class="p-2 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50"
                 @click="openEdit(g)"
               >
@@ -36,7 +36,7 @@
             <template v-else>
               <button
                 type="button"
-                title="Leave group"
+                title="Leave Group"
                 class="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 text-sm"
                 @click="$emit('leave', g)"
               >

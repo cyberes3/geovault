@@ -1,7 +1,7 @@
 <template>
   <BaseModal
     :is-open="true"
-    title="Discover trackers"
+    title="Discover Trackers"
     @close="$emit('close')"
   >
     <div class="p-4 space-y-4">
@@ -32,7 +32,7 @@
             type="button"
             :disabled="subscribingIds.has(t.id)"
             class="p-2 rounded-lg text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Add tracker"
+            title="Add Tracker"
             @click="subscribeOne(t)"
           >
             <PlusIcon v-if="!subscribingIds.has(t.id)" class="h-5 w-5" />

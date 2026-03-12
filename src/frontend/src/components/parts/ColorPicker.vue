@@ -23,7 +23,7 @@
           <button
             @click="handleCancel"
             class="p-1 -mr-1 text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
-            title="Close dialog"
+            title="Close Dialog"
           >
             <XMarkIcon class="h-5 w-5" />
           </button>

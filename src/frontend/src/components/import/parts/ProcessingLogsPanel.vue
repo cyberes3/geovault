@@ -4,7 +4,7 @@
       <h2 class="text-base sm:text-lg font-semibold text-gray-900">Processing Logs</h2>
       <button
         class="inline-flex items-center p-2 border border-gray-300 shadow-sm text-xs sm:text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        title="Open full log view"
+        title="Open Full Log View"
         @click="$emit('open-full-logs')"
       >
         <ArrowTopRightOnSquareIcon class="w-4 h-4" />

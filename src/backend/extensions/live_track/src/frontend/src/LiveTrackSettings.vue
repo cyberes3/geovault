@@ -7,12 +7,12 @@
         :setting="{
           key: 'extensions.live_track.default_sort',
           type: 'select',
-          title: 'Default sort',
+          title: 'Default Sort',
           description: 'How the track list is sorted when you open the Live Track page.',
           options: [
             { value: 'alphabetical', label: 'Alphabetical' },
-            { value: 'last_updated', label: 'Last updated' },
-            { value: 'num_points', label: 'Number of points' },
+            { value: 'last_updated', label: 'Last Updated' },
+            { value: 'num_points', label: 'Number of Points' },
             { value: 'newest', label: 'Newest' }
           ]
         }"
@@ -24,7 +24,7 @@
         :setting="{
           key: 'extensions.live_track.default_map',
           type: 'select',
-          title: 'Default map',
+          title: 'Default Map',
           description: 'Default map layer when you open the Live Track page.',
           options: defaultMapOptions
         }"

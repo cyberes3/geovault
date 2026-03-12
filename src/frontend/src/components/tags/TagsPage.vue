@@ -44,7 +44,7 @@
             v-if="searchQuery"
             class="absolute inset-y-0 right-0 pr-3 flex items-center min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 justify-center"
             @click="searchQuery = ''"
-            title="Clear search"
+            title="Clear Search"
         >
           <XMarkIcon class="h-5 w-5 text-gray-400 hover:text-gray-600" />
         </button>
@@ -121,7 +121,7 @@
                   variant="primary"
                   color="blue"
                   size="xs"
-                  title="Save tag name"
+                  title="Save Tag Name"
                   @click.stop="saveTagEdit(tag)"
               >
                 <CheckIcon class="w-4 h-4" />
@@ -140,7 +140,7 @@
               </button>
               <button
                   class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
-                  title="Share tag"
+                  title="Share Tag"
                   type="button"
                   @click.stop.prevent="openShareDialog(tag)"
                   @mousedown.stop.prevent
@@ -159,7 +159,7 @@
               <button
                   v-if="!isSystemTag(tag)"
                   class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
-                  title="Edit tag name"
+                  title="Edit Tag Name"
                   type="button"
                   @click.stop.prevent="startTagEdit(tag)"
                   @mousedown.stop.prevent
@@ -168,7 +168,7 @@
               </button>
               <button
                   class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
-                  title="Bulk style features in this tag"
+                  title="Bulk Style Features in This Tag"
                   type="button"
                   @click.stop.prevent="openBulkOperationsModal(tag)"
                   @mousedown.stop.prevent
@@ -177,7 +177,7 @@
               </button>
               <button
                   class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
-                  :title="isSystemTag(tag) ? 'Delete system tag and all its features' : 'Delete tag'"
+                  :title="isSystemTag(tag) ? 'Delete System Tag and All Its Features' : 'Delete Tag'"
                   type="button"
                   @click.stop.prevent="openDeleteModal(tag)"
                   @mousedown.stop.prevent
@@ -205,7 +205,7 @@
                 v-if="getTagSearchQuery(tag)"
                 class="absolute inset-y-0 right-0 pr-3 flex items-center min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 justify-center"
                 @click="updateTagSearchQuery(tag, '')"
-                title="Clear search"
+                title="Clear Search"
             >
               <XMarkIcon class="h-4 w-4 text-gray-400 hover:text-gray-600" />
             </button>
@@ -237,7 +237,7 @@
                 <button
                     v-if="!isSystemTag(tag)"
                     class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
-                    title="Remove this feature from tag"
+                    title="Remove This Feature from Tag"
                     type="button"
                     @click.stop.prevent="removeTagFromFeature(tag, feature)"
                 >
@@ -282,7 +282,7 @@
                   variant="white"
                   size="xs"
                   @click="tagPreviousPage(tag)"
-                  title="Previous page"
+                  title="Previous Page"
               >
                 <ArrowLeftIcon class="w-3 h-3 mr-1" />
                 Prev
@@ -294,7 +294,7 @@
                   variant="white"
                   size="xs"
                   @click="tagNextPage(tag)"
-                  title="Next page"
+                  title="Next Page"
               >
                 Next
                 <ArrowRightIcon class="w-3 h-3 ml-1" />
@@ -317,7 +317,7 @@
               variant="white"
               size="sm"
               @click="previousPage"
-              title="Go to previous page"
+              title="Go to Previous Page"
           >
             <ArrowLeftIcon class="w-4 h-4 mr-1" />
             Previous
@@ -328,7 +328,7 @@
               variant="white"
               size="sm"
               @click="nextPage"
-              title="Go to next page"
+              title="Go to Next Page"
           >
             Next
             <ArrowRightIcon class="w-4 h-4 ml-1" />
@@ -349,7 +349,7 @@
                 variant="white"
                 size="sm"
                 @click="jumpToPage"
-                title="Jump to page"
+                title="Jump to Page"
             >
               Go
             </BaseButton>

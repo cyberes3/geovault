@@ -42,7 +42,7 @@
               @click="removeTag(index)"
               :disabled="disabled"
               class="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-blue-600 hover:border-blue-200 hover:text-blue-500 focus:outline-none focus:border-blue-200 focus:text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Remove tag"
+              title="Remove Tag"
             >
               <XMarkIcon class="w-3 h-3" />
             </button>
@@ -80,7 +80,7 @@
         @click="addTagFromInput"
         :disabled="disabled || !tagInput.trim()"
         class="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-6 h-6 rounded bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
-        title="Add tag"
+        title="Add Tag"
       >
         <CheckIcon class="w-4 h-4" />
       </button>

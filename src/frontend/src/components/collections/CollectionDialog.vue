@@ -110,7 +110,7 @@
                     :loading="loadingFeatures"
                     loading-message="Loading features..."
                     empty-message="No features available"
-                    selected-count-label="Selected features"
+                    selected-count-label="Selected Features"
                     :filter-fn="featureFilterFn"
                   />
                 </div>
@@ -140,7 +140,7 @@
         variant="primary"
         color="blue"
         size="md"
-        title="Save collection"
+        title="Save Collection"
       >
         <span v-if="saving">Saving...</span>
         <span v-else>Save Collection</span>

@@ -61,12 +61,12 @@
               id="places-sort"
               v-model="sortBy"
               class="select-custom w-full sm:w-auto min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 flex-shrink-0"
-              aria-label="Sort places"
+              aria-label="Sort Places"
           >
-            <option value="composite">Default sort</option>
-            <option value="created">Last created</option>
-            <option value="modified">Last modified</option>
-            <option value="navigated">Last navigated to</option>
+            <option value="composite">Default Sort</option>
+            <option value="created">Last Created</option>
+            <option value="modified">Last Modified</option>
+            <option value="navigated">Last Navigated To</option>
           </select>
         </div>
 

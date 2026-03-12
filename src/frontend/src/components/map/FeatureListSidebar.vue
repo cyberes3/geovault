@@ -31,7 +31,7 @@
             ? 'text-blue-500 border-b-2 border-blue-500'
             : 'text-gray-600 hover:text-gray-900'
         ]"
-        title="View features in current map view"
+        title="View Features in Current Map View"
       >
         Features in Vicinity
       </button>
@@ -43,7 +43,7 @@
             ? 'text-blue-500 border-b-2 border-blue-500'
             : 'text-gray-600 hover:text-gray-900'
         ]"
-        title="Filter features by tags"
+        title="Filter Features by Tags"
       >
         Tag Filter
         <FunnelIcon
@@ -59,7 +59,7 @@
             ? 'text-blue-500 border-b-2 border-blue-500'
             : 'text-gray-600 hover:text-gray-900'
         ]"
-        title="Search for places or paste coordinates"
+        title="Search for Places or Paste Coordinates"
       >
         Search Places
       </button>
@@ -82,7 +82,7 @@
             @click="clearSearch"
             class="absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
             type="button"
-            title="Clear search"
+            title="Clear Search"
           >
             <XMarkIcon class="w-4 h-4" />
           </button>
@@ -141,7 +141,7 @@
               v-if="canHideFeatures"
               type="button"
               class="ml-1 text-gray-400 hover:text-gray-600 p-1 xl:hidden"
-              title="Hide this feature from the main map"
+              title="Hide This Feature from the Main Map"
               @click.stop.prevent="emitHideFeature(item)"
             >
               <EyeSlashIcon class="w-4 h-4" />
@@ -199,7 +199,7 @@
             @click="clearTagSearch"
             class="absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
             type="button"
-            title="Clear tag search"
+            title="Clear Tag Search"
           >
             <XMarkIcon class="w-4 h-4" />
           </button>
@@ -226,7 +226,7 @@
                 tag.endsWith(':') ? 'text-purple-600' : 'text-blue-600'
               ]"
               type="button"
-              title="Remove tag from filter"
+              title="Remove Tag from Filter"
             >
               <XMarkIcon class="w-3 h-3" />
             </button>
@@ -236,7 +236,7 @@
           @click="clearTagFilters"
           class="text-xs text-blue-500 hover:text-blue-700 focus:outline-none"
           type="button"
-          title="Clear all tag filters"
+          title="Clear All Tag Filters"
         >
           Clear filters
         </button>
@@ -290,7 +290,7 @@
             @click="clearGeocodingSearch"
             class="absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
             type="button"
-            title="Clear search"
+            title="Clear Search"
           >
             <XMarkIcon class="w-4 h-4" />
           </button>
@@ -312,7 +312,7 @@
             variant="white"
             size="xs"
             type="button"
-            title="Clear results and remove marker"
+            title="Clear Results and Remove Marker"
           >
             Clear Results
           </BaseButton>

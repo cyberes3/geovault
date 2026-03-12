@@ -72,7 +72,7 @@
         variant="primary"
         color="blue"
         size="sm"
-        :title="canSave ? 'Save coordinates' : (validationError || 'Invalid coordinates')"
+        :title="canSave ? 'Save Coordinates' : (validationError || 'Invalid coordinates')"
       >
         Save
       </BaseButton>

@@ -46,7 +46,7 @@
             variant="primary"
             color="blue"
             size="sm"
-            title="Change password"
+            title="Change Password"
         >
           <span v-if="passwordLoading">Changing...</span>
           <span v-else>Change Password</span>
@@ -142,7 +142,7 @@
           variant="primary"
           color="blue"
           size="sm"
-          title="Download all features as KMZ"
+          title="Download All Features as KMZ"
       >
         <span v-if="downloadLoading">Preparing Download...</span>
         <span v-else>Download All Features (KMZ)</span>
@@ -200,7 +200,7 @@
               variant="primary"
               color="blue"
               size="sm"
-              title="Create new API key"
+              title="Create New API Key"
           >
             <span v-if="createKeyLoading">Creating...</span>
             <span v-else>Create API Key</span>
@@ -271,7 +271,7 @@
                   variant="secondary"
                   color="red"
                   size="sm"
-                  title="Delete this API key"
+                  title="Delete This API Key"
               >
                 <span v-if="deleteKeyLoading === key.id">Deleting...</span>
                 <span v-else>Delete</span>
@@ -329,7 +329,7 @@
               variant="secondary"
               color="red"
               size="sm"
-              title="Revoke access for this application"
+              title="Revoke Access for This Application"
             >
               <span v-if="revokeOAuthLoading === token.id">Revoking...</span>
               <span v-else>Revoke</span>

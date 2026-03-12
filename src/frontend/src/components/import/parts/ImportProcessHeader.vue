@@ -15,7 +15,7 @@
           variant="white"
           size="sm"
           download
-          title="Download original file"
+          title="Download Original File"
         >
           <ArrowDownTrayIcon class="w-4 h-4 mr-1.5" />
           Download original

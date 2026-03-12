@@ -33,7 +33,7 @@
             type="button"
             class="absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
             @click="searchQuery = ''"
-            title="Clear search"
+            title="Clear Search"
           >
             <XMarkIcon class="w-4 h-4" />
           </button>
@@ -61,7 +61,7 @@
             <button
               type="button"
               class="ml-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
-              title="Un-hide this feature"
+              title="Un-hide This Feature"
               @click.stop="$emit('unhide', item.id)"
             >
               Show

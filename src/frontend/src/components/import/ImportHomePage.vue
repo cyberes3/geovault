@@ -96,7 +96,7 @@
               variant="white"
               size="sm"
               @click="previousPage"
-              title="Go to previous page"
+              title="Go to Previous Page"
             >
               <ArrowLeftIcon class="w-4 h-4 mr-1" />
               Previous
@@ -107,7 +107,7 @@
               variant="white"
               size="sm"
               @click="nextPage"
-              title="Go to next page"
+              title="Go to Next Page"
             >
               Next
               <ArrowRightIcon class="w-4 h-4 ml-1" />

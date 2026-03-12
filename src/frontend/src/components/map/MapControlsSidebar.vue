@@ -84,7 +84,7 @@
             </div>
             <ToggleButton
                 :model-value="hillshadeEnabled"
-                label="Enable hillshade"
+                label="Enable Hillshade"
                 @update:model-value="$emit('hillshade-change', $event)"
             />
           </div>
@@ -121,7 +121,7 @@
           type="button"
           @click="$emit('quick-point')"
           class="text-xs text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center font-medium focus:outline-none lg:text-[11px] xl:text-xs"
-          title="Add a quick point by pasting coordinates"
+          title="Add a Quick Point by Pasting Coordinates"
       >
         <MapPinIcon class="w-3 h-3 mr-1 lg:w-2.5 lg:h-2.5 lg:mr-0.5 xl:w-3 xl:h-3 xl:mr-1"/>
         Quick Point
@@ -151,7 +151,7 @@
           variant="primary"
           color="blue"
           size="md"
-          title="Download all features as KMZ"
+          title="Download All Features as KMZ"
       >
         <ArrowDownTrayIcon class="w-5 h-5 mr-2"/>
         Download All

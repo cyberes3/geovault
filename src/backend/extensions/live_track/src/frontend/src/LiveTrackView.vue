@@ -8,7 +8,7 @@
           <select
             v-model="sortBy"
             class="select-custom text-sm px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            title="Sort by"
+            title="Sort By"
           >
             <option value="alphabetical">Name</option>
             <option value="last_updated">Activity</option>
@@ -82,7 +82,7 @@
             <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
                 type="button"
-                title="View group"
+                title="View Group"
                 class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white"
                 @click.stop="openGroupQuickView(group)"
               >
@@ -91,7 +91,7 @@
               <template v-if="group.is_owner">
                 <button
                   type="button"
-                  title="Edit group"
+                  title="Edit Group"
                   class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white"
                   @click.stop="openEditGroupModal(group)"
                 >
@@ -101,7 +101,7 @@
               <template v-else>
                 <button
                   type="button"
-                  title="Leave group"
+                  title="Leave Group"
                   class="p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-white text-sm"
                   @click.stop="leaveGroup(group)"
                 >
@@ -134,7 +134,7 @@
             <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
                 type="button"
-                title="View group"
+                title="View Group"
                 class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white"
                 @click.stop="openGroupQuickView(group)"
               >
@@ -142,7 +142,7 @@
               </button>
               <button
                 type="button"
-                title="Leave group"
+                title="Leave Group"
                 class="p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-white text-sm"
                 @click.stop="leaveGroup(group)"
               >
@@ -189,7 +189,7 @@
             <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
               <button
                 type="button"
-                title="Latest params"
+                title="Latest Params"
                 class="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
                 @click.stop="openSidebar('params', track.id)"
               >
@@ -250,7 +250,7 @@
             <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
               <button
                 type="button"
-                title="Latest params"
+                title="Latest Params"
                 class="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
                 @click.stop="openSidebar('params', track.id)"
               >
@@ -374,7 +374,7 @@
                   </button>
                   <button
                     type="button"
-                    title="Latest params"
+                    title="Latest Params"
                     class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100"
                     @click="openParamsFromGroupQuickView(track)"
                   >
@@ -417,7 +417,7 @@
       <div class="flex flex-row sm:flex-col items-center gap-2 sm:gap-1">
         <button
           type="button"
-          title="New tracker"
+          title="New Tracker"
           :class="SIDEBAR_ACTION_BUTTON_CLASS"
           @click="openCreateTrackSidebar()"
         >
@@ -551,16 +551,16 @@
                 <div class="text-xs text-gray-500">{{ (group.track_ids || []).length }} tracker(s)</div>
               </div>
               <div class="flex items-center gap-1 opacity-60">
-                <button type="button" title="View group" class="p-2 rounded-xl text-gray-400 hover:text-blue-600" @click.stop="openGroupQuickView(group)">
+                <button type="button" title="View Group" class="p-2 rounded-xl text-gray-400 hover:text-blue-600" @click.stop="openGroupQuickView(group)">
                   <EyeIcon class="h-5 w-5" />
                 </button>
                 <template v-if="group.is_owner">
-                  <button type="button" title="Edit group" class="p-2 rounded-xl text-gray-400 hover:text-blue-600" @click.stop="openEditGroupModal(group)">
+                  <button type="button" title="Edit Group" class="p-2 rounded-xl text-gray-400 hover:text-blue-600" @click.stop="openEditGroupModal(group)">
                     <PencilIcon class="h-5 w-5" />
                   </button>
                 </template>
                 <template v-else>
-                  <button type="button" title="Leave group" class="p-2 rounded-xl text-gray-400 hover:text-red-600 text-sm" @click.stop="leaveGroup(group)">Leave</button>
+                  <button type="button" title="Leave Group" class="p-2 rounded-xl text-gray-400 hover:text-red-600 text-sm" @click.stop="leaveGroup(group)">Leave</button>
                 </template>
               </div>
             </div>
@@ -588,10 +588,10 @@
                       <div class="text-xs text-gray-500">{{ (group.track_ids || []).length }} tracker(s)</div>
                     </div>
                     <div class="flex items-center gap-1 opacity-60">
-                      <button type="button" title="View group" class="p-2 rounded-xl text-gray-400 hover:text-blue-600" @click.stop="openGroupQuickView(group)">
+                      <button type="button" title="View Group" class="p-2 rounded-xl text-gray-400 hover:text-blue-600" @click.stop="openGroupQuickView(group)">
                         <EyeIcon class="h-5 w-5" />
                       </button>
-                      <button type="button" title="Leave group" class="p-2 rounded-xl text-gray-400 hover:text-red-600 text-sm" @click.stop="leaveGroup(group)">Leave</button>
+                      <button type="button" title="Leave Group" class="p-2 rounded-xl text-gray-400 hover:text-red-600 text-sm" @click.stop="leaveGroup(group)">Leave</button>
                     </div>
                   </div>
                   <div
@@ -633,7 +633,7 @@
                     <div class="flex items-center gap-1 opacity-60 focus-within:opacity-100 transition-opacity">
                       <button
                         type="button"
-                        title="Latest params"
+                        title="Latest Params"
                         class="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
                         @click.stop="openSidebar('params', track.id)"
                       >
@@ -694,7 +694,7 @@
               <div class="flex items-center gap-1 opacity-60 focus-within:opacity-100 transition-opacity">
                 <button
                   type="button"
-                  title="Latest params"
+                  title="Latest Params"
                   class="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
                   @click.stop="openSidebar('params', track.id)"
                 >

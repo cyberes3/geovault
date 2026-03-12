@@ -22,7 +22,7 @@
     <string name="no_trackers_found_message">No trackers yet. Create one to start tracking.</string>
     <string name="no_tracker_selected_go_to_settings">No tracker selected. Go to Trackers → tap a tracker → Edit → turn on \"Default track\".</string>
     <string name="tracker_validation_failed_go_to_settings">This tracker is no longer valid. Go to Trackers → Edit → turn on \"Default track\" for another tracker.</string>
-    <string name="default_track_label">Default track</string>
+    <string name="default_track_label">Default Track</string>
     <string name="create_new_tracker">Create New Tracker</string>
     <string name="trackers_tab">Trackers</string>
     <string name="could_not_save_tracker_selection">Could not save tracker selection</string>
@@ -36,7 +36,7 @@
     <string name="waiting_for_gps_lock">Waiting for GPS lock</string>
     <string name="start_tracking">Start Tracking</string>
     <string name="stop_tracking">Stop Tracking</string>
-    <string name="stop_tracking_confirm_title">Stop tracking?</string>
+    <string name="stop_tracking_confirm_title">Stop Tracking?</string>
     <string name="tracking_duration">Tracking for %1$s</string>
     <string name="last_point_sent">Last point sent %1$s</string>
     <string name="points_sent_session">%1$d points sent this session</string>
@@ -73,9 +73,9 @@
     <string name="enter_filename">Please enter a filename</string>
     <string name="error_read_file">Could not read file</string>
     <string name="settings_required">Server URL is required. Connect your account to sign in.</string>
-    <string name="connect_account">Connect account</string>
+    <string name="connect_account">Connect Account</string>
     <string name="disconnect">Disconnect</string>
-    <string name="disconnect_confirm_title">Disconnect account?</string>
+    <string name="disconnect_confirm_title">Disconnect Account?</string>
     <string name="disconnect_confirm_message">You will be signed out. You can connect again from Settings.</string>
     <string name="oauth_connected">Connected successfully</string>
     <string name="config_required">Configuration Required</string>
@@ -102,15 +102,15 @@
     <string name="map_tap_marker_hint">Tap a marker to view details</string>
 
     <!-- Extended params: when on, sends full data; when off, sends only position + time to minimize data usage -->
-    <string name="extended_params_label">Send extended data</string>
+    <string name="extended_params_label">Send Extended Data</string>
 
     <!-- Logging settings help -->
-    <string name="logging_help_button">Tips for logging settings</string>
+    <string name="logging_help_button">Tips for Logging Settings</string>
     <string name="logging_help_title">Logging &amp; distance tips</string>
     <string name="logging_help_message">Logging interval – seconds between points. Suggested: 30 for walking, 15 for biking, 10 for driving. Use 0 for maximum frequency (more battery use).\n\nDistance filter – minimum distance between points. Suggested: 10m/30ft for walking, 30m/100ft for biking, 100m/330ft for driving. Use 0 to log as often as the interval allows.\n\nOnly log if significant motion – when on, the app logs only after your device detects significant activity (e.g. walking, biking, driving). The device uses its built-in motion sensor; no points are recorded while you stay still, which saves battery. On some devices this option may be disabled if the sensor is not available.\n\nBiking mode is good for driving if you aren\'t needing super high accuracy and is a little more battery efficient.</string>
 
     <!-- Tracking profiles -->
-    <string name="auto_tracking_label">Auto tracking mode</string>
+    <string name="auto_tracking_label">Auto Tracking Mode</string>
     <string name="tracking_profile_label">Tracking Profile</string>
     <string name="profile_walking">Walking</string>
     <string name="profile_biking">Biking</string>
@@ -128,8 +128,8 @@
     <string name="motion_sensor_unavailable_toast">Motion detection isn\'t available on this device</string>
 
     <!-- Restart / start on launch -->
-    <string name="restart_tracking_if_killed_label">Restart tracking if app killed while tracking</string>
-    <string name="start_tracking_on_launch_label">Start tracking when app is launched</string>
+    <string name="restart_tracking_if_killed_label">Restart Tracking If App Killed While Tracking</string>
+    <string name="start_tracking_on_launch_label">Start Tracking When App Is Launched</string>
     <string name="resuming_tracking">Resuming tracking</string>
     <string name="tracking_started">Tracking started</string>
     <string name="status_tracking">Tracking location</string>
@@ -142,30 +142,30 @@
     <string name="button_params">Params</string>
     <string name="button_map">Map</string>
     <string name="edit">Edit</string>
-    <string name="edit_tracker">Edit tracker</string>
-    <string name="delete_tracker">Delete tracker</string>
-    <string name="tracker_params_title">Tracker parameters</string>
+<string name="edit_tracker">Edit Tracker</string>
+<string name="delete_tracker">Delete Tracker</string>
+<string name="tracker_params_title">Tracker Parameters</string>
     <string name="latest_params_title">Latest Parameters</string>
     <string name="last_update_label">Last Update</string>
     <string name="no_points_yet">No points yet. Waiting for data…</string>
     <string name="position_label">Position</string>
     <string name="waiting_for_data">Waiting for data</string>
-    <string name="tracker_secret_label">Tracker secret</string>
-    <string name="created_at_label">Created at</string>
-    <string name="updated_at_label">Updated at</string>
+<string name="tracker_secret_label">Tracker Secret</string>
+<string name="created_at_label">Created At</string>
+<string name="updated_at_label">Updated At</string>
     <string name="track_points_count">Track points: %1$d</string>
-    <string name="delete_tracker_confirm_title">Delete tracker?</string>
+    <string name="delete_tracker_confirm_title">Delete Tracker?</string>
     <string name="delete_tracker_confirm_message">This cannot be undone. The track history will be lost.</string>
     <string name="save">Save</string>
     <string name="saved_tracker">Saved tracker</string>
     <string name="create">Create</string>
-    <string name="new_tracker_title">New track</string>
-    <string name="edit_tracker_title">Edit track</string>
-    <string name="discard_changes_confirm_title">Discard changes?</string>
+<string name="new_tracker_title">New Track</string>
+<string name="edit_tracker_title">Edit Track</string>
+<string name="discard_changes_confirm_title">Discard Changes?</string>
     <string name="discard_changes_confirm_message">You have unsaved changes. Close without saving?</string>
     <string name="discard">Discard</string>
     <string name="clear_history_tracker">Clear track history</string>
-    <string name="clear_history_confirm_title">Clear history?</string>
+    <string name="clear_history_confirm_title">Clear History?</string>
     <string name="clear_history_confirm_message">Clear all track history except the latest point? This cannot be undone.</string>
     <string name="history_cleared">History cleared</string>
     <string name="tracker_deleted">Tracker deleted</string>
@@ -189,7 +189,7 @@
     <string name="last_updated_hour">hr</string>
     <string name="last_updated_days">days</string>
     <string name="last_updated_day">day</string>
-    <string name="live_track_streaming_title">Streaming track</string>
+    <string name="live_track_streaming_title">Streaming Track</string>
     <string name="live_track_streaming_text">%1$s</string>
     <string name="live_track_streaming_text_anon">Track updates</string>
     <string name="live_track_streaming_channel">Track streaming</string>
