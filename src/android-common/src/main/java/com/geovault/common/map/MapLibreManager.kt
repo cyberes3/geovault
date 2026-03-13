@@ -52,8 +52,8 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
         const val RASTER_SOURCE_ID = "geovault-raster"
         const val RASTER_LAYER_ID = "geovault-raster-layer"
         const val ANNOTATIONS_LAYER_ID = "org.maplibre.annotations.points"
-        const val MAX_ZOOM_LEVEL = 15
-        const val MAX_ZOOM_LEVEL_VECTOR = 18
+        const val MAX_ZOOM_LEVEL = 25
+        const val MAX_ZOOM_LEVEL_VECTOR = 25
         const val DEFAULT_POINT_ZOOM = 12.0
     }
 

@@ -1,21 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Night mode (pure black OLED): overrides for dark theme -->
-    <color name="surface">#000000</color>
-    <color name="content_on_primary">#C0C0C0</color>
-    <color name="text_primary">#C0C0C0</color>
-    <color name="black">#C0C0C0</color>
-    <color name="blue_extra_light">#1A1A1A</color>
-    <color name="text_secondary">#A0A0A0</color>
-    <color name="border_light">#404040</color>
+    <!-- Night mode (pure black OLED): reference common where aligned -->
+    <color name="surface">@color/gv_common_surface</color>
+    <color name="content_on_primary">@color/gv_common_content_on_primary</color>
+    <color name="text_primary">@color/gv_common_text_primary</color>
+    <color name="black">@color/gv_common_black</color>
+    <color name="blue_extra_light">@color/gv_common_blue_extra_light</color>
+    <color name="text_secondary">@color/gv_common_text_secondary</color>
+    <color name="border_light">@color/gv_common_border_light</color>
     <color name="error_light">#3D1F1F</color>
     <color name="error_stroke">#5C2E2E</color>
     <color name="snackbar_background">#505050</color>
-    <color name="list_background">#000000</color>
-    <color name="search_bar_container_background">#000000</color>
-    <color name="search_divider">#163D8A</color>
+    <color name="list_background">@color/gv_common_surface</color>
+    <color name="search_bar_container_background">@color/gv_common_surface</color>
+    <color name="search_divider">@color/gv_common_primary_blue</color>
 
-    <!-- Map underlay: pure black in dark mode -->
     <!-- Track line outline: light grey in night mode -->
-    <color name="track_line_outline">#9ca3af</color>
+    <color name="track_line_outline">@color/gv_common_marker_border</color>
 </resources>

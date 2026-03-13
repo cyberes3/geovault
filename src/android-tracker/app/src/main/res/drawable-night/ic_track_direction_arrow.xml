@@ -12,7 +12,7 @@
         android:pivotY="2.6">
         <path
             android:fillColor="@color/primary_blue"
-            android:strokeColor="#6b7280"
+            android:strokeColor="@color/gray"
             android:strokeWidth="1.2"
             android:strokeLineCap="round"
             android:strokeLineJoin="round"

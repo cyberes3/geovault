@@ -36,6 +36,7 @@ class GeoVaultMapFragment : Fragment(), OnMapReadyCallback, MapView.OnDidFailLoa
 
     private var mapReady = false
     private var callback: Callback? = null
+    private var forceOsmOnly = false
 
     fun setCallback(cb: Callback?) {
         callback = cb
@@ -64,6 +65,10 @@ class GeoVaultMapFragment : Fragment(), OnMapReadyCallback, MapView.OnDidFailLoa
         }
 
         val showToggle = arguments?.getBoolean(ARG_SHOW_TOGGLE, true) ?: true
+        forceOsmOnly = arguments?.getBoolean(ARG_FORCE_OSM_ONLY, false) ?: false
+        if (forceOsmOnly) {
+            mapManager.sourceManager.setOsmOnly()
+        }
         val toggleCard = view.findViewById<View>(R.id.gv_common_mapToggleCard)
         toggleCard.visibility = if (showToggle) View.VISIBLE else View.GONE
         view.findViewById<View>(R.id.gv_common_mapToggle).setOnClickListener {
@@ -72,8 +77,10 @@ class GeoVaultMapFragment : Fragment(), OnMapReadyCallback, MapView.OnDidFailLoa
         }
 
         mapViewRef.getMapAsync(this)
-        mapManager.fetchMapSources {
-            if (mapReady) _maplibreMap?.let { mapManager.applySelectedSource(it) }
+        if (!forceOsmOnly) {
+            mapManager.fetchMapSources {
+                if (mapReady) _maplibreMap?.let { mapManager.applySelectedSource(it) }
+            }
         }
     }
 
@@ -94,7 +101,7 @@ class GeoVaultMapFragment : Fragment(), OnMapReadyCallback, MapView.OnDidFailLoa
         _maplibreMap = map
         mapReady = true
         mapManager.setupBaseMapSettings(map)
-        if (mapManager.sourcesFetched || GeovaultAuthManager.getServerUrl(requireContext()).isEmpty()) {
+        if (forceOsmOnly || mapManager.sourcesFetched || GeovaultAuthManager.getServerUrl(requireContext()).isEmpty()) {
             mapManager.applySelectedSource(map)
         }
     }
@@ -140,5 +147,6 @@ class GeoVaultMapFragment : Fragment(), OnMapReadyCallback, MapView.OnDidFailLoa
         private const val TAG = "GeoVaultMapFragment"
         private const val DEFAULT_PADDING_DP = 50
         const val ARG_SHOW_TOGGLE = "gv_common_arg_show_toggle"
+        const val ARG_FORCE_OSM_ONLY = "gv_common_arg_force_osm_only"
     }
 }

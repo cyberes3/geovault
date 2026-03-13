@@ -18,19 +18,67 @@
     <color name="gv_common_blue_800">#061D4A</color>
     <color name="gv_common_blue_900">#051638</color>
 
+    <!-- Red scale matching frontend (src/assets/css/colors.css / generate-colors.py) -->
+    <color name="gv_common_red_50">#FCF2F2</color>
+    <color name="gv_common_red_100">#F9E1E1</color>
+    <color name="gv_common_red_200">#F5BCBD</color>
+    <color name="gv_common_red_300">#F28B8D</color>
+    <color name="gv_common_red_400">#F45759</color>
+    <color name="gv_common_red_500">#FF3E41</color>
+    <color name="gv_common_red_600">#ED0003</color>
+    <color name="gv_common_red_700">#9E0002</color>
+    <color name="gv_common_red_800">#760001</color>
+    <color name="gv_common_red_900">#590001</color>
+
+    <!-- Green scale matching frontend (src/assets/css/colors.css / generate-colors.py) -->
+    <color name="gv_common_green_50">#F6FAF4</color>
+    <color name="gv_common_green_100">#EBF4E6</color>
+    <color name="gv_common_green_200">#D5E8C9</color>
+    <color name="gv_common_green_300">#BAD8A5</color>
+    <color name="gv_common_green_400">#9EC982</color>
+    <color name="gv_common_green_500">#5B8A3C</color>
+    <color name="gv_common_green_600">#4D802B</color>
+    <color name="gv_common_green_700">#2B4619</color>
+    <color name="gv_common_green_800">#253B16</color>
+    <color name="gv_common_green_900">#1B2C10</color>
+
+    <!-- Yellow scale matching frontend (src/assets/css/colors.css / generate-colors.py) -->
+    <color name="gv_common_yellow_50">#FBF8F3</color>
+    <color name="gv_common_yellow_100">#F7EFE2</color>
+    <color name="gv_common_yellow_200">#F1DDBF</color>
+    <color name="gv_common_yellow_300">#EDC791</color>
+    <color name="gv_common_yellow_400">#EBB25F</color>
+    <color name="gv_common_yellow_500">#F4AC45</color>
+    <color name="gv_common_yellow_600">#EA8A00</color>
+    <color name="gv_common_yellow_700">#9C5C00</color>
+    <color name="gv_common_yellow_800">#754500</color>
+    <color name="gv_common_yellow_900">#583300</color>
+
+    <!-- Purple scale matching frontend (src/assets/css/colors.css / generate-colors.py) -->
+    <color name="gv_common_purple_50">#FAF4F9</color>
+    <color name="gv_common_purple_100">#F4E6F2</color>
+    <color name="gv_common_purple_200">#E8C8E3</color>
+    <color name="gv_common_purple_300">#DCA2D3</color>
+    <color name="gv_common_purple_400">#D179C4</color>
+    <color name="gv_common_purple_500">#CB48B7</color>
+    <color name="gv_common_purple_600">#AE1F99</color>
+    <color name="gv_common_purple_700">#721664</color>
+    <color name="gv_common_purple_800">#54124A</color>
+    <color name="gv_common_purple_900">#3F0D37</color>
+
     <!-- Text colors -->
     <color name="gv_common_text_primary">#061D4A</color>
     <color name="gv_common_text_secondary">#4B5563</color>
 
-    <!-- Status colors -->
-    <color name="gv_common_success_green">#5B8A3C</color>
-    <color name="gv_common_error_red">#FF3E41</color>
-    <color name="gv_common_warning_yellow">#F4AC45</color>
+    <!-- Status colors (reference scale for single source of truth) -->
+    <color name="gv_common_success_green">@color/gv_common_green_500</color>
+    <color name="gv_common_error_red">@color/gv_common_red_500</color>
+    <color name="gv_common_warning_yellow">@color/gv_common_yellow_500</color>
     <color name="gv_common_spinner_blue">#6C93DE</color>
 
     <!-- Error background (light red for error state); matches frontend red-50 / red-200 -->
-    <color name="gv_common_error_light">#FCF2F2</color>
-    <color name="gv_common_error_stroke">#F5BCBD</color>
+    <color name="gv_common_error_light">@color/gv_common_red_50</color>
+    <color name="gv_common_error_stroke">@color/gv_common_red_200</color>
 
     <!-- Basic colors -->
     <color name="gv_common_white">#FFFFFF</color>

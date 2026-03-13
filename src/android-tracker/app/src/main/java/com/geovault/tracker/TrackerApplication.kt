@@ -31,7 +31,6 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
 
     override fun onCreate() {
         super.onCreate()
-        MapLibreInitializer.init(applicationContext)
         val redirectUri = "${BuildConfig.APPLICATION_ID}://oauth/callback"
         GeovaultAuthManager.init(
             this,
@@ -39,6 +38,7 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
             GeovaultAuthManager.OAUTH_CLIENT_ID_TRACKER
         )
         GeovaultAuthManager.setAuthFailureListener(this)
+        MapLibreInitializer.init(applicationContext)
         prefetchIfNeeded(applicationContext)
         createNotificationChannels()
     }

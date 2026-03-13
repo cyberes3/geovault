@@ -116,7 +116,8 @@
                         android:background="@drawable/edit_text_background"
                         android:textSize="14sp"
                         android:textColor="@color/text_primary"
-                        android:hint="#6C93DE" />
+                        android:textColorHint="@color/default_tracker_color"
+                        android:hint="@string/default_tracker_color_hex" />
                 </LinearLayout>
                 <Space
                     android:layout_width="0dp"

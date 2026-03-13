@@ -166,44 +166,46 @@ class OverlappingPointsPopup(
         val minY = rect.top + paddingPx
         val maxY = rect.bottom - paddingPx - contentHeight
         // When popup is larger than visible rect, max can be < min; coerceIn throws. Use safe range.
+        val safeMinX = minOf(minX, maxX)
         val safeMaxX = maxOf(minX, maxX)
+        val safeMinY = minOf(minY, maxY)
         val safeMaxY = maxOf(minY, maxY)
 
         // Above: popup bottom edge at screenY - gap (popup fully above point)
         val yAbove = screenY - gapPx - contentHeight
         if (yAbove >= minY) {
-            val x = (screenX - contentWidth / 2).coerceIn(minX, safeMaxX)
+            val x = (screenX - contentWidth / 2).coerceIn(safeMinX, safeMaxX)
             return Pair(x, yAbove)
         }
 
         // Below: popup top edge at screenY + gap (popup fully below point)
         val yBelow = screenY + gapPx
         if (yBelow >= minY && yBelow + contentHeight <= rect.bottom - paddingPx) {
-            val x = (screenX - contentWidth / 2).coerceIn(minX, safeMaxX)
+            val x = (screenX - contentWidth / 2).coerceIn(safeMinX, safeMaxX)
             return Pair(x, yBelow)
         }
 
         // Left: popup right edge at screenX - gap (popup fully left of point)
         val xLeft = screenX - gapPx - contentWidth
         if (xLeft >= minX && xLeft + contentWidth <= rect.right - paddingPx) {
-            val y = (screenY - contentHeight / 2).coerceIn(minY, safeMaxY)
+            val y = (screenY - contentHeight / 2).coerceIn(safeMinY, safeMaxY)
             return Pair(xLeft, y)
         }
 
         // Right: popup left edge at screenX + gap (popup fully right of point)
         val xRight = screenX + gapPx
         if (xRight >= minX && xRight + contentWidth <= rect.right - paddingPx) {
-            val y = (screenY - contentHeight / 2).coerceIn(minY, safeMaxY)
+            val y = (screenY - contentHeight / 2).coerceIn(safeMinY, safeMaxY)
             return Pair(xRight, y)
         }
 
         // Fallback: prefer above or below even if partially off-screen, then clamp (point may be near edge)
-        val yAboveClamped = yAbove.coerceIn(minY, safeMaxY)
-        val yBelowClamped = yBelow.coerceIn(minY, safeMaxY)
+        val yAboveClamped = yAbove.coerceIn(safeMinY, safeMaxY)
+        val yBelowClamped = yBelow.coerceIn(safeMinY, safeMaxY)
         return if (yAboveClamped <= yBelowClamped) {
-            Pair((screenX - contentWidth / 2).coerceIn(minX, safeMaxX), yAboveClamped)
+            Pair((screenX - contentWidth / 2).coerceIn(safeMinX, safeMaxX), yAboveClamped)
         } else {
-            Pair((screenX - contentWidth / 2).coerceIn(minX, safeMaxX), yBelowClamped)
+            Pair((screenX - contentWidth / 2).coerceIn(safeMinX, safeMaxX), yBelowClamped)
         }
     }
 

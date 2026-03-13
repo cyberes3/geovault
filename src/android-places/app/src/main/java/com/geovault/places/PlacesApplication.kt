@@ -23,9 +23,9 @@ class PlacesApplication : Application(), GeovaultAuthManager.AuthFailureListener
     }
     override fun onCreate() {
         super.onCreate()
-        MapLibreInitializer.init(applicationContext)
         GeovaultAuthManager.init(this, "com.geovault.places://oauth/callback", GeovaultAuthManager.OAUTH_CLIENT_ID_PLACES)
         GeovaultAuthManager.setAuthFailureListener(this)
+        MapLibreInitializer.init(applicationContext)
         GeovaultAuthManager.fetchUserStatus(this)
     }
 
