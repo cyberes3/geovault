@@ -66,9 +66,21 @@
     <color name="gv_common_purple_800">#54124A</color>
     <color name="gv_common_purple_900">#3F0D37</color>
 
+    <!-- Gray scale (Tailwind-aligned neutral; frontend colors.css) -->
+    <color name="gv_common_gray_50">#F9FAFB</color>
+    <color name="gv_common_gray_100">#F3F4F6</color>
+    <color name="gv_common_gray_200">#E5E7EB</color>
+    <color name="gv_common_gray_300">#D1D5DB</color>
+    <color name="gv_common_gray_400">#9CA3AF</color>
+    <color name="gv_common_gray_500">#6B7280</color>
+    <color name="gv_common_gray_600">#4B5563</color>
+    <color name="gv_common_gray_700">#374151</color>
+    <color name="gv_common_gray_800">#1F2937</color>
+    <color name="gv_common_gray_900">#111827</color>
+
     <!-- Text colors -->
     <color name="gv_common_text_primary">#061D4A</color>
-    <color name="gv_common_text_secondary">#4B5563</color>
+    <color name="gv_common_text_secondary">@color/gv_common_gray_600</color>
 
     <!-- Status colors (reference scale for single source of truth) -->
     <color name="gv_common_success_green">@color/gv_common_green_500</color>

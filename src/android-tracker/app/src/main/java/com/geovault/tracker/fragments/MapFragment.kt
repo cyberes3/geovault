@@ -18,8 +18,8 @@ import androidx.core.content.IntentCompat
 import androidx.fragment.app.Fragment
 import com.geovault.common.GeovaultAuthManager
 import androidx.core.os.bundleOf
-import com.geovault.common.map.AccuracyCircleLayer
 import com.geovault.common.map.GeoVaultMapFragment
+import com.geovault.common.map.LocationComponentHelper
 import com.geovault.common.map.MapLibreManager
 import com.geovault.common.map.MapMarkerUtils
 import com.geovault.tracker.DEFAULT_TRACKER_COLOR_HEX
@@ -37,16 +37,20 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
+import org.maplibre.android.location.modes.RenderMode
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
+import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.SymbolLayer
+import org.maplibre.android.style.sources.GeoJsonOptions
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.LineString
 import org.maplibre.geojson.MultiLineString
 import org.maplibre.geojson.Point
+import org.maplibre.geojson.Polygon
 
 class MapFragment : Fragment() {
 
@@ -82,6 +86,7 @@ class MapFragment : Fragment() {
 
     private var mapReady = false
     private var followLockEnabled = false
+    private var followLockNeedsInitialZoom = false
     /** When true, fetchHistory() will zoom the camera to fit the loaded track (e.g. after "View on map"). */
     private var zoomToTrackAfterLoad = false
     /** When true, fetchHistory() will not move the camera (restore track only). */
@@ -188,7 +193,30 @@ class MapFragment : Fragment() {
                     style.addImage("track-direction-arrow", bitmap)
                 }
                 style.addSource(GeoJsonSource(TRACK_SOURCE_ID))
-                style.addSource(GeoJsonSource(TRACK_POSITION_SOURCE_ID))
+                style.addSource(
+                    GeoJsonSource(
+                        TRACK_POSITION_SOURCE_ID,
+                        GeoJsonOptions().apply { this["synchronousUpdate"] = true }
+                    )
+                )
+                style.addSource(
+                    GeoJsonSource(
+                        TRACK_POSITION_ACCURACY_SOURCE_ID,
+                        GeoJsonOptions().apply { this["synchronousUpdate"] = true }
+                    )
+                )
+                LocationComponentHelper.activate(
+                    map = map,
+                    style = style,
+                    context = requireContext(),
+                    config = LocationComponentHelper.Config(
+                        accuracyColor = Color.parseColor(DEFAULT_TRACKER_COLOR_HEX),
+                        accuracyAlpha = 0.25f,
+                        backgroundDrawable = R.drawable.ic_track_direction_arrow_circle,
+                        foregroundDrawable = R.drawable.ic_track_direction_arrow,
+                        renderMode = RenderMode.COMPASS
+                    )
+                )
 
                 val outlineLayer = LineLayer(TRACK_OUTLINE_LAYER_ID, TRACK_SOURCE_ID).apply {
                     setProperties(
@@ -206,17 +234,18 @@ class MapFragment : Fragment() {
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
                     )
                 }
-                val initialZoom = map.cameraPosition?.zoom ?: 15.0
-                val initialLat = map.cameraPosition?.target?.latitude ?: 0.0
-                val initialPixelsPerMeter = AccuracyCircleLayer.pixelsPerMeterAt(initialZoom, initialLat)
-                AccuracyCircleLayer.attachToStyle(
-                    style,
-                    TRACK_POSITION_SOURCE_ID,
-                    TRACK_POSITION_ACCURACY_LAYER_ID,
-                    initialPixelsPerMeter,
-                    AccuracyCircleLayer.Options(strokeColor = Color.parseColor(DEFAULT_TRACKER_COLOR_HEX)),
-                    requireContext()
+                val trackerBaseColor = Color.parseColor(DEFAULT_TRACKER_COLOR_HEX)
+                val accuracyFillColor = Color.argb(
+                    64,
+                    Color.red(trackerBaseColor),
+                    Color.green(trackerBaseColor),
+                    Color.blue(trackerBaseColor)
                 )
+                val accuracyLayer = FillLayer(TRACK_POSITION_ACCURACY_LAYER_ID, TRACK_POSITION_ACCURACY_SOURCE_ID).apply {
+                    setProperties(
+                        PropertyFactory.fillColor(accuracyFillColor)
+                    )
+                }
                 val symbolLayer = SymbolLayer(TRACK_POSITION_LAYER_ID, TRACK_POSITION_SOURCE_ID).apply {
                     setProperties(
                         PropertyFactory.iconImage(org.maplibre.android.style.expressions.Expression.get("icon")),
@@ -229,20 +258,19 @@ class MapFragment : Fragment() {
                 }
                 style.addLayer(outlineLayer)
                 style.addLayer(fillLayer)
+                style.addLayer(accuracyLayer)
                 style.addLayer(symbolLayer)
                 map.addOnMoveListener(object : MapLibreMap.OnMoveListener {
                     override fun onMoveBegin(detector: org.maplibre.android.gestures.MoveGestureDetector) {
                         if (followLockEnabled) {
                             followLockEnabled = false
+                            LocationComponentHelper.setCameraTracking(map, enabled = false)
                             updateFollowLockButton()
                         }
                     }
                     override fun onMove(detector: org.maplibre.android.gestures.MoveGestureDetector) { }
                     override fun onMoveEnd(detector: org.maplibre.android.gestures.MoveGestureDetector) { }
                 })
-                map.addOnCameraMoveListener {
-                    AccuracyCircleLayer.updateRadiusFromCamera(map, TRACK_POSITION_ACCURACY_LAYER_ID)
-                }
                 mapReady = true
                 mapLoadingOverlay.visibility = View.GONE
                 updateTrackLine()
@@ -289,10 +317,9 @@ class MapFragment : Fragment() {
 
         zoomToLatestButton.setOnClickListener {
             followLockEnabled = !followLockEnabled
+            followLockNeedsInitialZoom = followLockEnabled
             if (followLockEnabled && trackPoints.isNotEmpty()) {
-                maplibreMap?.let { map ->
-                    mapManager?.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(trackPoints.last(), 16.0))
-                }
+                centerCameraOnTrackLocked(trackPoints.last(), forceZoomIn = true)
             }
             updateFollowLockButton()
         }
@@ -538,10 +565,19 @@ class MapFragment : Fragment() {
         }
     }
 
-    /** Keeps the map centered on the given point when follow lock is on; preserves zoom and uses a short animation. */
-    private fun centerCameraOnTrackLocked(target: LatLng) {
+    /**
+     * Keeps the map centered on the given point when follow lock is on.
+     * When [forceZoomIn] is true, make sure we jump to follow zoom first.
+     */
+    private fun centerCameraOnTrackLocked(target: LatLng, forceZoomIn: Boolean = false) {
         val map = maplibreMap ?: return
-        val zoom = map.cameraPosition.zoom
+        val shouldForceZoom = forceZoomIn || followLockNeedsInitialZoom
+        if (shouldForceZoom) followLockNeedsInitialZoom = false
+        val zoom = if (shouldForceZoom) {
+            maxOf(map.cameraPosition.zoom, FOLLOW_LOCK_TARGET_ZOOM)
+        } else {
+            map.cameraPosition.zoom
+        }
         val update = CameraUpdateFactory.newCameraPosition(
             CameraPosition.Builder().target(target).zoom(zoom).build()
         )
@@ -809,7 +845,7 @@ class MapFragment : Fragment() {
                         }
                     }
                     if (followLockEnabled && trackPoints.isNotEmpty()) {
-                        centerCameraOnTrackLocked(trackPoints.last())
+                        centerCameraOnTrackLocked(trackPoints.last(), forceZoomIn = true)
                     }
                 }
                 restoreOnlyNoZoom = false
@@ -872,11 +908,14 @@ class MapFragment : Fragment() {
 
     private fun applyPositionSymbolUpdate() {
         if (!isAdded) return
-        val style = maplibreMap?.style ?: return
+        val map = maplibreMap ?: return
+        val style = map.style ?: return
         val source = style.getSourceAs<GeoJsonSource>(TRACK_POSITION_SOURCE_ID) ?: return
+        val accuracySource = style.getSourceAs<GeoJsonSource>(TRACK_POSITION_ACCURACY_SOURCE_ID)
         
         if (trackPoints.isEmpty()) {
             source.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+            accuracySource?.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
             return
         }
         
@@ -915,6 +954,22 @@ class MapFragment : Fragment() {
         }
         val accuracyValue = (accuracyMeters?.takeIf { it > 0f } ?: 0f).toDouble()
 
+        if (showingDefault) {
+            val location = Location("tracker-default-location").apply {
+                latitude = toLatLng.latitude
+                longitude = toLatLng.longitude
+                accuracy = accuracyValue.toFloat()
+                bearing = toRotation
+            }
+            LocationComponentHelper.setEnabled(map, true)
+            LocationComponentHelper.forceLocation(map, location)
+            source.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+            accuracySource?.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+            return
+        }
+
+        LocationComponentHelper.setEnabled(map, false)
+
         val point = Point.fromLngLat(toLatLng.longitude, toLatLng.latitude)
         val feature = Feature.fromGeometry(point)
         feature.addStringProperty("icon", symbolIconId)
@@ -922,6 +977,40 @@ class MapFragment : Fragment() {
         feature.addNumberProperty("accuracy", accuracyValue)
 
         source.setGeoJson(feature)
+        if (accuracyValue > 0.0) {
+            val circle = buildAccuracyPolygon(toLatLng, accuracyValue)
+            val accuracyFeature = Feature.fromGeometry(circle)
+            accuracySource?.setGeoJson(accuracyFeature)
+        } else {
+            accuracySource?.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+        }
+    }
+
+    /**
+     * Build a geodesic polygon around [center] with [radiusMeters] radius.
+     * Rendering this geometry avoids zoom-time CircleLayer radius jitter.
+     */
+    private fun buildAccuracyPolygon(center: LatLng, radiusMeters: Double, steps: Int = 64): Polygon {
+        val earthRadiusMeters = 6378137.0
+        val latRad = Math.toRadians(center.latitude)
+        val lonRad = Math.toRadians(center.longitude)
+        val angularDistance = radiusMeters / earthRadiusMeters
+        val ring = ArrayList<Point>(steps + 1)
+        for (i in 0..steps) {
+            val bearing = (2.0 * Math.PI * i.toDouble()) / steps.toDouble()
+            val sinLat = kotlin.math.sin(latRad)
+            val cosLat = kotlin.math.cos(latRad)
+            val sinAng = kotlin.math.sin(angularDistance)
+            val cosAng = kotlin.math.cos(angularDistance)
+            val sinLat2 = sinLat * cosAng + cosLat * sinAng * kotlin.math.cos(bearing)
+            val lat2 = kotlin.math.asin(sinLat2)
+            val y = kotlin.math.sin(bearing) * sinAng * cosLat
+            val x = cosAng - sinLat * sinLat2
+            var lon2 = lonRad + kotlin.math.atan2(y, x)
+            lon2 = (lon2 + 3.0 * Math.PI) % (2.0 * Math.PI) - Math.PI
+            ring.add(Point.fromLngLat(Math.toDegrees(lon2), Math.toDegrees(lat2)))
+        }
+        return Polygon.fromLngLats(listOf(ring))
     }
 
     private fun getTrackDirectionDegrees(points: List<LatLng>): Float {
@@ -964,6 +1053,8 @@ class MapFragment : Fragment() {
         private const val KEY_FOLLOW_LOCK = "follow_lock"
         /** Duration (ms) for animating the camera when follow lock is on and the track moves. */
         private const val FOLLOW_LOCK_ANIMATION_MS = 300
+        /** Target zoom when enabling follow lock from a zoomed-out state. */
+        private const val FOLLOW_LOCK_TARGET_ZOOM = 16.0
         /** Do not draw track across jumps larger than this (meters). 100 miles. */
         private const val MAX_JUMP_METERS = 100f * 1609.344f
         /** Content padding (dp) so overlays (name card, buttons, spinner) don't cut off the track. */
@@ -979,6 +1070,7 @@ class MapFragment : Fragment() {
         private const val TRACK_OUTLINE_LAYER_ID = "track-outline-layer"
         private const val TRACK_FILL_LAYER_ID = "track-fill-layer"
         private const val TRACK_POSITION_SOURCE_ID = "track-position-source"
+        private const val TRACK_POSITION_ACCURACY_SOURCE_ID = "track-position-accuracy-source"
         private const val TRACK_POSITION_LAYER_ID = "track-position-layer"
         private const val TRACK_POSITION_ACCURACY_LAYER_ID = "track-position-accuracy-layer"
     }

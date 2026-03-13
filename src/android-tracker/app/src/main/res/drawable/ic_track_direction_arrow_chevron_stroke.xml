@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Chevron outline only (black border). Composed with circle and chevron_fill for track direction icon. -->
+<!-- Chevron outline disabled; only outer circle should have black border. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="32dp"
     android:height="32dp"
@@ -12,7 +12,7 @@
         android:pivotY="2.6">
         <path
             android:fillColor="#00000000"
-            android:strokeColor="@color/black"
+            android:strokeColor="#00000000"
             android:strokeWidth="1.2"
             android:strokeLineCap="round"
             android:strokeLineJoin="round"

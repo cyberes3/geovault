@@ -29,8 +29,8 @@
     <!-- List/container background (same as container in day; pure black in night) -->
     <color name="list_background">@color/blue_extra_light</color>
 
-    <!-- Legacy colors (no common equivalent) -->
-    <color name="gray">#6B7280</color>
-    <color name="gray_light">#F3F4F6</color>
+    <!-- Legacy colors (reference gray scale) -->
+    <color name="gray">@color/gv_common_gray_500</color>
+    <color name="gray_light">@color/gv_common_gray_100</color>
     <color name="gray_600">@color/gv_common_text_secondary</color>
 </resources>

@@ -23,7 +23,7 @@
     <color name="surface">@color/gv_common_surface</color>
     <color name="content_on_primary">@color/gv_common_content_on_primary</color>
     <color name="border_light">@color/gv_common_border_light</color>
-    <color name="divider">#E5E7EB</color>           <!-- gray-200, no common equivalent -->
+    <color name="divider">@color/gv_common_gray_200</color>
 
     <!-- Error state (for error_background drawable) -->
     <color name="error_light">@color/gv_common_error_light</color>
@@ -44,8 +44,8 @@
     <!-- Snackbar / error bar -->
     <color name="snackbar_background">@color/gv_common_snackbar_background</color>
 
-    <!-- Legacy colors (no common equivalent) -->
-    <color name="gray">#6B7280</color>
-    <color name="gray_light">#F3F4F6</color>
+    <!-- Legacy colors (reference gray scale) -->
+    <color name="gray">@color/gv_common_gray_500</color>
+    <color name="gray_light">@color/gv_common_gray_100</color>
     <color name="gray_600">@color/gv_common_text_secondary</color>
 </resources>

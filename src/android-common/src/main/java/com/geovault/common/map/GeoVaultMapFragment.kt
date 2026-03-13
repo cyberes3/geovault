@@ -79,7 +79,13 @@ class GeoVaultMapFragment : Fragment(), OnMapReadyCallback, MapView.OnDidFailLoa
         mapViewRef.getMapAsync(this)
         if (!forceOsmOnly) {
             mapManager.fetchMapSources {
-                if (mapReady) _maplibreMap?.let { mapManager.applySelectedSource(it) }
+                if (mapReady) {
+                    _maplibreMap?.let { map ->
+                        if (!mapManager.isCurrentSourceApplied(map)) {
+                            mapManager.applySelectedSource(map)
+                        }
+                    }
+                }
             }
         }
     }

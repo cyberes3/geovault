@@ -28,6 +28,8 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
         private set
         
     private var maplibreMap: MapLibreMap? = null
+    private var lastAppliedSourceKey: String? = null
+    private var pendingSourceKey: String? = null
     
     var onStyleLoaded: ((MapLibreMap, Style) -> Unit)? = null
 
@@ -92,23 +94,32 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
         if (activity.isDestroyed) return
 
         val savedCamera = map.cameraPosition
+        val effectiveId = sourceManager.getEffectiveSourceId()
+        val requestedSourceKey = buildSourceKey(effectiveId)
+
+        // Avoid reapplying the same source/style while already loaded or in flight.
+        if (requestedSourceKey == pendingSourceKey || (requestedSourceKey == lastAppliedSourceKey && map.style != null)) {
+            return
+        }
+        pendingSourceKey = requestedSourceKey
 
         fun restoreCamera() {
             if (!activity.isDestroyed) map.setCameraPosition(savedCamera)
         }
         
         try {
-            val effectiveId = sourceManager.getEffectiveSourceId()
             val mapMaxZoom = if (sourceManager.isVectorSource(effectiveId)) MAX_ZOOM_LEVEL_VECTOR.toDouble() else MAX_ZOOM_LEVEL.toDouble()
             map.setMaxZoomPreference(mapMaxZoom)
             
             if (sourceManager.isVectorSource(effectiveId)) {
                 val styleUrl = sourceManager.getResolvedStyleUrl(effectiveId)
                 if (!styleUrl.isNullOrBlank()) {
-                    loadVectorStyle(map, styleUrl) { restoreCamera() }
+                    loadVectorStyle(map, styleUrl, requestedSourceKey) { restoreCamera() }
                 } else {
                     map.setStyle(Style.Builder()) { style ->
                         if (!activity.isDestroyed) {
+                            lastAppliedSourceKey = requestedSourceKey
+                            pendingSourceKey = null
                             onStyleLoaded?.invoke(map, style)
                             restoreCamera()
                         }
@@ -132,6 +143,8 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
                             }
                         } catch (_: Exception) { /* ignore */ }
                         if (!activity.isDestroyed) {
+                            lastAppliedSourceKey = requestedSourceKey
+                            pendingSourceKey = null
                             onStyleLoaded?.invoke(map, style)
                             restoreCamera()
                         }
@@ -139,6 +152,8 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
                 } else {
                     map.setStyle(Style.Builder()) { style ->
                         if (!activity.isDestroyed) {
+                            lastAppliedSourceKey = requestedSourceKey
+                            pendingSourceKey = null
                             onStyleLoaded?.invoke(map, style)
                             restoreCamera()
                         }
@@ -146,8 +161,10 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
                 }
             }
         } catch (_: Exception) {
+            pendingSourceKey = null
             map.setStyle(Style.Builder()) { style ->
                 if (!activity.isDestroyed) {
+                    lastAppliedSourceKey = requestedSourceKey
                     onStyleLoaded?.invoke(map, style)
                     restoreCamera()
                 }
@@ -155,7 +172,12 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
         }
     }
 
-    private fun loadVectorStyle(map: MapLibreMap, styleUrl: String, restoreCamera: () -> Unit = {}) {
+    private fun loadVectorStyle(
+        map: MapLibreMap,
+        styleUrl: String,
+        sourceKey: String,
+        restoreCamera: () -> Unit = {}
+    ) {
         val serverUrl = GeovaultAuthManager.getServerUrl(activity).trimEnd('/')
         val isOurServer = serverUrl.isNotEmpty() && (styleUrl == serverUrl || styleUrl.startsWith("$serverUrl/"))
         val serverBase = if (isOurServer) java.net.URI.create(styleUrl).let { "${it.scheme}://${it.host}" } else null
@@ -165,14 +187,30 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
             if (!json.isNullOrBlank()) {
                 map.setStyle(Style.Builder().fromJson(json)) { style ->
                     if (!activity.isDestroyed) {
+                        lastAppliedSourceKey = sourceKey
+                        pendingSourceKey = null
                         onStyleLoaded?.invoke(map, style)
                         restoreCamera()
                     }
                 }
             } else {
+                pendingSourceKey = null
                 Toast.makeText(activity, "Map style unavailable, falling back to basic map.", Toast.LENGTH_SHORT).show()
                 loadOsmFallback(map, restoreCamera)
             }
+        }
+    }
+
+    fun isCurrentSourceApplied(map: MapLibreMap = maplibreMap!!): Boolean {
+        val requestedSourceKey = buildSourceKey(sourceManager.getEffectiveSourceId())
+        return requestedSourceKey == pendingSourceKey || (requestedSourceKey == lastAppliedSourceKey && map.style != null)
+    }
+
+    private fun buildSourceKey(effectiveId: String): String {
+        return if (sourceManager.isVectorSource(effectiveId)) {
+            "vector:$effectiveId:${sourceManager.getResolvedStyleUrl(effectiveId).orEmpty()}"
+        } else {
+            "raster:$effectiveId:${sourceManager.getRasterUrl(effectiveId).orEmpty()}"
         }
     }
 

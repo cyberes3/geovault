@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- White circle with black border; composed with chevron for track direction icon. -->
+<!-- White circle with thin black border, slightly translucent for overlap readability. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="32dp"
     android:height="32dp"
     android:viewportWidth="32"
     android:viewportHeight="32">
     <path
-        android:fillColor="@color/white"
-        android:strokeColor="@color/black"
+        android:fillColor="#D9FFFFFF"
+        android:strokeColor="#D9000000"
         android:strokeWidth="1.0"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
