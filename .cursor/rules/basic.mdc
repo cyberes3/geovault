@@ -25,6 +25,6 @@ Apps only target the latest Android version and SDK so do not do things like `if
 YOU ARE NOT ALLOWED TO DO `@Suppress("DEPRECATION")`!!!!!! YOU MUST FIX IT!!!!!!!
 We are using Material Design 2 only.
 We have preset color pallets in `android-common`. Please prioritize using those instead of hard-coding hex colors.
-
+No shadows on anything.
 
 External repos are provided for you in the `external sources/` directory. This folder is read-only. If you need to reference the source code of a library please check here before fetching GitHub.
