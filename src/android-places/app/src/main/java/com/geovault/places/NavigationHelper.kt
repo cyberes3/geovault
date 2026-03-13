@@ -13,6 +13,9 @@ import com.google.gson.reflect.TypeToken
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
+import java.util.Locale
 
 object NavigationHelper {
 
@@ -21,17 +24,16 @@ object NavigationHelper {
     private val gson = Gson()
     // Use getParameterized so R8 doesn't strip generic signature (anonymous TypeToken fails with ProGuard)
     private val intListType = TypeToken.getParameterized(List::class.java, Int::class.javaObjectType).type
+    private const val COORDINATE_PRECISION_DP = 8
 
     fun navigateToPlace(context: Context, feature: Feature, serverUrl: String) {
         val coords = feature.geometry.coordinates
         if (coords.size >= 2) {
             val lon = coords[0]
             val lat = coords[1]
-            val label = feature.properties.name ?: "Place"
-            val encodedLabel = Uri.encode(label)
 
-            // 1. Launch Map Intent (catch when no app can handle geo:)
-            val uri = Uri.parse("geo:$lat,$lon?q=$lat,$lon($encodedLabel)")
+            // 1. Launch Maps URL intent (catch when no app can handle it)
+            val uri = buildMapsSearchUri(lat = lat, lon = lon)
             val intent = Intent(Intent.ACTION_VIEW, uri)
             try {
                 context.startActivity(intent)
@@ -64,6 +66,18 @@ object NavigationHelper {
                 })
             }
         }
+    }
+
+    internal fun buildMapsSearchUri(lat: Double, lon: Double): Uri {
+        return Uri.parse(buildMapsSearchUrl(lat = lat, lon = lon))
+    }
+
+    internal fun buildMapsSearchUrl(lat: Double, lon: Double): String {
+        val latString = String.format(Locale.US, "%.${COORDINATE_PRECISION_DP}f", lat)
+        val lonString = String.format(Locale.US, "%.${COORDINATE_PRECISION_DP}f", lon)
+        val coordinateQuery = "$latString,$lonString"
+        val encodedCoordinateQuery = URLEncoder.encode(coordinateQuery, StandardCharsets.UTF_8.toString())
+        return "https://www.google.com/maps/search/?api=1&query=$encodedCoordinateQuery"
     }
 
     fun flushPendingNavigations(context: Context, serverUrl: String) {

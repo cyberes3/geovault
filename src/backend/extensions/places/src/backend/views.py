@@ -130,6 +130,8 @@ def places_list(request):
             PlaceMetadata.objects.create(feature=feature, updated_at=timezone.now())
 
             normalized_feature['properties']['database_id'] = feature.id
+            if feature.timestamp:
+                normalized_feature['properties']['created_at'] = feature.timestamp.isoformat()
             return success_response(normalized_feature, status=201)
 
         except json.JSONDecodeError:
@@ -154,6 +156,8 @@ def place_detail(request, feature_id):
         geojson = feature.geojson
         if geojson and 'properties' in geojson:
             geojson['properties']['database_id'] = feature.id
+            if feature.timestamp:
+                geojson['properties']['created_at'] = feature.timestamp.isoformat()
         return success_response(geojson)
 
     elif request.method == "PUT":
@@ -194,6 +198,8 @@ def place_detail(request, feature_id):
             meta.save(update_fields=['updated_at'])
 
             normalized_feature['properties']['database_id'] = feature.id
+            if feature.timestamp:
+                normalized_feature['properties']['created_at'] = feature.timestamp.isoformat()
             return success_response(normalized_feature)
 
         except json.JSONDecodeError:
