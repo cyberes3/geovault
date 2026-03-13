@@ -3,6 +3,7 @@ package com.geovault.places
 import android.content.Context
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ImportantMessageSnackbar
+import com.geovault.common.LoadingOverlayView
 import com.geovault.common.RetrofitClient
 import android.content.Intent
 import android.net.Uri
@@ -43,9 +44,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyState: View
     private lateinit var swipeRefresh: SwipeRefreshLayout
-    private lateinit var refreshOverlay: View
-    private lateinit var syncSpinner: com.geovault.common.LoadingSpinner
-    private lateinit var syncText: TextView
+    private lateinit var refreshOverlay: LoadingOverlayView
     private lateinit var searchInput: EditText
     private lateinit var searchClear: View
     private lateinit var searchDivider: View
@@ -154,8 +153,14 @@ class MainActivity : AppCompatActivity() {
         swipeRefresh.setProgressBackgroundColorSchemeResource(R.color.surface)
         swipeRefresh.setColorSchemeResources(R.color.primary_blue)
         refreshOverlay = findViewById(R.id.refreshOverlay)
-        syncSpinner = findViewById(R.id.syncSpinner)
-        syncText = findViewById(R.id.syncText)
+        refreshOverlay.setTitle("Syncing...")
+        refreshOverlay.setSubtext("Tap to cancel")
+        refreshOverlay.setOnOverlayClickListener {
+            cancelRefresh(
+                if (swipeRefresh.isRefreshing) "Cancelled - using cached data"
+                else "Syncing cancelled"
+            )
+        }
         searchInput = findViewById(R.id.searchInput)
         searchClear = findViewById(R.id.searchClear)
         searchDivider = findViewById(R.id.searchDivider)
@@ -244,13 +249,6 @@ class MainActivity : AppCompatActivity() {
             safeNoAnimation()
         }
 
-        // Tap overlay to cancel (works for initial sync and for offline-item sync)
-        refreshOverlay.setOnClickListener {
-            cancelRefresh(
-                if (swipeRefresh.isRefreshing) "Cancelled - using cached data"
-                else "Syncing cancelled"
-            )
-        }
     }
     
     override fun onNewIntent(intent: Intent) {
@@ -360,8 +358,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun hideSyncOverlayAndReset() {
         if (!::refreshOverlay.isInitialized || isDestroyed) return
-        refreshOverlay.visibility = View.GONE
-        stopSyncAnimation()
+        refreshOverlay.hide()
         swipeRefresh.isRefreshing = false
         fabAdd.isEnabled = true
         fabMap.isEnabled = true
@@ -444,11 +441,9 @@ class MainActivity : AppCompatActivity() {
         refreshCall?.cancel()
         val api = RetrofitClient.getClient(this, baseUrl).create(GeovaultApi::class.java)
 
-        syncSpinner.visibility = View.VISIBLE
-        refreshOverlay.visibility = View.VISIBLE
-        startSyncAnimation()
+        refreshOverlay.setTitle("Syncing...")
+        refreshOverlay.show()
         swipeRefresh.isRefreshing = true
-        syncText.text = "Syncing..."
         fabAdd.isEnabled = false
         fabMap.isEnabled = false
 
@@ -471,7 +466,7 @@ class MainActivity : AppCompatActivity() {
                         refreshListFromCache()
                         val offlineCount = cache.getOfflineFeatures().size
                         if (syncOffline && offlineCount > 0) {
-                            syncText.text = "Syncing $offlineCount offline ${if (offlineCount == 1) "item" else "items"}..."
+                            refreshOverlay.setTitle("Syncing $offlineCount offline ${if (offlineCount == 1) "item" else "items"}...")
                             runPendingSync(serverUrl)
                         } else {
                             hideSyncOverlayAndReset()
@@ -505,14 +500,6 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    private fun startSyncAnimation() {
-        syncSpinner.start()
-    }
-
-    private fun stopSyncAnimation() {
-        syncSpinner.stop(hide = false)
-    }
-
     private fun updateLastSyncUI() {
         val lastSync = cache.getLastSyncTime()
         if (lastSync == 0L) return
@@ -534,10 +521,8 @@ class MainActivity : AppCompatActivity() {
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
         val api = RetrofitClient.getClient(this, baseUrl).create(GeovaultApi::class.java)
 
-        syncSpinner.visibility = View.VISIBLE
-        refreshOverlay.visibility = View.VISIBLE
-        startSyncAnimation()
-        syncText.text = "Syncing ${toSync.size} offline ${if (toSync.size == 1) "item" else "items"}..."
+        refreshOverlay.setTitle("Syncing ${toSync.size} offline ${if (toSync.size == 1) "item" else "items"}...")
+        refreshOverlay.show()
 
         var syncedCount = 0
         var successCount = 0

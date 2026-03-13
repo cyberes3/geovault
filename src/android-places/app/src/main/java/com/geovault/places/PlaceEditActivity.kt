@@ -3,6 +3,7 @@ package com.geovault.places
 import com.geovault.common.CoordinateParser
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.R as CommonR
+import com.geovault.common.LoadingOverlayView
 import com.geovault.common.map.GeoVaultMapFragment
 import com.geovault.common.map.MapLibreManager
 import com.geovault.common.map.MapMarkerUtils
@@ -64,12 +65,9 @@ class PlaceEditActivity : AppCompatActivity() {
     private lateinit var useMyLocationButton: MaterialButton
     private lateinit var btnLocationIcon: ImageView
     private lateinit var btnLocationSpinner: com.geovault.common.LoadingSpinner
-    private lateinit var savingSpinner: com.geovault.common.LoadingSpinner
     private lateinit var titleText: TextView
     private lateinit var locationLoadingOverlay: View
-    private lateinit var savingOverlay: View
-    private lateinit var savingText: TextView
-    private lateinit var savingTapHint: TextView
+    private lateinit var savingOverlay: LoadingOverlayView
 
     private lateinit var searchPlaceButton: ImageView
     private lateinit var searchBarPanel: View
@@ -209,12 +207,9 @@ class PlaceEditActivity : AppCompatActivity() {
         useMyLocationButton = findViewById(R.id.useMyLocationButton)
         btnLocationIcon = findViewById(R.id.btnLocationIcon)
         btnLocationSpinner = findViewById(R.id.btnLocationSpinner)
-        savingSpinner = findViewById(R.id.savingSpinner)
         locationLoadingOverlay = findViewById(R.id.locationButtonContent)
         titleText = findViewById(R.id.titleText)
         savingOverlay = findViewById(R.id.savingOverlay)
-        savingText = findViewById(R.id.savingText)
-        savingTapHint = findViewById(R.id.savingTapHint)
 
         findViewById<View>(R.id.closeButton).setOnClickListener { tryFinish() }
         findViewById<View>(R.id.cancelButton).setOnClickListener { tryFinish() }
@@ -689,21 +684,17 @@ class PlaceEditActivity : AppCompatActivity() {
     }
 
     private fun showSavingOverlay(message: String = "Saving...") {
-        savingText.text = message
-        savingSpinner.start()
-        savingOverlay.visibility = View.VISIBLE
-        startSavingAnimation()
+        savingOverlay.setTitle(message)
         saveButton.isEnabled = false
 
         val isSavingOffline = message == "Saving offline..."
         if (isSavingOffline) {
-            savingOverlay.setOnClickListener(null)
-            savingOverlay.isClickable = false
-            savingTapHint.visibility = View.INVISIBLE
+            savingOverlay.setSubtextVisible(false)
+            savingOverlay.setOnOverlayClickListener(null)
         } else {
-            savingOverlay.isClickable = true
-            savingTapHint.visibility = View.VISIBLE
-            savingOverlay.setOnClickListener {
+            savingOverlay.setSubtext("Tap to save offline")
+            savingOverlay.setSubtextVisible(true)
+            savingOverlay.setOnOverlayClickListener {
                 saveCall?.cancel()
                 saveCall = null
                 if (pendingFeature != null) {
@@ -714,11 +705,11 @@ class PlaceEditActivity : AppCompatActivity() {
                 }
             }
         }
+        savingOverlay.show()
     }
 
     private fun hideSavingOverlay() {
-        savingOverlay.visibility = View.GONE
-        stopSavingAnimation()
+        savingOverlay.hide()
         validateForm() // Re-validate to restore button state
     }
 
@@ -889,7 +880,7 @@ class PlaceEditActivity : AppCompatActivity() {
         mapSearchCall = null
         searchPlaceSpinner.stop()
         btnLocationSpinner.stop()
-        savingSpinner.stop(hide = false)
+        savingOverlay.hide()
     }
 
     override fun onDestroy() {
@@ -909,14 +900,6 @@ class PlaceEditActivity : AppCompatActivity() {
             btnLocationSpinner.stop()
             useMyLocationButton.isEnabled = true
         }
-    }
-
-    private fun startSavingAnimation() {
-        savingSpinner.start()
-    }
-
-    private fun stopSavingAnimation() {
-        savingSpinner.stop(hide = false)
     }
 
     companion object {
