@@ -65,7 +65,7 @@ if [ -f "app/src/main/res/drawable/ic_launcher_foreground.xml" ]; then
     rm -f app/src/main/res/drawable/ic_launcher_foreground.xml
 fi
 
-# Parse arguments: [debug|release] and optional --skip-minify/--install
+# Parse arguments: [debug|release|clean] and optional --skip-minify/--install
 BUILD_TYPE=""
 SKIP_MINIFY=false
 INSTALL=false
@@ -74,15 +74,22 @@ for arg in "$@"; do
         SKIP_MINIFY=true
     elif [ "$arg" = "--install" ]; then
         INSTALL=true
-    elif [ -z "$BUILD_TYPE" ] && { [ "$arg" = "debug" ] || [ "$arg" = "release" ]; }; then
+    elif [ -z "$BUILD_TYPE" ] && { [ "$arg" = "debug" ] || [ "$arg" = "release" ] || [ "$arg" = "clean" ]; }; then
         BUILD_TYPE="$arg"
     fi
 done
 BUILD_TYPE=${BUILD_TYPE:-debug}
 
+if [ "$BUILD_TYPE" = "clean" ]; then
+    echo "Cleaning build outputs..."
+    ./gradlew clean
+    echo "Clean complete."
+    exit 0
+fi
+
 if [ "$BUILD_TYPE" != "debug" ] && [ "$BUILD_TYPE" != "release" ]; then
-    echo "Error: Build type must be 'debug' or 'release'"
-    echo "Usage: ./build-android.sh [debug|release] [--skip-minify] [--install]"
+    echo "Error: Build type must be 'debug', 'release', or 'clean'"
+    echo "Usage: ./build-android.sh [debug|release|clean] [--skip-minify] [--install]"
     exit 1
 fi
 

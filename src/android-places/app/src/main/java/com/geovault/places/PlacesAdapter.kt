@@ -6,17 +6,18 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
-import android.widget.Toast
 import android.content.Context
-import android.content.ClipboardManager
-import android.content.ClipData
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
+import com.geovault.common.ClipboardCopyHelper
+import kotlinx.coroutines.CoroutineScope
 
 class PlacesAdapter(
     private var places: List<Feature>,
     private var offlinePlaces: List<Feature>,
     private var offlineFeatures: List<OfflineFeature>,
+    private val copyHelper: ClipboardCopyHelper,
+    private val scope: CoroutineScope,
     private val onNavigate: (Feature) -> Unit,
     private val onEdit: (Feature) -> Unit,
     private val onEditOffline: (OfflineFeature) -> Unit,
@@ -241,13 +242,9 @@ class PlacesAdapter(
         }
         
         holder.coordinatesText.setOnClickListener {
-            val coordsText = holder.coordinatesText.text.toString()
+            val coordsText = holder.coordinatesText.text.toString().trim()
             if (coordsText.isNotEmpty()) {
-                val context = holder.itemView.context
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText("Coordinates", coordsText)
-                clipboard.setPrimaryClip(clip)
-                Toast.makeText(context, "Coordinates copied: $coordsText", Toast.LENGTH_SHORT).show()
+                copyHelper.copyText(scope, coordsText, "Coordinates")
             }
         }
     }

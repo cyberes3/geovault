@@ -40,6 +40,11 @@ From the `src/android` directory:
 ./build-android.sh release
 ```
 
+**Clean build outputs:**
+```bash
+./build-android.sh clean
+```
+
 The APK will be generated at:
 - Debug: `app/build/outputs/apk/debug/app-debug.apk`
 - Release: `app/build/outputs/apk/release/app-release.apk`

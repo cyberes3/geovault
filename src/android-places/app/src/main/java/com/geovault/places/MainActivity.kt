@@ -32,6 +32,8 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.lifecycleScope
+import com.geovault.common.ClipboardCopyHelper
 
 class MainActivity : AppCompatActivity() {
 
@@ -167,10 +169,14 @@ class MainActivity : AppCompatActivity() {
         fabAdd = findViewById(R.id.fab_add)
         fabMap = findViewById(R.id.fab_map)
         importantMessageSnackbar = findViewById(R.id.importantMessageSnackbar)
+        val copyHelper = ClipboardCopyHelper(this)
+        copyHelper.prewarm(recyclerView)
         adapter = PlacesAdapter(
             emptyList(),
             emptyList(),
             emptyList(),
+            copyHelper,
+            lifecycleScope,
             { feature: Feature ->
                 navigateToPlace(feature)
             }, 

@@ -62,6 +62,7 @@ dependencies {
     implementation("org.maplibre.gl:android-sdk:11.3.0")
     implementation("org.maplibre.gl:android-plugin-annotation-v9:3.0.2")
     implementation("com.google.android.gms:play-services-location:21.0.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.11.1")
