@@ -3,6 +3,7 @@ package com.geovault.common.map
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.PorterDuff
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
@@ -36,13 +37,17 @@ object MapMarkerUtils {
     /**
      * Composites background, then tinted foreground fill, then foreground stroke (no tint) so the
      * fill gets the tracker color and the stroke stays black. Use for track direction icon.
+     *
+     * @param backgroundAlpha Alpha for the background drawable (white circle + border), 1f = opaque.
+     *        Use a value &lt; 1f (e.g. 0.5f) to make the circle and border slightly transparent.
      */
     fun getMarkerBitmapWithTintedForeground(
         context: Context,
         backgroundResId: Int,
         foregroundFillResId: Int,
         foregroundStrokeResId: Int,
-        tintColor: Int
+        tintColor: Int,
+        backgroundAlpha: Float = 1f
     ): Bitmap? {
         val background = ContextCompat.getDrawable(context, backgroundResId) ?: return null
         val fillDrawable = ContextCompat.getDrawable(context, foregroundFillResId) ?: return null
@@ -53,8 +58,16 @@ object MapMarkerUtils {
         if (w <= 0 || h <= 0) return null
         val result = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(result)
-        background.setBounds(0, 0, w, h)
-        background.draw(canvas)
+        if (backgroundAlpha < 1f) {
+            val paint = Paint().apply { alpha = (backgroundAlpha * 255).toInt().coerceIn(0, 255) }
+            canvas.saveLayer(0f, 0f, w.toFloat(), h.toFloat(), paint)
+            background.setBounds(0, 0, w, h)
+            background.draw(canvas)
+            canvas.restore()
+        } else {
+            background.setBounds(0, 0, w, h)
+            background.draw(canvas)
+        }
         val tintedFill = DrawableCompat.wrap(fillDrawable.mutate())
         DrawableCompat.setTint(tintedFill, tintColor)
         DrawableCompat.setTintMode(tintedFill, PorterDuff.Mode.SRC_IN)

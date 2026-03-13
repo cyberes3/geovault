@@ -3,7 +3,10 @@ package com.geovault.places
 import android.content.Intent
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.R as CommonR
-import com.geovault.common.map.*
+import com.geovault.common.map.GeoVaultMapFragment
+import com.geovault.common.map.MapLibreManager
+import com.geovault.common.map.MapMarkerUtils
+import com.geovault.common.map.OverlappingPointsPopup
 import android.os.Bundle
 import android.view.View
 import androidx.activity.OnBackPressedCallback
@@ -12,33 +15,24 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
-import androidx.core.content.ContextCompat
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
-import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.MapLibreMap
-import org.maplibre.android.maps.OnMapReadyCallback
 import org.maplibre.android.maps.Style
-import org.maplibre.android.style.sources.RasterSource
-import org.maplibre.android.style.sources.TileSet
-import org.maplibre.android.style.layers.RasterLayer
 import org.maplibre.android.plugins.annotation.Symbol
 import org.maplibre.android.plugins.annotation.SymbolManager
 import org.maplibre.android.plugins.annotation.SymbolOptions
 import android.util.Log
-import android.widget.Toast
 import java.util.ArrayList
 import java.util.concurrent.Executors
 
-class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLoadingMapListener {
+class MapActivity : AppCompatActivity() {
 
-    private lateinit var mapView: MapView
-    private var maplibreMap: MapLibreMap? = null
+    private var mapFragment: GeoVaultMapFragment? = null
     private lateinit var features: ArrayList<Feature>
     private var symbolManager: SymbolManager? = null
-    /** Selection overlay: single yellow symbol on a layer above all blue markers. */
     private var selectionSymbolManager: SymbolManager? = null
     private var selectionSymbol: Symbol? = null
     private var lastSelectedSymbol: Symbol? = null
@@ -46,10 +40,6 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
     private val symbolToFeature = mutableMapOf<Symbol, Feature>()
     private var selectedFeature: Feature? = null
     private val executor = Executors.newSingleThreadExecutor()
-    private lateinit var mapManager: MapLibreManager
-    /** True when map is ready (onMapReady ran). */
-    private var mapReady = false
-    /** True after we've applied initial fit-bounds/zoom once; when restored we skip so MapView saved state keeps camera. */
     private var initialCameraApplied = false
 
     private val cache: PlacesCache
@@ -87,23 +77,18 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
             view.updatePadding(bottom = insets.bottom)
             WindowInsetsCompat.CONSUMED
         }
-        mapView = findViewById(R.id.map)
-        mapView.foreground = android.graphics.drawable.ColorDrawable(ContextCompat.getColor(this, R.color.map_underlay))
-        mapView.addOnDidFailLoadingMapListener(this)
-        mapView.onCreate(savedInstanceState)
-        mapManager = MapLibreManager(this, mapView)
-        mapManager.onStyleLoaded = { map, style ->
-            val padding = (50 * resources.displayMetrics.density).toInt()
-            mapManager.defaultPadding = doubleArrayOf(padding.toDouble(), padding.toDouble(), padding.toDouble(), padding.toDouble())
-            applyStyleLoaded(map)
-        }
+        mapFragment = supportFragmentManager.findFragmentById(R.id.gv_common_map_fragment) as? GeoVaultMapFragment
         initialCameraApplied = savedInstanceState?.getBoolean(KEY_INITIAL_CAMERA_APPLIED, false) ?: false
         features = ArrayList(cache.getDisplayFeatures())
-        mapView.getMapAsync(this)
         updateMapAuthHeader()
-        mapManager.fetchMapSources {
-            if (mapReady) mapManager.applySelectedSource()
-        }
+
+        mapFragment?.setCallback(object : GeoVaultMapFragment.Callback {
+            override fun onMapReady(map: MapLibreMap, style: Style) {
+                setupMapClickListener(map)
+                applyStyleLoaded(map)
+            }
+        })
+
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 startActivity(Intent(this@MapActivity, MainActivity::class.java).apply {
@@ -112,6 +97,7 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
                 safeNoAnimation()
             }
         })
+        setupMapUi()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -121,30 +107,28 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
         applyZoomFromIntent()
     }
 
-    /** Apply zoom_to_lat, zoom_to_lon, zoom_to_id from current intent (e.g. when opened from list "view on map"). */
     private fun applyZoomFromIntent() {
         if (!intent.hasExtra("zoom_to_lat") || !intent.hasExtra("zoom_to_lon")) return
-        val map = maplibreMap ?: return
+        val map = mapFragment?.maplibreMap ?: return
+        val mapManager = mapFragment?.mapManager ?: return
         val centerLat = intent.getDoubleExtra("zoom_to_lat", 0.0)
         val centerLon = intent.getDoubleExtra("zoom_to_lon", 0.0)
         val zoomToId = intent.getIntExtra("zoom_to_id", -1)
-        mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(LatLng(centerLat, centerLon)).zoom(DEFAULT_POINT_ZOOM).build()))
+        mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(LatLng(centerLat, centerLon)).zoom(MapLibreManager.DEFAULT_POINT_ZOOM).build()))
         if (zoomToId >= 0) {
             val pair = symbolToFeature.entries.find { it.value.properties.database_id == zoomToId }
             pair?.let { (symbol, feature) -> selectMarkerAndUpdateUi(symbol, feature) }
         }
     }
 
-    /** Single refresh path: load features from cache and redraw markers. */
     private fun loadFeaturesFromCache() {
         features.clear()
         features.addAll(cache.getDisplayFeatures())
         refreshMarkers()
     }
 
-    /** Clear existing markers and redraw from current {@code features} list. Call after updating features. */
     private fun refreshMarkers() {
-        val map = maplibreMap ?: return
+        val map = mapFragment?.maplibreMap ?: return
         if (map.style == null) return
         selectionSymbol?.let { selectionSymbolManager?.delete(it) }
         selectionSymbol = null
@@ -160,49 +144,47 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
         addMarkersIfReady(map)
     }
 
-    override fun onDidFailLoadingMap(errorMessage: String) {
-        Log.e(TAG, "Map style load failed: $errorMessage")
-        runOnUiThread {
-            val map = maplibreMap ?: return@runOnUiThread
-            val effectiveId = mapManager.sourceManager.getEffectiveSourceId()
-            if (mapManager.sourceManager.isVectorSource(effectiveId)) {
-                Toast.makeText(this, getString(R.string.map_style_unavailable_fallback_osm), Toast.LENGTH_SHORT).show()
-                mapManager.loadOsmFallback(map)
-            } else {
-                Toast.makeText(this, "Map failed: $errorMessage", Toast.LENGTH_LONG).show()
+    private fun setupMapClickListener(map: MapLibreMap) {
+        val mapView = mapFragment?.mapView ?: return
+        val hitRadiusPx = (20 * resources.displayMetrics.density).toInt().toFloat()
+        map.addOnMapClickListener { latLng ->
+            val tapScreen = map.projection.toScreenLocation(latLng)
+            val tapX = tapScreen.x
+            val tapY = tapScreen.y
+            val nearTap = symbolToFeature.entries.filter { (symbol, _) ->
+                val symScreen = map.projection.toScreenLocation(symbol.latLng)
+                val dx = symScreen.x - tapX
+                val dy = symScreen.y - tapY
+                (dx * dx + dy * dy) <= hitRadiusPx * hitRadiusPx
+            }
+            when {
+                nearTap.isEmpty() -> false
+                nearTap.size == 1 -> {
+                    val (symbol, feature) = nearTap[0]
+                    selectMarkerAndUpdateUi(symbol, feature)
+                    true
+                }
+                else -> {
+                    val names = nearTap.map { (_, f) -> f.properties.name?.takeIf { n -> n.isNotBlank() } ?: "" }
+                    val tapXi = tapX.toInt()
+                    val tapYi = tapY.toInt()
+                    OverlappingPointsPopup(this, mapView, names, tapXi, tapYi) { index ->
+                        val (symbol, feature) = nearTap[index]
+                        selectMarkerAndUpdateUi(symbol, feature)
+                    }.show()
+                    true
+                }
             }
         }
     }
-
-    override fun onMapReady(map: MapLibreMap) {
-        maplibreMap = map
-        mapReady = true
-        mapManager.setupBaseMapSettings(map)
-        setupMapUi()
-        // Load style once: when no server load now (OSM); when server configured wait for fetchSources callback.
-        if (mapManager.sourcesFetched || GeovaultAuthManager.getServerUrl(this).isEmpty()) {
-            mapManager.applySelectedSource(map)
-        }
-    }
-
 
     private fun applyStyleLoaded(map: MapLibreMap) {
         Log.d(TAG, "applyStyleLoaded: adding markers")
         addMarkersIfReady(map)
     }
 
-    private fun logStyleLayerOrder(style: Style, label: String) {
-        try {
-            val ids = style.layers.map { it.id }
-            Log.d(TAG, "layerOrder [$label]: ${ids.joinToString(" -> ")}")
-        } catch (e: Exception) {
-            Log.e(TAG, "layerOrder [$label]: failed to get layers", e)
-        }
-    }
-
-    /** Move selection layer to top of draw order so yellow marker is not covered by other symbol layers. */
     private fun moveSelectionLayerToTop() {
-        val style = maplibreMap?.style ?: return
+        val style = mapFragment?.maplibreMap?.style ?: return
         val selManager = selectionSymbolManager ?: return
         val layerId = selManager.layerId
         try {
@@ -221,17 +203,17 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
             startActivity(android.content.Intent(this, SettingsActivity::class.java))
             safeNoAnimation()
         }
-        findViewById<View>(R.id.mapToggle).setOnClickListener {
-            val nextSourceId = mapManager.sourceManager.getNextSourceId()
-            mapManager.sourceManager.setSelectedSourceId(nextSourceId)
-            mapManager.applySelectedSource()
+        findViewById<android.widget.TextView>(R.id.placeName)
+        findViewById<android.widget.TextView>(R.id.placeDescription)
+        findViewById<android.widget.Button>(R.id.viewInListButton)
+        findViewById<android.widget.Button>(R.id.editPlaceButton)
+        findViewById<android.widget.Button>(R.id.navigateButton).setOnClickListener {
+            selectedFeature?.let { feature ->
+                val serverUrl = GeovaultAuthManager.getServerUrl(this)
+                NavigationHelper.navigateToPlace(this, feature, serverUrl)
+            }
         }
-        val placeName = findViewById<android.widget.TextView>(R.id.placeName)
-        val placeDescription = findViewById<android.widget.TextView>(R.id.placeDescription)
-        val viewInListButton = findViewById<android.widget.Button>(R.id.viewInListButton)
-        val editPlaceButton = findViewById<android.widget.Button>(R.id.editPlaceButton)
-        val navigateButton = findViewById<android.widget.Button>(R.id.navigateButton)
-        editPlaceButton.setOnClickListener {
+        findViewById<android.widget.Button>(R.id.editPlaceButton).setOnClickListener {
             selectedFeature?.let { feature ->
                 val intent = android.content.Intent(this, PlaceEditActivity::class.java)
                 intent.putExtra("feature", feature)
@@ -239,13 +221,7 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
                 safeNoAnimation()
             }
         }
-        navigateButton.setOnClickListener {
-            selectedFeature?.let { feature ->
-                val serverUrl = GeovaultAuthManager.getServerUrl(this)
-                NavigationHelper.navigateToPlace(this, feature, serverUrl)
-            }
-        }
-        viewInListButton.setOnClickListener {
+        findViewById<android.widget.Button>(R.id.viewInListButton).setOnClickListener {
             selectedFeature?.properties?.database_id?.let { id ->
                 startActivity(Intent(this, MainActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
@@ -271,9 +247,7 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
                 .withLatLng(symbol.latLng)
                 .withIconImage(ICON_MARKER_SELECTED)
         )
-        Log.d(TAG, "selectMarkerAndUpdateUi: created selection symbol on layer ${selManager.layerId}")
         moveSelectionLayerToTop()
-        maplibreMap?.style?.let { logStyleLayerOrder(it, "after selectMarker") }
 
         findViewById<android.widget.TextView>(R.id.placeName).text = f.properties.name ?: "Unknown Place"
         findViewById<android.widget.TextView>(R.id.placeDescription).text = f.properties.description ?: ""
@@ -289,10 +263,9 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
         navigateButton.alpha = if (dbId != null) 1.0f else 0.5f
     }
 
-    /** Clear selection panel when switching map layers or leaving map; show default prompt. */
     private fun clearSelectionUi() {
-        findViewById<android.widget.TextView>(R.id.placeName).text = getString(R.string.map_select_place)
-        findViewById<android.widget.TextView>(R.id.placeDescription).text = getString(R.string.map_tap_marker_hint)
+        findViewById<android.widget.TextView>(R.id.placeName).text = getString(CommonR.string.gv_common_map_select_place)
+        findViewById<android.widget.TextView>(R.id.placeDescription).text = getString(CommonR.string.gv_common_map_tap_marker_hint)
         val viewInListButton = findViewById<android.widget.Button>(R.id.viewInListButton)
         val editPlaceButton = findViewById<android.widget.Button>(R.id.editPlaceButton)
         val navigateButton = findViewById<android.widget.Button>(R.id.navigateButton)
@@ -306,7 +279,9 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
 
     private fun addMarkersIfReady(map: MapLibreMap?) {
         if (isDestroyed) return
-        val mapRef = map ?: maplibreMap ?: return
+        val mapRef = map ?: mapFragment?.maplibreMap ?: return
+        val mapView = mapFragment?.mapView ?: return
+        val mapManager = mapFragment?.mapManager ?: return
         if (features.isEmpty()) {
             Log.d(TAG, "addMarkersIfReady: no features, skip")
             return
@@ -332,17 +307,10 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
         manager.setIconAllowOverlap(true)
         manager.setIconIgnorePlacement(true)
         val markersLayerId = manager.layerId
-        Log.d(TAG, "addMarkersIfReady: markers layerId=$markersLayerId")
         val selManager = SymbolManager(mapView, mapRef, style, null, markersLayerId)
         selectionSymbolManager = selManager
-        Log.d(TAG, "addMarkersIfReady: selection layerId=${selManager.layerId} (above $markersLayerId)")
         selManager.setIconAllowOverlap(true)
         selManager.setIconIgnorePlacement(true)
-        manager.addClickListener { symbol ->
-            Log.d(TAG, "addMarkersIfReady: marker clicked")
-            symbolToFeature[symbol]?.let { selectMarkerAndUpdateUi(symbol, it) }
-            false
-        }
         var minLat = 90.0
         var maxLat = -90.0
         var minLon = 180.0
@@ -400,7 +368,7 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
                             val (m, f) = pair
                             val c = f.geometry.coordinates
                             if (c.size >= 2) {
-                                mapRef.setCameraPosition(CameraPosition.Builder().target(LatLng(c[1], c[0])).zoom(DEFAULT_POINT_ZOOM).build())
+                                mapRef.setCameraPosition(CameraPosition.Builder().target(LatLng(c[1], c[0])).zoom(MapLibreManager.DEFAULT_POINT_ZOOM).build())
                                 selectMarkerAndUpdateUi(m, f)
                                 return
                             }
@@ -408,7 +376,7 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
                     }
                     val centerLat = intent.getDoubleExtra("zoom_to_lat", 0.0)
                     val centerLon = intent.getDoubleExtra("zoom_to_lon", 0.0)
-                    mapRef.setCameraPosition(CameraPosition.Builder().target(LatLng(centerLat, centerLon)).zoom(DEFAULT_POINT_ZOOM).build())
+                    mapRef.setCameraPosition(CameraPosition.Builder().target(LatLng(centerLat, centerLon)).zoom(MapLibreManager.DEFAULT_POINT_ZOOM).build())
                 } else {
                     val padding = (50 * resources.displayMetrics.density).toInt()
                     val update = CameraUpdateFactory.newLatLngBounds(bounds, padding)
@@ -434,27 +402,14 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        mapView.onStart()
-    }
-
     override fun onResume() {
         super.onResume()
-        mapView.onResume()
         updateMapAuthHeader()
         loadFeaturesFromCache()
     }
 
-    override fun onPause() {
-        super.onPause()
-        mapView.onPause()
-    }
-
     override fun onStop() {
         super.onStop()
-        mapView.onStop()
-        // Clear selected point when leaving the map so it's not selected when returning.
         selectionSymbol?.let { selectionSymbolManager?.delete(it) }
         selectionSymbol = null
         selectedFeature = null
@@ -463,21 +418,19 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
     }
 
     override fun onDestroy() {
-        mapView.removeOnDidFailLoadingMapListener(this)
         selectionSymbolManager?.onDestroy()
         selectionSymbolManager = null
         selectionSymbol = null
         symbolManager?.onDestroy()
         symbolManager = null
         executor.shutdown()
-        mapView.onDestroy()
+        mapFragment = null
         super.onDestroy()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putBoolean(KEY_INITIAL_CAMERA_APPLIED, initialCameraApplied)
-        mapView.onSaveInstanceState(outState)
     }
 
     override fun finish() {
@@ -493,15 +446,6 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLo
     companion object {
         private const val KEY_INITIAL_CAMERA_APPLIED = "initial_camera_applied"
         private const val TAG = "GeoVaultMap"
-        private const val RASTER_SOURCE_ID = "geovault-raster"
-        private const val RASTER_LAYER_ID = "geovault-raster-layer"
-        /** Layer ID below which we add raster so markers (annotations) render on top (cf. frontend moveLayer tile to bottom). */
-        private const val ANNOTATIONS_LAYER_ID = "org.maplibre.annotations.points"
-        /** Max zoom for raster (OSM, satellite) tiles. */
-        private const val MAX_ZOOM_LEVEL = 15
-        /** Max zoom for MapTiler vector maps. */
-        private const val MAX_ZOOM_LEVEL_VECTOR = 18
-        private const val DEFAULT_POINT_ZOOM = 12.0
         private const val ICON_MARKER_DEFAULT = "geovault-marker-default"
         private const val ICON_MARKER_SELECTED = "geovault-marker-selected"
     }

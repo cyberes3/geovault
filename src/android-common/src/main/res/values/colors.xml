@@ -52,4 +52,7 @@
     <!-- Map marker borders: default = white ring, selected = black ring in day -->
     <color name="gv_common_marker_border">#FFFFFF</color>
     <color name="gv_common_marker_border_selected">#000000</color>
+
+    <!-- Map load underlay (shown until tiles/style load); matches blue_extra_light in day -->
+    <color name="gv_common_map_underlay">#F3F6FA</color>
 </resources>

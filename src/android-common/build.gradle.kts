@@ -61,6 +61,7 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.maplibre.gl:android-sdk:11.3.0")
     implementation("org.maplibre.gl:android-plugin-annotation-v9:3.0.2")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.11.1")

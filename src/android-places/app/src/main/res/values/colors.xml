@@ -36,8 +36,6 @@
     <color name="search_divider">@color/border_light</color>
 
     <!-- Map underlay (shows when no map or while loading) -->
-    <color name="map_underlay">#F3F6FA</color>
-
     <!-- Snackbar / error bar -->
     <color name="snackbar_background">#323232</color>
 

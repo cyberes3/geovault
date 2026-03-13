@@ -3,7 +3,9 @@ package com.geovault.places
 import com.geovault.common.CoordinateParser
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.R as CommonR
-import com.geovault.common.map.*
+import com.geovault.common.map.GeoVaultMapFragment
+import com.geovault.common.map.MapLibreManager
+import com.geovault.common.map.MapMarkerUtils
 import com.geovault.common.RetrofitClient
 import android.Manifest
 import android.content.Context
@@ -42,13 +44,8 @@ import com.google.android.gms.location.LocationServices
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.MapLibreMap
-import org.maplibre.android.maps.OnMapReadyCallback
 import org.maplibre.android.maps.Style
-import org.maplibre.android.style.sources.RasterSource
-import org.maplibre.android.style.sources.TileSet
-import org.maplibre.android.style.layers.RasterLayer
 import org.maplibre.android.plugins.annotation.Symbol
 import org.maplibre.android.plugins.annotation.SymbolManager
 import org.maplibre.android.plugins.annotation.SymbolOptions
@@ -56,10 +53,9 @@ import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 
-class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDidFailLoadingMapListener {
+class PlaceEditActivity : AppCompatActivity() {
 
-    private lateinit var mapView: MapView
-    private var maplibreMap: MapLibreMap? = null
+    private var mapFragment: GeoVaultMapFragment? = null
     private lateinit var nameInput: EditText
     private lateinit var descriptionInput: EditText
     private lateinit var coordinatesInput: EditText
@@ -83,7 +79,6 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
     private lateinit var searchPlaceSpinner: com.geovault.common.LoadingSpinner
     private lateinit var searchPlaceResults: ListView
     private lateinit var mapContainer: View
-    private lateinit var mapManager: MapLibreManager
 
     private var latitude: Double? = null
     private var longitude: Double? = null
@@ -91,8 +86,6 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
 
     private var symbolManager: SymbolManager? = null
     private var placeSymbol: Symbol? = null
-    /** True when map is ready (onMapReady ran). */
-    private var mapReady = false
     /** True after we've centered the map on the place once; layer switches should not re-center. */
     private var initialMapCenterApplied = false
     private var editFeature: Feature? = null
@@ -122,9 +115,6 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
     }
 
-    /** Zoom level when focusing on a single point (same as MapActivity zoom-to-point). */
-    private val zoomLevelPoint = 12.0
-
     private val requestLocationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -138,18 +128,13 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         initViews()
         setupWindowInsets()
-        mapView = findViewById(R.id.map)
-        // MapLibre shows a foreground drawable until the map loads; use theme-aware color (black in dark mode).
-        mapView.foreground = android.graphics.drawable.ColorDrawable(ContextCompat.getColor(this, R.color.map_underlay))
-        mapView.addOnDidFailLoadingMapListener(this)
-        mapView.onCreate(savedInstanceState)
-        mapManager = MapLibreManager(this, mapView)
-        mapManager.onStyleLoaded = { map, style -> onStyleLoaded(style) }
-        mapView.getMapAsync(this)
-        mapManager.fetchMapSources {
-            if (mapReady) mapManager.applySelectedSource()
-        }
-        
+        mapFragment = supportFragmentManager.findFragmentById(R.id.gv_common_map_fragment) as? GeoVaultMapFragment
+        mapFragment?.setCallback(object : GeoVaultMapFragment.Callback {
+            override fun onMapReady(map: MapLibreMap, style: Style) {
+                onMapReadyFromFragment(map, style)
+            }
+        })
+
         // Check for edit intent
         editFeature = intent.getParcelableExtra("feature", Feature::class.java)
         originalFeature = intent.getParcelableExtra("original_feature", Feature::class.java)
@@ -181,65 +166,35 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
         validateForm() // Initial check
     }
 
-    override fun onDidFailLoadingMap(errorMessage: String) {
-        Log.e(TAG, "Map style load failed: $errorMessage")
-        runOnUiThread {
-            if (isDestroyed) return@runOnUiThread
-            val map = maplibreMap ?: return@runOnUiThread
-            val effectiveId = mapManager.sourceManager.getEffectiveSourceId()
-            if (mapManager.sourceManager.isVectorSource(effectiveId)) {
-                Toast.makeText(this, getString(R.string.map_style_unavailable_fallback_osm), Toast.LENGTH_SHORT).show()
-                mapManager.loadOsmFallback(map)
-            }
-        }
-    }
-
-    private fun onStyleLoaded(style: Style) {
+    private fun onMapReadyFromFragment(map: MapLibreMap, style: Style) {
         if (isDestroyed || !::nameInput.isInitialized) return
-        // Do not call symbolManager.onDestroy() here: the previous style was already replaced
-        // by setStyle(), so the old manager's native layer is invalid and onDestroy() can throw
-        // (wstring_convert / nativeGetId). Just clear references.
-        Log.d(TAG, "onStyleLoaded: clearing old refs, style.uri=${style.uri}")
+        val mapView = mapFragment?.mapView ?: return
+        val mapManager = mapFragment?.mapManager ?: return
+        Log.d(TAG, "onMapReadyFromFragment: clearing old refs, style.uri=${style.uri}")
         symbolManager = null
         placeSymbol = null
         val bitmap = MapMarkerUtils.getMarkerBitmap(this, CommonR.drawable.gv_common_ic_marker_default)
-        Log.d(TAG, "onStyleLoaded: bitmap=${if (bitmap != null) "${bitmap.width}x${bitmap.height}" else "null"}, iconId=$ICON_MARKER_PLACE")
         if (bitmap != null) {
             style.addImage(ICON_MARKER_PLACE, bitmap, false)
-            Log.d(TAG, "onStyleLoaded: addImage($ICON_MARKER_PLACE) ok")
-        } else {
-            Log.e(TAG, "onStyleLoaded: bitmap null, marker icon will be missing/black")
         }
-        val map = maplibreMap ?: return
         val manager = SymbolManager(mapView, map, style, null, null)
-        mapManager.onStyleLoaded = { map, style ->
-            val padding = (50 * resources.displayMetrics.density).toInt()
-            mapManager.defaultPadding = doubleArrayOf(padding.toDouble(), padding.toDouble(), padding.toDouble(), padding.toDouble())
-            
-            symbolManager = manager
-            manager.setIconAllowOverlap(true)
-            Log.d(TAG, "onStyleLoaded: new SymbolManager layerId=${manager.layerId}, lat=$latitude lon=$longitude")
-            latitude?.let { lat ->
-                longitude?.let { lon ->
-                    Log.d(TAG, "onStyleLoaded: calling updateMarker($lat, $lon)")
-                    updateMarker(lat, lon)
-                    if (!initialMapCenterApplied) {
-                        initialMapCenterApplied = true
-                        zoomToPoint(lat, lon)
-                    }
+        symbolManager = manager
+        manager.setIconAllowOverlap(true)
+        map.addOnMapClickListener { point ->
+            updateCoords(point.latitude, point.longitude, null)
+            true
+        }
+        if (latitude == null || longitude == null) {
+            mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(LatLng(0.0, 0.0), 0.0))
+        }
+        latitude?.let { lat ->
+            longitude?.let { lon ->
+                updateMarker(lat, lon)
+                if (!initialMapCenterApplied) {
+                    initialMapCenterApplied = true
+                    zoomToPoint(lat, lon)
                 }
             }
-        }
-    }
-
-    override fun onMapReady(map: MapLibreMap) {
-        maplibreMap = map
-        mapReady = true
-        mapManager.setupBaseMapSettings(map)
-        setupMap()
-        // Load style once: when no server we load now; when server configured we wait for fetchSources callback.
-        if (mapManager.sourcesFetched || GeovaultAuthManager.getServerUrl(this).isEmpty()) {
-            mapManager.applySelectedSource(map)
         }
     }
 
@@ -309,26 +264,6 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
             view.updatePadding(bottom = bottomInset)
             
             windowInsets
-        }
-    }
-
-    private fun setupMap() {
-        val map = maplibreMap ?: return
-        Log.d(TAG, "setupMap: registering map click listener")
-        map.addOnMapClickListener { point ->
-            Log.d(TAG, "setupMap: map tapped lat=${point.latitude} lon=${point.longitude} symbolManager=${symbolManager != null} placeSymbol=${placeSymbol != null}")
-            updateCoords(point.latitude, point.longitude, null)
-            true
-        }
-        findViewById<View>(R.id.mapToggle).setOnClickListener {
-            val nextSourceId = mapManager.sourceManager.getNextSourceId()
-            mapManager.sourceManager.setSelectedSourceId(nextSourceId)
-            mapManager.applySelectedSource()
-        }
-        // Only set default camera when no place coords; initial center on place happens in onStyleLoaded (once).
-        // New place: show entire world (zoom 0).
-        if (latitude == null || longitude == null) {
-            mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(LatLng(0.0, 0.0), 0.0))
         }
     }
 
@@ -662,15 +597,16 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
             val address = feature.properties.address
             val displayText = if (!address.isNullOrBlank()) address else null
             updateCoords(coords[1], coords[0], displayText)
-            maplibreMap?.let { map ->
-                mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(LatLng(coords[1], coords[0]), zoomLevelPoint.toDouble()))
+            mapFragment?.maplibreMap?.let { map ->
+                mapFragment?.mapManager?.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(LatLng(coords[1], coords[0]), MapLibreManager.DEFAULT_POINT_ZOOM))
             }
         }
     }
 
     private fun zoomToPoint(lat: Double, lon: Double) {
-        val map = maplibreMap ?: return
-        mapManager.animateCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(LatLng(lat, lon), zoomLevelPoint.toDouble()))
+        val map = mapFragment?.maplibreMap ?: return
+        val mapManager = mapFragment?.mapManager ?: return
+        mapManager.animateCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(LatLng(lat, lon), MapLibreManager.DEFAULT_POINT_ZOOM))
     }
 
     private fun updateCoords(lat: Double, lon: Double, displayText: String?) {
@@ -941,16 +877,6 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
         overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
     }
 
-    override fun onStart() {
-        super.onStart()
-        if (::mapView.isInitialized) mapView.onStart()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (::mapView.isInitialized) mapView.onResume()
-    }
-
     override fun onPause() {
         super.onPause()
         addressSearchRunnable?.let { handler.removeCallbacks(it) }
@@ -964,26 +890,14 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
         searchPlaceSpinner.stop()
         btnLocationSpinner.stop()
         savingSpinner.stop(hide = false)
-        if (::mapView.isInitialized) mapView.onPause()
-    }
-
-    override fun onStop() {
-        super.onStop()
-        if (::mapView.isInitialized) mapView.onStop()
     }
 
     override fun onDestroy() {
-        if (::mapView.isInitialized) mapView.removeOnDidFailLoadingMapListener(this)
         symbolManager?.onDestroy()
         symbolManager = null
         placeSymbol = null
-        if (::mapView.isInitialized) mapView.onDestroy()
+        mapFragment = null
         super.onDestroy()
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        if (::mapView.isInitialized) mapView.onSaveInstanceState(outState)
     }
     private fun setLocationLoading(loading: Boolean) {
         if (loading) {
@@ -1007,13 +921,6 @@ class PlaceEditActivity : AppCompatActivity(), OnMapReadyCallback, MapView.OnDid
 
     companion object {
         private const val TAG = "PlaceEditActivity"
-        private const val RASTER_SOURCE_ID = "geovault-raster"
-        private const val RASTER_LAYER_ID = "geovault-raster-layer"
-        private const val ANNOTATIONS_LAYER_ID = "org.maplibre.annotations.points"
-        /** Max zoom for raster (OSM, satellite) tiles. */
-        private const val MAX_ZOOM_LEVEL = 15
-        /** Max zoom for MapTiler vector maps. */
-        private const val MAX_ZOOM_LEVEL_VECTOR = 18
         private const val ICON_MARKER_PLACE = "geovault-marker-place"
     }
 }

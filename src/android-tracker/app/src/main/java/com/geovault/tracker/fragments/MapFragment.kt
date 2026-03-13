@@ -17,6 +17,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import androidx.fragment.app.Fragment
 import com.geovault.common.GeovaultAuthManager
+import androidx.core.os.bundleOf
+import com.geovault.common.map.AccuracyCircleLayer
+import com.geovault.common.map.GeoVaultMapFragment
 import com.geovault.common.map.MapLibreManager
 import com.geovault.common.map.MapMarkerUtils
 import com.geovault.tracker.DEFAULT_TRACKER_COLOR_HEX
@@ -33,8 +36,7 @@ import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
-import org.maplibre.android.maps.MapView
-import org.maplibre.android.style.layers.CircleLayer
+import org.maplibre.android.maps.Style
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.LineLayer
@@ -48,8 +50,8 @@ import org.maplibre.geojson.Point
 
 class MapFragment : Fragment() {
 
-    private lateinit var mapView: MapView
-    private lateinit var mapManager: MapLibreManager
+    private var mapFragment: GeoVaultMapFragment? = null
+    private var mapManager: MapLibreManager? = null
     private var maplibreMap: MapLibreMap? = null
     private var trackPoints: MutableList<LatLng> = mutableListOf()
     private var trackTimestamps: MutableList<Long> = mutableListOf()
@@ -92,23 +94,6 @@ class MapFragment : Fragment() {
     private var trackLineDirty = false
 
     private val mainScope = CoroutineScope(Dispatchers.Main + Job())
-
-    private val failLoadingMapListener = MapView.OnDidFailLoadingMapListener { errorMessage ->
-        Log.e(TAG, "Map style load failed: $errorMessage")
-        val map = maplibreMap ?: return@OnDidFailLoadingMapListener
-        val effectiveId = mapManager.sourceManager.getEffectiveSourceId()
-        if (mapManager.sourceManager.isVectorSource(effectiveId)) {
-            requireActivity().runOnUiThread {
-                if (!isAdded) return@runOnUiThread
-                Toast.makeText(requireContext(), getString(R.string.map_style_unavailable_fallback_osm), Toast.LENGTH_SHORT).show()
-                mapManager.loadOsmFallback(map)
-            }
-        } else {
-            requireActivity().runOnUiThread {
-                if (isAdded) Toast.makeText(requireContext(), "Map failed: $errorMessage", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
 
     private val locationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -158,7 +143,6 @@ class MapFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        mapView = view.findViewById(R.id.mapView)
         mapLoadingOverlay = view.findViewById(R.id.mapLoadingOverlay)
         trackerLabelCard = view.findViewById(R.id.trackerLabelCard)
         trackerNameLabel = view.findViewById(R.id.trackerNameLabel)
@@ -170,6 +154,116 @@ class MapFragment : Fragment() {
         zoomOutButton = view.findViewById(R.id.zoomOutButton)
         geometryLoadingSpinner = view.findViewById(R.id.geometryLoadingSpinner)
         lastUpdatedLabel = view.findViewById(R.id.lastUpdatedLabel)
+
+        if (childFragmentManager.findFragmentById(R.id.mapContainer) == null) {
+            childFragmentManager.beginTransaction()
+                .replace(
+                    R.id.mapContainer,
+                    GeoVaultMapFragment().apply {
+                        arguments = bundleOf(GeoVaultMapFragment.ARG_SHOW_TOGGLE to false)
+                    }
+                )
+                .commitNow()
+        }
+        mapFragment = childFragmentManager.findFragmentById(R.id.mapContainer) as? GeoVaultMapFragment
+        mapFragment?.setCallback(object : GeoVaultMapFragment.Callback {
+            override fun onMapReady(map: MapLibreMap, style: Style) {
+                maplibreMap = map
+                mapManager = mapFragment?.mapManager
+                val mgr = mapManager ?: return
+                mgr.defaultPadding = getMapPaddingArray()
+                val current = map.cameraPosition
+                val padded = CameraPosition.Builder(current)
+                    .padding(mgr.defaultPadding!!)
+                    .build()
+                map.moveCamera(CameraUpdateFactory.newCameraPosition(padded))
+                mgr.addMarkerIcon(style, "marker-default", R.drawable.ic_marker_default)
+                MapMarkerUtils.getMarkerBitmapWithTintedForeground(
+                    requireContext(),
+                    R.drawable.ic_track_direction_arrow_circle,
+                    R.drawable.ic_track_direction_arrow_chevron_fill,
+                    R.drawable.ic_track_direction_arrow_chevron_stroke,
+                    Color.parseColor(DEFAULT_TRACKER_COLOR_HEX)
+                )?.let { bitmap ->
+                    style.addImage("track-direction-arrow", bitmap)
+                }
+                style.addSource(GeoJsonSource("track-source"))
+                style.addSource(GeoJsonSource("track-position-source"))
+
+                val outlineLayer = LineLayer("track-outline-layer", "track-source").apply {
+                    setProperties(
+                        PropertyFactory.lineWidth(5f),
+                        PropertyFactory.lineColor(org.maplibre.android.style.expressions.Expression.get("outlineColor")),
+                        PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                        PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
+                    )
+                }
+                val fillLayer = LineLayer("track-fill-layer", "track-source").apply {
+                    setProperties(
+                        PropertyFactory.lineWidth(3f),
+                        PropertyFactory.lineColor(org.maplibre.android.style.expressions.Expression.get("lineColor")),
+                        PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                        PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
+                    )
+                }
+                val initialZoom = map.cameraPosition?.zoom ?: 15.0
+                val initialLat = map.cameraPosition?.target?.latitude ?: 0.0
+                val initialPixelsPerMeter = AccuracyCircleLayer.pixelsPerMeterAt(initialZoom, initialLat)
+                AccuracyCircleLayer.attachToStyle(
+                    style,
+                    "track-position-source",
+                    "track-position-accuracy-layer",
+                    initialPixelsPerMeter,
+                    AccuracyCircleLayer.Options(strokeColor = Color.parseColor(DEFAULT_TRACKER_COLOR_HEX)),
+                    requireContext()
+                )
+                val symbolLayer = SymbolLayer("track-position-layer", "track-position-source").apply {
+                    setProperties(
+                        PropertyFactory.iconImage(org.maplibre.android.style.expressions.Expression.get("icon")),
+                        PropertyFactory.iconSize(0.75f),
+                        PropertyFactory.iconRotate(org.maplibre.android.style.expressions.Expression.get("rotate")),
+                        PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
+                        PropertyFactory.iconAllowOverlap(true),
+                        PropertyFactory.iconIgnorePlacement(true)
+                    )
+                }
+                style.addLayer(outlineLayer)
+                style.addLayer(fillLayer)
+                style.addLayer(symbolLayer)
+                map.addOnMoveListener(object : MapLibreMap.OnMoveListener {
+                    override fun onMoveBegin(detector: org.maplibre.android.gestures.MoveGestureDetector) {
+                        if (followLockEnabled) {
+                            followLockEnabled = false
+                            updateFollowLockButton()
+                        }
+                    }
+                    override fun onMove(detector: org.maplibre.android.gestures.MoveGestureDetector) { }
+                    override fun onMoveEnd(detector: org.maplibre.android.gestures.MoveGestureDetector) { }
+                })
+                map.addOnCameraMoveListener { AccuracyCircleLayer.updateRadiusFromCamera(map, "track-position-accuracy-layer") }
+                mapReady = true
+                mapLoadingOverlay.visibility = View.GONE
+                updateTrackLine()
+                if (zoomToTrackAfterLoad && trackPoints.isNotEmpty()) {
+                    val bbox = (activity as? MainActivity)?.initialTrackForMap?.bbox
+                    if (bbox != null && bbox.size == 4) {
+                        val bounds = LatLngBounds.Builder()
+                            .include(LatLng(bbox[1], bbox[0]))
+                            .include(LatLng(bbox[3], bbox[2]))
+                            .build()
+                        val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
+                        mgr.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
+                        zoomToTrackAfterLoad = false
+                    } else if (trackPoints.size >= 2) {
+                        val bounds = LatLngBounds.Builder().apply { trackPoints.forEach { include(it) } }.build()
+                        val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
+                        mgr.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
+                        zoomToTrackAfterLoad = false
+                    }
+                }
+                fetchHistory()
+            }
+        })
 
         updateTrackerLabel()
         trackerLabelCard.setOnClickListener {
@@ -184,153 +278,18 @@ class MapFragment : Fragment() {
         updateFollowLockButton()
         updateZoomToLatestButtonState()
 
-        mapManager = MapLibreManager(requireActivity(), mapView)
-        mapManager.onStyleLoaded = { map, style ->
-            maplibreMap = map
-            mapManager.defaultPadding = getMapPaddingArray()
-            val current = map.cameraPosition
-            val padded = CameraPosition.Builder(current)
-                .padding(mapManager.defaultPadding!!)
-                .build()
-            map.moveCamera(CameraUpdateFactory.newCameraPosition(padded))
-            mapManager.addMarkerIcon(style, "marker-default", R.drawable.ic_marker_default)
-            MapMarkerUtils.getMarkerBitmapWithTintedForeground(
-                requireContext(),
-                R.drawable.ic_track_direction_arrow_circle,
-                R.drawable.ic_track_direction_arrow_chevron_fill,
-                R.drawable.ic_track_direction_arrow_chevron_stroke,
-                Color.parseColor(DEFAULT_TRACKER_COLOR_HEX)
-            )?.let { bitmap ->
-                style.addImage("track-direction-arrow", bitmap)
-            }
-            // Add GeoJSON sources
-            style.addSource(GeoJsonSource("track-source"))
-            style.addSource(GeoJsonSource("track-position-source"))
-
-            // Add standard LineLayers instead of using LineManager
-            val outlineLayer = LineLayer("track-outline-layer", "track-source").apply {
-                setProperties(
-                    PropertyFactory.lineWidth(5f),
-                    PropertyFactory.lineColor(org.maplibre.android.style.expressions.Expression.get("outlineColor")),
-                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
-                )
-            }
-            val fillLayer = LineLayer("track-fill-layer", "track-source").apply {
-                setProperties(
-                    PropertyFactory.lineWidth(3f),
-                    PropertyFactory.lineColor(org.maplibre.android.style.expressions.Expression.get("lineColor")),
-                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
-                )
-            }
-            // Circle radius: accuracy (m) * meters-to-pixels at current zoom. Use a literal factor and update it on
-            // camera move so the circle both shows and scales with zoom (zoom-based expressions in circle-radius
-            // can make the circle disappear on MapLibre Android).
-            val initialZoom = map.cameraPosition?.zoom ?: 15.0
-            val initialLat = map.cameraPosition?.target?.latitude ?: 0.0
-            val initialPixelsPerMeter = (256.0 * Math.pow(2.0, initialZoom)) / (40075016.686 * Math.cos(initialLat * Math.PI / 180.0)).coerceAtLeast(1.0)
-            val accuracyCircleLayer = CircleLayer("track-position-accuracy-layer", "track-position-source").apply {
-                setFilter(org.maplibre.android.style.expressions.Expression.gt(org.maplibre.android.style.expressions.Expression.get("accuracy"), org.maplibre.android.style.expressions.Expression.literal(0)))
-                setProperties(
-                    PropertyFactory.circleRadius(
-                        org.maplibre.android.style.expressions.Expression.max(
-                            org.maplibre.android.style.expressions.Expression.literal(6),
-                            org.maplibre.android.style.expressions.Expression.product(
-                                org.maplibre.android.style.expressions.Expression.get("accuracy"),
-                                org.maplibre.android.style.expressions.Expression.literal(initialPixelsPerMeter)
-                            )
-                        )
-                    ),
-                    PropertyFactory.circleColor(Color.argb(64, 51, 136, 255)),
-                    PropertyFactory.circleStrokeColor(Color.parseColor(DEFAULT_TRACKER_COLOR_HEX)),
-                    PropertyFactory.circleStrokeWidth(1f)
-                )
-            }
-            // Add SymbolLayer
-            val symbolLayer = SymbolLayer("track-position-layer", "track-position-source").apply {
-                setProperties(
-                    PropertyFactory.iconImage(org.maplibre.android.style.expressions.Expression.get("icon")),
-                    PropertyFactory.iconSize(0.75f),
-                    PropertyFactory.iconRotate(org.maplibre.android.style.expressions.Expression.get("rotate")),
-                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
-                    PropertyFactory.iconAllowOverlap(true),
-                    PropertyFactory.iconIgnorePlacement(true)
-                )
-            }
-            
-            style.addLayer(accuracyCircleLayer)
-            style.addLayer(outlineLayer)
-            style.addLayer(fillLayer)
-            style.addLayer(symbolLayer)
-            mapReady = true
-            mapLoadingOverlay.visibility = View.GONE
-            
-            // Draw any points we already have (e.g. from View on Map)
-            updateTrackLine()
-            
-            // If we have an immediate zoom pending and points are ready, do it now
-            if (zoomToTrackAfterLoad && trackPoints.isNotEmpty()) {
-                val bbox = (activity as? MainActivity)?.initialTrackForMap?.bbox
-                if (bbox != null && bbox.size == 4) {
-                    val bounds = LatLngBounds.Builder()
-                        .include(LatLng(bbox[1], bbox[0]))
-                        .include(LatLng(bbox[3], bbox[2]))
-                        .build()
-                    val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                    mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
-                    zoomToTrackAfterLoad = false
-                } else if (trackPoints.size >= 2) {
-                    val bounds = LatLngBounds.Builder().apply { trackPoints.forEach { include(it) } }.build()
-                    val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                    mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
-                    zoomToTrackAfterLoad = false
-                }
-            }
-            
-            fetchHistory()
-        }
-        
-        mapView.onCreate(savedInstanceState)
-        mapView.addOnDidFailLoadingMapListener(failLoadingMapListener)
-
-        mapManager.fetchMapSources {
-            maplibreMap?.let { map ->
-                if (isAdded) mapManager.applySelectedSource(map)
-            }
-        }
-        
-        mapView.getMapAsync { map ->
-            maplibreMap = map
-            mapManager.setupBaseMapSettings(map)
-            map.addOnMoveListener(object : MapLibreMap.OnMoveListener {
-                override fun onMoveBegin(detector: org.maplibre.android.gestures.MoveGestureDetector) {
-                    if (followLockEnabled) {
-                        followLockEnabled = false
-                        updateFollowLockButton()
-                    }
-                }
-                override fun onMove(detector: org.maplibre.android.gestures.MoveGestureDetector) { }
-                override fun onMoveEnd(detector: org.maplibre.android.gestures.MoveGestureDetector) { }
-            })
-            map.addOnCameraMoveListener { updateAccuracyCircleRadiusFromZoom() }
-            val serverUrl = GeovaultAuthManager.getServerUrl(requireContext())
-            if (mapManager.sourcesFetched || serverUrl.isEmpty()) {
-                if (isAdded) mapManager.applySelectedSource(map)
-            }
-        }
-
         mapToggle.setOnClickListener {
             val map = maplibreMap ?: return@setOnClickListener
-            mapManager.sourceManager.setSelectedSourceId(mapManager.sourceManager.getNextSourceId())
-            mapManager.applySelectedSource(map)
+            val mgr = mapManager ?: return@setOnClickListener
+            mgr.sourceManager.setSelectedSourceId(mgr.sourceManager.getNextSourceId())
+            mgr.applySelectedSource(map)
         }
-        
+
         zoomToLatestButton.setOnClickListener {
             followLockEnabled = !followLockEnabled
             if (followLockEnabled && trackPoints.isNotEmpty()) {
                 maplibreMap?.let { map ->
-                    mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(trackPoints.last(), 16.0))
+                    mapManager?.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(trackPoints.last(), 16.0))
                 }
             }
             updateFollowLockButton()
@@ -338,25 +297,19 @@ class MapFragment : Fragment() {
 
         zoomInButton.setOnClickListener {
             maplibreMap?.let { map ->
-                mapManager.animateCameraWithPadding(map, CameraUpdateFactory.zoomBy(1.0), durationMs = 200)
+                mapManager?.animateCameraWithPadding(map, CameraUpdateFactory.zoomBy(1.0), durationMs = 200)
             }
         }
         zoomOutButton.setOnClickListener {
             maplibreMap?.let { map ->
-                mapManager.animateCameraWithPadding(map, CameraUpdateFactory.zoomBy(-1.0), durationMs = 200)
+                mapManager?.animateCameraWithPadding(map, CameraUpdateFactory.zoomBy(-1.0), durationMs = 200)
             }
         }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        mapView.onStart()
     }
 
     override fun onResume() {
         super.onResume()
         view?.keepScreenOn = true
-        mapView.onResume()
         updateTrackerLabel()
 
         ContextCompat.registerReceiver(
@@ -417,8 +370,6 @@ class MapFragment : Fragment() {
     override fun onPause() {
         super.onPause()
         view?.keepScreenOn = false
-        mapView.onPause()
-        
         try {
             requireContext().unregisterReceiver(locationReceiver)
         } catch (e: IllegalArgumentException) { }
@@ -427,27 +378,23 @@ class MapFragment : Fragment() {
         } catch (e: IllegalArgumentException) { }
     }
 
-    override fun onStop() {
-        super.onStop()
-        mapView.onStop()
-    }
-
     override fun onDestroyView() {
-        mapView.removeOnDidFailLoadingMapListener(failLoadingMapListener)
+        mapFragment?.setCallback(null)
+        mapFragment = null
+        mapManager = null
+        maplibreMap = null
         super.onDestroyView()
-        mapView.onDestroy()
         mainScope.cancel()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putBoolean(KEY_FOLLOW_LOCK, followLockEnabled)
-        mapView.onSaveInstanceState(outState)
     }
 
     override fun onLowMemory() {
         super.onLowMemory()
-        mapView.onLowMemory()
+        mapFragment?.mapView?.onLowMemory()
     }
 
     private fun updateFollowLockButton() {
@@ -596,7 +543,7 @@ class MapFragment : Fragment() {
         val update = CameraUpdateFactory.newCameraPosition(
             CameraPosition.Builder().target(target).zoom(zoom).build()
         )
-        mapManager.animateCameraWithPadding(map, update, getMapPaddingArray(), FOLLOW_LOCK_ANIMATION_MS)
+        mapManager?.animateCameraWithPadding(map, update, getMapPaddingArray(), FOLLOW_LOCK_ANIMATION_MS)
     }
 
     private fun getMapPaddingArray(): DoubleArray {
@@ -640,8 +587,8 @@ class MapFragment : Fragment() {
         // Immediate visual clear: hide annotation layers so old data doesn't flash.
         if (isSwitching) {
             setAnnotationLayersVisibility(false)
-            mapView.alpha = 0f
-            mapView.animate().alpha(1f).setDuration(200).setStartDelay(50).start()
+            mapFragment?.mapView?.alpha = 0f
+            mapFragment?.mapView?.animate()?.alpha(1f)?.setDuration(200)?.setStartDelay(50)?.start()
         }
 
         trackPoints.clear()
@@ -718,10 +665,10 @@ class MapFragment : Fragment() {
                         .include(LatLng(bbox[3], bbox[2]))
                         .build()
                     val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                    mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
+                    mapManager?.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
                     zoomToTrackAfterLoad = false
                 } else if (initial.last_point != null && initial.last_point.size >= 2) {
-                    mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(
+                    mapManager?.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(
                         LatLng(initial.last_point[1], initial.last_point[0]), 14.0
                     ), getMapPaddingArray())
                     zoomToTrackAfterLoad = false
@@ -850,13 +797,13 @@ class MapFragment : Fragment() {
                                 .include(LatLng(bbox[3], bbox[2]))
                                 .build()
                             val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                            mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+                            mapManager?.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
                         } else if (trackPoints.size >= 2) {
                             val bounds = LatLngBounds.Builder().apply {
                                 trackPoints.forEach { include(it) }
                             }.build()
                             val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                            mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+                            mapManager?.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
                         }
                     }
                     if (followLockEnabled && trackPoints.isNotEmpty()) {
@@ -919,27 +866,6 @@ class MapFragment : Fragment() {
         
         source.setGeoJson(feature)
         applyPositionSymbolUpdate()
-    }
-
-    /** Updates the accuracy circle radius from current zoom so it scales with the map (avoids zoom() in style). */
-    private fun updateAccuracyCircleRadiusFromZoom() {
-        val map = maplibreMap ?: return
-        val style = map.style ?: return
-        val layer = style.getLayer("track-position-accuracy-layer") as? CircleLayer ?: return
-        val zoom = map.cameraPosition?.zoom ?: return
-        val lat = map.cameraPosition?.target?.latitude ?: 0.0
-        val pixelsPerMeter = (256.0 * Math.pow(2.0, zoom)) / (40075016.686 * Math.cos(lat * Math.PI / 180.0)).coerceAtLeast(1.0)
-        layer.setProperties(
-            PropertyFactory.circleRadius(
-                org.maplibre.android.style.expressions.Expression.max(
-                    org.maplibre.android.style.expressions.Expression.literal(6),
-                    org.maplibre.android.style.expressions.Expression.product(
-                        org.maplibre.android.style.expressions.Expression.get("accuracy"),
-                        org.maplibre.android.style.expressions.Expression.literal(pixelsPerMeter)
-                    )
-                )
-            )
-        )
     }
 
     private fun applyPositionSymbolUpdate() {

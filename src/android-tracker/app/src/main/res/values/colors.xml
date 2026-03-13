@@ -38,8 +38,6 @@
     <color name="search_divider">@color/border_light</color>
 
     <!-- Map underlay (shows when no map or while loading) -->
-    <color name="map_underlay">#F3F6FA</color>
-
     <!-- Track line outline (black in day) -->
     <color name="track_line_outline">#000000</color>
 

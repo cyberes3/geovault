@@ -18,7 +18,6 @@
     <color name="border_light">#404040</color>
     <color name="divider">#1A1A1A</color>
     <color name="search_divider">#163D8A</color>
-    <color name="map_underlay">#000000</color>
     <color name="snackbar_background">#505050</color>
 
     <color name="success_green">#5B8A3C</color>

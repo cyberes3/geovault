@@ -25,4 +25,7 @@
     <!-- Map marker borders: light grey in night for both default and selected -->
     <color name="gv_common_marker_border">#9ca3af</color>
     <color name="gv_common_marker_border_selected">#9ca3af</color>
+
+    <!-- Map load underlay (night: black) -->
+    <color name="gv_common_map_underlay">#000000</color>
 </resources>

@@ -91,16 +91,12 @@
     <string name="close">Close</string>
     <string name="description">Description</string>
     <string name="no_description">No description</string>
-    <string name="map_style_unavailable_fallback_osm">Map style unavailable, using OpenStreetMap</string>
     <string name="map_toggle_description">Toggle street or satellite map</string>
     <string name="recenter_to_tracker">Return to selected tracker</string>
     <string name="zoom_to_latest_description">Lock camera to follow latest track point</string>
     <string name="follow_lock_on_description">Unlock camera (stop following track)</string>
     <string name="zoom_in_description">Zoom in</string>
     <string name="zoom_out_description">Zoom out</string>
-    <string name="map_select_place">Select a place</string>
-    <string name="map_tap_marker_hint">Tap a marker to view details</string>
-
     <!-- Extended params: when on, sends full data; when off, sends only position + time to minimize data usage -->
     <string name="extended_params_label">Send Extended Data</string>
 

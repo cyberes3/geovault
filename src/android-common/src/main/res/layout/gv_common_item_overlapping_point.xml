@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/gv_common_overlapping_point_text"
+    android:layout_width="match_parent"
+    android:layout_height="@dimen/gv_common_overlapping_popup_item_height"
+    android:paddingStart="12dp"
+    android:paddingEnd="12dp"
+    android:textSize="16sp"
+    android:textColor="@color/gv_common_text_primary"
+    android:gravity="center"
+    android:background="?attr/selectableItemBackground"
+    android:maxLines="1"
+    android:ellipsize="end" />
