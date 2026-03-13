@@ -272,22 +272,25 @@ class PlaceEditActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                if (addressSearchCall != null) {
+                val input = coordinatesInput.text.toString().trim()
+                if (input.isEmpty()) {
                     addressSearchCall?.cancel()
                     addressSearchCall = null
                     setLocationLoading(false)
+                    addressSearchRunnable?.let { handler.removeCallbacks(it) }
+                    addressSearchRunnable = null
+                    coordinatesError.visibility = View.GONE
+                    coordinatesError.text = ""
+                    latitude = null
+                    longitude = null
+                    storedAddress = null
+                    placeSymbol?.let { symbolManager?.delete(it) }
+                    placeSymbol = null
                 }
-                addressSearchRunnable?.let { handler.removeCallbacks(it) }
-                addressSearchRunnable = null
-                if (skipNextCoordinatesValidation) {
-                    skipNextCoordinatesValidation = false
-                    return
-                }
-                val r = Runnable { validateCoordinatesFromInput() }
-                addressSearchRunnable = r
-                handler.postDelayed(r, 1000)
+                validateForm()
             }
         })
+        findViewById<View>(R.id.parseCoordinatesButton).setOnClickListener { validateCoordinatesFromInput() }
         useMyLocationButton.setOnClickListener {
             currentFocus?.let { focus ->
                 focus.clearFocus()
@@ -678,7 +681,8 @@ class PlaceEditActivity : AppCompatActivity() {
 
     private fun validateForm() {
         val name = nameInput.text.toString().trim()
-        val isValid = name.isNotEmpty() && latitude != null && longitude != null
+        val coordsText = coordinatesInput.text.toString().trim()
+        val isValid = name.isNotEmpty() && coordsText.isNotEmpty()
         saveButton.isEnabled = isValid
         saveButton.alpha = if (isValid) 1.0f else 0.5f
     }
@@ -744,16 +748,30 @@ class PlaceEditActivity : AppCompatActivity() {
 
     private fun savePlace() {
         val name = nameInput.text.toString().trim()
-        val lat = latitude
-        val lon = longitude
+        var lat = latitude
+        var lon = longitude
+        val coordsInput = coordinatesInput.text.toString().trim()
 
         if (name.isEmpty()) {
             nameInput.error = "Name is required"
             return
         }
-        if (lat == null || lon == null) {
+        if (coordsInput.isEmpty()) {
             Toast.makeText(this, "Coordinates are required", Toast.LENGTH_SHORT).show()
             return
+        }
+        if (lat == null || lon == null) {
+            val parsed = CoordinateParser.parse(coordsInput)
+            if (parsed != null) {
+                lat = parsed.first
+                lon = parsed.second
+                storedAddress = null
+            } else {
+                coordinatesError.text = "Invalid coordinates. Use the parse button for addresses."
+                coordinatesError.visibility = View.VISIBLE
+                Toast.makeText(this, "Invalid coordinates. Use the parse button for addresses.", Toast.LENGTH_SHORT).show()
+                return
+            }
         }
 
         val feature = Feature(

@@ -792,7 +792,7 @@ function getTrackArrowDataURL(color, selected) {
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="' + ARROW_RASTER_SIZE + '" height="' + ARROW_RASTER_SIZE + '" shape-rendering="geometricPrecision">' +
     circle +
-    '<path' + pathTransform + ' fill="' + fill + '" stroke="#000" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" shape-rendering="geometricPrecision" d="' + ARROW_PATH_D + '"/>' +
+    '<path' + pathTransform + ' fill="' + fill + '" shape-rendering="geometricPrecision" d="' + ARROW_PATH_D + '"/>' +
     '</svg>';
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }

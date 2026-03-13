@@ -31,12 +31,13 @@
                 android:id="@+id/placeMapIcon"
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:src="@android:drawable/ic_dialog_map"
+                android:src="@drawable/ic_map_outline"
                 app:tint="@color/primary_blue"
                 android:layout_marginEnd="12dp"
                 android:clickable="true"
                 android:focusable="true"
-                android:background="?attr/selectableItemBackground" />
+                android:background="?attr/selectableItemBackground"
+                android:contentDescription="@null" />
 
             <TextView
                 android:id="@+id/placeName"

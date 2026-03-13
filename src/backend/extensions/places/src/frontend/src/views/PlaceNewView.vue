@@ -59,7 +59,7 @@
 
     <!-- Form: 50% scrollable on mobile; fit-content on desktop -->
     <div
-        class="h-1/2 min-h-0 sm:h-auto sm:flex-shrink-0 flex flex-col bg-white border-t-2 border-gray-300 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+        class="h-1/2 min-h-0 sm:h-auto sm:flex-shrink-0 flex flex-col bg-white border-t border-gray-300 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
       <div class="flex-1 min-h-0 sm:flex-none sm:min-h-0 overflow-y-auto overscroll-contain">
         <div class="max-w-4xl mx-auto p-4 sm:p-6 space-y-4">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -93,14 +93,25 @@
               <span v-if="coordinateError" class="text-xs text-red-600">{{ coordinateError }}</span>
             </div>
             <div class="flex flex-row flex-wrap gap-2 items-center">
-              <input
-                  v-model="coordinatesInput"
-                  type="text"
-                  placeholder="37.7749, -122.4194"
-                  class="flex-1 min-w-[120px] h-10 px-3 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all sm:text-sm disabled:opacity-60 disabled:cursor-not-allowed"
-                  :disabled="loadingEdit"
-                  @input="onCoordinatesInput"
-              />
+              <div class="flex flex-1 min-w-[120px] items-center gap-2">
+                <input
+                    v-model="coordinatesInput"
+                    type="text"
+                    placeholder="37.7749, -122.4194"
+                    class="flex-1 min-w-0 h-10 px-3 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all sm:text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                    :disabled="loadingEdit"
+                    @input="onCoordinatesInput"
+                />
+                <button
+                    type="button"
+                    class="h-10 w-10 flex-shrink-0 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    :disabled="loadingEdit"
+                    title="Parse coordinates or address"
+                    @click="validateCoordinates"
+                >
+                  <ArrowPathIcon class="w-5 h-5"/>
+                </button>
+              </div>
               <BaseButton
                   type="button"
                   variant="white"
@@ -122,7 +133,7 @@
                 variant="primary"
                 color="blue"
                 size="sm"
-                :disabled="saving || loadingEdit || !name.trim() || latitude == null || longitude == null"
+                :disabled="saving || loadingEdit || !name.trim() || !coordinatesInput.trim()"
                 @click="savePlace"
             >
               <Loader v-if="saving" size="sm" layout="inline" :show-message="false" class="mr-2"/>
@@ -141,11 +152,12 @@
 <script>
 import {computed, inject, onBeforeUnmount, onDeactivated, onMounted, ref, watch} from 'vue';
 import {onBeforeRouteLeave, useRoute} from 'vue-router';
-import {MagnifyingGlassIcon, MapPinIcon} from '@heroicons/vue/24/outline';
+import {ArrowPathIcon, MagnifyingGlassIcon, MapPinIcon} from '@heroicons/vue/24/outline';
 
 export default {
   name: 'PlaceNewView',
   components: {
+    ArrowPathIcon,
     MagnifyingGlassIcon,
     MapPinIcon
   },
@@ -276,14 +288,10 @@ export default {
     }
 
     function onCoordinatesInput() {
-      if (coordinatesValidationTimeout.value) {
-        clearTimeout(coordinatesValidationTimeout.value);
-        coordinatesValidationTimeout.value = null;
+      const input = coordinatesInput.value.trim();
+      if (!input) {
+        coordinateError.value = '';
       }
-      coordinatesValidationTimeout.value = setTimeout(() => {
-        coordinatesValidationTimeout.value = null;
-        validateCoordinates();
-      }, 1000);
     }
 
     // Unified rule (same as Android): try parse as coordinates; if fail, geocode only when
@@ -515,7 +523,24 @@ export default {
     }
 
     async function savePlace() {
-      if (saving.value || !name.value.trim() || latitude.value == null || longitude.value == null) return;
+      if (saving.value || !name.value.trim() || !coordinatesInput.value.trim()) return;
+      let lat = latitude.value;
+      let lng = longitude.value;
+      if (lat == null || lng == null) {
+        const input = coordinatesInput.value.trim();
+        const parseCoordinates = window.gv_core?.GeoVault?.utils?.parseCoordinates;
+        if (parseCoordinates) {
+          const coordinates = parseCoordinates(input);
+          if (coordinates) {
+            lat = coordinates.lat;
+            lng = coordinates.lng;
+          }
+        }
+        if (lat == null || lng == null) {
+          coordinateError.value = 'Invalid coordinates. Use the parse button for addresses.';
+          return;
+        }
+      }
       saving.value = true;
       try {
         const properties = {
@@ -529,7 +554,7 @@ export default {
           type: 'Feature',
           geometry: {
             type: 'Point',
-            coordinates: [longitude.value, latitude.value]
+            coordinates: [lng, lat]
           },
           properties
         };
@@ -543,8 +568,8 @@ export default {
         initialFormSnapshot.value = {
           name: name.value.trim(),
           description: (description.value || '').trim(),
-          lat: latitude.value,
-          lon: longitude.value,
+          lat,
+          lon: lng,
           address: storedAddress.value || null
         };
         if (router) router.navigate('');
