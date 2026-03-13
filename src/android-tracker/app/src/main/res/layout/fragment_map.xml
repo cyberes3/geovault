@@ -14,7 +14,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:visibility="gone"
-        android:background="#E6000000"
+        android:background="@color/gv_common_overlay_black_90"
         android:clickable="true"
         android:focusable="true">
         <ProgressBar

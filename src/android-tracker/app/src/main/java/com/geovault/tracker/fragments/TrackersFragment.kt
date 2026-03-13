@@ -1,7 +1,6 @@
 package com.geovault.tracker.fragments
 
 import android.content.Context
-import android.graphics.Color
 import android.widget.ImageView
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -14,7 +13,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
-import com.geovault.tracker.DEFAULT_TRACKER_COLOR_HEX
+import com.geovault.tracker.parseHexToColor
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
@@ -265,12 +264,8 @@ class TrackersFragment : Fragment() {
                     .getString("selected_tracker_id", "") ?: ""
                 trackerSelectedCheck.visibility = if (tracker.id == selectedId) View.VISIBLE else View.GONE
                 trackerName.text = tracker.name
-                try {
-                    val color = Color.parseColor(tracker.color ?: DEFAULT_TRACKER_COLOR_HEX)
-                    colorBar.setBackgroundColor(color)
-                } catch (_: Exception) {
-                    colorBar.setBackgroundColor(ContextCompat.getColor(itemView.context, R.color.primary_blue))
-                }
+                val color = parseHexToColor(tracker.color, itemView.context)
+                colorBar.setBackgroundColor(color)
                 val lastCoord = tracker.last_point
                 val lastUpdateMs = when {
                     lastCoord != null && lastCoord.size >= 3 -> {

@@ -5,7 +5,7 @@
     android:viewportHeight="16">
     <!-- Yellow fill with explicit black border -->
     <path
-        android:fillColor="#000000"
+        android:fillColor="@color/black"
         android:pathData="M8,8m-8,0a8,8 0,1,1 16,0a8,8 0,1,1 -16,0" />
     <path
         android:fillColor="@color/warning_yellow"

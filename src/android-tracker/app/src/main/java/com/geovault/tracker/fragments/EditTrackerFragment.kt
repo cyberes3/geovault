@@ -16,7 +16,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
-import com.geovault.tracker.DEFAULT_TRACKER_COLOR_HEX
+import com.geovault.tracker.defaultTrackerColorHex
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
@@ -144,7 +144,7 @@ class EditTrackerFragment : Fragment() {
                 requireActivity().runOnUiThread {
                     showLoadingState(false)
                     if (fetched != null) {
-                        val color = fetched.color ?: DEFAULT_TRACKER_COLOR_HEX
+                        val color = fetched.color ?: defaultTrackerColorHex(requireContext())
                         nameEdit.setText(fetched.name)
                         colorEdit.setText(color)
                         updateColorPreview(colorPreview, color)
@@ -275,8 +275,9 @@ class EditTrackerFragment : Fragment() {
     private fun hasUnsavedChanges(): Boolean {
         if (initialName == null) return false
         val currentName = nameEdit.text?.toString()?.trim() ?: ""
-        val currentColorNorm = normalizeColorForCompare(colorEdit.text?.toString()?.trim()?.ifEmpty { null }) ?: DEFAULT_TRACKER_COLOR_HEX
-        val initialColorNorm = initialColor ?: DEFAULT_TRACKER_COLOR_HEX
+        val defaultHex = defaultTrackerColorHex(requireContext())
+        val currentColorNorm = normalizeColorForCompare(colorEdit.text?.toString()?.trim()?.ifEmpty { null }) ?: defaultHex
+        val initialColorNorm = initialColor ?: defaultHex
         val currentDefault = defaultTrackSwitch.isChecked
         val currentRecent = getSelectedRecentDataWindow()
         val initialRecent = initialRecentDataWindow ?: ""

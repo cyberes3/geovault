@@ -129,10 +129,16 @@ class PlacesAdapter(
             }
         }
         
-        val description = place.properties.description ?: "No description"
-        holder.descriptionText.text = description
-        holder.descriptionText.setOnClickListener {
-            onViewDescription(place.properties.name ?: "Unnamed Place", description)
+        val description = place.properties.description?.takeIf { it.isNotBlank() }
+        if (!description.isNullOrEmpty()) {
+            holder.descriptionText.visibility = View.VISIBLE
+            holder.descriptionText.text = description
+            holder.descriptionText.setOnClickListener {
+                onViewDescription(place.properties.name ?: "Unnamed Place", description)
+            }
+        } else {
+            holder.descriptionText.visibility = View.GONE
+            holder.descriptionText.setOnClickListener(null)
         }
 
         holder.mapIcon.setOnClickListener {

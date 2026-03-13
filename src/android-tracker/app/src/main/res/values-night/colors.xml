@@ -8,9 +8,9 @@
     <color name="blue_extra_light">@color/gv_common_blue_extra_light</color>
     <color name="text_secondary">@color/gv_common_text_secondary</color>
     <color name="border_light">@color/gv_common_border_light</color>
-    <color name="error_light">#3D1F1F</color>
-    <color name="error_stroke">#5C2E2E</color>
-    <color name="snackbar_background">#505050</color>
+    <color name="error_light">@color/gv_common_error_light</color>
+    <color name="error_stroke">@color/gv_common_error_stroke</color>
+    <color name="snackbar_background">@color/gv_common_snackbar_background</color>
     <color name="list_background">@color/gv_common_surface</color>
     <color name="search_bar_container_background">@color/gv_common_surface</color>
     <color name="search_divider">@color/gv_common_primary_blue</color>

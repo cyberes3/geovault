@@ -377,7 +377,7 @@
         android:id="@+id/savingOverlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#80000000"
+        android:background="@color/gv_common_overlay_black_50"
         android:visibility="gone"
         android:clickable="true"
         android:focusable="true"

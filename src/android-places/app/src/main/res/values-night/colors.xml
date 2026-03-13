@@ -17,9 +17,9 @@
     <color name="content_on_primary">@color/gv_common_content_on_primary</color>
     <color name="border_light">@color/gv_common_border_light</color>
     <color name="divider">@color/gv_common_gray_900</color>
-    <color name="card_stroke_color">@color/gv_common_content_on_primary</color>
-    <color name="search_divider">@color/gv_common_primary_blue</color>
-    <color name="snackbar_background">#505050</color>
+    <color name="card_stroke_color">@color/primary_blue</color>
+    <color name="search_divider">@color/border_light</color>
+    <color name="snackbar_background">@color/gv_common_snackbar_background</color>
 
     <color name="success_green">@color/gv_common_success_green</color>
     <color name="error_red">@color/gv_common_error_red</color>

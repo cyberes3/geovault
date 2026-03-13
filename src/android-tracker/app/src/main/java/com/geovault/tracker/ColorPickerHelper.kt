@@ -7,22 +7,25 @@ import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.widget.EditText
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import com.flask.colorpicker.ColorPickerView
 import com.flask.colorpicker.builder.ColorPickerDialogBuilder
 
-/** Default tracker color (blue-400 from frontend scale). Use this constant for all default color fallbacks. */
-internal const val DEFAULT_TRACKER_COLOR_HEX = "#6C93DE"
+/** Default tracker color hex from [R.color.default_tracker_color] (gv_common_blue_400). */
+fun defaultTrackerColorHex(context: Context): String =
+    colorToHex(ContextCompat.getColor(context, R.color.default_tracker_color))
 
 /**
  * Parses a hex color string (with or without #) to Android color int.
- * Returns default blue if invalid.
+ * Returns default tracker color from resources when [hex] is null or invalid.
  */
-fun parseHexToColor(hex: String?): Int {
-    val normalized = hex?.trim()?.let { if (it.startsWith("#")) it else "#$it" } ?: return Color.parseColor(DEFAULT_TRACKER_COLOR_HEX)
+fun parseHexToColor(hex: String?, context: Context): Int {
+    val normalized = hex?.trim()?.let { if (it.startsWith("#")) it else "#$it" }?.takeIf { it.isNotEmpty() }
+    if (normalized == null) return Color.parseColor(defaultTrackerColorHex(context))
     return try {
         Color.parseColor(normalized)
     } catch (_: Exception) {
-        Color.parseColor(DEFAULT_TRACKER_COLOR_HEX)
+        Color.parseColor(defaultTrackerColorHex(context))
     }
 }
 
@@ -46,7 +49,7 @@ fun showHueColorPickerDialog(
     colorEdit: EditText,
     onColorPicked: ((String) -> Unit)? = null
 ) {
-    val initialColor = parseHexToColor(initialHex)
+    val initialColor = parseHexToColor(initialHex, context)
     val dialog = ColorPickerDialogBuilder
         .with(context)
         .setTitle(context.getString(R.string.choose_color))
@@ -75,7 +78,7 @@ fun showHueColorPickerDialog(
  * Updates the color preview [View]'s background to [hex]. Use with the 40dp circular preview in edit/new tracker forms.
  */
 fun updateColorPreview(view: View, hex: String?) {
-    val color = parseHexToColor(hex)
+    val color = parseHexToColor(hex, view.context)
     val density = view.context.resources.displayMetrics.density
     val sizePx = (40 * density).toInt()
     val shape = GradientDrawable().apply {

@@ -22,7 +22,8 @@ import com.geovault.common.map.GeoVaultMapFragment
 import com.geovault.common.map.LocationComponentHelper
 import com.geovault.common.map.MapLibreManager
 import com.geovault.common.map.MapMarkerUtils
-import com.geovault.tracker.DEFAULT_TRACKER_COLOR_HEX
+import com.geovault.tracker.defaultTrackerColorHex
+import com.geovault.tracker.parseHexToColor
 import com.geovault.tracker.LiveTrackStreamingService
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
@@ -59,7 +60,7 @@ class MapFragment : Fragment() {
     private var maplibreMap: MapLibreMap? = null
     private var trackPoints: MutableList<LatLng> = mutableListOf()
     private var trackTimestamps: MutableList<Long> = mutableListOf()
-    /** Tracker color (hex e.g. DEFAULT_TRACKER_COLOR_HEX) for trail and icon; set when loading tracker in fetchHistory. */
+    /** Tracker color (hex, default from R.color.default_tracker_color) for trail and icon; set when loading tracker in fetchHistory. */
     private var currentTrackerColor: String? = null
 
     private lateinit var mapLoadingOverlay: View
@@ -188,7 +189,7 @@ class MapFragment : Fragment() {
                     R.drawable.ic_track_direction_arrow_circle,
                     R.drawable.ic_track_direction_arrow_chevron_fill,
                     R.drawable.ic_track_direction_arrow_chevron_stroke,
-                    Color.parseColor(DEFAULT_TRACKER_COLOR_HEX)
+                    parseHexToColor(null, requireContext())
                 )?.let { bitmap ->
                     style.addImage("track-direction-arrow", bitmap)
                 }
@@ -210,7 +211,7 @@ class MapFragment : Fragment() {
                     style = style,
                     context = requireContext(),
                     config = LocationComponentHelper.Config(
-                        accuracyColor = Color.parseColor(DEFAULT_TRACKER_COLOR_HEX),
+                        accuracyColor = parseHexToColor(null, requireContext()),
                         accuracyAlpha = 0.25f,
                         backgroundDrawable = R.drawable.ic_track_direction_arrow_circle,
                         foregroundDrawable = R.drawable.ic_track_direction_arrow,
@@ -234,7 +235,7 @@ class MapFragment : Fragment() {
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
                     )
                 }
-                val trackerBaseColor = Color.parseColor(DEFAULT_TRACKER_COLOR_HEX)
+                val trackerBaseColor = parseHexToColor(null, requireContext())
                 val accuracyFillColor = Color.argb(
                     64,
                     Color.red(trackerBaseColor),
@@ -688,7 +689,7 @@ class MapFragment : Fragment() {
             displayedTrackerId = initial.id
             displayedTrackerName = initial.name
             lastCachedUpdateTimeMs = trackerLastUpdateMs(initial)
-            currentTrackerColor = (initial.color ?: DEFAULT_TRACKER_COLOR_HEX).let { if (it.startsWith("#")) it else "#$it" }
+            currentTrackerColor = (initial.color ?: defaultTrackerColorHex(requireContext())).let { if (it.startsWith("#")) it else "#$it" }
             
             (initial.point_params?.lastOrNull()?.get("acc") as? Number)?.toFloat()?.takeIf { it > 0f }
                 ?.let { lastStreamedAccuracyMeters = it }
@@ -788,7 +789,7 @@ class MapFragment : Fragment() {
                 displayedTrackerName = tracker?.name
                 lastCachedUpdateTimeMs = trackerLastUpdateMs(tracker)
                 if (tracker != null) {
-                    currentTrackerColor = (tracker.color ?: DEFAULT_TRACKER_COLOR_HEX).let { if (it.startsWith("#")) it else "#$it" }
+                    currentTrackerColor = (tracker.color ?: defaultTrackerColorHex(requireContext())).let { if (it.startsWith("#")) it else "#$it" }
                     val defaultId = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
                         .getString("selected_tracker_id", "") ?: ""
                     if (trackerId != defaultId) {
@@ -882,7 +883,7 @@ class MapFragment : Fragment() {
         val style = maplibreMap?.style ?: return
         val source = style.getSourceAs<GeoJsonSource>(TRACK_SOURCE_ID) ?: return
         
-        val lineColor = currentTrackerColor ?: DEFAULT_TRACKER_COLOR_HEX
+        val lineColor = currentTrackerColor ?: defaultTrackerColorHex(requireContext())
         if (trackPoints.size < 2) {
             source.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
             applyPositionSymbolUpdate()
@@ -921,7 +922,7 @@ class MapFragment : Fragment() {
         
         val toLatLng = trackPoints.last()
         val toRotation = getTrackDirectionDegrees(trackPoints)
-        val hexColor = currentTrackerColor ?: DEFAULT_TRACKER_COLOR_HEX
+        val hexColor = currentTrackerColor ?: defaultTrackerColorHex(requireContext())
         
         val imageId = "track-direction-arrow-${hexColor.replace("#", "")}"
         var symbolIconId = imageId
@@ -933,7 +934,7 @@ class MapFragment : Fragment() {
                 R.drawable.ic_track_direction_arrow_circle,
                 R.drawable.ic_track_direction_arrow_chevron_fill,
                 R.drawable.ic_track_direction_arrow_chevron_stroke,
-                Color.parseColor(hexColor)
+                parseHexToColor(hexColor, requireContext())
             )
             if (tintedBitmap != null) {
                 try {

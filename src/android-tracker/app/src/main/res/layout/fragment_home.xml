@@ -437,7 +437,7 @@
         android:id="@+id/serverFailureOverlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#A0000000"
+        android:background="@color/gv_common_overlay_black_63"
         android:clickable="true"
         android:focusable="true"
         android:visibility="gone">

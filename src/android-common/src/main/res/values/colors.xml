@@ -115,4 +115,14 @@
 
     <!-- Map load underlay (shown until tiles/style load); matches blue_extra_light in day -->
     <color name="gv_common_map_underlay">#F3F6FA</color>
+
+    <!-- Overlay colors (semi-transparent black for modal/scrim backgrounds) -->
+    <color name="gv_common_overlay_black_10">#1A000000</color>
+    <color name="gv_common_overlay_black_50">#80000000</color>
+    <color name="gv_common_overlay_black_63">#A0000000</color>
+    <color name="gv_common_overlay_black_90">#E6000000</color>
+
+    <!-- Translucent colors (e.g. direction arrow circle) -->
+    <color name="gv_common_white_85">#D9FFFFFF</color>
+    <color name="gv_common_black_85">#D9000000</color>
 </resources>

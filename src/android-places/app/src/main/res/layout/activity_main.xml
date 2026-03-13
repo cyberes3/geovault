@@ -124,7 +124,7 @@
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:background="@color/search_divider"
-            android:visibility="invisible" />
+            android:visibility="gone" />
 
         <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
             android:id="@+id/swipeRefresh"
@@ -226,7 +226,7 @@
         android:id="@+id/refreshOverlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#80000000"
+        android:background="@color/gv_common_overlay_black_50"
         android:visibility="gone"
         android:clickable="true"
         android:focusable="true"

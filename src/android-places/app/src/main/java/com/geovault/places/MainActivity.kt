@@ -210,7 +210,7 @@ class MainActivity : AppCompatActivity() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 super.onScrolled(recyclerView, dx, dy)
                 val canScrollUp = recyclerView.canScrollVertically(-1)
-                searchDivider.visibility = if (canScrollUp) View.VISIBLE else View.INVISIBLE
+                searchDivider.visibility = if (canScrollUp) View.VISIBLE else View.GONE
             }
         })
 
