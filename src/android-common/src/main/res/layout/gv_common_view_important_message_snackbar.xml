@@ -7,7 +7,7 @@
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:background="@color/gv_common_snackbar_background"
-    android:elevation="8dp"
+    android:elevation="0dp"
     android:paddingStart="12dp"
     android:paddingEnd="12dp"
     android:paddingTop="8dp"

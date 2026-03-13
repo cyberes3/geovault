@@ -83,6 +83,21 @@
         <item name="android:textColor">@color/gv_common_dialog_positive_button</item>
     </style>
 
+    <style name="gv_common_MaterialCardView_NoShadow" parent="Widget.MaterialComponents.CardView">
+        <item name="cardElevation">0dp</item>
+    </style>
+
+    <style name="gv_common_CardView_NoShadow" parent="CardView">
+        <item name="cardElevation">0dp</item>
+        <item name="cardMaxElevation">0dp</item>
+    </style>
+
+    <style name="gv_common_FloatingActionButton_NoShadow" parent="Widget.MaterialComponents.FloatingActionButton">
+        <item name="elevation">0dp</item>
+        <item name="hoveredFocusedTranslationZ">0dp</item>
+        <item name="pressedTranslationZ">0dp</item>
+    </style>
+
     <!-- Section header (blue bar with title) -->
     <style name="gv_common_SectionHeader">
         <item name="android:background">@color/gv_common_primary_blue</item>
@@ -94,7 +109,7 @@
         <item name="android:paddingTop">20dp</item>
         <item name="android:paddingBottom">16dp</item>
         <item name="android:minHeight">64dp</item>
-        <item name="android:elevation">2dp</item>
+        <item name="android:elevation">0dp</item>
     </style>
 
 </resources>

@@ -14,5 +14,8 @@
         <item name="android:windowLightNavigationBar">false</item>
         <item name="materialAlertDialogTheme">@style/gv_common_AlertDialogTheme</item>
         <item name="alertDialogTheme">@style/gv_common_AlertDialogTheme</item>
+        <item name="materialCardViewStyle">@style/gv_common_MaterialCardView_NoShadow</item>
+        <item name="cardViewStyle">@style/gv_common_CardView_NoShadow</item>
+        <item name="floatingActionButtonStyle">@style/gv_common_FloatingActionButton_NoShadow</item>
     </style>
 </resources>

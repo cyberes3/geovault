@@ -19,7 +19,7 @@
         android:paddingTop="20dp"
         android:paddingBottom="16dp"
         android:background="@color/primary_blue"
-        android:elevation="2dp"
+        android:elevation="0dp"
         android:minHeight="64dp">
 
         <TextView

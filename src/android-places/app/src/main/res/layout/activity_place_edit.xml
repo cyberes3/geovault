@@ -18,7 +18,7 @@
         android:paddingTop="20dp"
         android:paddingBottom="16dp"
         android:background="@color/primary_blue"
-        android:elevation="2dp"
+        android:elevation="0dp"
         android:minHeight="64dp"
         app:layout_constraintTop_toTopOf="parent">
 
@@ -74,7 +74,7 @@
             android:layout_marginTop="16dp"
             android:layout_marginEnd="16dp"
             app:cardCornerRadius="22dp"
-            app:cardElevation="6dp"
+            app:cardElevation="0dp"
             app:cardBackgroundColor="@color/primary_blue">
 
             <ImageView
@@ -180,7 +180,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@color/surface"
-        android:elevation="8dp"
+        android:elevation="0dp"
         app:layout_constrainedHeight="true"
         app:layout_constraintTop_toBottomOf="@id/guideline"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -381,7 +381,7 @@
         android:visibility="gone"
         android:clickable="true"
         android:focusable="true"
-        android:elevation="16dp"
+        android:elevation="0dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent">
 
@@ -396,7 +396,7 @@
             android:paddingBottom="20dp"
             android:gravity="center"
             android:background="@drawable/bg_modal"
-            android:elevation="12dp">
+            android:elevation="0dp">
 
             <com.geovault.common.LoadingSpinner
                 android:id="@+id/savingSpinner"

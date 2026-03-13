@@ -34,7 +34,7 @@
         android:minWidth="0dp"
         android:visibility="gone"
         app:cardCornerRadius="22dp"
-        app:cardElevation="6dp"
+        app:cardElevation="0dp"
         app:cardBackgroundColor="@color/primary_blue">
         <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="wrap_content"
@@ -102,7 +102,7 @@
         android:clickable="true"
         android:focusable="true"
         app:cardCornerRadius="22dp"
-        app:cardElevation="6dp"
+        app:cardElevation="0dp"
         app:cardBackgroundColor="@color/primary_blue">
         <ImageView
             android:id="@+id/zoomToLatestButtonIcon"
@@ -124,7 +124,7 @@
         android:clickable="true"
         android:focusable="true"
         app:cardCornerRadius="22dp"
-        app:cardElevation="6dp"
+        app:cardElevation="0dp"
         app:cardBackgroundColor="@color/primary_blue">
         <ImageView
             android:layout_width="match_parent"
@@ -145,7 +145,7 @@
         android:clickable="true"
         android:focusable="true"
         app:cardCornerRadius="22dp"
-        app:cardElevation="6dp"
+        app:cardElevation="0dp"
         app:cardBackgroundColor="@color/primary_blue">
         <ImageView
             android:layout_width="match_parent"
@@ -166,7 +166,7 @@
         android:clickable="true"
         android:focusable="true"
         app:cardCornerRadius="22dp"
-        app:cardElevation="6dp"
+        app:cardElevation="0dp"
         app:cardBackgroundColor="@color/primary_blue">
         <ImageView
             android:layout_width="match_parent"
@@ -184,7 +184,7 @@
         android:layout_gravity="bottom|end"
         android:layout_marginBottom="16dp"
         android:layout_marginEnd="16dp"
-        android:elevation="6dp"
+        android:elevation="0dp"
         app:spinnerSize="32dp" />
 
 </FrameLayout>

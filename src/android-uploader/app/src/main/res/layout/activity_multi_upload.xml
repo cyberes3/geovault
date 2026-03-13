@@ -24,7 +24,7 @@
         android:paddingTop="20dp"
         android:paddingBottom="16dp"
         android:background="@color/primary_blue"
-        android:elevation="2dp"
+        android:elevation="0dp"
         android:minHeight="64dp">
 
         <TextView
@@ -74,7 +74,7 @@
         android:paddingTop="16dp"
         android:paddingBottom="20dp"
         android:background="@color/surface"
-        android:elevation="8dp">
+        android:elevation="0dp">
 
         <FrameLayout
             android:layout_width="match_parent"

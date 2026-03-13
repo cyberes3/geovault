@@ -187,10 +187,10 @@ class MapFragment : Fragment() {
                 )?.let { bitmap ->
                     style.addImage("track-direction-arrow", bitmap)
                 }
-                style.addSource(GeoJsonSource("track-source"))
-                style.addSource(GeoJsonSource("track-position-source"))
+                style.addSource(GeoJsonSource(TRACK_SOURCE_ID))
+                style.addSource(GeoJsonSource(TRACK_POSITION_SOURCE_ID))
 
-                val outlineLayer = LineLayer("track-outline-layer", "track-source").apply {
+                val outlineLayer = LineLayer(TRACK_OUTLINE_LAYER_ID, TRACK_SOURCE_ID).apply {
                     setProperties(
                         PropertyFactory.lineWidth(5f),
                         PropertyFactory.lineColor(org.maplibre.android.style.expressions.Expression.get("outlineColor")),
@@ -198,7 +198,7 @@ class MapFragment : Fragment() {
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
                     )
                 }
-                val fillLayer = LineLayer("track-fill-layer", "track-source").apply {
+                val fillLayer = LineLayer(TRACK_FILL_LAYER_ID, TRACK_SOURCE_ID).apply {
                     setProperties(
                         PropertyFactory.lineWidth(3f),
                         PropertyFactory.lineColor(org.maplibre.android.style.expressions.Expression.get("lineColor")),
@@ -211,13 +211,13 @@ class MapFragment : Fragment() {
                 val initialPixelsPerMeter = AccuracyCircleLayer.pixelsPerMeterAt(initialZoom, initialLat)
                 AccuracyCircleLayer.attachToStyle(
                     style,
-                    "track-position-source",
-                    "track-position-accuracy-layer",
+                    TRACK_POSITION_SOURCE_ID,
+                    TRACK_POSITION_ACCURACY_LAYER_ID,
                     initialPixelsPerMeter,
                     AccuracyCircleLayer.Options(strokeColor = Color.parseColor(DEFAULT_TRACKER_COLOR_HEX)),
                     requireContext()
                 )
-                val symbolLayer = SymbolLayer("track-position-layer", "track-position-source").apply {
+                val symbolLayer = SymbolLayer(TRACK_POSITION_LAYER_ID, TRACK_POSITION_SOURCE_ID).apply {
                     setProperties(
                         PropertyFactory.iconImage(org.maplibre.android.style.expressions.Expression.get("icon")),
                         PropertyFactory.iconSize(0.75f),
@@ -240,7 +240,9 @@ class MapFragment : Fragment() {
                     override fun onMove(detector: org.maplibre.android.gestures.MoveGestureDetector) { }
                     override fun onMoveEnd(detector: org.maplibre.android.gestures.MoveGestureDetector) { }
                 })
-                map.addOnCameraMoveListener { AccuracyCircleLayer.updateRadiusFromCamera(map, "track-position-accuracy-layer") }
+                map.addOnCameraMoveListener {
+                    AccuracyCircleLayer.updateRadiusFromCamera(map, TRACK_POSITION_ACCURACY_LAYER_ID)
+                }
                 mapReady = true
                 mapLoadingOverlay.visibility = View.GONE
                 updateTrackLine()
@@ -623,10 +625,10 @@ class MapFragment : Fragment() {
         val style = maplibreMap?.style ?: return
         val visibility = if (visible) Property.VISIBLE else Property.NONE
         
-        style.getLayer("track-outline-layer")?.setProperties(PropertyFactory.visibility(visibility))
-        style.getLayer("track-fill-layer")?.setProperties(PropertyFactory.visibility(visibility))
-        style.getLayer("track-position-accuracy-layer")?.setProperties(PropertyFactory.visibility(visibility))
-        style.getLayer("track-position-layer")?.setProperties(PropertyFactory.visibility(visibility))
+        style.getLayer(TRACK_OUTLINE_LAYER_ID)?.setProperties(PropertyFactory.visibility(visibility))
+        style.getLayer(TRACK_FILL_LAYER_ID)?.setProperties(PropertyFactory.visibility(visibility))
+        style.getLayer(TRACK_POSITION_ACCURACY_LAYER_ID)?.setProperties(PropertyFactory.visibility(visibility))
+        style.getLayer(TRACK_POSITION_LAYER_ID)?.setProperties(PropertyFactory.visibility(visibility))
         
         style.layers.forEach { layer ->
             // Annotation plugin layers start with this prefix.
@@ -842,7 +844,7 @@ class MapFragment : Fragment() {
 
     private fun updateTrackLine() {
         val style = maplibreMap?.style ?: return
-        val source = style.getSourceAs<GeoJsonSource>("track-source") ?: return
+        val source = style.getSourceAs<GeoJsonSource>(TRACK_SOURCE_ID) ?: return
         
         val lineColor = currentTrackerColor ?: DEFAULT_TRACKER_COLOR_HEX
         if (trackPoints.size < 2) {
@@ -871,7 +873,7 @@ class MapFragment : Fragment() {
     private fun applyPositionSymbolUpdate() {
         if (!isAdded) return
         val style = maplibreMap?.style ?: return
-        val source = style.getSourceAs<GeoJsonSource>("track-position-source") ?: return
+        val source = style.getSourceAs<GeoJsonSource>(TRACK_POSITION_SOURCE_ID) ?: return
         
         if (trackPoints.isEmpty()) {
             source.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
@@ -971,5 +973,13 @@ class MapFragment : Fragment() {
         private const val MAP_PADDING_BOTTOM_DP = 48
         /** Extra padding (dp) when fitting bounds inside the content-padded viewport. */
         private const val BOUNDS_PADDING_DP = 24
+
+        // Map source/layer IDs (tracker map only)
+        private const val TRACK_SOURCE_ID = "track-source"
+        private const val TRACK_OUTLINE_LAYER_ID = "track-outline-layer"
+        private const val TRACK_FILL_LAYER_ID = "track-fill-layer"
+        private const val TRACK_POSITION_SOURCE_ID = "track-position-source"
+        private const val TRACK_POSITION_LAYER_ID = "track-position-layer"
+        private const val TRACK_POSITION_ACCURACY_LAYER_ID = "track-position-accuracy-layer"
     }
 }

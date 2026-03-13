@@ -24,7 +24,7 @@
             android:paddingTop="20dp"
             android:paddingBottom="16dp"
             android:background="@color/primary_blue"
-            android:elevation="2dp">
+            android:elevation="0dp">
 
             <TextView
                 android:id="@+id/appTitle"
@@ -61,7 +61,7 @@
             android:id="@+id/bottomNavContainer"
             android:layout_width="match_parent"
             android:layout_height="64dp"
-            android:elevation="8dp"
+            android:elevation="0dp"
             android:background="@color/primary_blue">
 
             <LinearLayout
