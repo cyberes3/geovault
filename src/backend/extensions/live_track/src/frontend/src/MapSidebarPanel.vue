@@ -10,7 +10,7 @@
       <button
         type="button"
         @click="onCloseClick"
-        class="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 focus:outline-none flex-shrink-0"
+        class="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 focus:outline-none flex-shrink-0 transition-none"
         title="Close"
       >
         <XMarkIcon class="h-5 w-5" />

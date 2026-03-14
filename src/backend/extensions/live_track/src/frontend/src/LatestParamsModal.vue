@@ -3,6 +3,7 @@
     v-if="!embedded"
     title="Latest Parameters"
     :container-ref="containerRef"
+    :disable-animations="disableAnimations"
     @close="$emit('close')"
   >
     <div class="p-4 sm:p-5 space-y-3">
@@ -41,9 +42,6 @@
         No extended parameters for the latest point.
       </div>
     </div>
-    <template #actions>
-      <BaseButton variant="white" size="sm" @click="$emit('close')">Close</BaseButton>
-    </template>
   </LiveTrackSidebar>
   <!-- Embedded: content + footer only (shell is provided by parent) -->
   <div v-else class="flex-1 min-h-0 flex flex-col">
@@ -111,6 +109,10 @@ export default {
     },
     /** When true, render only content + footer (no sidebar shell); parent provides the shell. */
     embedded: {
+      type: Boolean,
+      default: false,
+    },
+    disableAnimations: {
       type: Boolean,
       default: false,
     },

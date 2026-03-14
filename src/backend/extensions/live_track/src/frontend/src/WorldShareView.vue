@@ -1,5 +1,5 @@
 <template>
-  <div class="flex-1 min-h-0 flex flex-col bg-gray-50">
+  <div class="flex-1 min-h-0 flex flex-col bg-gray-50 overflow-hidden">
     <div v-if="error" class="flex-1 flex flex-col items-center justify-center p-8 text-center">
       <p class="text-lg font-medium text-gray-900">{{ error }}</p>
       <p class="text-sm text-gray-500 mt-1">The share link may have been removed or expired.</p>
@@ -12,70 +12,57 @@
         <ShareIcon class="w-5 h-5 text-gray-500" />
         <h1 class="text-lg font-semibold text-gray-900 truncate">{{ trackName || 'Shared tracker' }}</h1>
       </header>
-      <div class="relative flex-1 w-full min-h-[300px]">
+      <div ref="mapWrapperRef" class="relative flex-1 min-h-0 w-full">
         <div ref="mapContainer" class="absolute inset-0 w-full h-full bg-gray-100" />
-        <div class="absolute z-10 bottom-4 right-4 flex flex-col gap-2 bg-white border border-gray-200 rounded overflow-hidden">
-          <button
-            type="button"
-            class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
-            :title="followLocked ? 'Unlock map' : 'Lock map to tracker'"
-            @click="toggleFollowLock"
-          >
-            <LockClosedIcon v-if="followLocked" class="w-5 h-5" />
-            <LockOpenIcon v-else class="w-5 h-5" />
-          </button>
-          <button
-            type="button"
-            class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
-            title="Map Settings"
-            @click="showLayerModal = true"
-          >
-            <Square3Stack3DIcon class="w-5 h-5" />
-          </button>
-        </div>
+        <SingleTrackMapControls
+          :follow-locked="followLocked"
+          :show-params-button="showParamsButton"
+          @toggle-follow="toggleFollowLock"
+          @open-params="openParamsSidebar"
+          @open-layer="openLayerSidebar"
+        />
       </div>
+      <LatestParamsModal
+        v-if="showParamsSidebar"
+        :track="paramsTrack"
+        :param-labels="{}"
+        :container-ref="mapWrapperRef"
+        :disable-animations="true"
+        @close="showParamsSidebar = false"
+      />
+      <LiveTrackSidebar
+        v-if="showLayerSidebar"
+        title="Map Settings"
+        :container-ref="mapWrapperRef"
+        :disable-animations="true"
+        @close="showLayerSidebar = false"
+      >
+        <MapLayerSidebar
+          :tile-sources="tileSources"
+          :selected-layer="selectedLayer"
+          @update:selected-layer="onLayerSidebarChange"
+        />
+      </LiveTrackSidebar>
     </template>
-
-    <BaseModal
-      :is-open="showLayerModal"
-      title="Map Settings"
-      @close="showLayerModal = false"
-    >
-      <div class="p-4">
-        <label for="world-share-layer-select" class="block text-sm font-medium text-gray-700 mb-2">Layer</label>
-        <select
-          id="world-share-layer-select"
-          v-model="selectedLayer"
-          class="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          title="Map layer"
-          @change="onLayerChange"
-        >
-          <option v-for="source in tileSources" :key="source.id" :value="source.id">
-            {{ source.name }}
-          </option>
-        </select>
-      </div>
-      <template #actions>
-        <BaseButton variant="white" size="sm" @click="showLayerModal = false">
-          Close
-        </BaseButton>
-      </template>
-    </BaseModal>
   </div>
 </template>
 
 <script>
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
-import { ShareIcon, Square3Stack3DIcon, LockClosedIcon, LockOpenIcon } from '@heroicons/vue/24/outline';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { ShareIcon } from '@heroicons/vue/24/outline';
 import Loader from 'platform/components/parts/Loader.vue';
-import BaseModal from 'platform/components/parts/BaseModal.vue';
-import BaseButton from 'platform/components/parts/BaseButton.vue';
-import { getCoordsSortedByTime, buildLineFeatures, buildPointFeature } from './trackGeometry.js';
-import { getArrowImageId, rasterizeArrowToImageData } from './trackArrowMap.js';
-import { getRasterSourceSpec, getRasterLayerMaxZoom, defaultOsmSource } from './mapTileUtils.js';
+import LatestParamsModal from './LatestParamsModal.vue';
+import LiveTrackSidebar from './LiveTrackSidebar.vue';
+import MapLayerSidebar from './MapLayerSidebar.vue';
+import SingleTrackMapControls from './SingleTrackMapControls.vue';
+import { getCoordsSortedByTime, buildLineFeatures, buildPointFeature, fitMapToSingleTrack, centerMapOnTrackLastPoint } from './trackGeometry.js';
+import { setupMapFollowListeners } from './mapFollowLock.js';
+import { ensureArrowImage } from './trackArrowMap.js';
+import { trackToParamsModalShape } from './trackParamsShape.js';
+import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } from './mapTileUtils.js';
+import { useTileSources } from './useTileSources.js';
 
 const BASE_URL = '/api/extensions/live-track/world/share';
-const TILE_SOURCES_API_URL = '/api/tiles/sources/';
 const LINES_SOURCE_ID = 'world-share-lines';
 const POINTS_SOURCE_ID = 'world-share-points';
 const LINES_LAYER_ID = 'world-share-lines-layer';
@@ -98,40 +85,45 @@ function getShareIdFromUrl() {
 
 export default {
   name: 'WorldShareView',
-  components: { ShareIcon, Square3Stack3DIcon, LockClosedIcon, LockOpenIcon, Loader, BaseModal, BaseButton },
+  components: { ShareIcon, SingleTrackMapControls, Loader, LatestParamsModal, LiveTrackSidebar, MapLayerSidebar },
   setup() {
     const loading = ref(true);
     const error = ref('');
     const trackName = ref('');
     const trackData = ref(null);
     const mapContainer = ref(null);
-    const tileSources = ref([defaultOsmSource]);
-    const selectedLayer = ref('osm');
-    const showLayerModal = ref(false);
+    const mapWrapperRef = ref(null);
+    const { tileSources, selectedLayer, fetchTileSources } = useTileSources({ apiUrl: '/api/tiles/sources/' });
+    const showLayerSidebar = ref(false);
+    const showParamsSidebar = ref(false);
+    function openParamsSidebar() {
+      showLayerSidebar.value = false;
+      showParamsSidebar.value = true;
+    }
+
+    function openLayerSidebar() {
+      showParamsSidebar.value = false;
+      showLayerSidebar.value = true;
+    }
+
+    function onLayerSidebarChange(layerId) {
+      selectedLayer.value = layerId || selectedLayer.value;
+      onLayerChange();
+    }
+
     const followLocked = ref(false);
     const shareIdRef = ref(null);
     let map = null;
     let pollTimerId = null;
 
-    async function fetchTileSources() {
-      try {
-        const response = await fetch(TILE_SOURCES_API_URL);
-        const data = await response.json();
-        if (data.sources && Array.isArray(data.sources)) {
-          tileSources.value = data.sources.filter((s) => !s.hidden);
-        }
-        if (tileSources.value.length === 0) {
-          tileSources.value = [defaultOsmSource];
-        }
-        if (!tileSources.value.some((s) => s.id === selectedLayer.value)) {
-          selectedLayer.value = tileSources.value[0]?.id || 'osm';
-        }
-      } catch (e) {
-        console.warn('WorldShareView: fetch tile sources failed', e);
-        tileSources.value = [defaultOsmSource];
-        selectedLayer.value = 'osm';
-      }
-    }
+    const showParamsButton = computed(() => {
+      const t = trackData.value;
+      if (!t?.share_params_with_recipients) return false;
+      const hasPoints = (t.point_params?.length || t.geometry?.coordinates?.length) > 0;
+      return hasPoints;
+    });
+
+    const paramsTrack = computed(() => trackToParamsModalShape(trackData.value));
 
     async function updateMapData() {
       if (!map || !trackData.value) return;
@@ -153,16 +145,6 @@ export default {
           features: pointFeature ? [pointFeature] : []
         });
       }
-    }
-
-    function ensureArrowImage(mapInstance, color, selected = false) {
-      const id = getArrowImageId(color, selected);
-      if (mapInstance.getStyle() && mapInstance.hasImage(id)) return Promise.resolve();
-      return rasterizeArrowToImageData(color, selected).then((imageData) => {
-        if (imageData && mapInstance && mapInstance.getStyle() && !mapInstance.hasImage(id)) {
-          mapInstance.addImage(id, imageData, { pixelRatio: 1 });
-        }
-      });
     }
 
     async function addWorldShareTrackLayers() {
@@ -227,29 +209,11 @@ export default {
     }
 
     function fitMapToTrack() {
-      if (!map || !trackData.value) return;
-      const coords = getCoordsSortedByTime(trackData.value).map((c) => [c[0], c[1]]);
-      if (coords.length >= 2) {
-        const lons = coords.map((c) => c[0]);
-        const lats = coords.map((c) => c[1]);
-        map.fitBounds(
-          [
-            [Math.min(...lons), Math.min(...lats)],
-            [Math.max(...lons), Math.max(...lats)]
-          ],
-          { padding: 40, maxZoom: 16, duration: 0 }
-        );
-      } else if (coords.length === 1) {
-        map.jumpTo({ center: coords[0], zoom: 14, duration: 0 });
-      }
+      fitMapToSingleTrack(map, trackData.value);
     }
 
     function centerOnTrack() {
-      if (!map || !trackData.value) return;
-      const coords = getCoordsSortedByTime(trackData.value).map((c) => [c[0], c[1]]);
-      const last = coords.length ? coords[coords.length - 1] : null;
-      if (!last) return;
-      map.panTo(last, { duration: 200 });
+      centerMapOnTrackLastPoint(map, trackData.value);
     }
 
     function toggleFollowLock() {
@@ -260,22 +224,12 @@ export default {
       updateMapData();
     }
 
-    function setupMapFollowListeners() {
+    function setupMapFollowListenersForView() {
       if (!map) return;
-      const breakLock = () => {
-        if (!followLocked.value) return;
-        followLocked.value = false;
-        updateMapData().catch(() => {
-          // ignore transient map update errors while styles/sources are reloading
-        });
-      };
-      map.on('dragstart', breakLock);
-      map.on('wheel', breakLock);
-      map.on('zoomstart', (e) => {
-        const type = e.originalEvent?.type;
-        if (type === 'touchstart' || type === 'touchmove' || type === 'wheel') {
-          breakLock();
-        }
+      setupMapFollowListeners(map, {
+        getLocked: () => followLocked.value,
+        setLocked: (v) => { followLocked.value = v; },
+        onUnlock: () => updateMapData().catch(() => {})
       });
     }
 
@@ -343,21 +297,21 @@ export default {
         return;
       }
 
-      if (map.getLayer(BASE_LAYER_ID)) map.removeLayer(BASE_LAYER_ID);
-      if (map.getSource(BASE_SOURCE_ID)) map.removeSource(BASE_SOURCE_ID);
       const spec = getRasterSourceSpec(selectedLayer.value, tileSource);
       const layerMaxZoom = getRasterLayerMaxZoom(clientConfig);
-      map.addSource(BASE_SOURCE_ID, spec);
-      map.addLayer(
-        {
+      replaceRasterBaseLayer(map, {
+        sourceId: BASE_SOURCE_ID,
+        layerId: BASE_LAYER_ID,
+        sourceSpec: spec,
+        layerSpec: {
           id: BASE_LAYER_ID,
           type: 'raster',
           source: BASE_SOURCE_ID,
           minzoom: clientConfig.minzoom ?? 0,
           maxzoom: layerMaxZoom
         },
-        LINES_LAYER_ID
-      );
+        insertBeforeLayerId: LINES_LAYER_ID
+      });
     }
 
     onMounted(async () => {
@@ -450,7 +404,7 @@ export default {
             }
             map.resize();
             await addWorldShareTrackLayers();
-            setupMapFollowListeners();
+            setupMapFollowListenersForView();
             requestAnimationFrame(() => {
               if (!map) {
                 resolve();
@@ -527,7 +481,7 @@ export default {
             return;
           }
           await addWorldShareTrackLayers();
-          setupMapFollowListeners();
+          setupMapFollowListenersForView();
           requestAnimationFrame(() => {
             if (!map) {
               resolve();
@@ -557,10 +511,17 @@ export default {
       error,
       trackName,
       mapContainer,
+      mapWrapperRef,
       tileSources,
       selectedLayer,
-      showLayerModal,
+      showLayerSidebar,
+      showParamsSidebar,
+      showParamsButton,
+      paramsTrack,
       followLocked,
+      openParamsSidebar,
+      openLayerSidebar,
+      onLayerSidebarChange,
       toggleFollowLock,
       onLayerChange
     };

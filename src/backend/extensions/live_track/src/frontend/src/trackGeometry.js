@@ -92,3 +92,39 @@ export function buildPointFeature(track, selected = false) {
     geometry: { type: 'Point', coordinates: pos }
   };
 }
+
+/**
+ * Fit map bounds to a single track's geometry. Uses getCoordsSortedByTime for ordering.
+ * @param {import('maplibre-gl').Map} map - MapLibre map instance
+ * @param {Object} track - Track with geometry.coordinates
+ */
+export function fitMapToSingleTrack(map, track) {
+  if (!map || !track) return;
+  const coords = getCoordsSortedByTime(track).map((c) => [c[0], c[1]]);
+  if (coords.length >= 2) {
+    const lons = coords.map((c) => c[0]);
+    const lats = coords.map((c) => c[1]);
+    map.fitBounds(
+      [
+        [Math.min(...lons), Math.min(...lats)],
+        [Math.max(...lons), Math.max(...lats)]
+      ],
+      { padding: 40, maxZoom: 16, duration: 0 }
+    );
+  } else if (coords.length === 1) {
+    map.jumpTo({ center: coords[0], zoom: 14, duration: 0 });
+  }
+}
+
+/**
+ * Pan map to the last point of a single track.
+ * @param {import('maplibre-gl').Map} map - MapLibre map instance
+ * @param {Object} track - Track with geometry.coordinates
+ */
+export function centerMapOnTrackLastPoint(map, track) {
+  if (!map || !track) return;
+  const coords = getCoordsSortedByTime(track).map((c) => [c[0], c[1]]);
+  const last = coords.length ? coords[coords.length - 1] : null;
+  if (!last) return;
+  map.panTo(last, { duration: 200 });
+}

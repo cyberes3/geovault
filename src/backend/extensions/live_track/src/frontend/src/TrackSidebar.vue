@@ -47,7 +47,7 @@
       @update:color="color = $event"
       @update:recentDataWindow="recentDataWindow = $event"
       @update:visibility="visibility = $event"
-      @update:shareParamsWithRecipients="shareParamsWithRecipients = $event"
+      @update:shareParamsWithRecipients="onShareParamsWithRecipientsUpdate($event)"
       @update:sharedWithEmails="sharedWithEmails = $event"
       @update:worldShareEnabled="setWorldShareEnabled"
       @reset-color="resetColorToDeterministic"
@@ -59,22 +59,14 @@
     />
 
     <template #actions>
-      <template v-if="mode === 'create' && createdTrack">
-        <BaseButton variant="white" size="sm" @click="$emit('saved')">Close</BaseButton>
-      </template>
-      <template v-else-if="mode === 'create'">
-        <BaseButton variant="white" size="sm" @click="$emit('close')">Close</BaseButton>
+      <template v-if="mode === 'create' && !createdTrack">
         <BaseButton variant="primary" color="blue" size="sm" :disabled="saving || !name.trim()" @click="create">
           <Loader v-if="saving" size="sm" layout="inline" :show-message="false" class="mr-1" />
           Create
         </BaseButton>
       </template>
-      <template v-else-if="mode === 'edit' && (loading || !track)">
-        <BaseButton variant="white" size="sm" @click="$emit('close')">Close</BaseButton>
-      </template>
-      <template v-else>
-        <BaseButton variant="white" size="sm" @click="$emit('close')">Close</BaseButton>
-        <BaseButton v-if="isOwner" variant="primary" color="blue" size="sm" :disabled="saving || !name.trim()" @click="save">
+      <template v-else-if="mode === 'edit' && !loading && track && isOwner">
+        <BaseButton variant="primary" color="blue" size="sm" :disabled="saving || !name.trim()" @click="save">
           <Loader v-if="saving" size="sm" layout="inline" :show-message="false" class="mr-1" />
           Save
         </BaseButton>
@@ -136,7 +128,7 @@
         @update:color="color = $event"
         @update:recentDataWindow="recentDataWindow = $event"
         @update:visibility="visibility = $event"
-        @update:shareParamsWithRecipients="shareParamsWithRecipients = $event"
+        @update:shareParamsWithRecipients="onShareParamsWithRecipientsUpdate($event)"
         @update:sharedWithEmails="sharedWithEmails = $event"
         @update:worldShareEnabled="setWorldShareEnabled"
         @reset-color="resetColorToDeterministic"
@@ -454,6 +446,30 @@ export default {
       }
     }
 
+    function onShareParamsWithRecipientsUpdate(value) {
+      shareParamsWithRecipients.value = value;
+      saveShareParamsWithRecipients(value);
+    }
+
+    async function saveShareParamsWithRecipients(value) {
+      if (!api || !props.track?.id || saving.value) return;
+      error.value = '';
+      saving.value = true;
+      try {
+        await api.post(`/trackers/${props.track.id}/settings/`, {
+          share_params_with_recipients: value
+        });
+        // Do not emit('saved') — keep sidebar open; setting is persisted so it will be correct on reload
+      } catch (e) {
+        const err = api.handleError?.(e);
+        error.value = err?.message || 'Failed to save setting';
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(error.value);
+        shareParamsWithRecipients.value = !value;
+      } finally {
+        saving.value = false;
+      }
+    }
+
     async function confirmUnsubscribe() {
       if (!props.track?.id || unsubscribing.value) return;
       if (!confirm('Remove this tracker from your list? You can add it again from Shared with me.')) return;
@@ -480,6 +496,7 @@ export default {
       worldShareEnabled,
       worldShareUrl,
       setWorldShareEnabled,
+      onShareParamsWithRecipientsUpdate,
       isOwner,
       unsubscribing,
       displayColor,

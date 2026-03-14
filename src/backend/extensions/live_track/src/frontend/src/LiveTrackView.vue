@@ -333,8 +333,10 @@ import MapSidebarPanel from './MapSidebarPanel.vue';
 import SharedWithMeSidebarContent from './SharedWithMeSidebarContent.vue';
 import TrackerListContent from './TrackerListContent.vue';
 import { getCoordsSortedByTime, getTrackDirectionAngle, splitTrackIntoSegments } from './trackGeometry.js';
-import { getArrowImageId, rasterizeArrowToImageData } from './trackArrowMap.js';
-import { getRasterSourceSpec, getRasterLayerMaxZoom } from './mapTileUtils.js';
+import { getArrowImageId, ensureArrowImage } from './trackArrowMap.js';
+import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } from './mapTileUtils.js';
+import { setupMapFollowListeners } from './mapFollowLock.js';
+import { useTileSources } from './useTileSources.js';
 import { formatTimestampLocal } from './paramFormatters.js';
 
 const maplibregl = window.gv_core?.maplibre || window.maplibregl;
@@ -580,54 +582,13 @@ export default {
 
     const highlightedId = ref(null);
     const userLogin = ref('');
-    const tileSources = ref([]);
-    const selectedLayer = ref('osm');
+    const { tileSources, selectedLayer, fetchTileSources } = useTileSources({
+      apiUrl: TILE_SOURCES_API_URL,
+      afterFetch: (tileSourcesRef, selectedLayerRef) => applyDefaultMapFromStore(tileSourcesRef, selectedLayerRef)
+    });
     let map = null;
     let trackUpdatedHandler = null;
     let centerDebounceId = null;
-
-    async function fetchTileSources() {
-      try {
-        const response = await fetch(TILE_SOURCES_API_URL);
-        const data = await response.json();
-        if (data.sources && Array.isArray(data.sources)) {
-          tileSources.value = data.sources.filter((s) => !s.hidden);
-        }
-        if (tileSources.value.length === 0) {
-          tileSources.value = [{
-            id: 'osm',
-            name: 'OpenStreetMap',
-            type: 'osm',
-            requires_proxy: false,
-            client_config: {
-              type: 'osm',
-              url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              tileSize: 256,
-              attribution: '© OpenStreetMap'
-            }
-          }];
-        }
-        applyDefaultMapFromStore();
-        if (!tileSources.value.some((s) => s.id === selectedLayer.value)) {
-          selectedLayer.value = tileSources.value[0]?.id || 'osm';
-        }
-      } catch (e) {
-        console.error('Live Track: fetch tile sources failed', e);
-        tileSources.value = [{
-          id: 'osm',
-          name: 'OpenStreetMap',
-          type: 'osm',
-          requires_proxy: false,
-          client_config: {
-            type: 'osm',
-            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            tileSize: 256,
-            attribution: '© OpenStreetMap'
-          }
-        }];
-        selectedLayer.value = 'osm';
-      }
-    }
 
     const formatTime = (ms) => formatTimestampLocal(ms);
 
@@ -774,16 +735,6 @@ export default {
       return { type: 'FeatureCollection', features };
     }
 
-    function ensureArrowImage(color, selected) {
-      const id = getArrowImageId(color, selected);
-      if (map.hasImage(id)) return Promise.resolve();
-      return rasterizeArrowToImageData(color, selected).then((imageData) => {
-        if (imageData && map && map.getStyle() && !map.hasImage(id)) {
-          map.addImage(id, imageData, { pixelRatio: 1 });
-        }
-      });
-    }
-
     async function updateMapFeatures() {
       if (!map || !maplibregl) return;
       const lineSource = map.getSource(LINES_SOURCE_ID);
@@ -797,7 +748,7 @@ export default {
           const lastColon = key.lastIndexOf(':');
           const color = key.slice(0, lastColon);
           const selected = key.slice(lastColon + 1) === 'true';
-          return ensureArrowImage(color, selected);
+          return ensureArrowImage(map, color, selected);
         })
       );
       pointSource.setData(pointsGeoJSON);
@@ -874,10 +825,7 @@ export default {
         map.addSource(POINTS_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       }
       if (!map.getLayer(POINTS_LAYER_ID)) {
-        const defaultColor = '#6C93DE';
-        const defaultId = getArrowImageId(defaultColor, false);
-        const imageData = await rasterizeArrowToImageData(defaultColor, false);
-        if (imageData && !map.hasImage(defaultId)) map.addImage(defaultId, imageData, { pixelRatio: 1 });
+        await ensureArrowImage(map, '#6C93DE', false);
         map.addLayer(pointsLayerSpec);
       }
       if (!map.getLayer(`${LINES_LAYER_ID}-black-outline`)) {
@@ -953,17 +901,13 @@ export default {
             attributionControl: false
           });
           map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
-          setupMapFollowListeners();
+          setupMapFollowListenersForView();
           disableMapRotation();
           map.once('load', () => {
             if (!map) return;
             map.resize();
-            const defaultColor = '#6C93DE';
-            const defaultId = getArrowImageId(defaultColor, false);
-            rasterizeArrowToImageData(defaultColor, false).then((imageData) => {
+            ensureArrowImage(map, '#6C93DE', false).then(() => {
               if (!map || !map.getStyle()) return;
-              if (!imageData) return;
-              if (!map.hasImage(defaultId)) map.addImage(defaultId, imageData, { pixelRatio: 1 });
               if (!map.getLayer(POINTS_LAYER_ID)) map.addLayer(pointsLayerSpec);
               updateMapFeatures().then(() => {
                 setTimeout(() => {
@@ -983,22 +927,21 @@ export default {
             });
           });
         } else {
-          if (map.getLayer(BASE_LAYER_ID)) map.removeLayer(BASE_LAYER_ID);
-          if (map.getSource(BASE_SOURCE_ID)) map.removeSource(BASE_SOURCE_ID);
           const spec = getRasterSourceSpec(layerValue, tileSource);
           const layerMaxZoom = getRasterLayerMaxZoom(clientConfig);
-          map.addSource(BASE_SOURCE_ID, spec);
-          const firstTrackLayerId = ACCURACY_CIRCLE_LAYER_ID;
-          map.addLayer(
-            {
+          replaceRasterBaseLayer(map, {
+            sourceId: BASE_SOURCE_ID,
+            layerId: BASE_LAYER_ID,
+            sourceSpec: spec,
+            layerSpec: {
               id: BASE_LAYER_ID,
               type: 'raster',
               source: BASE_SOURCE_ID,
               minzoom: clientConfig.minzoom ?? 0,
               maxzoom: layerMaxZoom
             },
-            firstTrackLayerId
-          );
+            insertBeforeLayerId: ACCURACY_CIRCLE_LAYER_ID
+          });
         }
       }
     }
@@ -1027,7 +970,7 @@ export default {
           attributionControl: false
         });
         map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
-        setupMapFollowListeners();
+        setupMapFollowListenersForView();
         disableMapRotation();
         map.on('load', () => {
           if (!map) return;
@@ -1080,18 +1023,14 @@ export default {
       });
 
       map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
-      setupMapFollowListeners();
+      setupMapFollowListenersForView();
       disableMapRotation();
 
       map.once('load', () => {
         if (!map) return;
         map.resize();
-        const defaultColor = '#6C93DE';
-        const defaultId = getArrowImageId(defaultColor, false);
-        rasterizeArrowToImageData(defaultColor, false).then((imageData) => {
+        ensureArrowImage(map, '#6C93DE', false).then(() => {
           if (!map || !map.getStyle()) return;
-          if (!imageData) return;
-          if (!map.hasImage(defaultId)) map.addImage(defaultId, imageData, { pixelRatio: 1 });
           if (!map.getLayer(POINTS_LAYER_ID)) map.addLayer(pointsLayerSpec);
           updateMapFeatures().then(() => {
             setTimeout(() => {
@@ -1139,27 +1078,11 @@ export default {
       }, MAP_SNAP_DURATION + 50);
     }
 
-    function setupMapFollowListeners() {
+    function setupMapFollowListenersForView() {
       if (!map) return;
-      
-      const breakLock = () => {
-        if (followLocked.value) {
-          followLocked.value = false;
-          selectedId.value = null;
-        }
-      };
-
-      // Only unlock when the user explicitly interacts with the map (drag, wheel, pinch).
-      // Map +/- controls keep the lock.
-      map.on('dragstart', breakLock);
-      map.on('wheel', breakLock);
-      map.on('dblclick', breakLock);
-      map.on('zoomstart', (e) => {
-        const type = e.originalEvent?.type;
-        // Break lock for touch pinch or mouse wheel zoom, but ignore click on +/- buttons
-        if (type === 'touchstart' || type === 'touchmove' || type === 'wheel') {
-          breakLock();
-        }
+      setupMapFollowListeners(map, {
+        getLocked: () => followLocked.value,
+        setLocked: (v) => { followLocked.value = v; if (!v) selectedId.value = null; }
       });
       const TRACK_LAYER_IDS = [
         POINTS_LAYER_ID,
@@ -1746,13 +1669,13 @@ export default {
       if (saved && VALID_SORT_VALUES.has(saved)) sortBy.value = saved;
     }
 
-    function applyDefaultMapFromStore() {
+    function applyDefaultMapFromStore(tileSourcesRef, selectedLayerRef) {
       const store = window.gv_core?.store;
       const getNestedValue = window.gv_core?.GeoVault?.utils?.getNestedValue;
-      if (!store || !getNestedValue || !tileSources.value.length) return;
+      if (!store || !getNestedValue || !tileSourcesRef?.value?.length) return;
       const defaultMap = getNestedValue(store.state?.userSettings, DEFAULT_MAP_KEY);
-      if (defaultMap && tileSources.value.some((s) => s.id === defaultMap)) {
-        selectedLayer.value = defaultMap;
+      if (defaultMap && tileSourcesRef.value.some((s) => s.id === defaultMap)) {
+        selectedLayerRef.value = defaultMap;
       }
     }
 
@@ -1858,7 +1781,7 @@ export default {
 
     onActivated(() => {
       applyDefaultSortFromStore();
-      applyDefaultMapFromStore();
+      applyDefaultMapFromStore(tileSources, selectedLayer);
       if (map && tileSources.value.some((s) => s.id === selectedLayer.value)) {
         switchMapLayer(selectedLayer.value);
       }
@@ -1869,7 +1792,7 @@ export default {
       (userSettings) => {
         if (!userSettings) return;
         applyDefaultSortFromStore();
-        applyDefaultMapFromStore();
+        applyDefaultMapFromStore(tileSources, selectedLayer);
         if (map && tileSources.value.length && tileSources.value.some((s) => s.id === selectedLayer.value)) {
           switchMapLayer(selectedLayer.value);
         }
@@ -2032,7 +1955,7 @@ export default {
   flex-direction: column;
   overflow: hidden;
   max-height: v-bind("trackerMaxHeight + 'px'");
-  transition: height 0.25s ease;
+  transition: none;
 }
 .mobile-tracker-drawer--dragging {
   transition: none;

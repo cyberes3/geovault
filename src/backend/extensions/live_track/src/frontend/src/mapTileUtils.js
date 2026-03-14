@@ -37,3 +37,20 @@ export function getRasterSourceSpec(layerValue, tileSource) {
 export function getRasterLayerMaxZoom(clientConfig, maxZoomDefault = DEFAULT_MAX_ZOOM, layerMaxZoomDefault = DEFAULT_LAYER_MAX_ZOOM) {
   return Math.max(clientConfig?.maxzoom ?? maxZoomDefault, layerMaxZoomDefault);
 }
+
+/**
+ * Replace the raster base layer and source on an existing map (raster mode).
+ * Removes existing layer and source if present, then adds the new source and layer.
+ * @param {import('maplibre-gl').Map} map - MapLibre map instance
+ * @param {{ sourceId: string, layerId: string, sourceSpec: Object, layerSpec: Object, insertBeforeLayerId?: string }} options
+ */
+export function replaceRasterBaseLayer(map, { sourceId, layerId, sourceSpec, layerSpec, insertBeforeLayerId }) {
+  if (!map) return;
+  if (map.getLayer(layerId)) map.removeLayer(layerId);
+  if (map.getSource(sourceId)) map.removeSource(sourceId);
+  map.addSource(sourceId, sourceSpec);
+  map.addLayer(
+    layerSpec,
+    insertBeforeLayerId || undefined
+  );
+}

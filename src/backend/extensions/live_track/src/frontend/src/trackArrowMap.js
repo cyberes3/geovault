@@ -44,6 +44,25 @@ export function getTrackArrowDataURL(color, selected) {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
 
+/**
+ * Ensure the arrow image for the given color/selected state exists on the map.
+ * Idempotent: no-op if the image is already present.
+ * @param {import('maplibre-gl').Map} mapInstance - MapLibre map instance
+ * @param {string} color - Hex color (e.g. '#6C93DE')
+ * @param {boolean} selected - Whether selected variant
+ * @returns {Promise<void>}
+ */
+export function ensureArrowImage(mapInstance, color, selected = false) {
+  if (!mapInstance?.getStyle?.() || !mapInstance.hasImage) return Promise.resolve();
+  const id = getArrowImageId(color, selected);
+  if (mapInstance.getStyle() && mapInstance.hasImage(id)) return Promise.resolve();
+  return rasterizeArrowToImageData(color, selected).then((imageData) => {
+    if (imageData && mapInstance && mapInstance.getStyle() && !mapInstance.hasImage(id)) {
+      mapInstance.addImage(id, imageData, { pixelRatio: 1 });
+    }
+  });
+}
+
 export function rasterizeArrowToImageData(color, selected) {
   return new Promise((resolve) => {
     const img = new Image();
