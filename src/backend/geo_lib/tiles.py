@@ -83,7 +83,11 @@ def tile_proxy(request, service, z, x, y):
         return HttpResponse('Service configuration error: missing url_template', status=500)
 
     # Calculate HTTP cache max-age from cache_expiry_days (convert days to seconds)
-    cache_max_age_seconds = get_required_setting('TILE_CACHE_EXPIRY_DAYS') * 24 * 60 * 60
+    # OSMF / openmaps.fr require at least 7 days for OSM/OpenTopoMap/OpenHikingMap
+    cache_expiry_days = get_required_setting('TILE_CACHE_EXPIRY_DAYS')
+    if service in ('osm', 'opentopomap', 'openhikingmap'):
+        cache_expiry_days = max(cache_expiry_days, 7)
+    cache_max_age_seconds = cache_expiry_days * 24 * 60 * 60
 
     # Determine file extension from URL template (fallback, will be updated from response if needed)
     url_extension = 'tile'
@@ -104,7 +108,7 @@ def tile_proxy(request, service, z, x, y):
         # Only check for the extension from URL template (no fallback)
         if url_extension != 'tile':
             cache_path = get_tile_cache_path(service, z, x, y, url_extension)
-            if cache_path is not None and is_tile_cached(cache_path):
+            if cache_path is not None and is_tile_cached(cache_path, service):
                 tile_data = read_tile_from_cache(cache_path)
                 if not tile_data:
                     return HttpResponse('Cached file not found', status=400)
@@ -132,8 +136,15 @@ def tile_proxy(request, service, z, x, y):
     tile_url = url_template.format(z=z, x=x, y=y)
 
     try:
-        # Create request with headers from proxy_config
-        headers = proxy_config.get('headers', {})
+        # Create request with headers from proxy_config (copy so we don't mutate cached config)
+        headers = dict(proxy_config.get('headers', {}))
+        # For OSM/OpenTopoMap/OpenHikingMap, send a valid Referer when in browser (tile servers expect it)
+        if service in ('osm', 'opentopomap', 'openhikingmap'):
+            referer = request.META.get('HTTP_REFERER', '').strip()
+            if not referer:
+                referer = request.build_absolute_uri('/')
+            if referer:
+                headers['Referer'] = referer
 
         # Use requests library with streaming for better performance
         response = requests.get(tile_url, headers=headers, stream=True, timeout=10)
@@ -332,13 +343,14 @@ def get_tile_cache_path(service, z, x, y, extension='tile'):
     return resolved
 
 
-def is_tile_cached(cache_path):
+def is_tile_cached(cache_path, service=None):
     """
     Check if a tile is cached and not expired.
     Path must resolve under TILE_CACHE_DIR; only the resolved path is used for I/O.
 
     Args:
         cache_path: Path to the cached tile file
+        service: Optional tile service id; if osm/opentopomap/openhikingmap, enforces OSMF minimum 7-day cache.
 
     Returns:
         True if cached and valid, False otherwise
@@ -358,7 +370,10 @@ def is_tile_cached(cache_path):
 
     try:
         file_mtime = datetime.fromtimestamp(resolved.stat().st_mtime)
-        expiry_time = timedelta(days=get_required_setting('TILE_CACHE_EXPIRY_DAYS'))
+        expiry_days = get_required_setting('TILE_CACHE_EXPIRY_DAYS')
+        if service in ('osm', 'opentopomap', 'openhikingmap'):
+            expiry_days = max(expiry_days, 7)  # OSMF / openmaps.fr policy: at least 7 days
+        expiry_time = timedelta(days=expiry_days)
 
         if datetime.now() - file_mtime > expiry_time:
             try:
