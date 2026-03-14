@@ -82,6 +82,7 @@
         @saved="onEditSaved"
         @refreshed="onEditRefreshed"
         @leave="onLeaveGroup"
+        @hidden-in-list-changed="$emit('hidden-in-list-changed', $event)"
       />
     </div>
   </div>
@@ -106,7 +107,7 @@ export default {
     /** When set, open in edit view for this group id. */
     initialGroupId: { type: [String, Number], default: null },
   },
-  emits: ['saved', 'refreshed', 'leave'],
+  emits: ['saved', 'refreshed', 'leave', 'hidden-in-list-changed'],
   setup(props, { emit }) {
     const view = ref('list');
     const selectedGroup = ref(null);

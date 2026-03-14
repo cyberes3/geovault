@@ -2,9 +2,11 @@
 Create dummy LiveTrack records with realistic geometry and point_params for
 development/testing.
 
-Uses the first available user (or --user email). Rerunning (without --delete)
-deletes existing dummy tracks (identified by the "Dummy: " name prefix) and
-recreates them with new random data. Use --delete to only remove dummy tracks.
+Creates 10 tracks, 3 groups (2+2+3 track memberships), world shares, direct
+shares to other users, public visibility, and group memberships. Uses the first
+available user (or --user email). Rerunning (without --delete) deletes existing
+dummy tracks and groups (by name prefix) and recreates them. Use --delete to
+only remove dummy data.
 """
 import math
 import random
@@ -20,6 +22,15 @@ User = get_user_model()
 
 EARTH_RADIUS_METERS = 6_371_000
 DUMMY_NAME_PREFIX = "Dummy: "
+DUMMY_GROUP_PREFIX = "Dummy Group: "
+
+NUM_TRACKS = 10
+NUM_GROUPS = 3
+NUM_WORLD_SHARES = 3
+NUM_TRACKS_SHARED_WITH_USERS = 5
+NUM_PUBLIC_TRACKS = 3
+NUM_GROUPS_SHARED_WITH_USERS = 2
+NUM_PUBLIC_GROUPS = 1  # 1 group gets many members to simulate "public"
 
 TRACK_PRESETS = [
     {"name": "Morning Run",       "color": "#e74c3c", "style": "run"},
@@ -32,12 +43,9 @@ TRACK_PRESETS = [
     {"name": "Weekend Ride",      "color": "#6C93DE", "style": "bike"},
     {"name": "City Exploration",  "color": "#e84393", "style": "walk"},
     {"name": "Mountain Bike Loop","color": "#00b894", "style": "bike"},
-    {"name": "Trail Run",         "color": "#fd79a8", "style": "run"},
-    {"name": "Cross Country",     "color": "#636e72", "style": "hike"},
-    {"name": "Night Ride",        "color": "#0984e3", "style": "bike"},
-    {"name": "Recovery Jog",      "color": "#d63031", "style": "run"},
-    {"name": "Delivery Route",    "color": "#fdcb6e", "style": "drive"},
 ]
+
+GROUP_NAMES = ["Family", "Team", "Public"]
 
 # style -> (speed_kph_range, num_points_range, interval_sec_range,
 #           base_altitude_range, altitude_variance)
@@ -137,20 +145,19 @@ class Command(BaseCommand):
             help="Email of the user to attach the tracks to. Default: first user.",
         )
         parser.add_argument(
-            "--count",
-            type=int,
-            default=5,
-            help="Number of dummy tracks to create (default: 5, max: 15).",
-        )
-        parser.add_argument(
             "--delete",
             action="store_true",
-            help="Only delete existing dummy tracks for the user; do not create any.",
+            help="Only delete existing dummy tracks and groups for the user; do not create any.",
         )
 
     def handle(self, *args, **options):
         try:
             LiveTrack = apps.get_model("live_track", "LiveTrack")
+            LiveTrackGroup = apps.get_model("live_track", "LiveTrackGroup")
+            LiveTrackGroupMember = apps.get_model("live_track", "LiveTrackGroupMember")
+            LiveTrackGroupMembership = apps.get_model("live_track", "LiveTrackGroupMembership")
+            LiveTrackShare = apps.get_model("live_track", "LiveTrackShare")
+            LiveTrackWorldShare = apps.get_model("live_track", "LiveTrackWorldShare")
         except LookupError:
             self.stdout.write(self.style.ERROR(
                 "App 'live_track' not found. Enable the Live Track extension and try again."
@@ -169,36 +176,39 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR("No user in the database. Create a user first."))
             return
 
-        to_delete = LiveTrack.objects.filter(user=user, name__startswith=DUMMY_NAME_PREFIX)
-        deleted_count, _ = to_delete.delete()
+        other_users = list(User.objects.exclude(pk=user.pk).order_by("pk"))
+
+        to_delete_tracks = LiveTrack.objects.filter(user=user, name__startswith=DUMMY_NAME_PREFIX)
+        deleted_tracks, _ = to_delete_tracks.delete()
+        to_delete_groups = LiveTrackGroup.objects.filter(
+            user=user, name__startswith=DUMMY_GROUP_PREFIX
+        )
+        deleted_groups, _ = to_delete_groups.delete()
+        deleted_count = deleted_tracks + deleted_groups
 
         if options.get("delete"):
             self.stdout.write(self.style.SUCCESS(
-                f"Done. Deleted {deleted_count} dummy track(s) for {user.email}."
+                f"Done. Deleted dummy data for {user.email} (tracks + groups)."
             ))
             return
 
-        count = max(1, min(options["count"], len(TRACK_PRESETS)))
-        presets = random.sample(TRACK_PRESETS, count)
-
-        visibilities = ["private"] * count
-        if count >= 3:
-            visibilities[1] = "public"
-        if count >= 5:
-            visibilities[3] = "shared"
+        # Visibility: 3 public, 5 shared (with random users), 2 private
+        visibilities = (
+            ["public"] * NUM_PUBLIC_TRACKS
+            + ["shared"] * NUM_TRACKS_SHARED_WITH_USERS
+            + ["private"] * (NUM_TRACKS - NUM_PUBLIC_TRACKS - NUM_TRACKS_SHARED_WITH_USERS)
+        )
         random.shuffle(visibilities)
 
-        created = 0
-        for i, preset in enumerate(presets):
+        tracks = []
+        for i, preset in enumerate(TRACK_PRESETS[:NUM_TRACKS]):
             coords, point_params = _generate_track(preset["style"])
             name = f"{DUMMY_NAME_PREFIX}{preset['name']}"
             visibility = visibilities[i]
-
             settings = {"color": preset["color"]}
             if random.random() < 0.3:
                 settings["recent_data_window"] = random.choice(["1h", "1d", "1w"])
-
-            LiveTrack.objects.create(
+            track = LiveTrack.objects.create(
                 id=uuid.uuid4(),
                 tracker_secret=secrets.token_urlsafe(32),
                 name=name,
@@ -209,11 +219,79 @@ class Command(BaseCommand):
                 geometry={"type": "LineString", "coordinates": coords},
                 point_params=point_params,
             )
+            tracks.append(track)
             self.stdout.write(self.style.SUCCESS(
-                f"  Created: {name} ({visibility}, {len(coords)} pts, style={preset['style']})"
+                f"  Created: {name} ({visibility}, {len(coords)} pts)"
             ))
-            created += 1
+
+        # Groups: 3 groups, 2 + 2 + 3 track members
+        group_track_assignments = [
+            (0, [0, 1]),           # group 0: 2 tracks
+            (1, [2, 3]),           # group 1: 2 tracks
+            (2, [4, 5, 6]),        # group 2: 3 tracks
+        ]
+        groups = []
+        for gidx, gname in enumerate(GROUP_NAMES):
+            grp = LiveTrackGroup.objects.create(
+                name=f"{DUMMY_GROUP_PREFIX}{gname}",
+                user=user,
+            )
+            groups.append(grp)
+            for track_idx in group_track_assignments[gidx][1]:
+                LiveTrackGroupMember.objects.create(group=grp, track=tracks[track_idx])
+            self.stdout.write(self.style.SUCCESS(
+                f"  Group: {grp.name} ({len(group_track_assignments[gidx][1])} tracks)"
+            ))
+
+        # World share: a few tracks
+        world_share_indices = random.sample(range(NUM_TRACKS), min(NUM_WORLD_SHARES, NUM_TRACKS))
+        for idx in world_share_indices:
+            LiveTrackWorldShare.objects.create(
+                track=tracks[idx],
+                share_id=str(uuid.uuid4()),
+            )
+            tracks[idx].share_params_with_world = random.choice([True, False])
+            tracks[idx].save(update_fields=["share_params_with_world"])
+        self.stdout.write(self.style.SUCCESS(
+            f"  World share enabled on {len(world_share_indices)} track(s)."
+        ))
+
+        # Share 5 tracks with random other users (visibility=shared + LiveTrackShare)
+        shared_track_indices = [i for i in range(NUM_TRACKS) if visibilities[i] == "shared"]
+        shared_track_indices = shared_track_indices[:NUM_TRACKS_SHARED_WITH_USERS]
+        for i, idx in enumerate(shared_track_indices):
+            if other_users:
+                u = other_users[i % len(other_users)]
+                LiveTrackShare.objects.get_or_create(track=tracks[idx], shared_with=u)
+        if other_users:
+            self.stdout.write(self.style.SUCCESS(
+                f"  Shared {len(shared_track_indices)} track(s) with other user(s)."
+            ))
+        else:
+            self.stdout.write(self.style.WARNING(
+                "  No other users in DB; skipped direct track shares."
+            ))
+
+        # 2 groups shared with other users, 1 group "publicly" (many members)
+        if other_users:
+            for gidx in range(NUM_GROUPS_SHARED_WITH_USERS):
+                for u in random.sample(other_users, min(2, len(other_users))):
+                    LiveTrackGroupMembership.objects.get_or_create(
+                        group=groups[gidx], user=u
+                    )
+            public_group_idx = NUM_GROUPS - 1
+            for u in other_users[: max(3, len(other_users))]:
+                LiveTrackGroupMembership.objects.get_or_create(
+                    group=groups[public_group_idx], user=u
+                )
+            self.stdout.write(self.style.SUCCESS(
+                f"  Group members: 2 groups with selected users, 1 group with all/several users."
+            ))
+        else:
+            self.stdout.write(self.style.WARNING(
+                "  No other users; skipped group memberships."
+            ))
 
         self.stdout.write(self.style.SUCCESS(
-            f"Done. Deleted {deleted_count}, created {created} dummy track(s) for {user.email}."
+            f"Done. Created {len(tracks)} tracks, {len(groups)} groups for {user.email}."
         ))

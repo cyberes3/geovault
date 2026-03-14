@@ -38,6 +38,8 @@
           :selected-id="selectedId"
           :active-group-id="activeGroupId"
           :highlighted-id="highlightedId"
+          :hidden-track-ids="hiddenTrackIds"
+          :hidden-group-ids="hiddenGroupIds"
           :loading="loading"
           :list-empty-for-tab="listEmptyForTab"
           scroll-container-class="flex-1 min-h-0 overflow-y-auto space-y-3 px-1 py-1 custom-scrollbar"
@@ -48,6 +50,8 @@
           @leave-group="leaveGroup"
           @edit-group="openEditGroupModal"
           @view-group="openGroupQuickView"
+          @toggle-visibility="toggleTrackVisibility"
+          @toggle-group-visibility="toggleGroupVisibility"
           @clear-highlight="highlightedId = null"
         />
       </aside>
@@ -56,11 +60,20 @@
     <main ref="mapColumnRef" class="live-track-map-column flex-1 relative min-h-0">
       <div ref="mapContainer" class="absolute inset-0 w-full h-full bg-gray-100" />
 
-      <!-- Selected item chip: group or tracker name, deselect with X -->
+      <!-- Selected item chip: group or tracker name, deselect with X; group icon when locked to a track in a shared group -->
       <div
         v-if="selectedItemLabel"
         class="absolute top-3 left-3 z-20 flex items-center gap-2 rounded-lg border border-blue-200 bg-white/95 px-3 py-2 shadow-sm"
       >
+        <button
+          v-if="selectedTrackSharedGroup"
+          type="button"
+          :title="'Open group: ' + (selectedTrackSharedGroup.name || 'Group')"
+          class="flex-shrink-0 p-1 rounded-md text-gray-500 hover:text-blue-600 hover:bg-blue-50"
+          @click="openGroupQuickView(selectedTrackSharedGroup)"
+        >
+          <UserGroupIcon class="h-5 w-5" />
+        </button>
         <span class="text-sm font-medium text-gray-900 truncate max-w-[12rem]" :title="selectedItemLabel">{{ selectedItemLabel }}</span>
         <button
           type="button"
@@ -96,6 +109,7 @@
             @saved="onTrackSidebarSaved"
             @deleted="onTrackDeleted"
             @unsubscribed="onTrackSidebarUnsubscribed"
+            @settings-changed="onTrackSettingsChanged"
           />
           <LatestParamsModal
             v-else-if="paramsModalTrackId != null"
@@ -106,7 +120,7 @@
           />
           <GroupsSidebarContent
             v-else-if="showGroupsSidebar"
-            :groups="groups"
+            :groups="sortedGroups"
             :trackers="trackers"
             :api="api"
             :initial-group-id="groupsSidebarInitialGroupId"
@@ -114,6 +128,7 @@
             @saved="onGroupsSidebarSaved"
             @refreshed="onGroupsSidebarRefreshed"
             @leave="onGroupsSidebarLeave"
+            @hidden-in-list-changed="onGroupHiddenInListChanged"
           />
           <div
             v-else-if="showGroupQuickViewSidebar && groupQuickViewGroup"
@@ -136,14 +151,30 @@
               <div
                 v-for="track in groupQuickViewTracks"
                 :key="track.id"
-                class="flex items-center gap-2 p-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
+                :class="[
+                  'group flex items-center gap-2 p-3 rounded-2xl border transition-all cursor-pointer',
+                  selectedId === track.id
+                    ? 'border-blue-500 bg-blue-100'
+                    : 'border-blue-100 bg-white hover:bg-blue-50 hover:border-blue-300'
+                ]"
+                @click="zoomToTrackInGroup(track)"
               >
                 <div class="flex-1 min-w-0">
                   <div class="text-sm font-medium text-gray-900 truncate">{{ track.name }}</div>
                   <div class="text-xs text-gray-500">{{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'No points' }}</div>
                 </div>
-                <div class="flex items-center gap-1 flex-shrink-0">
+                <div class="flex items-center gap-1 flex-shrink-0" @click.stop>
                   <button
+                    v-if="track.is_owner"
+                    type="button"
+                    title="Open in list"
+                    class="p-2 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50"
+                    @click="openTrackerInList(track)"
+                  >
+                    <ListBulletIcon class="h-5 w-5" />
+                  </button>
+                  <button
+                    v-else-if="groupQuickViewGroup?.is_owner"
                     type="button"
                     title="Zoom to tracker"
                     class="p-2 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50"
@@ -168,15 +199,26 @@
             v-else-if="showSharedWithMeSidebar"
             :trackers="trackers"
             :incoming-trackers="incomingSharedTrackers"
+            :incoming-groups="incomingSharedGroups"
+            :shared-groups-on-map="visibleSharedGroupsTab"
             :adding-incoming-id="addingIncomingId"
+            :adding-incoming-group-id="addingIncomingGroupId"
             :leaving-share-id="leavingShareId"
             :hidden-track-ids="hiddenTrackIds"
             :unsubscribing-id="unsubscribingId"
+            :unsubscribing-group-id="unsubscribingGroupId"
             :refreshing="sharedWithMeRefreshing"
+            :api="api"
             @toggle-visibility="toggleTrackVisibility"
+            @toggle-group-visibility="toggleGroupVisibility"
             @unsubscribe="onSharedUnsubscribe"
+            @unsubscribe-group="onSharedUnsubscribeGroup"
+            @select-track="onSharedSidebarSelectTrack"
+            @select-group="onSharedSidebarSelectGroup"
             @leave-share="onLeaveShare"
             @add-incoming="onAddIncomingTracker"
+            @add-incoming-group="onAddIncomingGroup"
+            @leave-group="onSharedWithMeLeaveGroup"
             @open-discover="showDiscoverModal = true"
             @refresh="onSharedWithMeRefresh"
           />
@@ -185,6 +227,18 @@
             :tile-sources="tileSources"
             :selected-layer="selectedLayer"
             @update:selected-layer="onLayerSidebarChange"
+          />
+          <LiveTrackSettingsSidebarContent
+            v-else-if="showSettingsSidebar"
+            :hidden-trackers="hiddenTrackersForSettings"
+            :hidden-groups="hiddenGroupsForSettings"
+            @open-shared-list="showSharedListModal = true"
+            @unhide-tracker="onUnhideTracker"
+            @unhide-all-trackers="onUnhideAllTrackers"
+            @unhide-tracker-from-map="onUnhideTrackerFromMap"
+            @unhide-group="onUnhideGroup"
+            @unhide-all-groups="onUnhideAllGroups"
+            @unhide-group-from-map="onUnhideGroupFromMap"
           />
         </MapSidebarPanel>
       </div>
@@ -221,15 +275,33 @@
           <span class="relative inline-flex">
             <ShareIcon :class="SIDEBAR_ACTION_ICON_CLASS" />
             <span
-              v-if="incomingSharedTrackers.length > 0"
+              v-if="incomingSharedTrackers.length + incomingSharedGroups.length > 0"
               class="absolute -top-1 -right-1 min-w-[0.875rem] h-4 px-0.5 flex items-center justify-center rounded-full bg-blue-500 text-white text-[9px] font-semibold leading-none"
             >
-              {{ incomingSharedTrackers.length > 99 ? '99+' : incomingSharedTrackers.length }}
+              {{ incomingSharedTrackers.length + incomingSharedGroups.length > 99 ? '99+' : incomingSharedTrackers.length + incomingSharedGroups.length }}
             </span>
           </span>
         </button>
       </div>
       <div class="flex flex-row sm:flex-col items-center gap-2 sm:gap-1">
+        <button
+          type="button"
+          title="Settings"
+          :class="SIDEBAR_ACTION_BUTTON_CLASS"
+          @click="openSidebar('settings')"
+        >
+          <Cog6ToothIcon :class="SIDEBAR_ACTION_ICON_CLASS" />
+        </button>
+        <button
+          type="button"
+          title="Refresh all"
+          :class="SIDEBAR_ACTION_BUTTON_CLASS"
+          :disabled="actionStripRefreshing"
+          @click="onFullRefresh"
+        >
+          <Loader v-if="actionStripRefreshing" size="xs" layout="inline" :show-message="false" />
+          <ArrowPathIcon v-else :class="SIDEBAR_ACTION_ICON_CLASS" />
+        </button>
         <button
           type="button"
           title="Map Settings"
@@ -293,6 +365,8 @@
             :selected-id="selectedId"
             :active-group-id="activeGroupId"
             :highlighted-id="highlightedId"
+            :hidden-track-ids="hiddenTrackIds"
+            :hidden-group-ids="hiddenGroupIds"
             :loading="loading"
             :list-empty-for-tab="listEmptyForTab"
             :scroll-container-class="['flex-1 min-h-0 space-y-3 px-1 py-1', isDrawerAtPeek ? 'mobile-drawer-content--no-scroll' : 'overflow-y-auto custom-scrollbar'].join(' ')"
@@ -304,6 +378,8 @@
             @leave-group="leaveGroup"
             @edit-group="openEditGroupModal"
             @view-group="openGroupQuickView"
+            @toggle-visibility="toggleTrackVisibility"
+            @toggle-group-visibility="toggleGroupVisibility"
             @clear-highlight="highlightedId = null"
           />
         </div>
@@ -316,24 +392,48 @@
       @close="showDiscoverModal = false"
       @saved="onDiscoverSaved"
     />
+    <SharedItemsModal
+      :is-open="showSharedListModal"
+      :items="sharedByYouTrackers"
+      @close="showSharedListModal = false"
+      @open-modify-sharing="shareSettingsModalTrack = $event"
+      @open-public-popup="publicSharePopupTrack = $event"
+    />
+    <ShareSettingsModal
+      :track="shareSettingsModalTrack"
+      :api="api"
+      @close="shareSettingsModalTrack = null"
+      @saved="onShareSettingsSaved"
+    />
+    <PublicSharePopup
+      :track="publicSharePopupTrack"
+      :api="api"
+      @close="publicSharePopupTrack = null"
+      @deleted="onPublicShareDeleted"
+    />
   </div>
 </template>
 
 <script>
 import { ref, computed, onMounted, onActivated, onBeforeUnmount, inject, watch, nextTick } from 'vue';
-import { PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon } from '@heroicons/vue/24/outline';
+import { PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon } from '@heroicons/vue/24/outline';
 import { useWindowSize, useScrollLock } from '@vueuse/core';
 import { getIngressBodyTemplate } from './ingressBodyTemplateCache.js';
 import { trackersLiveSocket } from './trackersLiveSocket.js';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
+import Loader from 'platform/components/parts/Loader.vue';
 import TrackSidebar from './TrackSidebar.vue';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
 import LatestParamsModal from './LatestParamsModal.vue';
 import GroupsSidebarContent from './GroupsSidebarContent.vue';
 import DiscoverTrackersModal from './DiscoverTrackersModal.vue';
+import SharedItemsModal from './SharedItemsModal.vue';
+import ShareSettingsModal from './ShareSettingsModal.vue';
+import PublicSharePopup from './PublicSharePopup.vue';
 import MapLayerSidebar from './MapLayerSidebar.vue';
 import MapSidebarPanel from './MapSidebarPanel.vue';
 import SharedWithMeSidebarContent from './SharedWithMeSidebarContent.vue';
+import LiveTrackSettingsSidebarContent from './LiveTrackSettingsSidebarContent.vue';
 import TrackerListContent from './TrackerListContent.vue';
 import { getCoordsSortedByTime, getTrackDirectionAngle, splitTrackIntoSegments } from './trackGeometry.js';
 import { getArrowImageId, ensureArrowImage } from './trackArrowMap.js';
@@ -373,16 +473,22 @@ const LIST_TABS = [
 
 export default {
   name: 'LiveTrackView',
-  components: { BaseButton, TrackSidebar, TrackDirectionIcon, LatestParamsModal, GroupsSidebarContent, DiscoverTrackersModal, MapLayerSidebar, MapSidebarPanel, SharedWithMeSidebarContent, TrackerListContent, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon },
+  components: { BaseButton, Loader, TrackSidebar, TrackDirectionIcon, LatestParamsModal, GroupsSidebarContent, DiscoverTrackersModal, SharedItemsModal, ShareSettingsModal, PublicSharePopup, MapLayerSidebar, MapSidebarPanel, SharedWithMeSidebarContent, LiveTrackSettingsSidebarContent, TrackerListContent, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon },
   setup() {
     const api = inject('extensionApi');
     const trackers = ref([]);
     const groups = ref([]);
     const sortBy = ref('alphabetical');
     const showDiscoverModal = ref(false);
+    const showSharedListModal = ref(false);
+    const shareSettingsModalTrack = ref(null);
+    const publicSharePopupTrack = ref(null);
     /** Track IDs hidden from the map (eye/eye-slash). Reactive: replace Set to trigger updates. */
     const hiddenTrackIds = ref(new Set());
+    /** Group IDs hidden from the map (so left tab can show eye state). Synced with server. */
+    const hiddenGroupIds = ref(new Set());
     const unsubscribingId = ref(null);
+    const unsubscribingGroupId = ref(null);
     const loading = ref(true);
     const selectedId = ref(null);
     const activeGroupId = ref(null);
@@ -449,8 +555,18 @@ export default {
       return track.last_timestamp_ms > fiveMinutesAgo;
     }
 
+    const trackerIdsOnMap = computed(() => new Set(trackers.value.map((t) => String(t.id))));
+
+    function isAcceptedOrOwnedGroup(group) {
+      if (group?.is_owner === true) return true;
+      const trackIds = group?.track_ids || [];
+      return trackIds.some((id) => trackerIdsOnMap.value.has(String(id)));
+    }
+
     const sortedGroups = computed(() => {
-      return [...groups.value].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      return [...groups.value]
+        .filter((group) => isAcceptedOrOwnedGroup(group))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     });
 
     const sortedTrackers = computed(() => {
@@ -475,27 +591,61 @@ export default {
 
     const listTab = ref('trackers');
     const visibleTrackersTab = computed(() =>
-      sortedTrackers.value.filter((t) => t.is_owner === true)
+      sortedTrackers.value.filter((t) => t.is_owner === true && !(t.settings && t.settings.hidden_in_list))
     );
     const visibleSharedTab = computed(() => {
-      const sharedGroups = sortedGroups.value.filter((g) => g.is_owner !== true);
+      const sharedGroups = sortedGroups.value.filter((g) => g.is_owner !== true && !hiddenGroupIds.value.has(String(g.id)));
       const trackIdsInSharedGroups = new Set(
         sharedGroups.flatMap((g) => (g.track_ids || []).map((id) => String(id)))
       );
       return sortedTrackers.value.filter(
-        (t) => t.is_owner !== true && !trackIdsInSharedGroups.has(String(t.id))
+        (t) =>
+          t.is_owner !== true &&
+          !trackIdsInSharedGroups.has(String(t.id)) &&
+          !hiddenTrackIds.value.has(String(t.id))
       );
     });
     const visibleGroupsTab = computed(() =>
-      sortedGroups.value.filter((g) => g.is_owner === true)
+      sortedGroups.value.filter((g) => g.is_owner === true && !g.hidden_in_list)
     );
     const visibleSharedGroupsTab = computed(() =>
-      sortedGroups.value.filter((g) => g.is_owner !== true)
+      sortedGroups.value.filter((g) => g.is_owner !== true && !hiddenGroupIds.value.has(String(g.id)))
+    );
+    const hiddenTrackersForSettings = computed(() => {
+      const listHidden = trackers.value
+        .filter((t) => t.is_owner === true && (t.settings && t.settings.hidden_in_list))
+        .map((t) => ({ id: t.id, name: t.name, is_owner: t.is_owner, source: 'list' }));
+      // Only show map-hidden trackers that are not part of a hidden group (group shows in Hidden groups instead)
+      const mapHidden = trackers.value
+        .filter((t) => {
+          if (!hiddenTrackIds.value.has(String(t.id))) return false;
+          const trackIdStr = String(t.id);
+          const isInHiddenGroup = sortedGroups.value.some(
+            (g) => hiddenGroupIds.value.has(String(g.id)) && (g.track_ids || []).map((id) => String(id)).includes(trackIdStr)
+          );
+          return !isInHiddenGroup;
+        })
+        .map((t) => ({ id: t.id, name: t.name, is_owner: t.is_owner, source: 'map' }));
+      return [...listHidden, ...mapHidden];
+    });
+    const hiddenGroupsForSettings = computed(() => {
+      const listHidden = sortedGroups.value
+        .filter((g) => g.is_owner === true && g.hidden_in_list)
+        .map((g) => ({ id: g.id, name: g.name, is_owner: g.is_owner, source: 'list' }));
+      const mapHidden = sortedGroups.value
+        .filter((g) => hiddenGroupIds.value.has(String(g.id)))
+        .map((g) => ({ id: g.id, name: g.name, is_owner: g.is_owner, source: 'map' }));
+      return [...listHidden, ...mapHidden];
+    });
+    const sharedByYouTrackers = computed(() =>
+      trackers.value.filter(
+        (t) => t.is_owner === true && (t.visibility === 'shared' || t.visibility === 'public')
+      )
     );
     const activeGroup = computed(() => {
       const id = activeGroupId.value;
       if (id == null) return null;
-      return groups.value.find((g) => String(g.id) === String(id)) ?? null;
+      return sortedGroups.value.find((g) => String(g.id) === String(id)) ?? null;
     });
     const selectedItemLabel = computed(() => {
       if (activeGroup.value) return activeGroup.value.name ?? '';
@@ -503,6 +653,15 @@ export default {
       if (id == null) return null;
       const track = trackers.value.find((t) => String(t.id) === String(id));
       return track?.name ?? null;
+    });
+    /** When locked to a tracker that belongs to a shared group (not yours), the first such group for opening the group sidebar. */
+    const selectedTrackSharedGroup = computed(() => {
+      const id = selectedId.value;
+      if (id == null) return null;
+      const idStr = String(id);
+      return sortedGroups.value.find(
+        (g) => g.is_owner !== true && (g.track_ids || []).some((tid) => String(tid) === idStr)
+      ) ?? null;
     });
     const listEmptyForTab = computed(() => {
       if (listTab.value === 'trackers') return visibleTrackersTab.value.length === 0;
@@ -540,10 +699,14 @@ export default {
     const groupQuickViewReturnAfterParams = ref(null);
     const showSharedWithMeSidebar = ref(false);
     const incomingSharedTrackers = ref([]);
+    const incomingSharedGroups = ref([]);
     const addingIncomingId = ref(null);
+    const addingIncomingGroupId = ref(null);
     const leavingShareId = ref(null);
     const sharedWithMeRefreshing = ref(false);
+    const actionStripRefreshing = ref(false);
     const showLayerSidebar = ref(false);
+    const showSettingsSidebar = ref(false);
 
     const isMapSidebarOpen = computed(
       () =>
@@ -552,7 +715,8 @@ export default {
         showGroupsSidebar.value ||
         showGroupQuickViewSidebar.value ||
         showSharedWithMeSidebar.value ||
-        showLayerSidebar.value
+        showLayerSidebar.value ||
+        showSettingsSidebar.value
     );
 
     const mapSidebarTitle = computed(() => {
@@ -562,6 +726,7 @@ export default {
       if (showGroupQuickViewSidebar.value && groupQuickViewGroup.value) return groupQuickViewGroup.value.name || 'Group';
       if (showSharedWithMeSidebar.value) return 'Shared with me';
       if (showLayerSidebar.value) return 'Map Settings';
+      if (showSettingsSidebar.value) return 'Settings';
       return '';
     });
 
@@ -628,8 +793,9 @@ export default {
       }
     }
 
-    async function fetchTrackers() {
-      loading.value = true;
+    async function fetchTrackers(options) {
+      const skipGlobalLoading = options?.skipGlobalLoading === true;
+      if (!skipGlobalLoading) loading.value = true;
       try {
         const res = await api.get('/trackers/');
         const raw = Array.isArray(res.data) ? res.data : [];
@@ -658,7 +824,47 @@ export default {
           window.gv_core.GeoVault.toast.error(err?.message || 'Failed to load trackers');
         }
       } finally {
-        loading.value = false;
+        if (!skipGlobalLoading) loading.value = false;
+      }
+    }
+
+    async function fetchMapVisibility() {
+      try {
+        const res = await api.get('/map-visibility/');
+        const data = res.data || {};
+        const trackIds = Array.isArray(data.hidden_track_ids) ? data.hidden_track_ids : [];
+        const groupIds = Array.isArray(data.hidden_group_ids) ? data.hidden_group_ids : [];
+        hiddenTrackIds.value = new Set(trackIds.map((id) => String(id)));
+        hiddenGroupIds.value = new Set(groupIds.map((id) => String(id)));
+        // Expand hidden groups into track IDs so map filter (hiddenTrackIds) is correct
+        for (const gid of hiddenGroupIds.value) {
+          const group = groups.value.find((g) => String(g.id) === gid);
+          if (group?.track_ids?.length) {
+            const s = new Set(hiddenTrackIds.value);
+            for (const tid of group.track_ids) s.add(String(tid));
+            hiddenTrackIds.value = s;
+          }
+        }
+        updateMapFeatures();
+      } catch (e) {
+        const err = api.handleError && api.handleError(e);
+        if (window.gv_core?.GeoVault?.toast) {
+          window.gv_core.GeoVault.toast.error(err?.message || 'Failed to load map visibility');
+        }
+      }
+    }
+
+    async function patchMapVisibility() {
+      try {
+        await api.patch('/map-visibility/', {
+          hidden_track_ids: [...hiddenTrackIds.value],
+          hidden_group_ids: [...hiddenGroupIds.value],
+        });
+      } catch (e) {
+        const err = api.handleError && api.handleError(e);
+        if (window.gv_core?.GeoVault?.toast) {
+          window.gv_core.GeoVault.toast.error(err?.message || 'Failed to save map visibility');
+        }
       }
     }
 
@@ -667,12 +873,14 @@ export default {
         const res = await api.get('/trackers/available-to-add/');
         const data = res.data || {};
         incomingSharedTrackers.value = Array.isArray(data.shared_with_me) ? data.shared_with_me : [];
+        incomingSharedGroups.value = Array.isArray(data.shared_with_me_groups) ? data.shared_with_me_groups : [];
       } catch (e) {
         const err = api.handleError && api.handleError(e);
         if (window.gv_core?.GeoVault?.toast) {
           window.gv_core.GeoVault.toast.error(err?.message || 'Failed to load incoming shares');
         }
         incomingSharedTrackers.value = [];
+        incomingSharedGroups.value = [];
       }
     }
 
@@ -685,11 +893,37 @@ export default {
       }
     }
 
+    function onSharedWithMeLeaveGroup(group) {
+      if (!group?.id) return;
+      groups.value = groups.value.filter((g) => String(g.id) !== String(group.id));
+    }
+
+    function onSharedSidebarSelectTrack(track) {
+      listTab.value = 'shared';
+      onTrackListClick(track);
+    }
+
+    function onSharedSidebarSelectGroup(group) {
+      listTab.value = 'shared';
+      onGroupListClick(group);
+    }
+
+    async function onFullRefresh() {
+      actionStripRefreshing.value = true;
+      try {
+        await fetchGroups();
+        await fetchIncomingShared();
+        await fetchTrackers({ skipGlobalLoading: true });
+      } finally {
+        actionStripRefreshing.value = false;
+      }
+    }
+
     function buildLinesGeoJSON() {
       const hidden = hiddenTrackIds.value;
       const features = [];
       for (const track of trackers.value) {
-        if (hidden.has(track.id)) continue;
+        if (hidden.has(String(track.id))) continue;
         const coordsSorted = getCoordsSortedByTime(track);
         const coords = coordsSorted.map((c) => [c[0], c[1]]);
         if (coords.length < 2) continue;
@@ -719,7 +953,7 @@ export default {
       const hidden = hiddenTrackIds.value;
       const features = [];
       for (const track of trackers.value) {
-        if (hidden.has(track.id)) continue;
+        if (hidden.has(String(track.id))) continue;
         const coordsSorted = getCoordsSortedByTime(track);
         const last = coordsSorted.length ? coordsSorted[coordsSorted.length - 1] : null;
         const pos = (last && last.length >= 2) ? [last[0], last[1]] : (track.last_position ? [track.last_position.lon, track.last_position.lat] : null);
@@ -1311,6 +1545,7 @@ export default {
       groupQuickViewGroup.value = null;
       showSharedWithMeSidebar.value = false;
       showLayerSidebar.value = false;
+      showSettingsSidebar.value = false;
     }
 
     function onParamsClose() {
@@ -1337,6 +1572,7 @@ export default {
       if (type === 'groups' && showGroupsSidebar.value) { closeMapSidebar(); return; }
       if (type === 'sharedWithMe' && showSharedWithMeSidebar.value) { closeMapSidebar(); return; }
       if (type === 'layer' && showLayerSidebar.value) { closeMapSidebar(); return; }
+      if (type === 'settings' && showSettingsSidebar.value) { closeMapSidebar(); return; }
       showTrackSidebar.value = false;
       paramsModalTrackId.value = null;
       groupQuickViewReturnAfterParams.value = null;
@@ -1346,6 +1582,7 @@ export default {
       groupQuickViewGroup.value = null;
       showSharedWithMeSidebar.value = false;
       showLayerSidebar.value = false;
+      showSettingsSidebar.value = false;
       if (type === 'track') showTrackSidebar.value = true;
       else if (type === 'params') paramsModalTrackId.value = payload ?? null;
       else if (type === 'groups') {
@@ -1357,13 +1594,109 @@ export default {
       } else if (type === 'sharedWithMe') {
         showSharedWithMeSidebar.value = true;
         fetchIncomingShared();
-      }
-      else if (type === 'layer') showLayerSidebar.value = true;
+      } else if (type === 'layer') showLayerSidebar.value = true;
+      else if (type === 'settings') showSettingsSidebar.value = true;
     }
 
     function onLayerSidebarChange(layerValue) {
       selectedLayer.value = layerValue;
       onLayerChange();
+    }
+
+    async function onUnhideTracker(trackerId) {
+      if (!trackerId || !api) return;
+      try {
+        await api.post(`/trackers/${trackerId}/settings/`, { hidden_in_list: false });
+        const idStr = String(trackerId);
+        const idx = trackers.value.findIndex((t) => String(t.id) === idStr);
+        if (idx >= 0) {
+          const t = trackers.value[idx];
+          const settings = { ...(t.settings || {}), hidden_in_list: false };
+          trackers.value = trackers.value.slice(0, idx).concat({ ...t, settings }).concat(trackers.value.slice(idx + 1));
+        }
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Tracker shown in list');
+      } catch (e) {
+        const err = api.handleError?.(e);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to unhide');
+      }
+    }
+
+    function onUnhideTrackerFromMap(trackId) {
+      const idStr = String(trackId);
+      const s = new Set(hiddenTrackIds.value);
+      s.delete(idStr);
+      hiddenTrackIds.value = s;
+      updateMapFeatures();
+      patchMapVisibility();
+    }
+
+    async function onUnhideAllTrackers() {
+      const list = hiddenTrackersForSettings.value;
+      for (const t of list) {
+        if (t.source === 'list') await onUnhideTracker(t.id);
+        else onUnhideTrackerFromMap(t.id);
+      }
+    }
+
+    async function onUnhideGroup(groupId) {
+      if (!groupId || !api) return;
+      try {
+        await api.patch(`/groups/${groupId}/`, { hidden_in_list: false });
+        const idStr = String(groupId);
+        const idx = groups.value.findIndex((g) => String(g.id) === idStr);
+        if (idx >= 0) {
+          const g = groups.value[idx];
+          groups.value = groups.value.slice(0, idx).concat({ ...g, hidden_in_list: false }).concat(groups.value.slice(idx + 1));
+        }
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Group shown in list');
+      } catch (e) {
+        const err = api.handleError?.(e);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to unhide');
+      }
+    }
+
+    function onUnhideGroupFromMap(groupId) {
+      const idStr = String(groupId);
+      const group = groups.value.find((g) => String(g.id) === idStr);
+      const gs = new Set(hiddenGroupIds.value);
+      gs.delete(idStr);
+      hiddenGroupIds.value = gs;
+      const trackIds = (group?.track_ids || []).map((id) => String(id));
+      const s = new Set(hiddenTrackIds.value);
+      trackIds.forEach((id) => s.delete(id));
+      hiddenTrackIds.value = s;
+      updateMapFeatures();
+      patchMapVisibility();
+    }
+
+    async function onUnhideAllGroups() {
+      const list = hiddenGroupsForSettings.value;
+      for (const g of list) {
+        if (g.source === 'list') await onUnhideGroup(g.id);
+        else onUnhideGroupFromMap(g.id);
+      }
+    }
+
+    function onShareSettingsSaved(updated) {
+      if (!updated?.id) return;
+      const idStr = String(updated.id);
+      const idx = trackers.value.findIndex((t) => String(t.id) === idStr);
+      if (idx >= 0) {
+        const t = trackers.value[idx];
+        trackers.value = trackers.value.slice(0, idx).concat({ ...t, ...updated }).concat(trackers.value.slice(idx + 1));
+      }
+      shareSettingsModalTrack.value = null;
+    }
+
+    function onPublicShareDeleted(updated) {
+      if (!updated?.id) return;
+      const idStr = String(updated.id);
+      const idx = trackers.value.findIndex((t) => String(t.id) === idStr);
+      if (idx >= 0) {
+        const t = trackers.value[idx];
+        trackers.value = trackers.value.slice(0, idx).concat({ ...t, ...updated }).concat(trackers.value.slice(idx + 1));
+      }
+      publicSharePopupTrack.value = null;
     }
 
     function onGroupsSidebarSaved() {
@@ -1456,6 +1789,24 @@ export default {
       if (isMobileView.value) collapseDrawerToPeek();
     }
 
+    function openTrackerInList(track) {
+      if (!track?.id) return;
+      highlightedId.value = null;
+      activeGroupId.value = null;
+      listTab.value = 'trackers';
+      selectedId.value = track.id;
+      followLocked.value = true;
+      updateMapFeatures();
+      nextTick(() => {
+        const scrollEl = listScrollContainer.value;
+        if (scrollEl) {
+          const row = scrollEl.querySelector(`[data-track-id="${track.id}"]`);
+          if (row) row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      });
+      if (isMobileView.value) collapseDrawerToPeek();
+    }
+
     function deselectGroup() {
       activeGroupId.value = null;
     }
@@ -1505,6 +1856,18 @@ export default {
       fetchTrackers();
     }
 
+    function onTrackSettingsChanged(payload) {
+      const { trackId, hidden_in_list } = payload || {};
+      if (trackId == null) return;
+      const idStr = String(trackId);
+      const idx = trackers.value.findIndex((t) => String(t.id) === idStr);
+      if (idx < 0) return;
+      const t = trackers.value[idx];
+      const settings = { ...(t.settings || {}), hidden_in_list };
+      trackers.value = trackers.value.slice(0, idx).concat([{ ...t, settings }]).concat(trackers.value.slice(idx + 1));
+      updateMapFeatures();
+    }
+
     function onTrackSidebarUnsubscribed(trackId) {
       showTrackSidebar.value = false;
       if (!trackId) return;
@@ -1528,11 +1891,75 @@ export default {
       fetchGroups();
     }
 
+    function onGroupHiddenInListChanged(payload) {
+      const { groupId, hiddenInList: value } = payload || {};
+      if (groupId == null) return;
+      const idStr = String(groupId);
+      const idx = groups.value.findIndex((g) => String(g.id) === idStr);
+      if (idx < 0) return;
+      const g = groups.value[idx];
+      groups.value = groups.value.slice(0, idx).concat([{ ...g, hidden_in_list: !!value }]).concat(groups.value.slice(idx + 1));
+    }
+
     function toggleTrackVisibility(trackId) {
+      const idStr = String(trackId);
       const s = new Set(hiddenTrackIds.value);
-      if (s.has(trackId)) s.delete(trackId);
-      else s.add(trackId);
+      if (s.has(idStr)) s.delete(idStr);
+      else s.add(idStr);
       hiddenTrackIds.value = s;
+      updateMapFeatures();
+      patchMapVisibility();
+    }
+
+    function toggleGroupVisibility(group) {
+      const trackIds = (group?.track_ids || []).map((id) => String(id));
+      if (trackIds.length === 0) return;
+      const groupIdStr = group?.id != null ? String(group.id) : null;
+      const s = new Set(hiddenTrackIds.value);
+      const gs = new Set(hiddenGroupIds.value);
+      const allHidden = trackIds.every((id) => s.has(id));
+      if (allHidden) {
+        trackIds.forEach((id) => s.delete(id));
+        if (groupIdStr) gs.delete(groupIdStr);
+      } else {
+        trackIds.forEach((id) => s.add(id));
+        if (groupIdStr) gs.add(groupIdStr);
+      }
+      hiddenTrackIds.value = s;
+      hiddenGroupIds.value = gs;
+      updateMapFeatures();
+      patchMapVisibility();
+    }
+
+    async function onSharedUnsubscribeGroup(group) {
+      if (!group?.id) return;
+      const trackIds = (group.track_ids || []).map((id) => String(id));
+      if (trackIds.length === 0) return;
+      if (!confirm('Remove all trackers in this group from your map? You can add the group again from Shared with me.')) return;
+      unsubscribingGroupId.value = group.id;
+      try {
+        for (const trackId of trackIds) {
+          await api.delete(`/trackers/${trackId}/subscribe/`);
+        }
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Group removed from map');
+        groups.value = groups.value.filter((g) => String(g.id) !== String(group.id));
+        trackers.value = trackers.value.filter((t) => !trackIds.includes(String(t.id)));
+        const s = new Set(hiddenTrackIds.value);
+        trackIds.forEach((id) => s.delete(id));
+        hiddenTrackIds.value = s;
+        const gs = new Set(hiddenGroupIds.value);
+        gs.delete(String(group.id));
+        hiddenGroupIds.value = gs;
+        if (selectedId.value && trackIds.includes(String(selectedId.value))) selectedId.value = null;
+        if (activeGroupId.value && String(activeGroupId.value) === String(group.id)) activeGroupId.value = null;
+        updateMapFeatures();
+        patchMapVisibility();
+      } catch (e) {
+        const err = api.handleError?.(e);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to remove group');
+      } finally {
+        unsubscribingGroupId.value = null;
+      }
     }
 
     function stubForIncoming(track) {
@@ -1569,6 +1996,7 @@ export default {
         s.delete(trackId);
         hiddenTrackIds.value = s;
         updateMapFeatures();
+        patchMapVisibility();
       } catch (e) {
         const err = api.handleError?.(e);
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to leave share');
@@ -1592,6 +2020,7 @@ export default {
         s.delete(trackId);
         hiddenTrackIds.value = s;
         updateMapFeatures();
+        patchMapVisibility();
       } catch (e) {
         const err = api.handleError?.(e);
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to remove');
@@ -1647,6 +2076,7 @@ export default {
 
     async function onAddIncomingTracker(tracker) {
       if (!tracker?.id || addingIncomingId.value != null) return;
+      const preservedListTab = listTab.value;
       addingIncomingId.value = tracker.id;
       try {
         await api.post(`/trackers/${tracker.id}/subscribe/`);
@@ -1660,6 +2090,33 @@ export default {
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to add tracker');
       } finally {
         addingIncomingId.value = null;
+        listTab.value = preservedListTab;
+      }
+    }
+
+    async function onAddIncomingGroup(group) {
+      if (!group?.id || addingIncomingGroupId.value != null) return;
+      const preservedListTab = listTab.value;
+      addingIncomingGroupId.value = group.id;
+      let success = true;
+      try {
+        for (const trackId of group.track_ids || []) {
+          try {
+            await api.post(`/trackers/${trackId}/subscribe/`);
+          } catch (e) {
+            const err = api.handleError?.(e);
+            if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to add group');
+            success = false;
+            break;
+          }
+        }
+        if (success && window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Group added');
+      } finally {
+        addingIncomingGroupId.value = null;
+        await fetchTrackers();
+        await fetchIncomingShared();
+        updateMapFeatures();
+        listTab.value = preservedListTab;
       }
     }
 
@@ -1707,10 +2164,12 @@ export default {
       if (ingressData?.param_labels && typeof ingressData.param_labels === 'object') {
         paramLabels.value = ingressData.param_labels;
       }
-      fetchGroups();
       fetchIncomingShared();
+      await fetchGroups();
       fetchTrackers().finally(() => {
-        requestAnimationFrame(() => initMap());
+        fetchMapVisibility().then(() => {
+          requestAnimationFrame(() => initMap());
+        });
       });
 
       function scheduleCenterOnSelectedTrack() {
@@ -1858,6 +2317,7 @@ export default {
       visibleSharedGroupsTab,
       activeGroup,
       selectedItemLabel,
+      selectedTrackSharedGroup,
       listEmptyForTab,
       loading,
       selectedId,
@@ -1867,8 +2327,16 @@ export default {
       SIDEBAR_ACTION_BUTTON_CLASS,
       SIDEBAR_ACTION_ICON_CLASS,
       showDiscoverModal,
+      showSharedListModal,
+      sharedByYouTrackers,
+      shareSettingsModalTrack,
+      publicSharePopupTrack,
+      onShareSettingsSaved,
+      onPublicShareDeleted,
       hiddenTrackIds,
+      hiddenGroupIds,
       unsubscribingId,
+      unsubscribingGroupId,
       paramsModalTrackId,
       paramsModalTrack,
       paramLabels,
@@ -1893,15 +2361,33 @@ export default {
       onParamsClose,
       openParamsFromGroupQuickView,
       zoomToTrackInGroup,
+      openTrackerInList,
       showSharedWithMeSidebar,
       sharedWithMeRefreshing,
       onSharedWithMeRefresh,
+      onSharedWithMeLeaveGroup,
+      onSharedSidebarSelectTrack,
+      onSharedSidebarSelectGroup,
       incomingSharedTrackers,
+      incomingSharedGroups,
       addingIncomingId,
+      addingIncomingGroupId,
       leavingShareId,
       onAddIncomingTracker,
+      onAddIncomingGroup,
       onLeaveShare,
       showLayerSidebar,
+      showSettingsSidebar,
+      hiddenTrackersForSettings,
+      hiddenGroupsForSettings,
+      onUnhideTracker,
+      onUnhideAllTrackers,
+      onUnhideTrackerFromMap,
+      onUnhideGroup,
+      onUnhideAllGroups,
+      onUnhideGroupFromMap,
+      actionStripRefreshing,
+      onFullRefresh,
       isMapSidebarOpen,
       userLogin,
       tileSources,
@@ -1927,16 +2413,20 @@ export default {
       openEditGroupModal,
       onGroupsSidebarSaved,
       onGroupsSidebarRefreshed,
+      onGroupHiddenInListChanged,
       onGroupsSidebarLeave,
       onDiscoverSaved,
       toggleTrackVisibility,
+      toggleGroupVisibility,
       onSharedUnsubscribe,
+      onSharedUnsubscribeGroup,
       onGroupListClick,
       deselectGroup,
       deselectSelection,
       fitMapToGroupTracks,
       leaveGroup,
       onTrackSidebarSaved,
+      onTrackSettingsChanged,
       onTrackSidebarUnsubscribed,
       onTrackDeleted,
       isRecentlyUpdated,

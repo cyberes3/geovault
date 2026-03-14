@@ -19,7 +19,7 @@ from geo_lib.website.auth import api_or_login_required_401
 from pydantic import ValidationError as PydanticValidationError
 
 from django.contrib.auth import get_user_model
-from django.db.models import Q
+from django.db.models import Count, F, Q
 
 from .helpers import (
     DEFAULT_TRACK_COLOR,
@@ -33,7 +33,9 @@ from .helpers import (
 )
 from .models import (
     LiveTrack,
+    LiveTrackGroup,
     LiveTrackGroupMember,
+    LiveTrackMapVisibilityPrefs,
     LiveTrackWorldShare,
     LiveTrackShare,
     LiveTrackSubscription,
@@ -43,6 +45,7 @@ from .models import (
 from .world_share_views import build_live_track_share_url
 from .validation import (
     PARAM_PRETTY_NAMES,
+    MapVisibilityPrefsRequest,
     TrackerCheckRequest,
     TrackerCheckResponse,
     TrackSettingsRequest,
@@ -131,10 +134,22 @@ def tracker_list_create(request):
                 track=t, shared_with=request.user
             ).exists():
                 visible_subscribed.append((t, False))
+            elif can_user_see_track_via_group(request.user, t):
+                visible_subscribed.append((t, False))
+        owned_ids = [t.id for t in owned]
+        subscriber_counts = (
+            LiveTrackSubscription.objects.filter(track_id__in=owned_ids)
+            .exclude(user_id=F("track__user_id"))
+            .values("track_id")
+            .annotate(count=Count("id"))
+        )
+        count_by_track = {s["track_id"]: s["count"] for s in subscriber_counts}
+
         out = []
         for t in owned:
             payload = track_to_response_metadata_only(t, include_secret=False, is_owner=True)
             payload["is_owner"] = True
+            payload["subscriber_count"] = count_by_track.get(t.id, 0)
             world_share = LiveTrackWorldShare.objects.filter(track=t).first()
             if world_share:
                 payload["world_share_id"] = world_share.share_id
@@ -146,23 +161,6 @@ def tracker_list_create(request):
             payload["owner_email"] = (t.user.email or "") if t.user_id else ""
             payload["visibility"] = t.visibility
             out.append(payload)
-        existing_ids = {str(p["id"]) for p in out}
-        group_track_ids = set(
-            LiveTrackGroupMember.objects.filter(
-                group__user_members__user=request.user
-            ).values_list("track_id", flat=True)
-        )
-        for track in LiveTrack.objects.filter(id__in=group_track_ids).select_related("user"):
-            if str(track.id) in existing_ids:
-                continue
-            if not can_user_see_track_via_group(request.user, track):
-                continue
-            payload = track_to_response_metadata_only(track, include_secret=False, is_owner=False)
-            payload["is_owner"] = False
-            payload["owner_email"] = (track.user.email or "") if track.user_id else ""
-            payload["visibility"] = track.visibility
-            out.append(payload)
-            existing_ids.add(str(track.id))
         out.sort(key=lambda x: (x.get("name") or "").lower())
         return JsonResponse(out, safe=False)
 
@@ -242,8 +240,8 @@ def tracker_post_settings(request, tracker_id):
             return error_response("A track with this name already exists", 409)
         track.name = name
         update_fields.append("name")
-    # Settings JSON: color, recent_data_window only (visibility etc. are model fields)
-    settings_keys = {"color", "recent_data_window"}
+    # Settings JSON: color, recent_data_window, hidden_in_list (visibility etc. are model fields)
+    settings_keys = {"color", "recent_data_window", "hidden_in_list"}
     settings_dump = {k: v for k, v in body.model_dump(exclude_unset=True).items() if k in settings_keys}
     if settings_dump:
         new_settings = {**(track.settings or {})}
@@ -294,11 +292,32 @@ def tracker_post_settings(request, tracker_id):
         update_fields.append("updated_at")
         track.save(update_fields=update_fields)
     resp = track_to_response_metadata_only(track, include_secret=True, is_owner=True)
+    resp["subscriber_count"] = LiveTrackSubscription.objects.filter(track=track).exclude(
+        user_id=track.user_id
+    ).count()
     world_share = LiveTrackWorldShare.objects.filter(track=track).first()
     if world_share:
         resp["world_share_id"] = world_share.share_id
         resp["world_share_url"] = build_live_track_share_url(world_share.share_id)
     return JsonResponse(resp)
+
+
+@api_or_login_required_401()
+@require_http_methods(["GET"])
+@handle_404
+@csrf_exempt
+def tracker_subscribers(request, tracker_id):
+    """GET trackers/<id>/subscribers/ — list users who have subscribed to this track (owner only). Excludes owner."""
+    track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
+    if track.user_id != request.user.id:
+        return error_response("Only the owner can list subscribers", 403)
+    subs = (
+        LiveTrackSubscription.objects.filter(track=track)
+        .exclude(user_id=track.user_id)
+        .select_related("user")
+    )
+    subscribers = [{"id": str(s.user_id), "email": (s.user.email or "").strip()} for s in subs if s.user_id]
+    return JsonResponse({"subscribers": subscribers})
 
 
 @api_or_login_required_401()
@@ -477,7 +496,7 @@ def tracker_subscribe_delete(request, tracker_id):
     if request.method == "POST":
         if track.user_id == request.user.id:
             return JsonResponse({"error": "You already own this tracker"}, status=400)
-        if not can_user_see_track(request.user, track):
+        if not (can_user_see_track(request.user, track) or can_user_see_track_via_group(request.user, track)):
             return error_response("You do not have access to this tracker", 403)
         LiveTrackSubscription.objects.get_or_create(user=request.user, track=track)
         return JsonResponse(
@@ -553,7 +572,92 @@ def tracker_available_to_add(request):
             "owner_email": (t.user.email or "") if t.user_id else "",
         }
 
+    member_groups = list(
+        LiveTrackGroup.objects.filter(user_members__user=request.user)
+        .exclude(user=request.user)
+        .select_related("user")
+        .distinct()
+        .order_by("name")
+    )
+    shared_with_me_groups = []
+    for group in member_groups:
+        group_track_ids = list(
+            LiveTrackGroupMember.objects.filter(group=group).values_list("track_id", flat=True)
+        )
+        addable_track_ids = []
+        for track in LiveTrack.objects.filter(id__in=group_track_ids).select_related("user"):
+            if track.id in have_ids:
+                continue
+            if can_user_see_track(request.user, track) or can_user_see_track_via_group(
+                request.user, track
+            ):
+                addable_track_ids.append(str(track.id))
+        if addable_track_ids:
+            shared_with_me_groups.append({
+                "id": str(group.id),
+                "name": group.name,
+                "owner_email": (group.user.email or "") if group.user_id else "",
+                "track_ids": addable_track_ids,
+            })
+
     return JsonResponse({
         "public": [item(t) for t in public],
         "shared_with_me": [item(t) for t in shared_with_me],
+        "shared_with_me_groups": shared_with_me_groups,
+    })
+
+
+def _valid_uuid_strings(ids):
+    """Return list of valid UUID strings from input list; invalid entries are skipped."""
+    out = []
+    for s in ids or []:
+        if not isinstance(s, str):
+            continue
+        s = s.strip()
+        if not s:
+            continue
+        try:
+            uuid.UUID(s)
+            out.append(s)
+        except (ValueError, TypeError):
+            continue
+    return out
+
+
+@api_or_login_required_401()
+@require_http_methods(["GET", "PATCH"])
+@csrf_exempt
+def map_visibility_get_patch(request):
+    """GET or PATCH map-visibility/ — per-user hidden-on-map track and group IDs."""
+    if request.method == "GET":
+        prefs, _ = LiveTrackMapVisibilityPrefs.objects.get_or_create(
+            user=request.user,
+            defaults={"hidden_track_ids": [], "hidden_group_ids": []},
+        )
+        return JsonResponse({
+            "hidden_track_ids": list(prefs.hidden_track_ids or []),
+            "hidden_group_ids": list(prefs.hidden_group_ids or []),
+        })
+    # PATCH
+    data, err = _get_json_body(request)
+    if err is not None:
+        return err
+    try:
+        body = MapVisibilityPrefsRequest.model_validate(data or {})
+    except PydanticValidationError as e:
+        errs = e.errors()
+        msg = errs[0].get("msg", "Invalid body") if errs else "Invalid body"
+        return error_response(msg, 400)
+    prefs, _ = LiveTrackMapVisibilityPrefs.objects.get_or_create(
+        user=request.user,
+        defaults={"hidden_track_ids": [], "hidden_group_ids": []},
+    )
+    if body.hidden_track_ids is not None:
+        prefs.hidden_track_ids = _valid_uuid_strings(body.hidden_track_ids)
+    if body.hidden_group_ids is not None:
+        prefs.hidden_group_ids = _valid_uuid_strings(body.hidden_group_ids)
+    prefs.save()
+    return JsonResponse({
+        "hidden_track_ids": list(prefs.hidden_track_ids),
+        "hidden_group_ids": list(prefs.hidden_group_ids),
     })

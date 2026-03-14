@@ -23,6 +23,7 @@ urlpatterns = [
     path("trackers/<str:tracker_id>/subscribe/", views.tracker_subscribe_delete),
     path("trackers/<str:tracker_id>/share-with-me/", views.tracker_leave_share),
     path("trackers/<str:tracker_id>/settings/", views.tracker_post_settings),
+    path("trackers/<str:tracker_id>/subscribers/", views.tracker_subscribers),
     path("trackers/<str:tracker_id>/", views.tracker_get_patch_delete),
     path("trackers/<str:tracker_id>/geometry/", views.tracker_get_geometry),
     path("trackers/<str:tracker_id>/coordinates/", views.tracker_get_latest_coordinates),
@@ -40,4 +41,5 @@ urlpatterns = [
     path("groups/<str:group_id>/members/", views.group_add_member),
     path("groups/<str:group_id>/members/<str:user_id>/", views.group_remove_member),
     path("groups/<str:group_id>/leave/", views.group_leave),
+    path("map-visibility/", views.map_visibility_get_patch),
 ]

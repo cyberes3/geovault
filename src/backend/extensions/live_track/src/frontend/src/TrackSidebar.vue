@@ -44,6 +44,7 @@
       :copy="copy"
       :world-share-enabled="worldShareEnabled"
       :world-share-url="worldShareUrl"
+      :hidden-in-list="hiddenInList"
       @update:name="name = $event"
       @update:color="color = $event"
       @update:recentDataWindow="recentDataWindow = $event"
@@ -52,6 +53,7 @@
       @update:shareParamsWithWorld="shareParamsWithWorld = $event"
       @update:sharedWithEmails="sharedWithEmails = $event"
       @update:worldShareEnabled="setWorldShareEnabled"
+      @update:hidden-in-list="onHiddenInListChange($event)"
       @reset-color="resetColorToDeterministic"
       @open-instructions="showInstructions = true"
       @download-kml="downloadKml"
@@ -121,6 +123,7 @@
         :copy="copy"
         :world-share-enabled="worldShareEnabled"
         :world-share-url="worldShareUrl"
+        :hidden-in-list="hiddenInList"
         @update:name="name = $event"
         @update:color="color = $event"
         @update:recentDataWindow="recentDataWindow = $event"
@@ -129,6 +132,7 @@
         @update:shareParamsWithWorld="shareParamsWithWorld = $event"
         @update:sharedWithEmails="sharedWithEmails = $event"
         @update:worldShareEnabled="setWorldShareEnabled"
+        @update:hidden-in-list="onHiddenInListChange($event)"
         @reset-color="resetColorToDeterministic"
         @open-instructions="showInstructions = true"
         @download-kml="downloadKml"
@@ -186,7 +190,7 @@ export default {
     /** When true, render only content + footer (no sidebar shell); parent provides the shell. */
     embedded: { type: Boolean, default: false },
   },
-  emits: ['close', 'saved', 'deleted', 'unsubscribed'],
+  emits: ['close', 'saved', 'deleted', 'unsubscribed', 'settings-changed'],
   setup(props, { emit }) {
     const AUTOSAVE_DEBOUNCE_MS = 500;
     const api = inject('extensionApi');
@@ -207,6 +211,7 @@ export default {
     const worldShareEnabled = ref(false);
     const worldShareUrl = ref('');
     const shareParamsWithWorld = ref(false);
+    const hiddenInList = ref(false);
     const lastSavedSnapshot = ref(null);
     const isInitializingDraft = ref(false);
     const createdTrack = ref(null);
@@ -315,7 +320,8 @@ export default {
         shareParamsWithRecipients: shareParamsWithRecipients.value === true,
         shareParamsWithWorld: shareParamsWithWorld.value === true,
         sharedWithEmails: [...(sharedWithEmails.value || [])].map((e) => String(e || '').toLowerCase()),
-        worldShareEnabled: worldShareEnabled.value === true
+        worldShareEnabled: worldShareEnabled.value === true,
+        hiddenInList: hiddenInList.value === true
       };
     }
 
@@ -332,7 +338,8 @@ export default {
           .map((e) => String(e || '').trim().toLowerCase())
           .filter(Boolean)
           .sort(),
-        worldShareEnabled: snapshot.worldShareEnabled === true
+        worldShareEnabled: snapshot.worldShareEnabled === true,
+        hiddenInList: snapshot.hiddenInList === true
       };
     }
 
@@ -341,16 +348,20 @@ export default {
     }
 
     function buildSettingsPayload(snapshot) {
-      return {
+      const payload = {
         name: snapshot.name.trim(),
         color: snapshot.color,
         recent_data_window: snapshot.recentDataWindow || null,
         visibility: snapshot.visibility,
         share_params_with_recipients: snapshot.shareParamsWithRecipients,
         share_params_with_world: snapshot.shareParamsWithWorld,
-        shared_with_emails: snapshot.visibility === 'shared' ? snapshot.sharedWithEmails : [],
-        world_share_enabled: snapshot.worldShareEnabled
+        world_share_enabled: snapshot.worldShareEnabled,
+        hidden_in_list: snapshot.hiddenInList
       };
+      if (snapshot.visibility === 'shared') {
+        payload.shared_with_emails = snapshot.sharedWithEmails;
+      }
+      return payload;
     }
 
     function stopAutosaveTimer() {
@@ -490,6 +501,7 @@ export default {
         sharedWithEmails.value = Array.isArray(t.shared_with_emails) ? [...t.shared_with_emails] : [];
         worldShareEnabled.value = !!(t.world_share_id);
         worldShareUrl.value = t.world_share_url || '';
+        hiddenInList.value = (t.settings && t.settings.hidden_in_list) === true;
         userPickedColor.value = true;
       } else {
         userPickedColor.value = false;
@@ -501,6 +513,7 @@ export default {
         sharedWithEmails.value = [];
         worldShareEnabled.value = false;
         worldShareUrl.value = '';
+        hiddenInList.value = false;
       }
       lastSavedSnapshot.value = makeSnapshotFromState();
       isInitializingDraft.value = false;
@@ -508,6 +521,14 @@ export default {
 
     function setWorldShareEnabled(enabled) {
       worldShareEnabled.value = enabled === true;
+      queueAutosave();
+    }
+
+    function onHiddenInListChange(value) {
+      hiddenInList.value = value;
+      if (props.track?.id) {
+        emit('settings-changed', { trackId: props.track.id, hidden_in_list: value });
+      }
       queueAutosave();
     }
 
@@ -525,6 +546,7 @@ export default {
         shareParamsWithRecipients: shareParamsWithRecipients.value,
         shareParamsWithWorld: shareParamsWithWorld.value,
         sharedWithEmails: sharedWithEmails.value,
+        hiddenInList: hiddenInList.value,
         worldShareEnabled: worldShareEnabled.value
       }),
       () => {
@@ -561,9 +583,11 @@ export default {
       shareParamsWithRecipients,
       shareParamsWithWorld,
       sharedWithEmails,
+      hiddenInList,
       worldShareEnabled,
       worldShareUrl,
       setWorldShareEnabled,
+      onHiddenInListChange,
       onShareParamsWithRecipientsUpdate,
       isOwner,
       unsubscribing,

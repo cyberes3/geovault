@@ -93,6 +93,7 @@ class LiveTrackGroup(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="live_track_groups")
+    hidden_in_list = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -128,3 +129,14 @@ class LiveTrackGroupMembership(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["group", "user"], name="live_track_group_membership_unique")
         ]
+
+
+class LiveTrackMapVisibilityPrefs(models.Model):
+    """Per-user preference for which tracks/groups are hidden on the map (eye toggle)."""
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="live_track_map_visibility_prefs")
+    hidden_track_ids = models.JSONField(default=list)  # list of UUID strings
+    hidden_group_ids = models.JSONField(default=list)  # list of UUID strings
+
+    class Meta:
+        app_label = "live_track"

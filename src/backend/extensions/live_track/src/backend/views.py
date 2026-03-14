@@ -14,6 +14,7 @@ from .group_views import (
 from .ingress_views import app_ingress, ingress
 from .tracker_views import (
     ingress_body_template,
+    map_visibility_get_patch,
     tracker_available_to_add,
     tracker_check,
     tracker_clear_history,
@@ -26,4 +27,5 @@ from .tracker_views import (
     tracker_post_settings,
     tracker_profile_properties,
     tracker_subscribe_delete,
+    tracker_subscribers,
 )

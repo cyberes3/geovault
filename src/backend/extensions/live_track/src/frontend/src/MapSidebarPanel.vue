@@ -16,7 +16,7 @@
         <XMarkIcon class="h-5 w-5" />
       </button>
     </div>
-    <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+    <div class="flex-1 min-h-0 flex flex-col overflow-hidden">
       <slot />
     </div>
   </div>

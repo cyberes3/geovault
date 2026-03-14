@@ -14,13 +14,6 @@
       <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
     </div>
     <div class="space-y-2">
-      <label class="text-sm font-medium text-gray-700">Password (read-only)</label>
-      <div class="flex gap-2">
-        <input :value="track?.tracker_secret" readonly class="flex-1 px-2 py-1 text-sm border rounded bg-gray-50" />
-        <button type="button" class="px-2 py-1 bg-gray-200 rounded text-sm" @click="copy(track?.tracker_secret || '')">Copy</button>
-      </div>
-    </div>
-    <div class="space-y-2">
       <label class="text-sm font-medium text-gray-700">Color</label>
       <div class="flex items-center gap-2">
         <ColorPickerElement :model-value="color" :disabled="!isOwner" @update:model-value="$emit('update:color', $event)" />
@@ -127,6 +120,25 @@
         <option value="1m">Last Month</option>
       </select>
     </div>
+    <div v-if="isOwner" class="space-y-2">
+      <div class="flex items-center gap-3">
+        <ToggleButton
+          :model-value="hiddenInList"
+          label="Hide in list"
+          size="md"
+          @update:model-value="$emit('update:hidden-in-list', $event)"
+        />
+        <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="$emit('update:hidden-in-list', !hiddenInList)">Hide in list</label>
+      </div>
+      <p class="text-xs text-gray-500">When on, this tracker is hidden from the sidebar list. You can unhide it in Settings.</p>
+    </div>
+    <div class="space-y-2">
+      <label class="text-sm font-medium text-gray-700">API Password</label>
+      <div class="flex gap-2">
+        <input :value="track?.tracker_secret" readonly class="flex-1 px-2 py-1 text-sm border rounded bg-gray-50" />
+        <button type="button" class="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm" @click="copy(track?.tracker_secret || '')">Copy</button>
+      </div>
+    </div>
     <div class="grid grid-cols-2 gap-3 pb-2">
       <BaseButton v-if="isOwner" variant="white" size="sm" @click="$emit('open-instructions')">GPSLogger Setup</BaseButton>
       <BaseButton variant="white" size="sm" @click="$emit('download-kml')">Download KML</BaseButton>
@@ -174,9 +186,10 @@ export default {
     copy: { type: Function, required: true },
     worldShareEnabled: { type: Boolean, default: false },
     worldShareUrl: { type: String, default: '' },
-    shareParamsWithWorld: { type: Boolean, default: false }
+    shareParamsWithWorld: { type: Boolean, default: false },
+    hiddenInList: { type: Boolean, default: false }
   },
-  emits: ['update:name', 'update:color', 'update:recentDataWindow', 'update:visibility', 'update:shareParamsWithRecipients', 'update:shareParamsWithWorld', 'update:sharedWithEmails', 'update:worldShareEnabled', 'reset-color', 'open-instructions', 'download-kml', 'clear-history', 'delete', 'unsubscribe'],
+  emits: ['update:name', 'update:color', 'update:recentDataWindow', 'update:visibility', 'update:shareParamsWithRecipients', 'update:shareParamsWithWorld', 'update:sharedWithEmails', 'update:worldShareEnabled', 'update:hidden-in-list', 'reset-color', 'open-instructions', 'download-kml', 'clear-history', 'delete', 'unsubscribe'],
   setup(props, { emit }) {
     const fullWorldShareUrl = computed(() => {
       const path = props.worldShareUrl || '';

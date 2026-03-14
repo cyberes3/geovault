@@ -54,6 +54,7 @@ def _group_payload(group, request_user, include_track_ids=True):
     out = {
         "id": str(group.id),
         "name": group.name,
+        "hidden_in_list": getattr(group, "hidden_in_list", False),
         "created_at": int(group.created_at.timestamp()) if group.created_at else None,
         "updated_at": int(group.updated_at.timestamp()) if group.updated_at else None,
         "is_owner": is_owner,
@@ -118,13 +119,20 @@ def group_get_patch_delete(request, group_id):
         data, err = _get_json_body(request)
         if err is not None:
             return err
-        name = (data.get("name") or "").strip()
-        if not name:
-            return error_response("name cannot be empty", 400)
-        if LiveTrackGroup.objects.filter(user=request.user, name=name).exclude(id=group.id).exists():
-            return error_response("A group with this name already exists", 409)
-        group.name = name
-        group.save(update_fields=["name", "updated_at"])
+        update_fields = ["updated_at"]
+        if "name" in data:
+            name = (data.get("name") or "").strip()
+            if not name:
+                return error_response("name cannot be empty", 400)
+            if LiveTrackGroup.objects.filter(user=request.user, name=name).exclude(id=group.id).exists():
+                return error_response("A group with this name already exists", 409)
+            group.name = name
+            update_fields.append("name")
+        if "hidden_in_list" in data:
+            group.hidden_in_list = bool(data["hidden_in_list"])
+            update_fields.append("hidden_in_list")
+        if len(update_fields) > 1:
+            group.save(update_fields=update_fields)
         return JsonResponse(_group_payload(group, request.user))
     if request.method == "DELETE":
         if not _group_can_edit(group, request.user):

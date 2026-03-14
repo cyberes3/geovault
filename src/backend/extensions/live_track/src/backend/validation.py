@@ -111,6 +111,22 @@ class TrackSettingsRequest(BaseModel):
     world_share_enabled: Optional[bool] = Field(
         default=None, description="When True, create or keep world (unauthenticated) share link; when False, remove it"
     )
+    hidden_in_list: Optional[bool] = Field(
+        default=None, description="When True, hide this tracker from the sidebar list (owner only)"
+    )
+
+
+class MapVisibilityPrefsRequest(BaseModel):
+    """Request body for PATCH map-visibility/. Optional keys; only provided keys are updated."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    hidden_track_ids: Optional[list[str]] = Field(
+        default=None, description="List of track UUIDs to hide on map"
+    )
+    hidden_group_ids: Optional[list[str]] = Field(
+        default=None, description="List of group UUIDs to hide on map"
+    )
 
 
 # Optional params we accept (subset of GPSLogger; exclude profile, filename, act, timeoffset, spd, aid)

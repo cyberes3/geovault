@@ -57,6 +57,18 @@
       />
       <p v-if="memberError" class="text-sm text-red-600">{{ memberError }}</p>
     </div>
+    <div v-if="group.is_owner" class="space-y-2">
+      <div class="flex items-center gap-3">
+        <ToggleButton
+          :model-value="hiddenInList"
+          label="Hide in list"
+          size="md"
+          @update:model-value="onHiddenInListChange($event)"
+        />
+        <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="onHiddenInListChange(!hiddenInList)">Hide in list</label>
+      </div>
+      <p class="text-xs text-gray-500">When on, this group is hidden from the sidebar list. You can unhide it in Settings.</p>
+    </div>
     <div class="flex flex-wrap gap-2 pt-2">
       <BaseButton variant="primary" color="blue" size="sm" :disabled="saving || !name.trim()" @click="save">
         <Loader v-if="saving" size="sm" layout="inline" :show-message="false" class="mr-1" />
@@ -118,6 +130,18 @@
           />
           <p v-if="memberError" class="text-sm text-red-600">{{ memberError }}</p>
         </div>
+        <div v-if="group.is_owner" class="space-y-2">
+          <div class="flex items-center gap-3">
+            <ToggleButton
+              :model-value="hiddenInList"
+              label="Hide in list"
+              size="md"
+              @update:model-value="onHiddenInListChange($event)"
+            />
+            <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="onHiddenInListChange(!hiddenInList)">Hide in list</label>
+          </div>
+          <p class="text-xs text-gray-500">When on, this group is hidden from the sidebar list. You can unhide it in Settings.</p>
+        </div>
       </template>
     </div>
     <template #actions>
@@ -155,10 +179,11 @@ import BaseButton from 'platform/components/parts/BaseButton.vue';
 import Loader from 'platform/components/parts/Loader.vue';
 import SearchableCheckboxList from 'platform/components/parts/SearchableCheckboxList.vue';
 import ScrollingSelect from 'platform/components/parts/ScrollingSelect.vue';
+import ToggleButton from 'platform/components/parts/ToggleButton.vue';
 
 export default {
   name: 'GroupModal',
-  components: { BaseModal, BaseButton, Loader, SearchableCheckboxList, ScrollingSelect },
+  components: { BaseModal, BaseButton, Loader, SearchableCheckboxList, ScrollingSelect, ToggleButton },
   props: {
     group: { type: Object, default: null },
     trackers: { type: Array, default: () => [] },
@@ -166,11 +191,12 @@ export default {
     /** When true and group is null, render only the create form (no modal wrapper) for use inside a sidebar. */
     embedded: { type: Boolean, default: false },
   },
-  emits: ['close', 'saved', 'refreshed', 'leave'],
+  emits: ['close', 'saved', 'refreshed', 'leave', 'hidden-in-list-changed'],
   setup(props, { emit }) {
     const name = ref(props.group?.name || '');
     const nameError = ref('');
     const saving = ref(false);
+    const hiddenInList = ref(props.group?.hidden_in_list === true);
     const groupTrackIds = ref([]);
     const groupTrackIdsSafe = computed({
       get: () => groupTrackIds.value ?? [],
@@ -202,6 +228,7 @@ export default {
       name.value = g?.name || '';
       nameError.value = '';
       memberError.value = '';
+      hiddenInList.value = g?.hidden_in_list === true;
       groupTrackIds.value = [...(g?.track_ids || [])];
       groupMemberIds.value = (g?.member_ids || []).map((id) => String(id));
       if (g?.id) fetchUsers();
@@ -230,7 +257,7 @@ export default {
       if (!props.group?.id || !name.value.trim()) return;
       saving.value = true;
       try {
-        await props.api.patch(`/groups/${props.group.id}/`, { name: name.value.trim() });
+        await props.api.patch(`/groups/${props.group.id}/`, { name: name.value.trim(), hidden_in_list: hiddenInList.value });
         const currentIds = new Set((groupTrackIds.value ?? []).map((id) => String(id)));
         const previousIds = new Set((props.group?.track_ids || []).map((id) => String(id)));
         const toRemove = (props.group?.track_ids || []).filter((id) => !currentIds.has(String(id)));
@@ -274,10 +301,18 @@ export default {
       }
     }
 
+    function onHiddenInListChange(value) {
+      hiddenInList.value = value;
+      if (props.group?.id) {
+        emit('hidden-in-list-changed', { groupId: props.group.id, hiddenInList: value });
+      }
+    }
+
     return {
       name,
       nameError,
       saving,
+      hiddenInList,
       groupTrackIdsSafe,
       allTrackers,
       groupMemberIds,
@@ -288,6 +323,7 @@ export default {
       membersSelectItems,
       memberError,
       onMemberToggle,
+      onHiddenInListChange,
     };
   },
 };

@@ -68,7 +68,7 @@
                 class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white"
                 @click.stop="$emit('viewGroup', group)"
               >
-                <EyeIcon class="h-5 w-5" />
+                <ListBulletIcon class="h-5 w-5" />
               </button>
               <template v-if="group.is_owner">
                 <button
@@ -127,19 +127,20 @@
             >
               <button
                 type="button"
+                :title="isGroupHidden(group) ? 'Show on map' : 'Hide on map'"
+                class="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-white"
+                @click.stop="$emit('toggleGroupVisibility', group)"
+              >
+                <EyeIcon v-if="isGroupHidden(group)" class="h-5 w-5" />
+                <EyeSlashIcon v-else class="h-5 w-5" />
+              </button>
+              <button
+                type="button"
                 title="View Group"
                 class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white"
                 @click.stop="$emit('viewGroup', group)"
               >
-                <EyeIcon class="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                title="Leave Group"
-                class="p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-white text-sm"
-                @click.stop="$emit('leaveGroup', group)"
-              >
-                Leave
+                <ListBulletIcon class="h-5 w-5" />
               </button>
             </div>
           </div>
@@ -190,6 +191,15 @@
               class="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity"
               :class="actionOpacityClass"
             >
+              <button
+                type="button"
+                :title="isHidden(track.id) ? 'Show on map' : 'Hide on map'"
+                class="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
+                @click.stop="$emit('toggleVisibility', track.id)"
+              >
+                <EyeIcon v-if="isHidden(track.id)" class="h-5 w-5" />
+                <EyeSlashIcon v-else class="h-5 w-5" />
+              </button>
               <button
                 type="button"
                 title="Latest Params"
@@ -280,8 +290,8 @@
 </template>
 
 <script>
-import { ref, computed, defineExpose } from 'vue';
-import { Square3Stack3DIcon, PencilIcon, TableCellsIcon, CloudIcon, EyeIcon } from '@heroicons/vue/24/outline';
+import { ref, computed } from 'vue';
+import { Square3Stack3DIcon, PencilIcon, TableCellsIcon, CloudIcon, ListBulletIcon, EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline';
 import Loader from 'platform/components/parts/Loader.vue';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
 import { getTrackDirectionAngle as getTrackDirectionAngleUtil } from './trackGeometry.js';
@@ -301,7 +311,9 @@ export default {
     PencilIcon,
     TableCellsIcon,
     CloudIcon,
+    ListBulletIcon,
     EyeIcon,
+    EyeSlashIcon,
     TrackDirectionIcon
   },
   props: {
@@ -314,6 +326,10 @@ export default {
     selectedId: { type: [Number, String], default: null },
     activeGroupId: { type: [Number, String], default: null },
     highlightedId: { type: [Number, String], default: null },
+    /** Set or array of track IDs hidden on map (for Shared tab eye button). */
+    hiddenTrackIds: { type: [Set, Array], default: () => new Set() },
+    /** Set or array of group IDs hidden on map (for Shared tab eye button). */
+    hiddenGroupIds: { type: [Set, Array], default: () => new Set() },
     loading: { type: Boolean, default: false },
     listEmptyForTab: { type: Boolean, default: true },
     scrollContainerClass: {
@@ -332,12 +348,33 @@ export default {
     'leaveGroup',
     'editGroup',
     'viewGroup',
+    'toggleVisibility',
+    'toggleGroupVisibility',
     'clearHighlight'
   ],
   setup(props) {
     const scrollContainerRef = ref(null);
     const formatTime = (ms) => formatTimestampLocal(ms);
     const getTrackDirectionAngle = getTrackDirectionAngleUtil;
+
+    function isHidden(trackId) {
+      const hid = props.hiddenTrackIds;
+      if (hid instanceof Set) return hid.has(String(trackId));
+      return Array.isArray(hid) && hid.includes(String(trackId));
+    }
+
+    function isGroupHidden(group) {
+      const groupIds = props.hiddenGroupIds;
+      const hasGroup = group?.id != null && (
+        groupIds instanceof Set ? groupIds.has(String(group.id)) : Array.isArray(groupIds) && groupIds.includes(String(group.id))
+      );
+      if (hasGroup) return true;
+      const trackIds = group?.track_ids || [];
+      if (trackIds.length === 0) return false;
+      const hid = props.hiddenTrackIds;
+      const has = (id) => (hid instanceof Set ? hid.has(String(id)) : Array.isArray(hid) && hid.includes(String(id)));
+      return trackIds.every((id) => has(id));
+    }
 
     const emptyTitle = computed(() => {
       if (props.listTab === 'trackers') return 'No trackers yet';
@@ -372,6 +409,8 @@ export default {
       scrollContainerRef,
       formatTime,
       getTrackDirectionAngle,
+      isHidden,
+      isGroupHidden,
       emptyTitle,
       emptyMessage,
       trackRowClass
