@@ -6,18 +6,20 @@ import androidx.viewpager2.adapter.FragmentStateAdapter
 import com.geovault.tracker.fragments.HomeFragment
 import com.geovault.tracker.fragments.MapFragment
 import com.geovault.tracker.fragments.SettingsFragment
+import com.geovault.tracker.fragments.SharedTrackersFragment
 import com.geovault.tracker.fragments.TrackersFragment
 
 class MainPagerAdapter(private val activity: FragmentActivity) : FragmentStateAdapter(activity) {
 
-    override fun getItemCount(): Int = 4
+    override fun getItemCount(): Int = 5
 
     override fun createFragment(position: Int): Fragment {
         return when (position) {
             0 -> HomeFragment()
             1 -> MapFragment()
             2 -> TrackersFragment()
-            3 -> SettingsFragment()
+            3 -> SharedTrackersFragment()
+            4 -> SettingsFragment()
             else -> throw IllegalStateException("Invalid position $position")
         }
     }

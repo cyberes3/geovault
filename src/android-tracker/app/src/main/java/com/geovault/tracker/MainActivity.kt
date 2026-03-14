@@ -174,9 +174,9 @@ class MainActivity : AppCompatActivity() {
         viewPager.adapter = pagerAdapter
         
         viewPager.isUserInputEnabled = false
-        viewPager.offscreenPageLimit = 3  // Keep all 4 pages in memory
+        viewPager.offscreenPageLimit = 4  // Keep all 5 pages in memory
 
-        val savedTab = (savedInstanceState?.getInt(KEY_CURRENT_TAB, 0) ?: 0).coerceIn(0, 3)
+        val savedTab = (savedInstanceState?.getInt(KEY_CURRENT_TAB, 0) ?: 0).coerceIn(0, 4)
         viewPager.setCurrentItem(savedTab, false)
 
         // When launching on the Map tab, pre-fetch default tracker so the map can zoom to its extent
@@ -254,13 +254,21 @@ class MainActivity : AppCompatActivity() {
             }
             viewPager.setCurrentItem(2, false)
         }
-        findViewById<View>(R.id.navSettings).setOnClickListener {
+        findViewById<View>(R.id.navShared).setOnClickListener {
             if (isParamsOverlayOnTop()) {
                 supportFragmentManager.popBackStack()
                 viewPager.setCurrentItem(3, false)
                 return@setOnClickListener
             }
             viewPager.setCurrentItem(3, false)
+        }
+        findViewById<View>(R.id.navSettings).setOnClickListener {
+            if (isParamsOverlayOnTop()) {
+                supportFragmentManager.popBackStack()
+                viewPager.setCurrentItem(4, false)
+                return@setOnClickListener
+            }
+            viewPager.setCurrentItem(4, false)
         }
 
         updateNavTabBackground(savedTab)
@@ -404,6 +412,7 @@ class MainActivity : AppCompatActivity() {
         val navHome = findViewById<View>(R.id.navHome)
         val navMap = findViewById<View>(R.id.navMap)
         val navTrackers = findViewById<View>(R.id.navTrackers)
+        val navShared = findViewById<View>(R.id.navShared)
         val navSettings = findViewById<View>(R.id.navSettings)
         val topName = if (supportFragmentManager.backStackEntryCount > 0) {
             supportFragmentManager.getBackStackEntryAt(supportFragmentManager.backStackEntryCount - 1).name
@@ -415,6 +424,8 @@ class MainActivity : AppCompatActivity() {
         navMap.isClickable = !disableNav
         navTrackers.isEnabled = !disableNav
         navTrackers.isClickable = !disableNav
+        navShared.isEnabled = !disableNav
+        navShared.isClickable = !disableNav
         navSettings.isEnabled = !disableNav
         navSettings.isClickable = !disableNav
         if (disableNav) {
@@ -422,6 +433,7 @@ class MainActivity : AppCompatActivity() {
             updateNavTabColors(navHome, false, grayColor, grayColor)
             updateNavTabColors(navMap, false, grayColor, grayColor)
             updateNavTabColors(navTrackers, false, grayColor, grayColor)
+            updateNavTabColors(navShared, false, grayColor, grayColor)
             updateNavTabColors(navSettings, false, grayColor, grayColor)
         } else {
             updateNavTabBackground(viewPager.currentItem)
@@ -432,6 +444,7 @@ class MainActivity : AppCompatActivity() {
         val navHome = findViewById<View>(R.id.navHome)
         val navMap = findViewById<View>(R.id.navMap)
         val navTrackers = findViewById<View>(R.id.navTrackers)
+        val navShared = findViewById<View>(R.id.navShared)
         val navSettings = findViewById<View>(R.id.navSettings)
 
         val yellowColor = ContextCompat.getColor(this, R.color.warning_yellow)
@@ -441,7 +454,8 @@ class MainActivity : AppCompatActivity() {
         updateNavTabColors(navHome, position == 0, yellowColor, whiteColor)
         updateNavTabColors(navMap, position == 1, yellowColor, if (isServerAccessible) whiteColor else grayColor)
         updateNavTabColors(navTrackers, position == 2, yellowColor, if (isServerAccessible) whiteColor else grayColor)
-        updateNavTabColors(navSettings, position == 3, yellowColor, whiteColor)
+        updateNavTabColors(navShared, position == 3, yellowColor, if (isServerAccessible) whiteColor else grayColor)
+        updateNavTabColors(navSettings, position == 4, yellowColor, whiteColor)
     }
 
     private fun setServerAccessibility(accessible: Boolean) {
@@ -450,31 +464,37 @@ class MainActivity : AppCompatActivity() {
         
         val navMap = findViewById<View>(R.id.navMap)
         val navTrackers = findViewById<View>(R.id.navTrackers)
+        val navShared = findViewById<View>(R.id.navShared)
         
         val grayColor = ContextCompat.getColor(this, R.color.text_secondary)
         val yellowColor = ContextCompat.getColor(this, R.color.warning_yellow)
         val whiteColor = ContextCompat.getColor(this, R.color.content_on_primary)
         
         if (!accessible) {
-            // Disable Map and Trackers tabs
+            // Disable Map, Trackers, and Shared tabs
             navMap.isEnabled = false
             navMap.isClickable = false
             navTrackers.isEnabled = false
             navTrackers.isClickable = false
+            navShared.isEnabled = false
+            navShared.isClickable = false
             
             updateNavTabColors(navMap, false, yellowColor, grayColor)
             updateNavTabColors(navTrackers, false, yellowColor, grayColor)
+            updateNavTabColors(navShared, false, yellowColor, grayColor)
             
-            // If we are on Map or Trackers, switch to Home
-            if (viewPager.currentItem == 1 || viewPager.currentItem == 2) {
+            // If we are on Map, Trackers, or Shared, switch to Home
+            if (viewPager.currentItem == 1 || viewPager.currentItem == 2 || viewPager.currentItem == 3) {
                 viewPager.setCurrentItem(0, false)
             }
         } else {
-            // Re-enable Map and Trackers tabs
+            // Re-enable Map, Trackers, and Shared tabs
             navMap.isEnabled = true
             navMap.isClickable = true
             navTrackers.isEnabled = true
             navTrackers.isClickable = true
+            navShared.isEnabled = true
+            navShared.isClickable = true
             
             updateNavTabBackground(viewPager.currentItem)
         }
@@ -493,6 +513,7 @@ class MainActivity : AppCompatActivity() {
                 R.id.navHome -> R.id.navHomeIcon
                 R.id.navMap -> R.id.navMapIcon
                 R.id.navTrackers -> R.id.navTrackersIcon
+                R.id.navShared -> R.id.navSharedIcon
                 R.id.navSettings -> R.id.navSettingsIcon
                 else -> return
             }
@@ -505,6 +526,7 @@ class MainActivity : AppCompatActivity() {
                 R.id.navHome -> R.id.navHomeText
                 R.id.navMap -> R.id.navMapText
                 R.id.navTrackers -> R.id.navTrackersText
+                R.id.navShared -> R.id.navSharedText
                 R.id.navSettings -> R.id.navSettingsText
                 else -> return
             }
@@ -566,6 +588,13 @@ class MainActivity : AppCompatActivity() {
         supportFragmentManager.beginTransaction()
             .add(R.id.fragment_overlay_container, fragment, "edit_tracker")
             .addToBackStack("edit_tracker")
+            .commit()
+    }
+
+    fun showGroupsFragment() {
+        supportFragmentManager.beginTransaction()
+            .add(R.id.fragment_overlay_container, com.geovault.tracker.fragments.GroupsFragment(), "groups")
+            .addToBackStack("groups")
             .commit()
     }
 

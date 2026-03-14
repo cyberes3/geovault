@@ -14,6 +14,12 @@ object TrackerRepository {
     private var isFetching = false
     private val listeners = mutableListOf<(List<Tracker>?) -> Unit>()
 
+    /** Cached map visibility; updated by getMapVisibility and patchMapVisibility. */
+    @Volatile
+    private var mapVisibilityCache: MapVisibilityResponse? = null
+
+    fun getMapVisibilityCache(): MapVisibilityResponse? = mapVisibilityCache
+
     private var currentTrackerCache: Tracker? = null
     private var currentTrackerId: String? = null
 
@@ -203,37 +209,67 @@ object TrackerRepository {
         recentDataWindow: String?,
         callback: (Tracker?) -> Unit
     ) {
+        updateTrackerSettings(context, id, TrackerSettingsRequest(
+            name = name,
+            color = color?.takeIf { it.isNotBlank() },
+            recent_data_window = recentDataWindow?.takeIf { it.isNotBlank() }
+        )) { tracker, _ -> callback(tracker) }
+    }
+
+    /**
+     * POST trackers/<id>/settings/ with full sharing fields.
+     * On 400 with invalid_emails, errorMessage is set (e.g. "Invalid emails: a@b.com, c@d.com").
+     */
+    fun updateTrackerSettings(
+        context: Context,
+        id: String,
+        request: TrackerSettingsRequest,
+        callback: (Tracker?, errorMessage: String?) -> Unit
+    ) {
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
         if (serverUrl.isEmpty()) {
-            callback(null)
+            callback(null, null)
             return
         }
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
-        val body = TrackerSettingsRequest(
-            name = name,
-            color = color?.takeIf { it.isNotBlank() },
-            recent_data_window = recentDataWindow?.takeIf { it.isNotBlank() }
-        )
-        api.postTrackerSettings(id, body)
+        api.postTrackerSettings(id, request)
             .enqueue(object : Callback<Tracker> {
                 override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
-                    val tracker = if (response.isSuccessful) response.body() else null
-                    if (tracker != null) {
-                        val defaultId = context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-                            .getString("selected_tracker_id", "") ?: ""
-                        if (id == defaultId) {
-                            currentTrackerId = id
-                            currentTrackerCache = tracker
+                    if (response.isSuccessful) {
+                        val tracker = response.body()
+                        if (tracker != null) {
+                            val defaultId = context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+                                .getString("selected_tracker_id", "") ?: ""
+                            if (id == defaultId) {
+                                currentTrackerId = id
+                                currentTrackerCache = tracker
+                            }
+                            trackersCache = null
+                            geometryCache = null
                         }
-                        trackersCache = null
-                        geometryCache = null
+                        callback(tracker, null)
+                        return
                     }
-                    callback(tracker)
+                    val errorMsg = response.errorBody()?.string()?.let { body ->
+                        try {
+                            val json = org.json.JSONObject(body)
+                            val invalid = json.optJSONArray("invalid_emails")
+                            if (invalid != null && invalid.length() > 0) {
+                                val list = (0 until invalid.length()).map { invalid.getString(it) }
+                                "Invalid emails: ${list.joinToString(", ")}"
+                            } else {
+                                json.optString("error", body.take(200))
+                            }
+                        } catch (_: Exception) {
+                            body.take(200)
+                        }
+                    }
+                    callback(null, errorMsg)
                 }
                 override fun onFailure(call: Call<Tracker>, t: Throwable) {
                     Log.e("TrackerRepository", "Failed to update tracker settings", t)
-                    callback(null)
+                    callback(null, null)
                 }
             })
     }
@@ -317,5 +353,386 @@ object TrackerRepository {
                     callback(false)
                 }
             })
+    }
+
+    fun getAvailableToAdd(context: Context, callback: (AvailableToAddResponse?) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(null)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.getAvailableToAdd().enqueue(object : Callback<AvailableToAddResponse> {
+            override fun onResponse(call: Call<AvailableToAddResponse>, response: Response<AvailableToAddResponse>) {
+                callback(response.body())
+            }
+            override fun onFailure(call: Call<AvailableToAddResponse>, t: Throwable) {
+                Log.e("TrackerRepository", "Failed to get available-to-add", t)
+                callback(null)
+            }
+        })
+    }
+
+    fun subscribeTracker(context: Context, trackerId: String, callback: (Tracker?) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(null)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.subscribeTracker(trackerId).enqueue(object : Callback<Tracker> {
+            override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
+                if (response.isSuccessful) {
+                    trackersCache = null
+                }
+                callback(response.body())
+            }
+            override fun onFailure(call: Call<Tracker>, t: Throwable) {
+                Log.e("TrackerRepository", "Subscribe failed", t)
+                callback(null)
+            }
+        })
+    }
+
+    fun unsubscribeTracker(context: Context, trackerId: String, callback: (Boolean) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(false)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.unsubscribeTracker(trackerId).enqueue(object : Callback<ResponseBody> {
+            override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                if (response.isSuccessful) trackersCache = null
+                callback(response.isSuccessful)
+            }
+            override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
+                Log.e("TrackerRepository", "Unsubscribe failed", t)
+                callback(false)
+            }
+        })
+    }
+
+    fun leaveShareWithMe(context: Context, trackerId: String, callback: (Boolean) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(false)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.leaveShareWithMe(trackerId).enqueue(object : Callback<ResponseBody> {
+            override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                if (response.isSuccessful) trackersCache = null
+                callback(response.isSuccessful)
+            }
+            override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
+                Log.e("TrackerRepository", "Leave share failed", t)
+                callback(false)
+            }
+        })
+    }
+
+    fun getSubscribers(context: Context, trackerId: String, callback: (SubscribersResponse?) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(null)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.getSubscribers(trackerId).enqueue(object : Callback<SubscribersResponse> {
+            override fun onResponse(call: Call<SubscribersResponse>, response: Response<SubscribersResponse>) {
+                callback(response.body())
+            }
+            override fun onFailure(call: Call<SubscribersResponse>, t: Throwable) {
+                Log.e("TrackerRepository", "Get subscribers failed", t)
+                callback(null)
+            }
+        })
+    }
+
+    fun getMapVisibility(context: Context, callback: (MapVisibilityResponse?) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(null)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.getMapVisibility().enqueue(object : Callback<MapVisibilityResponse> {
+            override fun onResponse(call: Call<MapVisibilityResponse>, response: Response<MapVisibilityResponse>) {
+                val body = response.body()
+                if (body != null) mapVisibilityCache = body
+                callback(body)
+            }
+            override fun onFailure(call: Call<MapVisibilityResponse>, t: Throwable) {
+                Log.e("TrackerRepository", "Get map visibility failed", t)
+                callback(null)
+            }
+        })
+    }
+
+    fun patchMapVisibility(
+        context: Context,
+        request: MapVisibilityRequest,
+        callback: (MapVisibilityResponse?) -> Unit
+    ) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(null)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.patchMapVisibility(request).enqueue(object : Callback<MapVisibilityResponse> {
+            override fun onResponse(call: Call<MapVisibilityResponse>, response: Response<MapVisibilityResponse>) {
+                val body = response.body()
+                if (body != null) mapVisibilityCache = body
+                callback(body)
+            }
+            override fun onFailure(call: Call<MapVisibilityResponse>, t: Throwable) {
+                Log.e("TrackerRepository", "Patch map visibility failed", t)
+                callback(null)
+            }
+        })
+    }
+
+    fun getGroups(context: Context, callback: (List<Group>?) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(null)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.getGroups().enqueue(object : Callback<List<Group>> {
+            override fun onResponse(call: Call<List<Group>>, response: Response<List<Group>>) {
+                callback(response.body() ?: emptyList())
+            }
+            override fun onFailure(call: Call<List<Group>>, t: Throwable) {
+                Log.e("TrackerRepository", "Get groups failed", t)
+                callback(null)
+            }
+        })
+    }
+
+    fun createGroup(context: Context, name: String, callback: (Group?) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(null)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.createGroup(GroupCreateRequest(name = name)).enqueue(object : Callback<Group> {
+            override fun onResponse(call: Call<Group>, response: Response<Group>) {
+                callback(response.body())
+            }
+            override fun onFailure(call: Call<Group>, t: Throwable) {
+                Log.e("TrackerRepository", "Create group failed", t)
+                callback(null)
+            }
+        })
+    }
+
+    fun getGroup(context: Context, groupId: String, callback: (Group?) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(null)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.getGroup(groupId).enqueue(object : Callback<Group> {
+            override fun onResponse(call: Call<Group>, response: Response<Group>) {
+                callback(response.body())
+            }
+            override fun onFailure(call: Call<Group>, t: Throwable) {
+                Log.e("TrackerRepository", "Get group failed", t)
+                callback(null)
+            }
+        })
+    }
+
+    fun patchGroup(context: Context, groupId: String, request: GroupPatchRequest, callback: (Group?) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(null)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.patchGroup(groupId, request).enqueue(object : Callback<Group> {
+            override fun onResponse(call: Call<Group>, response: Response<Group>) {
+                callback(response.body())
+            }
+            override fun onFailure(call: Call<Group>, t: Throwable) {
+                Log.e("TrackerRepository", "Patch group failed", t)
+                callback(null)
+            }
+        })
+    }
+
+    fun deleteGroup(context: Context, groupId: String, callback: (Boolean) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(false)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.deleteGroup(groupId).enqueue(object : Callback<ResponseBody> {
+            override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                callback(response.isSuccessful)
+            }
+            override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
+                Log.e("TrackerRepository", "Delete group failed", t)
+                callback(false)
+            }
+        })
+    }
+
+    fun addGroupTrack(context: Context, groupId: String, trackId: String, callback: (Group?) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(null)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.addGroupTrack(groupId, GroupAddTrackRequest(track_id = trackId)).enqueue(object : Callback<Group> {
+            override fun onResponse(call: Call<Group>, response: Response<Group>) {
+                callback(response.body())
+            }
+            override fun onFailure(call: Call<Group>, t: Throwable) {
+                Log.e("TrackerRepository", "Add group track failed", t)
+                callback(null)
+            }
+        })
+    }
+
+    fun removeGroupTrack(context: Context, groupId: String, trackId: String, callback: (Boolean) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(false)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.removeGroupTrack(groupId, trackId).enqueue(object : Callback<ResponseBody> {
+            override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                callback(response.isSuccessful)
+            }
+            override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
+                Log.e("TrackerRepository", "Remove group track failed", t)
+                callback(false)
+            }
+        })
+    }
+
+    fun addGroupMember(context: Context, groupId: String, email: String, callback: (Group?) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(null)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.addGroupMember(groupId, GroupAddMemberRequest(email = email)).enqueue(object : Callback<Group> {
+            override fun onResponse(call: Call<Group>, response: Response<Group>) {
+                callback(response.body())
+            }
+            override fun onFailure(call: Call<Group>, t: Throwable) {
+                Log.e("TrackerRepository", "Add group member failed", t)
+                callback(null)
+            }
+        })
+    }
+
+    fun removeGroupMember(context: Context, groupId: String, userId: String, callback: (Boolean) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(false)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.removeGroupMember(groupId, userId).enqueue(object : Callback<ResponseBody> {
+            override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                callback(response.isSuccessful)
+            }
+            override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
+                Log.e("TrackerRepository", "Remove group member failed", t)
+                callback(false)
+            }
+        })
+    }
+
+    fun leaveGroup(context: Context, groupId: String, callback: (Boolean) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(false)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.leaveGroup(groupId).enqueue(object : Callback<ResponseBody> {
+            override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                callback(response.isSuccessful)
+            }
+            override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
+                Log.e("TrackerRepository", "Leave group failed", t)
+                callback(false)
+            }
+        })
+    }
+
+    fun getUsers(context: Context, callback: (UsersResponse?) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(null)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.getUsers().enqueue(object : Callback<UsersResponse> {
+            override fun onResponse(call: Call<UsersResponse>, response: Response<UsersResponse>) {
+                callback(response.body())
+            }
+            override fun onFailure(call: Call<UsersResponse>, t: Throwable) {
+                Log.e("TrackerRepository", "Get users failed", t)
+                callback(null)
+            }
+        })
+    }
+
+    /** Returns the URL to download KML for the tracker (authenticated GET). */
+    fun getTrackerKmlUrl(context: Context, trackerId: String): String {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
+        return "$serverUrl/api/extensions/live-track/trackers/$trackerId/kml/"
+    }
+
+    /** Fetches KML response body for the tracker (for download/share). */
+    fun fetchTrackerKml(context: Context, trackerId: String, callback: (ResponseBody?) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(null)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.getTrackerKml(trackerId).enqueue(object : Callback<ResponseBody> {
+            override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                callback(if (response.isSuccessful) response.body() else null)
+            }
+            override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
+                Log.e("TrackerRepository", "Fetch KML failed", t)
+                callback(null)
+            }
+        })
     }
 }

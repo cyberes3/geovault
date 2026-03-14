@@ -1,23 +1,5 @@
 <template>
   <div class="flex-1 min-h-0 flex flex-col p-4 overflow-hidden">
-    <p class="text-sm text-gray-900 mb-4">
-      Hidden trackers and groups appear here (from list or map). Use the toggle on each tracker or group edit page to hide them from the list; use the eye in the Shared tab to hide on map.
-    </p>
-
-    <!-- Manage shared trackers -->
-    <div class="flex-shrink-0 mb-4">
-      <BaseButton
-        variant="primary"
-        color="blue"
-        size="sm"
-        class="w-full flex items-center justify-center gap-2"
-        @click="$emit('open-shared-list')"
-      >
-        <ShareIcon class="h-4 w-4" />
-        Manage Shared Trackers
-      </BaseButton>
-    </div>
-
     <!-- Hidden trackers -->
     <div class="flex-shrink-0 mb-4">
       <div class="flex items-center justify-between mb-2">
@@ -93,12 +75,11 @@
 </template>
 
 <script>
-import { CloudIcon, ShareIcon } from '@heroicons/vue/24/outline';
-import BaseButton from 'platform/components/parts/BaseButton.vue';
+import { CloudIcon } from '@heroicons/vue/24/outline';
 
 export default {
   name: 'LiveTrackSettingsSidebarContent',
-  components: { CloudIcon, ShareIcon, BaseButton },
+  components: { CloudIcon },
   props: {
     /** Each item: { id, name, is_owner, source: 'list'|'map' } */
     hiddenTrackers: { type: Array, default: () => [] },
@@ -106,7 +87,6 @@ export default {
     hiddenGroups: { type: Array, default: () => [] },
   },
   emits: [
-    'open-shared-list',
     'unhide-tracker',
     'unhide-all-trackers',
     'unhide-tracker-from-map',

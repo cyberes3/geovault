@@ -60,7 +60,7 @@
         <FrameLayout
             android:id="@+id/bottomNavContainer"
             android:layout_width="match_parent"
-            android:layout_height="64dp"
+            android:layout_height="52dp"
             android:elevation="0dp"
             android:background="@color/primary_blue">
 
@@ -82,8 +82,8 @@
                 android:focusable="true">
                 <ImageView
                     android:id="@+id/navHomeIcon"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
                     android:src="@drawable/ic_home"
                     app:tint="@color/content_on_primary" />
                 <TextView
@@ -91,7 +91,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Home"
-                    android:textSize="12sp"
+                    android:textSize="10sp"
                     android:textColor="@color/content_on_primary" />
             </LinearLayout>
 
@@ -106,8 +106,8 @@
                 android:focusable="true">
                 <ImageView
                     android:id="@+id/navMapIcon"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
                     android:src="@android:drawable/ic_dialog_map"
                     app:tint="@color/content_on_primary" />
                 <TextView
@@ -115,7 +115,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Map"
-                    android:textSize="12sp"
+                    android:textSize="10sp"
                     android:textColor="@color/content_on_primary" />
             </LinearLayout>
 
@@ -130,8 +130,8 @@
                 android:focusable="true">
                 <ImageView
                     android:id="@+id/navTrackersIcon"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
                     android:src="@drawable/ic_radio"
                     app:tint="@color/content_on_primary" />
                 <TextView
@@ -139,7 +139,31 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/trackers_tab"
-                    android:textSize="12sp"
+                    android:textSize="10sp"
+                    android:textColor="@color/content_on_primary" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/navShared"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:clickable="true"
+                android:focusable="true">
+                <ImageView
+                    android:id="@+id/navSharedIcon"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_share"
+                    app:tint="@color/content_on_primary" />
+                <TextView
+                    android:id="@+id/navSharedText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/shared_tab"
+                    android:textSize="10sp"
                     android:textColor="@color/content_on_primary" />
             </LinearLayout>
 
@@ -154,8 +178,8 @@
                 android:focusable="true">
                 <ImageView
                     android:id="@+id/navSettingsIcon"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
                     android:src="@drawable/ic_settings"
                     app:tint="@color/content_on_primary" />
                 <TextView
@@ -163,7 +187,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Settings"
-                    android:textSize="12sp"
+                    android:textSize="10sp"
                     android:textColor="@color/content_on_primary" />
             </LinearLayout>
 

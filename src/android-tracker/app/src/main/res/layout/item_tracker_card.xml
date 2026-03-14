@@ -133,5 +133,44 @@
                 android:layout_weight="1"
                 android:text="@string/edit" />
         </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/trackerSharedActionsRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:visibility="gone"
+            android:layout_marginTop="8dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnUnsubscribe"
+                style="@style/gv_common_ButtonOutlined"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:text="@string/unsubscribe"
+                android:textSize="13sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnRemoveFromShare"
+                style="@style/gv_common_ButtonOutlined"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:text="@string/remove_from_share"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/btnHideOnMap"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:textSize="13sp"
+            android:textColor="@color/primary_blue"
+            android:visibility="gone"
+            android:text="@string/hide_on_map" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

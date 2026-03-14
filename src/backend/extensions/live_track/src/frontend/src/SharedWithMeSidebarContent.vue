@@ -10,8 +10,11 @@
       <MagnifyingGlassIcon class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
     </div>
     <div class="flex-shrink-0 mb-3 flex items-center gap-2">
-      <BaseButton variant="white" size="sm" class="flex-1" @click="$emit('openDiscover')">
+      <BaseButton variant="primary" color="blue" size="sm" class="flex-1" @click="$emit('openDiscover')">
         Add Public Trackers
+      </BaseButton>
+      <BaseButton variant="primary" color="blue" size="sm" class="flex-1" @click="$emit('open-shared-list')">
+        Manage Shared
       </BaseButton>
       <button
         type="button"
@@ -20,8 +23,7 @@
         :disabled="refreshing"
         @click="$emit('refresh')"
       >
-        <Loader v-if="refreshing" size="xs" layout="inline" :show-message="false" />
-        <ArrowPathIcon v-else class="h-5 w-5" />
+        <ArrowPathIcon :class="['h-5 w-5', refreshing ? 'animate-spin' : '']" />
       </button>
     </div>
     <div class="flex-1 min-h-0 flex flex-col gap-3 overflow-hidden">
@@ -124,26 +126,40 @@
                 <EyeIcon v-if="isHidden(track.id)" class="h-5 w-5" />
                 <EyeSlashIcon v-else class="h-5 w-5" />
               </button>
-              <button
-                type="button"
-                title="Unsubscribe (remove from my list; you can add again from Incoming)"
-                class="p-2 rounded-lg text-gray-500 hover:text-amber-600 hover:bg-amber-50 flex items-center justify-center size-9 flex-shrink-0"
-                :disabled="isUnsubscribing(track.id) || isLeavingShare(track.id)"
-                @click="$emit('unsubscribe', track.id)"
-              >
-                <Loader v-if="isUnsubscribing(track.id)" size="xs" layout="inline" :show-message="false" />
-                <UserMinusIcon v-else class="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                title="Remove me from share (owner will no longer have you as recipient; you won't see this in Incoming again)"
-                class="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 flex items-center justify-center size-9 flex-shrink-0"
-                :disabled="isUnsubscribing(track.id) || isLeavingShare(track.id)"
-                @click="$emit('leaveShare', track.id)"
-              >
-                <Loader v-if="isLeavingShare(track.id)" size="xs" layout="inline" :show-message="false" />
-                <XMarkIcon v-else class="h-5 w-5" />
-              </button>
+              <template v-if="(track.visibility || '') === 'public'">
+                <button
+                  type="button"
+                  title="Remove from my trackers (you can add again from Public Trackers)"
+                  class="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 flex items-center justify-center size-9 flex-shrink-0"
+                  :disabled="isUnsubscribing(track.id)"
+                  @click="$emit('unsubscribe', track.id)"
+                >
+                  <Loader v-if="isUnsubscribing(track.id)" size="xs" layout="inline" :show-message="false" />
+                  <XMarkIcon v-else class="h-5 w-5" />
+                </button>
+              </template>
+              <template v-else>
+                <button
+                  type="button"
+                  title="Unsubscribe (remove from my list; you can add again from Incoming)"
+                  class="p-2 rounded-lg text-gray-500 hover:text-amber-600 hover:bg-amber-50 flex items-center justify-center size-9 flex-shrink-0"
+                  :disabled="isUnsubscribing(track.id) || isLeavingShare(track.id)"
+                  @click="$emit('unsubscribe', track.id)"
+                >
+                  <Loader v-if="isUnsubscribing(track.id)" size="xs" layout="inline" :show-message="false" />
+                  <UserMinusIcon v-else class="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  title="Remove me from share (owner will no longer have you as recipient; you won't see this in Incoming again)"
+                  class="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 flex items-center justify-center size-9 flex-shrink-0"
+                  :disabled="isUnsubscribing(track.id) || isLeavingShare(track.id)"
+                  @click="$emit('leaveShare', track.id)"
+                >
+                  <Loader v-if="isLeavingShare(track.id)" size="xs" layout="inline" :show-message="false" />
+                  <XMarkIcon v-else class="h-5 w-5" />
+                </button>
+              </template>
             </div>
           </div>
           <div
@@ -230,12 +246,16 @@ export default {
     /** API client for leave-group call */
     api: { type: Object, default: null },
   },
-  emits: ['toggleVisibility', 'unsubscribe', 'leaveShare', 'addIncoming', 'addIncomingGroup', 'leaveGroup', 'toggleGroupVisibility', 'unsubscribeGroup', 'selectTrack', 'selectGroup', 'openDiscover', 'refresh'],
+  emits: ['toggleVisibility', 'unsubscribe', 'leaveShare', 'addIncoming', 'addIncomingGroup', 'leaveGroup', 'toggleGroupVisibility', 'unsubscribeGroup', 'selectTrack', 'selectGroup', 'openDiscover', 'open-shared-list', 'refresh'],
   setup(props, { emit }) {
     const searchQuery = ref('');
 
     const sharedTrackers = computed(() =>
-      props.trackers.filter((t) => t.is_owner === false && (t.visibility || '') === 'shared')
+      props.trackers.filter(
+        (t) =>
+          t.is_owner === false &&
+          ((t.visibility || '') === 'shared' || (t.visibility || '') === 'public')
+      )
     );
 
     const filterByQuery = (list, nameKey = 'name', ownerKey = 'owner_email') => {

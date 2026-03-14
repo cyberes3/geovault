@@ -27,6 +27,8 @@
     <!-- Must match gv_common_blue_400 (default_tracker_color). Used as hint in new/edit tracker forms. -->
     <string name="default_tracker_color_hex">#6C93DE</string>
     <string name="trackers_tab">Trackers</string>
+    <string name="shared_tab">Shared</string>
+    <string name="no_shared_trackers">No shared trackers. Tap Add to discover public trackers or ones shared with you.</string>
     <string name="could_not_save_tracker_selection">Could not save tracker selection</string>
     <string name="failed_to_load_tracker">Failed to load tracker</string>
     <string name="tracker_operation_timeout">Request timed out. Please try again.</string>
@@ -200,5 +202,59 @@
     <string name="logged_in">Logged in</string>
     <string name="server_connection_error_title">Connection Error</string>
     <string name="server_connection_error_message">Unable to connect to the server. Check connection status.</string>
+
+    <!-- Sharing -->
+    <string name="sharing_section">Sharing</string>
+    <string name="visibility_label">Visibility</string>
+    <string name="visibility_private">Private</string>
+    <string name="visibility_shared">Shared with specific people</string>
+    <string name="visibility_public">Public</string>
+    <string name="shared_with_recipients_label">Shared with</string>
+    <string name="add_recipient">Add recipient</string>
+    <string name="share_params_with_recipients_label">Share parameters with recipients</string>
+    <string name="world_share_enabled_label">Enable world share link</string>
+    <string name="share_params_with_world_label">Share parameters with world link</string>
+    <string name="copy_world_share_link">Copy world link</string>
+    <string name="world_link_copied">World link copied to clipboard</string>
+    <string name="invalid_emails_error">Invalid emails: %1$s</string>
+
+    <string name="add_tracker">Add tracker</string>
+    <string name="discover_public">Public trackers</string>
+    <string name="discover_shared_with_me">Shared with you</string>
+    <string name="discover_empty">No trackers to add. Ask someone to share one with you or make theirs public.</string>
+    <string name="unsubscribe">Unsubscribe</string>
+    <string name="remove_from_share">Remove from share</string>
+    <string name="add">Add</string>
+    <string name="unsubscribed">Unsubscribed</string>
+    <string name="removed_from_share">Removed from share</string>
+
+    <!-- Groups -->
+    <string name="groups_title">Groups</string>
+    <string name="create_group">Create group</string>
+    <string name="new_group_name_hint">Group name</string>
+    <string name="group_tracks">Tracks</string>
+    <string name="group_members">Members</string>
+    <string name="leave_group">Leave group</string>
+    <string name="delete_group">Delete group</string>
+    <string name="rename_group">Rename</string>
+    <string name="add_track_to_group">Add track</string>
+    <string name="add_member_to_group">Add member</string>
+    <string name="group_leave_confirm_title">Leave group?</string>
+    <string name="group_leave_confirm_message">You will no longer see this group or its shared trackers.</string>
+    <string name="group_delete_confirm_title">Delete group?</string>
+    <string name="group_delete_confirm_message">This cannot be undone. Members will lose access.</string>
+    <string name="no_groups">No groups. Create one to organize trackers.</string>
+
+    <string name="hide_on_map">Hide on map</string>
+    <string name="show_on_map">Show on map</string>
+
+    <string name="subscribers_title">Subscribers</string>
+    <string name="export_kml">Export KML</string>
+    <string name="copy_profile_url">Copy GPSLogger profile URL</string>
+    <string name="copy_secret">Copy secret</string>
+    <string name="profile_url_copied">Profile URL copied</string>
+    <string name="secret_copied">Secret copied to clipboard</string>
+    <string name="kml_exported">KML saved</string>
+    <string name="owner_tools">Owner tools</string>
 </resources>
 

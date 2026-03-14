@@ -1,7 +1,7 @@
 <template>
   <BaseModal
     :is-open="true"
-    title="Discover Trackers"
+    title="Public Trackers"
     @close="$emit('close')"
   >
     <div class="p-4 space-y-4">
@@ -50,8 +50,7 @@
         :disabled="loading"
         @click="onRefresh"
       >
-        <Loader v-if="loading" size="xs" layout="inline" :show-message="false" />
-        <ArrowPathIcon v-else class="h-5 w-5" />
+        <ArrowPathIcon :class="['h-5 w-5', loading ? 'animate-spin' : '']" />
       </button>
       <BaseButton variant="white" size="sm" @click="$emit('close')">Close</BaseButton>
     </template>

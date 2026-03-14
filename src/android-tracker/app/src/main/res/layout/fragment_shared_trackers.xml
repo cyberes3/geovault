@@ -10,7 +10,6 @@
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <!-- Create tracker button row (same style as places search bar container) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -24,25 +23,15 @@
             android:elevation="0dp">
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/createTrackerButton"
+                android:id="@+id/sharedAddTrackerButton"
                 style="@style/gv_common_ButtonOutlined"
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="44dp"
-                android:layout_weight="1"
-                android:layout_marginEnd="8dp"
-                android:text="@string/create_new_tracker" />
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/groupsButton"
-                style="@style/gv_common_ButtonOutlined"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="1"
-                android:text="@string/groups_title" />
+                android:text="@string/add_tracker" />
         </LinearLayout>
 
-        <!-- Full-width divider (shown when list is scrolled, like places searchDivider) -->
         <View
-            android:id="@+id/trackerListDivider"
+            android:id="@+id/sharedListDivider"
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:background="@color/search_divider"
@@ -54,21 +43,33 @@
             android:layout_weight="1">
 
             <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-                android:id="@+id/trackersSwipeRefresh"
+                android:id="@+id/sharedSwipeRefresh"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:background="@color/list_background">
 
                 <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/trackersRecyclerView"
+                    android:id="@+id/sharedRecyclerView"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:padding="8dp"
                     android:clipToPadding="false" />
             </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
+            <TextView
+                android:id="@+id/sharedEmpty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:padding="24dp"
+                android:text="@string/no_shared_trackers"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:gravity="center"
+                android:visibility="gone" />
+
             <FrameLayout
-                android:id="@+id/trackersLoadingOverlay"
+                android:id="@+id/sharedLoadingOverlay"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:background="@color/list_background"
@@ -83,7 +84,7 @@
                     android:orientation="vertical"
                     android:gravity="center_horizontal">
                     <com.geovault.common.LoadingSpinner
-                        android:id="@+id/trackersLoadingSpinner"
+                        android:id="@+id/sharedLoadingSpinner"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content" />
                     <TextView

@@ -13,8 +13,7 @@
           :disabled="refreshing"
           @click="$emit('refreshed')"
         >
-          <Loader v-if="refreshing" size="xs" layout="inline" :show-message="false" />
-          <ArrowPathIcon v-else class="h-5 w-5" />
+          <ArrowPathIcon :class="['h-5 w-5', refreshing ? 'animate-spin' : '']" />
         </button>
       </div>
       <div class="flex-1 min-h-0 overflow-y-auto space-y-2">
@@ -92,12 +91,11 @@
 import { ref, computed, watch } from 'vue';
 import { ArrowPathIcon, PencilIcon } from '@heroicons/vue/24/outline';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
-import Loader from 'platform/components/parts/Loader.vue';
 import GroupModal from './GroupModal.vue';
 
 export default {
   name: 'GroupsSidebarContent',
-  components: { BaseButton, GroupModal, Loader, ArrowPathIcon, PencilIcon },
+  components: { BaseButton, GroupModal, ArrowPathIcon, PencilIcon },
   props: {
     /** When true, show loading state on refresh button */
     refreshing: { type: Boolean, default: false },

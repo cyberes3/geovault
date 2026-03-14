@@ -220,6 +220,7 @@
             @add-incoming-group="onAddIncomingGroup"
             @leave-group="onSharedWithMeLeaveGroup"
             @open-discover="showDiscoverModal = true"
+            @open-shared-list="showSharedListModal = true"
             @refresh="onSharedWithMeRefresh"
           />
           <MapLayerSidebar
@@ -232,7 +233,6 @@
             v-else-if="showSettingsSidebar"
             :hidden-trackers="hiddenTrackersForSettings"
             :hidden-groups="hiddenGroupsForSettings"
-            @open-shared-list="showSharedListModal = true"
             @unhide-tracker="onUnhideTracker"
             @unhide-all-trackers="onUnhideAllTrackers"
             @unhide-tracker-from-map="onUnhideTrackerFromMap"
@@ -299,8 +299,7 @@
           :disabled="actionStripRefreshing"
           @click="onFullRefresh"
         >
-          <Loader v-if="actionStripRefreshing" size="xs" layout="inline" :show-message="false" />
-          <ArrowPathIcon v-else :class="SIDEBAR_ACTION_ICON_CLASS" />
+          <ArrowPathIcon :class="[SIDEBAR_ACTION_ICON_CLASS, actionStripRefreshing ? 'animate-spin' : '']" />
         </button>
         <button
           type="button"
@@ -421,7 +420,6 @@ import { useWindowSize, useScrollLock } from '@vueuse/core';
 import { getIngressBodyTemplate } from './ingressBodyTemplateCache.js';
 import { trackersLiveSocket } from './trackersLiveSocket.js';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
-import Loader from 'platform/components/parts/Loader.vue';
 import TrackSidebar from './TrackSidebar.vue';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
 import LatestParamsModal from './LatestParamsModal.vue';
@@ -473,7 +471,7 @@ const LIST_TABS = [
 
 export default {
   name: 'LiveTrackView',
-  components: { BaseButton, Loader, TrackSidebar, TrackDirectionIcon, LatestParamsModal, GroupsSidebarContent, DiscoverTrackersModal, SharedItemsModal, ShareSettingsModal, PublicSharePopup, MapLayerSidebar, MapSidebarPanel, SharedWithMeSidebarContent, LiveTrackSettingsSidebarContent, TrackerListContent, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon },
+  components: { BaseButton, TrackSidebar, TrackDirectionIcon, LatestParamsModal, GroupsSidebarContent, DiscoverTrackersModal, SharedItemsModal, ShareSettingsModal, PublicSharePopup, MapLayerSidebar, MapSidebarPanel, SharedWithMeSidebarContent, LiveTrackSettingsSidebarContent, TrackerListContent, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon },
   setup() {
     const api = inject('extensionApi');
     const trackers = ref([]);
@@ -2008,12 +2006,14 @@ export default {
     async function onSharedUnsubscribe(trackId) {
       if (!trackId) return;
       if (!confirm('Remove this tracker from your list? You can add it again from Shared With Me.')) return;
+      const track = trackers.value.find((t) => String(t.id) === String(trackId));
+      const isPublic = (track?.visibility || '') === 'public';
       unsubscribingId.value = trackId;
       try {
         await api.delete(`/trackers/${trackId}/subscribe/`);
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Tracker removed');
         const idStr = String(trackId);
-        moveTrackToIncoming(trackId);
+        if (!isPublic) moveTrackToIncoming(trackId);
         trackers.value = trackers.value.filter((t) => String(t.id) !== idStr);
         if (String(selectedId.value) === idStr) selectedId.value = null;
         const s = new Set(hiddenTrackIds.value);

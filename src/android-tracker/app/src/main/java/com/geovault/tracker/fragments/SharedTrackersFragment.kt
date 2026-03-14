@@ -1,11 +1,11 @@
 package com.geovault.tracker.fragments
 
 import android.content.Context
-import android.widget.ImageView
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -13,67 +13,48 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
-import com.geovault.tracker.parseHexToColor
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
-import com.google.android.material.card.MaterialCardView
+import com.geovault.tracker.parseHexToColor
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class TrackersFragment : Fragment() {
+class SharedTrackersFragment : Fragment() {
 
-    private lateinit var createTrackerButton: MaterialButton
-    private lateinit var groupsButton: MaterialButton
-    private lateinit var trackerListDivider: View
+    private lateinit var addButton: MaterialButton
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var recyclerView: RecyclerView
+    private lateinit var emptyView: TextView
     private lateinit var loadingOverlay: View
     private lateinit var loadingSpinner: LoadingSpinner
-    private var adapter: TrackersAdapter? = null
-    private var pendingScrollToTrackerId: String? = null
+    private var adapter: SharedTrackersAdapter? = null
     private var hiddenTrackIds: Set<String> = emptySet()
 
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View? {
-        return inflater.inflate(R.layout.fragment_trackers, container, false)
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
+        return inflater.inflate(R.layout.fragment_shared_trackers, container, false)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        createTrackerButton = view.findViewById(R.id.createTrackerButton)
-        groupsButton = view.findViewById(R.id.groupsButton)
-        trackerListDivider = view.findViewById(R.id.trackerListDivider)
-        swipeRefresh = view.findViewById(R.id.trackersSwipeRefresh)
-        recyclerView = view.findViewById(R.id.trackersRecyclerView)
-        loadingOverlay = view.findViewById(R.id.trackersLoadingOverlay)
-        loadingSpinner = view.findViewById(R.id.trackersLoadingSpinner)
+        addButton = view.findViewById(R.id.sharedAddTrackerButton)
+        swipeRefresh = view.findViewById(R.id.sharedSwipeRefresh)
+        recyclerView = view.findViewById(R.id.sharedRecyclerView)
+        emptyView = view.findViewById(R.id.sharedEmpty)
+        loadingOverlay = view.findViewById(R.id.sharedLoadingOverlay)
+        loadingSpinner = view.findViewById(R.id.sharedLoadingSpinner)
 
+        addButton.setOnClickListener {
+            DiscoverTrackersBottomSheet().show(parentFragmentManager, "discover_trackers")
+        }
         swipeRefresh.setOnRefreshListener { loadTrackers() }
 
-        createTrackerButton.setOnClickListener {
-            (activity as? MainActivity)?.showNewTrackerFragment()
-        }
-        groupsButton.setOnClickListener {
-            (activity as? MainActivity)?.showGroupsFragment()
-        }
-
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
-            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                super.onScrolled(recyclerView, dx, dy)
-                val canScrollUp = recyclerView.canScrollVertically(-1)
-                trackerListDivider.visibility = if (canScrollUp) View.VISIBLE else View.INVISIBLE
-                if (dx != 0 || dy != 0) clearHighlight()
-            }
-        })
-        adapter = TrackersAdapter(emptyList(), hiddenTrackIds) { tracker, action ->
+        adapter = SharedTrackersAdapter(emptyList(), hiddenTrackIds) { tracker, action ->
             when (action) {
                 TrackerAction.EDIT -> (activity as? MainActivity)?.showEditTrackerFragment(tracker)
                 TrackerAction.VIEW_ON_MAP -> viewOnMap(tracker)
@@ -89,77 +70,23 @@ class TrackersFragment : Fragment() {
                             if (t < 1e12) t * 1000 else t
                         } else null
                     },
-                    positionLat = tracker.last_point?.let { c ->
-                        if (c.size >= 2) (c[1] as? Number)?.toDouble() else null
-                    },
-                    positionLon = tracker.last_point?.let { c ->
-                        if (c.size >= 2) (c[0] as? Number)?.toDouble() else null
-                    }
+                    positionLat = tracker.last_point?.let { c -> if (c.size >= 2) (c[1] as? Number)?.toDouble() else null },
+                    positionLon = tracker.last_point?.let { c -> if (c.size >= 2) (c[0] as? Number)?.toDouble() else null }
                 )
             }
         }
         recyclerView.adapter = adapter
-        loadingOverlay.visibility = View.VISIBLE
-        loadingSpinner.start()
-        var trackersResult: List<Tracker>? = null
-        var visibilityResult: com.geovault.tracker.MapVisibilityResponse? = null
-        fun maybeApply() {
-            if (trackersResult != null && visibilityResult != null && isAdded) {
-                requireActivity().runOnUiThread {
-                    hiddenTrackIds = visibilityResult!!.hidden_track_ids.toSet()
-                    adapter?.setHiddenTrackIds(hiddenTrackIds)
-                    adapter?.setTrackers((trackersResult ?: emptyList()).filter { it.isOwner() })
-                    loadingSpinner.stop(hide = false)
-                    loadingOverlay.visibility = View.GONE
-                    applyScrollAndHighlightIfPending()
-                }
-            }
-        }
-        TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { list ->
-            trackersResult = list
-            maybeApply()
-        }
-        TrackerRepository.getMapVisibility(requireContext()) { vis ->
-            visibilityResult = vis ?: com.geovault.tracker.MapVisibilityResponse()
-            maybeApply()
-        }
 
-        requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_REFRESH_LIST, viewLifecycleOwner) { _, _ ->
+        parentFragmentManager.setFragmentResultListener(TrackersFragment.REQUEST_REFRESH_LIST, viewLifecycleOwner) { _, _ ->
             loadTrackers()
         }
-        requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_UPDATE_TRACKER, viewLifecycleOwner) { _, bundle ->
-            val updated = bundle.getParcelable<Tracker>("tracker", Tracker::class.java)
-            if (updated != null) {
-                adapter?.updateTracker(updated)
-            }
-        }
-        // Params fragment refreshes trackers in background; when done we update list from cache
-        requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_UPDATE_LIST_FROM_CACHE, viewLifecycleOwner) { _, _ ->
-            TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { list ->
-                if (isAdded) {
-                    requireActivity().runOnUiThread {
-                        adapter?.setTrackers(list ?: emptyList())
-                    }
-                }
-            }
-        }
-    }
 
-    override fun onPause() {
-        super.onPause()
-        clearHighlight()
-    }
-
-    companion object {
-        const val REQUEST_REFRESH_LIST = "tracker_list_refresh"
-        const val REQUEST_UPDATE_TRACKER = "tracker_list_update_tracker"
-        const val REQUEST_UPDATE_LIST_FROM_CACHE = "tracker_list_update_from_cache"
+        loadingOverlay.visibility = View.VISIBLE
+        loadingSpinner.start()
+        loadTrackers()
     }
 
     private fun loadTrackers() {
-        clearHighlight()
-        loadingOverlay.visibility = View.VISIBLE
-        loadingSpinner.start()
         var trackersResult: List<Tracker>? = null
         var visibilityResult: com.geovault.tracker.MapVisibilityResponse? = null
         fun maybeApply() {
@@ -167,9 +94,11 @@ class TrackersFragment : Fragment() {
                 requireActivity().runOnUiThread {
                     hiddenTrackIds = visibilityResult!!.hidden_track_ids.toSet()
                     adapter?.setHiddenTrackIds(hiddenTrackIds)
-                    adapter?.setTrackers((trackersResult ?: emptyList()).filter { it.isOwner() })
-                    loadingSpinner.stop(hide = false)
+                    val shared = (trackersResult ?: emptyList()).filter { !it.isOwner() }
+                    adapter?.setTrackers(shared)
+                    emptyView.visibility = if (shared.isEmpty()) View.VISIBLE else View.GONE
                     loadingOverlay.visibility = View.GONE
+                    loadingSpinner.stop(hide = false)
                     swipeRefresh.isRefreshing = false
                 }
             }
@@ -184,58 +113,7 @@ class TrackersFragment : Fragment() {
         }
     }
 
-    private fun toggleHideOnMap(tracker: Tracker) {
-        val newSet = if (tracker.id in hiddenTrackIds) {
-            hiddenTrackIds - tracker.id
-        } else {
-            hiddenTrackIds + tracker.id
-        }
-        TrackerRepository.patchMapVisibility(requireContext(), com.geovault.tracker.MapVisibilityRequest(hidden_track_ids = newSet.toList())) { updated ->
-            if (isAdded && updated != null) {
-                requireActivity().runOnUiThread {
-                    hiddenTrackIds = updated.hidden_track_ids.toSet()
-                    adapter?.setHiddenTrackIds(hiddenTrackIds)
-                }
-            }
-        }
-    }
-
-    private fun loadTrackersFromCache() {
-        TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { list ->
-            if (isAdded) {
-                requireActivity().runOnUiThread {
-                    adapter?.setTrackers(list ?: emptyList())
-                }
-            }
-        }
-    }
-
-    /** Called when user taps the name chip on the map: switch to this tab and scroll to the given tracker (or just open list if null). */
-    fun requestScrollToTrackerId(trackerId: String?) {
-        pendingScrollToTrackerId = trackerId
-        if ((adapter?.itemCount ?: 0) > 0) {
-            applyScrollAndHighlightIfPending()
-        }
-    }
-
-    private fun clearHighlight() {
-        adapter?.setHighlightedTrackerId(null)
-    }
-
-    private fun applyScrollAndHighlightIfPending() {
-        val id = pendingScrollToTrackerId ?: return
-        pendingScrollToTrackerId = null
-        val ad = adapter ?: return
-        val index = ad.indexOfTrackerId(id)
-        if (index < 0) return
-        val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return
-        val offset = recyclerView.height / 3
-        layoutManager.scrollToPositionWithOffset(index, offset)
-        ad.setHighlightedTrackerId(id)
-    }
-
     private fun viewOnMap(tracker: Tracker) {
-        // Do not change default track; only show this track on the map. Reset will load the default.
         TrackerRepository.clearCurrentTrackerCache()
         (activity as? MainActivity)?.setInitialTrackForMap(tracker)
         (activity as? MainActivity)?.setCurrentTab(1, forceRefreshMap = true, delayMs = 50)
@@ -271,16 +149,25 @@ class TrackersFragment : Fragment() {
         }
     }
 
+    private fun toggleHideOnMap(tracker: Tracker) {
+        val newSet = if (tracker.id in hiddenTrackIds) hiddenTrackIds - tracker.id else hiddenTrackIds + tracker.id
+        TrackerRepository.patchMapVisibility(requireContext(), com.geovault.tracker.MapVisibilityRequest(hidden_track_ids = newSet.toList())) { updated ->
+            if (isAdded && updated != null) {
+                requireActivity().runOnUiThread {
+                    hiddenTrackIds = updated.hidden_track_ids.toSet()
+                    adapter?.setHiddenTrackIds(hiddenTrackIds)
+                }
+            }
+        }
+    }
+
     private enum class TrackerAction { EDIT, VIEW_ON_MAP, VIEW_PARAMS, UNSUBSCRIBE, REMOVE_FROM_SHARE, TOGGLE_HIDE_ON_MAP }
 
-    private class TrackersAdapter(
+    private class SharedTrackersAdapter(
         private var trackers: List<Tracker>,
         private var hiddenTrackIds: Set<String>,
         private val onAction: (Tracker, TrackerAction) -> Unit
-    ) : RecyclerView.Adapter<TrackersAdapter.ViewHolder>() {
-
-        var highlightedTrackerId: String? = null
-            private set
+    ) : RecyclerView.Adapter<SharedTrackersAdapter.ViewHolder>() {
 
         fun setHiddenTrackIds(ids: Set<String>) {
             if (hiddenTrackIds == ids) return
@@ -288,36 +175,9 @@ class TrackersFragment : Fragment() {
             notifyDataSetChanged()
         }
 
-        fun indexOfTrackerId(id: String): Int = trackers.indexOfFirst { it.id == id }
-
-        fun setHighlightedTrackerId(id: String?) {
-            if (highlightedTrackerId == id) return
-            val oldId = highlightedTrackerId
-            highlightedTrackerId = id
-            if (oldId != null) {
-                val oldIndex = indexOfTrackerId(oldId)
-                if (oldIndex >= 0) notifyItemChanged(oldIndex)
-            }
-            if (id != null) {
-                val newIndex = indexOfTrackerId(id)
-                if (newIndex >= 0) notifyItemChanged(newIndex)
-            }
-        }
-
         fun setTrackers(list: List<Tracker>) {
             trackers = list
             notifyDataSetChanged()
-        }
-
-        fun updateTracker(updated: Tracker) {
-            val index = trackers.indexOfFirst { it.id == updated.id }
-            if (index >= 0) {
-                val existing = trackers[index]
-                trackers = trackers.toMutableList().apply {
-                    set(index, existing.copy(name = updated.name, color = updated.color))
-                }
-                notifyItemChanged(index)
-            }
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -326,15 +186,12 @@ class TrackersFragment : Fragment() {
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            holder.bind(trackers[position], highlightedTrackerId, hiddenTrackIds)
+            holder.bind(trackers[position], hiddenTrackIds)
         }
 
         override fun getItemCount(): Int = trackers.size
 
-        class ViewHolder(
-            itemView: View,
-            private val onAction: (Tracker, TrackerAction) -> Unit
-        ) : RecyclerView.ViewHolder(itemView) {
+        class ViewHolder(itemView: View, private val onAction: (Tracker, TrackerAction) -> Unit) : RecyclerView.ViewHolder(itemView) {
             private val trackerName: TextView = itemView.findViewById(R.id.trackerName)
             private val trackerSelectedCheck: ImageView = itemView.findViewById(R.id.trackerSelectedCheck)
             private val colorBar: View = itemView.findViewById(R.id.trackerColorBar)
@@ -349,7 +206,7 @@ class TrackersFragment : Fragment() {
             private val btnRemoveFromShare: MaterialButton = itemView.findViewById(R.id.btnRemoveFromShare)
             private val btnHideOnMap: TextView = itemView.findViewById(R.id.btnHideOnMap)
 
-            fun bind(tracker: Tracker, highlightedId: String?, hiddenTrackIds: Set<String>) {
+            fun bind(tracker: Tracker, hiddenTrackIds: Set<String>) {
                 val selectedId = itemView.context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
                     .getString("selected_tracker_id", "") ?: ""
                 trackerSelectedCheck.visibility = if (tracker.id == selectedId) View.VISIBLE else View.GONE
@@ -384,8 +241,7 @@ class TrackersFragment : Fragment() {
                 val hasPoints = lastPosition != null
                 btnViewOnMap.isEnabled = hasPoints
                 btnViewOnMap.alpha = if (hasPoints) 1f else 0.4f
-                val isOwner = tracker.isOwner()
-                sharedActionsRow.visibility = if (isOwner) View.GONE else View.VISIBLE
+                sharedActionsRow.visibility = View.VISIBLE
                 btnUnsubscribe.setOnClickListener { onAction(tracker, TrackerAction.UNSUBSCRIBE) }
                 btnRemoveFromShare.setOnClickListener { onAction(tracker, TrackerAction.REMOVE_FROM_SHARE) }
                 val hidden = tracker.id in hiddenTrackIds
@@ -395,21 +251,13 @@ class TrackersFragment : Fragment() {
                 btnViewParams.setOnClickListener { onAction(tracker, TrackerAction.VIEW_PARAMS) }
                 btnEdit.setOnClickListener { onAction(tracker, TrackerAction.EDIT) }
                 btnViewOnMap.setOnClickListener { onAction(tracker, TrackerAction.VIEW_ON_MAP) }
-                (itemView as? MaterialCardView)?.let { card ->
-                    val highlight = tracker.id == highlightedId
-                    val strokePx = if (highlight) (2 * itemView.resources.displayMetrics.density).toInt() else 0
-                    card.setStrokeWidth(strokePx)
-                    card.strokeColor = if (strokePx > 0) {
-                        ContextCompat.getColor(itemView.context, R.color.primary_blue)
-                    } else {
-                        android.graphics.Color.TRANSPARENT
-                    }
-                }
+                (itemView as? MaterialCardView)?.setStrokeWidth(0)
+                (itemView as? MaterialCardView)?.strokeColor = android.graphics.Color.TRANSPARENT
             }
-        }
 
-        companion object {
-            private val LIST_DATE_FORMAT = SimpleDateFormat("MMM d, yyyy, h:mm a", Locale.getDefault())
+            companion object {
+                private val LIST_DATE_FORMAT = SimpleDateFormat("MMM d, yyyy, h:mm a", Locale.getDefault())
+            }
         }
     }
 }
