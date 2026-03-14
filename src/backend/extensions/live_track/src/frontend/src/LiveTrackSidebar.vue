@@ -3,7 +3,7 @@
     <!-- When locked to container, wrap in a layer that fills the map column so panel height = map height. pointer-events-none so map can pan/zoom; panel has pointer-events-auto. -->
     <div
       v-if="isContainerMode"
-      class="absolute inset-0 overflow-hidden flex justify-end pointer-events-none"
+      class="fixed inset-0 sm:absolute sm:inset-0 overflow-hidden flex justify-end pointer-events-none z-50"
     >
       <div
         ref="panel"
@@ -115,7 +115,7 @@ export default {
     const teleportTarget = computed(() => resolvedContainer.value ?? 'body');
     const isContainerMode = computed(() => resolvedContainer.value != null && teleportTarget.value !== 'body');
     const panelClasses = computed(() => {
-      const base = 'live-track-sidebar-panel z-40 flex flex-col bg-white border-l border-gray-200 overflow-hidden pointer-events-auto';
+      const base = 'live-track-sidebar-panel z-50 flex flex-col bg-white border-l border-gray-200 overflow-hidden pointer-events-auto';
       const animationClass = props.disableAnimations ? 'live-track-sidebar--no-animations' : '';
       if (isContainerMode.value) {
         return `${base} w-full sm:w-[28rem] h-full ${animationClass}`.trim();

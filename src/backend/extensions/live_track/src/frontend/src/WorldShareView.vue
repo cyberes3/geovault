@@ -9,19 +9,95 @@
     </div>
     <template v-else>
       <header class="flex-shrink-0 px-4 py-2 bg-white border-b border-gray-200 flex items-center gap-2">
-        <ShareIcon class="w-5 h-5 text-gray-500" />
-        <h1 class="text-lg font-semibold text-gray-900 truncate">{{ displayTitle }}</h1>
+        <ShareIcon class="w-5 h-5 text-gray-500 flex-shrink-0" />
+        <h1 class="text-lg font-semibold text-gray-900 truncate min-w-0">{{ displayTitle }}</h1>
       </header>
-      <div ref="mapWrapperRef" class="relative flex-1 min-h-0 w-full">
-        <div ref="mapContainer" class="absolute inset-0 w-full h-full bg-gray-100" />
-        <SingleTrackMapControls
-          :follow-locked="followLocked && !!trackData"
-          :show-params-button="showParamsButton"
-          @toggle-follow="toggleFollowLock"
-          @open-params="openParamsSidebar"
-          @open-layer="openLayerSidebar"
-        />
+      <div class="flex-1 min-h-0 flex flex-col sm:flex-row">
+        <!-- Desktop: sidebar with track list -->
+        <aside
+          v-if="!isMobileView"
+          class="flex flex-col min-h-0 border-r border-gray-200 bg-white sm:w-80 flex-shrink-0"
+        >
+          <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
+            <MapTrackList
+              :tracks="visibleTracks"
+              :selected-id="selectedId"
+              :get-params-allowed="getParamsAllowedForTrack"
+              @track-click="onTrackListClick"
+              @open-params="openParamsForTrack"
+            />
+          </div>
+        </aside>
+
+        <!-- Map column -->
+        <div ref="mapWrapperRef" class="relative flex-1 min-h-0 w-full flex flex-col">
+          <div ref="mapContainer" class="absolute inset-0 w-full h-full bg-gray-100" />
+          <!-- Selected chip: track name, deselect X -->
+          <div
+            v-if="selectedItemLabel"
+            class="absolute top-3 left-3 z-20 flex items-center gap-2 rounded-lg border border-blue-200 bg-white/95 px-3 py-2 shadow-sm"
+          >
+            <span class="text-sm font-medium text-gray-900 truncate max-w-[12rem]" :title="selectedItemLabel">{{ selectedItemLabel }}</span>
+            <button
+              type="button"
+              title="Deselect"
+              class="flex-shrink-0 p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+              @click="deselectSelection"
+            >
+              <XMarkIcon class="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        <!-- Action strip: same position as main tracker map (top bar on mobile, right strip on desktop) -->
+        <aside
+          v-if="!isMobileView || (!showLayerSidebar && !showParamsSidebar)"
+          class="flex flex-shrink-0 flex-row sm:flex-col w-full sm:w-12 min-h-0 border-b sm:border-b-0 sm:border-l border-gray-200 bg-white items-center justify-center sm:justify-end py-1.5 sm:py-2 gap-2 sm:gap-1 order-first sm:order-last"
+          aria-label="Actions"
+        >
+          <button
+            type="button"
+            title="Map Settings"
+            :class="SIDEBAR_ACTION_BUTTON_CLASS"
+            @click="openLayerSidebar"
+          >
+            <Square3Stack3DIcon :class="SIDEBAR_ACTION_ICON_CLASS" />
+          </button>
+          <button
+            type="button"
+            title="Go to Home Extent"
+            :class="SIDEBAR_ACTION_BUTTON_CLASS"
+            @click="goHome"
+          >
+            <HomeIcon :class="SIDEBAR_ACTION_ICON_CLASS" />
+          </button>
+        </aside>
       </div>
+
+      <!-- Mobile: bottom drawer with track list -->
+      <Teleport v-if="isMobileView" to="body">
+        <MobileMapDrawer
+          ref="mobileDrawerRef"
+          :max-height="worldShareDrawerMaxHeight"
+          :initial-snap-index="0"
+          :hidden="showLayerSidebar || showParamsSidebar"
+        >
+          <template #default="{ atPeek }">
+            <div class="flex-1 min-h-0 flex flex-col overflow-hidden px-2 pb-2">
+              <div :class="['flex-1 min-h-0 overflow-hidden', atPeek ? 'world-share-drawer-content--no-scroll' : 'overflow-y-auto custom-scrollbar']">
+                <MapTrackList
+                  :tracks="visibleTracks"
+                  :selected-id="selectedId"
+                  :get-params-allowed="getParamsAllowedForTrack"
+                  @track-click="onTrackListClick"
+                  @open-params="openParamsForTrack"
+                />
+              </div>
+            </div>
+          </template>
+        </MobileMapDrawer>
+      </Teleport>
+
       <LatestParamsModal
         v-if="showParamsSidebar"
         :track="paramsTrack"
@@ -49,35 +125,15 @@
 
 <script>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
-import { ShareIcon } from '@heroicons/vue/24/outline';
+import { ShareIcon, Square3Stack3DIcon, XMarkIcon, HomeIcon } from '@heroicons/vue/24/outline';
+import { useWindowSize } from '@vueuse/core';
 import Loader from 'platform/components/parts/Loader.vue';
 import LatestParamsModal from './LatestParamsModal.vue';
 import LiveTrackSidebar from './LiveTrackSidebar.vue';
 import MapLayerSidebar from './MapLayerSidebar.vue';
-import SingleTrackMapControls from './SingleTrackMapControls.vue';
-import { getCoordsSortedByTime, buildLineFeatures, buildPointFeature, fitMapToSingleTrack, centerMapOnTrackLastPoint } from './trackGeometry.js';
-
-function fitMapToTracks(map, tracks) {
-  if (!map || !tracks?.length) return;
-  const allCoords = [];
-  for (const track of tracks) {
-    const coords = getCoordsSortedByTime(track).map((c) => [c[0], c[1]]);
-    allCoords.push(...coords);
-  }
-  if (allCoords.length >= 2) {
-    const lons = allCoords.map((c) => c[0]);
-    const lats = allCoords.map((c) => c[1]);
-    map.fitBounds(
-      [
-        [Math.min(...lons), Math.min(...lats)],
-        [Math.max(...lons), Math.max(...lats)]
-      ],
-      { padding: 40, maxZoom: 16, duration: 0 }
-    );
-  } else if (allCoords.length === 1) {
-    map.jumpTo({ center: allCoords[0], zoom: 14, duration: 0 });
-  }
-}
+import MapTrackList from './MapTrackList.vue';
+import MobileMapDrawer from './MobileMapDrawer.vue';
+import { buildLineFeatures, buildPointFeature, fitMapToTracks, fitMapToSingleTrack, centerMapOnTrackLastPoint } from './trackGeometry.js';
 import { setupMapFollowListeners } from './mapFollowLock.js';
 import { ensureArrowImage } from './trackArrowMap.js';
 import { trackToParamsModalShape } from './trackParamsShape.js';
@@ -96,6 +152,10 @@ const MIN_ZOOM = 0;
 const MAX_ZOOM = 18;
 const LAYER_MAX_ZOOM = 19;
 const POLL_INTERVAL_MS = 5000;
+const MAP_SNAP_DURATION = 200;
+const SIDEBAR_ACTION_BUTTON_CLASS =
+  'p-1.5 sm:p-2 rounded-lg text-blue-600 hover:bg-blue-50 active:bg-blue-100 focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white [-webkit-tap-highlight-color:transparent]';
+const SIDEBAR_ACTION_ICON_CLASS = 'h-5 w-5 sm:h-6 sm:w-6';
 
 function getShareIdFromUrl() {
   const hash = typeof window !== 'undefined' ? window.location.hash : '';
@@ -107,7 +167,7 @@ function getShareIdFromUrl() {
 
 export default {
   name: 'WorldShareView',
-  components: { ShareIcon, SingleTrackMapControls, Loader, LatestParamsModal, LiveTrackSidebar, MapLayerSidebar },
+  components: { ShareIcon, Square3Stack3DIcon, XMarkIcon, HomeIcon, Loader, LatestParamsModal, LiveTrackSidebar, MapLayerSidebar, MapTrackList, MobileMapDrawer },
   setup() {
     const loading = ref(true);
     const error = ref('');
@@ -118,12 +178,54 @@ export default {
     const displayTitle = computed(() => trackName.value || groupName.value || 'Shared');
     const mapContainer = ref(null);
     const mapWrapperRef = ref(null);
+    const mobileDrawerRef = ref(null);
     const { tileSources, selectedLayer, fetchTileSources } = useTileSources({ apiUrl: '/api/tiles/sources/' });
     const showLayerSidebar = ref(false);
     const showParamsSidebar = ref(false);
-    function openParamsSidebar() {
-      showLayerSidebar.value = false;
-      showParamsSidebar.value = true;
+    const paramsModalTrack = ref(null);
+    const selectedId = ref(null);
+    const followLocked = ref(false);
+    const shareIdRef = ref(null);
+    let map = null;
+    let pollTimerId = null;
+
+    const isMobileView = ref(
+      typeof window !== 'undefined' ? window.matchMedia('(max-width: 639px)').matches : false
+    );
+    let mobileQueryListener = null;
+
+    const { height: windowHeight } = useWindowSize();
+    const worldShareDrawerMaxHeight = computed(() => {
+      // Same as main tracker: app nav = 64px, header bar = 64px, buffer = 4px.
+      // Max drawer height = viewport minus those so sheet stops at bottom of header.
+      const APP_NAV_PX = 64;
+      const HEADER_PX = 64;
+      const BUFFER_PX = 4;
+      return Math.max(65, windowHeight.value - APP_NAV_PX - HEADER_PX - BUFFER_PX);
+    });
+
+    const visibleTracks = computed(() => {
+      if (groupTracks.value?.length) return groupTracks.value;
+      if (trackData.value) return [trackData.value];
+      return [];
+    });
+
+    const selectedTrack = computed(() => {
+      const id = selectedId.value;
+      if (id == null) return null;
+      return visibleTracks.value.find((t) => String(t.id) === String(id)) ?? null;
+    });
+
+    const selectedItemLabel = computed(() => selectedTrack.value?.name ?? null);
+
+    const paramsTrack = computed(() => trackToParamsModalShape(paramsModalTrack.value));
+
+    function getParamsAllowedForTrack(track) {
+      const allow = track?.share_params_with_world === true ||
+        (track?.share_params_with_world === undefined && track?.share_params_with_recipients === true);
+      if (!allow) return false;
+      const hasPoints = (track?.point_params?.length || track?.geometry?.coordinates?.length || 0) > 0;
+      return hasPoints;
     }
 
     function openLayerSidebar() {
@@ -136,31 +238,70 @@ export default {
       onLayerChange();
     }
 
-    const followLocked = ref(false);
-    const shareIdRef = ref(null);
-    let map = null;
-    let pollTimerId = null;
+    function openParamsForTrack(track) {
+      paramsModalTrack.value = track;
+      showParamsSidebar.value = true;
+    }
 
-    const showParamsButton = computed(() => {
-      if (groupTracks.value?.length) return false;
-      const t = trackData.value;
-      const allowParams = t?.share_params_with_world === true || (t?.share_params_with_world === undefined && t?.share_params_with_recipients === true);
-      if (!allowParams) return false;
-      const hasPoints = (t.point_params?.length || t.geometry?.coordinates?.length) > 0;
-      return hasPoints;
-    });
+    function centerOnSelectedTrack() {
+      const track = selectedTrack.value;
+      if (track && map) centerMapOnTrackLastPoint(map, track);
+    }
 
-    const paramsTrack = computed(() => trackToParamsModalShape(trackData.value));
+    function deselectSelection() {
+      selectedId.value = null;
+      followLocked.value = false;
+      updateMapData();
+    }
+
+    async function goHome() {
+      selectedId.value = null;
+      followLocked.value = false;
+      await updateMapData();
+      if (visibleTracks.value.length > 0 && map) {
+        if (groupTracks.value?.length) {
+          fitMapToTracks(map, groupTracks.value);
+        } else {
+          fitMapToSingleTrack(map, trackData.value);
+        }
+      } else if (map) {
+        map.easeTo({ center: [0, 0], zoom: 2, duration: MAP_SNAP_DURATION });
+      }
+    }
+
+    function onTrackListClick(track) {
+      if (selectedId.value != null && String(selectedId.value) === String(track.id)) {
+        selectedId.value = null;
+        followLocked.value = false;
+        updateMapData();
+        return;
+      }
+      selectedId.value = track.id;
+      followLocked.value = true;
+      updateMapData();
+      if (map) {
+        const coords = (track.geometry?.coordinates || []).slice(-1).map((c) => [c[0], c[1]]);
+        const last = coords.length ? coords[0] : null;
+        if (last) {
+          const zoom = Math.max(map.getZoom(), 14);
+          map.easeTo({ center: last, zoom, duration: MAP_SNAP_DURATION });
+        }
+      }
+      if (isMobileView.value && mobileDrawerRef.value?.collapseToPeek) {
+        mobileDrawerRef.value.collapseToPeek();
+      }
+    }
 
     async function updateMapData() {
-      const tracks = groupTracks.value?.length ? groupTracks.value : (trackData.value ? [trackData.value] : []);
+      const tracks = visibleTracks.value;
       if (!map || !tracks.length) return;
       if (!map.getStyle()) return;
-      const selected = followLocked.value && trackData.value;
       const lineSource = map.getSource(LINES_SOURCE_ID);
       const pointSource = map.getSource(POINTS_SOURCE_ID);
       if (lineSource) {
-        const lineFeatures = tracks.flatMap((t) => buildLineFeatures(t, selected && t === trackData.value));
+        const lineFeatures = tracks.flatMap((t) =>
+          buildLineFeatures(t, selectedId.value != null && String(t.id) === String(selectedId.value))
+        );
         lineSource.setData({ type: 'FeatureCollection', features: lineFeatures });
       }
       if (pointSource) {
@@ -170,7 +311,9 @@ export default {
           await ensureArrowImage(map, color, true);
         }
         const pointFeatures = tracks
-          .map((t) => buildPointFeature(t, selected && t === trackData.value))
+          .map((t) =>
+            buildPointFeature(t, selectedId.value != null && String(t.id) === String(selectedId.value))
+          )
           .filter(Boolean);
         pointSource.setData({ type: 'FeatureCollection', features: pointFeatures });
       }
@@ -210,10 +353,10 @@ export default {
           layout: { 'line-join': 'round', 'line-cap': 'round' }
         },
         LINES_LAYER_ID
-      );
+        );
       }
       if (!map.getLayer(POINTS_LAYER_ID)) {
-        const tracks = groupTracks.value?.length ? groupTracks.value : (trackData.value ? [trackData.value] : []);
+        const tracks = visibleTracks.value;
         const colors = [...new Set(tracks.map((t) => t?.color || '#6C93DE'))];
         for (const color of colors) {
           await ensureArrowImage(map, color, false);
@@ -248,23 +391,14 @@ export default {
       }
     }
 
-    function centerOnTrack() {
-      if (trackData.value) centerMapOnTrackLastPoint(map, trackData.value);
-    }
-
-    function toggleFollowLock() {
-      followLocked.value = !followLocked.value;
-      if (followLocked.value) {
-        centerOnTrack();
-      }
-      updateMapData();
-    }
-
     function setupMapFollowListenersForView() {
       if (!map) return;
       setupMapFollowListeners(map, {
         getLocked: () => followLocked.value,
-        setLocked: (v) => { followLocked.value = v; },
+        setLocked: (v) => {
+          followLocked.value = v;
+          if (!v) selectedId.value = null;
+        },
         onUnlock: () => updateMapData().catch(() => {})
       });
     }
@@ -387,6 +521,13 @@ export default {
         }
         loading.value = false;
 
+        const mq = typeof window !== 'undefined' ? window.matchMedia('(max-width: 639px)') : null;
+        if (mq) {
+          isMobileView.value = mq.matches;
+          mobileQueryListener = (e) => { isMobileView.value = e.matches; };
+          mq.addEventListener('change', mobileQueryListener);
+        }
+
         await nextTick();
         await new Promise((r) => setTimeout(r, 50));
         await initMap();
@@ -404,7 +545,7 @@ export default {
                 trackData.value = data;
               }
               await updateMapData();
-              if (followLocked.value && map && trackData.value) centerOnTrack();
+              if (followLocked.value && map && selectedTrack.value) centerOnSelectedTrack();
             } catch (_) {
               // ignore poll errors
             }
@@ -542,6 +683,10 @@ export default {
     }
 
     onBeforeUnmount(() => {
+      if (mobileQueryListener && typeof window !== 'undefined') {
+        window.matchMedia('(max-width: 639px)').removeEventListener('change', mobileQueryListener);
+        mobileQueryListener = null;
+      }
       if (pollTimerId) {
         clearInterval(pollTimerId);
         pollTimerId = null;
@@ -558,19 +703,53 @@ export default {
       displayTitle,
       mapContainer,
       mapWrapperRef,
+      mobileDrawerRef,
       tileSources,
       selectedLayer,
       showLayerSidebar,
       showParamsSidebar,
-      showParamsButton,
       paramsTrack,
+      selectedId,
+      selectedItemLabel,
+      visibleTracks,
       followLocked,
-      openParamsSidebar,
+      isMobileView,
+      worldShareDrawerMaxHeight,
       openLayerSidebar,
+      openParamsForTrack,
       onLayerSidebarChange,
-      toggleFollowLock,
-      onLayerChange
+      onTrackListClick,
+      deselectSelection,
+      goHome,
+      getParamsAllowedForTrack,
+      onLayerChange,
+      SIDEBAR_ACTION_BUTTON_CLASS,
+      SIDEBAR_ACTION_ICON_CLASS
     };
   }
 };
 </script>
+
+<style scoped>
+.world-share-drawer-content--no-scroll {
+  overflow: hidden;
+  touch-action: none;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+</style>

@@ -94,6 +94,33 @@ export function buildPointFeature(track, selected = false) {
 }
 
 /**
+ * Fit map bounds to multiple tracks' geometries. Uses getCoordsSortedByTime for ordering.
+ * @param {import('maplibre-gl').Map} map - MapLibre map instance
+ * @param {Object[]} tracks - Array of tracks with geometry.coordinates
+ */
+export function fitMapToTracks(map, tracks) {
+  if (!map || !tracks?.length) return;
+  const allCoords = [];
+  for (const track of tracks) {
+    const coords = getCoordsSortedByTime(track).map((c) => [c[0], c[1]]);
+    allCoords.push(...coords);
+  }
+  if (allCoords.length >= 2) {
+    const lons = allCoords.map((c) => c[0]);
+    const lats = allCoords.map((c) => c[1]);
+    map.fitBounds(
+      [
+        [Math.min(...lons), Math.min(...lats)],
+        [Math.max(...lons), Math.max(...lats)]
+      ],
+      { padding: 40, maxZoom: 16, duration: 0 }
+    );
+  } else if (allCoords.length === 1) {
+    map.jumpTo({ center: allCoords[0], zoom: 14, duration: 0 });
+  }
+}
+
+/**
  * Fit map bounds to a single track's geometry. Uses getCoordsSortedByTime for ordering.
  * @param {import('maplibre-gl').Map} map - MapLibre map instance
  * @param {Object} track - Track with geometry.coordinates

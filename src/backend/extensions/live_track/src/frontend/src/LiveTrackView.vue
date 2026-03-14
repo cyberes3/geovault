@@ -89,7 +89,7 @@
       <div
         v-if="isMapSidebarOpen"
         ref="mapSidebarRef"
-        class="absolute inset-0 overflow-hidden flex justify-end z-40 pointer-events-none"
+        class="fixed inset-0 sm:absolute sm:inset-0 overflow-hidden flex justify-end z-50 pointer-events-none"
         tabindex="-1"
       >
         <MapSidebarPanel
@@ -247,6 +247,7 @@
 
     <!-- Action strip: top bar on mobile (compact), right strip on desktop -->
     <aside
+      v-if="!isMobileView || !isMapSidebarOpen"
       class="flex flex-shrink-0 flex-row sm:flex-col w-full sm:w-12 min-h-0 border-b sm:border-b-0 sm:border-l border-gray-200 bg-white items-center justify-center sm:justify-between py-1.5 sm:py-2 gap-2 sm:gap-1 order-first sm:order-last"
       aria-label="Actions"
     >
@@ -322,68 +323,48 @@
     </aside>
     </div>
 
-    <!-- Tracker List: Mobile – custom drawer (no third-party sheet). Collapse = set height to 25%, no close animation. -->
+    <!-- Tracker List: Mobile – shared drawer component -->
     <Teleport v-if="isMobileView" to="body">
-      <div
-        v-if="isMobileView && isSheetOpen && !isMapSidebarOpen"
-        ref="mobileDrawerEl"
-        :class="['mobile-tracker-drawer', { 'mobile-tracker-drawer--dragging': isDrawerDragging }]"
-        :style="{ height: (mobileDrawerHeightPx || mobileDrawerSnapPx[0] || 200) + 'px' }"
-        class="flex flex-col min-h-0"
+      <MobileMapDrawer
+        v-if="isMobileView && isSheetOpen"
+        ref="mobileDrawerRef"
+        :max-height="trackerMaxHeight"
+        :initial-snap-index="0"
+        :hidden="isMapSidebarOpen"
       >
-        <div
-          class="mobile-drawer-handle"
-          role="button"
-          tabindex="0"
-          aria-label="Drag to Resize"
-          @touchstart.passive="onDrawerDragStart"
-          @touchmove.prevent="onDrawerDragMove"
-          @touchend="onDrawerDragEnd"
-          @mousedown="onDrawerDragStart"
-        >
-          <div class="mobile-drawer-handle-bar" />
-        </div>
-        <div class="flex-1 min-h-0 overflow-hidden flex flex-col px-2 pb-2 relative">
-          <!-- When at peek, whole content area is a drag target (no scroll, drag to expand) -->
-          <div
-            v-if="isDrawerAtPeek"
-            class="mobile-drawer-drag-overlay"
-            aria-label="Drag to Expand"
-            @touchstart.passive="onDrawerDragStart"
-            @touchmove.prevent="onDrawerDragMove"
-            @touchend="onDrawerDragEnd"
-            @mousedown="onDrawerDragStart"
-          />
-          <TrackerListContent
-            ref="listContentMobileRef"
-            v-model:list-tab="listTab"
-            :list-tabs="LIST_TABS"
-            :visible-trackers-tab="visibleTrackersTab"
-            :visible-shared-tab="visibleSharedTab"
-            :visible-groups-tab="visibleGroupsTab"
-            :visible-shared-groups-tab="visibleSharedGroupsTab"
-            :selected-id="selectedId"
-            :active-group-id="activeGroupId"
-            :highlighted-id="highlightedId"
-            :hidden-track-ids="hiddenTrackIds"
-            :hidden-group-ids="hiddenGroupIds"
-            :loading="loading"
-            :list-empty-for-tab="listEmptyForTab"
-            :scroll-container-class="['flex-1 min-h-0 space-y-3 px-1 py-1', isDrawerAtPeek ? 'mobile-drawer-content--no-scroll' : 'overflow-y-auto custom-scrollbar'].join(' ')"
-            action-opacity-class="opacity-60"
-            @group-click="onGroupListClick"
-            @track-click="onTrackListClick"
-            @edit-track="openEditTrackSidebar"
-            @open-params="(id) => openSidebar('params', id)"
-            @leave-group="leaveGroup"
-            @edit-group="openEditGroupModal"
-            @view-group="openGroupQuickView"
-            @toggle-visibility="toggleTrackVisibility"
-            @toggle-group-visibility="toggleGroupVisibility"
-            @clear-highlight="highlightedId = null"
-          />
-        </div>
-      </div>
+        <template #default="{ atPeek }">
+          <div class="flex-1 min-h-0 overflow-hidden flex flex-col px-2 pb-2 relative">
+            <TrackerListContent
+              ref="listContentMobileRef"
+              v-model:list-tab="listTab"
+              :list-tabs="LIST_TABS"
+              :visible-trackers-tab="visibleTrackersTab"
+              :visible-shared-tab="visibleSharedTab"
+              :visible-groups-tab="visibleGroupsTab"
+              :visible-shared-groups-tab="visibleSharedGroupsTab"
+              :selected-id="selectedId"
+              :active-group-id="activeGroupId"
+              :highlighted-id="highlightedId"
+              :hidden-track-ids="hiddenTrackIds"
+              :hidden-group-ids="hiddenGroupIds"
+              :loading="loading"
+              :list-empty-for-tab="listEmptyForTab"
+              :scroll-container-class="['flex-1 min-h-0 space-y-3 px-1 py-1', atPeek ? 'mobile-drawer-content--no-scroll' : 'overflow-y-auto custom-scrollbar'].join(' ')"
+              action-opacity-class="opacity-60"
+              @group-click="onGroupListClick"
+              @track-click="onTrackListClick"
+              @edit-track="openEditTrackSidebar"
+              @open-params="(id) => openSidebar('params', id)"
+              @leave-group="leaveGroup"
+              @edit-group="openEditGroupModal"
+              @view-group="openGroupQuickView"
+              @toggle-visibility="toggleTrackVisibility"
+              @toggle-group-visibility="toggleGroupVisibility"
+              @clear-highlight="highlightedId = null"
+            />
+          </div>
+        </template>
+      </MobileMapDrawer>
     </Teleport>
 
     <DiscoverTrackersModal
@@ -434,6 +415,7 @@ import MapSidebarPanel from './MapSidebarPanel.vue';
 import SharedWithMeSidebarContent from './SharedWithMeSidebarContent.vue';
 import LiveTrackSettingsSidebarContent from './LiveTrackSettingsSidebarContent.vue';
 import TrackerListContent from './TrackerListContent.vue';
+import MobileMapDrawer from './MobileMapDrawer.vue';
 import { getCoordsSortedByTime, getTrackDirectionAngle, splitTrackIntoSegments } from './trackGeometry.js';
 import { getArrowImageId, ensureArrowImage } from './trackArrowMap.js';
 import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } from './mapTileUtils.js';
@@ -472,7 +454,7 @@ const LIST_TABS = [
 
 export default {
   name: 'LiveTrackView',
-  components: { BaseButton, TrackSidebar, TrackDirectionIcon, LatestParamsModal, GroupsSidebarContent, DiscoverTrackersModal, SharedItemsModal, ShareSettingsModal, PublicSharePopup, MapLayerSidebar, MapSidebarPanel, SharedWithMeSidebarContent, LiveTrackSettingsSidebarContent, TrackerListContent, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon },
+  components: { BaseButton, TrackSidebar, TrackDirectionIcon, LatestParamsModal, GroupsSidebarContent, DiscoverTrackersModal, SharedItemsModal, ShareSettingsModal, PublicSharePopup, MapLayerSidebar, MapSidebarPanel, SharedWithMeSidebarContent, LiveTrackSettingsSidebarContent, TrackerListContent, MobileMapDrawer, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon },
   setup() {
     const api = inject('extensionApi');
     const trackers = ref([]);
@@ -499,14 +481,7 @@ export default {
     const isSheetOpen = ref(false);
     let mobileQueryListener = null;
 
-    const mobileDrawerEl = ref(null);
-    const mobileDrawerHeightPx = ref(0);
-    const isDrawerDragging = ref(false);
-    const mobileDrawerDrag = ref({ active: false, startY: 0, startHeight: 0 });
-    let drawerMouseUpListener = null;
-    let drawerMouseMoveListener = null;
-    let drawerRafId = null;
-    let pendingDragY = null;
+    const mobileDrawerRef = ref(null);
 
     const { height: windowHeight } = useWindowSize();
     const rootContainer = ref(null);
@@ -528,24 +503,6 @@ export default {
       const TRACKER_HEADER_PX = 64;
       const BUFFER_PX = 4;
       return Math.max(65, windowHeight.value - APP_NAV_PX - TRACKER_HEADER_PX - BUFFER_PX);
-    });
-
-    const trackerSheetSnapPoints = computed(() => {
-      return ['25%', trackerMaxHeight.value];
-    });
-
-    const mobileDrawerSnapPx = computed(() => {
-      const h = windowHeight.value;
-      return [
-        Math.round(h * 0.25),
-        trackerMaxHeight.value
-      ];
-    });
-
-    const isDrawerAtPeek = computed(() => {
-      const current = mobileDrawerHeightPx.value || mobileDrawerSnapPx.value[0];
-      const peek = mobileDrawerSnapPx.value[0];
-      return current <= peek + 2;
     });
 
     function isRecentlyUpdated(track) {
@@ -1406,69 +1363,7 @@ export default {
     /** Collapse drawer to 25% – just set height; no close animation, no bounce. */
     function collapseDrawerToPeek() {
       if (!isMobileView.value) return;
-      const snaps = mobileDrawerSnapPx.value;
-      if (snaps[0] != null) mobileDrawerHeightPx.value = snaps[0];
-    }
-
-    function onDrawerDragStart(e) {
-      const y = e.touches ? e.touches[0].clientY : e.clientY;
-      mobileDrawerDrag.value = { active: true, startY: y, startHeight: mobileDrawerHeightPx.value };
-      isDrawerDragging.value = true;
-      if (!e.touches) {
-        drawerMouseMoveListener = (e2) => onDrawerDragMove(e2);
-        drawerMouseUpListener = () => onDrawerDragEnd();
-        document.addEventListener('mousemove', drawerMouseMoveListener);
-        document.addEventListener('mouseup', drawerMouseUpListener);
-      }
-    }
-
-    function applyDrawerHeightFromDrag(y) {
-      const drag = mobileDrawerDrag.value;
-      if (!drag.active) return;
-      const deltaY = drag.startY - y;
-      const snaps = mobileDrawerSnapPx.value;
-      const minH = snaps[0];
-      const maxH = snaps[1];
-      let h = Math.round(drag.startHeight + deltaY);
-      h = Math.max(minH, Math.min(maxH, h));
-      mobileDrawerHeightPx.value = h;
-    }
-
-    function onDrawerDragMove(e) {
-      if (!mobileDrawerDrag.value.active) return;
-      const y = e.touches ? e.touches[0].clientY : e.clientY;
-      pendingDragY = y;
-      if (drawerRafId == null) {
-        drawerRafId = requestAnimationFrame(() => {
-          drawerRafId = null;
-          if (pendingDragY != null) {
-            applyDrawerHeightFromDrag(pendingDragY);
-            pendingDragY = null;
-          }
-        });
-      }
-    }
-
-    function onDrawerDragEnd() {
-      if (!mobileDrawerDrag.value.active) return;
-      if (drawerRafId != null) {
-        cancelAnimationFrame(drawerRafId);
-        drawerRafId = null;
-      }
-      if (pendingDragY != null) applyDrawerHeightFromDrag(pendingDragY);
-      pendingDragY = null;
-      mobileDrawerDrag.value = { active: false, startY: 0, startHeight: 0 };
-      isDrawerDragging.value = false;
-      if (drawerMouseMoveListener) {
-        document.removeEventListener('mousemove', drawerMouseMoveListener);
-        document.removeEventListener('mouseup', drawerMouseUpListener);
-        drawerMouseUpListener = null;
-        drawerMouseMoveListener = null;
-      }
-      const snaps = mobileDrawerSnapPx.value;
-      const current = mobileDrawerHeightPx.value;
-      const mid = (snaps[0] + snaps[1]) / 2;
-      mobileDrawerHeightPx.value = current >= mid ? snaps[1] : snaps[0];
+      mobileDrawerRef.value?.collapseToPeek?.();
     }
 
     function fitBoundsFromCoords(coords) {
@@ -2250,11 +2145,9 @@ export default {
       const mq = window.matchMedia('(max-width: 639px)');
       isMobileView.value = mq.matches;
       isSheetOpen.value = mq.matches;
-      if (mq.matches) mobileDrawerHeightPx.value = mobileDrawerSnapPx.value[0];
-      mobileQueryListener = (e) => { 
-        isMobileView.value = e.matches; 
+      mobileQueryListener = (e) => {
+        isMobileView.value = e.matches;
         isSheetOpen.value = e.matches;
-        if (e.matches && mobileDrawerHeightPx.value === 0) mobileDrawerHeightPx.value = mobileDrawerSnapPx.value[0];
       };
       mq.addEventListener('change', mobileQueryListener);
 
@@ -2282,11 +2175,6 @@ export default {
     );
 
     onBeforeUnmount(() => {
-      if (drawerRafId != null) cancelAnimationFrame(drawerRafId);
-      if (drawerMouseMoveListener) {
-        document.removeEventListener('mousemove', drawerMouseMoveListener);
-        document.removeEventListener('mouseup', drawerMouseUpListener);
-      }
       if (mobileQueryListener && typeof window !== 'undefined') {
         window.matchMedia('(max-width: 639px)').removeEventListener('change', mobileQueryListener);
         mobileQueryListener = null;
@@ -2399,14 +2287,7 @@ export default {
       selectedLayer,
       isMobileView,
       isSheetOpen,
-      mobileDrawerEl,
-      mobileDrawerHeightPx,
-      mobileDrawerSnapPx,
-      isDrawerAtPeek,
-      isDrawerDragging,
-      onDrawerDragStart,
-      onDrawerDragMove,
-      onDrawerDragEnd,
+      mobileDrawerRef,
       formatTime,
       goHome,
       onLayerChange,
@@ -2436,8 +2317,7 @@ export default {
       onTrackDeleted,
       isRecentlyUpdated,
       rootContainer,
-      trackerMaxHeight,
-      trackerSheetSnapPoints
+      trackerMaxHeight
     };
   }
 };
@@ -2455,58 +2335,6 @@ export default {
 :deep(.live-track-map-column *:focus-visible) {
   outline: none !important;
   box-shadow: none !important;
-}
-
-.mobile-tracker-drawer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 60;
-  background: #fff;
-  border: 1px solid #3b82f6;
-  border-bottom: none;
-  border-radius: 16px 16px 0 0;
-  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.1);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  max-height: v-bind("trackerMaxHeight + 'px'");
-  transition: none;
-}
-.mobile-tracker-drawer--dragging {
-  transition: none;
-  will-change: height;
-}
-
-.mobile-drawer-handle {
-  flex-shrink: 0;
-  padding: 14px 16px 10px;
-  cursor: grab;
-  touch-action: none;
-  display: flex;
-  justify-content: center;
-}
-.mobile-drawer-handle:active {
-  cursor: grabbing;
-}
-
-.mobile-drawer-handle-bar {
-  width: 36px;
-  height: 4px;
-  border-radius: 2px;
-  background: rgba(0, 0, 0, 0.28);
-}
-
-.mobile-drawer-drag-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  cursor: grab;
-}
-
-.mobile-drawer-drag-overlay:active {
-  cursor: grabbing;
 }
 
 .mobile-drawer-content--no-scroll {
