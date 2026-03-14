@@ -348,6 +348,40 @@ def broadcast_track_updated(
 
 
 LIVE_TRACK_PENDING_PREFIX = "live_track_pending:"
+LIVE_TRACK_FLUSHER_ALIVE_KEY = "live_track_flusher_alive"
+LIVE_TRACK_FLUSH_TASK_NAME = "extensions.live_track.flush_pending_broadcasts"
+LIVE_TRACK_FLUSH_SCHEDULE_KEY = "live_track_flush_scheduled"
+LIVE_TRACK_FLUSH_DELAY_SECONDS = 0.2
+
+
+def set_flusher_alive() -> None:
+    """Write current timestamp to Redis so the server can verify the flusher process is running."""
+    try:
+        redis_client = get_redis_connection()
+        redis_client.set(LIVE_TRACK_FLUSHER_ALIVE_KEY, str(time.time()))
+    except Exception:
+        pass
+
+
+def get_flusher_alive_timestamp() -> float | None:
+    """Return the flusher alive timestamp from Redis, or None if missing or on error."""
+    try:
+        redis_client = get_redis_connection()
+        raw = redis_client.get(LIVE_TRACK_FLUSHER_ALIVE_KEY)
+        if raw is None:
+            return None
+        s = raw.decode() if isinstance(raw, bytes) else raw
+        return float(s)
+    except Exception:
+        return None
+
+
+def is_flusher_alive(max_age_seconds: float) -> bool:
+    """Return True if the flusher has written an alive timestamp within the last max_age_seconds."""
+    ts = get_flusher_alive_timestamp()
+    if ts is None:
+        return False
+    return (time.time() - ts) <= max_age_seconds
 
 
 def queue_broadcast_track_updated(
@@ -380,7 +414,36 @@ def queue_broadcast_track_updated(
     }
     key = f"{LIVE_TRACK_PENDING_PREFIX}{track_id}"
     redis_client.rpush(key, json.dumps(payload))
+    _schedule_live_track_flush(redis_client)
     return True
+
+
+def _schedule_live_track_flush(redis_client) -> None:
+    """
+    Debounce Celery flush scheduling to avoid one task per ingress call.
+    """
+    lock_seconds = max(1, int(LIVE_TRACK_FLUSH_DELAY_SECONDS) + 1)
+    acquired = redis_client.set(
+        LIVE_TRACK_FLUSH_SCHEDULE_KEY,
+        "1",
+        nx=True,
+        ex=lock_seconds,
+    )
+    if not acquired:
+        return
+
+    try:
+        from website.celery_app import celery_app
+
+        celery_app.send_task(
+            LIVE_TRACK_FLUSH_TASK_NAME,
+            queue="live_track",
+            countdown=LIVE_TRACK_FLUSH_DELAY_SECONDS,
+        )
+    except Exception:
+        # If queueing fails, clear lock so a later ingress can re-attempt scheduling.
+        redis_client.delete(LIVE_TRACK_FLUSH_SCHEDULE_KEY)
+        raise
 
 
 def flush_pending_broadcasts() -> int:
@@ -389,6 +452,7 @@ def flush_pending_broadcasts() -> int:
         redis_client = get_redis_connection()
     except Exception:
         return 0
+    redis_client.delete(LIVE_TRACK_FLUSH_SCHEDULE_KEY)
     keys = redis_client.keys(f"{LIVE_TRACK_PENDING_PREFIX}*")
     if not keys:
         return 0
@@ -430,3 +494,8 @@ def flush_pending_broadcasts() -> int:
             async_to_sync(channel_layer.group_send)(f"live_track_{user_id}", message)
         flushed += 1
     return flushed
+
+
+def flush_pending_broadcasts_task() -> int:
+    """Celery task callback for flushing buffered live-track updates."""
+    return flush_pending_broadcasts()

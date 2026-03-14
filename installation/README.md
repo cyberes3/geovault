@@ -148,17 +148,13 @@ Example Nginx config file is located at `geovault nginx.conf`.
 
 ```shell
 cp installation/geovault.service /etc/systemd/system/geovault.service
+cp installation/geovault-celery.service /etc/systemd/system/geovault-celery.service
+cp installation/geovault-celery-beat.service /etc/systemd/system/geovault-celery-beat.service
 systemctl daemon-reload
-systemctl enable --now geovault
+systemctl enable --now geovault-celery geovault-celery-beat geovault
+systemctl status geovault-celery
+systemctl status geovault-celery-beat
 systemctl status geovault
-```
-
-Flusher service for the live track extension:
-```shell
-sudo cp installation/geovault-live-track-flush.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now geovault-live-track-flush
-sudo systemctl status geovault-live-track-flush
 ```
 
 ## Overpass Server

@@ -4,6 +4,7 @@ import os
 import sys
 
 from django.apps import AppConfig
+from django.utils.module_loading import import_string
 
 
 class DatamanageConfig(AppConfig):
@@ -12,7 +13,7 @@ class DatamanageConfig(AppConfig):
 
     def ready(self):
         """
-        Start background services when Django is ready.
+        Register process lifecycle hooks when Django is ready.
         
         IMPORTANT: Preventing duplicate background service starts
         =========================================================
@@ -41,7 +42,10 @@ class DatamanageConfig(AppConfig):
         # If RUN_MAIN is set but not 'true', we're in the reloader process - skip.
         # If RUN_MAIN is not set at all, we're in production (WSGI/ASGI) - continue.
         run_main = os.environ.get('RUN_MAIN')
-        if run_main is not None and run_main != 'true':
+        is_runserver = any(cmd in sys.argv for cmd in ('runserver', 'runserver_plus'))
+        if is_runserver and run_main != 'true':
+            return
+        if not is_runserver and run_main is not None and run_main != 'true':
             return
         
         # Don't start services during migrations, management commands, or tests
@@ -55,20 +59,9 @@ class DatamanageConfig(AppConfig):
             if command != 'runserver' and 'manage.py' in sys.argv[0]:
                 return
 
-        # Start the replacement cleanup service (idempotent - only starts once)
-        # Ensure Django is fully initialized
-        # Import here to avoid circular import issues during app loading
-        try:
-            from api.services.replacement_cleanup_service import ensure_service_started
-            ensure_service_started()
-        except Exception as e:
-            # Log but don't fail app initialization if service fails to start
-            apps_logger.error(f"Failed to start replacement cleanup service: {e}", exc_info=True)
-        
         # Register queue worker cleanup on shutdown
-        # Import here to avoid circular import during app initialization
         try:
-            from geo_lib.processing.queue_worker import stop_all_workers
+            stop_all_workers = import_string("geo_lib.processing.queue_worker.stop_all_workers")
             atexit.register(stop_all_workers)
             apps_logger.info("Registered queue worker cleanup handler")
         except Exception as e:

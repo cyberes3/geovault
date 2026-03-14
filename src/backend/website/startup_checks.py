@@ -27,10 +27,12 @@ import importlib.util
 import os
 import pwd
 import sys
+import time
 import traceback
 from pathlib import Path
 
 from asgiref.sync import async_to_sync
+from celery.exceptions import TimeoutError as CeleryTimeoutError
 from channels.layers import get_channel_layer
 from django.conf import settings
 from django.contrib.sites.models import Site
@@ -41,9 +43,11 @@ from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.file_types import FILE_TYPE_CONFIGS
 from geo_lib.processing.job_recovery import recover_interrupted_jobs as do_job_recovery
 from geo_lib.utils.redis_connection import get_redis_connection
+from website.celery_app import celery_app
 from website.config_loader import get_config_loader
 from website.settings_utils import get_required_setting
 from website.extensions.extension_loader import get_extension_registry
+from api.tasks import CELERY_BEAT_HEARTBEAT_KEY
 
 _logger = get_tagged_logger('startup')
 
@@ -875,6 +879,93 @@ def check_extensions():
         return False
 
 
+def check_live_track_flusher():
+    """
+    Legacy compatibility check retained as a no-op after Celery cutover.
+    """
+    _logger.info("✓ Live Track flusher check skipped (Celery-based flush enabled)")
+    return True
+
+
+def _log_celery_service_help(service_name: str, additional_hint: str = "") -> None:
+    """Log concise operator guidance when a Celery startup check fails."""
+    _logger.error("  Celery startup help:")
+    _logger.error(f"  - Check status: sudo systemctl status {service_name}")
+    _logger.error(f"  - View logs: sudo journalctl -u {service_name} -n 120 --no-pager")
+    _logger.error("  - Verify Redis: sudo systemctl status redis redis-server")
+    _logger.error("  - Restart: sudo systemctl restart geovault-celery geovault-celery-beat geovault")
+    if additional_hint:
+        _logger.error(f"  - Hint: {additional_hint}")
+
+
+def check_celery_worker():
+    """
+    Verify Celery worker availability by dispatching a lightweight task and awaiting result.
+    """
+    try:
+        config_loader = get_config_loader()
+        timeout_seconds = max(1, config_loader.get_int("celery.worker_startup_timeout_seconds", 5))
+        result = celery_app.send_task("api.celery_health.ping_worker", queue="maintenance")
+        value = result.get(timeout=timeout_seconds)
+        if value != "pong":
+            _logger.error("✗ Celery worker check failed: unexpected response %r", value)
+            return False
+        _logger.info("✓ Celery worker is reachable")
+        return True
+    except CeleryTimeoutError:
+        _logger.error(
+            "✗ Celery worker check failed: timed out waiting for ping task result "
+            "(worker did not respond before timeout)."
+        )
+        _log_celery_service_help(
+            "geovault-celery",
+            "Ensure the worker is running and subscribed to the 'maintenance' queue.",
+        )
+        return False
+    except Exception as e:
+        _logger.error(f"✗ Celery worker check failed: {e}")
+        _log_celery_service_help("geovault-celery")
+        return False
+
+
+def check_celery_beat():
+    """
+    Verify celery-beat scheduling by checking for a recent Redis heartbeat timestamp.
+    """
+    try:
+        config_loader = get_config_loader()
+        max_age = max(5, config_loader.get_int("celery.beat_heartbeat_max_age_seconds", 20))
+        wait_seconds = max(0, config_loader.get_int("celery.beat_startup_wait_seconds", 10))
+        deadline = time.time() + wait_seconds
+        redis_client = get_redis_connection()
+
+        while True:
+            raw = redis_client.get(CELERY_BEAT_HEARTBEAT_KEY)
+            if raw:
+                try:
+                    heartbeat_ts = float(raw)
+                    if (time.time() - heartbeat_ts) <= max_age:
+                        _logger.info("✓ Celery beat heartbeat is recent")
+                        return True
+                except (TypeError, ValueError):
+                    pass
+
+            if time.time() >= deadline:
+                break
+            time.sleep(1)
+
+        _logger.error("✗ Celery beat check failed: heartbeat missing or stale.")
+        _log_celery_service_help(
+            "geovault-celery-beat",
+            "Beat must be running so periodic tasks can update the heartbeat key.",
+        )
+        return False
+    except Exception as e:
+        _logger.error(f"✗ Celery beat check failed: {e}")
+        _log_celery_service_help("geovault-celery-beat")
+        return False
+
+
 def run_startup_checks():
     """
     Run all startup checks and exit if any fail.
@@ -922,6 +1013,8 @@ def run_startup_checks():
         ("File Type Max Size", check_file_type_max_size),
         ("Site Configuration", check_site_configuration),
         ("Extensions", check_extensions),
+        ("Celery worker", check_celery_worker),
+        ("Celery beat", check_celery_beat),
     ]
 
     failed_checks = []

@@ -19,6 +19,10 @@ from website.extensions.extension_hooks import (
     clear_extension_context,
     register_websocket_route,
     get_registered_websocket_routes,
+    register_bg_task,
+    register_periodic_bg_task,
+    get_registered_bg_tasks,
+    get_registered_periodic_bg_tasks,
 )
 import website.extensions.extension_hooks as extension_hooks_module
 from geo_lib.processing.hooks import register_import_hook, execute_import_hooks
@@ -37,11 +41,15 @@ class TestExtensionHooks:
         clear_extension_context()
         # Clear any registered hooks
         extension_hooks_module._hook_registry.clear()
+        extension_hooks_module._bg_task_registry.clear()
+        extension_hooks_module._periodic_bg_task_registry.clear()
     
     def teardown_method(self):
         """Clear extension context after each test."""
         clear_extension_context()
         extension_hooks_module._hook_registry.clear()
+        extension_hooks_module._bg_task_registry.clear()
+        extension_hooks_module._periodic_bg_task_registry.clear()
 
     def test_register_websocket_route_with_context(self):
         """Registering a WebSocket route with extension context adds it to the registry."""
@@ -316,6 +324,62 @@ class TestExtensionHooks:
         
         clear_extension_context()
 
+    def test_register_bg_task_without_context_raises(self):
+        """Background task registration without extension context should fail."""
+        def callback():
+            return True
+
+        with pytest.raises(ValueError, match="Cannot register background task outside of extension context"):
+            register_bg_task("task1", callback)
+
+    def test_register_bg_task_with_context_prefixes_name(self):
+        """Background task names should be extension-prefixed."""
+        set_extension_context("test_extension")
+        try:
+            def callback():
+                return True
+
+            task_name = register_bg_task("task1", callback, queue="extensions")
+            assert task_name == "extensions.test_extension.task1"
+            tasks = get_registered_bg_tasks()
+            assert len(tasks) == 1
+            assert tasks[0]["task_name"] == "extensions.test_extension.task1"
+            assert tasks[0]["extension_name"] == "test_extension"
+            assert tasks[0]["queue"] == "extensions"
+        finally:
+            clear_extension_context()
+
+    def test_register_periodic_bg_task_without_context_raises(self):
+        """Periodic registration without extension context should fail."""
+        with pytest.raises(ValueError, match="Cannot register periodic background task outside of extension context"):
+            register_periodic_bg_task("sched1", "extensions.test_extension.task1", 60.0)
+
+    def test_register_periodic_bg_task_with_context(self):
+        """Periodic registration stores schedule metadata."""
+        set_extension_context("test_extension")
+        try:
+            def callback():
+                return True
+
+            task_name = register_bg_task("task1", callback)
+            schedule_name = register_periodic_bg_task(
+                "every_minute",
+                task_name,
+                60.0,
+                args=[1],
+                kwargs={"a": 2},
+                options={"queue": "extensions"},
+            )
+            assert schedule_name == "extensions.test_extension.every_minute"
+            items = get_registered_periodic_bg_tasks()
+            assert len(items) == 1
+            assert items[0]["task_name"] == task_name
+            assert items[0]["args"] == [1]
+            assert items[0]["kwargs"] == {"a": 2}
+            assert items[0]["options"] == {"queue": "extensions"}
+        finally:
+            clear_extension_context()
+
 
 @pytest.mark.django_db
 class TestExtensionHooksIntegration:
@@ -325,6 +389,8 @@ class TestExtensionHooksIntegration:
         """Clear hooks before each test."""
         clear_extension_context()
         extension_hooks_module._hook_registry.clear()
+        extension_hooks_module._bg_task_registry.clear()
+        extension_hooks_module._periodic_bg_task_registry.clear()
         from geo_lib.processing.hooks import _import_hooks
         _import_hooks.clear()
     
@@ -332,6 +398,8 @@ class TestExtensionHooksIntegration:
         """Clear hooks after each test."""
         clear_extension_context()
         extension_hooks_module._hook_registry.clear()
+        extension_hooks_module._bg_task_registry.clear()
+        extension_hooks_module._periodic_bg_task_registry.clear()
         from geo_lib.processing.hooks import _import_hooks
         _import_hooks.clear()
     
@@ -528,6 +596,32 @@ class TestExtensionAppConfig:
             config.ready()
         
         # Should not be called in reloader
+        assert ready_called['called'] is False
+
+    def test_ready_skips_in_runserver_parent_when_run_main_missing(self):
+        """Test that ready() skips runserver parent process when RUN_MAIN is missing."""
+        from website.extensions.extension_base import ExtensionAppConfig
+        import os
+        from types import ModuleType
+
+        ready_called = {'called': False}
+
+        mock_module = ModuleType('test_extension.src.backend')
+        mock_module.__file__ = '/fake/path/test_extension/src/backend/__init__.py'
+
+        class TestExtensionConfig(ExtensionAppConfig):
+            name = 'test_extension.src.backend'
+            label = 'test_extension'
+
+            def extension_ready(self):
+                ready_called['called'] = True
+
+        config = TestExtensionConfig('test_extension', mock_module)
+
+        with patch.dict(os.environ, {}, clear=True):
+            with patch('sys.argv', ['manage.py', 'runserver']):
+                config.ready()
+
         assert ready_called['called'] is False
     
     def test_ready_skips_during_migrations(self):

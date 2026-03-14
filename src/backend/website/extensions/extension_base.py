@@ -6,6 +6,7 @@ extension_ready() method to perform initialization tasks like hook registration.
 """
 import logging
 import os
+import sys
 
 from django.apps import AppConfig
 
@@ -55,14 +56,15 @@ class ExtensionAppConfig(AppConfig):
         3. Calls extension_ready() if implemented
         4. Clears extension context after initialization
         """
-        # Skip if we're in the reloader process (development only)
+        # Skip runserver reloader parent process (RUN_MAIN is only 'true' in child).
         run_main = os.environ.get('RUN_MAIN')
-        if run_main is not None and run_main != 'true':
+        is_runserver = any(cmd in sys.argv for cmd in ('runserver', 'runserver_plus'))
+        if is_runserver and run_main != 'true':
+            return
+        if not is_runserver and run_main is not None and run_main != 'true':
             return
 
         # Don't initialize during migrations, management commands, or tests
-        # Check if we're in a management command context
-        import sys
         if 'migrate' in sys.argv or 'makemigrations' in sys.argv:
             return
 

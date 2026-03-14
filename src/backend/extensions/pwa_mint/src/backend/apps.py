@@ -1,7 +1,21 @@
 import logging
 import sys
+from datetime import timedelta
 
+from website.extensions.extension_hooks import (
+    register_bg_task,
+    register_periodic_bg_task,
+    register_well_known,
+)
 from website.extensions.extension_base import ExtensionAppConfig
+
+from .utils import get_keystore_info
+from .views import asset_links
+from .worker import (
+    enqueue_startup_check,
+    pwa_check_and_regenerate_task,
+    pwa_regenerate_task,
+)
 
 logger = logging.getLogger("website.pwa_mint")
 
@@ -27,12 +41,32 @@ def _is_management_command():
     return False
 
 
+def _is_celery_process():
+    """True when running a celery worker/beat process."""
+    if len(sys.argv) < 1:
+        return False
+    argv = " ".join(arg.lower() for arg in sys.argv)
+    return "celery" in argv and (" worker" in f" {argv}" or " beat" in f" {argv}")
+
+
+def _should_enqueue_startup_check():
+    """
+    Enqueue startup check only from the primary web process.
+    - Never from tests, management commands, or celery worker/beat.
+    - Never from runserver/runserver_plus (dev autoreload can trigger many restarts).
+    """
+    if _is_running_tests() or _is_management_command() or _is_celery_process():
+        return False
+
+    if any(arg in ("runserver", "runserver_plus") for arg in sys.argv):
+        return False
+
+    return True
+
+
 class PwaMintConfig(ExtensionAppConfig):
     """
-    PWA Minting extension. Does not block server or tests:
-    - Worker is never started during tests.
-    - When running the server, the APK regeneration worker runs in a daemon thread
-      (start_worker() returns immediately); no startup or request path is blocked.
+    PWA Minting extension using Celery tasks for background regeneration.
     """
     name = 'extensions.pwa_mint.src.backend'
     label = 'pwa_mint'
@@ -40,9 +74,6 @@ class PwaMintConfig(ExtensionAppConfig):
 
     def extension_ready(self):
         # Register .well-known items
-        from website.extensions.extension_hooks import register_well_known
-        from .views import asset_links
-
         try:
             register_well_known('assetlinks.json', asset_links)
         except ValueError as e:
@@ -52,23 +83,31 @@ class PwaMintConfig(ExtensionAppConfig):
 
         # Keystore check is quick; keep it on startup.
         try:
-            from .utils import get_keystore_info
             get_keystore_info()
         except Exception as e:
             logger.warning(f"Failed to initialize keystore on startup: {e}")
 
-        # Do not start worker during tests (would block: 30s wait + APK HTTP request).
-        if _is_running_tests():
-            return
-
-        # Do not start worker for management commands (avoids APK check log noise).
-        if _is_management_command():
-            return
-
-        # Worker runs in a daemon thread; returns immediately, never blocks server.
         try:
-            from .worker import start_worker
-            start_worker()
-            logger.info("PWA regeneration worker started successfully")
+            check_task_name = register_bg_task(
+                "check_and_regenerate",
+                pwa_check_and_regenerate_task,
+                queue="extensions",
+            )
+            register_bg_task(
+                "regenerate",
+                pwa_regenerate_task,
+                queue="extensions",
+            )
+            register_periodic_bg_task(
+                "daily_check",
+                check_task_name,
+                timedelta(hours=24),
+                options={"queue": "extensions"},
+            )
+
+            # Startup enqueue should happen only from the primary web process.
+            if _should_enqueue_startup_check():
+                enqueue_startup_check(check_task_name)
+            logger.info("PWA Celery tasks registered successfully")
         except Exception as e:
-            logger.error(f"Failed to start PWA regeneration worker: {e}", exc_info=True)
+            logger.error(f"Failed to register PWA Celery tasks: {e}", exc_info=True)

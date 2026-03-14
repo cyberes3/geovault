@@ -11,6 +11,10 @@ failures.txt
 todo.txt
 build_log.txt
 
+celerybeat-schedule
+celerybeat-schedule-shm
+celerybeat-schedule-wal
+
 external sources/
 
 # symlinked from other repository source

@@ -1,6 +1,7 @@
 [Unit]
 Description=GeoVault Server
-After=network.target
+After=network.target redis.service geovault-celery.service geovault-celery-beat.service
+Requires=redis.service geovault-celery.service geovault-celery-beat.service
 
 [Service]
 Type=simple

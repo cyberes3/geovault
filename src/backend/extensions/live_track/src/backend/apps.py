@@ -1,5 +1,10 @@
+import logging
+from importlib import import_module
+
 from website.extensions.extension_base import ExtensionAppConfig
-from website.extensions.extension_hooks import register_websocket_route
+from website.extensions.extension_hooks import register_bg_task, register_websocket_route
+
+logger = logging.getLogger(__name__)
 
 
 class LiveTrackConfig(ExtensionAppConfig):
@@ -9,8 +14,21 @@ class LiveTrackConfig(ExtensionAppConfig):
     verbose_name = "Live Track"
 
     def extension_ready(self):
-        from .consumers import LiveTrackOnlyConsumer
+        base_module = self.module.__name__
+        consumers_module = import_module(f"{base_module}.consumers")
+        helpers_module = import_module(f"{base_module}.helpers")
+
+        live_track_consumer = getattr(consumers_module, "LiveTrackOnlyConsumer")
+        flush_pending_broadcasts_task = getattr(
+            helpers_module, "flush_pending_broadcasts_task"
+        )
         register_websocket_route(
             r"ws/extensions/live-track/trackers-live/$",
-            LiveTrackOnlyConsumer,
+            live_track_consumer,
         )
+        register_bg_task(
+            "flush_pending_broadcasts",
+            flush_pending_broadcasts_task,
+            queue="live_track",
+        )
+        logger.info("Live Track Celery flush task registered")

@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 import logging
 import os
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 from website.config_loader import get_config_loader
@@ -282,6 +283,45 @@ CHANNEL_LAYERS = {
                 config.get_int('redis.port', 6379)
             )],
         },
+    },
+}
+
+# Celery configuration
+_default_celery_broker_url = (
+    f"redis://{config.get_str('redis.host', '127.0.0.1')}:{config.get_int('redis.port', 6379)}/3"
+)
+_default_celery_result_backend = (
+    f"redis://{config.get_str('redis.host', '127.0.0.1')}:{config.get_int('redis.port', 6379)}/4"
+)
+
+CELERY_BROKER_URL = config.get_with_env_override(
+    "celery.broker_url",
+    "CELERY_BROKER_URL",
+    _default_celery_broker_url,
+)
+CELERY_RESULT_BACKEND = config.get_with_env_override(
+    "celery.result_backend",
+    "CELERY_RESULT_BACKEND",
+    _default_celery_result_backend,
+)
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_ENABLE_UTC = True
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_DEFAULT_QUEUE = config.get_str("celery.default_queue", "default")
+CELERY_TASK_ALWAYS_EAGER = config.get_bool("celery.task_always_eager", False)
+CELERY_TASK_EAGER_PROPAGATES = config.get_bool("celery.task_eager_propagates", True)
+CELERY_BEAT_SCHEDULE = {
+    "replacement_cleanup_every_60_seconds": {
+        "task": "api.replacement_cleanup.cleanup_orphaned_replacements",
+        "schedule": timedelta(seconds=60),
+        "options": {"queue": "maintenance"},
+    },
+    "celery_beat_heartbeat_every_5_seconds": {
+        "task": "api.celery_health.beat_heartbeat",
+        "schedule": timedelta(seconds=5),
+        "options": {"queue": "maintenance"},
     },
 }
 

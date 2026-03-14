@@ -12,7 +12,7 @@ VISIBILITY_PUBLIC = "public"
 VISIBILITY_CHOICES = [
     (VISIBILITY_PRIVATE, "Private"),
     (VISIBILITY_SHARED, "Shared with specific users"),
-    (VISIBILITY_PUBLIC, "Public (all authenticated users)"),
+    (VISIBILITY_PUBLIC, "Public"),
 ]
 
 

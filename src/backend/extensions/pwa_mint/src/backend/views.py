@@ -13,6 +13,7 @@ import io
 import logging
 from pathlib import Path
 from .utils import get_assetlinks, get_keystore_info, get_keystore_base64, get_apk_cache_path
+from website.celery_app import celery_app
 from website.config_loader import get_config_loader
 
 logger = logging.getLogger("website.pwa_mint")
@@ -163,14 +164,14 @@ def _perform_pwa_generation(request):
 @require_POST
 def admin_force_regenerate_pwa_apk(request):
     """
-    Admin-only endpoint to force APK regeneration synchronously.
-    Blocks until the build completes (typically 1–2 minutes). Staff or superuser only.
+    Admin-only endpoint to force APK regeneration asynchronously via Celery.
     """
     if not request.user.is_staff and not request.user.is_superuser:
         return JsonResponse({"error": "Forbidden. Staff or superuser required."}, status=403)
-    logger.info("Admin %s triggered synchronous PWA APK regeneration", request.user.username)
-    response, success = _perform_pwa_generation(request)
-    return response
+    task_name = "extensions.pwa_mint.regenerate"
+    logger.info("Admin %s queued PWA APK regeneration task", request.user.username)
+    celery_app.send_task(task_name, queue="extensions")
+    return JsonResponse({"status": "queued", "task": task_name}, status=202)
 
 
 @login_required

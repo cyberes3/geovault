@@ -1,0 +1,16 @@
+[Unit]
+Description=GeoVault Celery Worker
+After=network.target redis.service
+Requires=redis.service
+
+[Service]
+Type=simple
+User=geovault
+SyslogIdentifier=geovault-celery
+WorkingDirectory=/srv/geovault/geovault/src/backend
+ExecStart=/srv/geovault/geovault/src/backend/venv/bin/celery -A website.celery_app worker --loglevel=INFO --queues=default,maintenance,extensions,live_track
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=GeoVault Celery Beat Scheduler
+After=network.target redis.service geovault-celery.service
+Requires=redis.service geovault-celery.service
+
+[Service]
+Type=simple
+User=geovault
+SyslogIdentifier=geovault-celery-beat
+WorkingDirectory=/srv/geovault/geovault/src/backend
+ExecStartPre=/usr/bin/mkdir -p /srv/geovault/geovault/src/backend/data/celery
+ExecStart=/srv/geovault/geovault/src/backend/venv/bin/celery -A website.celery_app beat --loglevel=INFO --schedule /srv/geovault/geovault/src/backend/data/celery/celerybeat-schedule
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

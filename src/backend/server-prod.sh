@@ -13,6 +13,9 @@ HOST="0.0.0.0"
 PORT="8000"
 
 # Note: Daphne is single-process. For multiple workers, run multiple instances.
+# Celery worker and beat are managed by systemd units:
+# - geovault-celery.service
+# - geovault-celery-beat.service
 exec daphne \
     --bind "$HOST" \
     --port "$PORT" \

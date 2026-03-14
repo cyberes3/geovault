@@ -11,6 +11,10 @@ python manage.py migrate --no-input
 # Run Django dev server
 python -u manage.py runserver 0.0.0.0:8000
 
+# Run Celery in separate terminals:
+# celery -A website.celery_app worker --loglevel=info --queues=default,maintenance,extensions,live_track
+# celery -A website.celery_app beat --loglevel=info
+
 # Heplful Reminders
 # https://172.0.3.105/pgadmin4
 # python3 manage.py clear_import_queue --force

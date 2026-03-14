@@ -1169,7 +1169,6 @@ export default {
           })
         );
         trackers.value = withGeometry;
-        if (withGeometry.length === 1 && !selectedId.value) selectedId.value = withGeometry[0].id;
         updateMapFeatures();
       } catch (e) {
         const err = api.handleError && api.handleError(e);
