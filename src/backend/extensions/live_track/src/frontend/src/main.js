@@ -1,6 +1,6 @@
 import LiveTrackView from './LiveTrackView.vue';
 import LiveTrackSettings from './LiveTrackSettings.vue';
-import PublicShareView from './PublicShareView.vue';
+import WorldShareView from './WorldShareView.vue';
 import './assets/main.css';
 
 /**
@@ -27,7 +27,7 @@ async function setup({ app, router, registry, api, toast, metadata }) {
   });
   router.addRoute({
     path: 'share',
-    component: PublicShareView
+    component: WorldShareView
   });
 }
 

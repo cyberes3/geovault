@@ -34,13 +34,13 @@ from .helpers import (
 from .models import (
     LiveTrack,
     LiveTrackGroupMember,
-    LiveTrackPublicShare,
+    LiveTrackWorldShare,
     LiveTrackShare,
     LiveTrackSubscription,
     VISIBILITY_PUBLIC,
     VISIBILITY_SHARED,
 )
-from .public_views import build_live_track_share_url
+from .world_share_views import build_live_track_share_url
 from .validation import (
     PARAM_PRETTY_NAMES,
     TrackerCheckRequest,
@@ -135,7 +135,7 @@ def tracker_list_create(request):
         for t in owned:
             payload = track_to_response_metadata_only(t, include_secret=False, is_owner=True)
             payload["is_owner"] = True
-            world_share = LiveTrackPublicShare.objects.filter(track=t).first()
+            world_share = LiveTrackWorldShare.objects.filter(track=t).first()
             if world_share:
                 payload["world_share_id"] = world_share.share_id
                 payload["world_share_url"] = build_live_track_share_url(world_share.share_id)
@@ -204,7 +204,7 @@ def tracker_get_patch_delete(request, tracker_id):
         if not is_owner:
             resp["owner_email"] = (track.user.email or "") if track.user_id else ""
         if is_owner:
-            world_share = LiveTrackPublicShare.objects.filter(track=track).first()
+            world_share = LiveTrackWorldShare.objects.filter(track=track).first()
             if world_share:
                 resp["world_share_id"] = world_share.share_id
                 resp["world_share_url"] = build_live_track_share_url(world_share.share_id)
@@ -281,17 +281,17 @@ def tracker_post_settings(request, tracker_id):
         LiveTrackShare.objects.filter(track=track, shared_with_id__in=to_remove).delete()
     if body.world_share_enabled is not None:
         if body.world_share_enabled:
-            share, _ = LiveTrackPublicShare.objects.get_or_create(
+            share, _ = LiveTrackWorldShare.objects.get_or_create(
                 track=track,
                 defaults={"share_id": str(uuid.uuid4())},
             )
         else:
-            LiveTrackPublicShare.objects.filter(track=track).delete()
+            LiveTrackWorldShare.objects.filter(track=track).delete()
     if update_fields:
         update_fields.append("updated_at")
         track.save(update_fields=update_fields)
     resp = track_to_response_metadata_only(track, include_secret=True, is_owner=True)
-    world_share = LiveTrackPublicShare.objects.filter(track=track).first()
+    world_share = LiveTrackWorldShare.objects.filter(track=track).first()
     if world_share:
         resp["world_share_id"] = world_share.share_id
         resp["world_share_url"] = build_live_track_share_url(world_share.share_id)

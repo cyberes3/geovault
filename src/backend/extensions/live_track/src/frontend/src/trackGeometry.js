@@ -1,6 +1,6 @@
 /**
  * Shared track geometry helpers: coordinate sorting, segment splitting, GeoJSON feature builders.
- * Used by LiveTrackView and PublicShareView for map drawing.
+ * Used by LiveTrackView and WorldShareView for map drawing.
  */
 
 import { getArrowImageId } from './trackArrowMap.js';

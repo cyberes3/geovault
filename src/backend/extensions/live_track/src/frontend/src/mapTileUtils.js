@@ -1,6 +1,6 @@
 /**
  * Shared tile source and layer helpers for MapLibre raster layers.
- * Used by LiveTrackView and PublicShareView.
+ * Used by LiveTrackView and WorldShareView.
  */
 
 const DEFAULT_MAX_ZOOM = 18;

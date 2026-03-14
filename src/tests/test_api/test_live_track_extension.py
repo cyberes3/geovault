@@ -15,6 +15,7 @@ from extensions.live_track.src.backend.models import (
     LiveTrackGroup,
     LiveTrackGroupMember,
     LiveTrackGroupMembership,
+    LiveTrackWorldShare,
     LiveTrackShare,
     LiveTrackSubscription,
 )
@@ -1963,3 +1964,93 @@ class TestBroadcastTrackUpdated(TestCase):
         self.assertEqual(message["data"]["track_id"], str(track.id))
         self.assertEqual(message["data"]["point"], [10.0, 45.0, 1700000000000])
         self.assertEqual(message["data"]["index"], 0)
+
+
+class TestLiveTrackWorldShare(TestCase):
+    """Test world (unauthenticated) share endpoints: GET world/share/<id>/info/ and GET world/share/<id>/."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email="worldshare@example.com",
+            password="testpass123",
+            username="worldshare",
+        )
+        self.client.force_login(self.user)
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "World Shared Track"}),
+                content_type="application/json",
+            )
+        self.assertEqual(create_resp.status_code, 201)
+        self.track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            settings_resp = self.client.post(
+                f"/api/extensions/live-track/trackers/{self.track_id}/settings/",
+                data=json.dumps({"world_share_enabled": True}),
+                content_type="application/json",
+            )
+        data = settings_resp.json()
+        self.share_id = data.get("world_share_id")
+        self.assertIsNotNone(self.share_id, "world_share_id returned when world share enabled")
+
+    def test_world_share_info_200(self):
+        """GET world/share/<share_id>/info/ without auth returns 200 with share_type, track_name, track_id."""
+        self.client.logout()
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/world/share/{self.share_id}/info/"
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["share_type"], "live_track")
+        self.assertEqual(data["track_name"], "World Shared Track")
+        self.assertEqual(data["track_id"], self.track_id)
+        self.assertIn("created_at", data)
+
+    def test_world_share_data_200(self):
+        """GET world/share/<share_id>/ without auth returns 200 with track name, geometry."""
+        self.client.logout()
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/world/share/{self.share_id}/"
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["name"], "World Shared Track")
+        self.assertIn("geometry", data)
+        self.assertIn("point_params", data)
+        self.assertNotIn("tracker_secret", data)
+
+    def test_world_share_info_404_invalid_id(self):
+        """GET world/share/<invalid_id>/info/ returns 404."""
+        self.client.logout()
+        invalid_id = "00000000-0000-0000-4000-000000000000"
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/world/share/{invalid_id}/info/"
+            )
+        self.assertEqual(response.status_code, 404)
+
+    def test_world_share_data_404_invalid_id(self):
+        """GET world/share/<invalid_id>/ returns 404."""
+        self.client.logout()
+        invalid_id = "00000000-0000-0000-4000-000000000000"
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/world/share/{invalid_id}/"
+            )
+        self.assertEqual(response.status_code, 404)
+
+    def test_public_share_redirects_to_world_share(self):
+        """GET public/share/<id>/ redirects to world/share/<id>/ for backward compatibility."""
+        self.client.logout()
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/public/share/{self.share_id}/info/",
+                follow=False,
+            )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("world/share", response["Location"])
+        self.assertIn(self.share_id, response["Location"])

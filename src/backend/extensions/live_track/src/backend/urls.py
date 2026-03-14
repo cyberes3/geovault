@@ -1,11 +1,21 @@
+from django.http import HttpResponseRedirect
 from django.urls import path
 
 from . import views
-from . import public_views
+from . import world_share_views
+
+
+def _redirect_public_share_to_world(request, share_id):
+    """Redirect legacy public/share/ URL to world/share/ for backward compatibility."""
+    new_path = request.path.replace("/public/share/", "/world/share/", 1)
+    return HttpResponseRedirect(request.build_absolute_uri(new_path))
+
 
 urlpatterns = [
-    path("public/share/<str:share_id>/info/", public_views.public_share_info),
-    path("public/share/<str:share_id>/", public_views.public_share_data),
+    path("world/share/<str:share_id>/info/", world_share_views.world_share_info),
+    path("world/share/<str:share_id>/", world_share_views.world_share_data),
+    path("public/share/<str:share_id>/info/", lambda r, share_id: _redirect_public_share_to_world(r, share_id)),
+    path("public/share/<str:share_id>/", lambda r, share_id: _redirect_public_share_to_world(r, share_id)),
     path("trackers/", views.tracker_list_create),
     path("trackers/available-to-add/", views.tracker_available_to_add),
     path("tracker-check/", views.tracker_check),

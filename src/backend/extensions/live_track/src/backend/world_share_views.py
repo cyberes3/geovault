@@ -7,8 +7,8 @@ import re
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from .helpers import _filter_coords_by_recent_window, track_to_response
-from .models import LiveTrack, LiveTrackPublicShare
+from .helpers import track_to_response
+from .models import LiveTrackWorldShare
 
 
 def _validate_share_id(share_id: str) -> bool:
@@ -25,14 +25,14 @@ def build_live_track_share_url(share_id: str) -> str:
 
 
 @require_http_methods(["GET"])
-def public_share_info(request, share_id):
+def world_share_info(request, share_id):
     """
-    GET public/share/<share_id>/info/ — world share, no auth.
+    GET world/share/<share_id>/info/ — world share, no auth.
     Returns share_type, track_name, track_id, created_at.
     """
     if not _validate_share_id(share_id):
         return JsonResponse({"error": "Invalid share link", "code": 404}, status=404)
-    share = LiveTrackPublicShare.objects.filter(share_id=share_id).select_related("track").first()
+    share = LiveTrackWorldShare.objects.filter(share_id=share_id).select_related("track").first()
     if not share:
         return JsonResponse({"error": "Invalid share link", "code": 404}, status=404)
     track = share.track
@@ -45,14 +45,14 @@ def public_share_info(request, share_id):
 
 
 @require_http_methods(["GET"])
-def public_share_data(request, share_id):
+def world_share_data(request, share_id):
     """
-    GET public/share/<share_id>/ — world share, no auth.
+    GET world/share/<share_id>/ — world share, no auth.
     Returns track name, geometry, point_params (respecting recent_data_window) for the shared track.
     """
     if not _validate_share_id(share_id):
         return JsonResponse({"error": "Invalid share link", "code": 404}, status=404)
-    share = LiveTrackPublicShare.objects.filter(share_id=share_id).select_related("track").first()
+    share = LiveTrackWorldShare.objects.filter(share_id=share_id).select_related("track").first()
     if not share:
         return JsonResponse({"error": "Invalid share link", "code": 404}, status=404)
     track = share.track

@@ -62,11 +62,11 @@ class LiveTrackShare(models.Model):
         ]
 
 
-class LiveTrackPublicShare(models.Model):
+class LiveTrackWorldShare(models.Model):
     """World (unauthenticated) share link for a track; one per track. When enabled, anyone with the URL can view the track (read-only). Distinct from visibility=public (all authenticated users)."""
 
     share_id = models.CharField(max_length=36, unique=True, db_index=True)
-    track = models.OneToOneField(LiveTrack, on_delete=models.CASCADE, related_name="public_share")
+    track = models.OneToOneField(LiveTrack, on_delete=models.CASCADE, related_name="world_share")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

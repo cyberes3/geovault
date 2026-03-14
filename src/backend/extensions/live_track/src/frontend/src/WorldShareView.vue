@@ -42,9 +42,9 @@
       @close="showLayerModal = false"
     >
       <div class="p-4">
-        <label for="public-share-layer-select" class="block text-sm font-medium text-gray-700 mb-2">Layer</label>
+        <label for="world-share-layer-select" class="block text-sm font-medium text-gray-700 mb-2">Layer</label>
         <select
-          id="public-share-layer-select"
+          id="world-share-layer-select"
           v-model="selectedLayer"
           class="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           title="Map layer"
@@ -74,15 +74,15 @@ import { getCoordsSortedByTime, buildLineFeatures, buildPointFeature } from './t
 import { getArrowImageId, rasterizeArrowToImageData } from './trackArrowMap.js';
 import { getRasterSourceSpec, getRasterLayerMaxZoom, defaultOsmSource } from './mapTileUtils.js';
 
-const BASE_URL = '/api/extensions/live-track/public/share';
+const BASE_URL = '/api/extensions/live-track/world/share';
 const TILE_SOURCES_API_URL = '/api/tiles/sources/';
-const LINES_SOURCE_ID = 'public-share-lines';
-const POINTS_SOURCE_ID = 'public-share-points';
-const LINES_LAYER_ID = 'public-share-lines-layer';
-const LINES_BLACK_OUTLINE_LAYER_ID = 'public-share-lines-layer-black-outline';
-const POINTS_LAYER_ID = 'public-share-points-layer';
-const BASE_SOURCE_ID = 'public-share-base';
-const BASE_LAYER_ID = 'public-share-base-layer';
+const LINES_SOURCE_ID = 'world-share-lines';
+const POINTS_SOURCE_ID = 'world-share-points';
+const LINES_LAYER_ID = 'world-share-lines-layer';
+const LINES_BLACK_OUTLINE_LAYER_ID = 'world-share-lines-layer-black-outline';
+const POINTS_LAYER_ID = 'world-share-points-layer';
+const BASE_SOURCE_ID = 'world-share-base';
+const BASE_LAYER_ID = 'world-share-base-layer';
 const MIN_ZOOM = 0;
 const MAX_ZOOM = 18;
 const LAYER_MAX_ZOOM = 19;
@@ -97,7 +97,7 @@ function getShareIdFromUrl() {
 }
 
 export default {
-  name: 'PublicShareView',
+  name: 'WorldShareView',
   components: { ShareIcon, Square3Stack3DIcon, LockClosedIcon, LockOpenIcon, Loader, BaseModal, BaseButton },
   setup() {
     const loading = ref(true);
@@ -127,7 +127,7 @@ export default {
           selectedLayer.value = tileSources.value[0]?.id || 'osm';
         }
       } catch (e) {
-        console.warn('PublicShareView: fetch tile sources failed', e);
+        console.warn('WorldShareView: fetch tile sources failed', e);
         tileSources.value = [defaultOsmSource];
         selectedLayer.value = 'osm';
       }
@@ -165,7 +165,7 @@ export default {
       });
     }
 
-    async function addPublicShareTrackLayers() {
+    async function addWorldShareTrackLayers() {
       if (!map || !map.getStyle()) return;
       if (!map.getSource(LINES_SOURCE_ID)) {
         map.addSource(LINES_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -293,7 +293,7 @@ export default {
         const bearing = map.getBearing();
         map.once('error', () => {
           if (!map) return;
-          console.warn('PublicShareView: style failed to load, switching to OSM');
+          console.warn('WorldShareView: style failed to load, switching to OSM');
           const fallbackId = tileSources.value.find((s) => {
             const cc = s.client_config || {};
             return !cc.style_url && cc.type !== 'maptiler';
@@ -313,7 +313,7 @@ export default {
         map.once('styledata', async () => {
           if (!map) return;
           map.resize();
-          await addPublicShareTrackLayers();
+          await addWorldShareTrackLayers();
           requestAnimationFrame(() => {
             if (!map) return;
             map.resize();
@@ -418,7 +418,7 @@ export default {
     function initMap() {
       const maplibregl = window.gv_core?.maplibre || window.maplibregl;
       if (!mapContainer.value || !maplibregl || !trackData.value) {
-        if (!maplibregl) console.warn('PublicShareView: MapLibre not available');
+        if (!maplibregl) console.warn('WorldShareView: MapLibre not available');
         return Promise.resolve();
       }
 
@@ -440,7 +440,7 @@ export default {
         });
         map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
         map.on('error', (e) => {
-          console.warn('PublicShareView: map error', e.error?.message || e);
+          console.warn('WorldShareView: map error', e.error?.message || e);
         });
         return new Promise((resolve) => {
           map.once('load', async () => {
@@ -449,7 +449,7 @@ export default {
               return;
             }
             map.resize();
-            await addPublicShareTrackLayers();
+            await addWorldShareTrackLayers();
             setupMapFollowListeners();
             requestAnimationFrame(() => {
               if (!map) {
@@ -526,7 +526,7 @@ export default {
             resolve();
             return;
           }
-          await addPublicShareTrackLayers();
+          await addWorldShareTrackLayers();
           setupMapFollowListeners();
           requestAnimationFrame(() => {
             if (!map) {
