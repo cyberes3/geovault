@@ -27,252 +27,30 @@
         v-if="!isMobileView"
         class="flex flex-col min-h-0 border-r border-gray-200 bg-white sm:w-1/4 sm:flex-shrink-0"
       >
-      <div class="flex-1 min-h-0 overflow-hidden flex flex-col px-2 pt-2 pb-2">
-        <div v-if="loading" class="flex-1 flex flex-col items-center justify-center p-4">
-          <Loader size="md" :show-message="false" layout="inline" />
-          <p class="text-sm text-black mt-4">Loading...</p>
-        </div>
-
-        <template v-else>
-          <div class="flex border-b border-gray-200 mb-2 flex-shrink-0">
-            <button
-              v-for="tab in LIST_TABS"
-              :key="tab.id"
-              type="button"
-              :class="[
-                'flex-1 py-2.5 text-sm font-medium border-b-2 transition-colors',
-                listTab === tab.id
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              ]"
-              @click="listTab = tab.id"
-            >
-              {{ tab.label }}
-            </button>
-          </div>
-
-          <div v-if="listEmptyForTab" class="flex-1 flex flex-col items-center justify-center py-12 px-6 text-center">
-            <h3 class="text-base font-semibold text-gray-900 mb-1">{{ listTab === 'trackers' ? 'No trackers yet' : listTab === 'groups' ? 'No groups yet' : 'No shared trackers or groups' }}</h3>
-            <p class="text-sm text-gray-500 max-w-xs">{{ listTab === 'trackers' ? 'Start by creating your first tracker to begin recording data.' : listTab === 'groups' ? 'Create a group to organize trackers and share with others.' : 'Trackers and groups shared with you will appear here.' }}</p>
-          </div>
-
-          <div
-            v-else
-            ref="listScrollContainerDesktop"
-            class="flex-1 min-h-0 overflow-y-auto space-y-3 px-1 py-1 custom-scrollbar"
-            @click.self="highlightedId = null"
-          >
-          <template v-if="listTab === 'groups'">
-          <div
-            v-for="group in visibleGroupsTab"
-            :key="'group-' + group.id"
-            :class="[
-              'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-colors',
-              activeGroupId != null && String(activeGroupId) === String(group.id) ? 'border-blue-500 bg-blue-100' : 'border-gray-200 bg-white hover:bg-gray-50'
-            ]"
-            @click="onGroupListClick(group)"
-          >
-            <div class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-gray-100 border border-gray-200">
-              <Square3Stack3DIcon class="h-6 w-6 text-gray-500" />
-            </div>
-            <div class="flex-1 min-w-0">
-              <div class="font-bold text-gray-900 truncate">{{ group.name }}</div>
-              <div class="text-xs text-gray-500">{{ (group.track_ids || []).length }} tracker(s)</div>
-            </div>
-            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button
-                type="button"
-                title="View Group"
-                class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white"
-                @click.stop="openGroupQuickView(group)"
-              >
-                <EyeIcon class="h-5 w-5" />
-              </button>
-              <template v-if="group.is_owner">
-                <button
-                  type="button"
-                  title="Edit Group"
-                  class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white"
-                  @click.stop="openEditGroupModal(group)"
-                >
-                  <PencilIcon class="h-5 w-5" />
-                </button>
-              </template>
-              <template v-else>
-                <button
-                  type="button"
-                  title="Leave Group"
-                  class="p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-white text-sm"
-                  @click.stop="leaveGroup(group)"
-                >
-                  Leave
-                </button>
-              </template>
-            </div>
-          </div>
-          </template>
-          <template v-else-if="listTab === 'shared'">
-          <div
-            v-for="group in visibleSharedGroupsTab"
-            :key="'shared-group-' + group.id"
-            :class="[
-              'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-colors',
-              activeGroupId != null && String(activeGroupId) === String(group.id) ? 'border-blue-500 bg-blue-100' : 'border-gray-200 bg-white hover:bg-gray-50'
-            ]"
-            @click="onGroupListClick(group)"
-          >
-            <div class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-gray-100 border border-gray-200">
-              <Square3Stack3DIcon class="h-6 w-6 text-gray-500" />
-            </div>
-            <div class="flex-1 min-w-0">
-              <div class="font-bold text-gray-900 tracking-tight break-all flex items-center gap-1.5 min-w-0" :title="group.name">
-                <span class="truncate">{{ group.name }}</span>
-                <CloudIcon class="h-4 w-4 text-gray-500 flex-shrink-0" />
-              </div>
-              <div class="text-xs text-gray-500">{{ (group.track_ids || []).length }} tracker(s)</div>
-            </div>
-            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button
-                type="button"
-                title="View Group"
-                class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white"
-                @click.stop="openGroupQuickView(group)"
-              >
-                <EyeIcon class="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                title="Leave Group"
-                class="p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-white text-sm"
-                @click.stop="leaveGroup(group)"
-              >
-                Leave
-              </button>
-            </div>
-          </div>
-          <div
-            v-for="track in visibleSharedTab"
-            :key="track.id"
-            :data-track-id="track.id"
-            :class="[
-              'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-all',
-              selectedId === track.id
-                ? 'border-blue-500 bg-blue-100'
-                : 'border-blue-100 bg-white hover:bg-blue-50 hover:border-blue-300',
-              highlightedId === track.id && selectedId !== track.id ? 'ring-2 ring-blue-500' : ''
-            ]"
-            @click="onTrackListClick(track)"
-          >
-            <div
-              class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-white border border-gray-100 transition-colors"
-              :style="{ borderLeftColor: track.color || '#6C93DE', borderLeftWidth: '4px' }"
-            >
-              <TrackDirectionIcon
-                :color="track.color || '#6C93DE'"
-                :angle="getTrackDirectionAngle(track)"
-                :size="26"
-                :selected="selectedId === track.id"
-                reserve-circle
-              />
-            </div>
-            <div class="flex-1 min-w-0">
-              <div class="font-bold text-gray-900 tracking-tight break-all flex items-center gap-1.5 min-w-0" :title="track.name">
-                <span class="truncate">{{ track.name }}</span>
-                <CloudIcon v-if="!track.is_owner && track.visibility === 'shared'" class="h-4 w-4 text-gray-500 flex-shrink-0" />
-              </div>
-              <div class="flex items-center gap-1.5 mt-0.5">
-                <div class="text-xs font-medium text-gray-500 truncate">
-                  {{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'Waiting for data...' }}
-                </div>
-              </div>
-            </div>
-            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-              <button
-                type="button"
-                title="Latest Params"
-                class="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
-                @click.stop="openSidebar('params', track.id)"
-              >
-                <TableCellsIcon class="h-5 w-5" />
-              </button>
-              <template v-if="track.is_owner">
-                <button
-                  type="button"
-                  title="Edit"
-                  class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
-                  @click.stop="openEditTrackSidebar(track)"
-                >
-                  <PencilIcon class="h-5 w-5" />
-                </button>
-              </template>
-            </div>
-          </div>
-          </template>
-          <template v-else>
-          <div
-            v-for="track in visibleTrackersTab"
-            :key="track.id"
-            :data-track-id="track.id"
-            :class="[
-              'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-all',
-              selectedId === track.id
-                ? 'border-blue-500 bg-blue-100'
-                : 'border-blue-100 bg-white hover:bg-blue-50 hover:border-blue-300',
-              highlightedId === track.id && selectedId !== track.id ? 'ring-2 ring-blue-500' : ''
-            ]"
-            @click="onTrackListClick(track)"
-          >
-            <div 
-              class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-white border border-gray-100 transition-colors"
-              :style="{ borderLeftColor: track.color || '#6C93DE', borderLeftWidth: '4px' }"
-            >
-              <TrackDirectionIcon
-                :color="track.color || '#6C93DE'"
-                :angle="getTrackDirectionAngle(track)"
-                :size="26"
-                :selected="selectedId === track.id"
-                reserve-circle
-              />
-            </div>
-            
-            <div class="flex-1 min-w-0">
-              <div class="font-bold text-gray-900 tracking-tight break-all flex items-center gap-1.5 min-w-0" :title="track.name">
-                <span class="truncate">{{ track.name }}</span>
-                <CloudIcon v-if="!track.is_owner && track.visibility === 'shared'" class="h-4 w-4 text-gray-500 flex-shrink-0" />
-              </div>
-              <div class="flex items-center gap-1.5 mt-0.5">
-                <div class="text-xs font-medium text-gray-500 truncate">
-                  {{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'Waiting for data...' }}
-                </div>
-              </div>
-            </div>
-
-            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-              <button
-                type="button"
-                title="Latest Params"
-                class="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
-                @click.stop="openSidebar('params', track.id)"
-              >
-                <TableCellsIcon class="h-5 w-5" />
-              </button>
-              <template v-if="track.is_owner">
-                <button
-                  type="button"
-                  title="Edit"
-                  class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
-                  @click.stop="openEditTrackSidebar(track)"
-                >
-                  <PencilIcon class="h-5 w-5" />
-                </button>
-              </template>
-            </div>
-          </div>
-          </template>
-        </div>
-        </template>
-      </div>
-    </aside>
+        <TrackerListContent
+          ref="listContentDesktopRef"
+          v-model:list-tab="listTab"
+          :list-tabs="LIST_TABS"
+          :visible-trackers-tab="visibleTrackersTab"
+          :visible-shared-tab="visibleSharedTab"
+          :visible-groups-tab="visibleGroupsTab"
+          :visible-shared-groups-tab="visibleSharedGroupsTab"
+          :selected-id="selectedId"
+          :active-group-id="activeGroupId"
+          :highlighted-id="highlightedId"
+          :loading="loading"
+          :list-empty-for-tab="listEmptyForTab"
+          scroll-container-class="flex-1 min-h-0 overflow-y-auto space-y-3 px-1 py-1 custom-scrollbar"
+          @group-click="onGroupListClick"
+          @track-click="onTrackListClick"
+          @edit-track="openEditTrackSidebar"
+          @open-params="(id) => openSidebar('params', id)"
+          @leave-group="leaveGroup"
+          @edit-group="openEditGroupModal"
+          @view-group="openGroupQuickView"
+          @clear-highlight="highlightedId = null"
+        />
+      </aside>
 
     <!-- Map: 75% on desktop, full width on mobile -->
     <main ref="mapColumnRef" class="live-track-map-column flex-1 relative min-h-0">
@@ -501,222 +279,31 @@
             @touchend="onDrawerDragEnd"
             @mousedown="onDrawerDragStart"
           />
-          <div v-if="loading" class="flex-1 flex flex-col items-center justify-center p-4">
-            <Loader size="md" :show-message="false" layout="inline" />
-            <p class="text-sm text-black mt-4">Loading...</p>
-          </div>
-          <template v-else>
-            <div class="flex border-b border-gray-200 mb-2 flex-shrink-0">
-              <button
-                v-for="tab in LIST_TABS"
-                :key="tab.id"
-                type="button"
-                :class="[
-                  'flex-1 py-2.5 text-sm font-medium border-b-2 transition-colors',
-                  listTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                ]"
-                @click="listTab = tab.id"
-              >
-                {{ tab.label }}
-              </button>
-            </div>
-            <div v-if="listEmptyForTab" class="flex-1 flex flex-col items-center justify-center py-12 px-6 text-center">
-              <h3 class="text-base font-semibold text-gray-900 mb-1">{{ listTab === 'trackers' ? 'No trackers yet' : listTab === 'groups' ? 'No groups yet' : 'No shared trackers or groups' }}</h3>
-              <p class="text-sm text-gray-500 max-w-xs">{{ listTab === 'trackers' ? 'Start by creating your first tracker to begin recording data.' : listTab === 'groups' ? 'Create a group to organize trackers and share with others.' : 'Trackers and groups shared with you will appear here.' }}</p>
-            </div>
-            <div
-              v-else
-              ref="listScrollContainerMobile"
-              :class="['flex-1 min-h-0 space-y-3 px-1 py-1', isDrawerAtPeek ? 'mobile-drawer-content--no-scroll' : 'overflow-y-auto custom-scrollbar']"
-              @click.self="highlightedId = null"
-            >
-              <template v-if="listTab === 'groups'">
-                <div class="space-y-3">
-                  <div
-                    v-for="group in visibleGroupsTab"
-                    :key="'group-' + group.id"
-                    :class="[
-                      'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-colors',
-                      activeGroupId != null && String(activeGroupId) === String(group.id) ? 'border-blue-500 bg-blue-100' : 'border-gray-200 bg-white hover:bg-gray-50'
-                    ]"
-                    @click="onGroupListClick(group)"
-                  >
-              <div class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-gray-100 border border-gray-200">
-                <Square3Stack3DIcon class="h-6 w-6 text-gray-500" />
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="font-bold text-gray-900 truncate">{{ group.name }}</div>
-                <div class="text-xs text-gray-500">{{ (group.track_ids || []).length }} tracker(s)</div>
-              </div>
-              <div class="flex items-center gap-1 opacity-60">
-                <button type="button" title="View Group" class="p-2 rounded-xl text-gray-400 hover:text-blue-600" @click.stop="openGroupQuickView(group)">
-                  <EyeIcon class="h-5 w-5" />
-                </button>
-                <template v-if="group.is_owner">
-                  <button type="button" title="Edit Group" class="p-2 rounded-xl text-gray-400 hover:text-blue-600" @click.stop="openEditGroupModal(group)">
-                    <PencilIcon class="h-5 w-5" />
-                  </button>
-                </template>
-                <template v-else>
-                  <button type="button" title="Leave Group" class="p-2 rounded-xl text-gray-400 hover:text-red-600 text-sm" @click.stop="leaveGroup(group)">Leave</button>
-                </template>
-              </div>
-            </div>
-                </div>
-              </template>
-              <template v-else-if="listTab === 'shared'">
-                <div class="space-y-3">
-                  <div
-                    v-for="group in visibleSharedGroupsTab"
-                    :key="'shared-group-' + group.id"
-                    :class="[
-                      'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-colors',
-                      activeGroupId != null && String(activeGroupId) === String(group.id) ? 'border-blue-500 bg-blue-100' : 'border-gray-200 bg-white hover:bg-gray-50'
-                    ]"
-                    @click="onGroupListClick(group)"
-                  >
-                    <div class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-gray-100 border border-gray-200">
-                      <Square3Stack3DIcon class="h-6 w-6 text-gray-500" />
-                    </div>
-                    <div class="flex-1 min-w-0">
-                      <div class="font-bold text-gray-900 tracking-tight break-all flex items-center gap-1.5 min-w-0" :title="group.name">
-                        <span class="truncate">{{ group.name }}</span>
-                        <CloudIcon class="h-4 w-4 text-gray-500 flex-shrink-0" />
-                      </div>
-                      <div class="text-xs text-gray-500">{{ (group.track_ids || []).length }} tracker(s)</div>
-                    </div>
-                    <div class="flex items-center gap-1 opacity-60">
-                      <button type="button" title="View Group" class="p-2 rounded-xl text-gray-400 hover:text-blue-600" @click.stop="openGroupQuickView(group)">
-                        <EyeIcon class="h-5 w-5" />
-                      </button>
-                      <button type="button" title="Leave Group" class="p-2 rounded-xl text-gray-400 hover:text-red-600 text-sm" @click.stop="leaveGroup(group)">Leave</button>
-                    </div>
-                  </div>
-                  <div
-                    v-for="track in visibleSharedTab"
-                    :key="track.id"
-                    :data-track-id="track.id"
-                    :class="[
-                      'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-all',
-                      selectedId === track.id
-                        ? 'border-blue-500 bg-blue-100'
-                        : 'border-blue-100 bg-white hover:bg-blue-50 hover:border-blue-300',
-                      highlightedId === track.id && selectedId !== track.id ? 'ring-2 ring-blue-500' : ''
-                    ]"
-                    @click="onTrackListClick(track)"
-                  >
-                    <div
-                      class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-white border border-gray-100 transition-colors"
-                      :style="{ borderLeftColor: track.color || '#6C93DE', borderLeftWidth: '4px' }"
-                    >
-                      <TrackDirectionIcon
-                        :color="track.color || '#6C93DE'"
-                        :angle="getTrackDirectionAngle(track)"
-                        :size="26"
-                        :selected="selectedId === track.id"
-                        reserve-circle
-                      />
-                    </div>
-                    <div class="flex-1 min-w-0">
-                      <div class="font-bold text-gray-900 tracking-tight break-all flex items-center gap-1.5 min-w-0" :title="track.name">
-                        <span class="truncate">{{ track.name }}</span>
-                        <CloudIcon v-if="!track.is_owner && track.visibility === 'shared'" class="h-4 w-4 text-gray-500 flex-shrink-0" />
-                      </div>
-                      <div class="flex items-center gap-1.5 mt-0.5">
-                        <div class="text-xs font-medium text-gray-500 truncate">
-                          {{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'Waiting for data...' }}
-                        </div>
-                      </div>
-                    </div>
-                    <div class="flex items-center gap-1 opacity-60 focus-within:opacity-100 transition-opacity">
-                      <button
-                        type="button"
-                        title="Latest Params"
-                        class="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
-                        @click.stop="openSidebar('params', track.id)"
-                      >
-                        <TableCellsIcon class="h-5 w-5" />
-                      </button>
-                      <template v-if="track.is_owner">
-                        <button
-                          type="button"
-                          title="Edit"
-                          class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
-                          @click.stop="openEditTrackSidebar(track)"
-                        >
-                          <PencilIcon class="h-5 w-5" />
-                        </button>
-                      </template>
-                    </div>
-                  </div>
-                </div>
-              </template>
-              <template v-else>
-                <div class="space-y-3">
-                  <div
-                    v-for="track in visibleTrackersTab"
-              :key="track.id"
-              :data-track-id="track.id"
-              :class="[
-                'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-all',
-                selectedId === track.id
-                  ? 'border-blue-500 bg-blue-100'
-                  : 'border-blue-100 bg-white hover:bg-blue-50 hover:border-blue-300',
-                highlightedId === track.id && selectedId !== track.id ? 'ring-2 ring-blue-500' : ''
-              ]"
-              @click="onTrackListClick(track)"
-            >
-              <div
-                class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-white border border-gray-100 transition-colors"
-                :style="{ borderLeftColor: track.color || '#6C93DE', borderLeftWidth: '4px' }"
-              >
-                <TrackDirectionIcon
-                  :color="track.color || '#6C93DE'"
-                  :angle="getTrackDirectionAngle(track)"
-                  :size="26"
-                  :selected="selectedId === track.id"
-                  reserve-circle
-                />
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="font-bold text-gray-900 tracking-tight break-all flex items-center gap-1.5 min-w-0" :title="track.name">
-                  <span class="truncate">{{ track.name }}</span>
-                  <CloudIcon v-if="!track.is_owner && track.visibility === 'shared'" class="h-4 w-4 text-gray-500 flex-shrink-0" />
-                </div>
-                <div class="flex items-center gap-1.5 mt-0.5">
-                  <div class="text-xs font-medium text-gray-500 truncate">
-                    {{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'Waiting for data...' }}
-                  </div>
-                </div>
-              </div>
-              <div class="flex items-center gap-1 opacity-60 focus-within:opacity-100 transition-opacity">
-                <button
-                  type="button"
-                  title="Latest Params"
-                  class="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
-                  @click.stop="openSidebar('params', track.id)"
-                >
-                  <TableCellsIcon class="h-5 w-5" />
-                </button>
-                <template v-if="track.is_owner">
-                  <button
-                    type="button"
-                    title="Edit"
-                    class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
-                    @click.stop="openEditTrackSidebar(track)"
-                  >
-                    <PencilIcon class="h-5 w-5" />
-                  </button>
-                </template>
-              </div>
-            </div>
-                </div>
-              </template>
-            </div>
-        </template>
-      </div>
+          <TrackerListContent
+            ref="listContentMobileRef"
+            v-model:list-tab="listTab"
+            :list-tabs="LIST_TABS"
+            :visible-trackers-tab="visibleTrackersTab"
+            :visible-shared-tab="visibleSharedTab"
+            :visible-groups-tab="visibleGroupsTab"
+            :visible-shared-groups-tab="visibleSharedGroupsTab"
+            :selected-id="selectedId"
+            :active-group-id="activeGroupId"
+            :highlighted-id="highlightedId"
+            :loading="loading"
+            :list-empty-for-tab="listEmptyForTab"
+            :scroll-container-class="['flex-1 min-h-0 space-y-3 px-1 py-1', isDrawerAtPeek ? 'mobile-drawer-content--no-scroll' : 'overflow-y-auto custom-scrollbar'].join(' ')"
+            action-opacity-class="opacity-60"
+            @group-click="onGroupListClick"
+            @track-click="onTrackListClick"
+            @edit-track="openEditTrackSidebar"
+            @open-params="(id) => openSidebar('params', id)"
+            @leave-group="leaveGroup"
+            @edit-group="openEditGroupModal"
+            @view-group="openGroupQuickView"
+            @clear-highlight="highlightedId = null"
+          />
+        </div>
       </div>
     </Teleport>
 
@@ -744,6 +331,11 @@ import DiscoverTrackersModal from './DiscoverTrackersModal.vue';
 import MapLayerSidebar from './MapLayerSidebar.vue';
 import MapSidebarPanel from './MapSidebarPanel.vue';
 import SharedWithMeSidebarContent from './SharedWithMeSidebarContent.vue';
+import TrackerListContent from './TrackerListContent.vue';
+import { getCoordsSortedByTime, getTrackDirectionAngle, splitTrackIntoSegments } from './trackGeometry.js';
+import { getArrowImageId, rasterizeArrowToImageData } from './trackArrowMap.js';
+import { getRasterSourceSpec, getRasterLayerMaxZoom } from './mapTileUtils.js';
+import { formatTimestampLocal } from './paramFormatters.js';
 
 const maplibregl = window.gv_core?.maplibre || window.maplibregl;
 
@@ -756,8 +348,6 @@ const BASE_SOURCE_ID = 'base-raster';
 const BASE_LAYER_ID = 'base-raster-layer';
 const MIN_ZOOM = 0;
 const MAX_ZOOM = 18;
-/** Do not draw track across jumps larger than this (meters). 100 miles. Same as Android tracker. */
-const MAX_JUMP_METERS = 100 * 1609.344;
 const LAYER_MAX_ZOOM = MAX_ZOOM + 1;
 const TILE_SOURCES_API_URL = '/api/tiles/sources/';
 /** Shared button class for all right-sidebar action icons. Ring only on focus-visible so tap on mobile doesn't show thick border; no tap highlight. */
@@ -770,69 +360,15 @@ const VALID_SORT_VALUES = new Set(['alphabetical', 'last_updated', 'num_points',
 const CENTER_DEBOUNCE_MS = 220;
 /** Duration (ms) for minimal map snap animations. */
 const MAP_SNAP_DURATION = 200;
-const ARROW_PATH_D =
-  'M29.9,28.6l-13-26c-0.3-0.7-1.4-0.7-1.8,0l-13,26c-0.2,0.4-0.1,0.8,0.2,1.1C2.5,30,3,30.1,3.4,29.9L16,25.1l12.6,4.9c0.1,0,0.2,0.1,0.4,0.1c0.3,0,0.5-0.1,0.7-0.3C30,29.4,30.1,28.9,29.9,28.6z';
-
-function getArrowImageId(color, selected) {
-  const base = (color || '#6C93DE').replace('#', '');
-  return 'track-arrow-' + (selected ? 'selected-' : '') + base;
-}
-
-/** 96px gives more source pixels for MapLibre's LINEAR sampling so scaled-down icons look cleaner (see draw_symbol.ts). */
-const ARROW_RASTER_SIZE = 96;
-
-/** SVG data URL for the direction arrow. Same chevron for both; selected adds white circle with black border. */
-function getTrackArrowDataURL(color, selected) {
-  const fill = color || '#6C93DE';
-  const circle =
-    selected
-      ? '<circle cx="16" cy="16" r="15" fill="white" stroke="#000" stroke-width="1.5"/>'
-      : '';
-  const chevronStroke = '#000';
-  const chevronStrokeWidth = selected ? '1' : '2';
-  const pathTransform = ' transform="translate(16,2.6) scale(0.8) translate(-16,-2.6)"';
-  const svg =
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="' + ARROW_RASTER_SIZE + '" height="' + ARROW_RASTER_SIZE + '" shape-rendering="geometricPrecision">' +
-    circle +
-    '<path' + pathTransform + ' fill="' + fill + '" stroke="' + chevronStroke + '" stroke-width="' + chevronStrokeWidth + '" stroke-linejoin="round" shape-rendering="geometricPrecision" d="' + ARROW_PATH_D + '"/>' +
-    '</svg>';
-  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-}
-
-/**
- * Rasterize arrow SVG and return MapLibre image spec { width, height, data } so sprite size stays consistent.
- * Passing a canvas can cause "mismatched image size" when the sprite reads dimensions; explicit data avoids that.
- */
-function rasterizeArrowToImageData(color, selected) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = ARROW_RASTER_SIZE;
-      canvas.height = ARROW_RASTER_SIZE;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        resolve(null);
-        return;
-      }
-      ctx.imageSmoothingEnabled = true;
-      if (ctx.imageSmoothingQuality) ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, 0, 0, ARROW_RASTER_SIZE, ARROW_RASTER_SIZE);
-      const imageData = ctx.getImageData(0, 0, ARROW_RASTER_SIZE, ARROW_RASTER_SIZE);
-      resolve({
-        width: ARROW_RASTER_SIZE,
-        height: ARROW_RASTER_SIZE,
-        data: new Uint8Array(imageData.data)
-      });
-    };
-    img.onerror = () => resolve(null);
-    img.src = getTrackArrowDataURL(color, selected);
-  });
-}
+const LIST_TABS = [
+  { id: 'trackers', label: 'Trackers' },
+  { id: 'groups', label: 'Groups' },
+  { id: 'shared', label: 'Shared' }
+];
 
 export default {
   name: 'LiveTrackView',
-  components: { BaseButton, TrackSidebar, TrackDirectionIcon, LatestParamsModal, GroupsSidebarContent, DiscoverTrackersModal, MapSidebarPanel, MapLayerSidebar, SharedWithMeSidebarContent, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon },
+  components: { BaseButton, TrackSidebar, TrackDirectionIcon, LatestParamsModal, GroupsSidebarContent, DiscoverTrackersModal, MapLayerSidebar, MapSidebarPanel, SharedWithMeSidebarContent, TrackerListContent, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon },
   setup() {
     const api = inject('extensionApi');
     const trackers = ref([]);
@@ -933,11 +469,6 @@ export default {
     });
 
     const listTab = ref('trackers');
-    const LIST_TABS = [
-      { id: 'trackers', label: 'Trackers' },
-      { id: 'groups', label: 'Groups' },
-      { id: 'shared', label: 'Shared' },
-    ];
     const visibleTrackersTab = computed(() =>
       sortedTrackers.value.filter((t) => t.is_owner === true)
     );
@@ -989,11 +520,12 @@ export default {
     const mapContainer = ref(null);
     const mapColumnRef = ref(null);
     const mapSidebarRef = ref(null);
-    const listScrollContainerDesktop = ref(null);
-    const listScrollContainerMobile = ref(null);
-    const listScrollContainer = computed(() =>
-      isMobileView.value ? listScrollContainerMobile.value : listScrollContainerDesktop.value
-    );
+    const listContentDesktopRef = ref(null);
+    const listContentMobileRef = ref(null);
+    const listScrollContainer = computed(() => {
+      const c = isMobileView.value ? listContentMobileRef.value : listContentDesktopRef.value;
+      return c?.scrollContainerEl?.value ?? null;
+    });
     const showGroupsSidebar = ref(false);
     const groupsSidebarInitialGroupId = ref(null);
     const showGroupQuickViewSidebar = ref(false);
@@ -1097,23 +629,7 @@ export default {
       }
     }
 
-    function formatTime(ms) {
-      if (!ms) return '';
-      const d = new Date(ms);
-      return d.toLocaleString();
-    }
-
-    /** Degrees from north (0 = up), clockwise. Uses two most recent points by time (sorted so order is reliable). */
-    function getTrackDirectionAngle(track) {
-      const coords = getCoordsSortedByTime(track);
-      if (coords.length < 2) return 0;
-      const prev = coords[coords.length - 2];
-      const last = coords[coords.length - 1];
-      const dLon = last[0] - prev[0];
-      const dLat = last[1] - prev[1];
-      if (dLon === 0 && dLat === 0) return 0;
-      return (Math.atan2(dLon, dLat) * 180) / Math.PI;
-    }
+    const formatTime = (ms) => formatTimestampLocal(ms);
 
     function normalizeTrackForMemory(track) {
       const geom = track.geometry || { type: 'LineString', coordinates: [] };
@@ -1192,54 +708,6 @@ export default {
         }
         incomingSharedTrackers.value = [];
       }
-    }
-
-    /** Distance in meters between two [lon, lat] points (Haversine). */
-    function distanceMeters(lon1, lat1, lon2, lat2) {
-      const R = 6371000;
-      const dLat = ((lat2 - lat1) * Math.PI) / 180;
-      const dLon = ((lon2 - lon1) * Math.PI) / 180;
-      const a =
-        Math.sin(dLat / 2) ** 2 +
-        Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      return R * c;
-    }
-
-    /** Returns track coordinates sorted by timestamp ascending (oldest first) so the track always draws in chronological order. */
-    function getCoordsSortedByTime(track) {
-      const geom = track.geometry || {};
-      const coords = geom.coordinates || [];
-      if (coords.length <= 1) return [...coords];
-      return [...coords].sort((a, b) => {
-        const ta = typeof a[2] === 'number' ? a[2] : 0;
-        const tb = typeof b[2] === 'number' ? b[2] : 0;
-        return ta - tb;
-      });
-    }
-
-    /**
-     * Split track coordinates into segments so that no segment spans more than MAX_JUMP_METERS.
-     * Consecutive points farther apart than that start a new segment (the jump is not drawn).
-     * coords: array of [lon, lat]. Returns array of segments (each segment is [lon, lat][]).
-     */
-    function splitTrackIntoSegments(coords) {
-      if (coords.length < 2) return [];
-      const segments = [];
-      let current = [coords[0]];
-      for (let i = 1; i < coords.length; i++) {
-        const prev = coords[i - 1];
-        const curr = coords[i];
-        const dist = distanceMeters(prev[0], prev[1], curr[0], curr[1]);
-        if (dist > MAX_JUMP_METERS) {
-          if (current.length >= 2) segments.push(current);
-          current = [curr];
-        } else {
-          current.push(curr);
-        }
-      }
-      if (current.length >= 2) segments.push(current);
-      return segments;
     }
 
     function buildLinesGeoJSON() {
@@ -1333,27 +801,6 @@ export default {
         })
       );
       pointSource.setData(pointsGeoJSON);
-    }
-
-    function getRasterSourceSpec(layerValue, tileSource) {
-      const clientConfig = tileSource?.client_config || {};
-      const url = clientConfig.url || `/api/tiles/${layerValue}/{z}/{x}/{y}`;
-      let tiles;
-      if (clientConfig.tileSubdomains && Array.isArray(clientConfig.tileSubdomains)) {
-        tiles = clientConfig.tileSubdomains.map((sub) => url.replace('{s}', sub));
-      } else {
-        tiles = [url.replace('{s}', clientConfig.tileSubdomains?.[0] || 'a')];
-      }
-      return {
-        type: 'raster',
-        tiles,
-        tileSize: clientConfig.tileSize || 256,
-        attribution: clientConfig.attribution || ''
-      };
-    }
-
-    function getRasterLayerMaxZoom(clientConfig) {
-      return Math.max(clientConfig?.maxzoom ?? MAX_ZOOM, LAYER_MAX_ZOOM);
     }
 
     const lineBlackOutlineLayerSpec = {
@@ -2525,7 +1972,6 @@ export default {
       onDrawerDragMove,
       onDrawerDragEnd,
       formatTime,
-      getTrackDirectionAngle,
       goHome,
       onLayerChange,
       onLayerSidebarChange,

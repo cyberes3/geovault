@@ -95,6 +95,7 @@ const toggleClasses = computed(() => {
     'relative',
     'inline-flex',
     'items-center',
+    'p-0.5',
     'rounded-full',
     'transition-colors',
     'duration-200',
@@ -141,7 +142,7 @@ const knobClasses = computed(() => {
   if (props.modelValue) {
     base.push(sizeConfig.value.translate)
   } else {
-    base.push('translate-x-0.5')
+    base.push('translate-x-0')
   }
   
   return base.join(' ')

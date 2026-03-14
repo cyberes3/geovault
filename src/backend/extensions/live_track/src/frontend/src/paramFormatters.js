@@ -12,7 +12,11 @@ function getUnitPreference() {
   return window.gv_core?.store?.state?.userSettings?.account?.units || 'imperial';
 }
 
-function formatTimestampLocal(ms) {
+/**
+ * Format timestamp for list/params display (locale string).
+ * Accepts ms (number) or seconds (number < 1e12).
+ */
+export function formatTimestampLocal(ms) {
   if (ms == null || ms === '') return '';
   const d = new Date(typeof ms === 'number' && ms < 1e12 ? ms * 1000 : ms);
   return d.toLocaleString(undefined, {

@@ -70,6 +70,9 @@ import { ShareIcon, Square3Stack3DIcon, LockClosedIcon, LockOpenIcon } from '@he
 import Loader from 'platform/components/parts/Loader.vue';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
+import { getCoordsSortedByTime, buildLineFeatures, buildPointFeature } from './trackGeometry.js';
+import { getArrowImageId, rasterizeArrowToImageData } from './trackArrowMap.js';
+import { getRasterSourceSpec, getRasterLayerMaxZoom, defaultOsmSource } from './mapTileUtils.js';
 
 const BASE_URL = '/api/extensions/live-track/public/share';
 const TILE_SOURCES_API_URL = '/api/tiles/sources/';
@@ -84,61 +87,6 @@ const MIN_ZOOM = 0;
 const MAX_ZOOM = 18;
 const LAYER_MAX_ZOOM = 19;
 const POLL_INTERVAL_MS = 5000;
-const MAX_JUMP_METERS = 100 * 1609.344;
-
-const ARROW_PATH_D =
-  'M29.9,28.6l-13-26c-0.3-0.7-1.4-0.7-1.8,0l-13,26c-0.2,0.4-0.1,0.8,0.2,1.1C2.5,30,3,30.1,3.4,29.9L16,25.1l12.6,4.9c0.1,0,0.2,0.1,0.4,0.1c0.3,0,0.5-0.1,0.7-0.3C30,29.4,30.1,28.9,29.9,28.6z';
-
-function getArrowImageId(color, selected) {
-  const base = (color || '#6C93DE').replace('#', '');
-  return 'track-arrow-' + (selected ? 'selected-' : '') + base;
-}
-
-const ARROW_RASTER_SIZE = 96;
-
-function getTrackArrowDataURL(color, selected) {
-  const fill = color || '#6C93DE';
-  const circle =
-    selected
-      ? '<circle cx="16" cy="16" r="15" fill="white" stroke="#000" stroke-width="1.5"/>'
-      : '';
-  const chevronStroke = '#000';
-  const chevronStrokeWidth = selected ? '1' : '2';
-  const pathTransform = ' transform="translate(16,2.6) scale(0.8) translate(-16,-2.6)"';
-  const svg =
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="' + ARROW_RASTER_SIZE + '" height="' + ARROW_RASTER_SIZE + '" shape-rendering="geometricPrecision">' +
-    circle +
-    '<path' + pathTransform + ' fill="' + fill + '" stroke="' + chevronStroke + '" stroke-width="' + chevronStrokeWidth + '" stroke-linejoin="round" shape-rendering="geometricPrecision" d="' + ARROW_PATH_D + '"/>' +
-    '</svg>';
-  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-}
-
-function rasterizeArrowToImageData(color, selected) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = ARROW_RASTER_SIZE;
-      canvas.height = ARROW_RASTER_SIZE;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        resolve(null);
-        return;
-      }
-      ctx.imageSmoothingEnabled = true;
-      if (ctx.imageSmoothingQuality) ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, 0, 0, ARROW_RASTER_SIZE, ARROW_RASTER_SIZE);
-      const imageData = ctx.getImageData(0, 0, ARROW_RASTER_SIZE, ARROW_RASTER_SIZE);
-      resolve({
-        width: ARROW_RASTER_SIZE,
-        height: ARROW_RASTER_SIZE,
-        data: new Uint8Array(imageData.data)
-      });
-    };
-    img.onerror = () => resolve(null);
-    img.src = getTrackArrowDataURL(color, selected);
-  });
-}
 
 function getShareIdFromUrl() {
   const hash = typeof window !== 'undefined' ? window.location.hash : '';
@@ -147,123 +95,6 @@ function getShareIdFromUrl() {
   const params = new URLSearchParams(hash.slice(q));
   return params.get('id');
 }
-
-function distanceMeters(lon1, lat1, lon2, lat2) {
-  const R = 6371000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-function getCoordsSortedByTime(track) {
-  const geom = track.geometry || {};
-  const coords = geom.coordinates || [];
-  if (coords.length <= 1) return [...coords];
-  return [...coords].sort((a, b) => {
-    const ta = typeof a[2] === 'number' ? a[2] : 0;
-    const tb = typeof b[2] === 'number' ? b[2] : 0;
-    return ta - tb;
-  });
-}
-
-/** Degrees from north (0 = up), clockwise. Uses two most recent points by time. */
-function getTrackDirectionAngle(track) {
-  const coords = getCoordsSortedByTime(track);
-  if (coords.length < 2) return 0;
-  const prev = coords[coords.length - 2];
-  const last = coords[coords.length - 1];
-  const dLon = last[0] - prev[0];
-  const dLat = last[1] - prev[1];
-  if (dLon === 0 && dLat === 0) return 0;
-  return (Math.atan2(dLon, dLat) * 180) / Math.PI;
-}
-
-function splitTrackIntoSegments(coords) {
-  if (coords.length < 2) return [];
-  const segments = [];
-  let current = [coords[0]];
-  for (let i = 1; i < coords.length; i++) {
-    const prev = coords[i - 1];
-    const curr = coords[i];
-    const dist = distanceMeters(prev[0], prev[1], curr[0], curr[1]);
-    if (dist > MAX_JUMP_METERS) {
-      if (current.length >= 2) segments.push(current);
-      current = [curr];
-    } else {
-      current.push(curr);
-    }
-  }
-  if (current.length >= 2) segments.push(current);
-  return segments;
-}
-
-function buildLineFeatures(track, selected = false) {
-  const coordsSorted = getCoordsSortedByTime(track);
-  const coords = coordsSorted.map((c) => [c[0], c[1]]);
-  if (coords.length < 2) return [];
-  const segments = splitTrackIntoSegments(coords);
-  const color = track.color || '#6C93DE';
-  const features = [];
-  for (const segment of segments) {
-    features.push({
-      type: 'Feature',
-      properties: { color, selected: !!selected },
-      geometry: { type: 'LineString', coordinates: segment }
-    });
-  }
-  return features;
-}
-
-function buildPointFeature(track, selected = false) {
-  const coordsSorted = getCoordsSortedByTime(track);
-  const last = coordsSorted.length ? coordsSorted[coordsSorted.length - 1] : null;
-  const pos = last && last.length >= 2 ? [last[0], last[1]] : null;
-  if (!pos) return null;
-  const color = track.color || '#6C93DE';
-  const iconImage = getArrowImageId(color, selected);
-  const rotation = getTrackDirectionAngle(track);
-  return {
-    type: 'Feature',
-    properties: { color, iconImage, rotation, selected: !!selected },
-    geometry: { type: 'Point', coordinates: pos }
-  };
-}
-
-function getRasterSourceSpec(layerValue, tileSource) {
-  const clientConfig = tileSource?.client_config || {};
-  const url = clientConfig.url || `/api/tiles/${layerValue}/{z}/{x}/{y}`;
-  let tiles;
-  if (clientConfig.tileSubdomains && Array.isArray(clientConfig.tileSubdomains)) {
-    tiles = clientConfig.tileSubdomains.map((sub) => url.replace('{s}', sub));
-  } else {
-    tiles = [url.replace('{s}', clientConfig.tileSubdomains?.[0] || 'a')];
-  }
-  return {
-    type: 'raster',
-    tiles,
-    tileSize: clientConfig.tileSize || 256,
-    attribution: clientConfig.attribution || ''
-  };
-}
-
-function getRasterLayerMaxZoom(clientConfig) {
-  return Math.max(clientConfig?.maxzoom ?? MAX_ZOOM, LAYER_MAX_ZOOM);
-}
-
-const defaultOsmSource = {
-  id: 'osm',
-  name: 'OpenStreetMap',
-  type: 'osm',
-  client_config: {
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    tileSize: 256,
-    attribution: '© OpenStreetMap'
-  }
-};
 
 export default {
   name: 'PublicShareView',

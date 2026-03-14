@@ -26,7 +26,7 @@
           :stroke="'#000'"
           :stroke-width="selected ? 1 : 2"
           stroke-linejoin="round"
-          d="M29.9,28.6l-13-26c-0.3-0.7-1.4-0.7-1.8,0l-13,26c-0.2,0.4-0.1,0.8,0.2,1.1C2.5,30,3,30.1,3.4,29.9L16,25.1l12.6,4.9c0.1,0,0.2,0.1,0.4,0.1c0.3,0,0.5-0.1,0.7-0.3C30,29.4,30.1,28.9,29.9,28.6z"
+          :d="ARROW_PATH_D"
         />
       </g>
     </g>
@@ -34,6 +34,8 @@
 </template>
 
 <script>
+import { ARROW_PATH_D } from './trackArrowMap.js';
+
 export default {
   name: 'TrackDirectionIcon',
   props: {
@@ -62,6 +64,9 @@ export default {
       type: Boolean,
       default: false
     }
+  },
+  setup() {
+    return { ARROW_PATH_D };
   }
 };
 </script>

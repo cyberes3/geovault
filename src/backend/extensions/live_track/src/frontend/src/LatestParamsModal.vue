@@ -91,7 +91,7 @@
 <script>
 import { computed } from 'vue';
 import LiveTrackSidebar from './LiveTrackSidebar.vue';
-import { formatParamDisplay } from './paramFormatters.js';
+import { formatParamDisplay, formatTimestampLocal } from './paramFormatters.js';
 
 export default {
   name: 'LatestParamsModal',
@@ -137,19 +137,6 @@ export default {
       return Object.entries(params).sort(([a], [b]) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     });
 
-    function formatTimeLocal(ms) {
-      if (!ms) return '';
-      const d = new Date(ms);
-      return d.toLocaleString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        second: '2-digit'
-      });
-    }
-
     function formatLatLon(pos) {
       if (!pos || pos.lat == null || pos.lon == null) return '';
       return `${Number(pos.lat).toFixed(6)}, ${Number(pos.lon).toFixed(6)}`;
@@ -177,7 +164,7 @@ export default {
       hasStoredParams,
       displayParams,
       sortedParamEntries,
-      formatTimeLocal,
+      formatTimeLocal: formatTimestampLocal,
       formatLatLon,
       formatDurationRunning,
       formatParamDisplay
