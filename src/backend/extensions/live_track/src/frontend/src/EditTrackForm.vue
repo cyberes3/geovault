@@ -35,56 +35,81 @@
         </button>
       </div>
     </div>
-    <div v-if="isOwner" class="space-y-2">
-      <label class="text-sm font-medium text-gray-700">Who can see and add this tracker</label>
-      <select
-        :value="visibility"
-        class="select-custom w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-        @change="$emit('update:visibility', ($event.target && $event.target.value) || 'private')"
-      >
-        <option value="private">Private (only me)</option>
-        <option value="shared">Shared with specific users</option>
-        <option value="public">Public (all authenticated users)</option>
-      </select>
-    </div>
-    <div v-if="isOwner && visibility === 'shared'" class="space-y-2">
-      <ScrollingSelect
-        label="Shared with (click to add or remove)"
-        :items="availableUsersForSelect"
-        :selected-values="sharedWithEmails"
-        :loading="loadingUsers"
-        max-height="12rem"
-        empty-message="No other users found"
-        @select="toggleUserEmail"
-      />
-    </div>
-    <div v-if="isOwner" class="space-y-2">
-      <label class="flex items-center gap-2 cursor-pointer">
-        <input type="checkbox" :checked="shareParamsWithRecipients" @change="$emit('update:shareParamsWithRecipients', ($event.target && $event.target.checked) || false)" />
-        <span class="text-sm font-medium text-gray-700">Allow recipients to view parameters</span>
-      </label>
-      <p class="text-xs text-gray-500">When on, people you share with can see extended parameters (e.g. in Latest params). Serial is never shared.</p>
-    </div>
-    <div v-if="isOwner" class="space-y-2">
-      <div class="flex items-center gap-3">
-        <ToggleButton
-          :model-value="worldShareEnabled"
-          label="World share link"
-          size="md"
-          @update:model-value="$emit('update:worldShareEnabled', $event)"
-        />
-        <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="$emit('update:worldShareEnabled', !worldShareEnabled)">World share link</label>
+    <template v-if="isOwner">
+      <div class="border border-gray-200 rounded-lg p-3 space-y-3 bg-gray-50/50">
+        <h3 class="text-sm font-semibold text-gray-800">Sharing with users</h3>
+        <div class="space-y-2">
+          <label class="text-sm font-medium text-gray-700">Who can see and add this tracker</label>
+          <select
+            :value="visibility"
+            class="select-custom w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            @change="$emit('update:visibility', ($event.target && $event.target.value) || 'private')"
+          >
+            <option value="private">Private (only me)</option>
+            <option value="shared">Shared with specific users</option>
+            <option value="public">Public (all authenticated users)</option>
+          </select>
+        </div>
+        <div v-if="visibility === 'shared'" class="space-y-2">
+          <ScrollingSelect
+            label="Shared with (click to add or remove)"
+            :items="availableUsersForSelect"
+            :selected-values="sharedWithEmails"
+            :loading="loadingUsers"
+            max-height="12rem"
+            empty-message="No other users found"
+            @select="toggleUserEmail"
+          />
+        </div>
+        <div class="space-y-2">
+          <div class="flex items-center gap-3">
+            <ToggleButton
+              :model-value="shareParamsWithRecipients"
+              label="Allow viewing parameters"
+              size="md"
+              @update:model-value="$emit('update:shareParamsWithRecipients', $event)"
+            />
+            <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="$emit('update:shareParamsWithRecipients', !shareParamsWithRecipients)">Allow viewing parameters</label>
+          </div>
+          <p class="text-xs text-gray-500">When on, people you share with can see extended parameters (e.g. in Latest params). Serial is never shared.</p>
+        </div>
       </div>
-      <p class="text-xs text-gray-500">When on, anyone with the link can view this track on a read-only map (no login required).</p>
-      <div v-if="worldShareEnabled && worldShareUrl" class="flex gap-2 items-center">
-        <input
-          :value="fullWorldShareUrl"
-          readonly
-          class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 font-mono"
-        />
-        <button type="button" class="px-3 py-2 bg-gray-200 rounded text-sm whitespace-nowrap" @click="copy(fullWorldShareUrl)">Copy</button>
+      <div class="border border-gray-200 rounded-lg p-3 space-y-3 bg-gray-50/50">
+        <h3 class="text-sm font-semibold text-gray-800">World share link</h3>
+        <div class="space-y-2">
+          <div class="flex items-center gap-3">
+            <ToggleButton
+              :model-value="worldShareEnabled"
+              label="World share link"
+              size="md"
+              @update:model-value="$emit('update:worldShareEnabled', $event)"
+            />
+            <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="$emit('update:worldShareEnabled', !worldShareEnabled)">World share link</label>
+          </div>
+          <p class="text-xs text-gray-500">When on, anyone with the link can view this track on a read-only map (no login required).</p>
+        </div>
+        <div class="space-y-2">
+          <div class="flex items-center gap-3">
+            <ToggleButton
+              :model-value="shareParamsWithRecipients"
+              label="Allow viewing parameters"
+              size="md"
+              @update:model-value="$emit('update:shareParamsWithRecipients', $event)"
+            />
+            <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="$emit('update:shareParamsWithRecipients', !shareParamsWithRecipients)">Allow viewing parameters</label>
+          </div>
+          <p class="text-xs text-gray-500">When on, anyone with the link can see extended parameters. Serial is never shared.</p>
+        </div>
+        <div v-if="worldShareEnabled && worldShareUrl" class="flex gap-2 items-center">
+          <input
+            :value="fullWorldShareUrl"
+            readonly
+            class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 font-mono"
+          />
+          <button type="button" class="px-3 py-2 bg-gray-200 rounded text-sm whitespace-nowrap" @click="copy(fullWorldShareUrl)">Copy</button>
+        </div>
       </div>
-    </div>
+    </template>
     <div class="space-y-2">
       <label class="text-sm font-medium text-gray-700">Visibility Window</label>
       <select
