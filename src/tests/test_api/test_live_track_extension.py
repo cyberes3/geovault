@@ -1426,6 +1426,36 @@ class TestLiveTrackIngress(TestCase):
         self.assertEqual(coords[0][1], 37.5)
         self.assertEqual(coords[0][0], -122.5)
 
+    def test_ingress_gpslogger_form_all_strings_invalid_bearing(self):
+        """POST with GPSLogger-style form body (all string values, invalid bearing) returns 200."""
+        form_body = (
+            "lat=39.12176081&lon=-104.88864222&sat=10&desc=&alt=2253.0859375"
+            "&acc=8.452844619750977&bearing=ARING&prov=gps&spd_kph=0.0"
+            "&timestamp=1773445312&starttimestamp=1773445310&batt=72.0"
+            "&ischarging=true&ser=852210c6e27f72b8&dist=0"
+        )
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                response = self.client.post(
+                    self.ingress_url,
+                    data=form_body,
+                    content_type="application/x-www-form-urlencoded",
+                    HTTP_AUTHORIZATION=self.auth_header,
+                )
+        self.assertEqual(response.status_code, 200, response.content)
+        track = LiveTrack.objects.get(id=self.track_id)
+        coords = (track.geometry or {}).get("coordinates", [])
+        self.assertEqual(len(coords), 1)
+        self.assertEqual(coords[0][1], 39.12176081)
+        self.assertEqual(coords[0][0], -104.88864222)
+        params = track.point_params or []
+        self.assertEqual(len(params), 1)
+        self.assertIsNone(params[0].get("bearing"))
+        self.assertEqual(params[0].get("alt"), 2253.0859375)
+        self.assertEqual(params[0].get("batt"), 72.0)
+        self.assertIs(params[0].get("ischarging"), True)
+
     def test_ingress_optional_params_stored(self):
         """Optional params (alt, acc, spd_kph) are stored in point_params."""
         with _patch_live_track_enabled():

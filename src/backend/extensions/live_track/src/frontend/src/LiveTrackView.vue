@@ -788,11 +788,13 @@ function getTrackArrowDataURL(color, selected) {
     selected
       ? '<circle cx="16" cy="16" r="15" fill="white" stroke="#000" stroke-width="1.5"/>'
       : '';
+  const chevronStroke = '#000';
+  const chevronStrokeWidth = selected ? '1' : '2';
   const pathTransform = ' transform="translate(16,2.6) scale(0.8) translate(-16,-2.6)"';
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="' + ARROW_RASTER_SIZE + '" height="' + ARROW_RASTER_SIZE + '" shape-rendering="geometricPrecision">' +
     circle +
-    '<path' + pathTransform + ' fill="' + fill + '" shape-rendering="geometricPrecision" d="' + ARROW_PATH_D + '"/>' +
+    '<path' + pathTransform + ' fill="' + fill + '" stroke="' + chevronStroke + '" stroke-width="' + chevronStrokeWidth + '" stroke-linejoin="round" shape-rendering="geometricPrecision" d="' + ARROW_PATH_D + '"/>' +
     '</svg>';
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }

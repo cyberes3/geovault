@@ -3,9 +3,73 @@ Pydantic models for live_track request validation.
 Ingress body: only GPSLogger-supported params we accept (no profile, filename, act, timeoffset, spd, aid).
 """
 
-from typing import Literal, Optional, Union
+from typing import Annotated, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic.functional_validators import BeforeValidator
+
+
+def _coerce_float(v):
+    """Coerce str/int to float for form-urlencoded clients (e.g. GPSLogger). Invalid -> None for optional use."""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str):
+        s = v.strip()
+        if s == "":
+            return None
+        try:
+            return float(s)
+        except ValueError:
+            return None
+    return None
+
+
+def _coerce_float_required(v):
+    """Coerce str/int to float; leave as-is so Pydantic raises for required fields if invalid."""
+    if v is None:
+        return v
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str):
+        s = v.strip()
+        if s == "":
+            return v
+        try:
+            return float(s)
+        except ValueError:
+            return v
+    return v
+
+
+def _coerce_int(v):
+    """Coerce str/float to int for form-urlencoded clients. Invalid -> None for optional use."""
+    if v is None:
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, (float, str)):
+        try:
+            return int(float(v))
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
+def _coerce_ischarging(v):
+    """Coerce 'true'/'false' strings to bool; leave other values for Pydantic."""
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        low = v.strip().lower()
+        if low in ("true", "1", "yes"):
+            return True
+        if low in ("false", "0", "no", ""):
+            return False
+    return v
 
 
 class TrackerCheckRequest(BaseModel):
@@ -50,26 +114,28 @@ class TrackSettingsRequest(BaseModel):
 
 
 class LiveTrackIngressBody(BaseModel):
-    """Pydantic model for ingress POST body. Unknown keys are dropped before validation."""
+    """Pydantic model for ingress POST body. Unknown keys are dropped before validation.
+    Form-urlencoded clients (e.g. GPSLogger) send all values as strings; we coerce and treat
+    unparseable optional numerics as None (e.g. placeholder/corrupt bearing like 'ARING')."""
 
     model_config = ConfigDict(extra="ignore")
 
-    lat: float = Field(..., description="Latitude")
-    lon: float = Field(..., description="Longitude")
+    lat: Annotated[float, BeforeValidator(_coerce_float_required)] = Field(..., description="Latitude")
+    lon: Annotated[float, BeforeValidator(_coerce_float_required)] = Field(..., description="Longitude")
     # Optional (stored in point_params); timestamp (epoch sec or ms) used for point time if present
-    sat: Optional[int] = None
+    sat: Annotated[Optional[int], BeforeValidator(_coerce_int)] = None
     desc: Optional[str] = None
-    alt: Optional[float] = None
-    acc: Optional[float] = None
-    bearing: Optional[float] = Field(default=None, description="Bearing in degrees (0–360)")
+    alt: Annotated[Optional[float], BeforeValidator(_coerce_float)] = None
+    acc: Annotated[Optional[float], BeforeValidator(_coerce_float)] = None
+    bearing: Annotated[Optional[float], BeforeValidator(_coerce_float)] = Field(default=None, description="Bearing in degrees (0–360)")
     prov: Optional[str] = None
-    spd_kph: Optional[float] = None
-    timestamp: Optional[int] = None
-    starttimestamp: Optional[int] = None
-    batt: Optional[float] = None
-    ischarging: Optional[Union[bool, str]] = None
+    spd_kph: Annotated[Optional[float], BeforeValidator(_coerce_float)] = None
+    timestamp: Annotated[Optional[int], BeforeValidator(_coerce_int)] = None
+    starttimestamp: Annotated[Optional[int], BeforeValidator(_coerce_int)] = None
+    batt: Annotated[Optional[float], BeforeValidator(_coerce_float)] = None
+    ischarging: Annotated[Optional[Union[bool, str]], BeforeValidator(_coerce_ischarging)] = None
     ser: Optional[str] = None
-    dist: Optional[float] = None
+    dist: Annotated[Optional[float], BeforeValidator(_coerce_float)] = None
 
 
 # Human-readable labels for the params table (e.g. in Latest Params modal)

@@ -9,6 +9,7 @@ DEFAULT_TRACK_COLOR = "#6C93DE"
 
 
 import json
+import re
 import time
 from urllib.parse import parse_qs
 
@@ -246,15 +247,45 @@ def can_user_see_track_via_group(user, track: LiveTrack) -> bool:
     ).exists()
 
 
+# Charset alias map for Content-Type (HTTP names -> Python codec names)
+_CHARSET_ALIASES = {
+    "iso-8859-1": "latin-1",
+    "iso_8859-1": "latin-1",
+    "latin1": "latin-1",
+    "utf-8": "utf-8",
+    "utf8": "utf-8",
+}
+
+
+def _decode_request_body(raw: bytes, content_type: str) -> str:
+    """Decode request body using charset from Content-Type; fallback UTF-8 then Latin-1 to avoid replacement chars."""
+    charset = None
+    if content_type:
+        match = re.search(r"charset\s*=\s*([^\s;]+)", content_type, re.IGNORECASE)
+        if match:
+            charset = match.group(1).strip(" \t\"'").lower()
+            charset = _CHARSET_ALIASES.get(charset, charset)
+    for encoding in (charset or "utf-8", "utf-8", "latin-1"):
+        if not encoding:
+            continue
+        try:
+            return raw.decode(encoding)
+        except (LookupError, UnicodeDecodeError):
+            continue
+    return raw.decode("latin-1")  # never fails
+
+
 def parse_ingress_body(request) -> dict:
     """Parse POST body as form or JSON into a flat dict for Pydantic."""
-    ct = (request.content_type or "").split(";")[0].strip().lower()
+    content_type = (request.META.get("CONTENT_TYPE") or request.content_type or "").strip()
+    ct = content_type.split(";")[0].strip().lower()
     if ct == "application/json":
         try:
-            return json.loads(request.body.decode("utf-8"))
+            body_str = _decode_request_body(request.body, content_type)
+            return json.loads(body_str)
         except (json.JSONDecodeError, UnicodeDecodeError):
             return {}
-    body = request.body.decode("utf-8")
+    body = _decode_request_body(request.body, content_type)
     parsed = parse_qs(body, keep_blank_values=True)
     return {k: (v[0] if len(v) == 1 else v) for k, v in parsed.items()}
 
