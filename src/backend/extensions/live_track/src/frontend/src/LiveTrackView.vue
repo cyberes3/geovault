@@ -880,9 +880,15 @@ export default {
 
     function buildLinesGeoJSON() {
       const hidden = hiddenTrackIds.value;
+      const groupId = activeGroupId.value;
+      const groupTrackIds =
+        groupId != null && activeGroup.value
+          ? new Set((activeGroup.value.track_ids || []).map((id) => String(id)))
+          : null;
       const features = [];
       for (const track of trackers.value) {
         if (hidden.has(String(track.id))) continue;
+        if (groupTrackIds != null && !groupTrackIds.has(String(track.id))) continue;
         const coordsSorted = getCoordsSortedByTime(track);
         const coords = coordsSorted.map((c) => [c[0], c[1]]);
         if (coords.length < 2) continue;
@@ -910,9 +916,15 @@ export default {
 
     function buildPointsGeoJSON() {
       const hidden = hiddenTrackIds.value;
+      const groupId = activeGroupId.value;
+      const groupTrackIds =
+        groupId != null && activeGroup.value
+          ? new Set((activeGroup.value.track_ids || []).map((id) => String(id)))
+          : null;
       const features = [];
       for (const track of trackers.value) {
         if (hidden.has(String(track.id))) continue;
+        if (groupTrackIds != null && !groupTrackIds.has(String(track.id))) continue;
         const coordsSorted = getCoordsSortedByTime(track);
         const last = coordsSorted.length ? coordsSorted[coordsSorted.length - 1] : null;
         const pos = (last && last.length >= 2) ? [last[0], last[1]] : (track.last_position ? [track.last_position.lon, track.last_position.lat] : null);
@@ -1654,6 +1666,7 @@ export default {
     function onGroupListClick(group) {
       activeGroupId.value = group?.id ?? null;
       selectedId.value = null;
+      updateMapFeatures();
       fitMapToGroupTracks(group);
     }
 
@@ -1664,8 +1677,9 @@ export default {
     function onGroupQuickViewFitMap() {
       const g = groupQuickViewGroup.value;
       if (!g) return;
-      fitMapToGroupTracks(g);
       activeGroupId.value = g.id ?? null;
+      updateMapFeatures();
+      fitMapToGroupTracks(g);
     }
 
     function zoomToTrackInGroup(track) {
@@ -1706,11 +1720,13 @@ export default {
 
     function deselectGroup() {
       activeGroupId.value = null;
+      updateMapFeatures();
     }
 
     function deselectSelection() {
       activeGroupId.value = null;
       selectedId.value = null;
+      updateMapFeatures();
       if (isMobileView.value) collapseDrawerToPeek();
     }
 
