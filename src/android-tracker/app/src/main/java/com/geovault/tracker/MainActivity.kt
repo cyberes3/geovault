@@ -201,8 +201,10 @@ class MainActivity : AppCompatActivity() {
                 }
                 lastSelectedTabIndex = position
                 updateNavTabBackground(position)
+                if (position == 2) TrackerRepository.prefetchGroups(this@MainActivity)
             }
         })
+        if (savedTab == 2) TrackerRepository.prefetchGroups(this)
 
         findViewById<View>(R.id.navHome).setOnClickListener {
             if (isParamsOverlayOnTop()) {

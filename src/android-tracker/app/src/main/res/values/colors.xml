@@ -24,6 +24,7 @@
     <color name="content_on_primary">@color/gv_common_content_on_primary</color>
     <color name="border_light">@color/gv_common_border_light</color>
     <color name="divider">@color/gv_common_gray_200</color>
+    <color name="card_stroke_color">@color/primary_blue</color>
 
     <!-- Error state (for error_background drawable) -->
     <color name="error_light">@color/gv_common_error_light</color>

@@ -309,6 +309,13 @@ class MapFragment : Fragment() {
         updateFollowLockButton()
         updateZoomToLatestButtonState()
 
+        requireActivity().supportFragmentManager.setFragmentResultListener(TrackersFragment.REQUEST_REFRESH_LIST, viewLifecycleOwner) { _, bundle ->
+            val hiddenId = bundle?.getString(TrackersFragment.KEY_HIDDEN_TRACKER_ID) ?: return@setFragmentResultListener
+            if (hiddenId == displayedTrackerId) {
+                refreshTrackForSelectedTracker()
+            }
+        }
+
         mapToggle.setOnClickListener {
             val map = maplibreMap ?: return@setOnClickListener
             val mgr = mapManager ?: return@setOnClickListener

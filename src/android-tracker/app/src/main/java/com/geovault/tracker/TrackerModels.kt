@@ -118,7 +118,7 @@ data class Group(
     val updated_at: Long? = null,
     val is_owner: Boolean? = null,
     val owner_email: String? = null,
-    val track_ids: List<String> = emptyList()
+    val track_ids: List<String>? = null
 )
 
 data class GroupCreateRequest(val name: String)

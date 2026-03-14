@@ -11,7 +11,7 @@
     app:cardElevation="0dp"
     app:cardBackgroundColor="@color/surface"
     app:strokeWidth="@dimen/card_stroke_width"
-    app:strokeColor="@color/primary_blue">
+    app:strokeColor="@color/card_stroke_color">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -161,16 +161,5 @@
                 android:text="@string/remove_from_share"
                 android:textSize="13sp" />
         </LinearLayout>
-
-        <TextView
-            android:id="@+id/btnHideOnMap"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
-            android:textSize="13sp"
-            android:textColor="@color/primary_blue"
-            android:visibility="gone"
-            android:text="@string/hide_on_map" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

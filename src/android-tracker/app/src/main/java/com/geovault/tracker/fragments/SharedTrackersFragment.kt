@@ -33,7 +33,6 @@ class SharedTrackersFragment : Fragment() {
     private lateinit var loadingOverlay: View
     private lateinit var loadingSpinner: LoadingSpinner
     private var adapter: SharedTrackersAdapter? = null
-    private var hiddenTrackIds: Set<String> = emptySet()
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_shared_trackers, container, false)
@@ -54,13 +53,12 @@ class SharedTrackersFragment : Fragment() {
         swipeRefresh.setOnRefreshListener { loadTrackers() }
 
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        adapter = SharedTrackersAdapter(emptyList(), hiddenTrackIds) { tracker, action ->
+        adapter = SharedTrackersAdapter(emptyList()) { tracker, action ->
             when (action) {
                 TrackerAction.EDIT -> (activity as? MainActivity)?.showEditTrackerFragment(tracker)
                 TrackerAction.VIEW_ON_MAP -> viewOnMap(tracker)
                 TrackerAction.UNSUBSCRIBE -> unsubscribeTracker(tracker)
                 TrackerAction.REMOVE_FROM_SHARE -> removeFromShare(tracker)
-                TrackerAction.TOGGLE_HIDE_ON_MAP -> toggleHideOnMap(tracker)
                 TrackerAction.VIEW_PARAMS -> (activity as? MainActivity)?.showTrackerParamsFragment(
                     tracker.id,
                     tracker.name,
@@ -87,14 +85,10 @@ class SharedTrackersFragment : Fragment() {
     }
 
     private fun loadTrackers() {
-        var trackersResult: List<Tracker>? = null
-        var visibilityResult: com.geovault.tracker.MapVisibilityResponse? = null
-        fun maybeApply() {
-            if (trackersResult != null && visibilityResult != null && isAdded) {
+        TrackerRepository.getTrackers(requireContext(), forceRefresh = true) { list ->
+            if (isAdded) {
                 requireActivity().runOnUiThread {
-                    hiddenTrackIds = visibilityResult!!.hidden_track_ids.toSet()
-                    adapter?.setHiddenTrackIds(hiddenTrackIds)
-                    val shared = (trackersResult ?: emptyList()).filter { !it.isOwner() }
+                    val shared = (list ?: emptyList()).filter { !it.isOwner() }
                     adapter?.setTrackers(shared)
                     emptyView.visibility = if (shared.isEmpty()) View.VISIBLE else View.GONE
                     loadingOverlay.visibility = View.GONE
@@ -102,14 +96,6 @@ class SharedTrackersFragment : Fragment() {
                     swipeRefresh.isRefreshing = false
                 }
             }
-        }
-        TrackerRepository.getTrackers(requireContext(), forceRefresh = true) { list ->
-            trackersResult = list
-            maybeApply()
-        }
-        TrackerRepository.getMapVisibility(requireContext()) { vis ->
-            visibilityResult = vis ?: com.geovault.tracker.MapVisibilityResponse()
-            maybeApply()
         }
     }
 
@@ -149,31 +135,12 @@ class SharedTrackersFragment : Fragment() {
         }
     }
 
-    private fun toggleHideOnMap(tracker: Tracker) {
-        val newSet = if (tracker.id in hiddenTrackIds) hiddenTrackIds - tracker.id else hiddenTrackIds + tracker.id
-        TrackerRepository.patchMapVisibility(requireContext(), com.geovault.tracker.MapVisibilityRequest(hidden_track_ids = newSet.toList())) { updated ->
-            if (isAdded && updated != null) {
-                requireActivity().runOnUiThread {
-                    hiddenTrackIds = updated.hidden_track_ids.toSet()
-                    adapter?.setHiddenTrackIds(hiddenTrackIds)
-                }
-            }
-        }
-    }
-
-    private enum class TrackerAction { EDIT, VIEW_ON_MAP, VIEW_PARAMS, UNSUBSCRIBE, REMOVE_FROM_SHARE, TOGGLE_HIDE_ON_MAP }
+    private enum class TrackerAction { EDIT, VIEW_ON_MAP, VIEW_PARAMS, UNSUBSCRIBE, REMOVE_FROM_SHARE }
 
     private class SharedTrackersAdapter(
         private var trackers: List<Tracker>,
-        private var hiddenTrackIds: Set<String>,
         private val onAction: (Tracker, TrackerAction) -> Unit
     ) : RecyclerView.Adapter<SharedTrackersAdapter.ViewHolder>() {
-
-        fun setHiddenTrackIds(ids: Set<String>) {
-            if (hiddenTrackIds == ids) return
-            hiddenTrackIds = ids
-            notifyDataSetChanged()
-        }
 
         fun setTrackers(list: List<Tracker>) {
             trackers = list
@@ -186,7 +153,7 @@ class SharedTrackersFragment : Fragment() {
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            holder.bind(trackers[position], hiddenTrackIds)
+            holder.bind(trackers[position])
         }
 
         override fun getItemCount(): Int = trackers.size
@@ -204,9 +171,8 @@ class SharedTrackersFragment : Fragment() {
             private val sharedActionsRow: View = itemView.findViewById(R.id.trackerSharedActionsRow)
             private val btnUnsubscribe: MaterialButton = itemView.findViewById(R.id.btnUnsubscribe)
             private val btnRemoveFromShare: MaterialButton = itemView.findViewById(R.id.btnRemoveFromShare)
-            private val btnHideOnMap: TextView = itemView.findViewById(R.id.btnHideOnMap)
 
-            fun bind(tracker: Tracker, hiddenTrackIds: Set<String>) {
+            fun bind(tracker: Tracker) {
                 val selectedId = itemView.context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
                     .getString("selected_tracker_id", "") ?: ""
                 trackerSelectedCheck.visibility = if (tracker.id == selectedId) View.VISIBLE else View.GONE
@@ -244,10 +210,6 @@ class SharedTrackersFragment : Fragment() {
                 sharedActionsRow.visibility = View.VISIBLE
                 btnUnsubscribe.setOnClickListener { onAction(tracker, TrackerAction.UNSUBSCRIBE) }
                 btnRemoveFromShare.setOnClickListener { onAction(tracker, TrackerAction.REMOVE_FROM_SHARE) }
-                val hidden = tracker.id in hiddenTrackIds
-                btnHideOnMap.visibility = View.VISIBLE
-                btnHideOnMap.text = itemView.context.getString(if (hidden) R.string.show_on_map else R.string.hide_on_map)
-                btnHideOnMap.setOnClickListener { onAction(tracker, TrackerAction.TOGGLE_HIDE_ON_MAP) }
                 btnViewParams.setOnClickListener { onAction(tracker, TrackerAction.VIEW_PARAMS) }
                 btnEdit.setOnClickListener { onAction(tracker, TrackerAction.EDIT) }
                 btnViewOnMap.setOnClickListener { onAction(tracker, TrackerAction.VIEW_ON_MAP) }

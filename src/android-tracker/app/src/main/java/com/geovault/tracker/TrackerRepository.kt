@@ -79,6 +79,8 @@ object TrackerRepository {
 
     fun clearCache() {
         trackersCache = null
+        groupsCache = null
+        mapVisibilityCache = null
     }
 
     fun getTracker(context: Context, id: String, forceRefresh: Boolean = false, callback: (Tracker?) -> Unit) {
@@ -501,7 +503,16 @@ object TrackerRepository {
         })
     }
 
-    fun getGroups(context: Context, callback: (List<Group>?) -> Unit) {
+    @Volatile
+    private var groupsCache: List<Group>? = null
+
+    fun getGroupsCache(): List<Group>? = groupsCache
+
+    fun getGroups(context: Context, forceRefresh: Boolean = false, callback: (List<Group>?) -> Unit) {
+        if (!forceRefresh && groupsCache != null) {
+            callback(groupsCache)
+            return
+        }
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
         if (serverUrl.isEmpty()) {
             callback(null)
@@ -511,13 +522,20 @@ object TrackerRepository {
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
         api.getGroups().enqueue(object : Callback<List<Group>> {
             override fun onResponse(call: Call<List<Group>>, response: Response<List<Group>>) {
-                callback(response.body() ?: emptyList())
+                val list = response.body() ?: emptyList()
+                groupsCache = list
+                callback(list)
             }
             override fun onFailure(call: Call<List<Group>>, t: Throwable) {
                 Log.e("TrackerRepository", "Get groups failed", t)
                 callback(null)
             }
         })
+    }
+
+    /** Prefetch groups into cache so Groups screen opens instantly. Call when Trackers tab is visible. */
+    fun prefetchGroups(context: Context) {
+        getGroups(context, forceRefresh = true) { }
     }
 
     fun createGroup(context: Context, name: String, callback: (Group?) -> Unit) {
@@ -530,6 +548,7 @@ object TrackerRepository {
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
         api.createGroup(GroupCreateRequest(name = name)).enqueue(object : Callback<Group> {
             override fun onResponse(call: Call<Group>, response: Response<Group>) {
+                groupsCache = null
                 callback(response.body())
             }
             override fun onFailure(call: Call<Group>, t: Throwable) {
@@ -568,6 +587,7 @@ object TrackerRepository {
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
         api.patchGroup(groupId, request).enqueue(object : Callback<Group> {
             override fun onResponse(call: Call<Group>, response: Response<Group>) {
+                groupsCache = null
                 callback(response.body())
             }
             override fun onFailure(call: Call<Group>, t: Throwable) {
@@ -587,6 +607,7 @@ object TrackerRepository {
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
         api.deleteGroup(groupId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                if (response.isSuccessful) groupsCache = null
                 callback(response.isSuccessful)
             }
             override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
@@ -606,6 +627,7 @@ object TrackerRepository {
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
         api.addGroupTrack(groupId, GroupAddTrackRequest(track_id = trackId)).enqueue(object : Callback<Group> {
             override fun onResponse(call: Call<Group>, response: Response<Group>) {
+                groupsCache = null
                 callback(response.body())
             }
             override fun onFailure(call: Call<Group>, t: Throwable) {
@@ -625,6 +647,7 @@ object TrackerRepository {
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
         api.removeGroupTrack(groupId, trackId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                if (response.isSuccessful) groupsCache = null
                 callback(response.isSuccessful)
             }
             override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
@@ -644,6 +667,7 @@ object TrackerRepository {
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
         api.leaveGroup(groupId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                if (response.isSuccessful) groupsCache = null
                 callback(response.isSuccessful)
             }
             override fun onFailure(call: Call<ResponseBody>, t: Throwable) {

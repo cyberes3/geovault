@@ -70,6 +70,14 @@
                 android:textColor="@color/text_primary"
                 android:layout_marginBottom="16dp" />
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/hiddenTrackersButton"
+                style="@style/gv_common_ButtonOutlined"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="@string/hidden_trackers"
+                android:layout_marginBottom="16dp" />
+
             <!-- HR between toggles and logging/filter -->
             <View
                 android:layout_width="match_parent"
@@ -98,17 +106,19 @@
                 android:textColor="@color/text_primary"
                 android:layout_marginBottom="8dp" />
 
-            <Spinner
-                android:id="@+id/profileSpinner"
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/gv_common_ExposedDropdownMenu"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="56dp"
-                android:background="@drawable/bg_spinner_selector"
-                android:paddingStart="14dp"
-                android:paddingEnd="40dp"
-                android:paddingTop="14dp"
-                android:paddingBottom="14dp"
-                android:layout_marginBottom="24dp" />
+                android:layout_marginBottom="24dp">
+                <AutoCompleteTextView
+                    android:id="@+id/profileSpinner"
+                    style="@style/gv_common_AutoCompleteDropdown"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="56dp"
+                    android:hint="@string/tracking_profile_label" />
+            </com.google.android.material.textfield.TextInputLayout>
 
 
             <!-- Logging / filter fields section -->

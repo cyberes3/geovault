@@ -16,6 +16,7 @@
     <string name="settings_title">Settings</string>
     <string name="loading_trackers">Loading trackers…</string>
     <string name="loading_params">Loading…</string>
+    <string name="loading_groups">Loading groups…</string>
     <string name="select_tracker">Select a tracker</string>
     <string name="no_tracker_selected">No tracker selected</string>
     <string name="no_trackers_found">No trackers found</string>
@@ -160,7 +161,7 @@
     <string name="saved_tracker">Saved tracker</string>
     <string name="create">Create</string>
 <string name="new_tracker_title">New Track</string>
-<string name="edit_tracker_title">Edit Track</string>
+<string name="edit_tracker_title">Edit Tracker</string>
 <string name="discard_changes_confirm_title">Discard Changes?</string>
     <string name="discard_changes_confirm_message">You have unsaved changes. Close without saving?</string>
     <string name="discard">Discard</string>
@@ -232,6 +233,7 @@
 
     <!-- Groups -->
     <string name="groups_title">Groups</string>
+    <string name="open_groups">Open groups</string>
     <string name="create_group">Create group</string>
     <string name="new_group_name_hint">Group name</string>
     <string name="group_tracks">Tracks</string>
@@ -248,8 +250,13 @@
     <string name="group_delete_confirm_message">This cannot be undone. Members will lose access.</string>
     <string name="no_groups">No groups. Create one to organize trackers.</string>
 
-    <string name="hide_on_map">Hide on map</string>
+    <string name="hide_on_map">Hide</string>
     <string name="show_on_map">Show on map</string>
+    <string name="hidden_trackers">Hidden trackers</string>
+    <string name="hidden_trackers_empty">No hidden trackers.</string>
+    <string name="hidden_trackers_show_item">Show %1$s</string>
+    <string name="show">Show</string>
+    <string name="show_all">Show all</string>
 
     <string name="subscribers_title">Subscribers</string>
     <string name="export_kml">Export KML</string>

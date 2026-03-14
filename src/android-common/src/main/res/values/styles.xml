@@ -83,6 +83,24 @@
         <item name="android:textColor">@color/gv_common_dialog_positive_button</item>
     </style>
 
+    <!-- Styled dropdown: Material ExposedDropdownMenu container (use with AutoCompleteTextView inside) -->
+    <style name="gv_common_ExposedDropdownMenu" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
+        <item name="boxStrokeWidth">0dp</item>
+        <item name="boxStrokeWidthFocused">0dp</item>
+        <item name="hintEnabled">false</item>
+        <item name="endIconTint">@color/gv_common_text_secondary</item>
+    </style>
+
+    <!-- Inner AutoCompleteTextView for gv_common_ExposedDropdownMenu (no keyboard, themed text/background) -->
+    <style name="gv_common_AutoCompleteDropdown" parent="Widget.MaterialComponents.AutoCompleteTextView.FilledBox">
+        <item name="android:inputType">none</item>
+        <item name="android:defaultFocusHighlightEnabled">false</item>
+        <item name="android:textColor">@color/gv_common_text_primary</item>
+        <item name="android:textColorHint">@color/gv_common_text_secondary</item>
+        <item name="android:background">@drawable/gv_common_edit_text_background</item>
+        <item name="android:padding">12dp</item>
+    </style>
+
     <style name="gv_common_MaterialCardView_NoShadow" parent="Widget.MaterialComponents.CardView">
         <item name="cardElevation">0dp</item>
     </style>

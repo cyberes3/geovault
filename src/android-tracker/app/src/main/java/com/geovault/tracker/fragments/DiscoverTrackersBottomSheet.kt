@@ -131,7 +131,7 @@ class DiscoverTrackersBottomSheet : BottomSheetDialogFragment() {
             addBtn.isEnabled = false
             var failed = false
             var done = 0
-            val trackIds = group.track_ids
+            val trackIds = group.track_ids ?: emptyList()
             if (trackIds.isEmpty()) {
                 parent.removeView(row)
                 parentFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, Bundle())

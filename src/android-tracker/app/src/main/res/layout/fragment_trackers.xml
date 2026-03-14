@@ -5,96 +5,74 @@
     android:layout_height="match_parent"
     android:background="@color/list_background">
 
-    <LinearLayout
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical">
+        android:layout_height="match_parent">
 
-        <!-- Create tracker button row (same style as places search bar container) -->
-        <LinearLayout
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/trackersSwipeRefresh"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingStart="20dp"
-            android:paddingEnd="20dp"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:background="@color/search_bar_container_background"
-            android:elevation="0dp">
+            android:layout_height="match_parent"
+            android:background="@color/list_background">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/createTrackerButton"
-                style="@style/gv_common_ButtonOutlined"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="1"
-                android:layout_marginEnd="8dp"
-                android:text="@string/create_new_tracker" />
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/groupsButton"
-                style="@style/gv_common_ButtonOutlined"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="1"
-                android:text="@string/groups_title" />
-        </LinearLayout>
-
-        <!-- Full-width divider (shown when list is scrolled, like places searchDivider) -->
-        <View
-            android:id="@+id/trackerListDivider"
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/search_divider"
-            android:visibility="invisible" />
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/trackersRecyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:padding="8dp"
+                android:clipToPadding="false" />
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
         <FrameLayout
+            android:id="@+id/trackersLoadingOverlay"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1">
+            android:layout_height="match_parent"
+            android:background="@color/list_background"
+            android:visibility="gone"
+            android:clickable="true"
+            android:focusable="true">
 
-            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-                android:id="@+id/trackersSwipeRefresh"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="@color/list_background">
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/trackersRecyclerView"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:padding="8dp"
-                    android:clipToPadding="false" />
-            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
-
-            <FrameLayout
-                android:id="@+id/trackersLoadingOverlay"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="@color/list_background"
-                android:visibility="gone"
-                android:clickable="true"
-                android:focusable="true">
-
-                <LinearLayout
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:orientation="vertical"
+                android:gravity="center_horizontal">
+                <com.geovault.common.LoadingSpinner
+                    android:id="@+id/trackersLoadingSpinner"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+                <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:orientation="vertical"
-                    android:gravity="center_horizontal">
-                    <com.geovault.common.LoadingSpinner
-                        android:id="@+id/trackersLoadingSpinner"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" />
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="@string/loading_trackers"
-                        android:textSize="14sp"
-                        android:textColor="@color/text_secondary" />
-                </LinearLayout>
-            </FrameLayout>
+                    android:layout_marginTop="12dp"
+                    android:text="@string/loading_trackers"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_secondary" />
+            </LinearLayout>
         </FrameLayout>
-    </LinearLayout>
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/trackersGroupsFab"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end|bottom"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="88dp"
+            android:contentDescription="@string/open_groups"
+            app:srcCompat="@drawable/ic_groups"
+            app:tint="@color/content_on_primary"
+            app:backgroundTint="@color/primary_blue" />
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/trackersCreateFab"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end|bottom"
+            android:layout_margin="16dp"
+            android:contentDescription="@string/create_new_tracker"
+            app:srcCompat="@drawable/ic_add"
+            app:tint="@color/content_on_primary"
+            app:backgroundTint="@color/primary_blue" />
+    </FrameLayout>
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -63,13 +63,21 @@
         android:layout_marginTop="8dp"
         android:layout_marginBottom="8dp"
         android:visibility="gone" />
-    <Spinner
-        android:id="@+id/groupDetailVisibility"
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/groupDetailVisibilityLayout"
+        style="@style/gv_common_ExposedDropdownMenu"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:minHeight="40dp"
         android:layout_marginBottom="8dp"
-        android:visibility="gone" />
+        android:visibility="gone">
+        <AutoCompleteTextView
+            android:id="@+id/groupDetailVisibility"
+            style="@style/gv_common_AutoCompleteDropdown"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="40dp"
+            android:hint="@string/visibility_label" />
+    </com.google.android.material.textfield.TextInputLayout>
     <LinearLayout
         android:id="@+id/groupDetailSharedWithList"
         android:layout_width="match_parent"

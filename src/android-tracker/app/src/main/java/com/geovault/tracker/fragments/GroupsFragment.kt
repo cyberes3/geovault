@@ -5,10 +5,13 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageButton
 import android.widget.TextView
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.Group
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
@@ -17,8 +20,12 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 
 class GroupsFragment : Fragment() {
 
+    private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyView: TextView
+    private lateinit var loadingOverlay: View
+    private lateinit var loadingSpinner: LoadingSpinner
+    private lateinit var closeButton: ImageButton
     private lateinit var fab: FloatingActionButton
     private var adapter: GroupsAdapter? = null
 
@@ -28,8 +35,12 @@ class GroupsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        swipeRefresh = view.findViewById(R.id.groupsSwipeRefresh)
         recyclerView = view.findViewById(R.id.groupsRecyclerView)
         emptyView = view.findViewById(R.id.groupsEmpty)
+        loadingOverlay = view.findViewById(R.id.groupsLoadingOverlay)
+        loadingSpinner = view.findViewById(R.id.groupsLoadingSpinner)
+        closeButton = view.findViewById(R.id.groupsCloseButton)
         fab = view.findViewById(R.id.groupsFab)
 
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
@@ -38,26 +49,48 @@ class GroupsFragment : Fragment() {
         }
         recyclerView.adapter = adapter
 
+        closeButton.setOnClickListener {
+            requireActivity().supportFragmentManager.popBackStack()
+        }
         fab.setOnClickListener { showCreateGroupDialog() }
 
+        swipeRefresh.setOnRefreshListener { loadGroups(forceRefresh = true) }
+
         parentFragmentManager.setFragmentResultListener(REQUEST_GROUPS_REFRESH, viewLifecycleOwner) { _, _ ->
-            loadGroups()
+            loadGroups(forceRefresh = true)
         }
 
-        loadGroups()
+        val cached = TrackerRepository.getGroupsCache()
+        if (cached != null) {
+            applyGroups(cached)
+        } else {
+            loadingOverlay.visibility = View.VISIBLE
+            loadingSpinner.start()
+            loadGroups(forceRefresh = false)
+        }
     }
 
     companion object {
         const val REQUEST_GROUPS_REFRESH = "groups_refresh"
     }
 
-    fun loadGroups() {
-        TrackerRepository.getGroups(requireContext()) { list ->
+    private fun applyGroups(groups: List<Group>) {
+        loadingOverlay.visibility = View.GONE
+        loadingSpinner.stop(hide = false)
+        swipeRefresh.isRefreshing = false
+        adapter?.setGroups(groups)
+        emptyView.visibility = if (groups.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    private fun loadGroups(forceRefresh: Boolean = false) {
+        if (forceRefresh) {
+            loadingOverlay.visibility = View.VISIBLE
+            loadingSpinner.start()
+        }
+        TrackerRepository.getGroups(requireContext(), forceRefresh = forceRefresh) { list ->
             if (!isAdded) return@getGroups
             requireActivity().runOnUiThread {
-                val groups = list ?: emptyList()
-                adapter?.setGroups(groups)
-                emptyView.visibility = if (groups.isEmpty()) View.VISIBLE else View.GONE
+                applyGroups(list ?: emptyList())
             }
         }
     }
@@ -76,7 +109,7 @@ class GroupsFragment : Fragment() {
                     TrackerRepository.createGroup(requireContext(), name) { group ->
                         if (isAdded && group != null) {
                             requireActivity().runOnUiThread {
-                                loadGroups()
+                                loadGroups(forceRefresh = true)
                                 (activity as? MainActivity)?.showSnackbar(getString(R.string.saved_tracker))
                                 GroupDetailBottomSheet.newInstance(group).show(parentFragmentManager, "group_detail")
                             }
@@ -115,7 +148,7 @@ class GroupsFragment : Fragment() {
 
             fun bind(group: Group) {
                 name.text = group.name
-                val tracks = group.track_ids.size
+                val tracks = group.track_ids?.size ?: 0
                 val ownerStr = if (group.is_owner == true) " · Owner" else ""
                 meta.text = "$tracks tracks$ownerStr"
                 itemView.setOnClickListener { onGroupClick(group) }

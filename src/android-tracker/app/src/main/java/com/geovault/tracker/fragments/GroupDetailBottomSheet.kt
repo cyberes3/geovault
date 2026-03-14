@@ -8,9 +8,9 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.ArrayAdapter
+import android.widget.AutoCompleteTextView
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.Spinner
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
@@ -20,6 +20,7 @@ import com.geovault.tracker.Group
 import com.geovault.tracker.GroupPatchRequest
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
+import com.geovault.common.R as CommonR
 import com.geovault.tracker.TrackerRepository
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 
@@ -32,7 +33,8 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
     private lateinit var deleteButton: com.google.android.material.button.MaterialButton
     private lateinit var sharingSectionHeader: TextView
     private lateinit var visibilityHeader: TextView
-    private lateinit var visibilitySpinner: Spinner
+    private lateinit var visibilityLayout: View
+    private lateinit var visibilitySpinner: AutoCompleteTextView
     private lateinit var sharedWithList: LinearLayout
     private lateinit var addSharedWithButton: com.google.android.material.button.MaterialButton
     private lateinit var worldShareRow: LinearLayout
@@ -55,6 +57,7 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
         deleteButton = view.findViewById(R.id.groupDetailDelete)
         sharingSectionHeader = view.findViewById(R.id.groupDetailSharingSectionHeader)
         visibilityHeader = view.findViewById(R.id.groupDetailSharingHeader)
+        visibilityLayout = view.findViewById(R.id.groupDetailVisibilityLayout)
         visibilitySpinner = view.findViewById(R.id.groupDetailVisibility)
         sharedWithList = view.findViewById(R.id.groupDetailSharedWithList)
         addSharedWithButton = view.findViewById(R.id.groupDetailAddSharedWith)
@@ -85,7 +88,7 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
         deleteButton.visibility = if (isOwner) View.VISIBLE else View.GONE
 
         tracksList.removeAllViews()
-        for (trackId in g.track_ids) {
+        for (trackId in (g.track_ids ?: emptyList())) {
             val row = layoutInflater.inflate(android.R.layout.simple_list_item_1, tracksList, false)
             (row as? TextView)?.text = trackId.take(8) + "…"
             if (isOwner) {
@@ -112,22 +115,19 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
         sharingSectionHeader.visibility = View.VISIBLE
         if (isOwner) {
             visibilityHeader.visibility = View.VISIBLE
-            visibilitySpinner.visibility = View.VISIBLE
+            visibilityLayout.visibility = View.VISIBLE
             worldShareRow.visibility = View.VISIBLE
             val visIndex = visibilityValues.indexOf(g.visibility ?: "private").coerceIn(0, visibilityValues.size - 1)
-            val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, listOf(getString(R.string.visibility_private), getString(R.string.visibility_shared), getString(R.string.visibility_public)))
-            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            visibilitySpinner.adapter = adapter
-            visibilitySpinner.setSelection(visIndex)
-            visibilitySpinner.setOnItemSelectedListener(object : android.widget.AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                    val vis = visibilityValues[position]
-                    if (vis != (group?.visibility ?: "private")) {
-                        patchGroupSharing(g, visibility = vis, sharedWithEmails = if (vis == "shared") (g.shared_with_emails ?: emptyList()) else null, worldShareEnabled = null)
-                    }
+            val labels = listOf(getString(R.string.visibility_private), getString(R.string.visibility_shared), getString(R.string.visibility_public))
+            val adapter = ArrayAdapter(requireContext(), CommonR.layout.gv_common_item_dropdown, labels)
+            visibilitySpinner.setAdapter(adapter)
+            visibilitySpinner.setText(labels[visIndex], false)
+            visibilitySpinner.setOnItemClickListener { _, _, position, _ ->
+                val vis = visibilityValues[position]
+                if (vis != (group?.visibility ?: "private")) {
+                    patchGroupSharing(g, visibility = vis, sharedWithEmails = if (vis == "shared") (g.shared_with_emails ?: emptyList()) else null, worldShareEnabled = null)
                 }
-                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
-            })
+            }
             val sharedWithEmails = g.shared_with_emails ?: emptyList()
             if (g.visibility == "shared") {
                 sharedWithList.visibility = View.VISIBLE
@@ -155,7 +155,7 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
             }
         } else {
             visibilityHeader.visibility = View.GONE
-            visibilitySpinner.visibility = View.GONE
+            visibilityLayout.visibility = View.GONE
             sharedWithList.visibility = View.GONE
             addSharedWithButton.visibility = View.GONE
             worldShareRow.visibility = View.GONE
@@ -246,7 +246,7 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
         TrackerRepository.getTrackers(requireContext(), forceRefresh = true) { list ->
             if (!isAdded) return@getTrackers
             val trackers = list ?: emptyList()
-            val alreadyInGroup = g.track_ids.toSet()
+            val alreadyInGroup = (g.track_ids ?: emptyList()).toSet()
             val addable = trackers.filter { it.id !in alreadyInGroup }
             requireActivity().runOnUiThread {
                 if (addable.isEmpty()) {

@@ -7,7 +7,13 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.*
+import android.widget.ArrayAdapter
+import android.widget.LinearLayout
+import android.widget.AutoCompleteTextView
+import android.widget.EditText
+import android.widget.ImageButton
+import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
@@ -16,8 +22,12 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.R as CommonR
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
+import com.geovault.tracker.Tracker
+import com.geovault.tracker.TrackerRepository
+import com.geovault.tracker.TrackerSettingsRequest
 import com.google.android.material.button.MaterialButton
 
 class SettingsFragment : Fragment() {
@@ -29,7 +39,7 @@ class SettingsFragment : Fragment() {
     private lateinit var intervalEdit: EditText
     private lateinit var distanceEdit: EditText
     private lateinit var accuracyEdit: EditText
-    private lateinit var profileSpinner: Spinner
+    private lateinit var profileSpinner: AutoCompleteTextView
     private lateinit var extendedParamsSwitch: SwitchCompat
     private lateinit var significantMotionSwitch: SwitchCompat
     private lateinit var significantMotionRow: View
@@ -37,6 +47,7 @@ class SettingsFragment : Fragment() {
     private lateinit var restartTrackingIfKilledSwitch: SwitchCompat
     private lateinit var startTrackingOnLaunchSwitch: SwitchCompat
     private lateinit var autoTrackingSwitch: SwitchCompat
+    private lateinit var hiddenTrackersButton: MaterialButton
     private lateinit var distanceLabel: TextView
     private lateinit var accuracyLabel: TextView
 
@@ -83,6 +94,7 @@ class SettingsFragment : Fragment() {
         restartTrackingIfKilledSwitch = view.findViewById(R.id.restartTrackingIfKilledSwitch)
         startTrackingOnLaunchSwitch = view.findViewById(R.id.startTrackingOnLaunchSwitch)
         autoTrackingSwitch = view.findViewById(R.id.autoTrackingSwitch)
+        hiddenTrackersButton = view.findViewById(R.id.hiddenTrackersButton)
         distanceLabel = view.findViewById(R.id.distanceLabel)
         accuracyLabel = view.findViewById(R.id.accuracyLabel)
 
@@ -119,10 +131,138 @@ class SettingsFragment : Fragment() {
             saveSetting("auto_tracking_enabled", isChecked)
             updateAutoTrackingUi(isChecked)
         }
+        hiddenTrackersButton.setOnClickListener { showHiddenTrackersDialog() }
 
         view.findViewById<View>(R.id.loggingHelpButton).setOnClickListener { showLoggingHelpDialog() }
         
         setupProfileSpinner()
+    }
+
+    private data class HiddenTrackerItem(val id: String, val name: String)
+
+    private fun isHiddenInList(tracker: Tracker): Boolean {
+        return (tracker.settings?.get("hidden_in_list") as? Boolean) == true
+    }
+
+    private fun showHiddenTrackersDialog() {
+        hiddenTrackersButton.isEnabled = false
+        TrackerRepository.getTrackers(requireContext(), forceRefresh = true) { list ->
+            if (!isAdded) return@getTrackers
+            requireActivity().runOnUiThread {
+                hiddenTrackersButton.isEnabled = true
+                val hiddenTrackers = (list ?: emptyList())
+                    .filter { it.isOwner() && isHiddenInList(it) }
+                    .map { HiddenTrackerItem(id = it.id, name = it.name) }
+                    .sortedBy { it.name.lowercase() }
+                if (hiddenTrackers.isEmpty()) {
+                    AlertDialog.Builder(requireContext())
+                        .setTitle(getString(R.string.hidden_trackers))
+                        .setMessage(getString(R.string.hidden_trackers_empty))
+                        .setPositiveButton(getString(R.string.close), null)
+                        .show()
+                    return@runOnUiThread
+                }
+                val dialogView = layoutInflater.inflate(R.layout.dialog_hidden_trackers, null)
+                val listContainer = dialogView.findViewById<LinearLayout>(R.id.hiddenTrackersList)
+                val showAllButton = dialogView.findViewById<MaterialButton>(R.id.hiddenTrackersShowAll)
+                val closeButton = dialogView.findViewById<TextView>(R.id.hiddenTrackersClose)
+                if (hiddenTrackers.size > 1) {
+                    showAllButton.visibility = View.VISIBLE
+                }
+                val dialog = AlertDialog.Builder(requireContext())
+                    .setView(dialogView)
+                    .setCancelable(true)
+                    .create()
+                fun removeRowAndDismissIfEmpty(row: View) {
+                    listContainer.removeView(row)
+                    if (listContainer.childCount == 0) {
+                        dialog.dismiss()
+                        requireActivity().supportFragmentManager.setFragmentResult(
+                            TrackersFragment.REQUEST_REFRESH_LIST,
+                            Bundle()
+                        )
+                    }
+                }
+                for (item in hiddenTrackers) {
+                    val row = layoutInflater.inflate(R.layout.item_hidden_tracker_row, listContainer, false)
+                    row.findViewById<TextView>(R.id.hiddenTrackerName).text = item.name
+                    val showBtn = row.findViewById<ImageButton>(R.id.hiddenTrackerShow)
+                    showBtn.setOnClickListener {
+                        showBtn.isEnabled = false
+                        unhideTracker(
+                            item.id,
+                            onSuccess = { removeRowAndDismissIfEmpty(row) },
+                            onFailure = { showBtn.isEnabled = true }
+                        )
+                    }
+                    listContainer.addView(row)
+                }
+                showAllButton.setOnClickListener {
+                    showAllButton.isEnabled = false
+                    closeButton.isEnabled = false
+                    for (i in 0 until listContainer.childCount) {
+                        listContainer.getChildAt(i).findViewById<ImageButton>(R.id.hiddenTrackerShow)?.isEnabled = false
+                    }
+                    unhideAllTrackers(
+                        trackerIds = hiddenTrackers.map { it.id },
+                        onComplete = {
+                            dialog.dismiss()
+                            requireActivity().supportFragmentManager.setFragmentResult(
+                                TrackersFragment.REQUEST_REFRESH_LIST,
+                                Bundle()
+                            )
+                        }
+                    )
+                }
+                closeButton.setOnClickListener { dialog.dismiss() }
+                dialog.show()
+            }
+        }
+    }
+
+    private fun unhideTracker(
+        trackerId: String,
+        onSuccess: (() -> Unit)? = null,
+        onFailure: (() -> Unit)? = null
+    ) {
+        TrackerRepository.updateTrackerSettings(
+            requireContext(),
+            trackerId,
+            TrackerSettingsRequest(hidden_in_list = false)
+        ) { updated, errorMessage ->
+            if (!isAdded) return@updateTrackerSettings
+            requireActivity().runOnUiThread {
+                if (updated != null) {
+                    requireActivity().supportFragmentManager.setFragmentResult(
+                        TrackersFragment.REQUEST_REFRESH_LIST,
+                        Bundle()
+                    )
+                    onSuccess?.invoke()
+                } else {
+                    (activity as? MainActivity)?.showSnackbar(
+                        errorMessage ?: getString(R.string.failed_to_load_tracker)
+                    )
+                    onFailure?.invoke()
+                }
+            }
+        }
+    }
+
+    private fun unhideAllTrackers(trackerIds: List<String>, onComplete: () -> Unit, index: Int = 0) {
+        if (index >= trackerIds.size) {
+            onComplete()
+            return
+        }
+        TrackerRepository.updateTrackerSettings(
+            requireContext(),
+            trackerIds[index],
+            TrackerSettingsRequest(hidden_in_list = false)
+        ) { _, _ ->
+            if (!isAdded) return@updateTrackerSettings
+            requireActivity().runOnUiThread {
+                unhideAllTrackers(trackerIds, onComplete, index + 1)
+            }
+        }
     }
 
 
@@ -142,6 +282,9 @@ class SettingsFragment : Fragment() {
 
     private var isUpdatingFromSpinner = false
 
+    /** Selected profile index (0=walking, 1=biking, 2=driving, 3=custom). */
+    private var selectedProfileIndex = 1
+
     private val profiles = listOf(
         Triple("walking", "30", Pair("10", "50")),
         Triple("biking", "15", Pair("30", "100")),
@@ -150,45 +293,42 @@ class SettingsFragment : Fragment() {
     )
 
     private fun setupProfileSpinner() {
-        val adapter = ArrayAdapter(
-            requireContext(),
-            android.R.layout.simple_spinner_item,
-            listOf(
-                getString(R.string.profile_walking),
-                getString(R.string.profile_biking),
-                getString(R.string.profile_driving),
-                getString(R.string.profile_custom)
-            )
+        val labels = listOf(
+            getString(R.string.profile_walking),
+            getString(R.string.profile_biking),
+            getString(R.string.profile_driving),
+            getString(R.string.profile_custom)
         )
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        profileSpinner.adapter = adapter
+        val adapter = ArrayAdapter(requireContext(), CommonR.layout.gv_common_item_dropdown, labels)
+        profileSpinner.setAdapter(adapter)
 
-        profileSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                if (position < 3) {
-                    val profile = profiles[position]
-                    isUpdatingFromSpinner = true
-                    intervalEdit.setText(profile.second)
-                    distanceEdit.setText(profile.third.first)
-                    accuracyEdit.setText(profile.third.second)
-                    isUpdatingFromSpinner = false
-                    saveSetting("tracking_profile", position.toString())
-                } else if (position == 3) {
-                    saveSetting("tracking_profile", "3")
-                }
+        profileSpinner.setOnItemClickListener { _, _, position, _ ->
+            selectedProfileIndex = position
+            if (position < 3) {
+                val profile = profiles[position]
+                isUpdatingFromSpinner = true
+                intervalEdit.setText(profile.second)
+                distanceEdit.setText(profile.third.first)
+                accuracyEdit.setText(profile.third.second)
+                isUpdatingFromSpinner = false
+                saveSetting("tracking_profile", position.toString())
+            } else if (position == 3) {
+                saveSetting("tracking_profile", "3")
             }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
-        
+
         // Load saved profile
         val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val savedProfile = prefs.getString("tracking_profile", "1")?.toIntOrNull() ?: 1
-        profileSpinner.setSelection(savedProfile)
+        selectedProfileIndex = savedProfile
+        profileSpinner.setText(labels[savedProfile], false)
     }
 
     private fun updateAutoTrackingUi(enabled: Boolean) {
         val alpha = if (enabled) 0.5f else 1.0f
         profileSpinner.isEnabled = !enabled
+        profileSpinner.isClickable = !enabled
+        profileSpinner.isFocusable = !enabled
         profileSpinner.alpha = alpha
         intervalEdit.isEnabled = !enabled
         intervalEdit.alpha = alpha
@@ -198,8 +338,9 @@ class SettingsFragment : Fragment() {
 
     private fun updateProfileToCustom() {
         if (isUpdatingFromSpinner) return
-        if (profileSpinner.selectedItemPosition != 3) {
-            profileSpinner.setSelection(3)
+        if (selectedProfileIndex != 3) {
+            selectedProfileIndex = 3
+            profileSpinner.setText(getString(R.string.profile_custom), false)
         }
     }
 
@@ -338,6 +479,9 @@ class SettingsFragment : Fragment() {
                 GeovaultAuthManager.revokeToken(requireContext(), GeovaultAuthManager.getAccessToken(requireContext()))
                 GeovaultAuthManager.revokeToken(requireContext(), GeovaultAuthManager.getRefreshToken(requireContext()))
                 GeovaultAuthManager.clearTokens(requireContext())
+                TrackerRepository.clearCache()
+                TrackerRepository.clearCurrentTrackerCache()
+                TrackerRepository.clearGeometryCache()
                 updateUi()
                 Toast.makeText(requireContext(), getString(R.string.disconnect), Toast.LENGTH_SHORT).show()
             }

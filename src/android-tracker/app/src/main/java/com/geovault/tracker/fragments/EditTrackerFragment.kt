@@ -11,10 +11,10 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
+import android.widget.AutoCompleteTextView
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
-import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -30,6 +30,7 @@ import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.TrackingService
 import com.geovault.tracker.UserItem
 import com.geovault.common.LoadingSpinner
+import com.geovault.common.R as CommonR
 import com.geovault.tracker.showHueColorPickerDialog
 import com.geovault.tracker.updateColorPreview
 import com.google.android.material.button.MaterialButton
@@ -43,17 +44,18 @@ class EditTrackerFragment : Fragment() {
     private lateinit var colorPreview: View
     private lateinit var pickColorButton: MaterialButton
     private lateinit var defaultTrackSwitch: SwitchCompat
+    private lateinit var hideOnMapSwitch: SwitchCompat
     private lateinit var saveButton: MaterialButton
-    private lateinit var cancelButton: MaterialButton
     private lateinit var clearHistoryButton: MaterialButton
-    private lateinit var deleteButton: ImageButton
-    private lateinit var recentDataWindowSpinner: Spinner
+    private lateinit var deleteButton: MaterialButton
+    private lateinit var closeButton: ImageButton
+    private lateinit var recentDataWindowSpinner: AutoCompleteTextView
     private lateinit var scrollContent: NestedScrollView
     private lateinit var loadingOverlay: View
     private lateinit var loadingSpinner: LoadingSpinner
 
     private lateinit var sharingSection: View
-    private lateinit var visibilitySpinner: Spinner
+    private lateinit var visibilitySpinner: AutoCompleteTextView
     private lateinit var sharedWithContainer: View
     private lateinit var recipientsList: LinearLayout
     private lateinit var addRecipientButton: MaterialButton
@@ -64,10 +66,8 @@ class EditTrackerFragment : Fragment() {
     private lateinit var shareParamsWorldSwitch: SwitchCompat
     private lateinit var copyWorldLinkButton: MaterialButton
     private lateinit var ownerToolsSection: View
-    private lateinit var subscribersButton: MaterialButton
     private lateinit var exportKmlButton: MaterialButton
-    private lateinit var copyProfileUrlButton: MaterialButton
-    private lateinit var copySecretButton: MaterialButton
+    private var updatingHideSwitch = false
 
     /** After clear history succeeds, keep the clear button disabled until this fragment is closed. */
     private var historyClearedThisSession = false
@@ -76,6 +76,10 @@ class EditTrackerFragment : Fragment() {
     private val recentDataValues = arrayOf("", "1min", "1h", "1d", "1w", "1m")
 
     private val visibilityValues = arrayOf("private", "shared", "public")
+
+    /** Selected indices for dropdowns (since AutoCompleteTextView has no selectedItemPosition). */
+    private var selectedRecentDataIndex = 0
+    private var selectedVisibilityIndex = 0
 
     /** Snapshot when form was loaded; used to detect unsaved changes. */
     private var initialName: String? = null
@@ -110,10 +114,11 @@ class EditTrackerFragment : Fragment() {
         colorPreview = view.findViewById(R.id.colorPreview)
         pickColorButton = view.findViewById(R.id.pickColorButton)
         defaultTrackSwitch = view.findViewById(R.id.editTrackerDefaultSwitch)
+        hideOnMapSwitch = view.findViewById(R.id.editTrackerHideOnMapSwitch)
         saveButton = view.findViewById(R.id.editTrackerSave)
-        cancelButton = view.findViewById(R.id.editTrackerCancel)
         clearHistoryButton = view.findViewById(R.id.editTrackerClearHistory)
         deleteButton = view.findViewById(R.id.editTrackerDelete)
+        closeButton = view.findViewById(R.id.editTrackerClose)
         recentDataWindowSpinner = view.findViewById(R.id.editTrackerRecentDataSpinner)
         scrollContent = view.findViewById(R.id.editTrackerScrollContent)
         loadingOverlay = view.findViewById(R.id.editTrackerLoadingOverlay)
@@ -131,28 +136,21 @@ class EditTrackerFragment : Fragment() {
         shareParamsWorldSwitch = view.findViewById(R.id.editTrackerShareParamsWorld)
         copyWorldLinkButton = view.findViewById(R.id.editTrackerCopyWorldLink)
         ownerToolsSection = view.findViewById(R.id.editTrackerOwnerToolsSection)
-        subscribersButton = view.findViewById(R.id.editTrackerSubscribers)
         exportKmlButton = view.findViewById(R.id.editTrackerExportKml)
-        copyProfileUrlButton = view.findViewById(R.id.editTrackerCopyProfileUrl)
-        copySecretButton = view.findViewById(R.id.editTrackerCopySecret)
 
         val visibilityLabels = arrayOf(
             getString(R.string.visibility_private),
             getString(R.string.visibility_shared),
             getString(R.string.visibility_public)
         )
-        val visibilityAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, visibilityLabels)
-        visibilityAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        visibilitySpinner.adapter = visibilityAdapter
-
-        visibilitySpinner.setSelection(0)
-        visibilitySpinner.setOnItemSelectedListener(object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val vis = if (position in visibilityValues.indices) visibilityValues[position] else "private"
-                sharedWithContainer.visibility = if (vis == "shared") View.VISIBLE else View.GONE
-            }
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
-        })
+        val visibilityAdapter = ArrayAdapter(requireContext(), CommonR.layout.gv_common_item_dropdown, visibilityLabels)
+        visibilitySpinner.setAdapter(visibilityAdapter)
+        visibilitySpinner.setText(visibilityLabels[0], false)
+        visibilitySpinner.setOnItemClickListener { _, _, position, _ ->
+            selectedVisibilityIndex = position
+            val vis = if (position in visibilityValues.indices) visibilityValues[position] else "private"
+            sharedWithContainer.visibility = if (vis == "shared") View.VISIBLE else View.GONE
+        }
 
         worldShareEnabledSwitch.setOnCheckedChangeListener { _, isChecked ->
             worldShareParamsRow.visibility = if (isChecked) View.VISIBLE else View.GONE
@@ -170,7 +168,7 @@ class EditTrackerFragment : Fragment() {
 
         addRecipientButton.setOnClickListener { showAddRecipientDialog() }
 
-        cancelButton.setOnClickListener { tryClose() }
+        closeButton.setOnClickListener { tryClose() }
 
         showLoadingState(true)
 
@@ -182,9 +180,12 @@ class EditTrackerFragment : Fragment() {
             getString(R.string.recent_data_1w),
             getString(R.string.recent_data_1m)
         )
-        val spinnerAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, recentDataLabels)
-        spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        recentDataWindowSpinner.adapter = spinnerAdapter
+        val spinnerAdapter = ArrayAdapter(requireContext(), CommonR.layout.gv_common_item_dropdown, recentDataLabels)
+        recentDataWindowSpinner.setAdapter(spinnerAdapter)
+        recentDataWindowSpinner.setText(recentDataLabels[0], false)
+        recentDataWindowSpinner.setOnItemClickListener { _, _, position, _ ->
+            selectedRecentDataIndex = position
+        }
 
         pickColorButton.setOnClickListener {
             showHueColorPickerDialog(
@@ -244,12 +245,27 @@ class EditTrackerFragment : Fragment() {
                         val recentVal = (fetched.settings?.get("recent_data_window") as? String) ?: ""
                         initialRecentDataWindow = recentVal
                         val idx = recentDataValues.indexOf(recentVal).coerceAtLeast(0)
-                        recentDataWindowSpinner.setSelection(idx)
+                        selectedRecentDataIndex = idx
+                        val recentDataLabels = arrayOf(
+                            getString(R.string.recent_data_all),
+                            getString(R.string.recent_data_1min),
+                            getString(R.string.recent_data_1h),
+                            getString(R.string.recent_data_1d),
+                            getString(R.string.recent_data_1w),
+                            getString(R.string.recent_data_1m)
+                        )
+                        recentDataWindowSpinner.setText(recentDataLabels[idx], false)
                         if (fetched.isOwner()) {
                             sharingSection.visibility = View.VISIBLE
                             val vis = fetched.visibility ?: "private"
                             val visIdx = visibilityValues.indexOf(vis).coerceIn(0, visibilityValues.size - 1)
-                            visibilitySpinner.setSelection(visIdx)
+                            selectedVisibilityIndex = visIdx
+                            val visibilityLabels = arrayOf(
+                                getString(R.string.visibility_private),
+                                getString(R.string.visibility_shared),
+                                getString(R.string.visibility_public)
+                            )
+                            visibilitySpinner.setText(visibilityLabels[visIdx], false)
                             sharedWithContainer.visibility = if (vis == "shared") View.VISIBLE else View.GONE
                             sharedWithEmails.clear()
                             sharedWithEmails.addAll(fetched.shared_with_emails ?: emptyList())
@@ -273,26 +289,7 @@ class EditTrackerFragment : Fragment() {
                         }
                         if (fetched.isOwner()) {
                             ownerToolsSection.visibility = View.VISIBLE
-                            subscribersButton.setOnClickListener { showSubscribersDialog(trackerId) }
                             exportKmlButton.setOnClickListener { exportKml(trackerId) }
-                            copyProfileUrlButton.setOnClickListener {
-                                val secret = currentFetchedTracker?.tracker_secret
-                                if (!secret.isNullOrBlank()) {
-                                    val url = (GeovaultAuthManager.getServerUrl(requireContext()).trimEnd('/')
-                                        + "/api/extensions/live-track/trackers/$trackerId/profile.properties?secret=$secret")
-                                    val cm = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                    cm?.setPrimaryClip(ClipData.newPlainText("GPSLogger profile", url))
-                                    Toast.makeText(requireContext(), getString(R.string.profile_url_copied), Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                            copySecretButton.setOnClickListener {
-                                val secret = currentFetchedTracker?.tracker_secret
-                                if (!secret.isNullOrBlank()) {
-                                    val cm = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                    cm?.setPrimaryClip(ClipData.newPlainText("Tracker secret", secret))
-                                    Toast.makeText(requireContext(), getString(R.string.secret_copied), Toast.LENGTH_SHORT).show()
-                                }
-                            }
                         } else {
                             ownerToolsSection.visibility = View.GONE
                         }
@@ -300,6 +297,53 @@ class EditTrackerFragment : Fragment() {
                             requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
                                 .putString("selected_tracker_name", fetched.name)
                                 .apply()
+                        }
+                        val hiddenInList = (fetched.settings?.get("hidden_in_list") as? Boolean) == true
+                        updatingHideSwitch = true
+                        hideOnMapSwitch.isChecked = hiddenInList
+                        updatingHideSwitch = false
+                        hideOnMapSwitch.setOnCheckedChangeListener { _, isChecked ->
+                            if (updatingHideSwitch) return@setOnCheckedChangeListener
+                            hideOnMapSwitch.isEnabled = false
+                            TrackerRepository.updateTrackerSettings(
+                                requireContext(),
+                                trackerId,
+                                TrackerSettingsRequest(hidden_in_list = isChecked)
+                            ) { updated, errorMessage ->
+                                if (!isAdded) return@updateTrackerSettings
+                                requireActivity().runOnUiThread {
+                                    hideOnMapSwitch.isEnabled = true
+                                    if (updated != null) {
+                                        currentFetchedTracker = updated
+                                        if (isChecked) {
+                                            val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+                                            if (trackerId == prefs.getString("selected_tracker_id", null)) {
+                                                prefs.edit()
+                                                    .remove("selected_tracker_id")
+                                                    .remove("selected_tracker_name")
+                                                    .apply()
+                                                TrackerRepository.clearCurrentTrackerCache()
+                                                TrackerRepository.clearGeometryCache()
+                                            }
+                                            requireActivity().supportFragmentManager.setFragmentResult(
+                                                TrackersFragment.REQUEST_REFRESH_LIST,
+                                                android.os.Bundle().apply { putString(TrackersFragment.KEY_HIDDEN_TRACKER_ID, trackerId) }
+                                            )
+                                        } else {
+                                            requireActivity().supportFragmentManager.setFragmentResult(
+                                                TrackersFragment.REQUEST_REFRESH_LIST,
+                                                android.os.Bundle()
+                                            )
+                                        }
+                                    } else {
+                                        updatingHideSwitch = true
+                                        hideOnMapSwitch.isChecked = !isChecked
+                                        updatingHideSwitch = false
+                                        val msg = errorMessage ?: getString(R.string.failed_to_load_tracker)
+                                        (activity as? MainActivity)?.showSnackbar(msg)
+                                    }
+                                }
+                            }
                         }
                     } else {
                         (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
@@ -315,10 +359,8 @@ class EditTrackerFragment : Fragment() {
                 (activity as? MainActivity)?.showSnackbar("Name is required")
                 return@setOnClickListener
             }
-            val recentPos = recentDataWindowSpinner.selectedItemPosition
-            val recentDataWindow = if (recentPos in recentDataValues.indices) recentDataValues[recentPos] else ""
-            val visPos = visibilitySpinner.selectedItemPosition
-            val visibility = if (visPos in visibilityValues.indices) visibilityValues[visPos] else "private"
+            val recentDataWindow = if (selectedRecentDataIndex in recentDataValues.indices) recentDataValues[selectedRecentDataIndex] else ""
+            val visibility = if (selectedVisibilityIndex in visibilityValues.indices) visibilityValues[selectedVisibilityIndex] else "private"
             val request = TrackerSettingsRequest(
                 name = name,
                 color = color?.takeIf { it.isNotBlank() },
@@ -430,8 +472,7 @@ class EditTrackerFragment : Fragment() {
     }
 
     private fun getSelectedRecentDataWindow(): String {
-        val pos = recentDataWindowSpinner.selectedItemPosition
-        return if (pos in recentDataValues.indices) recentDataValues[pos] else ""
+        return if (selectedRecentDataIndex in recentDataValues.indices) recentDataValues[selectedRecentDataIndex] else ""
     }
 
     private fun hasUnsavedChanges(): Boolean {
@@ -445,8 +486,7 @@ class EditTrackerFragment : Fragment() {
         val initialRecent = initialRecentDataWindow ?: ""
         var base = currentName != initialName || currentColorNorm != initialColorNorm || currentDefault != initialDefaultTrack || currentRecent != initialRecent
         if (sharingSection.visibility == View.VISIBLE) {
-            val visPos = visibilitySpinner.selectedItemPosition
-            val currentVis = if (visPos in visibilityValues.indices) visibilityValues[visPos] else "private"
+            val currentVis = if (selectedVisibilityIndex in visibilityValues.indices) visibilityValues[selectedVisibilityIndex] else "private"
             base = base || currentVis != (initialVisibility ?: "private") ||
                 shareParamsRecipientsSwitch.isChecked != initialShareParamsRecipients ||
                 allowGroupReshareSwitch.isChecked != initialAllowGroupReshare ||
@@ -467,21 +507,6 @@ class EditTrackerFragment : Fragment() {
                 refreshRecipientsList()
             }
             recipientsList.addView(row)
-        }
-    }
-
-    private fun showSubscribersDialog(trackerId: String) {
-        TrackerRepository.getSubscribers(requireContext(), trackerId) { response ->
-            if (!isAdded) return@getSubscribers
-            requireActivity().runOnUiThread {
-                val list = response?.subscribers ?: emptyList()
-                val message = if (list.isEmpty()) "No subscribers" else list.joinToString("\n") { it.email }
-                AlertDialog.Builder(requireContext())
-                    .setTitle(getString(R.string.subscribers_title))
-                    .setMessage(message)
-                    .setPositiveButton(getString(R.string.close), null)
-                    .show()
-            }
         }
     }
 
@@ -581,8 +606,6 @@ class EditTrackerFragment : Fragment() {
         val alpha = if (enabled) 1f else 0.4f
         saveButton.isEnabled = enabled
         saveButton.alpha = alpha
-        cancelButton.isEnabled = enabled
-        cancelButton.alpha = alpha
         val clearEnabled = enabled && !historyClearedThisSession
         clearHistoryButton.isEnabled = clearEnabled
         clearHistoryButton.alpha = if (clearEnabled) 1f else 0.4f
@@ -595,9 +618,14 @@ class EditTrackerFragment : Fragment() {
         colorEdit.isEnabled = enabled
         pickColorButton.isEnabled = enabled
         defaultTrackSwitch.isEnabled = enabled
+        hideOnMapSwitch.isEnabled = enabled
         recentDataWindowSpinner.isEnabled = enabled
+        recentDataWindowSpinner.isClickable = enabled
+        recentDataWindowSpinner.isFocusable = enabled
         if (sharingSection.visibility == View.VISIBLE) {
             visibilitySpinner.isEnabled = enabled
+            visibilitySpinner.isClickable = enabled
+            visibilitySpinner.isFocusable = enabled
             addRecipientButton.isEnabled = enabled
             shareParamsRecipientsSwitch.isEnabled = enabled
             allowGroupReshareSwitch.isEnabled = enabled
@@ -609,10 +637,7 @@ class EditTrackerFragment : Fragment() {
             }
         }
         if (ownerToolsSection.visibility == View.VISIBLE) {
-            subscribersButton.isEnabled = enabled
             exportKmlButton.isEnabled = enabled
-            copyProfileUrlButton.isEnabled = enabled
-            copySecretButton.isEnabled = enabled
         }
         setActionButtonsEnabled(enabled)
     }

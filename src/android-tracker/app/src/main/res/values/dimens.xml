@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Card stroke: none in day, thin blue border in night -->
-    <dimen name="card_stroke_width">0dp</dimen>
+    <!-- Card stroke: match places app (visible border) -->
+    <dimen name="card_stroke_width">2dp</dimen>
 </resources>
