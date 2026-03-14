@@ -58,6 +58,7 @@ class EditTrackerFragment : Fragment() {
     private lateinit var recipientsList: LinearLayout
     private lateinit var addRecipientButton: MaterialButton
     private lateinit var shareParamsRecipientsSwitch: SwitchCompat
+    private lateinit var allowGroupReshareSwitch: SwitchCompat
     private lateinit var worldShareEnabledSwitch: SwitchCompat
     private lateinit var worldShareParamsRow: View
     private lateinit var shareParamsWorldSwitch: SwitchCompat
@@ -84,6 +85,7 @@ class EditTrackerFragment : Fragment() {
     private var initialVisibility: String? = null
     private var initialSharedWithEmails: List<String>? = null
     private var initialShareParamsRecipients: Boolean = false
+    private var initialAllowGroupReshare: Boolean = false
     private var initialShareParamsWorld: Boolean = false
     private var initialWorldShareEnabled: Boolean = false
 
@@ -123,6 +125,7 @@ class EditTrackerFragment : Fragment() {
         recipientsList = view.findViewById(R.id.editTrackerRecipientsList)
         addRecipientButton = view.findViewById(R.id.editTrackerAddRecipient)
         shareParamsRecipientsSwitch = view.findViewById(R.id.editTrackerShareParamsRecipients)
+        allowGroupReshareSwitch = view.findViewById(R.id.editTrackerAllowGroupReshare)
         worldShareEnabledSwitch = view.findViewById(R.id.editTrackerWorldShareEnabled)
         worldShareParamsRow = view.findViewById(R.id.editTrackerWorldShareParamsRow)
         shareParamsWorldSwitch = view.findViewById(R.id.editTrackerShareParamsWorld)
@@ -253,11 +256,14 @@ class EditTrackerFragment : Fragment() {
                             initialSharedWithEmails = sharedWithEmails.toList()
                             refreshRecipientsList()
                             shareParamsRecipientsSwitch.isChecked = fetched.share_params_with_recipients == true
+                            val allowReshare = (fetched.settings as? Map<*, *>)?.get("allow_group_reshare") == true
+                            allowGroupReshareSwitch.isChecked = allowReshare
                             shareParamsWorldSwitch.isChecked = fetched.share_params_with_world == true
                             val worldOn = fetched.world_share_url != null
                             worldShareEnabledSwitch.isChecked = worldOn
                             initialVisibility = vis
                             initialShareParamsRecipients = fetched.share_params_with_recipients == true
+                            initialAllowGroupReshare = allowReshare
                             initialShareParamsWorld = fetched.share_params_with_world == true
                             initialWorldShareEnabled = worldOn
                             worldShareParamsRow.visibility = if (worldOn) View.VISIBLE else View.GONE
@@ -321,7 +327,8 @@ class EditTrackerFragment : Fragment() {
                 share_params_with_recipients = if (sharingSection.visibility == View.VISIBLE) shareParamsRecipientsSwitch.isChecked else null,
                 share_params_with_world = if (sharingSection.visibility == View.VISIBLE) shareParamsWorldSwitch.isChecked else null,
                 shared_with_emails = if (sharingSection.visibility == View.VISIBLE && visibility == "shared") sharedWithEmails.toList() else null,
-                world_share_enabled = if (sharingSection.visibility == View.VISIBLE) worldShareEnabledSwitch.isChecked else null
+                world_share_enabled = if (sharingSection.visibility == View.VISIBLE) worldShareEnabledSwitch.isChecked else null,
+                allow_group_reshare = if (sharingSection.visibility == View.VISIBLE) allowGroupReshareSwitch.isChecked else null
             )
             setAllInputsEnabled(false)
             TrackerRepository.updateTrackerSettings(requireContext(), trackerId, request) { updated, errorMessage ->
@@ -442,6 +449,7 @@ class EditTrackerFragment : Fragment() {
             val currentVis = if (visPos in visibilityValues.indices) visibilityValues[visPos] else "private"
             base = base || currentVis != (initialVisibility ?: "private") ||
                 shareParamsRecipientsSwitch.isChecked != initialShareParamsRecipients ||
+                allowGroupReshareSwitch.isChecked != initialAllowGroupReshare ||
                 shareParamsWorldSwitch.isChecked != initialShareParamsWorld ||
                 worldShareEnabledSwitch.isChecked != initialWorldShareEnabled ||
                 sharedWithEmails.toSet() != (initialSharedWithEmails?.toSet() ?: emptySet<String>())
@@ -592,6 +600,7 @@ class EditTrackerFragment : Fragment() {
             visibilitySpinner.isEnabled = enabled
             addRecipientButton.isEnabled = enabled
             shareParamsRecipientsSwitch.isEnabled = enabled
+            allowGroupReshareSwitch.isEnabled = enabled
             worldShareEnabledSwitch.isEnabled = enabled
             shareParamsWorldSwitch.isEnabled = enabled
             copyWorldLinkButton.isEnabled = enabled

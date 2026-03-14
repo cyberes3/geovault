@@ -52,7 +52,8 @@ data class TrackerSettingsRequest(
     val share_params_with_world: Boolean? = null,
     val shared_with_emails: List<String>? = null,
     val world_share_enabled: Boolean? = null,
-    val hidden_in_list: Boolean? = null
+    val hidden_in_list: Boolean? = null,
+    val allow_group_reshare: Boolean? = null
 )
 
 /** Response from GET trackers/<id>/coordinates/ — latest 100 coordinates + point_params. */
@@ -117,9 +118,7 @@ data class Group(
     val updated_at: Long? = null,
     val is_owner: Boolean? = null,
     val owner_email: String? = null,
-    val track_ids: List<String> = emptyList(),
-    val member_ids: List<String> = emptyList(),
-    val member_emails: List<String> = emptyList()
+    val track_ids: List<String> = emptyList()
 )
 
 data class GroupCreateRequest(val name: String)
@@ -133,8 +132,6 @@ data class GroupPatchRequest(
 )
 
 data class GroupAddTrackRequest(val track_id: String)
-
-data class GroupAddMemberRequest(val email: String)
 
 /** GET /api/users/ — list users for share recipient picker. */
 data class UsersResponse(val users: List<UserItem> = emptyList())

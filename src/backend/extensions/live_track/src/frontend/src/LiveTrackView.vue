@@ -1732,14 +1732,14 @@ export default {
 
     async function onGroupsSidebarLeave(group) {
       if (!group?.id) return;
-      if (!confirm('Leave this group? You will no longer see its trackers on the map or in Shared.')) return;
+      if (!confirm('Leave this shared group? You will no longer see its trackers on the map or in Shared.')) return;
       try {
         await api.delete(`/groups/${group.id}/leave/`);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Left group');
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Left shared group');
         removeGroupFromLocalState(group);
       } catch (e) {
         const err = api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to leave group');
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to leave shared group');
       }
     }
 
@@ -1821,14 +1821,14 @@ export default {
 
     async function leaveGroup(group) {
       if (!group?.id) return;
-      if (!confirm('Leave this group? You will no longer see its trackers on the map or in Shared.')) return;
+      if (!confirm('Leave this shared group? You will no longer see its trackers on the map or in Shared.')) return;
       try {
         await api.delete(`/groups/${group.id}/leave/`);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Left group');
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Left shared group');
         removeGroupFromLocalState(group);
       } catch (e) {
         const err = api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to leave group');
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to leave shared group');
       }
     }
 

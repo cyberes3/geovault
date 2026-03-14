@@ -2,10 +2,10 @@
 Create dummy LiveTrack records with realistic geometry and point_params for
 development/testing.
 
-Creates 10 tracks, 3 groups (2+2+3 track memberships), world shares (tracks and
+Creates 10 tracks, 3 groups (2+2+3 track members), world shares (tracks and
 groups), direct shares to other users, public visibility, group visibility
-(public/shared/private), group direct shares (LiveTrackGroupShare), and group
-memberships. Uses the first available user (or --user email). Rerunning
+(public/shared/private), and group direct shares (LiveTrackGroupShare).
+Uses the first available user (or --user email). Rerunning
 (without --delete) deletes existing dummy tracks and groups (by name prefix)
 and recreates them. Use --delete to only remove dummy data.
 """
@@ -31,7 +31,7 @@ NUM_WORLD_SHARES = 3
 NUM_TRACKS_SHARED_WITH_USERS = 5
 NUM_PUBLIC_TRACKS = 3
 NUM_GROUPS_SHARED_WITH_USERS = 2
-NUM_PUBLIC_GROUPS = 1  # 1 group gets many members to simulate "public"
+NUM_PUBLIC_GROUPS = 1  # 1 group is public
 
 TRACK_PRESETS = [
     {"name": "Morning Run",       "color": "#e74c3c", "style": "run"},
@@ -156,7 +156,6 @@ class Command(BaseCommand):
             LiveTrack = apps.get_model("live_track", "LiveTrack")
             LiveTrackGroup = apps.get_model("live_track", "LiveTrackGroup")
             LiveTrackGroupMember = apps.get_model("live_track", "LiveTrackGroupMember")
-            LiveTrackGroupMembership = apps.get_model("live_track", "LiveTrackGroupMembership")
             LiveTrackGroupShare = apps.get_model("live_track", "LiveTrackGroupShare")
             LiveTrackGroupWorldShare = apps.get_model("live_track", "LiveTrackGroupWorldShare")
             LiveTrackShare = apps.get_model("live_track", "LiveTrackShare")
@@ -290,6 +289,28 @@ class Command(BaseCommand):
                 "  No other users; skipped group direct shares."
             ))
 
+        # Cross-user reshare: another user adds a shared track to their own group
+        if other_users and shared_track_indices:
+            reshare_track = tracks[shared_track_indices[0]]
+            reshare_track.settings = {**(reshare_track.settings or {}), "allow_group_reshare": True}
+            reshare_track.save(update_fields=["settings"])
+            reshare_user = other_users[0]
+            reshare_group = LiveTrackGroup.objects.create(
+                name=f"{DUMMY_GROUP_PREFIX}{reshare_user.username}'s Group",
+                user=reshare_user,
+                visibility="shared",
+            )
+            LiveTrackGroupMember.objects.get_or_create(group=reshare_group, track=reshare_track)
+            LiveTrackGroupShare.objects.get_or_create(group=reshare_group, shared_with=user)
+            self.stdout.write(self.style.SUCCESS(
+                f"  Cross-user reshare: {reshare_user.email} added '{reshare_track.name}' to their group "
+                f"'{reshare_group.name}' (shared back with {user.email})."
+            ))
+        else:
+            self.stdout.write(self.style.WARNING(
+                "  No other users or shared tracks; skipped cross-user reshare."
+            ))
+
         # Group world share: enable for at least one group (e.g. Public)
         group_world_share_idx = NUM_GROUPS - 1
         LiveTrackGroupWorldShare.objects.get_or_create(
@@ -299,26 +320,6 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"  Group world share: enabled on {groups[group_world_share_idx].name}."
         ))
-
-        # Group memberships: 2 groups with selected members, 1 (Public) with several members
-        if other_users:
-            for gidx in range(NUM_GROUPS_SHARED_WITH_USERS):
-                for u in random.sample(other_users, min(2, len(other_users))):
-                    LiveTrackGroupMembership.objects.get_or_create(
-                        group=groups[gidx], user=u
-                    )
-            public_group_idx = NUM_GROUPS - 1
-            for u in other_users[: max(3, len(other_users))]:
-                LiveTrackGroupMembership.objects.get_or_create(
-                    group=groups[public_group_idx], user=u
-                )
-            self.stdout.write(self.style.SUCCESS(
-                f"  Group members: 2 groups with selected users, 1 group with all/several users."
-            ))
-        else:
-            self.stdout.write(self.style.WARNING(
-                "  No other users; skipped group memberships."
-            ))
 
         self.stdout.write(self.style.SUCCESS(
             f"Done. Created {len(tracks)} tracks, {len(groups)} groups for {user.email}."

@@ -249,13 +249,6 @@ def can_user_see_track(user, track: LiveTrack) -> bool:
     return False
 
 
-def can_user_see_track_via_group(user, track: LiveTrack) -> bool:
-    """True if user is a member of a group that contains this track (so they can view shared-group trackers)."""
-    return LiveTrackGroupMember.objects.filter(
-        track=track, group__user_members__user=user
-    ).exists()
-
-
 def can_user_see_track_via_group_share(user, track: LiveTrack) -> bool:
     """True if user has group shared with them (LiveTrackGroupShare) for a group that contains this track."""
     return LiveTrackGroupMember.objects.filter(

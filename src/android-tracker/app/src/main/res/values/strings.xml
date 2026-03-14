@@ -212,6 +212,8 @@
     <string name="shared_with_recipients_label">Shared with</string>
     <string name="add_recipient">Add recipient</string>
     <string name="share_params_with_recipients_label">Share parameters with recipients</string>
+    <string name="allow_adding_to_groups_label">Allow adding to groups</string>
+    <string name="allow_adding_to_groups_warning">When on, people who have access can add this tracker to their groups. Groups may share it with more users or world links.</string>
     <string name="world_share_enabled_label">Enable world share link</string>
     <string name="share_params_with_world_label">Share parameters with world link</string>
     <string name="copy_world_share_link">Copy world link</string>
@@ -234,12 +236,13 @@
     <string name="new_group_name_hint">Group name</string>
     <string name="group_tracks">Tracks</string>
     <string name="group_members">Members</string>
-    <string name="leave_group">Leave group</string>
+    <string name="group_members_label">Group members</string>
+    <string name="leave_group">Leave shared group</string>
     <string name="delete_group">Delete group</string>
     <string name="rename_group">Rename</string>
     <string name="add_track_to_group">Add track</string>
     <string name="add_member_to_group">Add member</string>
-    <string name="group_leave_confirm_title">Leave group?</string>
+    <string name="group_leave_confirm_title">Leave shared group?</string>
     <string name="group_leave_confirm_message">You will no longer see this group or its shared trackers.</string>
     <string name="group_delete_confirm_title">Delete group?</string>
     <string name="group_delete_confirm_message">This cannot be undone. Members will lose access.</string>

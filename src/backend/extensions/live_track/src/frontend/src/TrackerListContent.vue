@@ -83,11 +83,11 @@
               <template v-else>
                 <button
                   type="button"
-                  title="Leave Group"
+                  title="Leave shared group"
                   class="p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-white text-sm"
                   @click.stop="$emit('leaveGroup', group)"
                 >
-                  Leave
+                  Leave shared group
                 </button>
               </template>
             </div>

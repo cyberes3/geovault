@@ -78,7 +78,7 @@
             <div class="flex items-center gap-1 flex-shrink-0">
               <button
                 type="button"
-                title="Leave Group"
+                title="Leave shared group"
                 class="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center size-9 flex-shrink-0"
                 :disabled="isAddingGroup(group.id)"
                 @click="onLeaveGroup(group)"
@@ -219,7 +219,7 @@
               </button>
               <button
                 type="button"
-                title="Leave Group"
+                title="Leave shared group"
                 class="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 flex items-center justify-center size-9 flex-shrink-0"
                 :disabled="isUnsubscribingGroup(group.id)"
                 @click="onLeaveGroup(group)"
@@ -311,11 +311,11 @@ export default {
       if (!props.api?.delete || !group?.id) return;
       try {
         await props.api.delete(`/groups/${group.id}/leave/`);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Left group');
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Left shared group');
         emit('leaveGroup', group);
       } catch (e) {
         const err = props.api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to leave group');
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to leave shared group');
       }
     }
 

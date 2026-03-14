@@ -1,5 +1,5 @@
 """
-Live track group CRUD and membership views.
+Live track group CRUD and sharing views (sharing-only; no membership).
 """
 
 import json
@@ -18,10 +18,10 @@ from .models import (
     LiveTrack,
     LiveTrackGroup,
     LiveTrackGroupMember,
-    LiveTrackGroupMembership,
     LiveTrackGroupShare,
     LiveTrackGroupWorldShare,
     LiveTrackSubscription,
+    VISIBILITY_PRIVATE,
     VISIBILITY_PUBLIC,
     VISIBILITY_SHARED,
 )
@@ -31,10 +31,8 @@ User = get_user_model()
 
 
 def can_user_see_group(user, group):
-    """True if user is owner, member, or group is visible (public or shared with user)."""
+    """True if user is owner or group is visible (public or shared with user)."""
     if group.user_id == user.id:
-        return True
-    if LiveTrackGroupMembership.objects.filter(group=group, user=user).exists():
         return True
     if group.visibility == VISIBILITY_PUBLIC:
         return True
@@ -52,7 +50,7 @@ def _get_json_body(request):
 
 
 def _get_group_for_user_or_404(user, group_id):
-    """Return LiveTrackGroup if user can see it (owner, member, or visibility public/shared with user). Raises Http404 otherwise."""
+    """Return LiveTrackGroup if user can see it (owner or visibility public/shared with user). Raises Http404 otherwise."""
     try:
         group = LiveTrackGroup.objects.get(id=group_id)
     except (LiveTrackGroup.DoesNotExist, ValueError):
@@ -94,13 +92,6 @@ def _group_payload(group, request_user, include_track_ids=True):
             LiveTrackGroupMember.objects.filter(group=group).values_list("track_id", flat=True)
         )
         out["track_ids"] = [str(tid) for tid in track_ids]
-    memberships = (
-        LiveTrackGroupMembership.objects.filter(group=group)
-        .select_related("user")
-        .order_by("user__email")
-    )
-    out["member_ids"] = [str(m.user_id) for m in memberships]
-    out["member_emails"] = [(m.user.email or "").strip() for m in memberships]
     return out
 
 
@@ -110,18 +101,11 @@ def _group_payload(group, request_user, include_track_ids=True):
 def group_list_create(request):
     if request.method == "GET":
         owned = LiveTrackGroup.objects.filter(user=request.user).order_by("name")
-        member_of = LiveTrackGroup.objects.filter(
-            user_members__user=request.user
-        ).exclude(user=request.user).distinct().order_by("name")
         seen_ids = set()
         items = []
         for g in owned:
             seen_ids.add(g.id)
             items.append(_group_payload(g, request.user))
-        for g in member_of:
-            if g.id not in seen_ids:
-                seen_ids.add(g.id)
-                items.append(_group_payload(g, request.user))
         public_groups = (
             LiveTrackGroup.objects.filter(visibility=VISIBILITY_PUBLIC)
             .exclude(user=request.user)
@@ -192,10 +176,18 @@ def group_get_patch_delete(request, group_id):
                 return error_response("visibility must be private, shared, or public", 400)
             group.visibility = v
             update_fields.append("visibility")
+            if v == VISIBILITY_PRIVATE:
+                # No longer shared: clear group share entries so they don't become stale
+                LiveTrackGroupShare.objects.filter(group=group).delete()
         if "shared_with_emails" in data:
             if getattr(group, "visibility", "private") != VISIBILITY_SHARED:
                 return error_response("shared_with_emails only applies when visibility is shared", 400)
-            emails = [e.strip().lower() for e in (data.get("shared_with_emails") or []) if (e or "").strip()]
+            raw = data.get("shared_with_emails")
+            if not isinstance(raw, list):
+                return error_response("shared_with_emails must be a list", 400)
+            if any(not isinstance(e, str) for e in raw):
+                return error_response("shared_with_emails must be a list of strings", 400)
+            emails = [e.strip().lower() for e in raw if (e or "").strip()]
             q = Q()
             for e in emails:
                 q |= Q(email__iexact=e)
@@ -258,6 +250,13 @@ def group_add_track(request, group_id):
         LiveTrackSubscription.objects.get_or_create(user=request.user, track=track)
     else:
         return error_response("You do not have access to this tracker", 403)
+    # If requester is not owner, adding to group requires tracker owner to allow re-share
+    if track.user_id != request.user.id:
+        if not (track.settings or {}).get("allow_group_reshare"):
+            return error_response(
+                "The tracker owner has not allowed adding this tracker to groups",
+                403,
+            )
     LiveTrackGroupMember.objects.get_or_create(group=group, track=track)
     return JsonResponse(_group_payload(group, request.user))
 
@@ -278,60 +277,20 @@ def group_remove_track(request, group_id, track_id):
 
 
 @api_or_login_required_401()
-@require_http_methods(["POST"])
-@handle_404
-@csrf_exempt
-def group_add_member(request, group_id):
-    """Add a user to the group by email. Owner only."""
-    group = _get_group_for_user_or_404(request.user, group_id)
-    if not _group_can_edit(group, request.user):
-        return error_response("Only the owner can add members", 403)
-    data, err = _get_json_body(request)
-    if err is not None:
-        return err
-    email = (data.get("email") or "").strip()
-    if not email:
-        return error_response("email is required", 400)
-    other = User.objects.filter(email__iexact=email).first()
-    if not other or not other.email:
-        return error_response("User not found", 404)
-    if other.id == request.user.id:
-        return error_response("You are already the owner", 400)
-    LiveTrackGroupMembership.objects.get_or_create(group=group, user=other)
-    return JsonResponse(_group_payload(group, request.user))
-
-
-@api_or_login_required_401()
-@require_http_methods(["DELETE"])
-@handle_404
-@csrf_exempt
-def group_remove_member(request, group_id, user_id):
-    """Owner removes a member from the group."""
-    group = _get_group_for_user_or_404(request.user, group_id)
-    if not _group_can_edit(group, request.user):
-        return error_response("Only the owner can remove members", 403)
-    membership = LiveTrackGroupMembership.objects.filter(
-        group=group, user_id=user_id
-    ).first()
-    if not membership:
-        return error_response("User is not a member of this group", 404)
-    membership.delete()
-    return JsonResponse({}, status=204)
-
-
-@api_or_login_required_401()
 @require_http_methods(["DELETE"])
 @handle_404
 @csrf_exempt
 def group_leave(request, group_id):
-    """Current user removes their own membership (non-owners only)."""
+    """Current user removes their own share (self-unshare). Owner cannot leave."""
     group = _get_group_for_user_or_404(request.user, group_id)
     if group.user_id == request.user.id:
         return error_response("Owner cannot leave; delete the group to remove it", 400)
-    membership = LiveTrackGroupMembership.objects.filter(
-        group=group, user=request.user
+    share = LiveTrackGroupShare.objects.filter(
+        group=group, shared_with=request.user
     ).first()
-    if not membership:
-        return error_response("You are not a member of this group", 404)
-    membership.delete()
+    if not share:
+        return error_response("You are not shared with this group", 404)
+    share.delete()
+    track_ids = LiveTrackGroupMember.objects.filter(group=group).values_list("track_id", flat=True)
+    LiveTrackSubscription.objects.filter(user=request.user, track_id__in=track_ids).delete()
     return JsonResponse({}, status=204)

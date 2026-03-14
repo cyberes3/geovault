@@ -38,8 +38,6 @@ urlpatterns = [
     path("groups/<str:group_id>/", views.group_get_patch_delete),
     path("groups/<str:group_id>/tracks/", views.group_add_track),
     path("groups/<str:group_id>/tracks/<str:track_id>/", views.group_remove_track),
-    path("groups/<str:group_id>/members/", views.group_add_member),
-    path("groups/<str:group_id>/members/<str:user_id>/", views.group_remove_member),
     path("groups/<str:group_id>/leave/", views.group_leave),
     path("map-visibility/", views.map_visibility_get_patch),
 ]

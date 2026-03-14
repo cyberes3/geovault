@@ -29,79 +29,26 @@
       </div>
     </div>
     <template v-if="isOwner">
-      <div class="border border-gray-200 rounded-lg p-3 space-y-3 bg-gray-50/50">
-        <h3 class="text-sm font-semibold text-gray-800">Sharing with users</h3>
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700">Who can see and add this tracker</label>
-          <select
-            :value="visibility"
-            class="select-custom w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            @change="$emit('update:visibility', ($event.target && $event.target.value) || 'private')"
-          >
-            <option value="private">Private (only me)</option>
-            <option value="shared">Shared with specific users</option>
-            <option value="public">Public (all authenticated users)</option>
-          </select>
-        </div>
-        <div v-if="visibility === 'shared'" class="space-y-2">
-          <ScrollingSelect
-            label="Shared with (click to add or remove)"
-            :items="availableUsersForSelect"
-            :selected-values="sharedWithEmails"
-            :loading="loadingUsers"
-            max-height="12rem"
-            empty-message="No other users found"
-            @select="toggleUserEmail"
-          />
-        </div>
-        <div class="space-y-2">
-          <div class="flex items-center gap-3">
-            <ToggleButton
-              :model-value="shareParamsWithRecipients"
-              label="Allow viewing parameters (shared users)"
-              size="md"
-              @update:model-value="$emit('update:shareParamsWithRecipients', $event)"
-            />
-            <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="$emit('update:shareParamsWithRecipients', !shareParamsWithRecipients)">Allow viewing parameters</label>
-          </div>
-          <p class="text-xs text-gray-500">When on, people you share this tracker with can see extended parameters (e.g. in Latest params). Serial is never shared.</p>
-        </div>
-      </div>
-      <div class="border border-gray-200 rounded-lg p-3 space-y-3 bg-gray-50/50">
-        <h3 class="text-sm font-semibold text-gray-800">World share link</h3>
-        <div class="space-y-2">
-          <div class="flex items-center gap-3">
-            <ToggleButton
-              :model-value="worldShareEnabled"
-              label="World share link"
-              size="md"
-              @update:model-value="$emit('update:worldShareEnabled', $event)"
-            />
-            <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="$emit('update:worldShareEnabled', !worldShareEnabled)">World share link</label>
-          </div>
-          <p class="text-xs text-gray-500">When on, anyone with the link can view this track on a read-only map (no login required).</p>
-        </div>
-        <div class="space-y-2">
-          <div class="flex items-center gap-3">
-            <ToggleButton
-              :model-value="shareParamsWithWorld"
-              label="Allow viewing parameters (world link)"
-              size="md"
-              @update:model-value="$emit('update:shareParamsWithWorld', $event)"
-            />
-            <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="$emit('update:shareParamsWithWorld', !shareParamsWithWorld)">Allow viewing parameters</label>
-          </div>
-          <p class="text-xs text-gray-500">When on, anyone with the world share link can see extended parameters. Serial is never shared.</p>
-        </div>
-        <div v-if="worldShareEnabled && worldShareUrl" class="flex gap-2 items-center">
-          <input
-            :value="fullWorldShareUrl"
-            readonly
-            class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 font-mono"
-          />
-          <button type="button" class="px-3 py-2 bg-gray-200 rounded text-sm whitespace-nowrap" @click="copy(fullWorldShareUrl)">Copy</button>
-        </div>
-      </div>
+      <SharingSection
+        variant="track"
+        :visibility="visibility"
+        :shared-with-select-items="availableUsersForSelect"
+        :shared-with-select-values="sharedWithEmailsForSelect"
+        :loading-users="loadingUsers"
+        :world-share-enabled="worldShareEnabled"
+        :full-world-share-url="fullWorldShareUrl"
+        :share-params-with-recipients="shareParamsWithRecipients"
+        :share-params-with-world="shareParamsWithWorld"
+        :allow-group-reshare="allowGroupReshare"
+        :disabled="!isOwner"
+        @update:visibility="$emit('update:visibility', $event)"
+        @update:shared-with-emails="$emit('update:sharedWithEmails', $event)"
+        @update:world-share-enabled="$emit('update:worldShareEnabled', $event)"
+        @update:share-params-with-recipients="$emit('update:shareParamsWithRecipients', $event)"
+        @update:share-params-with-world="$emit('update:shareParamsWithWorld', $event)"
+        @update:allow-group-reshare="$emit('update:allowGroupReshare', $event)"
+        @copy="copy(fullWorldShareUrl)"
+      />
     </template>
     <div class="space-y-2">
       <label class="text-sm font-medium text-gray-700">Visibility Window</label>
@@ -162,12 +109,11 @@
 import { ref, watch, computed } from 'vue';
 import { ArrowPathIcon } from '@heroicons/vue/24/outline';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
-import ScrollingSelect from 'platform/components/parts/ScrollingSelect.vue';
-import ToggleButton from 'platform/components/parts/ToggleButton.vue';
+import SharingSection from './SharingSection.vue';
 
 export default {
   name: 'EditTrackForm',
-  components: { ArrowPathIcon, BaseButton, ScrollingSelect, ToggleButton },
+  components: { ArrowPathIcon, BaseButton, SharingSection },
   props: {
     track: { type: Object, default: null },
     name: { type: String, default: '' },
@@ -187,9 +133,10 @@ export default {
     worldShareEnabled: { type: Boolean, default: false },
     worldShareUrl: { type: String, default: '' },
     shareParamsWithWorld: { type: Boolean, default: false },
-    hiddenInList: { type: Boolean, default: false }
+    hiddenInList: { type: Boolean, default: false },
+    allowGroupReshare: { type: Boolean, default: false }
   },
-  emits: ['update:name', 'update:color', 'update:recentDataWindow', 'update:visibility', 'update:shareParamsWithRecipients', 'update:shareParamsWithWorld', 'update:sharedWithEmails', 'update:worldShareEnabled', 'update:hidden-in-list', 'reset-color', 'open-instructions', 'download-kml', 'clear-history', 'delete', 'unsubscribe'],
+  emits: ['update:name', 'update:color', 'update:recentDataWindow', 'update:visibility', 'update:shareParamsWithRecipients', 'update:shareParamsWithWorld', 'update:sharedWithEmails', 'update:worldShareEnabled', 'update:allowGroupReshare', 'update:hidden-in-list', 'reset-color', 'open-instructions', 'download-kml', 'clear-history', 'delete', 'unsubscribe'],
   setup(props, { emit }) {
     const fullWorldShareUrl = computed(() => {
       const path = props.worldShareUrl || '';
@@ -218,6 +165,9 @@ export default {
     const availableUsersForSelect = computed(() =>
       (availableUsers.value || []).map((u) => ({ value: (u.email || '').toLowerCase(), label: u.email || '' })).filter((u) => u.value)
     );
+    const sharedWithEmailsForSelect = computed(() =>
+      (props.sharedWithEmails || []).map((e) => String(e || '').toLowerCase()).filter(Boolean)
+    );
 
     watch(
       () => props.isOwner && props.visibility === 'shared',
@@ -225,15 +175,7 @@ export default {
       { immediate: true }
     );
 
-    function toggleUserEmail(item) {
-      const email = (item && (item.label ?? item.value)) ? String(item.label || item.value).trim().toLowerCase() : '';
-      if (!email) return;
-      const current = props.sharedWithEmails || [];
-      const has = current.some((e) => (e || '').toLowerCase() === email);
-      if (has) emit('update:sharedWithEmails', current.filter((e) => (e || '').toLowerCase() !== email));
-      else emit('update:sharedWithEmails', [...current, email]);
-    }
-    return { availableUsersForSelect, loadingUsers, toggleUserEmail, fullWorldShareUrl };
+    return { availableUsersForSelect, sharedWithEmailsForSelect, loadingUsers, fullWorldShareUrl };
   }
 };
 </script>

@@ -85,12 +85,6 @@ interface TrackerApi {
     @DELETE("/api/extensions/live-track/groups/{id}/tracks/{track_id}/")
     fun removeGroupTrack(@Path("id") id: String, @Path("track_id") trackId: String): Call<ResponseBody>
 
-    @POST("/api/extensions/live-track/groups/{id}/members/")
-    fun addGroupMember(@Path("id") id: String, @Body request: GroupAddMemberRequest): Call<Group>
-
-    @DELETE("/api/extensions/live-track/groups/{id}/members/{user_id}/")
-    fun removeGroupMember(@Path("id") id: String, @Path("user_id") userId: String): Call<ResponseBody>
-
     @DELETE("/api/extensions/live-track/groups/{id}/leave/")
     fun leaveGroup(@Path("id") id: String): Call<ResponseBody>
 

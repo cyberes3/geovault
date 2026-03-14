@@ -88,7 +88,7 @@ class LiveTrackSubscription(models.Model):
 
 
 class LiveTrackGroup(models.Model):
-    """Named group of trackers; owner can add tracks and members."""
+    """Named group of trackers; owner can add tracks and share via visibility/shared_with."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
@@ -144,19 +144,6 @@ class LiveTrackGroupMember(models.Model):
         app_label = "live_track"
         constraints = [
             models.UniqueConstraint(fields=["group", "track"], name="live_track_group_member_unique")
-        ]
-
-
-class LiveTrackGroupMembership(models.Model):
-    """Users who are in the group (besides the owner); can leave."""
-
-    group = models.ForeignKey(LiveTrackGroup, on_delete=models.CASCADE, related_name="user_members")
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="live_track_group_memberships")
-
-    class Meta:
-        app_label = "live_track"
-        constraints = [
-            models.UniqueConstraint(fields=["group", "user"], name="live_track_group_membership_unique")
         ]
 
 

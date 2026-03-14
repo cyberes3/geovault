@@ -1,5 +1,8 @@
 """
 World (unauthenticated) share endpoints for tracker share links.
+
+Deterministic lookup contract: when resolving a world-share ID, track is looked up
+first, then group. If both existed with the same ID (collision), track takes precedence.
 """
 
 import re

@@ -114,6 +114,10 @@ class TrackSettingsRequest(BaseModel):
     hidden_in_list: Optional[bool] = Field(
         default=None, description="When True, hide this tracker from the sidebar list (owner only)"
     )
+    allow_group_reshare: Optional[bool] = Field(
+        default=None,
+        description="When True, users who have access to this tracker may add it to their groups; default False",
+    )
 
 
 class MapVisibilityPrefsRequest(BaseModel):

@@ -28,11 +28,10 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
     private lateinit var nameEdit: EditText
     private lateinit var tracksList: LinearLayout
     private lateinit var addTrackButton: com.google.android.material.button.MaterialButton
-    private lateinit var membersList: LinearLayout
-    private lateinit var addMemberButton: com.google.android.material.button.MaterialButton
     private lateinit var leaveButton: com.google.android.material.button.MaterialButton
     private lateinit var deleteButton: com.google.android.material.button.MaterialButton
-    private lateinit var sharingHeader: TextView
+    private lateinit var sharingSectionHeader: TextView
+    private lateinit var visibilityHeader: TextView
     private lateinit var visibilitySpinner: Spinner
     private lateinit var sharedWithList: LinearLayout
     private lateinit var addSharedWithButton: com.google.android.material.button.MaterialButton
@@ -52,11 +51,10 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
         nameEdit = view.findViewById(R.id.groupDetailName)
         tracksList = view.findViewById(R.id.groupDetailTracksList)
         addTrackButton = view.findViewById(R.id.groupDetailAddTrack)
-        membersList = view.findViewById(R.id.groupDetailMembersList)
-        addMemberButton = view.findViewById(R.id.groupDetailAddMember)
         leaveButton = view.findViewById(R.id.groupDetailLeave)
         deleteButton = view.findViewById(R.id.groupDetailDelete)
-        sharingHeader = view.findViewById(R.id.groupDetailSharingHeader)
+        sharingSectionHeader = view.findViewById(R.id.groupDetailSharingSectionHeader)
+        visibilityHeader = view.findViewById(R.id.groupDetailSharingHeader)
         visibilitySpinner = view.findViewById(R.id.groupDetailVisibility)
         sharedWithList = view.findViewById(R.id.groupDetailSharedWithList)
         addSharedWithButton = view.findViewById(R.id.groupDetailAddSharedWith)
@@ -83,7 +81,6 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
         val isOwner = g.is_owner == true
         nameEdit.isEnabled = isOwner
         addTrackButton.visibility = if (isOwner) View.VISIBLE else View.GONE
-        addMemberButton.visibility = if (isOwner) View.VISIBLE else View.GONE
         leaveButton.visibility = if (isOwner) View.GONE else View.VISIBLE
         deleteButton.visibility = if (isOwner) View.VISIBLE else View.GONE
 
@@ -108,37 +105,13 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
             }
         }
 
-        membersList.removeAllViews()
-        val memberIds = g.member_ids
-        val memberEmails = g.member_emails
-        for (i in memberEmails.indices) {
-            val row = layoutInflater.inflate(android.R.layout.simple_list_item_1, membersList, false)
-            (row as? TextView)?.text = memberEmails.getOrNull(i) ?: ""
-            if (isOwner && i < memberIds.size) {
-                val uid = memberIds[i]
-                val remove = TextView(requireContext()).apply {
-                    text = " ×"
-                    setTextColor(ContextCompat.getColor(requireContext(), R.color.error_red))
-                    setOnClickListener { removeMember(g.id, uid) }
-                }
-                val rowWrap = android.widget.LinearLayout(requireContext()).apply {
-                    orientation = android.widget.LinearLayout.HORIZONTAL
-                    addView(row, android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                    addView(remove)
-                }
-                membersList.addView(rowWrap)
-            } else {
-                membersList.addView(row)
-            }
-        }
-
         addTrackButton.setOnClickListener { showAddTrackDialog(g) }
-        addMemberButton.setOnClickListener { showAddMemberDialog(g) }
         leaveButton.setOnClickListener { confirmLeave(g) }
         deleteButton.setOnClickListener { confirmDelete(g) }
 
+        sharingSectionHeader.visibility = View.VISIBLE
         if (isOwner) {
-            sharingHeader.visibility = View.VISIBLE
+            visibilityHeader.visibility = View.VISIBLE
             visibilitySpinner.visibility = View.VISIBLE
             worldShareRow.visibility = View.VISIBLE
             val visIndex = visibilityValues.indexOf(g.visibility ?: "private").coerceIn(0, visibilityValues.size - 1)
@@ -181,7 +154,7 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
                 }
             }
         } else {
-            sharingHeader.visibility = View.GONE
+            visibilityHeader.visibility = View.GONE
             visibilitySpinner.visibility = View.GONE
             sharedWithList.visibility = View.GONE
             addSharedWithButton.visibility = View.GONE
@@ -303,47 +276,6 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
 
     private fun removeTrack(groupId: String, trackId: String) {
         TrackerRepository.removeGroupTrack(requireContext(), groupId, trackId) { success ->
-            if (isAdded && success) {
-                requireActivity().runOnUiThread { loadGroup(groupId) }
-                parentFragmentManager.setFragmentResult(GroupsFragment.REQUEST_GROUPS_REFRESH, Bundle())
-            }
-        }
-    }
-
-    private fun showAddMemberDialog(g: Group) {
-        TrackerRepository.getUsers(requireContext()) { response ->
-            if (!isAdded) return@getUsers
-            val users = response?.users ?: emptyList()
-            val existing = g.member_emails.map { it.lowercase() }.toSet()
-            val addable = users.filter { !existing.contains(it.email.trim().lowercase()) }
-            requireActivity().runOnUiThread {
-                if (addable.isEmpty()) {
-                    (activity as? MainActivity)?.showSnackbar("No users to add")
-                    return@runOnUiThread
-                }
-                val emails = addable.map { it.email }
-                AlertDialog.Builder(requireContext())
-                    .setTitle(getString(R.string.add_member_to_group))
-                    .setItems(emails.toTypedArray()) { _, which ->
-                        val email = addable[which].email.trim()
-                        TrackerRepository.addGroupMember(requireContext(), g.id, email) { updated ->
-                            if (isAdded && updated != null) {
-                                requireActivity().runOnUiThread {
-                                    group = updated
-                                    bindGroup(updated)
-                                    parentFragmentManager.setFragmentResult(GroupsFragment.REQUEST_GROUPS_REFRESH, Bundle())
-                                }
-                            }
-                        }
-                    }
-                    .setNegativeButton(getString(R.string.cancel_button), null)
-                    .show()
-            }
-        }
-    }
-
-    private fun removeMember(groupId: String, userId: String) {
-        TrackerRepository.removeGroupMember(requireContext(), groupId, userId) { success ->
             if (isAdded && success) {
                 requireActivity().runOnUiThread { loadGroup(groupId) }
                 parentFragmentManager.setFragmentResult(GroupsFragment.REQUEST_GROUPS_REFRESH, Bundle())

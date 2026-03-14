@@ -46,63 +46,20 @@
       />
     </div>
     <div class="space-y-2">
-      <ScrollingSelect
-        label="Members"
-        :items="membersSelectItems"
-        :selected-values="groupMemberIds"
-        :loading="loadingUsers"
-        max-height="12rem"
-        empty-message="No other users found"
-        @select="onMemberToggle"
+      <SharingSection
+        variant="group"
+        :visibility="visibility"
+        :shared-with-select-items="sharedWithSelectItems"
+        :shared-with-select-values="sharedWithEmailsForSelect"
+        :loading-users="loadingUsers"
+        :world-share-enabled="worldShareEnabled"
+        :full-world-share-url="fullWorldShareUrl"
+        :disabled="!group.is_owner"
+        @update:visibility="visibility = $event"
+        @update:shared-with-emails="sharedWithEmails = $event"
+        @update:world-share-enabled="worldShareEnabled = $event"
+        @copy="copyWorldShareUrl"
       />
-      <p v-if="memberError" class="text-sm text-red-600">{{ memberError }}</p>
-    </div>
-    <div v-if="group.is_owner" class="space-y-2">
-      <div class="border border-gray-200 rounded-lg p-3 space-y-3 bg-gray-50/50">
-        <h3 class="text-sm font-semibold text-gray-800">Sharing</h3>
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700">Who can see this group</label>
-          <select
-            v-model="visibility"
-            class="select-custom w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="private">Private (only me and members)</option>
-            <option value="shared">Shared with specific users</option>
-            <option value="public">Public (all authenticated users)</option>
-          </select>
-        </div>
-        <div v-if="visibility === 'shared'" class="space-y-2">
-          <ScrollingSelect
-            label="Shared with (click to add or remove)"
-            :items="sharedWithSelectItems"
-            :selected-values="sharedWithEmailsForSelect"
-            :loading="loadingUsers"
-            max-height="12rem"
-            empty-message="No other users found"
-            @select="onSharedWithToggle"
-          />
-        </div>
-        <div class="space-y-2">
-          <div class="flex items-center gap-3">
-            <ToggleButton
-              :model-value="worldShareEnabled"
-              label="World share link"
-              size="md"
-              @update:model-value="worldShareEnabled = $event"
-            />
-            <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="worldShareEnabled = !worldShareEnabled">World share link</label>
-          </div>
-          <p class="text-xs text-gray-500">When on, anyone with the link can view this group's tracks on a read-only map (no login required).</p>
-        </div>
-        <div v-if="worldShareEnabled && worldShareUrl" class="flex gap-2 items-center">
-          <input
-            :value="fullWorldShareUrl"
-            readonly
-            class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 font-mono"
-          />
-          <button type="button" class="px-3 py-2 bg-gray-200 rounded text-sm whitespace-nowrap" @click="copyWorldShareUrl">Copy</button>
-        </div>
-      </div>
       <div class="flex items-center gap-3">
         <ToggleButton
           :model-value="hiddenInList"
@@ -127,7 +84,7 @@
         class="text-red-600 hover:bg-red-50"
         @click="$emit('leave')"
       >
-        Leave group
+        Leave shared group
       </BaseButton>
     </div>
   </div>
@@ -164,63 +121,20 @@
           />
         </div>
         <div class="space-y-2">
-          <ScrollingSelect
-            label="Members"
-            :items="membersSelectItems"
-            :selected-values="groupMemberIds"
-            :loading="loadingUsers"
-            max-height="12rem"
-            empty-message="No other users found"
-            @select="onMemberToggle"
+          <SharingSection
+            variant="group"
+            :visibility="visibility"
+            :shared-with-select-items="sharedWithSelectItems"
+            :shared-with-select-values="sharedWithEmailsForSelect"
+            :loading-users="loadingUsers"
+            :world-share-enabled="worldShareEnabled"
+            :full-world-share-url="fullWorldShareUrl"
+            :disabled="!group.is_owner"
+            @update:visibility="visibility = $event"
+            @update:shared-with-emails="sharedWithEmails = $event"
+            @update:world-share-enabled="worldShareEnabled = $event"
+            @copy="copyWorldShareUrl"
           />
-          <p v-if="memberError" class="text-sm text-red-600">{{ memberError }}</p>
-        </div>
-        <div v-if="group.is_owner" class="space-y-2">
-          <div class="border border-gray-200 rounded-lg p-3 space-y-3 bg-gray-50/50">
-            <h3 class="text-sm font-semibold text-gray-800">Sharing</h3>
-            <div class="space-y-2">
-              <label class="text-sm font-medium text-gray-700">Who can see this group</label>
-              <select
-                v-model="visibility"
-                class="select-custom w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="private">Private (only me and members)</option>
-                <option value="shared">Shared with specific users</option>
-                <option value="public">Public (all authenticated users)</option>
-              </select>
-            </div>
-            <div v-if="visibility === 'shared'" class="space-y-2">
-              <ScrollingSelect
-                label="Shared with (click to add or remove)"
-                :items="sharedWithSelectItems"
-                :selected-values="sharedWithEmailsForSelect"
-                :loading="loadingUsers"
-                max-height="12rem"
-                empty-message="No other users found"
-                @select="onSharedWithToggle"
-              />
-            </div>
-            <div class="space-y-2">
-              <div class="flex items-center gap-3">
-                <ToggleButton
-                  :model-value="worldShareEnabled"
-                  label="World share link"
-                  size="md"
-                  @update:model-value="worldShareEnabled = $event"
-                />
-                <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="worldShareEnabled = !worldShareEnabled">World share link</label>
-              </div>
-              <p class="text-xs text-gray-500">When on, anyone with the link can view this group's tracks on a read-only map (no login required).</p>
-            </div>
-            <div v-if="worldShareEnabled && worldShareUrl" class="flex gap-2 items-center">
-              <input
-                :value="fullWorldShareUrl"
-                readonly
-                class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 font-mono"
-              />
-              <button type="button" class="px-3 py-2 bg-gray-200 rounded text-sm whitespace-nowrap" @click="copyWorldShareUrl">Copy</button>
-            </div>
-          </div>
           <div class="flex items-center gap-3">
             <ToggleButton
               :model-value="hiddenInList"
@@ -270,10 +184,11 @@ import Loader from 'platform/components/parts/Loader.vue';
 import SearchableCheckboxList from 'platform/components/parts/SearchableCheckboxList.vue';
 import ScrollingSelect from 'platform/components/parts/ScrollingSelect.vue';
 import ToggleButton from 'platform/components/parts/ToggleButton.vue';
+import SharingSection from './SharingSection.vue';
 
 export default {
   name: 'GroupModal',
-  components: { BaseModal, BaseButton, Loader, SearchableCheckboxList, ScrollingSelect, ToggleButton },
+  components: { BaseModal, BaseButton, Loader, SearchableCheckboxList, ScrollingSelect, ToggleButton, SharingSection },
   props: {
     group: { type: Object, default: null },
     trackers: { type: Array, default: () => [] },
@@ -292,14 +207,9 @@ export default {
       get: () => groupTrackIds.value ?? [],
       set: (v) => { groupTrackIds.value = Array.isArray(v) ? v : []; },
     });
-    const groupMemberIds = ref([]);
     const allUsers = ref([]);
     const loadingUsers = ref(false);
-    const memberError = ref('');
 
-    const membersSelectItems = computed(() =>
-      (allUsers.value || []).map((u) => ({ id: u.id, label: u.email || '' })).filter((u) => u.label)
-    );
     const sharedWithSelectItems = computed(() =>
       (allUsers.value || [])
         .map((u) => ({ value: (u.email || '').toLowerCase(), label: u.email || '' }))
@@ -328,39 +238,51 @@ export default {
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
       return origin ? `${origin}${worldShareUrl.value}` : worldShareUrl.value;
     });
-    function copyWorldShareUrl() {
+    async function copyWorldShareUrl() {
       if (!fullWorldShareUrl.value) return;
-      navigator.clipboard.writeText(fullWorldShareUrl.value).then(() => {
+      const text = fullWorldShareUrl.value;
+      const showSuccess = () => {
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Link copied');
-      });
+      };
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(text);
+          showSuccess();
+        } catch {
+          fallbackCopy(text, showSuccess);
+        }
+      } else {
+        fallbackCopy(text, showSuccess);
+      }
+    }
+    function fallbackCopy(text, onSuccess) {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.opacity = '0';
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        const ok = document.execCommand('copy');
+        if (ok) onSuccess();
+      } catch {
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error('Could not copy; please copy the link manually.');
+      }
+      document.body.removeChild(textArea);
     }
     const sharedWithEmailsForSelect = computed(() =>
       (sharedWithEmails.value || []).map((e) => String(e || '').toLowerCase()).filter(Boolean)
     );
-    function onSharedWithToggle(item) {
-      if (!item) return;
-      const email = (item.label || item.value || '').toString().trim().toLowerCase();
-      if (!email) return;
-      const current = sharedWithEmailsForSelect.value;
-      const idx = current.indexOf(email);
-      if (idx >= 0) {
-        sharedWithEmails.value = sharedWithEmails.value.filter((e) => (e || '').toLowerCase() !== email);
-      } else {
-        sharedWithEmails.value = [...sharedWithEmails.value, email];
-      }
-    }
 
     watch(() => props.group, (g) => {
       name.value = g?.name || '';
       nameError.value = '';
-      memberError.value = '';
       hiddenInList.value = g?.hidden_in_list === true;
       visibility.value = g?.visibility || 'private';
       sharedWithEmails.value = Array.isArray(g?.shared_with_emails) ? [...g.shared_with_emails] : [];
       worldShareEnabled.value = !!(g?.world_share_id);
       worldShareUrl.value = g?.world_share_url || '';
       groupTrackIds.value = [...(g?.track_ids || [])];
-      groupMemberIds.value = (g?.member_ids || []).map((id) => String(id));
       if (g?.id) fetchUsers();
     }, { immediate: true });
 
@@ -412,17 +334,6 @@ export default {
         for (const trackId of toAdd) {
           await props.api.post(`/groups/${props.group.id}/tracks/`, { track_id: trackId });
         }
-        const prevMemberIds = new Set((props.group?.member_ids || []).map((id) => String(id)));
-        const currMemberIds = new Set(groupMemberIds.value);
-        const membersToRemove = [...prevMemberIds].filter((id) => !currMemberIds.has(id));
-        const membersToAdd = [...currMemberIds].filter((id) => !prevMemberIds.has(id));
-        for (const userId of membersToRemove) {
-          await props.api.delete(`/groups/${props.group.id}/members/${userId}/`);
-        }
-        for (const userId of membersToAdd) {
-          const user = allUsers.value.find((u) => String(u.id) === userId);
-          if (user?.email) await props.api.post(`/groups/${props.group.id}/members/`, { email: user.email });
-        }
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Group updated');
         emit('saved');
       } catch (e) {
@@ -430,18 +341,6 @@ export default {
         nameError.value = err?.message || 'Failed to save';
       } finally {
         saving.value = false;
-      }
-    }
-
-    function onMemberToggle(item) {
-      if (!item) return;
-      const userId = String(item.value != null ? item.value : item.id);
-      memberError.value = '';
-      const idx = groupMemberIds.value.indexOf(userId);
-      if (idx >= 0) {
-        groupMemberIds.value = groupMemberIds.value.filter((id) => id !== userId);
-      } else {
-        groupMemberIds.value = [...groupMemberIds.value, userId];
       }
     }
 
@@ -465,17 +364,12 @@ export default {
       worldShareUrl,
       fullWorldShareUrl,
       copyWorldShareUrl,
-      onSharedWithToggle,
       groupTrackIdsSafe,
       allTrackers,
-      groupMemberIds,
       create,
       save,
       allUsers,
       loadingUsers,
-      membersSelectItems,
-      memberError,
-      onMemberToggle,
       onHiddenInListChange,
     };
   },

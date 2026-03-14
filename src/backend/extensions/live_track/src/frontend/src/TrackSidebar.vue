@@ -45,6 +45,7 @@
       :world-share-enabled="worldShareEnabled"
       :world-share-url="worldShareUrl"
       :hidden-in-list="hiddenInList"
+      :allow-group-reshare="allowGroupReshare"
       @update:name="name = $event"
       @update:color="color = $event"
       @update:recentDataWindow="recentDataWindow = $event"
@@ -53,6 +54,7 @@
       @update:shareParamsWithWorld="shareParamsWithWorld = $event"
       @update:sharedWithEmails="sharedWithEmails = $event"
       @update:worldShareEnabled="setWorldShareEnabled"
+      @update:allowGroupReshare="onAllowGroupReshareChange($event)"
       @update:hidden-in-list="onHiddenInListChange($event)"
       @reset-color="resetColorToDeterministic"
       @open-instructions="showInstructions = true"
@@ -124,6 +126,7 @@
         :world-share-enabled="worldShareEnabled"
         :world-share-url="worldShareUrl"
         :hidden-in-list="hiddenInList"
+        :allow-group-reshare="allowGroupReshare"
         @update:name="name = $event"
         @update:color="color = $event"
         @update:recentDataWindow="recentDataWindow = $event"
@@ -132,6 +135,7 @@
         @update:shareParamsWithWorld="shareParamsWithWorld = $event"
         @update:sharedWithEmails="sharedWithEmails = $event"
         @update:worldShareEnabled="setWorldShareEnabled"
+        @update:allowGroupReshare="onAllowGroupReshareChange($event)"
         @update:hidden-in-list="onHiddenInListChange($event)"
         @reset-color="resetColorToDeterministic"
         @open-instructions="showInstructions = true"
@@ -212,6 +216,7 @@ export default {
     const worldShareUrl = ref('');
     const shareParamsWithWorld = ref(false);
     const hiddenInList = ref(false);
+    const allowGroupReshare = ref(false);
     const lastSavedSnapshot = ref(null);
     const isInitializingDraft = ref(false);
     const createdTrack = ref(null);
@@ -321,7 +326,8 @@ export default {
         shareParamsWithWorld: shareParamsWithWorld.value === true,
         sharedWithEmails: [...(sharedWithEmails.value || [])].map((e) => String(e || '').toLowerCase()),
         worldShareEnabled: worldShareEnabled.value === true,
-        hiddenInList: hiddenInList.value === true
+        hiddenInList: hiddenInList.value === true,
+        allowGroupReshare: allowGroupReshare.value === true
       };
     }
 
@@ -339,7 +345,8 @@ export default {
           .filter(Boolean)
           .sort(),
         worldShareEnabled: snapshot.worldShareEnabled === true,
-        hiddenInList: snapshot.hiddenInList === true
+        hiddenInList: snapshot.hiddenInList === true,
+        allowGroupReshare: snapshot.allowGroupReshare === true
       };
     }
 
@@ -356,7 +363,8 @@ export default {
         share_params_with_recipients: snapshot.shareParamsWithRecipients,
         share_params_with_world: snapshot.shareParamsWithWorld,
         world_share_enabled: snapshot.worldShareEnabled,
-        hidden_in_list: snapshot.hiddenInList
+        hidden_in_list: snapshot.hiddenInList,
+        allow_group_reshare: snapshot.allowGroupReshare
       };
       if (snapshot.visibility === 'shared') {
         payload.shared_with_emails = snapshot.sharedWithEmails;
@@ -502,6 +510,7 @@ export default {
         worldShareEnabled.value = !!(t.world_share_id);
         worldShareUrl.value = t.world_share_url || '';
         hiddenInList.value = (t.settings && t.settings.hidden_in_list) === true;
+        allowGroupReshare.value = (t.settings && t.settings.allow_group_reshare) === true;
         userPickedColor.value = true;
       } else {
         userPickedColor.value = false;
@@ -514,6 +523,7 @@ export default {
         worldShareEnabled.value = false;
         worldShareUrl.value = '';
         hiddenInList.value = false;
+        allowGroupReshare.value = false;
       }
       lastSavedSnapshot.value = makeSnapshotFromState();
       isInitializingDraft.value = false;
@@ -532,6 +542,11 @@ export default {
       queueAutosave();
     }
 
+    function onAllowGroupReshareChange(value) {
+      allowGroupReshare.value = value;
+      queueAutosave();
+    }
+
     function onShareParamsWithRecipientsUpdate(value) {
       shareParamsWithRecipients.value = value;
       queueAutosave();
@@ -547,7 +562,8 @@ export default {
         shareParamsWithWorld: shareParamsWithWorld.value,
         sharedWithEmails: sharedWithEmails.value,
         hiddenInList: hiddenInList.value,
-        worldShareEnabled: worldShareEnabled.value
+        worldShareEnabled: worldShareEnabled.value,
+        allowGroupReshare: allowGroupReshare.value
       }),
       () => {
         queueAutosave();

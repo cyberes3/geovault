@@ -38,6 +38,6 @@
             android:textSize="12sp"
             android:textColor="@color/text_secondary"
             android:layout_marginTop="4dp"
-            tools:text="2 tracks · 3 members · Owner" />
+            tools:text="2 tracks · Owner" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

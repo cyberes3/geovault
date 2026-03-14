@@ -634,44 +634,6 @@ object TrackerRepository {
         })
     }
 
-    fun addGroupMember(context: Context, groupId: String, email: String, callback: (Group?) -> Unit) {
-        val serverUrl = GeovaultAuthManager.getServerUrl(context)
-        if (serverUrl.isEmpty()) {
-            callback(null)
-            return
-        }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
-        api.addGroupMember(groupId, GroupAddMemberRequest(email = email)).enqueue(object : Callback<Group> {
-            override fun onResponse(call: Call<Group>, response: Response<Group>) {
-                callback(response.body())
-            }
-            override fun onFailure(call: Call<Group>, t: Throwable) {
-                Log.e("TrackerRepository", "Add group member failed", t)
-                callback(null)
-            }
-        })
-    }
-
-    fun removeGroupMember(context: Context, groupId: String, userId: String, callback: (Boolean) -> Unit) {
-        val serverUrl = GeovaultAuthManager.getServerUrl(context)
-        if (serverUrl.isEmpty()) {
-            callback(false)
-            return
-        }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
-        api.removeGroupMember(groupId, userId).enqueue(object : Callback<ResponseBody> {
-            override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
-                callback(response.isSuccessful)
-            }
-            override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
-                Log.e("TrackerRepository", "Remove group member failed", t)
-                callback(false)
-            }
-        })
-    }
-
     fun leaveGroup(context: Context, groupId: String, callback: (Boolean) -> Unit) {
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
         if (serverUrl.isEmpty()) {

@@ -3,12 +3,10 @@ Live track extension views. Re-exports from tracker_views and ingress_views so u
 """
 
 from .group_views import (
-    group_add_member,
     group_add_track,
     group_get_patch_delete,
     group_leave,
     group_list_create,
-    group_remove_member,
     group_remove_track,
 )
 from .ingress_views import app_ingress, ingress

@@ -42,27 +42,16 @@
         android:layout_marginBottom="16dp" />
 
     <TextView
+        android:id="@+id/groupDetailSharingSectionHeader"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/group_members"
+        android:text="@string/sharing_section"
         android:textSize="14sp"
         android:textStyle="bold"
         android:textColor="@color/text_secondary"
-        android:layout_marginBottom="8dp" />
-    <LinearLayout
-        android:id="@+id/groupDetailMembersList"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:layout_marginBottom="8dp" />
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/groupDetailAddMember"
-        style="@style/gv_common_ButtonOutlined"
-        android:layout_width="wrap_content"
-        android:layout_height="40dp"
-        android:text="@string/add_member_to_group"
-        android:layout_marginBottom="16dp" />
-
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:visibility="gone" />
     <TextView
         android:id="@+id/groupDetailSharingHeader"
         android:layout_width="match_parent"

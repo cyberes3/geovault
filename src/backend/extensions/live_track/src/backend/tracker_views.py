@@ -27,7 +27,6 @@ from .helpers import (
     _filter_coords_by_recent_window,
     _strip_ser_from_params,
     can_user_see_track,
-    can_user_see_track_via_group,
     can_user_see_track_via_group_share,
     track_to_response,
     track_to_response_metadata_only,
@@ -40,6 +39,7 @@ from .models import (
     LiveTrackWorldShare,
     LiveTrackShare,
     LiveTrackSubscription,
+    VISIBILITY_PRIVATE,
     VISIBILITY_PUBLIC,
     VISIBILITY_SHARED,
 )
@@ -67,7 +67,7 @@ def _get_json_body(request):
 
 
 def _get_track_for_user_or_404(user, tracker_id):
-    """Return LiveTrack if user owns it, can see it (subscribed + visible), or can see it via group membership. Raises Http404 otherwise."""
+    """Return LiveTrack if user owns it, can see it (subscribed + visible), or can see it via group share. Raises Http404 otherwise."""
     from django.http import Http404
 
     try:
@@ -78,7 +78,7 @@ def _get_track_for_user_or_404(user, tracker_id):
         return track
     if can_user_see_track(user, track) and LiveTrackSubscription.objects.filter(user=user, track=track).exists():
         return track
-    if can_user_see_track_via_group(user, track):
+    if can_user_see_track_via_group_share(user, track):
         return track
     raise Http404
 
@@ -135,7 +135,7 @@ def tracker_list_create(request):
                 track=t, shared_with=request.user
             ).exists():
                 visible_subscribed.append((t, False))
-            elif can_user_see_track_via_group(request.user, t):
+            elif can_user_see_track_via_group_share(request.user, t):
                 visible_subscribed.append((t, False))
         owned_ids = [t.id for t in owned]
         subscriber_counts = (
@@ -241,8 +241,8 @@ def tracker_post_settings(request, tracker_id):
             return error_response("A track with this name already exists", 409)
         track.name = name
         update_fields.append("name")
-    # Settings JSON: color, recent_data_window, hidden_in_list (visibility etc. are model fields)
-    settings_keys = {"color", "recent_data_window", "hidden_in_list"}
+    # Settings JSON: color, recent_data_window, hidden_in_list, allow_group_reshare (visibility etc. are model fields)
+    settings_keys = {"color", "recent_data_window", "hidden_in_list", "allow_group_reshare"}
     settings_dump = {k: v for k, v in body.model_dump(exclude_unset=True).items() if k in settings_keys}
     if settings_dump:
         new_settings = {**(track.settings or {})}
@@ -256,6 +256,12 @@ def tracker_post_settings(request, tracker_id):
     if body.visibility is not None:
         track.visibility = body.visibility
         update_fields.append("visibility")
+        if body.visibility == VISIBILITY_PRIVATE:
+            LiveTrackShare.objects.filter(track=track).delete()
+            LiveTrackGroupMember.objects.filter(track=track).exclude(group__user=track.user).delete()
+            LiveTrackSubscription.objects.filter(track=track).exclude(user=track.user).delete()
+        elif body.visibility == VISIBILITY_PUBLIC:
+            LiveTrackShare.objects.filter(track=track).delete()
     if body.share_params_with_recipients is not None:
         track.share_params_with_recipients = body.share_params_with_recipients
         update_fields.append("share_params_with_recipients")
@@ -281,6 +287,21 @@ def tracker_post_settings(request, tracker_id):
         for u in to_add:
             LiveTrackShare.objects.get_or_create(track=track, shared_with=u)
         LiveTrackShare.objects.filter(track=track, shared_with_id__in=to_remove).delete()
+        # Remove track from any groups owned by the unshared users and drop their subscriptions
+        if to_remove:
+            LiveTrackGroupMember.objects.filter(
+                track=track, group__user_id__in=to_remove
+            ).delete()
+            LiveTrackSubscription.objects.filter(
+                track=track, user_id__in=to_remove
+            ).delete()
+    if body.visibility == VISIBILITY_SHARED:
+        recipient_ids = set(
+            LiveTrackShare.objects.filter(track=track).values_list("shared_with_id", flat=True)
+        )
+        keep_ids = recipient_ids | {track.user_id}
+        LiveTrackGroupMember.objects.filter(track=track).exclude(group__user_id__in=keep_ids).delete()
+        LiveTrackSubscription.objects.filter(track=track).exclude(user_id__in=keep_ids).delete()
     if body.world_share_enabled is not None:
         if body.world_share_enabled:
             share, _ = LiveTrackWorldShare.objects.get_or_create(
@@ -497,7 +518,7 @@ def tracker_subscribe_delete(request, tracker_id):
     if request.method == "POST":
         if track.user_id == request.user.id:
             return JsonResponse({"error": "You already own this tracker"}, status=400)
-        if not (can_user_see_track(request.user, track) or can_user_see_track_via_group(request.user, track)):
+        if not (can_user_see_track(request.user, track) or can_user_see_track_via_group_share(request.user, track)):
             return error_response("You do not have access to this tracker", 403)
         LiveTrackSubscription.objects.get_or_create(user=request.user, track=track)
         return JsonResponse(
@@ -583,19 +604,11 @@ def tracker_available_to_add(request):
                 continue
             if (
                 can_user_see_track(request.user, track)
-                or can_user_see_track_via_group(request.user, track)
                 or can_user_see_track_via_group_share(request.user, track)
             ):
                 addable.append(str(track.id))
         return addable
 
-    member_groups = list(
-        LiveTrackGroup.objects.filter(user_members__user=request.user)
-        .exclude(user=request.user)
-        .select_related("user")
-        .distinct()
-        .order_by("name")
-    )
     groups_shared_with_me = list(
         LiveTrackGroup.objects.filter(
             visibility=VISIBILITY_SHARED,
@@ -606,20 +619,9 @@ def tracker_available_to_add(request):
         .distinct()
         .order_by("name")
     )
-    seen_group_ids = {g.id for g in member_groups}
+    seen_group_ids = set()
     shared_with_me_groups = []
-    for group in member_groups:
-        addable = addable_track_ids_for_group(group)
-        if addable:
-            shared_with_me_groups.append({
-                "id": str(group.id),
-                "name": group.name,
-                "owner_email": (group.user.email or "") if group.user_id else "",
-                "track_ids": addable,
-            })
     for group in groups_shared_with_me:
-        if group.id in seen_group_ids:
-            continue
         seen_group_ids.add(group.id)
         addable = addable_track_ids_for_group(group)
         if addable:
