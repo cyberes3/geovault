@@ -7,6 +7,48 @@ import maplibregl from 'maplibre-gl'
 // Maximum allowed zoom level for the map
 export const MAX_ZOOM_LEVEL = 18
 
+// Hosts that require a valid Referer when loading tiles directly (OSMF / openmaps.fr policy)
+const OSM_TILE_HOSTS = ['tile.openstreetmap.org', 'tile.openmaps.fr']
+
+// ResourceType.Tile value from MapLibre (see external sources/maplibre-gl-js/src/util/request_manager.ts)
+const RESOURCE_TYPE_TILE = 'Tile'
+
+function isOsmRelatedTileUrl(url, resourceType) {
+  if (resourceType !== RESOURCE_TYPE_TILE) return false
+  try {
+    const host = new URL(url, window.location.origin).hostname
+    return OSM_TILE_HOSTS.some((h) => host === h)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Build a transformRequest that sends a valid Referer for OSM/OpenTopoMap/OpenHikingMap tile requests,
+ * so direct (non-proxied) usage still complies with tile server policies.
+ *
+ * Note: The MapLibre copy in external sources/maplibre-gl-js does not pass referrerPolicy to fetch
+ * (RequestParameters has no referrerPolicy; makeFetchRequest uses getReferrer() only). So the
+ * referrerPolicy we set here is for forward compatibility if the library adds support. The library
+ * already sends referrer via getReferrer() (document URL), so OSM tiles get a valid Referer by
+ * default when proxying is disabled.
+ *
+ * @param {Function} [customTransformRequest] - Optional custom transformRequest to chain
+ * @returns {Function} transformRequest(url, resourceType) returning RequestParameters
+ */
+export function createTransformRequest(customTransformRequest) {
+  return (url, resourceType) => {
+    const result = customTransformRequest
+      ? customTransformRequest(url, resourceType)
+      : { url }
+    const out = result && typeof result === 'object' ? { ...result, url: result.url ?? url } : { url }
+    if (isOsmRelatedTileUrl(out.url, resourceType)) {
+      out.referrerPolicy = 'strict-origin-when-cross-origin'
+    }
+    return out
+  }
+}
+
 /**
  * Initialize a MapLibre map instance
  * @param {HTMLElement} container - Map container element
@@ -15,7 +57,7 @@ export const MAX_ZOOM_LEVEL = 18
  * @param {number} config.zoom - Initial zoom level
  * @param {string} config.glyphsUrl - Glyphs URL template
  * @param {boolean} config.antialias - Enable anti-aliasing (default: false)
- * @param {Function} config.transformRequest - Optional transformRequest function for custom headers
+ * @param {Function} config.transformRequest - Optional transformRequest function for custom headers (chained with OSM referrer)
  * @returns {Object} MapLibre map instance
  */
 export function initializeMap(container, config) {
@@ -42,10 +84,8 @@ export function initializeMap(container, config) {
     antialias: antialias // Enable anti-aliasing based on user setting
   }
 
-  // Add transformRequest if provided (for custom headers like User-Agent)
-  if (transformRequest) {
-    mapConfig.transformRequest = transformRequest
-  }
+  // Always use a transformRequest that sends valid Referer for OSM-related tiles; chain custom if provided
+  mapConfig.transformRequest = createTransformRequest(transformRequest)
 
   const map = new maplibregl.Map(mapConfig)
 

@@ -46,9 +46,9 @@ def _initialize_tile_sources():
     proxy_sources = config_loader.get('tilesources.proxy_sources', [])
     if not isinstance(proxy_sources, list):
         proxy_sources = []
-    # OSM, OpenTopoMap, and OpenHikingMap are always proxied (caching, User-Agent, single origin)
-    always_proxy = ['osm', 'opentopomap', 'openhikingmap']
-    proxy_sources = list(set(proxy_sources) | set(always_proxy))
+    # When proxy_osm is true, proxy OSM-related sources (osm, opentopomap, openhikingmap) for caching and valid headers
+    if config_loader.get('tilesources.proxy_osm', False):
+        proxy_sources = list(set(proxy_sources) | {'osm', 'opentopomap', 'openhikingmap'})
 
     # Filter out MapTiler sources - maptiler.proxy_tiles controls MapTiler proxying
     proxy_sources = [source_id for source_id in proxy_sources if not source_id.startswith('maptiler-')]

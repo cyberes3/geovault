@@ -67,6 +67,10 @@ tilesources:
   # Number of days before cached tiles expire
   cache_expiry_days: 30
 
+  # When true, proxy all OSM-related tile sources (OSM, OpenTopoMap, OpenHikingMap) through the server.
+  # Good for when OSM blocks you.
+  # proxy_osm: false
+
   # Source IDs to hide from the website map's basemap selector.
   # hidden:
   #   - google-satellite-hybrid
