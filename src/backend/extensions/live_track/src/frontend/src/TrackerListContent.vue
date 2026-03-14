@@ -169,9 +169,16 @@
               >
                 <span class="truncate">{{ track.name }}</span>
                 <CloudIcon
-                  v-if="!track.is_owner && track.visibility === 'shared'"
+                  v-if="!track.is_owner"
                   class="h-4 w-4 text-gray-500 flex-shrink-0"
                 />
+              </div>
+              <div
+                v-if="track.owner_email"
+                class="text-xs text-gray-500 truncate mt-0.5"
+                :title="'Shared by ' + track.owner_email"
+              >
+                Shared by {{ track.owner_email }}
               </div>
               <div class="flex items-center gap-1.5 mt-0.5">
                 <div class="text-xs font-medium text-gray-500 truncate">
@@ -232,7 +239,7 @@
               >
                 <span class="truncate">{{ track.name }}</span>
                 <CloudIcon
-                  v-if="!track.is_owner && track.visibility === 'shared'"
+                  v-if="!track.is_owner"
                   class="h-4 w-4 text-gray-500 flex-shrink-0"
                 />
               </div>
@@ -360,8 +367,6 @@ export default {
         highlighted ? 'ring-2 ring-blue-500' : ''
       ];
     }
-
-    defineExpose({ scrollContainerEl: scrollContainerRef });
 
     return {
       scrollContainerRef,

@@ -56,5 +56,7 @@ def world_share_data(request, share_id):
     if not share:
         return JsonResponse({"error": "Invalid share link", "code": 404}, status=404)
     track = share.track
-    payload = track_to_response(track, include_secret=False, is_owner=False, all_data=False)
+    payload = track_to_response(
+        track, include_secret=False, is_owner=False, all_data=False, for_world_share=True
+    )
     return JsonResponse(payload)

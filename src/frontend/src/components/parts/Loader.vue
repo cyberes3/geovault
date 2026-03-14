@@ -16,7 +16,7 @@ const props = defineProps({
   size: {
     type: String,
     default: 'md',
-    validator: (value) => ['sm', 'md', 'lg'].includes(value)
+    validator: (value) => ['xs', 'sm', 'md', 'lg'].includes(value)
   },
   layout: {
     type: String,
@@ -52,6 +52,10 @@ const shouldShowMessage = computed(() => {
 // Size classes
 const sizeClasses = computed(() => {
   const sizes = {
+    xs: {
+      border: 'w-5 h-5 border-2',
+      message: 'text-xs'
+    },
     sm: {
       border: 'w-4 h-4 border-2',
       message: 'text-xs'
@@ -76,10 +80,10 @@ const containerClasses = computed(() => {
   return 'flex flex-col items-center justify-center py-12'
 })
 
-// Spinner wrapper classes
+// Spinner wrapper classes (omit -ml-1 mr-2 when no message so spinner stays centered in icon slots)
 const spinnerClasses = computed(() => {
   const base = 'relative'
-  if (props.layout === 'inline') {
+  if (props.layout === 'inline' && props.showMessage !== false) {
     return `${base} -ml-1 mr-2`
   }
   return base

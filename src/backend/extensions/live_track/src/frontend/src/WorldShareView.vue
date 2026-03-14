@@ -118,7 +118,8 @@ export default {
 
     const showParamsButton = computed(() => {
       const t = trackData.value;
-      if (!t?.share_params_with_recipients) return false;
+      const allowParams = t?.share_params_with_world === true || (t?.share_params_with_world === undefined && t?.share_params_with_recipients === true);
+      if (!allowParams) return false;
       const hasPoints = (t.point_params?.length || t.geometry?.coordinates?.length) > 0;
       return hasPoints;
     });

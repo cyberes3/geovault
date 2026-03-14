@@ -9,10 +9,20 @@
       />
       <MagnifyingGlassIcon class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
     </div>
-    <div class="flex-shrink-0 mb-3">
-      <BaseButton variant="white" size="sm" class="w-full" @click="$emit('openDiscover')">
+    <div class="flex-shrink-0 mb-3 flex items-center gap-2">
+      <BaseButton variant="white" size="sm" class="flex-1" @click="$emit('openDiscover')">
         Add public trackers
       </BaseButton>
+      <button
+        type="button"
+        title="Refresh"
+        class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 flex-shrink-0 disabled:opacity-50 flex items-center justify-center size-9"
+        :disabled="refreshing"
+        @click="$emit('refresh')"
+      >
+        <Loader v-if="refreshing" size="xs" layout="inline" :show-message="false" />
+        <ArrowPathIcon v-else class="h-5 w-5" />
+      </button>
     </div>
     <div class="flex-1 min-h-0 flex flex-col gap-3 overflow-hidden">
       <div class="flex-1 min-h-0 flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-gray-50/60 shadow-sm">
@@ -34,21 +44,21 @@
               <button
                 type="button"
                 title="Reject (remove me from share; you won't see this in Incoming again)"
-                class="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center size-9 flex-shrink-0"
                 :disabled="isAdding(track.id) || isLeavingShare(track.id)"
                 @click="$emit('leaveShare', track.id)"
               >
-                <Loader v-if="isLeavingShare(track.id)" size="sm" layout="inline" :show-message="false" class="h-5 w-5" />
+                <Loader v-if="isLeavingShare(track.id)" size="xs" layout="inline" :show-message="false" />
                 <XMarkIcon v-else class="h-5 w-5" />
               </button>
               <button
                 type="button"
                 title="Add to my trackers"
-                class="p-2 rounded-lg text-blue-600 hover:bg-blue-50 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="p-2 rounded-lg text-blue-600 hover:bg-blue-50 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center size-9"
                 :disabled="isAdding(track.id) || isLeavingShare(track.id)"
                 @click="$emit('addIncoming', track)"
               >
-                <Loader v-if="isAdding(track.id)" size="sm" layout="inline" :show-message="false" class="h-5 w-5" />
+                <Loader v-if="isAdding(track.id)" size="xs" layout="inline" :show-message="false" />
                 <PlusIcon v-else class="h-5 w-5" />
               </button>
             </div>
@@ -75,7 +85,7 @@
               <button
                 type="button"
                 :title="isHidden(track.id) ? 'Show on map' : 'Hide on map'"
-                class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 flex items-center justify-center size-9 flex-shrink-0"
                 @click="$emit('toggleVisibility', track.id)"
               >
                 <EyeIcon v-if="isHidden(track.id)" class="h-5 w-5" />
@@ -84,22 +94,22 @@
               <button
                 type="button"
                 title="Unsubscribe (remove from my list; you can add again from Incoming)"
-                class="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50"
+                class="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 flex items-center justify-center size-9 flex-shrink-0"
                 :disabled="isUnsubscribing(track.id) || isLeavingShare(track.id)"
                 @click="$emit('unsubscribe', track.id)"
               >
-                <TrashIcon v-if="!isUnsubscribing(track.id)" class="h-5 w-5" />
-                <Loader v-else size="sm" layout="inline" :show-message="false" class="h-5 w-5" />
+                <Loader v-if="isUnsubscribing(track.id)" size="xs" layout="inline" :show-message="false" />
+                <UserMinusIcon v-else class="h-5 w-5" />
               </button>
               <button
                 type="button"
                 title="Remove me from share (owner will no longer have you as recipient; you won't see this in Incoming again)"
-                class="p-2 rounded-lg text-gray-500 hover:text-amber-600 hover:bg-amber-50"
+                class="p-2 rounded-lg text-gray-500 hover:text-amber-600 hover:bg-amber-50 flex items-center justify-center size-9 flex-shrink-0"
                 :disabled="isUnsubscribing(track.id) || isLeavingShare(track.id)"
                 @click="$emit('leaveShare', track.id)"
               >
-                <Loader v-if="isLeavingShare(track.id)" size="sm" layout="inline" :show-message="false" class="h-5 w-5" />
-                <UserMinusIcon v-else class="h-5 w-5" />
+                <Loader v-if="isLeavingShare(track.id)" size="xs" layout="inline" :show-message="false" />
+                <XMarkIcon v-else class="h-5 w-5" />
               </button>
             </div>
           </div>
@@ -112,14 +122,16 @@
 
 <script>
 import { ref, computed } from 'vue';
-import { CloudIcon, EyeIcon, EyeSlashIcon, TrashIcon, MagnifyingGlassIcon, PlusIcon, UserMinusIcon, XMarkIcon } from '@heroicons/vue/24/outline';
+import { ArrowPathIcon, CloudIcon, EyeIcon, EyeSlashIcon, MagnifyingGlassIcon, PlusIcon, UserMinusIcon, XMarkIcon } from '@heroicons/vue/24/outline';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import Loader from 'platform/components/parts/Loader.vue';
 
 export default {
   name: 'SharedWithMeSidebarContent',
-  components: { BaseButton, Loader, CloudIcon, EyeIcon, EyeSlashIcon, TrashIcon, MagnifyingGlassIcon, PlusIcon, UserMinusIcon, XMarkIcon },
+  components: { BaseButton, Loader, ArrowPathIcon, CloudIcon, EyeIcon, EyeSlashIcon, MagnifyingGlassIcon, PlusIcon, UserMinusIcon, XMarkIcon },
   props: {
+    /** When true, show loading state on refresh button */
+    refreshing: { type: Boolean, default: false },
     trackers: { type: Array, default: () => [] },
     /** Trackers shared with you that you haven't added yet (from available-to-add shared_with_me) */
     incomingTrackers: { type: Array, default: () => [] },
@@ -131,7 +143,7 @@ export default {
     hiddenTrackIds: { type: [Set, Array], default: () => new Set() },
     unsubscribingId: { type: [String, Number], default: null },
   },
-  emits: ['toggleVisibility', 'unsubscribe', 'leaveShare', 'addIncoming', 'openDiscover'],
+  emits: ['toggleVisibility', 'unsubscribe', 'leaveShare', 'addIncoming', 'openDiscover', 'refresh'],
   setup(props) {
     const searchQuery = ref('');
 

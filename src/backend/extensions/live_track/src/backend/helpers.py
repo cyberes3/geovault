@@ -88,6 +88,7 @@ def track_to_response(
     include_secret: bool = False,
     all_data: bool = False,
     is_owner: bool = True,
+    for_world_share: bool = False,
 ) -> dict:
     geom = copy.deepcopy(track.geometry or {"type": "LineString", "coordinates": []})
     point_params = copy.deepcopy(track.point_params or [])
@@ -97,7 +98,11 @@ def track_to_response(
         coords, point_params = _filter_coords_by_recent_window(coords, point_params, window_key)
         geom = {"type": "LineString", "coordinates": copy.deepcopy(coords)}
     if not is_owner:
-        if not getattr(track, "share_params_with_recipients", False):
+        show_params = (
+            getattr(track, "share_params_with_world", False) if for_world_share
+            else getattr(track, "share_params_with_recipients", False)
+        )
+        if not show_params:
             point_params = []
         else:
             _strip_ser_from_params(point_params)
@@ -148,6 +153,8 @@ def track_to_response(
         "created_at": int(track.created_at.timestamp()) if track.created_at else None,
         "updated_at": int(track.updated_at.timestamp()) if track.updated_at else None,
     }
+    if for_world_share:
+        out["share_params_with_world"] = getattr(track, "share_params_with_world", False)
     if include_secret and is_owner:
         out["tracker_secret"] = track.tracker_secret
     if is_owner:
@@ -214,6 +221,7 @@ def track_to_response_metadata_only(
         "settings": track.settings or {},
         "visibility": getattr(track, "visibility", "private"),
         "share_params_with_recipients": getattr(track, "share_params_with_recipients", False),
+        "share_params_with_world": getattr(track, "share_params_with_world", False),
         "created_at": int(track.created_at.timestamp()) if track.created_at else None,
         "updated_at": int(track.updated_at.timestamp()) if track.updated_at else None,
         "last_point": last_point,

@@ -65,13 +65,13 @@
           <div class="flex items-center gap-3">
             <ToggleButton
               :model-value="shareParamsWithRecipients"
-              label="Allow viewing parameters"
+              label="Allow viewing parameters (shared users)"
               size="md"
               @update:model-value="$emit('update:shareParamsWithRecipients', $event)"
             />
             <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="$emit('update:shareParamsWithRecipients', !shareParamsWithRecipients)">Allow viewing parameters</label>
           </div>
-          <p class="text-xs text-gray-500">When on, people you share with can see extended parameters (e.g. in Latest params). Serial is never shared.</p>
+          <p class="text-xs text-gray-500">When on, people you share this tracker with can see extended parameters (e.g. in Latest params). Serial is never shared.</p>
         </div>
       </div>
       <div class="border border-gray-200 rounded-lg p-3 space-y-3 bg-gray-50/50">
@@ -91,14 +91,14 @@
         <div class="space-y-2">
           <div class="flex items-center gap-3">
             <ToggleButton
-              :model-value="shareParamsWithRecipients"
-              label="Allow viewing parameters"
+              :model-value="shareParamsWithWorld"
+              label="Allow viewing parameters (world link)"
               size="md"
-              @update:model-value="$emit('update:shareParamsWithRecipients', $event)"
+              @update:model-value="$emit('update:shareParamsWithWorld', $event)"
             />
-            <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="$emit('update:shareParamsWithRecipients', !shareParamsWithRecipients)">Allow viewing parameters</label>
+            <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="$emit('update:shareParamsWithWorld', !shareParamsWithWorld)">Allow viewing parameters</label>
           </div>
-          <p class="text-xs text-gray-500">When on, anyone with the link can see extended parameters. Serial is never shared.</p>
+          <p class="text-xs text-gray-500">When on, anyone with the world share link can see extended parameters. Serial is never shared.</p>
         </div>
         <div v-if="worldShareEnabled && worldShareUrl" class="flex gap-2 items-center">
           <input
@@ -127,9 +127,6 @@
         <option value="1m">Last Month</option>
       </select>
     </div>
-    <p v-if="isOwner" class="text-sm text-amber-800 bg-amber-50 p-3 rounded">
-      Anyone with the secret can broadcast data to this tracker. Keep it private.
-    </p>
     <div class="grid grid-cols-2 gap-3 pb-2">
       <BaseButton v-if="isOwner" variant="white" size="sm" @click="$emit('open-instructions')">GPSLogger Setup</BaseButton>
       <BaseButton variant="white" size="sm" @click="$emit('download-kml')">Download KML</BaseButton>
@@ -176,9 +173,10 @@ export default {
     clearHistoryDisabled: { type: Boolean, default: false },
     copy: { type: Function, required: true },
     worldShareEnabled: { type: Boolean, default: false },
-    worldShareUrl: { type: String, default: '' }
+    worldShareUrl: { type: String, default: '' },
+    shareParamsWithWorld: { type: Boolean, default: false }
   },
-  emits: ['update:name', 'update:color', 'update:recentDataWindow', 'update:visibility', 'update:shareParamsWithRecipients', 'update:sharedWithEmails', 'update:worldShareEnabled', 'reset-color', 'open-instructions', 'download-kml', 'clear-history', 'delete', 'unsubscribe'],
+  emits: ['update:name', 'update:color', 'update:recentDataWindow', 'update:visibility', 'update:shareParamsWithRecipients', 'update:shareParamsWithWorld', 'update:sharedWithEmails', 'update:worldShareEnabled', 'reset-color', 'open-instructions', 'download-kml', 'clear-history', 'delete', 'unsubscribe'],
   setup(props, { emit }) {
     const fullWorldShareUrl = computed(() => {
       const path = props.worldShareUrl || '';

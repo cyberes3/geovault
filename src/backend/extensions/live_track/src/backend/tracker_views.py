@@ -260,6 +260,9 @@ def tracker_post_settings(request, tracker_id):
     if body.share_params_with_recipients is not None:
         track.share_params_with_recipients = body.share_params_with_recipients
         update_fields.append("share_params_with_recipients")
+    if body.share_params_with_world is not None:
+        track.share_params_with_world = body.share_params_with_world
+        update_fields.append("share_params_with_world")
     if body.shared_with_emails is not None:
         if track.visibility != VISIBILITY_SHARED:
             return error_response("shared_with_emails only applies when visibility is shared", 400)

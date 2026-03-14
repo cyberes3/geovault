@@ -102,6 +102,9 @@ class TrackSettingsRequest(BaseModel):
     share_params_with_recipients: Optional[bool] = Field(
         default=None, description="Whether subscribers can view extended parameters (ser never shared)"
     )
+    share_params_with_world: Optional[bool] = Field(
+        default=None, description="Whether world (unauthenticated) share link viewers can see extended parameters"
+    )
     shared_with_emails: Optional[list[str]] = Field(
         default=None, description="When visibility=shared, list of user emails to share with (replaces existing)"
     )

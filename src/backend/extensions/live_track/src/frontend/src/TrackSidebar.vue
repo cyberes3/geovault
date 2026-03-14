@@ -33,6 +33,7 @@
       :recent-data-window="recentDataWindow"
       :visibility="visibility"
       :share-params-with-recipients="shareParamsWithRecipients"
+      :share-params-with-world="shareParamsWithWorld"
       :shared-with-emails="sharedWithEmails"
       :is-owner="isOwner"
       :error="error"
@@ -48,6 +49,7 @@
       @update:recentDataWindow="recentDataWindow = $event"
       @update:visibility="visibility = $event"
       @update:shareParamsWithRecipients="onShareParamsWithRecipientsUpdate($event)"
+      @update:shareParamsWithWorld="shareParamsWithWorld = $event"
       @update:sharedWithEmails="sharedWithEmails = $event"
       @update:worldShareEnabled="setWorldShareEnabled"
       @reset-color="resetColorToDeterministic"
@@ -63,12 +65,6 @@
         <BaseButton variant="primary" color="blue" size="sm" :disabled="saving || !name.trim()" @click="create">
           <Loader v-if="saving" size="sm" layout="inline" :show-message="false" class="mr-1" />
           Create
-        </BaseButton>
-      </template>
-      <template v-else-if="mode === 'edit' && !loading && track && isOwner">
-        <BaseButton variant="primary" color="blue" size="sm" :disabled="saving || !name.trim()" @click="save">
-          <Loader v-if="saving" size="sm" layout="inline" :show-message="false" class="mr-1" />
-          Save
         </BaseButton>
       </template>
     </template>
@@ -114,6 +110,7 @@
         :recent-data-window="recentDataWindow"
         :visibility="visibility"
         :share-params-with-recipients="shareParamsWithRecipients"
+        :share-params-with-world="shareParamsWithWorld"
         :shared-with-emails="sharedWithEmails"
         :is-owner="isOwner"
         :error="error"
@@ -129,6 +126,7 @@
         @update:recentDataWindow="recentDataWindow = $event"
         @update:visibility="visibility = $event"
         @update:shareParamsWithRecipients="onShareParamsWithRecipientsUpdate($event)"
+        @update:shareParamsWithWorld="shareParamsWithWorld = $event"
         @update:sharedWithEmails="sharedWithEmails = $event"
         @update:worldShareEnabled="setWorldShareEnabled"
         @reset-color="resetColorToDeterministic"
@@ -138,33 +136,21 @@
         @delete="confirmDelete"
         @unsubscribe="confirmUnsubscribe"
       />
-      <div
-        v-if="(mode === 'create' && !createdTrack) || (mode === 'edit' && track && !loading && isOwner)"
-        class="mt-6 pt-4 border-t border-gray-200 flex items-center justify-end gap-3 flex-shrink-0"
+    </div>
+    <div
+      v-if="mode === 'create' && !createdTrack"
+      class="flex-shrink-0 px-4 sm:px-5 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-end gap-3"
+    >
+      <BaseButton
+        variant="primary"
+        color="blue"
+        size="sm"
+        :disabled="saving || !name.trim()"
+        @click="create"
       >
-        <BaseButton
-          v-if="mode === 'create'"
-          variant="primary"
-          color="blue"
-          size="sm"
-          :disabled="saving || !name.trim()"
-          @click="create"
-        >
-          <Loader v-if="saving" size="sm" layout="inline" :show-message="false" class="mr-1" />
-          Create
-        </BaseButton>
-        <BaseButton
-          v-else
-          variant="primary"
-          color="blue"
-          size="sm"
-          :disabled="saving || !name.trim()"
-          @click="save"
-        >
-          <Loader v-if="saving" size="sm" layout="inline" :show-message="false" class="mr-1" />
-          Save
-        </BaseButton>
-      </div>
+        <Loader v-if="saving" size="sm" layout="inline" :show-message="false" class="mr-1" />
+        Create
+      </BaseButton>
     </div>
     <GpsLoggerInstructionsModal
       v-if="showInstructions && instructionsPassword"
@@ -179,7 +165,7 @@
 </template>
 
 <script>
-import { ref, watch, computed, inject, onMounted } from 'vue';
+import { ref, watch, computed, inject, onMounted, onBeforeUnmount } from 'vue';
 import LiveTrackSidebar from './LiveTrackSidebar.vue';
 import Loader from 'platform/components/parts/Loader.vue';
 import { getIngressBodyTemplate } from './ingressBodyTemplateCache.js';
@@ -202,6 +188,7 @@ export default {
   },
   emits: ['close', 'saved', 'deleted', 'unsubscribed'],
   setup(props, { emit }) {
+    const AUTOSAVE_DEBOUNCE_MS = 500;
     const api = inject('extensionApi');
     const name = ref('');
     const color = ref('#6C93DE');
@@ -219,8 +206,15 @@ export default {
     const historyClearedThisSession = ref(false);
     const worldShareEnabled = ref(false);
     const worldShareUrl = ref('');
+    const shareParamsWithWorld = ref(false);
+    const lastSavedSnapshot = ref(null);
+    const isInitializingDraft = ref(false);
     const createdTrack = ref(null);
     const showInstructions = ref(false);
+    let autosaveTimerId = null;
+    let autosaveInFlight = false;
+    let autosaveQueued = false;
+    let autosaveSeq = 0;
 
     const sidebarTitle = computed(() => (props.mode === 'create' ? 'New tracker' : 'Edit tracker'));
     const isOwner = computed(() => props.track?.is_owner !== false);
@@ -312,6 +306,110 @@ export default {
       document.body.removeChild(el);
     }
 
+    function makeSnapshotFromState() {
+      return {
+        name: name.value,
+        color: color.value,
+        recentDataWindow: recentDataWindow.value || '',
+        visibility: visibility.value || 'private',
+        shareParamsWithRecipients: shareParamsWithRecipients.value === true,
+        shareParamsWithWorld: shareParamsWithWorld.value === true,
+        sharedWithEmails: [...(sharedWithEmails.value || [])].map((e) => String(e || '').toLowerCase()),
+        worldShareEnabled: worldShareEnabled.value === true
+      };
+    }
+
+    function normalizeSnapshot(snapshot) {
+      if (!snapshot) return null;
+      return {
+        name: String(snapshot.name || ''),
+        color: String(snapshot.color || '#6C93DE'),
+        recentDataWindow: String(snapshot.recentDataWindow || ''),
+        visibility: String(snapshot.visibility || 'private'),
+        shareParamsWithRecipients: snapshot.shareParamsWithRecipients === true,
+        shareParamsWithWorld: snapshot.shareParamsWithWorld === true,
+        sharedWithEmails: [...(snapshot.sharedWithEmails || [])]
+          .map((e) => String(e || '').trim().toLowerCase())
+          .filter(Boolean)
+          .sort(),
+        worldShareEnabled: snapshot.worldShareEnabled === true
+      };
+    }
+
+    function snapshotsEqual(a, b) {
+      return JSON.stringify(normalizeSnapshot(a)) === JSON.stringify(normalizeSnapshot(b));
+    }
+
+    function buildSettingsPayload(snapshot) {
+      return {
+        name: snapshot.name.trim(),
+        color: snapshot.color,
+        recent_data_window: snapshot.recentDataWindow || null,
+        visibility: snapshot.visibility,
+        share_params_with_recipients: snapshot.shareParamsWithRecipients,
+        share_params_with_world: snapshot.shareParamsWithWorld,
+        shared_with_emails: snapshot.visibility === 'shared' ? snapshot.sharedWithEmails : [],
+        world_share_enabled: snapshot.worldShareEnabled
+      };
+    }
+
+    function stopAutosaveTimer() {
+      if (autosaveTimerId != null) {
+        clearTimeout(autosaveTimerId);
+        autosaveTimerId = null;
+      }
+    }
+
+    function queueAutosave() {
+      if (props.mode !== 'edit' || !isOwner.value || !props.track?.id) return;
+      if (isInitializingDraft.value) return;
+      if (!lastSavedSnapshot.value) return;
+      const current = makeSnapshotFromState();
+      if (snapshotsEqual(current, lastSavedSnapshot.value)) return;
+      stopAutosaveTimer();
+      autosaveTimerId = setTimeout(() => {
+        autosaveTimerId = null;
+        flushAutosave().catch(() => {});
+      }, AUTOSAVE_DEBOUNCE_MS);
+    }
+
+    async function flushAutosave() {
+      if (props.mode !== 'edit' || !isOwner.value || !props.track?.id) return;
+      if (!lastSavedSnapshot.value) return;
+      const current = makeSnapshotFromState();
+      if (snapshotsEqual(current, lastSavedSnapshot.value)) return;
+      if (autosaveInFlight) {
+        autosaveQueued = true;
+        return;
+      }
+      autosaveInFlight = true;
+      const seq = ++autosaveSeq;
+      error.value = '';
+      saving.value = true;
+      try {
+        const payload = buildSettingsPayload(current);
+        const res = await api.post(`/trackers/${props.track.id}/settings/`, payload);
+        if (seq !== autosaveSeq) return;
+        lastSavedSnapshot.value = makeSnapshotFromState();
+        if (res?.data) {
+          worldShareEnabled.value = !!(res.data.world_share_id);
+          worldShareUrl.value = res.data.world_share_url || '';
+        }
+      } catch (e) {
+        if (seq === autosaveSeq) {
+          const err = api.handleError?.(e);
+          error.value = err?.message || 'Failed to save';
+        }
+      } finally {
+        if (seq === autosaveSeq) saving.value = false;
+        autosaveInFlight = false;
+        if (autosaveQueued) {
+          autosaveQueued = false;
+          await flushAutosave();
+        }
+      }
+    }
+
     async function create() {
       if (!api || saving.value || !name.value.trim()) return;
       error.value = '';
@@ -322,28 +420,6 @@ export default {
       } catch (e) {
         const err = api.handleError?.(e);
         error.value = err?.message || 'Failed to create tracker';
-      } finally {
-        saving.value = false;
-      }
-    }
-
-    async function save() {
-      if (!api || !props.track || saving.value || !name.value.trim()) return;
-      error.value = '';
-      saving.value = true;
-      try {
-        await api.post(`/trackers/${props.track.id}/settings/`, {
-          name: name.value.trim(),
-          color: color.value,
-          recent_data_window: recentDataWindow.value || null,
-          visibility: visibility.value,
-          share_params_with_recipients: shareParamsWithRecipients.value,
-          shared_with_emails: visibility.value === 'shared' ? sharedWithEmails.value : undefined
-        });
-        emit('saved');
-      } catch (e) {
-        const err = api.handleError?.(e);
-        error.value = err?.message || 'Failed to save';
       } finally {
         saving.value = false;
       }
@@ -403,12 +479,14 @@ export default {
     }
 
     watch(() => props.track, (t) => {
+      isInitializingDraft.value = true;
       if (t) {
         name.value = t.name || '';
         color.value = t.color || '#6C93DE';
         recentDataWindow.value = t.settings?.recent_data_window ?? '';
         visibility.value = t.visibility || 'private';
         shareParamsWithRecipients.value = t.share_params_with_recipients === true;
+        shareParamsWithWorld.value = t.share_params_with_world === true;
         sharedWithEmails.value = Array.isArray(t.shared_with_emails) ? [...t.shared_with_emails] : [];
         worldShareEnabled.value = !!(t.world_share_id);
         worldShareUrl.value = t.world_share_url || '';
@@ -419,56 +497,45 @@ export default {
         recentDataWindow.value = '';
         visibility.value = 'private';
         shareParamsWithRecipients.value = false;
+        shareParamsWithWorld.value = false;
         sharedWithEmails.value = [];
         worldShareEnabled.value = false;
         worldShareUrl.value = '';
       }
+      lastSavedSnapshot.value = makeSnapshotFromState();
+      isInitializingDraft.value = false;
     }, { immediate: true });
 
-    async function setWorldShareEnabled(enabled) {
-      if (!api || !props.track?.id || saving.value) return;
-      error.value = '';
-      saving.value = true;
-      try {
-        const res = await api.post(`/trackers/${props.track.id}/settings/`, {
-          world_share_enabled: enabled
-        });
-        const data = res.data;
-        worldShareEnabled.value = !!(data?.world_share_id);
-        worldShareUrl.value = data?.world_share_url || '';
-        // Do not emit('saved') here — parent would close the sidebar; keep sidebar open so user can copy the link
-      } catch (e) {
-        const err = api.handleError?.(e);
-        error.value = err?.message || (enabled ? 'Failed to enable world share link' : 'Failed to disable world share link');
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(error.value);
-      } finally {
-        saving.value = false;
-      }
+    function setWorldShareEnabled(enabled) {
+      worldShareEnabled.value = enabled === true;
+      queueAutosave();
     }
 
     function onShareParamsWithRecipientsUpdate(value) {
       shareParamsWithRecipients.value = value;
-      saveShareParamsWithRecipients(value);
+      queueAutosave();
     }
 
-    async function saveShareParamsWithRecipients(value) {
-      if (!api || !props.track?.id || saving.value) return;
-      error.value = '';
-      saving.value = true;
-      try {
-        await api.post(`/trackers/${props.track.id}/settings/`, {
-          share_params_with_recipients: value
-        });
-        // Do not emit('saved') — keep sidebar open; setting is persisted so it will be correct on reload
-      } catch (e) {
-        const err = api.handleError?.(e);
-        error.value = err?.message || 'Failed to save setting';
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(error.value);
-        shareParamsWithRecipients.value = !value;
-      } finally {
-        saving.value = false;
-      }
-    }
+    watch(
+      () => ({
+        name: name.value,
+        color: color.value,
+        recentDataWindow: recentDataWindow.value,
+        visibility: visibility.value,
+        shareParamsWithRecipients: shareParamsWithRecipients.value,
+        shareParamsWithWorld: shareParamsWithWorld.value,
+        sharedWithEmails: sharedWithEmails.value,
+        worldShareEnabled: worldShareEnabled.value
+      }),
+      () => {
+        queueAutosave();
+      },
+      { deep: true }
+    );
+
+    onBeforeUnmount(() => {
+      stopAutosaveTimer();
+    });
 
     async function confirmUnsubscribe() {
       if (!props.track?.id || unsubscribing.value) return;
@@ -492,6 +559,7 @@ export default {
       recentDataWindow,
       visibility,
       shareParamsWithRecipients,
+      shareParamsWithWorld,
       sharedWithEmails,
       worldShareEnabled,
       worldShareUrl,
@@ -517,7 +585,6 @@ export default {
       profileUrl,
       copy,
       create,
-      save,
       downloadKml,
       confirmClearHistory,
       confirmDelete,

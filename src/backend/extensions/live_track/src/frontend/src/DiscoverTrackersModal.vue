@@ -31,18 +31,28 @@
           <button
             type="button"
             :disabled="subscribingIds.has(t.id)"
-            class="p-2 rounded-lg text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="p-2 rounded-lg text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center size-9 flex-shrink-0"
             title="Add Tracker"
             @click="subscribeOne(t)"
           >
             <PlusIcon v-if="!subscribingIds.has(t.id)" class="h-5 w-5" />
-            <Loader v-else size="sm" layout="inline" :show-message="false" class="h-5 w-5" />
+            <Loader v-else size="xs" layout="inline" :show-message="false" />
           </button>
         </div>
         <p v-if="!loading && filteredList.length === 0" class="px-3 py-4 text-sm text-gray-500">No public trackers available</p>
       </div>
     </div>
     <template #actions>
+      <button
+        type="button"
+        title="Refresh"
+        class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-50 flex-shrink-0 flex items-center justify-center size-9"
+        :disabled="loading"
+        @click="onRefresh"
+      >
+        <Loader v-if="loading" size="xs" layout="inline" :show-message="false" />
+        <ArrowPathIcon v-else class="h-5 w-5" />
+      </button>
       <BaseButton variant="white" size="sm" @click="$emit('close')">Close</BaseButton>
     </template>
   </BaseModal>
@@ -50,14 +60,14 @@
 
 <script>
 import { ref, computed, onMounted } from 'vue';
-import { PlusIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
+import { ArrowPathIcon, PlusIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import Loader from 'platform/components/parts/Loader.vue';
 
 export default {
   name: 'DiscoverTrackersModal',
-  components: { BaseModal, BaseButton, Loader, PlusIcon, MagnifyingGlassIcon },
+  components: { BaseModal, BaseButton, Loader, ArrowPathIcon, PlusIcon, MagnifyingGlassIcon },
   props: {
     api: { type: Object, required: true },
   },
@@ -80,7 +90,8 @@ export default {
       );
     });
 
-    onMounted(async () => {
+    async function fetchAvailable() {
+      loading.value = true;
       try {
         const res = await props.api.get('/trackers/available-to-add/');
         available.value = res.data || { public: [], shared_with_me: [] };
@@ -91,6 +102,14 @@ export default {
       } finally {
         loading.value = false;
       }
+    }
+
+    function onRefresh() {
+      fetchAvailable();
+    }
+
+    onMounted(() => {
+      fetchAvailable();
     });
 
     async function subscribeOne(tracker) {
@@ -114,7 +133,7 @@ export default {
       }
     }
 
-    return { searchQuery, loading, filteredList, subscribingIds, subscribeOne };
+    return { searchQuery, loading, filteredList, subscribingIds, subscribeOne, onRefresh };
   },
 };
 </script>

@@ -2,10 +2,20 @@
   <div class="flex-1 min-h-0 flex flex-col p-4">
     <!-- List view -->
     <template v-if="view === 'list'">
-      <div class="flex-shrink-0 mb-3">
-        <BaseButton variant="primary" color="blue" size="sm" class="w-full" @click="view = 'create'">
+      <div class="flex-shrink-0 mb-3 flex items-center gap-2">
+        <BaseButton variant="primary" color="blue" size="sm" class="flex-1" @click="view = 'create'">
           Create group
         </BaseButton>
+        <button
+          type="button"
+          title="Refresh"
+          class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 flex-shrink-0 disabled:opacity-50 flex items-center justify-center size-9"
+          :disabled="refreshing"
+          @click="$emit('refreshed')"
+        >
+          <Loader v-if="refreshing" size="xs" layout="inline" :show-message="false" />
+          <ArrowPathIcon v-else class="h-5 w-5" />
+        </button>
       </div>
       <div class="flex-1 min-h-0 overflow-y-auto space-y-2">
         <div
@@ -79,14 +89,17 @@
 
 <script>
 import { ref, computed, watch } from 'vue';
-import { PencilIcon } from '@heroicons/vue/24/outline';
+import { ArrowPathIcon, PencilIcon } from '@heroicons/vue/24/outline';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
+import Loader from 'platform/components/parts/Loader.vue';
 import GroupModal from './GroupModal.vue';
 
 export default {
   name: 'GroupsSidebarContent',
-  components: { BaseButton, GroupModal, PencilIcon },
+  components: { BaseButton, GroupModal, Loader, ArrowPathIcon, PencilIcon },
   props: {
+    /** When true, show loading state on refresh button */
+    refreshing: { type: Boolean, default: false },
     groups: { type: Array, default: () => [] },
     trackers: { type: Array, default: () => [] },
     api: { type: Object, required: true },

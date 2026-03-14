@@ -1,6 +1,6 @@
 <template>
   <div
-    class="map-sidebar-panel w-full sm:w-[28rem] h-full flex flex-col bg-white border-l border-gray-200 overflow-hidden"
+    class="map-sidebar-panel w-full sm:w-[28rem] h-full flex flex-col bg-white border-l border-gray-200 overflow-hidden pointer-events-auto"
     style="box-shadow: -4px 0 15px -3px rgba(0, 0, 0, 0.08), -2px 0 6px -2px rgba(0, 0, 0, 0.04)"
   >
     <div class="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-gray-200 bg-white flex-shrink-0">

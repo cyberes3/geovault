@@ -72,11 +72,11 @@
         </button>
       </div>
 
-      <!-- Sidebar panel: in-place inside map column so height = map height (no Teleport) -->
+      <!-- Sidebar panel: in-place inside map column so height = map height (no Teleport). pointer-events-none on wrapper so map can pan/zoom; panel has pointer-events-auto. -->
       <div
         v-if="isMapSidebarOpen"
         ref="mapSidebarRef"
-        class="absolute inset-0 overflow-hidden flex justify-end z-40"
+        class="absolute inset-0 overflow-hidden flex justify-end z-40 pointer-events-none"
         tabindex="-1"
       >
         <MapSidebarPanel
@@ -110,6 +110,7 @@
             :trackers="trackers"
             :api="api"
             :initial-group-id="groupsSidebarInitialGroupId"
+            :refreshing="groupsSidebarRefreshing"
             @saved="onGroupsSidebarSaved"
             @refreshed="onGroupsSidebarRefreshed"
             @leave="onGroupsSidebarLeave"
@@ -171,11 +172,13 @@
             :leaving-share-id="leavingShareId"
             :hidden-track-ids="hiddenTrackIds"
             :unsubscribing-id="unsubscribingId"
+            :refreshing="sharedWithMeRefreshing"
             @toggle-visibility="toggleTrackVisibility"
             @unsubscribe="onSharedUnsubscribe"
             @leave-share="onLeaveShare"
             @add-incoming="onAddIncomingTracker"
             @open-discover="showDiscoverModal = true"
+            @refresh="onSharedWithMeRefresh"
           />
           <MapLayerSidebar
             v-else-if="showLayerSidebar"
@@ -526,10 +529,11 @@ export default {
     const listContentMobileRef = ref(null);
     const listScrollContainer = computed(() => {
       const c = isMobileView.value ? listContentMobileRef.value : listContentDesktopRef.value;
-      return c?.scrollContainerEl?.value ?? null;
+      return c?.scrollContainerRef?.value ?? null;
     });
     const showGroupsSidebar = ref(false);
     const groupsSidebarInitialGroupId = ref(null);
+    const groupsSidebarRefreshing = ref(false);
     const showGroupQuickViewSidebar = ref(false);
     const groupQuickViewGroup = ref(null);
     /** When set, closing the params sidebar should return to this group quick view instead of closing the sidebar. */
@@ -538,6 +542,7 @@ export default {
     const incomingSharedTrackers = ref([]);
     const addingIncomingId = ref(null);
     const leavingShareId = ref(null);
+    const sharedWithMeRefreshing = ref(false);
     const showLayerSidebar = ref(false);
 
     const isMapSidebarOpen = computed(
@@ -668,6 +673,15 @@ export default {
           window.gv_core.GeoVault.toast.error(err?.message || 'Failed to load incoming shares');
         }
         incomingSharedTrackers.value = [];
+      }
+    }
+
+    async function onSharedWithMeRefresh() {
+      sharedWithMeRefreshing.value = true;
+      try {
+        await fetchIncomingShared();
+      } finally {
+        sharedWithMeRefreshing.value = false;
       }
     }
 
@@ -1358,8 +1372,12 @@ export default {
     }
 
     async function onGroupsSidebarRefreshed() {
-      await fetchGroups();
-      await fetchTrackers();
+      groupsSidebarRefreshing.value = true;
+      try {
+        await fetchGroups();
+      } finally {
+        groupsSidebarRefreshing.value = false;
+      }
     }
 
     function removeGroupFromLocalState(group) {
@@ -1866,14 +1884,18 @@ export default {
       openSidebar,
       showGroupsSidebar,
       groupsSidebarInitialGroupId,
+      groupsSidebarRefreshing,
       showGroupQuickViewSidebar,
       groupQuickViewGroup,
       groupQuickViewTracks,
       openGroupQuickView,
       onGroupQuickViewFitMap,
+      onParamsClose,
       openParamsFromGroupQuickView,
       zoomToTrackInGroup,
       showSharedWithMeSidebar,
+      sharedWithMeRefreshing,
+      onSharedWithMeRefresh,
       incomingSharedTrackers,
       addingIncomingId,
       leavingShareId,

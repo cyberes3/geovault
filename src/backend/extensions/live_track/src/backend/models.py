@@ -33,6 +33,7 @@ class LiveTrack(models.Model):
         default=VISIBILITY_PRIVATE,
     )
     share_params_with_recipients = models.BooleanField(default=False)
+    share_params_with_world = models.BooleanField(default=False)
     geometry = models.JSONField(default=dict)
     point_params = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
