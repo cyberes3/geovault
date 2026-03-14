@@ -11,7 +11,7 @@ from api.views.collections.management import (
     delete_collection,
     get_collection_features,
 )
-from api.views.app_releases import get_app_releases
+from api.views.app_releases import app_download_redirect, get_app_releases
 from website.internal_apps import internal_apps_page
 from api.views.config import get_config
 from api.views.features.creation import create_quick_point
@@ -112,8 +112,9 @@ urlpatterns = [
     # Config endpoint
     path('config/', get_config),
 
-    # App releases (Android APK download URLs)
-    path('app-releases/', get_app_releases),
+    # App releases and download redirect (Android APK)
+    path('apps/releases/', get_app_releases),
+    path('apps/download/<str:name>/', app_download_redirect),
     # Internal HTML page: more apps (Gitea releases)
     path('pages/apps/', internal_apps_page),
 

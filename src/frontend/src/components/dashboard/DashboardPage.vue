@@ -256,13 +256,13 @@ export default {
   computed: {
     ...mapState(["userInfo"]),
     uploaderApkUrl() {
-      return this.appReleases?.uploader_url ?? this.releasesPageUrl;
+      return this.appReleases?.uploader_url ? '/api/apps/download/uploader/' : this.releasesPageUrl;
     },
     placesApkUrl() {
-      return this.appReleases?.places_url ?? this.releasesPageUrl;
+      return this.appReleases?.places_url ? '/api/apps/download/places/' : this.releasesPageUrl;
     },
     trackerApkUrl() {
-      return this.appReleases?.tracker_url ?? this.releasesPageUrl;
+      return this.appReleases?.tracker_url ? '/api/apps/download/tracker/' : this.releasesPageUrl;
     },
     pwaMintEnabled() {
       return this.extensions.some(ext => ext.name === 'pwa_mint');
@@ -359,7 +359,7 @@ export default {
     },
     async fetchAppReleases() {
       try {
-        const response = await fetch("/api/app-releases/");
+        const response = await fetch("/api/apps/releases/");
         if (!response.ok) return;
         const data = await response.json();
         this.appReleases = data;

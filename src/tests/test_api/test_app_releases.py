@@ -1,5 +1,5 @@
 """
-Tests for app-releases API endpoint.
+Tests for app releases API (/api/apps/releases/) and download redirect (/api/apps/download/<name>/).
 
 Uses real Gitea API calls by default to validate integration with git.evulid.cc.
 """
@@ -19,9 +19,11 @@ User = get_user_model()
 TEST_RELEASES_API_URL = "https://git.evulid.cc/api/v1/repos/cyberes/geovault-app-release/releases"
 TEST_RELEASES_PAGE_URL = "https://git.evulid.cc/cyberes/geovault-app-release/releases"
 
+RELEASES_URL = "/api/apps/releases/"
+
 
 class TestAppReleasesAPI(TestCase):
-    """Test /api/app-releases/ endpoint."""
+    """Test /api/apps/releases/ endpoint."""
 
     def setUp(self):
         cache.delete(f"{APP_RELEASES_CACHE_KEY_PREFIX}:{DEFAULT_RELEASES_API_URL}")
@@ -35,7 +37,7 @@ class TestAppReleasesAPI(TestCase):
     def test_app_releases_requires_auth(self):
         """Unauthenticated request returns 401."""
         self.client.logout()
-        response = self.client.get("/api/app-releases/")
+        response = self.client.get(RELEASES_URL)
         self.assertEqual(response.status_code, 401)
 
     def test_app_releases_real_gitea_response(self):
@@ -43,7 +45,7 @@ class TestAppReleasesAPI(TestCase):
         Hit the real Gitea API and assert response shape and cache header.
         URLs are hardcoded to git.evulid.cc.
         """
-        response = self.client.get("/api/app-releases/")
+        response = self.client.get(RELEASES_URL)
         self.assertEqual(response.status_code, 200, response.content.decode())
 
         data = json.loads(response.content)
@@ -69,7 +71,7 @@ class TestAppReleasesAPI(TestCase):
     def test_app_releases_unsafe_url_returns_fallback(self):
         """When releases API URL fails SSRF check, return fallback only and still cache 30m."""
         with patch("api.views.app_releases.is_url_safe_for_fetch", return_value=False):
-            response = self.client.get("/api/app-releases/")
+            response = self.client.get(RELEASES_URL)
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIsNone(data["uploader_url"])
@@ -88,7 +90,7 @@ class TestAppReleasesAPI(TestCase):
             return real_get(url, *args, **kwargs)
 
         with patch("api.views.app_releases.requests.get", side_effect=mock_get):
-            response = self.client.get("/api/app-releases/")
+            response = self.client.get(RELEASES_URL)
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIsNone(data["uploader_url"])
@@ -108,9 +110,67 @@ class TestAppReleasesAPI(TestCase):
             return real_get(url, *args, **kwargs)
 
         with patch("api.views.app_releases.requests.get", side_effect=count_get):
-            r1 = self.client.get("/api/app-releases/")
-            r2 = self.client.get("/api/app-releases/")
+            r1 = self.client.get(RELEASES_URL)
+            r2 = self.client.get(RELEASES_URL)
         self.assertEqual(r1.status_code, 200)
         self.assertEqual(r2.status_code, 200)
         self.assertEqual(json.loads(r1.content), json.loads(r2.content))
         self.assertEqual(call_count, 1, "Gitea should be called once; second response from server cache")
+
+
+class TestAppDownloadRedirect(TestCase):
+    """Test /api/apps/download/<name>/ redirect endpoint."""
+
+    def setUp(self):
+        cache.delete(f"{APP_RELEASES_CACHE_KEY_PREFIX}:{DEFAULT_RELEASES_API_URL}")
+        self.user = User.objects.create_user(
+            email="test@example.com",
+            password="testpass123",
+            username="testuser",
+        )
+        self.client.force_login(self.user)
+
+    def test_download_redirect_requires_auth(self):
+        """Unauthenticated request returns 401."""
+        self.client.logout()
+        response = self.client.get("/api/apps/download/uploader/")
+        self.assertEqual(response.status_code, 401)
+
+    def test_download_redirect_uploader_302(self):
+        """Authenticated request for uploader returns 302 to real APK URL."""
+        response = self.client.get("/api/apps/download/uploader/")
+        self.assertEqual(response.status_code, 302)
+        location = response.get("Location", "")
+        self.assertTrue(location.startswith("http") and location.endswith(".apk"))
+
+    def test_download_redirect_places_302(self):
+        """Authenticated request for places returns 302 to real APK URL."""
+        response = self.client.get("/api/apps/download/places/")
+        self.assertEqual(response.status_code, 302)
+        location = response.get("Location", "")
+        self.assertTrue(location.startswith("http") and location.endswith(".apk"))
+
+    def test_download_redirect_tracker_302(self):
+        """Authenticated request for tracker returns 302 to real APK URL (Gitea has real releases)."""
+        response = self.client.get("/api/apps/download/tracker/")
+        self.assertEqual(response.status_code, 302)
+        location = response.get("Location", "")
+        self.assertTrue(location.startswith("http"), f"Location should be absolute URL, got {location!r}")
+        # When Gitea has Tracker assets, we must redirect to the asset URL, not the releases page
+        self.assertNotEqual(
+            location.rstrip("/"),
+            TEST_RELEASES_PAGE_URL.rstrip("/"),
+            "Tracker should redirect to asset URL when releases exist, not releases page",
+        )
+
+    def test_download_redirect_missing_url_fallback(self):
+        """When app has no URL, redirect to releases_page_url."""
+        with patch("api.views.app_releases.is_url_safe_for_fetch", return_value=False):
+            response = self.client.get("/api/apps/download/uploader/")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.get("Location"), TEST_RELEASES_PAGE_URL)
+
+    def test_download_redirect_invalid_name_404(self):
+        """Invalid app name returns 404."""
+        response = self.client.get("/api/apps/download/unknown/")
+        self.assertEqual(response.status_code, 404)

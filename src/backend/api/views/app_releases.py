@@ -8,7 +8,7 @@ import os
 
 import requests
 from django.core.cache import cache
-from django.http import JsonResponse
+from django.http import HttpResponseNotFound, HttpResponseRedirect, JsonResponse
 from django.views.decorators.http import require_http_methods
 from pydantic import BaseModel, Field
 
@@ -127,6 +127,25 @@ def _fetch_app_releases_data(api_url: str, page_url: str) -> dict:
     ).model_dump()
 
 
+# Allowed app names for /api/apps/download/<name>/
+DOWNLOAD_APP_NAMES = frozenset({"uploader", "places", "tracker"})
+
+
+def _get_app_releases_data() -> dict:
+    """Return releases dict from cache or by fetching Gitea. Shared by JSON endpoint and download redirect."""
+    api_url = _get_releases_api_url()
+    page_url = _get_releases_page_url(api_url)
+    cache_key = f"{APP_RELEASES_CACHE_KEY_PREFIX}:{api_url}"
+
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    data = _fetch_app_releases_data(api_url, page_url)
+    cache.set(cache_key, data, timeout=CACHE_MAX_AGE_SECONDS)
+    return data
+
+
 @api_or_login_required_401()
 @require_http_methods(["GET"])
 def get_app_releases(request):
@@ -136,18 +155,25 @@ def get_app_releases(request):
     assets, URLs are null and clients should use releases_page_url.
     Response is cached server-side for 30 minutes.
     """
-    api_url = _get_releases_api_url()
-    page_url = _get_releases_page_url(api_url)
-    cache_key = f"{APP_RELEASES_CACHE_KEY_PREFIX}:{api_url}"
-
-    cached = cache.get(cache_key)
-    if cached is not None:
-        response = JsonResponse(cached)
-        response["Cache-Control"] = "private, no-store"
-        return response
-
-    data = _fetch_app_releases_data(api_url, page_url)
-    cache.set(cache_key, data, timeout=CACHE_MAX_AGE_SECONDS)
+    data = _get_app_releases_data()
     response = JsonResponse(data)
     response["Cache-Control"] = "private, no-store"
     return response
+
+
+@api_or_login_required_401()
+@require_http_methods(["GET"])
+def app_download_redirect(request, name: str):
+    """
+    Redirect to the real APK download URL for the given app (uploader, places, tracker).
+    If that app has no URL, redirect to the releases page. Invalid name returns 404.
+    """
+    name = (name or "").strip().lower()
+    if name not in DOWNLOAD_APP_NAMES:
+        return HttpResponseNotFound()
+
+    data = _get_app_releases_data()
+    url = data.get("uploader_url" if name == "uploader" else "places_url" if name == "places" else "tracker_url")
+    fallback = data.get("releases_page_url") or "https://git.evulid.cc/cyberes/geovault-app-release/releases"
+    redirect_url = (url or "").strip() or fallback
+    return HttpResponseRedirect(redirect_url)
