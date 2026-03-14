@@ -2,6 +2,7 @@ package com.geovault.uploader
 
 import android.content.Context
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.ImportantMessageSnackbar
 import com.geovault.common.RetrofitClient
 import android.content.Intent
 import android.content.SharedPreferences
@@ -11,7 +12,6 @@ import android.view.View
 import android.widget.ImageButton
 import android.widget.ProgressBar
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
@@ -41,7 +41,8 @@ class MultiUploadActivity : AppCompatActivity() {
     private lateinit var uploadAllButton: MaterialButton
     private lateinit var cancelButton: MaterialButton
     private lateinit var menuButton: ImageButton
-    
+    private lateinit var importantMessageSnackbar: ImportantMessageSnackbar
+
     private lateinit var adapter: FileQueueAdapter
     private val files = mutableListOf<FileItem>()
     
@@ -71,12 +72,17 @@ class MultiUploadActivity : AppCompatActivity() {
         return serverUrl
     }
 
+    private fun showSnackbar(message: String) {
+        importantMessageSnackbar.showMessage(message)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_multi_upload)
         
         filesRecyclerView = findViewById(R.id.filesRecyclerView)
         fileCountText = findViewById(R.id.fileCountText)
+        importantMessageSnackbar = findViewById(R.id.importantMessageSnackbar)
         
         // Handle window insets for status bar and navigation bar
         val rootView = findViewById<View>(R.id.rootLayout)
@@ -268,7 +274,7 @@ class MultiUploadActivity : AppCompatActivity() {
         val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
         if (serverUrl.isEmpty() || !GeovaultAuthManager.isLoggedIn(this)) {
             statusText.visibility = View.GONE
-            Toast.makeText(this, getString(R.string.config_settings_first), Toast.LENGTH_SHORT).show()
+            showSnackbar(getString(R.string.config_settings_first))
             return
         }
         
@@ -280,7 +286,7 @@ class MultiUploadActivity : AppCompatActivity() {
         
         if (validFilesCount == 0) {
             statusText.visibility = View.GONE
-            Toast.makeText(this, "No valid files to upload", Toast.LENGTH_SHORT).show()
+            showSnackbar("No valid files to upload")
             return
         }
         

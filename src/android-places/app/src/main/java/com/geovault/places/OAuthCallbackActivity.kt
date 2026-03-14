@@ -67,9 +67,8 @@ class OAuthCallbackActivity : AppCompatActivity() {
                 onError = { msg ->
                     runOnUiThread {
                         if (isDestroyed) return@runOnUiThread
-                        Toast.makeText(this@OAuthCallbackActivity, msg, Toast.LENGTH_LONG).show()
                         setResult(RESULT_CANCELED)
-                        finish()
+                        finish(errorMessage = msg)
                     }
                 }
             )
@@ -77,14 +76,20 @@ class OAuthCallbackActivity : AppCompatActivity() {
     }
 
     private fun finishWithError(msg: String) {
-        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
         setResult(RESULT_CANCELED)
-        finish()
+        finish(errorMessage = msg)
     }
 
     override fun finish() {
+        finish(errorMessage = null)
+    }
+
+    private fun finish(errorMessage: String?) {
         safeNoAnimation()
-        startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
+        val mainIntent = Intent(this, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        errorMessage?.let { mainIntent.putExtra(MainActivity.EXTRA_OAUTH_ERROR, it) }
+        startActivity(mainIntent)
         super.finish()
     }
 

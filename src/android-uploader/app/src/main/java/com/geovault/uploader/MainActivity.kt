@@ -2,6 +2,7 @@ package com.geovault.uploader
 
 import android.content.Context
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.ImportantMessageSnackbar
 import com.geovault.common.RetrofitClient
 import android.content.Intent
 import android.content.SharedPreferences
@@ -48,8 +49,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var validationTitleText: TextView
     private lateinit var settingsButton: MaterialButton
     private lateinit var menuButton: ImageButton
-    
-    
+    private var importantMessageSnackbar: ImportantMessageSnackbar? = null
+
     private var fileUri: Uri? = null
     private var originalFilename: String? = null
     
@@ -68,6 +69,7 @@ class MainActivity : AppCompatActivity() {
     
     companion object {
         private const val PREF_ADD_SUFFIX = "add_suffix"
+        const val EXTRA_OAUTH_ERROR = "oauth_error"
     }
 
     private fun normalizeServerUrl(url: String): String {
@@ -107,7 +109,13 @@ class MainActivity : AppCompatActivity() {
         validationTitleText = findViewById(R.id.validationTitleText)
         settingsButton = findViewById(R.id.settingsButton)
         menuButton = findViewById(R.id.menuButton)
-        
+        importantMessageSnackbar = findViewById(R.id.importantMessageSnackbar)
+
+        intent?.getStringExtra(EXTRA_OAUTH_ERROR)?.let { message ->
+            rootView.post { showSnackbar(message) }
+            intent?.removeExtra(EXTRA_OAUTH_ERROR)
+        }
+
         // Set up header menu button (always visible) and settings button click listeners
         menuButton.setOnClickListener {
             openSettings()
@@ -323,6 +331,7 @@ class MainActivity : AppCompatActivity() {
                         val errorMsg = e.message ?: "Unknown error"
                         val cleanErrorMsg = errorMsg.replace(Regex("^Failed to connect to /"), "Failed to connect to ")
                         showError("Connection failed\n$cleanErrorMsg")
+                        showSnackbar("Connection failed: $cleanErrorMsg")
                     }
                     tempFile.delete()
                 }
@@ -383,6 +392,7 @@ class MainActivity : AppCompatActivity() {
                                 errorMessage
                             }
                             showError(fullMessage)
+                            showSnackbar(errorMessage)
                         }
                     }
                     tempFile.delete()
@@ -394,12 +404,17 @@ class MainActivity : AppCompatActivity() {
             uploadButton.isEnabled = true
             cancelButton.isEnabled = true
             showError("Error: ${e.message}")
+            showSnackbar("Error: ${e.message}")
         }
     }
     
     private fun showError(message: String) {
         statusText.visibility = View.VISIBLE
         statusText.text = message
+    }
+
+    private fun showSnackbar(message: String) {
+        importantMessageSnackbar?.showMessage(message)
     }
     
     private fun validateApiKey() {

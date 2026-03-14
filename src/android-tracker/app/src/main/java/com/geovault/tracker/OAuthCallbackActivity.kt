@@ -3,7 +3,6 @@ package com.geovault.tracker
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.geovault.common.GeovaultAuthManager
 import java.util.concurrent.Executors
@@ -68,33 +67,31 @@ class OAuthCallbackActivity : AppCompatActivity() {
                     onError = { msg ->
                         runOnUiThread {
                             if (isDestroyed) return@runOnUiThread
-                            Toast.makeText(this@OAuthCallbackActivity, msg, Toast.LENGTH_LONG).show()
-                            finish()
+                            finish(signedInEmail = null, errorMessage = msg)
                         }
                     }
                 )
             } catch (e: Exception) {
                 runOnUiThread {
-                    Toast.makeText(this@OAuthCallbackActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
-                    finish()
+                    finish(signedInEmail = null, errorMessage = "Error: ${e.message}")
                 }
             }
         }
     }
 
     private fun finishWithError(msg: String) {
-        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
-        finish()
+        finish(signedInEmail = null, errorMessage = msg)
     }
 
     override fun finish() {
         finish(signedInEmail = null)
     }
 
-    private fun finish(signedInEmail: String?) {
+    private fun finish(signedInEmail: String?, errorMessage: String? = null) {
         val mainIntent = Intent(this, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         signedInEmail?.let { mainIntent.putExtra(MainActivity.EXTRA_SIGNED_IN_EMAIL, it) }
+        errorMessage?.let { mainIntent.putExtra(MainActivity.EXTRA_OAUTH_ERROR, it) }
         startActivity(mainIntent)
         super.finish()
     }

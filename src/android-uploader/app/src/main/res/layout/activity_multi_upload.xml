@@ -143,5 +143,15 @@
 
 </LinearLayout>
 
+    <!-- Important message bar from common: tap to dismiss, auto-dismisses after 15s -->
+    <com.geovault.common.ImportantMessageSnackbar
+        android:id="@+id/importantMessageSnackbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp" />
+
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
 

@@ -40,11 +40,16 @@ object NavigationHelper {
             } catch (e: ActivityNotFoundException) {
                 val message = context.getString(R.string.no_map_app)
                 val activity = context as? Activity
-                val rootView = activity?.findViewById<android.view.View>(android.R.id.content)
-                if (rootView != null) {
-                    Snackbar.make(rootView, message, Snackbar.LENGTH_LONG).show()
-                } else {
-                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                when (activity) {
+                    is MainActivity -> activity.showSnackbar(message)
+                    else -> {
+                        val rootView = activity?.findViewById<android.view.View>(android.R.id.content)
+                        if (rootView != null) {
+                            Snackbar.make(rootView, message, Snackbar.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        }
+                    }
                 }
             }
 

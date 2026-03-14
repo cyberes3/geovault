@@ -293,6 +293,10 @@ class MainActivity : AppCompatActivity() {
             }
             intent.removeExtra(EXTRA_SIGNED_IN_EMAIL)
         }
+        intent?.getStringExtra(EXTRA_OAUTH_ERROR)?.let { message ->
+            rootView.post { showSnackbar(message) }
+            intent.removeExtra(EXTRA_OAUTH_ERROR)
+        }
 
         // Restart-if-killed and start-on-launch
         val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
@@ -762,5 +766,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val KEY_CURRENT_TAB = "current_tab"
         const val EXTRA_SIGNED_IN_EMAIL = "signed_in_email"
+        const val EXTRA_OAUTH_ERROR = "oauth_error"
     }
 }

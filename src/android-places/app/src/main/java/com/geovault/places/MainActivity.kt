@@ -41,6 +41,7 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "MainActivity"
         const val EXTRA_SELECTED_ID_FROM_MAP = "selected_id_from_map"
         const val EXTRA_SHOW_EXPORT_SAVED_MESSAGE = "show_export_saved_message"
+        const val EXTRA_OAUTH_ERROR = "oauth_error"
     }
 
     private lateinit var recyclerView: RecyclerView
@@ -264,6 +265,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        intent?.getStringExtra(EXTRA_OAUTH_ERROR)?.let { message ->
+            showSnackbar(message)
+            intent?.removeExtra(EXTRA_OAUTH_ERROR)
+        }
         if (intent?.getBooleanExtra(EXTRA_SHOW_EXPORT_SAVED_MESSAGE, false) == true) {
             intent?.removeExtra(EXTRA_SHOW_EXPORT_SAVED_MESSAGE)
             Toast.makeText(this, getString(R.string.offline_data_saved_to_files), Toast.LENGTH_SHORT).show()
@@ -709,7 +714,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showSnackbar(message: String) {
+    fun showSnackbar(message: String) {
         importantMessageSnackbar.showMessage(message)
     }
 

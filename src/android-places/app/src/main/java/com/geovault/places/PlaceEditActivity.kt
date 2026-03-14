@@ -2,6 +2,7 @@ package com.geovault.places
 
 import com.geovault.common.CoordinateParser
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.ImportantMessageSnackbar
 import com.geovault.common.R as CommonR
 import com.geovault.common.LoadingOverlayView
 import com.geovault.common.map.GeoVaultMapFragment
@@ -68,6 +69,7 @@ class PlaceEditActivity : AppCompatActivity() {
     private lateinit var titleText: TextView
     private lateinit var locationLoadingOverlay: View
     private lateinit var savingOverlay: LoadingOverlayView
+    private lateinit var importantMessageSnackbar: ImportantMessageSnackbar
 
     private lateinit var searchPlaceButton: ImageView
     private lateinit var searchBarPanel: View
@@ -117,7 +119,7 @@ class PlaceEditActivity : AppCompatActivity() {
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) getCurrentLocation()
-        else Toast.makeText(this, "Location permission denied", Toast.LENGTH_SHORT).show()
+        else showSnackbar("Location permission denied")
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -210,6 +212,7 @@ class PlaceEditActivity : AppCompatActivity() {
         locationLoadingOverlay = findViewById(R.id.locationButtonContent)
         titleText = findViewById(R.id.titleText)
         savingOverlay = findViewById(R.id.savingOverlay)
+        importantMessageSnackbar = findViewById(R.id.importantMessageSnackbar)
 
         findViewById<View>(R.id.closeButton).setOnClickListener { tryFinish() }
         findViewById<View>(R.id.cancelButton).setOnClickListener { tryFinish() }
@@ -668,15 +671,19 @@ class PlaceEditActivity : AppCompatActivity() {
                             updateCoords(it.latitude, it.longitude, null)
                             zoomToPoint(it.latitude, it.longitude)
                         } ?: run {
-                            Toast.makeText(this, "Could not get location", Toast.LENGTH_SHORT).show()
+                            showSnackbar("Could not get location")
                         }
                     }
                 }
             }
             .addOnFailureListener {
                 setLocationLoading(false)
-                Toast.makeText(this, "Location request failed: ${it.message}", Toast.LENGTH_SHORT).show()
+                showSnackbar("Location request failed: ${it.message}")
             }
+    }
+
+    private fun showSnackbar(message: String) {
+        importantMessageSnackbar.showMessage(message)
     }
 
     private fun validateForm() {
