@@ -10,12 +10,12 @@
     <template v-else>
       <header class="flex-shrink-0 px-4 py-2 bg-white border-b border-gray-200 flex items-center gap-2">
         <ShareIcon class="w-5 h-5 text-gray-500" />
-        <h1 class="text-lg font-semibold text-gray-900 truncate">{{ trackName || 'Shared tracker' }}</h1>
+        <h1 class="text-lg font-semibold text-gray-900 truncate">{{ displayTitle }}</h1>
       </header>
       <div ref="mapWrapperRef" class="relative flex-1 min-h-0 w-full">
         <div ref="mapContainer" class="absolute inset-0 w-full h-full bg-gray-100" />
         <SingleTrackMapControls
-          :follow-locked="followLocked"
+          :follow-locked="followLocked && !!trackData"
           :show-params-button="showParamsButton"
           @toggle-follow="toggleFollowLock"
           @open-params="openParamsSidebar"
@@ -56,6 +56,28 @@ import LiveTrackSidebar from './LiveTrackSidebar.vue';
 import MapLayerSidebar from './MapLayerSidebar.vue';
 import SingleTrackMapControls from './SingleTrackMapControls.vue';
 import { getCoordsSortedByTime, buildLineFeatures, buildPointFeature, fitMapToSingleTrack, centerMapOnTrackLastPoint } from './trackGeometry.js';
+
+function fitMapToTracks(map, tracks) {
+  if (!map || !tracks?.length) return;
+  const allCoords = [];
+  for (const track of tracks) {
+    const coords = getCoordsSortedByTime(track).map((c) => [c[0], c[1]]);
+    allCoords.push(...coords);
+  }
+  if (allCoords.length >= 2) {
+    const lons = allCoords.map((c) => c[0]);
+    const lats = allCoords.map((c) => c[1]);
+    map.fitBounds(
+      [
+        [Math.min(...lons), Math.min(...lats)],
+        [Math.max(...lons), Math.max(...lats)]
+      ],
+      { padding: 40, maxZoom: 16, duration: 0 }
+    );
+  } else if (allCoords.length === 1) {
+    map.jumpTo({ center: allCoords[0], zoom: 14, duration: 0 });
+  }
+}
 import { setupMapFollowListeners } from './mapFollowLock.js';
 import { ensureArrowImage } from './trackArrowMap.js';
 import { trackToParamsModalShape } from './trackParamsShape.js';
@@ -90,7 +112,10 @@ export default {
     const loading = ref(true);
     const error = ref('');
     const trackName = ref('');
+    const groupName = ref('');
     const trackData = ref(null);
+    const groupTracks = ref([]);
+    const displayTitle = computed(() => trackName.value || groupName.value || 'Shared');
     const mapContainer = ref(null);
     const mapWrapperRef = ref(null);
     const { tileSources, selectedLayer, fetchTileSources } = useTileSources({ apiUrl: '/api/tiles/sources/' });
@@ -117,6 +142,7 @@ export default {
     let pollTimerId = null;
 
     const showParamsButton = computed(() => {
+      if (groupTracks.value?.length) return false;
       const t = trackData.value;
       const allowParams = t?.share_params_with_world === true || (t?.share_params_with_world === undefined && t?.share_params_with_recipients === true);
       if (!allowParams) return false;
@@ -127,24 +153,26 @@ export default {
     const paramsTrack = computed(() => trackToParamsModalShape(trackData.value));
 
     async function updateMapData() {
-      if (!map || !trackData.value) return;
+      const tracks = groupTracks.value?.length ? groupTracks.value : (trackData.value ? [trackData.value] : []);
+      if (!map || !tracks.length) return;
       if (!map.getStyle()) return;
-      const selected = followLocked.value;
+      const selected = followLocked.value && trackData.value;
       const lineSource = map.getSource(LINES_SOURCE_ID);
       const pointSource = map.getSource(POINTS_SOURCE_ID);
       if (lineSource) {
-        const lineFeatures = buildLineFeatures(trackData.value, selected);
+        const lineFeatures = tracks.flatMap((t) => buildLineFeatures(t, selected && t === trackData.value));
         lineSource.setData({ type: 'FeatureCollection', features: lineFeatures });
       }
       if (pointSource) {
-        const color = trackData.value?.color || '#6C93DE';
-        await ensureArrowImage(map, color, false);
-        await ensureArrowImage(map, color, true);
-        const pointFeature = buildPointFeature(trackData.value, selected);
-        pointSource.setData({
-          type: 'FeatureCollection',
-          features: pointFeature ? [pointFeature] : []
-        });
+        const colors = [...new Set(tracks.map((t) => t.color || '#6C93DE'))];
+        for (const color of colors) {
+          await ensureArrowImage(map, color, false);
+          await ensureArrowImage(map, color, true);
+        }
+        const pointFeatures = tracks
+          .map((t) => buildPointFeature(t, selected && t === trackData.value))
+          .filter(Boolean);
+        pointSource.setData({ type: 'FeatureCollection', features: pointFeatures });
       }
     }
 
@@ -185,9 +213,12 @@ export default {
       );
       }
       if (!map.getLayer(POINTS_LAYER_ID)) {
-        const color = trackData.value?.color || '#6C93DE';
-        await ensureArrowImage(map, color, false);
-        await ensureArrowImage(map, color, true);
+        const tracks = groupTracks.value?.length ? groupTracks.value : (trackData.value ? [trackData.value] : []);
+        const colors = [...new Set(tracks.map((t) => t?.color || '#6C93DE'))];
+        for (const color of colors) {
+          await ensureArrowImage(map, color, false);
+          await ensureArrowImage(map, color, true);
+        }
         if (map && map.getStyle() && !map.getLayer(POINTS_LAYER_ID)) {
           map.addLayer({
             id: POINTS_LAYER_ID,
@@ -210,11 +241,15 @@ export default {
     }
 
     function fitMapToTrack() {
-      fitMapToSingleTrack(map, trackData.value);
+      if (groupTracks.value?.length) {
+        fitMapToTracks(map, groupTracks.value);
+      } else {
+        fitMapToSingleTrack(map, trackData.value);
+      }
     }
 
     function centerOnTrack() {
-      centerMapOnTrackLastPoint(map, trackData.value);
+      if (trackData.value) centerMapOnTrackLastPoint(map, trackData.value);
     }
 
     function toggleFollowLock() {
@@ -334,15 +369,22 @@ export default {
           return;
         }
         const info = await infoRes.json();
-        trackName.value = info.track_name || 'Shared tracker';
-
         const dataRes = await fetch(`${BASE_URL}/${encodeURIComponent(shareId)}/`);
         if (!dataRes.ok) {
           error.value = 'Invalid share link';
           loading.value = false;
           return;
         }
-        trackData.value = await dataRes.json();
+        const data = await dataRes.json();
+        if (info.share_type === 'live_track_group') {
+          groupName.value = info.group_name || data.group_name || 'Shared group';
+          groupTracks.value = Array.isArray(data.tracks) ? data.tracks : [];
+          trackData.value = null;
+        } else {
+          trackName.value = info.track_name || 'Shared tracker';
+          trackData.value = data;
+          groupTracks.value = [];
+        }
         loading.value = false;
 
         await nextTick();
@@ -356,9 +398,13 @@ export default {
               const res = await fetch(`${BASE_URL}/${encodeURIComponent(shareIdRef.value)}/`);
               if (!res.ok) return;
               const data = await res.json();
-              trackData.value = data;
+              if (data.share_type === 'live_track_group' && Array.isArray(data.tracks)) {
+                groupTracks.value = data.tracks;
+              } else {
+                trackData.value = data;
+              }
               await updateMapData();
-              if (followLocked.value && map) centerOnTrack();
+              if (followLocked.value && map && trackData.value) centerOnTrack();
             } catch (_) {
               // ignore poll errors
             }
@@ -372,7 +418,8 @@ export default {
 
     function initMap() {
       const maplibregl = window.gv_core?.maplibre || window.maplibregl;
-      if (!mapContainer.value || !maplibregl || !trackData.value) {
+      const hasData = trackData.value || (groupTracks.value?.length > 0);
+      if (!mapContainer.value || !maplibregl || !hasData) {
         if (!maplibregl) console.warn('WorldShareView: MapLibre not available');
         return Promise.resolve();
       }
@@ -381,6 +428,7 @@ export default {
       const tileSource = tileSources.value.find((s) => s.id === layerValue) || tileSources.value[0];
       const clientConfig = tileSource?.client_config || {};
       const isStyleBased = !!(clientConfig.style_url || clientConfig.type === 'maptiler');
+      const tracksForInit = groupTracks.value?.length ? groupTracks.value : (trackData.value ? [trackData.value] : []);
 
       if (isStyleBased && clientConfig.style_url) {
         map = new maplibregl.Map({
@@ -421,13 +469,10 @@ export default {
 
       const baseSpec = getRasterSourceSpec(layerValue, tileSource);
       const layerMaxZoom = getRasterLayerMaxZoom(clientConfig);
-      const lineFeatures = buildLineFeatures(trackData.value, false);
-      const pointFeature = buildPointFeature(trackData.value, false);
+      const lineFeatures = tracksForInit.flatMap((t) => buildLineFeatures(t, false));
+      const pointFeatures = tracksForInit.map((t) => buildPointFeature(t, false)).filter(Boolean);
       const lineGeoJSON = { type: 'FeatureCollection', features: lineFeatures };
-      const pointGeoJSON = {
-        type: 'FeatureCollection',
-        features: pointFeature ? [pointFeature] : []
-      };
+      const pointGeoJSON = { type: 'FeatureCollection', features: pointFeatures };
 
       const style = {
         version: 8,
@@ -510,7 +555,7 @@ export default {
     return {
       loading,
       error,
-      trackName,
+      displayTitle,
       mapContainer,
       mapWrapperRef,
       tileSources,

@@ -8,7 +8,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from .helpers import track_to_response
-from .models import LiveTrackWorldShare
+from .models import LiveTrack, LiveTrackGroupMember, LiveTrackGroupWorldShare, LiveTrackWorldShare
 
 
 def _validate_share_id(share_id: str) -> bool:
@@ -24,39 +24,73 @@ def build_live_track_share_url(share_id: str) -> str:
     return f"/#/extensions/live-track/share?id={share_id}"
 
 
+def build_live_track_group_share_url(share_id: str) -> str:
+    """Return the frontend path for the group world share (same route as track)."""
+    return f"/#/extensions/live-track/share?id={share_id}"
+
+
 @require_http_methods(["GET"])
 def world_share_info(request, share_id):
     """
     GET world/share/<share_id>/info/ — world share, no auth.
-    Returns share_type, track_name, track_id, created_at.
+    Returns share_type (live_track or live_track_group), and type-specific fields.
+    Lookup order: track first, then group.
     """
     if not _validate_share_id(share_id):
         return JsonResponse({"error": "Invalid share link", "code": 404}, status=404)
-    share = LiveTrackWorldShare.objects.filter(share_id=share_id).select_related("track").first()
-    if not share:
-        return JsonResponse({"error": "Invalid share link", "code": 404}, status=404)
-    track = share.track
-    return JsonResponse({
-        "share_type": "live_track",
-        "track_id": str(track.id),
-        "track_name": track.name,
-        "created_at": share.created_at.isoformat(),
-    })
+    track_share = LiveTrackWorldShare.objects.filter(share_id=share_id).select_related("track").first()
+    if track_share:
+        track = track_share.track
+        return JsonResponse({
+            "share_type": "live_track",
+            "track_id": str(track.id),
+            "track_name": track.name,
+            "created_at": track_share.created_at.isoformat(),
+        })
+    group_share = LiveTrackGroupWorldShare.objects.filter(share_id=share_id).select_related("group").first()
+    if group_share:
+        group = group_share.group
+        return JsonResponse({
+            "share_type": "live_track_group",
+            "group_id": str(group.id),
+            "group_name": group.name,
+            "created_at": group_share.created_at.isoformat(),
+        })
+    return JsonResponse({"error": "Invalid share link", "code": 404}, status=404)
 
 
 @require_http_methods(["GET"])
 def world_share_data(request, share_id):
     """
     GET world/share/<share_id>/ — world share, no auth.
-    Returns track name, geometry, point_params (respecting recent_data_window) for the shared track.
+    Returns track payload (live_track) or group payload with tracks array (live_track_group).
+    Lookup order: track first, then group.
     """
     if not _validate_share_id(share_id):
         return JsonResponse({"error": "Invalid share link", "code": 404}, status=404)
-    share = LiveTrackWorldShare.objects.filter(share_id=share_id).select_related("track").first()
-    if not share:
-        return JsonResponse({"error": "Invalid share link", "code": 404}, status=404)
-    track = share.track
-    payload = track_to_response(
-        track, include_secret=False, is_owner=False, all_data=False, for_world_share=True
-    )
-    return JsonResponse(payload)
+    track_share = LiveTrackWorldShare.objects.filter(share_id=share_id).select_related("track").first()
+    if track_share:
+        track = track_share.track
+        payload = track_to_response(
+            track, include_secret=False, is_owner=False, all_data=False, for_world_share=True
+        )
+        return JsonResponse(payload)
+    group_share = LiveTrackGroupWorldShare.objects.filter(share_id=share_id).select_related("group").first()
+    if group_share:
+        group = group_share.group
+        track_ids = list(
+            LiveTrackGroupMember.objects.filter(group=group).values_list("track_id", flat=True)
+        )
+        tracks = list(LiveTrack.objects.filter(id__in=track_ids).order_by("name"))
+        track_payloads = [
+            track_to_response(
+                t, include_secret=False, is_owner=False, all_data=False, for_world_share=True
+            )
+            for t in tracks
+        ]
+        return JsonResponse({
+            "share_type": "live_track_group",
+            "group_name": group.name,
+            "tracks": track_payloads,
+        })
+    return JsonResponse({"error": "Invalid share link", "code": 404}, status=404)

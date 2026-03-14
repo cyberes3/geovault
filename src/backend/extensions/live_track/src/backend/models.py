@@ -94,6 +94,11 @@ class LiveTrackGroup(models.Model):
     name = models.CharField(max_length=255)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="live_track_groups")
     hidden_in_list = models.BooleanField(default=False)
+    visibility = models.CharField(
+        max_length=20,
+        choices=VISIBILITY_CHOICES,
+        default=VISIBILITY_PRIVATE,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -103,6 +108,30 @@ class LiveTrackGroup(models.Model):
             models.UniqueConstraint(fields=["user", "name"], name="live_track_group_unique_name_per_user")
         ]
         ordering = ["name"]
+
+
+class LiveTrackGroupShare(models.Model):
+    """Direct share with a user; only meaningful when group visibility is 'shared'."""
+
+    group = models.ForeignKey(LiveTrackGroup, on_delete=models.CASCADE, related_name="share_entries")
+    shared_with = models.ForeignKey(User, on_delete=models.CASCADE, related_name="live_track_group_shares_received")
+
+    class Meta:
+        app_label = "live_track"
+        constraints = [
+            models.UniqueConstraint(fields=["group", "shared_with"], name="live_track_group_share_unique")
+        ]
+
+
+class LiveTrackGroupWorldShare(models.Model):
+    """World (unauthenticated) share link for a group; one per group. When enabled, anyone with the URL can view the group's tracks (read-only)."""
+
+    share_id = models.CharField(max_length=36, unique=True, db_index=True)
+    group = models.OneToOneField(LiveTrackGroup, on_delete=models.CASCADE, related_name="world_share")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "live_track"
 
 
 class LiveTrackGroupMember(models.Model):

@@ -97,7 +97,30 @@
               </button>
             </div>
           </div>
-          <p v-if="filteredIncoming.length === 0 && filteredIncomingGroups.length === 0" class="text-sm text-gray-500 py-4 px-2 text-center">No incoming shares</p>
+          <div
+            v-for="group in filteredPublicGroups"
+            :key="'public-group-' + group.id"
+            class="flex items-center gap-2 p-3 rounded-lg border border-gray-200/80 bg-white hover:bg-gray-50 hover:border-gray-300 transition-colors"
+          >
+            <UserGroupIcon class="h-5 w-5 text-gray-500 flex-shrink-0" />
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-gray-900 truncate" :title="group.name">{{ group.name }}</div>
+              <div class="text-xs text-gray-500 truncate" :title="group.owner_email">{{ group.owner_email }} (public)</div>
+            </div>
+            <div class="flex items-center gap-1 flex-shrink-0">
+              <button
+                type="button"
+                title="Add group to my trackers"
+                class="p-2 rounded-lg text-blue-600 hover:bg-blue-50 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center size-9"
+                :disabled="isAddingGroup(group.id)"
+                @click="$emit('addIncomingGroup', group)"
+              >
+                <Loader v-if="isAddingGroup(group.id)" size="xs" layout="inline" :show-message="false" />
+                <PlusIcon v-else class="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+          <p v-if="filteredIncoming.length === 0 && filteredIncomingGroups.length === 0 && filteredPublicGroups.length === 0" class="text-sm text-gray-500 py-4 px-2 text-center">No incoming shares</p>
         </div>
       </div>
       <div class="flex-1 min-h-0 flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -230,6 +253,8 @@ export default {
     incomingTrackers: { type: Array, default: () => [] },
     /** Groups shared with you that have at least one addable track (from available-to-add shared_with_me_groups) */
     incomingGroups: { type: Array, default: () => [] },
+    /** Public groups with at least one addable track (from available-to-add public_groups) */
+    incomingPublicGroups: { type: Array, default: () => [] },
     /** Groups shared with you that are on your map (accepted; at least one track subscribed) */
     sharedGroupsOnMap: { type: Array, default: () => [] },
     /** Track ID currently being added (show spinner) */
@@ -270,6 +295,7 @@ export default {
 
     const filteredIncoming = computed(() => filterByQuery(props.incomingTrackers || []));
     const filteredIncomingGroups = computed(() => filterByQuery(props.incomingGroups || [], 'name', 'owner_email'));
+    const filteredPublicGroups = computed(() => filterByQuery(props.incomingPublicGroups || [], 'name', 'owner_email'));
 
     const filteredShared = computed(() => filterByQuery(sharedTrackers.value));
     const filteredSharedGroupsOnMap = computed(() =>
@@ -331,6 +357,7 @@ export default {
       searchQuery,
       filteredIncoming,
       filteredIncomingGroups,
+      filteredPublicGroups,
       filteredShared,
       filteredSharedGroupsOnMap,
       isHidden,

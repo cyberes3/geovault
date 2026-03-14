@@ -2,11 +2,12 @@
 Create dummy LiveTrack records with realistic geometry and point_params for
 development/testing.
 
-Creates 10 tracks, 3 groups (2+2+3 track memberships), world shares, direct
-shares to other users, public visibility, and group memberships. Uses the first
-available user (or --user email). Rerunning (without --delete) deletes existing
-dummy tracks and groups (by name prefix) and recreates them. Use --delete to
-only remove dummy data.
+Creates 10 tracks, 3 groups (2+2+3 track memberships), world shares (tracks and
+groups), direct shares to other users, public visibility, group visibility
+(public/shared/private), group direct shares (LiveTrackGroupShare), and group
+memberships. Uses the first available user (or --user email). Rerunning
+(without --delete) deletes existing dummy tracks and groups (by name prefix)
+and recreates them. Use --delete to only remove dummy data.
 """
 import math
 import random
@@ -156,6 +157,8 @@ class Command(BaseCommand):
             LiveTrackGroup = apps.get_model("live_track", "LiveTrackGroup")
             LiveTrackGroupMember = apps.get_model("live_track", "LiveTrackGroupMember")
             LiveTrackGroupMembership = apps.get_model("live_track", "LiveTrackGroupMembership")
+            LiveTrackGroupShare = apps.get_model("live_track", "LiveTrackGroupShare")
+            LiveTrackGroupWorldShare = apps.get_model("live_track", "LiveTrackGroupWorldShare")
             LiveTrackShare = apps.get_model("live_track", "LiveTrackShare")
             LiveTrackWorldShare = apps.get_model("live_track", "LiveTrackWorldShare")
         except LookupError:
@@ -224,23 +227,25 @@ class Command(BaseCommand):
                 f"  Created: {name} ({visibility}, {len(coords)} pts)"
             ))
 
-        # Groups: 3 groups, 2 + 2 + 3 track members
+        # Groups: 3 groups, 2 + 2 + 3 track members; visibility: Family=shared, Team=shared, Public=public
         group_track_assignments = [
-            (0, [0, 1]),           # group 0: 2 tracks
-            (1, [2, 3]),           # group 1: 2 tracks
-            (2, [4, 5, 6]),        # group 2: 3 tracks
+            (0, [0, 1]),           # group 0: Family, 2 tracks
+            (1, [2, 3]),           # group 1: Team, 2 tracks
+            (2, [4, 5, 6]),        # group 2: Public, 3 tracks
         ]
+        group_visibilities = ["shared", "shared", "public"]  # Family, Team, Public
         groups = []
         for gidx, gname in enumerate(GROUP_NAMES):
             grp = LiveTrackGroup.objects.create(
                 name=f"{DUMMY_GROUP_PREFIX}{gname}",
                 user=user,
+                visibility=group_visibilities[gidx],
             )
             groups.append(grp)
             for track_idx in group_track_assignments[gidx][1]:
                 LiveTrackGroupMember.objects.create(group=grp, track=tracks[track_idx])
             self.stdout.write(self.style.SUCCESS(
-                f"  Group: {grp.name} ({len(group_track_assignments[gidx][1])} tracks)"
+                f"  Group: {grp.name} ({group_visibilities[gidx]}, {len(group_track_assignments[gidx][1])} tracks)"
             ))
 
         # World share: a few tracks
@@ -272,7 +277,30 @@ class Command(BaseCommand):
                 "  No other users in DB; skipped direct track shares."
             ))
 
-        # 2 groups shared with other users, 1 group "publicly" (many members)
+        # Group shares: shared groups get LiveTrackGroupShare entries for other users
+        if other_users:
+            for gidx in range(NUM_GROUPS_SHARED_WITH_USERS):
+                for u in random.sample(other_users, min(2, len(other_users))):
+                    LiveTrackGroupShare.objects.get_or_create(group=groups[gidx], shared_with=u)
+            self.stdout.write(self.style.SUCCESS(
+                f"  Group direct shares: {NUM_GROUPS_SHARED_WITH_USERS} groups shared with other user(s)."
+            ))
+        else:
+            self.stdout.write(self.style.WARNING(
+                "  No other users; skipped group direct shares."
+            ))
+
+        # Group world share: enable for at least one group (e.g. Public)
+        group_world_share_idx = NUM_GROUPS - 1
+        LiveTrackGroupWorldShare.objects.get_or_create(
+            group=groups[group_world_share_idx],
+            defaults={"share_id": str(uuid.uuid4())},
+        )
+        self.stdout.write(self.style.SUCCESS(
+            f"  Group world share: enabled on {groups[group_world_share_idx].name}."
+        ))
+
+        # Group memberships: 2 groups with selected members, 1 (Public) with several members
         if other_users:
             for gidx in range(NUM_GROUPS_SHARED_WITH_USERS):
                 for u in random.sample(other_users, min(2, len(other_users))):

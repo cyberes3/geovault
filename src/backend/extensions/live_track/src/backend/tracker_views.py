@@ -28,6 +28,7 @@ from .helpers import (
     _strip_ser_from_params,
     can_user_see_track,
     can_user_see_track_via_group,
+    can_user_see_track_via_group_share,
     track_to_response,
     track_to_response_metadata_only,
 )
@@ -572,6 +573,22 @@ def tracker_available_to_add(request):
             "owner_email": (t.user.email or "") if t.user_id else "",
         }
 
+    def addable_track_ids_for_group(group):
+        group_track_ids = list(
+            LiveTrackGroupMember.objects.filter(group=group).values_list("track_id", flat=True)
+        )
+        addable = []
+        for track in LiveTrack.objects.filter(id__in=group_track_ids).select_related("user"):
+            if track.id in have_ids:
+                continue
+            if (
+                can_user_see_track(request.user, track)
+                or can_user_see_track_via_group(request.user, track)
+                or can_user_see_track_via_group_share(request.user, track)
+            ):
+                addable.append(str(track.id))
+        return addable
+
     member_groups = list(
         LiveTrackGroup.objects.filter(user_members__user=request.user)
         .exclude(user=request.user)
@@ -579,31 +596,63 @@ def tracker_available_to_add(request):
         .distinct()
         .order_by("name")
     )
+    groups_shared_with_me = list(
+        LiveTrackGroup.objects.filter(
+            visibility=VISIBILITY_SHARED,
+            share_entries__shared_with=request.user,
+        )
+        .exclude(user=request.user)
+        .select_related("user")
+        .distinct()
+        .order_by("name")
+    )
+    seen_group_ids = {g.id for g in member_groups}
     shared_with_me_groups = []
     for group in member_groups:
-        group_track_ids = list(
-            LiveTrackGroupMember.objects.filter(group=group).values_list("track_id", flat=True)
-        )
-        addable_track_ids = []
-        for track in LiveTrack.objects.filter(id__in=group_track_ids).select_related("user"):
-            if track.id in have_ids:
-                continue
-            if can_user_see_track(request.user, track) or can_user_see_track_via_group(
-                request.user, track
-            ):
-                addable_track_ids.append(str(track.id))
-        if addable_track_ids:
+        addable = addable_track_ids_for_group(group)
+        if addable:
             shared_with_me_groups.append({
                 "id": str(group.id),
                 "name": group.name,
                 "owner_email": (group.user.email or "") if group.user_id else "",
-                "track_ids": addable_track_ids,
+                "track_ids": addable,
+            })
+    for group in groups_shared_with_me:
+        if group.id in seen_group_ids:
+            continue
+        seen_group_ids.add(group.id)
+        addable = addable_track_ids_for_group(group)
+        if addable:
+            shared_with_me_groups.append({
+                "id": str(group.id),
+                "name": group.name,
+                "owner_email": (group.user.email or "") if group.user_id else "",
+                "track_ids": addable,
+            })
+
+    public_groups = []
+    for group in (
+        LiveTrackGroup.objects.filter(visibility=VISIBILITY_PUBLIC)
+        .exclude(user=request.user)
+        .select_related("user")
+        .order_by("name")
+    ):
+        if group.id in seen_group_ids:
+            continue
+        addable = addable_track_ids_for_group(group)
+        if addable:
+            public_groups.append({
+                "id": str(group.id),
+                "name": group.name,
+                "owner_email": (group.user.email or "") if group.user_id else "",
+                "track_ids": addable,
             })
 
     return JsonResponse({
         "public": [item(t) for t in public],
         "shared_with_me": [item(t) for t in shared_with_me],
         "shared_with_me_groups": shared_with_me_groups,
+        "public_groups": public_groups,
     })
 
 

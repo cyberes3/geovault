@@ -65,7 +65,8 @@ data class TrackerCoordinatesResponse(
 data class AvailableToAddResponse(
     val public: List<AvailableToAddItem> = emptyList(),
     val shared_with_me: List<AvailableToAddItem> = emptyList(),
-    val shared_with_me_groups: List<AvailableToAddGroup> = emptyList()
+    val shared_with_me_groups: List<AvailableToAddGroup> = emptyList(),
+    val public_groups: List<AvailableToAddGroup> = emptyList()
 )
 
 data class AvailableToAddItem(
@@ -108,6 +109,10 @@ data class Group(
     val id: String,
     val name: String,
     val hidden_in_list: Boolean? = null,
+    val visibility: String? = null,
+    val shared_with_emails: List<String>? = null,
+    val world_share_id: String? = null,
+    val world_share_url: String? = null,
     val created_at: Long? = null,
     val updated_at: Long? = null,
     val is_owner: Boolean? = null,
@@ -121,7 +126,10 @@ data class GroupCreateRequest(val name: String)
 
 data class GroupPatchRequest(
     val name: String? = null,
-    val hidden_in_list: Boolean? = null
+    val hidden_in_list: Boolean? = null,
+    val visibility: String? = null,
+    val shared_with_emails: List<String>? = null,
+    val world_share_enabled: Boolean? = null
 )
 
 data class GroupAddTrackRequest(val track_id: String)

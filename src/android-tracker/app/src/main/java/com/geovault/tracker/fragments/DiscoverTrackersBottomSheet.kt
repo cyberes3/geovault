@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.geovault.common.LoadingSpinner
+import com.geovault.tracker.AvailableToAddGroup
 import com.geovault.tracker.AvailableToAddItem
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
@@ -20,6 +21,10 @@ class DiscoverTrackersBottomSheet : BottomSheetDialogFragment() {
     private lateinit var publicList: LinearLayout
     private lateinit var sharedHeader: TextView
     private lateinit var sharedList: LinearLayout
+    private lateinit var publicGroupsHeader: TextView
+    private lateinit var publicGroupsList: LinearLayout
+    private lateinit var sharedGroupsHeader: TextView
+    private lateinit var sharedGroupsList: LinearLayout
     private lateinit var loadingView: View
     private lateinit var spinner: LoadingSpinner
     private lateinit var emptyView: TextView
@@ -35,6 +40,10 @@ class DiscoverTrackersBottomSheet : BottomSheetDialogFragment() {
         publicList = view.findViewById(R.id.discoverPublicList)
         sharedHeader = view.findViewById(R.id.discoverSharedHeader)
         sharedList = view.findViewById(R.id.discoverSharedList)
+        publicGroupsHeader = view.findViewById(R.id.discoverPublicGroupsHeader)
+        publicGroupsList = view.findViewById(R.id.discoverPublicGroupsList)
+        sharedGroupsHeader = view.findViewById(R.id.discoverSharedGroupsHeader)
+        sharedGroupsList = view.findViewById(R.id.discoverSharedGroupsList)
         loadingView = view.findViewById(R.id.discoverLoading)
         spinner = view.findViewById(R.id.discoverSpinner)
         emptyView = view.findViewById(R.id.discoverEmpty)
@@ -56,7 +65,9 @@ class DiscoverTrackersBottomSheet : BottomSheetDialogFragment() {
                 }
                 val public = response.public
                 val shared = response.shared_with_me
-                if (public.isEmpty() && shared.isEmpty()) {
+                val publicGroups = response.public_groups
+                val sharedGroups = response.shared_with_me_groups
+                if (public.isEmpty() && shared.isEmpty() && publicGroups.isEmpty() && sharedGroups.isEmpty()) {
                     emptyView.visibility = View.VISIBLE
                     scrollContent.visibility = View.GONE
                     return@runOnUiThread
@@ -65,6 +76,8 @@ class DiscoverTrackersBottomSheet : BottomSheetDialogFragment() {
                 scrollContent.visibility = View.VISIBLE
                 publicList.removeAllViews()
                 sharedList.removeAllViews()
+                publicGroupsList.removeAllViews()
+                sharedGroupsList.removeAllViews()
                 if (public.isNotEmpty()) {
                     publicHeader.visibility = View.VISIBLE
                     publicList.visibility = View.VISIBLE
@@ -85,8 +98,76 @@ class DiscoverTrackersBottomSheet : BottomSheetDialogFragment() {
                     sharedHeader.visibility = View.GONE
                     sharedList.visibility = View.GONE
                 }
+                if (publicGroups.isNotEmpty()) {
+                    publicGroupsHeader.visibility = View.VISIBLE
+                    publicGroupsList.visibility = View.VISIBLE
+                    for (group in publicGroups) {
+                        addGroupRow(publicGroupsList, group)
+                    }
+                } else {
+                    publicGroupsHeader.visibility = View.GONE
+                    publicGroupsList.visibility = View.GONE
+                }
+                if (sharedGroups.isNotEmpty()) {
+                    sharedGroupsHeader.visibility = View.VISIBLE
+                    sharedGroupsList.visibility = View.VISIBLE
+                    for (group in sharedGroups) {
+                        addGroupRow(sharedGroupsList, group)
+                    }
+                } else {
+                    sharedGroupsHeader.visibility = View.GONE
+                    sharedGroupsList.visibility = View.GONE
+                }
             }
         }
+    }
+
+    private fun addGroupRow(parent: LinearLayout, group: AvailableToAddGroup) {
+        val row = layoutInflater.inflate(R.layout.item_available_tracker, parent, false)
+        row.findViewById<TextView>(R.id.availableTrackerName).text = group.name
+        row.findViewById<TextView>(R.id.availableTrackerOwner).text = (group.owner_email?.takeIf { it.isNotBlank() } ?: "") + " (group)"
+        val addBtn = row.findViewById<com.google.android.material.button.MaterialButton>(R.id.availableTrackerAdd)
+        addBtn.setOnClickListener {
+            addBtn.isEnabled = false
+            var failed = false
+            var done = 0
+            val trackIds = group.track_ids
+            if (trackIds.isEmpty()) {
+                parent.removeView(row)
+                parentFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, Bundle())
+                (activity as? MainActivity)?.showSnackbar(getString(R.string.saved_tracker))
+                return@setOnClickListener
+            }
+            for (trackId in trackIds) {
+                TrackerRepository.subscribeTracker(requireContext(), trackId) { tracker ->
+                    if (!isAdded) return@subscribeTracker
+                    requireActivity().runOnUiThread {
+                        done++
+                        if (tracker == null) failed = true
+                        if (done == trackIds.size) {
+                            if (!failed) {
+                                parent.removeView(row)
+                                if (parent.childCount == 0) {
+                                    if (parent == publicGroupsList) {
+                                        publicGroupsHeader.visibility = View.GONE
+                                        publicGroupsList.visibility = View.GONE
+                                    } else {
+                                        sharedGroupsHeader.visibility = View.GONE
+                                        sharedGroupsList.visibility = View.GONE
+                                    }
+                                }
+                                parentFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, Bundle())
+                                (activity as? MainActivity)?.showSnackbar(getString(R.string.saved_tracker))
+                            } else {
+                                addBtn.isEnabled = true
+                                (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        parent.addView(row)
     }
 
     private fun addItemRow(parent: LinearLayout, item: AvailableToAddItem) {

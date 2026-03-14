@@ -3,8 +3,10 @@ Live track group CRUD and membership views.
 """
 
 import json
+import uuid
 
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from django.http import Http404, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -17,11 +19,28 @@ from .models import (
     LiveTrackGroup,
     LiveTrackGroupMember,
     LiveTrackGroupMembership,
+    LiveTrackGroupShare,
+    LiveTrackGroupWorldShare,
     LiveTrackSubscription,
     VISIBILITY_PUBLIC,
+    VISIBILITY_SHARED,
 )
+from .world_share_views import build_live_track_group_share_url
 
 User = get_user_model()
+
+
+def can_user_see_group(user, group):
+    """True if user is owner, member, or group is visible (public or shared with user)."""
+    if group.user_id == user.id:
+        return True
+    if LiveTrackGroupMembership.objects.filter(group=group, user=user).exists():
+        return True
+    if group.visibility == VISIBILITY_PUBLIC:
+        return True
+    if group.visibility == VISIBILITY_SHARED:
+        return LiveTrackGroupShare.objects.filter(group=group, shared_with=user).exists()
+    return False
 
 
 def _get_json_body(request):
@@ -33,14 +52,12 @@ def _get_json_body(request):
 
 
 def _get_group_for_user_or_404(user, group_id):
-    """Return LiveTrackGroup if user is owner or has membership. Raises Http404 otherwise."""
+    """Return LiveTrackGroup if user can see it (owner, member, or visibility public/shared with user). Raises Http404 otherwise."""
     try:
         group = LiveTrackGroup.objects.get(id=group_id)
     except (LiveTrackGroup.DoesNotExist, ValueError):
         raise Http404
-    if group.user_id == user.id:
-        return group
-    if LiveTrackGroupMembership.objects.filter(group=group, user=user).exists():
+    if can_user_see_group(user, group):
         return group
     raise Http404
 
@@ -55,12 +72,23 @@ def _group_payload(group, request_user, include_track_ids=True):
         "id": str(group.id),
         "name": group.name,
         "hidden_in_list": getattr(group, "hidden_in_list", False),
+        "visibility": getattr(group, "visibility", "private"),
         "created_at": int(group.created_at.timestamp()) if group.created_at else None,
         "updated_at": int(group.updated_at.timestamp()) if group.updated_at else None,
         "is_owner": is_owner,
     }
     if not is_owner and group.user_id:
         out["owner_email"] = (group.user.email or "") if group.user_id else ""
+    if is_owner:
+        emails = list(
+            LiveTrackGroupShare.objects.filter(group=group)
+            .values_list("shared_with__email", flat=True)
+        )
+        out["shared_with_emails"] = [e for e in emails if e]
+        world_share = LiveTrackGroupWorldShare.objects.filter(group=group).first()
+        if world_share:
+            out["world_share_id"] = world_share.share_id
+            out["world_share_url"] = build_live_track_group_share_url(world_share.share_id)
     if include_track_ids:
         track_ids = list(
             LiveTrackGroupMember.objects.filter(group=group).values_list("track_id", flat=True)
@@ -85,11 +113,38 @@ def group_list_create(request):
         member_of = LiveTrackGroup.objects.filter(
             user_members__user=request.user
         ).exclude(user=request.user).distinct().order_by("name")
+        seen_ids = set()
         items = []
         for g in owned:
+            seen_ids.add(g.id)
             items.append(_group_payload(g, request.user))
         for g in member_of:
+            if g.id not in seen_ids:
+                seen_ids.add(g.id)
+                items.append(_group_payload(g, request.user))
+        public_groups = (
+            LiveTrackGroup.objects.filter(visibility=VISIBILITY_PUBLIC)
+            .exclude(user=request.user)
+            .exclude(id__in=seen_ids)
+            .select_related("user")
+            .order_by("name")
+        )
+        for g in public_groups:
+            seen_ids.add(g.id)
             items.append(_group_payload(g, request.user))
+        shared_with_me = (
+            LiveTrackGroup.objects.filter(
+                visibility=VISIBILITY_SHARED,
+                share_entries__shared_with=request.user,
+            )
+            .exclude(id__in=seen_ids)
+            .select_related("user")
+            .distinct()
+            .order_by("name")
+        )
+        for g in shared_with_me:
+            items.append(_group_payload(g, request.user))
+        items.sort(key=lambda x: (x.get("name") or "").lower())
         return JsonResponse(items, safe=False)
     if request.method == "POST":
         data, err = _get_json_body(request)
@@ -131,6 +186,39 @@ def group_get_patch_delete(request, group_id):
         if "hidden_in_list" in data:
             group.hidden_in_list = bool(data["hidden_in_list"])
             update_fields.append("hidden_in_list")
+        if "visibility" in data:
+            v = data.get("visibility")
+            if v not in ("private", "shared", "public"):
+                return error_response("visibility must be private, shared, or public", 400)
+            group.visibility = v
+            update_fields.append("visibility")
+        if "shared_with_emails" in data:
+            if getattr(group, "visibility", "private") != VISIBILITY_SHARED:
+                return error_response("shared_with_emails only applies when visibility is shared", 400)
+            emails = [e.strip().lower() for e in (data.get("shared_with_emails") or []) if (e or "").strip()]
+            q = Q()
+            for e in emails:
+                q |= Q(email__iexact=e)
+            users = User.objects.filter(q)
+            users_by_email = {u.email.lower(): u for u in users if u.email}
+            invalid = [e for e in emails if e not in users_by_email]
+            if invalid:
+                return JsonResponse({"error": "Invalid emails", "invalid_emails": invalid}, status=400)
+            target_users = set(users_by_email[e] for e in emails)
+            current = set(LiveTrackGroupShare.objects.filter(group=group).values_list("shared_with_id", flat=True))
+            to_add = target_users - {u for u in target_users if u.id in current}
+            to_remove = current - {u.id for u in target_users}
+            for u in to_add:
+                LiveTrackGroupShare.objects.get_or_create(group=group, shared_with=u)
+            LiveTrackGroupShare.objects.filter(group=group, shared_with_id__in=to_remove).delete()
+        if "world_share_enabled" in data:
+            if data["world_share_enabled"]:
+                LiveTrackGroupWorldShare.objects.get_or_create(
+                    group=group,
+                    defaults={"share_id": str(uuid.uuid4())},
+                )
+            else:
+                LiveTrackGroupWorldShare.objects.filter(group=group).delete()
         if len(update_fields) > 1:
             group.save(update_fields=update_fields)
         return JsonResponse(_group_payload(group, request.user))

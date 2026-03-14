@@ -15,6 +15,8 @@ from extensions.live_track.src.backend.models import (
     LiveTrackGroup,
     LiveTrackGroupMember,
     LiveTrackGroupMembership,
+    LiveTrackGroupShare,
+    LiveTrackGroupWorldShare,
     LiveTrackWorldShare,
     LiveTrackShare,
     LiveTrackSubscription,
@@ -251,7 +253,7 @@ class TestLiveTrackAPI(TestCase):
         self.client.force_login(self.user)
 
     def test_available_to_add_returns_public_and_shared(self):
-        """GET trackers/available-to-add/ returns public and shared_with_me sections."""
+        """GET trackers/available-to-add/ returns public, shared_with_me, and public_groups sections."""
         with _patch_live_track_enabled():
             create_resp = self.client.post(
                 "/api/extensions/live-track/trackers/",
@@ -267,6 +269,8 @@ class TestLiveTrackAPI(TestCase):
         data = response.json()
         self.assertIn("public", data)
         self.assertIn("shared_with_me", data)
+        self.assertIn("public_groups", data)
+        self.assertIn("shared_with_me_groups", data)
         self.assertEqual(len(data["public"]), 1)
         self.assertEqual(data["public"][0]["id"], track_id)
         self.client.force_login(self.user)
@@ -642,6 +646,125 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(len(data["shared_with_me_groups"]), 1)
         self.assertEqual(data["shared_with_me_groups"][0]["id"], group_id)
         self.assertIn(track_id, data["shared_with_me_groups"][0]["track_ids"])
+        self.client.force_login(self.user)
+
+    def test_available_to_add_includes_public_groups(self):
+        """GET trackers/available-to-add/ returns public_groups when group is public and has addable track."""
+        with _patch_live_track_enabled():
+            track_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Public Track"}),
+                content_type="application/json",
+            )
+        track_id = track_resp.json()["id"]
+        LiveTrack.objects.filter(id=track_id).update(visibility="public")
+        with _patch_live_track_enabled():
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Public Group"}),
+                content_type="application/json",
+            )
+        group_id = group_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"visibility": "public"}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/groups/{group_id}/tracks/",
+                data=json.dumps({"track_id": track_id}),
+                content_type="application/json",
+            )
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.get("/api/extensions/live-track/trackers/available-to-add/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("public_groups", data)
+        self.assertEqual(len(data["public_groups"]), 1)
+        self.assertEqual(data["public_groups"][0]["id"], group_id)
+        self.assertIn(track_id, data["public_groups"][0]["track_ids"])
+        self.client.force_login(self.user)
+
+    def test_available_to_add_shared_with_me_groups_via_group_share(self):
+        """GET trackers/available-to-add/ returns group in shared_with_me_groups when shared via GroupShare (no membership)."""
+        with _patch_live_track_enabled():
+            track_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Track In Shared Group"}),
+                content_type="application/json",
+            )
+        track_id = track_resp.json()["id"]
+        with _patch_live_track_enabled():
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Shared Via GroupShare"}),
+                content_type="application/json",
+            )
+        group_id = group_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/groups/{group_id}/tracks/",
+                data=json.dumps({"track_id": track_id}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.get("/api/extensions/live-track/trackers/available-to-add/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("shared_with_me_groups", data)
+        self.assertEqual(len(data["shared_with_me_groups"]), 1)
+        self.assertEqual(data["shared_with_me_groups"][0]["id"], group_id)
+        self.assertIn(track_id, data["shared_with_me_groups"][0]["track_ids"])
+        self.client.force_login(self.user)
+
+    def test_available_to_add_excludes_public_group_if_no_addable_tracks(self):
+        """Public group with only private tracks (not shared with other user) does not appear in public_groups."""
+        with _patch_live_track_enabled():
+            track_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Private Only"}),
+                content_type="application/json",
+            )
+        track_id = track_resp.json()["id"]
+        with _patch_live_track_enabled():
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Public But Private Tracks"}),
+                content_type="application/json",
+            )
+        group_id = group_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"visibility": "public"}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/groups/{group_id}/tracks/",
+                data=json.dumps({"track_id": track_id}),
+                content_type="application/json",
+            )
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.get("/api/extensions/live-track/trackers/available-to-add/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        public_group_ids = [g["id"] for g in data.get("public_groups", [])]
+        self.assertNotIn(group_id, public_group_ids)
         self.client.force_login(self.user)
 
     def test_non_owner_does_not_see_world_share_id_or_shared_with_emails(self):
@@ -2301,6 +2424,231 @@ class TestLiveTrackGroups(TestCase):
         self.assertIn("owner_email", data[0])
         self.client.force_login(self.user)
 
+    def test_group_patch_visibility(self):
+        """Owner PATCHes group visibility; GET returns it; non-owner can GET when public/shared."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Vis Group"}),
+                content_type="application/json",
+            )
+        group_id = create_resp.json()["id"]
+        for vis in ("public", "shared", "private"):
+            with _patch_live_track_enabled():
+                response = self.client.patch(
+                    f"/api/extensions/live-track/groups/{group_id}/",
+                    data=json.dumps({"visibility": vis}),
+                    content_type="application/json",
+                )
+            self.assertEqual(response.status_code, 200, f"visibility={vis}")
+            self.assertEqual(response.json()["visibility"], vis)
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.get(f"/api/extensions/live-track/groups/{group_id}/")
+        self.assertEqual(response.status_code, 404, "other user cannot see group when it is private")
+        self.client.force_login(self.user)
+        with _patch_live_track_enabled():
+            self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"visibility": "public"}),
+                content_type="application/json",
+            )
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.get(f"/api/extensions/live-track/groups/{group_id}/")
+        self.assertEqual(response.status_code, 200, "other user can GET group when public")
+        self.assertEqual(response.json()["visibility"], "public")
+        self.client.force_login(self.user)
+
+    def test_group_patch_shared_with_emails(self):
+        """Owner sets visibility=shared and shared_with_emails; GET returns them; empty list removes share."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Shared Group"}),
+                content_type="application/json",
+            )
+        group_id = create_resp.json()["id"]
+        group = LiveTrackGroup.objects.get(id=group_id)
+        with _patch_live_track_enabled():
+            response = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("shared_with_emails", data)
+        self.assertEqual(data["shared_with_emails"], [self.other_user.email])
+        self.assertTrue(LiveTrackGroupShare.objects.filter(group=group, shared_with=self.other_user).exists())
+        with _patch_live_track_enabled():
+            response = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"shared_with_emails": []}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(LiveTrackGroupShare.objects.filter(group=group).exists())
+
+    def test_group_patch_world_share_enabled(self):
+        """Owner PATCHes world_share_enabled true; GET returns world_share_id/url; false removes them."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "World Group"}),
+                content_type="application/json",
+            )
+        group_id = create_resp.json()["id"]
+        group = LiveTrackGroup.objects.get(id=group_id)
+        with _patch_live_track_enabled():
+            response = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"world_share_enabled": True}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("world_share_id", data)
+        self.assertIn("world_share_url", data)
+        self.assertTrue(LiveTrackGroupWorldShare.objects.filter(group=group).exists())
+        share_id = data["world_share_id"]
+        with _patch_live_track_enabled():
+            response = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"world_share_enabled": False}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertNotIn("world_share_id", data)
+        self.assertNotIn("world_share_url", data)
+        self.assertFalse(LiveTrackGroupWorldShare.objects.filter(group=group).exists())
+
+    def test_group_visibility_required_for_shared_with_emails(self):
+        """PATCH with shared_with_emails when visibility is not shared returns 400."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Private Group"}),
+                content_type="application/json",
+            )
+        group_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"shared_with_emails": [self.other_user.email]}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 400)
+
+    def test_group_list_includes_public_and_shared_with_me(self):
+        """GET groups/ as non-owner returns public groups and groups shared with user."""
+        with _patch_live_track_enabled():
+            pub_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Public List Group"}),
+                content_type="application/json",
+            )
+        pub_id = pub_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.patch(
+                f"/api/extensions/live-track/groups/{pub_id}/",
+                data=json.dumps({"visibility": "public"}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            shared_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Shared List Group"}),
+                content_type="application/json",
+            )
+        shared_id = shared_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.patch(
+                f"/api/extensions/live-track/groups/{shared_id}/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.get("/api/extensions/live-track/groups/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        names = [g["name"] for g in data]
+        self.assertIn("Public List Group", names)
+        self.assertIn("Shared List Group", names)
+        self.client.force_login(self.user)
+
+    def test_group_non_owner_cannot_patch_visibility_or_world_share(self):
+        """Member PATCHes group with visibility or world_share_enabled; expect 403."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Member Edit Group"}),
+                content_type="application/json",
+            )
+        group_id = create_resp.json()["id"]
+        group = LiveTrackGroup.objects.get(id=group_id)
+        LiveTrackGroupMembership.objects.create(group=group, user=self.other_user)
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"visibility": "public"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 403)
+        with _patch_live_track_enabled():
+            response = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"world_share_enabled": True}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 403)
+        self.client.force_login(self.user)
+
+    def test_group_owner_sees_shared_with_emails_non_owner_does_not(self):
+        """GET group as owner includes shared_with_emails and world_share; non-owner does not."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Secret Group"}),
+                content_type="application/json",
+            )
+        group_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                    "world_share_enabled": True,
+                }),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            response = self.client.get(f"/api/extensions/live-track/groups/{group_id}/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("shared_with_emails", data)
+        self.assertIn("world_share_id", data)
+        self.assertIn("world_share_url", data)
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.get(f"/api/extensions/live-track/groups/{group_id}/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertNotIn("shared_with_emails", data)
+        self.assertNotIn("world_share_id", data)
+        self.assertNotIn("world_share_url", data)
+        self.client.force_login(self.user)
+
 
 class TestLiveTrackAppIngress(TestCase):
     """Test app-ingress requires auth."""
@@ -2515,5 +2863,86 @@ class TestLiveTrackWorldShare(TestCase):
         with _patch_live_track_enabled():
             response = self.client.get(
                 "/api/extensions/live-track/world/share/not-a-uuid/"
+            )
+        self.assertEqual(response.status_code, 404)
+
+
+class TestLiveTrackGroupWorldShare(TestCase):
+    """Test world share endpoints for groups: info and data return share_type live_track_group."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email="groupworld@example.com",
+            password="testpass123",
+            username="groupworld",
+        )
+        self.client.force_login(self.user)
+        with _patch_live_track_enabled():
+            track_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Track In Group"}),
+                content_type="application/json",
+            )
+        self.track_id = track_resp.json()["id"]
+        with _patch_live_track_enabled():
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "World Shared Group"}),
+                content_type="application/json",
+            )
+        self.group_id = group_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/groups/{self.group_id}/tracks/",
+                data=json.dumps({"track_id": self.track_id}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            patch_resp = self.client.patch(
+                f"/api/extensions/live-track/groups/{self.group_id}/",
+                data=json.dumps({"world_share_enabled": True}),
+                content_type="application/json",
+            )
+        self.group_share_id = patch_resp.json().get("world_share_id")
+        self.assertIsNotNone(self.group_share_id)
+
+    def test_group_world_share_info_200(self):
+        """GET world/share/<group_share_id>/info/ without auth returns 200 with share_type live_track_group."""
+        self.client.logout()
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/world/share/{self.group_share_id}/info/"
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["share_type"], "live_track_group")
+        self.assertEqual(data["group_id"], self.group_id)
+        self.assertEqual(data["group_name"], "World Shared Group")
+        self.assertIn("created_at", data)
+
+    def test_group_world_share_data_200(self):
+        """GET world/share/<group_share_id>/ without auth returns 200 with share_type, group_name, tracks."""
+        self.client.logout()
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/world/share/{self.group_share_id}/"
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["share_type"], "live_track_group")
+        self.assertEqual(data["group_name"], "World Shared Group")
+        self.assertIn("tracks", data)
+        self.assertEqual(len(data["tracks"]), 1)
+        self.assertEqual(data["tracks"][0]["name"], "Track In Group")
+        self.assertNotIn("tracker_secret", data["tracks"][0])
+
+    def test_group_world_share_info_404(self):
+        """GET world/share/<valid-uuid-no-record>/info/ returns 404."""
+        self.client.logout()
+        invalid_id = "00000000-0000-0000-4000-000000000000"
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/world/share/{invalid_id}/info/"
             )
         self.assertEqual(response.status_code, 404)

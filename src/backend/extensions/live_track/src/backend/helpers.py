@@ -21,6 +21,7 @@ from geo_lib.utils.redis_connection import get_redis_connection
 from .models import (
     LiveTrack,
     LiveTrackGroupMember,
+    LiveTrackGroupShare,
     LiveTrackShare,
     LiveTrackSubscription,
     VISIBILITY_PUBLIC,
@@ -252,6 +253,15 @@ def can_user_see_track_via_group(user, track: LiveTrack) -> bool:
     """True if user is a member of a group that contains this track (so they can view shared-group trackers)."""
     return LiveTrackGroupMember.objects.filter(
         track=track, group__user_members__user=user
+    ).exists()
+
+
+def can_user_see_track_via_group_share(user, track: LiveTrack) -> bool:
+    """True if user has group shared with them (LiveTrackGroupShare) for a group that contains this track."""
+    return LiveTrackGroupMember.objects.filter(
+        track=track,
+        group__visibility=VISIBILITY_SHARED,
+        group__share_entries__shared_with=user,
     ).exists()
 
 
