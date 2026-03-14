@@ -167,7 +167,7 @@
                   <button
                     v-if="track.is_owner"
                     type="button"
-                    title="Open in list"
+                    title="Open in List"
                     class="p-2 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50"
                     @click="openTrackerInList(track)"
                   >
@@ -176,7 +176,7 @@
                   <button
                     v-else-if="groupQuickViewGroup?.is_owner"
                     type="button"
-                    title="Zoom to tracker"
+                    title="Zoom to Tracker"
                     class="p-2 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50"
                     @click="zoomToTrackInGroup(track)"
                   >
@@ -268,7 +268,7 @@
         </button>
         <button
           type="button"
-          title="Shared with me"
+          title="Shared With Me"
           :class="SIDEBAR_ACTION_BUTTON_CLASS"
           @click="openSidebar('sharedWithMe')"
         >
@@ -294,7 +294,7 @@
         </button>
         <button
           type="button"
-          title="Refresh all"
+          title="Refresh All"
           :class="SIDEBAR_ACTION_BUTTON_CLASS"
           :disabled="actionStripRefreshing"
           @click="onFullRefresh"
@@ -312,7 +312,7 @@
         </button>
         <button
           type="button"
-          title="Go to home extent"
+          title="Go to Home Extent"
           :class="SIDEBAR_ACTION_BUTTON_CLASS"
           @click="goHome"
         >
@@ -335,7 +335,7 @@
           class="mobile-drawer-handle"
           role="button"
           tabindex="0"
-          aria-label="Drag to resize"
+          aria-label="Drag to Resize"
           @touchstart.passive="onDrawerDragStart"
           @touchmove.prevent="onDrawerDragMove"
           @touchend="onDrawerDragEnd"
@@ -348,7 +348,7 @@
           <div
             v-if="isDrawerAtPeek"
             class="mobile-drawer-drag-overlay"
-            aria-label="Drag to expand"
+            aria-label="Drag to Expand"
             @touchstart.passive="onDrawerDragStart"
             @touchmove.prevent="onDrawerDragMove"
             @touchend="onDrawerDragEnd"
@@ -720,11 +720,11 @@ export default {
     );
 
     const mapSidebarTitle = computed(() => {
-      if (showTrackSidebar.value) return trackSidebarMode.value === 'create' ? 'New tracker' : 'Edit tracker';
+      if (showTrackSidebar.value) return trackSidebarMode.value === 'create' ? 'New Tracker' : 'Edit Tracker';
       if (paramsModalTrackId.value != null) return 'Latest Parameters';
       if (showGroupsSidebar.value) return 'Groups';
       if (showGroupQuickViewSidebar.value && groupQuickViewGroup.value) return groupQuickViewGroup.value.name || 'Group';
-      if (showSharedWithMeSidebar.value) return 'Shared with me';
+      if (showSharedWithMeSidebar.value) return 'Shared With Me';
       if (showLayerSidebar.value) return 'Map Settings';
       if (showSettingsSidebar.value) return 'Settings';
       return '';
@@ -1935,7 +1935,7 @@ export default {
       if (!group?.id) return;
       const trackIds = (group.track_ids || []).map((id) => String(id));
       if (trackIds.length === 0) return;
-      if (!confirm('Remove all trackers in this group from your map? You can add the group again from Shared with me.')) return;
+      if (!confirm('Remove all trackers in this group from your map? You can add the group again from Shared With Me.')) return;
       unsubscribingGroupId.value = group.id;
       try {
         for (const trackId of trackIds) {
@@ -2007,7 +2007,7 @@ export default {
 
     async function onSharedUnsubscribe(trackId) {
       if (!trackId) return;
-      if (!confirm('Remove this tracker from your list? You can add it again from Shared with me.')) return;
+      if (!confirm('Remove this tracker from your list? You can add it again from Shared With Me.')) return;
       unsubscribingId.value = trackId;
       try {
         await api.delete(`/trackers/${trackId}/subscribe/`);

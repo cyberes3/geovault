@@ -106,7 +106,7 @@
                     type="button"
                     class="h-10 w-10 flex-shrink-0 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                     :disabled="loadingEdit"
-                    title="Parse coordinates or address"
+                    title="Parse Coordinates or Address"
                     @click="validateCoordinates"
                 >
                   <ArrowPathIcon class="w-5 h-5"/>
@@ -118,7 +118,7 @@
                   size="sm"
                   class="w-full sm:w-auto justify-center"
                   :disabled="isGettingLocation || loadingEdit"
-                  title="Use current location"
+                  title="Use Current Location"
                   @click="useCurrentLocation"
               >
                 <Loader v-if="isGettingLocation" size="sm" layout="inline" :show-message="false"/>

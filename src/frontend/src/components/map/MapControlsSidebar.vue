@@ -102,7 +102,7 @@
                 Hide all feature labels
               </span>
               <span class="block text-xs text-gray-500 lg:text-[11px] xl:text-xs mt-1">
-                Hide labels for all features on the map
+                Hide Labels for All Features on the Map
               </span>
             </div>
             <ToggleButton

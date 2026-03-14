@@ -221,7 +221,7 @@ export default {
     let autosaveQueued = false;
     let autosaveSeq = 0;
 
-    const sidebarTitle = computed(() => (props.mode === 'create' ? 'New tracker' : 'Edit tracker'));
+    const sidebarTitle = computed(() => (props.mode === 'create' ? 'New Tracker' : 'Edit Tracker'));
     const isOwner = computed(() => props.track?.is_owner !== false);
 
     /** Deterministic hex color from string (high S, high V so not too dark). */
@@ -561,7 +561,7 @@ export default {
 
     async function confirmUnsubscribe() {
       if (!props.track?.id || unsubscribing.value) return;
-      if (!confirm('Remove this tracker from your list? You can add it again from Shared with me.')) return;
+      if (!confirm('Remove this tracker from your list? You can add it again from Shared With Me.')) return;
       unsubscribing.value = true;
       try {
         await api.delete(`/trackers/${props.track.id}/subscribe/`);

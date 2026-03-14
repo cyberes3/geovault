@@ -14,14 +14,14 @@
         @click="$emit('open-shared-list')"
       >
         <ShareIcon class="h-4 w-4" />
-        Manage shared trackers
+        Manage Shared Trackers
       </BaseButton>
     </div>
 
     <!-- Hidden trackers -->
     <div class="flex-shrink-0 mb-4">
       <div class="flex items-center justify-between mb-2">
-        <h3 class="text-sm font-semibold text-gray-900">Hidden trackers</h3>
+        <h3 class="text-sm font-semibold text-gray-900">Hidden Trackers</h3>
         <span v-if="hiddenTrackers.length > 0" class="text-xs text-gray-900">{{ hiddenTrackers.length }}</span>
       </div>
       <div v-if="hiddenTrackers.length === 0" class="text-xs text-gray-900 italic">None</div>

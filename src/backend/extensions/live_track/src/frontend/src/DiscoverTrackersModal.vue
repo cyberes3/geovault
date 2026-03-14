@@ -5,7 +5,7 @@
     @close="$emit('close')"
   >
     <div class="p-4 space-y-4">
-      <p class="text-sm text-gray-600">Add public trackers. Incoming shares appear in Shared with me.</p>
+      <p class="text-sm text-gray-600">Add public trackers. Incoming shares appear in Shared With Me.</p>
       <div class="relative">
         <input
           v-model="searchQuery"

@@ -4,7 +4,7 @@
     <template v-if="view === 'list'">
       <div class="flex-shrink-0 mb-3 flex items-center gap-2">
         <BaseButton variant="primary" color="blue" size="sm" class="flex-1" @click="view = 'create'">
-          Create group
+          Create Group
         </BaseButton>
         <button
           type="button"

@@ -34,7 +34,7 @@
     </div>
     <div class="space-y-2">
       <SearchableCheckboxList
-        label="Trackers in group"
+        label="Trackers in Group"
         description="Check the trackers that belong to this group"
         :items="allTrackers"
         v-model="groupTrackIdsSafe"
@@ -61,11 +61,11 @@
       <div class="flex items-center gap-3">
         <ToggleButton
           :model-value="hiddenInList"
-          label="Hide in list"
+          label="Hide in List"
           size="md"
           @update:model-value="onHiddenInListChange($event)"
         />
-        <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="onHiddenInListChange(!hiddenInList)">Hide in list</label>
+        <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="onHiddenInListChange(!hiddenInList)">Hide in List</label>
       </div>
       <p class="text-xs text-gray-500">When on, this group is hidden from the sidebar list. You can unhide it in Settings.</p>
     </div>
@@ -90,7 +90,7 @@
   <BaseModal
     v-else
     :is-open="true"
-    :title="group ? 'Edit group' : 'Create group'"
+    :title="group ? 'Edit Group' : 'Create Group'"
     @close="$emit('close')"
   >
     <div class="p-4 space-y-4">
@@ -107,7 +107,7 @@
       <template v-if="group">
         <div class="space-y-2">
           <SearchableCheckboxList
-            label="Trackers in group"
+            label="Trackers in Group"
             description="Check the trackers that belong to this group"
             :items="allTrackers"
             v-model="groupTrackIdsSafe"
@@ -134,11 +134,11 @@
           <div class="flex items-center gap-3">
             <ToggleButton
               :model-value="hiddenInList"
-              label="Hide in list"
+              label="Hide in List"
               size="md"
               @update:model-value="onHiddenInListChange($event)"
             />
-            <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="onHiddenInListChange(!hiddenInList)">Hide in list</label>
+            <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="onHiddenInListChange(!hiddenInList)">Hide in List</label>
           </div>
           <p class="text-xs text-gray-500">When on, this group is hidden from the sidebar list. You can unhide it in Settings.</p>
         </div>

@@ -325,6 +325,404 @@ class TestLiveTrackAPI(TestCase):
             )
         self.assertFalse(LiveTrackShare.objects.filter(track=track).exists())
 
+    def test_post_settings_shared_with_emails_invalid_emails_400(self):
+        """POST settings with visibility=shared and unknown emails returns 400 with invalid_emails."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Shared Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": ["nonexistent@example.com", "another@example.com"],
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn("invalid_emails", data)
+        self.assertEqual(set(data["invalid_emails"]), {"nonexistent@example.com", "another@example.com"})
+
+    def test_post_settings_shared_with_emails_when_not_shared_400(self):
+        """POST settings with shared_with_emails when visibility is not shared returns 400."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Private Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "private",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 400)
+
+    def test_available_to_add_includes_shared_with_me_track(self):
+        """GET trackers/available-to-add/ returns track in shared_with_me when shared with user."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Shared With Other"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.get("/api/extensions/live-track/trackers/available-to-add/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("shared_with_me", data)
+        shared_ids = [t["id"] for t in data["shared_with_me"]]
+        self.assertIn(track_id, shared_ids)
+        self.client.force_login(self.user)
+
+    def test_leave_share_removes_share_and_subscription(self):
+        """DELETE trackers/<id>/share-with-me/ removes LiveTrackShare and subscription."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "To Leave"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        LiveTrackSubscription.objects.create(user=self.other_user, track=track)
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.delete(
+                f"/api/extensions/live-track/trackers/{track_id}/share-with-me/"
+            )
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(LiveTrackShare.objects.filter(track=track, shared_with=self.other_user).exists())
+        self.assertFalse(LiveTrackSubscription.objects.filter(user=self.other_user, track=track).exists())
+        self.client.force_login(self.user)
+
+    def test_leave_share_400_for_owner(self):
+        """DELETE share-with-me/ as owner returns 400."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Own Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.delete(
+                f"/api/extensions/live-track/trackers/{track_id}/share-with-me/"
+            )
+        self.assertEqual(response.status_code, 400)
+
+    def test_leave_share_404_when_not_shared_with_you(self):
+        """DELETE share-with-me/ when track is not shared with you returns 404."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Private Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.delete(
+                f"/api/extensions/live-track/trackers/{track_id}/share-with-me/"
+            )
+        self.assertEqual(response.status_code, 404)
+        self.client.force_login(self.user)
+
+    def test_available_to_add_excludes_tracks_you_already_have(self):
+        """GET trackers/available-to-add/ excludes a track from shared_with_me after subscribing."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "To Exclude"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.get("/api/extensions/live-track/trackers/available-to-add/")
+        self.assertEqual(response.status_code, 200)
+        shared_ids = [t["id"] for t in response.json()["shared_with_me"]]
+        self.assertIn(track_id, shared_ids)
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/subscribe/",
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            response = self.client.get("/api/extensions/live-track/trackers/available-to-add/")
+        self.assertEqual(response.status_code, 200)
+        shared_ids = [t["id"] for t in response.json()["shared_with_me"]]
+        self.assertNotIn(track_id, shared_ids)
+        self.client.force_login(self.user)
+
+    def test_leave_share_removes_live_track_group_member(self):
+        """DELETE share-with-me/ removes LiveTrackGroupMember for groups owned by the leaving user."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "In Group"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/subscribe/",
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "My Group"}),
+                content_type="application/json",
+            )
+        group_id = group_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/groups/{group_id}/tracks/",
+                data=json.dumps({"track_id": track_id}),
+                content_type="application/json",
+            )
+        self.assertTrue(
+            LiveTrackGroupMember.objects.filter(
+                group__user=self.other_user, track=track
+            ).exists()
+        )
+        with _patch_live_track_enabled():
+            response = self.client.delete(
+                f"/api/extensions/live-track/trackers/{track_id}/share-with-me/"
+            )
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(
+            LiveTrackGroupMember.objects.filter(
+                group__user=self.other_user, track=track
+            ).exists()
+        )
+        self.assertFalse(LiveTrackShare.objects.filter(track=track, shared_with=self.other_user).exists())
+        self.client.force_login(self.user)
+
+    def test_subscribers_owner_gets_200_and_list(self):
+        """GET trackers/<id>/subscribers/ as owner returns 200 with subscribers list; owner not in list."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Public For Subs"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        track.visibility = "public"
+        track.save(update_fields=["visibility"])
+        LiveTrackSubscription.objects.create(user=self.other_user, track=track)
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/trackers/{track_id}/subscribers/"
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("subscribers", data)
+        subs = data["subscribers"]
+        self.assertEqual(len(subs), 1)
+        self.assertEqual(subs[0]["email"], self.other_user.email)
+        self.assertEqual(subs[0]["id"], str(self.other_user.id))
+
+    def test_subscribers_non_owner_gets_404(self):
+        """GET trackers/<id>/subscribers/ as non-owner returns 404 (get_object_or_404_for_user excludes non-owners)."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Other Sub"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        track.visibility = "public"
+        track.save(update_fields=["visibility"])
+        LiveTrackSubscription.objects.create(user=self.other_user, track=track)
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/trackers/{track_id}/subscribers/"
+            )
+        self.assertEqual(response.status_code, 404)
+        self.client.force_login(self.user)
+
+    def test_available_to_add_includes_shared_with_me_groups(self):
+        """GET trackers/available-to-add/ returns shared_with_me_groups when user is member of group with shared track."""
+        with _patch_live_track_enabled():
+            track_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Track In Group"}),
+                content_type="application/json",
+            )
+        track_id = track_resp.json()["id"]
+        with _patch_live_track_enabled():
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Shared Group"}),
+                content_type="application/json",
+            )
+        group_id = group_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/groups/{group_id}/tracks/",
+                data=json.dumps({"track_id": track_id}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/groups/{group_id}/members/",
+                data=json.dumps({"email": self.other_user.email}),
+                content_type="application/json",
+            )
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.get("/api/extensions/live-track/trackers/available-to-add/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("shared_with_me_groups", data)
+        self.assertEqual(len(data["shared_with_me_groups"]), 1)
+        self.assertEqual(data["shared_with_me_groups"][0]["id"], group_id)
+        self.assertIn(track_id, data["shared_with_me_groups"][0]["track_ids"])
+        self.client.force_login(self.user)
+
+    def test_non_owner_does_not_see_world_share_id_or_shared_with_emails(self):
+        """GET trackers/<id>/ as shared-with user does not include world_share_id, world_share_url, shared_with_emails."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "World And Shared"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "world_share_enabled": True,
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/subscribe/",
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertNotIn("world_share_id", data)
+        self.assertNotIn("world_share_url", data)
+        self.assertNotIn("shared_with_emails", data)
+        self.client.force_login(self.user)
+
+    def test_post_settings_shared_with_emails_mixed_valid_invalid_returns_400(self):
+        """POST settings with visibility=shared and mix of valid/invalid emails returns 400 with only invalid in list."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Mixed Emails"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email, "nonexistent@example.com"],
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn("invalid_emails", data)
+        self.assertEqual(set(data["invalid_emails"]), {"nonexistent@example.com"})
+        self.assertFalse(LiveTrackShare.objects.filter(track=track).exists())
+
+    def test_post_settings_shared_with_emails_with_visibility_public_400(self):
+        """POST settings with visibility=public and shared_with_emails returns 400."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Public Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "public",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 400)
+
     def test_non_owner_never_receives_ser(self):
         """GET trackers/<id>/geometry/ for subscribed track never includes 'ser' in point_params."""
         with _patch_live_track_enabled():
@@ -2054,3 +2452,68 @@ class TestLiveTrackWorldShare(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("world/share", response["Location"])
         self.assertIn(self.share_id, response["Location"])
+
+    def test_disable_world_share_removes_link(self):
+        """POST settings with world_share_enabled: false removes LiveTrackWorldShare and response has no world_share_id."""
+        self.assertTrue(LiveTrackWorldShare.objects.filter(track_id=self.track_id).exists())
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{self.track_id}/settings/",
+                data=json.dumps({"world_share_enabled": False}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertNotIn("world_share_id", data)
+        self.assertNotIn("world_share_url", data)
+        self.assertFalse(LiveTrackWorldShare.objects.filter(track_id=self.track_id).exists())
+
+    def test_world_share_data_respects_share_params_with_world(self):
+        """GET world/share/<id>/ returns point_params when share_params_with_world True, empty when False."""
+        track = LiveTrack.objects.get(id=self.track_id)
+        track.point_params = [{"acc": 5.0, "alt": 100}]
+        track.share_params_with_world = True
+        track.save(update_fields=["point_params", "share_params_with_world"])
+        self.client.logout()
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/world/share/{self.share_id}/"
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("point_params", data)
+        self.assertGreater(len(data["point_params"]), 0, "point_params visible when share_params_with_world True")
+
+        self.client.force_login(self.user)
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{self.track_id}/settings/",
+                data=json.dumps({"share_params_with_world": False}),
+                content_type="application/json",
+            )
+        self.client.logout()
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/world/share/{self.share_id}/"
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["point_params"], [], "point_params hidden when share_params_with_world False")
+
+    def test_world_share_info_404_malformed_share_id(self):
+        """GET world/share/<malformed>/info/ returns 404 for non-UUID share_id."""
+        self.client.logout()
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                "/api/extensions/live-track/world/share/not-a-uuid/info/"
+            )
+        self.assertEqual(response.status_code, 404)
+
+    def test_world_share_data_404_malformed_share_id(self):
+        """GET world/share/<malformed>/ returns 404 for non-UUID share_id."""
+        self.client.logout()
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                "/api/extensions/live-track/world/share/not-a-uuid/"
+            )
+        self.assertEqual(response.status_code, 404)

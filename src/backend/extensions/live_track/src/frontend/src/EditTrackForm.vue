@@ -20,7 +20,7 @@
         <button
           v-if="isOwner"
           type="button"
-          title="Reset to default color from name"
+          title="Reset to Default Color from Name"
           class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
           @click="$emit('reset-color')"
         >
@@ -124,11 +124,11 @@
       <div class="flex items-center gap-3">
         <ToggleButton
           :model-value="hiddenInList"
-          label="Hide in list"
+          label="Hide in List"
           size="md"
           @update:model-value="$emit('update:hidden-in-list', $event)"
         />
-        <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="$emit('update:hidden-in-list', !hiddenInList)">Hide in list</label>
+        <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="$emit('update:hidden-in-list', !hiddenInList)">Hide in List</label>
       </div>
       <p class="text-xs text-gray-500">When on, this tracker is hidden from the sidebar list. You can unhide it in Settings.</p>
     </div>

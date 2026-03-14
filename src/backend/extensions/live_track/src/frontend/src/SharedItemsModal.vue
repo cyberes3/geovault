@@ -1,7 +1,7 @@
 <template>
   <BaseModal
     :is-open="isOpen"
-    title="Manage shared trackers"
+    title="Manage Shared Trackers"
     @close="$emit('close')"
   >
     <div class="p-4 space-y-4">

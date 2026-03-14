@@ -12,7 +12,7 @@
             variant="primary"
             color="blue"
             size="md"
-            title="Add a new place"
+            title="Add a New Place"
         >
           <PlusIcon class="h-5 w-5 mr-2"/>
           Add Place
@@ -161,7 +161,7 @@
                     <button
                         type="button"
                         class="p-0.5 rounded text-gray-500 hover:text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-gray-400 disabled:pointer-events-none"
-                        :title="copiedPlaceId === place.properties.database_id ? 'Copied!' : 'Copy coordinates'"
+                        :title="copiedPlaceId === place.properties.database_id ? 'Copied!' : 'Copy Coordinates'"
                         :disabled="copiedPlaceId === place.properties.database_id"
                         @click.stop="copyCoordinates(place)"
                     >
@@ -209,7 +209,7 @@
           <button
               type="button"
               class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
-              title="Go to home extent"
+              title="Go to Home Extent"
               @click="resetMapToDefaultExtent"
           >
             <HomeIcon class="w-5 h-5"/>

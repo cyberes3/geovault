@@ -3,7 +3,7 @@
     <button
       type="button"
       class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
-      :title="followLocked ? 'Unlock map' : 'Lock map to tracker'"
+      :title="followLocked ? 'Unlock Map' : 'Lock Map to Tracker'"
       @click="$emit('toggle-follow')"
     >
       <LockClosedIcon v-if="followLocked" class="w-5 h-5" />
@@ -13,7 +13,7 @@
       v-if="showParamsButton"
       type="button"
       class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
-      title="Latest parameters"
+      title="Latest Parameters"
       @click="$emit('open-params')"
     >
       <TableCellsIcon class="w-5 h-5" />

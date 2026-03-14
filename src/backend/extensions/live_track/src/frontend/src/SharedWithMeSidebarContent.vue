@@ -11,7 +11,7 @@
     </div>
     <div class="flex-shrink-0 mb-3 flex items-center gap-2">
       <BaseButton variant="white" size="sm" class="flex-1" @click="$emit('openDiscover')">
-        Add public trackers
+        Add Public Trackers
       </BaseButton>
       <button
         type="button"
@@ -53,7 +53,7 @@
               </button>
               <button
                 type="button"
-                title="Add to my trackers"
+                title="Add to My Trackers"
                 class="p-2 rounded-lg text-blue-600 hover:bg-blue-50 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center size-9"
                 :disabled="isAdding(track.id) || isLeavingShare(track.id)"
                 @click="$emit('addIncoming', track)"
@@ -76,7 +76,7 @@
             <div class="flex items-center gap-1 flex-shrink-0">
               <button
                 type="button"
-                title="Leave group"
+                title="Leave Group"
                 class="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center size-9 flex-shrink-0"
                 :disabled="isAddingGroup(group.id)"
                 @click="onLeaveGroup(group)"
@@ -85,7 +85,7 @@
               </button>
               <button
                 type="button"
-                title="Add group to my trackers"
+                title="Add Group to My Trackers"
                 class="p-2 rounded-lg text-blue-600 hover:bg-blue-50 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center size-9"
                 :disabled="isAddingGroup(group.id)"
                 @click="$emit('addIncomingGroup', group)"
@@ -117,7 +117,7 @@
             <div class="flex items-center gap-1 flex-shrink-0" @click.stop>
               <button
                 type="button"
-                :title="isHidden(track.id) ? 'Show on map' : 'Hide on map'"
+                :title="isHidden(track.id) ? 'Show on Map' : 'Hide on Map'"
                 class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 flex items-center justify-center size-9 flex-shrink-0"
                 @click="$emit('toggleVisibility', track.id)"
               >
@@ -160,7 +160,7 @@
             <div class="flex items-center gap-1 flex-shrink-0" @click.stop>
               <button
                 type="button"
-                :title="isGroupHidden(group) ? 'Show group on map' : 'Hide group on map'"
+                :title="isGroupHidden(group) ? 'Show Group on Map' : 'Hide Group on Map'"
                 class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 flex items-center justify-center size-9 flex-shrink-0"
                 :disabled="isUnsubscribingGroup(group.id)"
                 @click="$emit('toggleGroupVisibility', group)"
@@ -180,7 +180,7 @@
               </button>
               <button
                 type="button"
-                title="Leave group"
+                title="Leave Group"
                 class="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 flex items-center justify-center size-9 flex-shrink-0"
                 :disabled="isUnsubscribingGroup(group.id)"
                 @click="onLeaveGroup(group)"

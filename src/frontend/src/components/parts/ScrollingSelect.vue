@@ -20,7 +20,7 @@
           :key="item.value"
           type="button"
           :disabled="disabled"
-          :title="isSelected(item.value) ? 'Click to remove' : 'Click to add'"
+          :title="isSelected(item.value) ? 'Click to Remove' : 'Click to Add'"
           :class="[
             'w-full text-left px-3 py-2 text-sm focus:outline-none border-b border-gray-100 last:border-b-0 transition-colors',
             isSelected(item.value)
