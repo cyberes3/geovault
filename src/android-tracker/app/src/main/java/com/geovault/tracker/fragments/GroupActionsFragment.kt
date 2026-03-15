@@ -6,6 +6,7 @@ import android.view.Menu
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.widget.PopupMenu
 import androidx.fragment.app.Fragment
@@ -132,12 +133,12 @@ class GroupActionsFragment : Fragment() {
             private val onShowMenu: ((Tracker, View) -> Unit)?
         ) : RecyclerView.ViewHolder(itemView) {
             private val name: TextView = itemView.findViewById(R.id.groupTrackerName)
-            private val colorBar: View = itemView.findViewById(R.id.groupTrackerColorBar)
+            private val groupTrackerChevronIcon: ImageView = itemView.findViewById(R.id.groupTrackerChevronIcon)
             private val menuBtn: ImageButton = itemView.findViewById(R.id.groupTrackerMenu)
             private val removeBtn: ImageButton = itemView.findViewById(R.id.groupTrackerRemove)
             fun bind(tracker: Tracker, showRemove: Boolean) {
                 name.text = tracker.name
-                colorBar.setBackgroundColor(parseHexToColor(tracker.color, itemView.context))
+                groupTrackerChevronIcon.setColorFilter(parseHexToColor(tracker.color, itemView.context))
                 removeBtn.visibility = if (showRemove && onRemove != null) View.VISIBLE else View.GONE
                 removeBtn.setOnClickListener { onRemove?.invoke(tracker.id) }
                 menuBtn.setOnClickListener { onShowMenu?.invoke(tracker, menuBtn) }

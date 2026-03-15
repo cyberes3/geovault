@@ -53,6 +53,13 @@ import org.maplibre.geojson.LineString
 import org.maplibre.geojson.MultiLineString
 import org.maplibre.geojson.Point
 import org.maplibre.geojson.Polygon
+import kotlin.math.abs
+import kotlin.math.atan
+import kotlin.math.ln
+import kotlin.math.min
+import kotlin.math.pow
+import kotlin.math.sinh
+import kotlin.math.tan
 
 class MapFragment : Fragment() {
 
@@ -185,6 +192,7 @@ class MapFragment : Fragment() {
         mapFragment?.setCallback(object : GeoVaultMapFragment.Callback {
             override fun onMapReady(map: MapLibreMap, style: Style) {
                 maplibreMap = map
+                map.setMinZoomPreference(MIN_ZOOM)
                 mapManager = mapFragment?.mapManager
                 val mgr = mapManager ?: return
                 mgr.defaultPadding = getMapPaddingArray()
@@ -332,21 +340,11 @@ class MapFragment : Fragment() {
                             .include(LatLng(bbox[1], bbox[0]))
                             .include(LatLng(bbox[3], bbox[2]))
                             .build()
-                        val p = getBoundsPaddingEdgesPx(0)
-                        mgr.moveCameraWithPadding(
-                            map,
-                            CameraUpdateFactory.newLatLngBounds(bounds, p[0], p[1], p[2], p[3]),
-                            getMapPaddingArray()
-                        )
+                        moveCameraToFitBoundsWithMinZoomClamp(map, bounds)
                         zoomToTrackAfterLoad = false
                     } else if (trackPoints.size >= 2) {
                         val bounds = LatLngBounds.Builder().apply { trackPoints.forEach { include(it) } }.build()
-                        val p = getBoundsPaddingEdgesPx(0)
-                        mgr.moveCameraWithPadding(
-                            map,
-                            CameraUpdateFactory.newLatLngBounds(bounds, p[0], p[1], p[2], p[3]),
-                            getMapPaddingArray()
-                        )
+                        moveCameraToFitBoundsWithMinZoomClamp(map, bounds)
                         zoomToTrackAfterLoad = false
                     }
                 }
@@ -800,6 +798,205 @@ class MapFragment : Fragment() {
         )
     }
 
+    /** Web Mercator X world-pixel at [zoom], wrapping longitudes. */
+    private fun worldXAtZoom(lonDeg: Double, zoom: Double): Double {
+        val worldSize = 256.0 * 2.0.pow(zoom)
+        var norm = ((lonDeg + 180.0) / 360.0) % 1.0
+        if (norm < 0.0) norm += 1.0
+        return norm * worldSize
+    }
+
+    /** Web Mercator Y world-pixel at [zoom], clamped to supported latitude range. */
+    private fun worldYAtZoom(latDeg: Double, zoom: Double): Double {
+        val worldSize = 256.0 * 2.0.pow(zoom)
+        val lat = latDeg.coerceIn(-85.05112878, 85.05112878)
+        val latRad = lat * kotlin.math.PI / 180.0
+        val mercN = ln(tan(kotlin.math.PI / 4.0 + latRad / 2.0))
+        return (0.5 - mercN / (2.0 * kotlin.math.PI)) * worldSize
+    }
+
+    private fun wrappedPixelDelta(a: Double, b: Double, worldSize: Double): Double {
+        val d = abs(a - b)
+        return min(d, worldSize - d)
+    }
+
+    private fun worldXToLonDeg(x: Double, worldSize: Double): Double {
+        var norm = (x / worldSize) % 1.0
+        if (norm < 0.0) norm += 1.0
+        return norm * 360.0 - 180.0
+    }
+
+    private fun worldYToLatDeg(y: Double, worldSize: Double): Double {
+        val yy = y.coerceIn(0.0, worldSize)
+        val n = kotlin.math.PI * (1.0 - 2.0 * yy / worldSize)
+        return atan(sinh(n)) * 180.0 / kotlin.math.PI
+    }
+
+    /**
+     * Move camera to fit [bounds] if resulting zoom >= [MIN_ZOOM]; otherwise center on [bounds].center at MIN_ZOOM (single-track / tight bbox).
+     */
+    private fun moveCameraToFitBoundsWithMinZoomClamp(map: MapLibreMap, bounds: LatLngBounds) {
+        val mgr = mapManager ?: return
+        val p = getBoundsPaddingEdgesPx(0)
+        val boundsUpdate = CameraUpdateFactory.newLatLngBounds(bounds, p[0], p[1], p[2], p[3])
+        val pos = boundsUpdate.getCameraPosition(map)
+        if (pos != null && pos.zoom.toDouble() >= MIN_ZOOM) {
+            mgr.moveCameraWithPadding(map, boundsUpdate, getMapPaddingArray())
+        } else {
+            val center = bounds.center
+            mgr.moveCameraWithPadding(
+                map,
+                CameraUpdateFactory.newCameraPosition(
+                    CameraPosition.Builder()
+                        .target(center)
+                        .zoom(MIN_ZOOM)
+                        .tilt(0.0)
+                        .bearing(0.0)
+                        .build()
+                ),
+                getMapPaddingArray()
+            )
+        }
+    }
+
+    /**
+     * All-trackers fit: fit full bounds if zoom allows; else viewport at MIN_ZOOM that contains the most tracker last-points; else one tracker at MIN_ZOOM.
+     */
+    private fun moveCameraForAllTrackersWithMinZoom(
+        map: MapLibreMap,
+        bounds: LatLngBounds,
+        coordsByTrackerId: Map<String, List<LatLng>>,
+        trackers: List<Tracker>,
+        fitToTrackerId: String?
+    ) {
+        val mgr = mapManager ?: return
+        val p = getBoundsPaddingEdgesPx(0)
+        val boundsUpdate = CameraUpdateFactory.newLatLngBounds(bounds, p[0], p[1], p[2], p[3])
+        val pos = boundsUpdate.getCameraPosition(map)
+        // If fit computes exactly MIN_ZOOM, that can still mean "clamped from lower zoom";
+        // in that case we should run fit-most instead of assuming all points fit.
+        if (pos != null && pos.zoom.toDouble() > (MIN_ZOOM + MIN_ZOOM_EPSILON)) {
+            Log.d(
+                TAG,
+                "all-trackers fit all: zoom=${pos.zoom}, minZoom=$MIN_ZOOM, trackerCount=${trackers.size}"
+            )
+            mgr.moveCameraWithPadding(map, boundsUpdate, getMapPaddingArray())
+            return
+        }
+        if (fitToTrackerId != null) {
+            Log.d(
+                TAG,
+                "all-trackers fit specific tracker path: fitToTrackerId=$fitToTrackerId (using min-zoom clamp helper)"
+            )
+            moveCameraToFitBoundsWithMinZoomClamp(map, bounds)
+            return
+        }
+        val repTrackerPoints = trackers.mapNotNull { t ->
+            coordsByTrackerId[t.id]?.lastOrNull()?.let { t.id to it }
+        }
+        if (repTrackerPoints.size <= 1) {
+            val target = repTrackerPoints.firstOrNull()?.second
+                ?: trackers.firstNotNullOfOrNull { t -> coordsByTrackerId[t.id]?.lastOrNull() }
+                ?: bounds.center
+            Log.d(
+                TAG,
+                "all-trackers fallback(single): representativeTrackerCount=${repTrackerPoints.size}, minZoom=$MIN_ZOOM, target=(${target.latitude},${target.longitude})"
+            )
+            mgr.moveCameraWithPadding(
+                map,
+                CameraUpdateFactory.newLatLngZoom(target, MIN_ZOOM),
+                getMapPaddingArray()
+            )
+            return
+        }
+        val visibleW = (map.width - p[0] - p[2]).coerceAtLeast(1f).toDouble()
+        val visibleH = (map.height - p[1] - p[3]).coerceAtLeast(1f).toDouble()
+        val halfW = visibleW * 0.5
+        val halfH = visibleH * 0.5
+        val worldSize = 256.0 * 2.0.pow(MIN_ZOOM)
+
+        val pointsProjected = repTrackerPoints.map { (trackerId, pt) ->
+            Quad(
+                trackerId,
+                pt,
+                worldXAtZoom(pt.longitude, MIN_ZOOM),
+                worldYAtZoom(pt.latitude, MIN_ZOOM)
+            )
+        }
+
+        // Max-coverage search for fixed-size viewport at MIN_ZOOM.
+        // Candidate centers are derived from projected point edges, not only point positions.
+        val candidateXs = mutableSetOf<Double>()
+        val candidateYs = mutableSetOf<Double>()
+        for ((_, _, px, py) in pointsProjected) {
+            candidateXs.add(px)
+            candidateXs.add(px - halfW)
+            candidateXs.add(px + halfW)
+            candidateYs.add(py)
+            candidateYs.add(py - halfH)
+            candidateYs.add(py + halfH)
+        }
+        val center = bounds.center
+        candidateXs.add(worldXAtZoom(center.longitude, MIN_ZOOM))
+        candidateYs.add(worldYAtZoom(center.latitude, MIN_ZOOM))
+
+        var bestCount = 0
+        var bestCx = candidateXs.first()
+        var bestCy = candidateYs.first()
+        for (cx in candidateXs) {
+            for (cy in candidateYs) {
+                val cnt = pointsProjected.count { (_, _, px, py) ->
+                    wrappedPixelDelta(px, cx, worldSize) <= halfW && abs(py - cy) <= halfH
+                }
+                if (cnt > bestCount) {
+                    bestCount = cnt
+                    bestCx = cx
+                    bestCy = cy
+                }
+            }
+        }
+        val bestCenter = LatLng(
+            worldYToLatDeg(bestCy, worldSize),
+            worldXToLonDeg(bestCx, worldSize)
+        )
+        val includedTrackerIds = pointsProjected
+            .filter { (_, _, px, py) ->
+                wrappedPixelDelta(px, bestCx, worldSize) <= halfW && abs(py - bestCy) <= halfH
+            }
+            .map { it.first }
+        val excludedTrackerIds = repTrackerPoints.map { it.first }.filterNot { includedTrackerIds.contains(it) }
+        Log.d(
+            TAG,
+            "all-trackers fit-most: total=${repTrackerPoints.size}, included=${includedTrackerIds.size}, excluded=${excludedTrackerIds.size}, minZoom=$MIN_ZOOM, visiblePx=(${visibleW.toInt()}x${visibleH.toInt()}), center=(${bestCenter.latitude},${bestCenter.longitude}), includedIds=$includedTrackerIds, excludedIds=$excludedTrackerIds"
+        )
+        if (bestCount <= 1) {
+            val ordered = trackers.mapNotNull { t -> coordsByTrackerId[t.id]?.lastOrNull() }
+            val target = ordered.firstOrNull() ?: repTrackerPoints.first().second
+            Log.d(
+                TAG,
+                "all-trackers fallback(one-at-min-zoom): bestCount=$bestCount, minZoom=$MIN_ZOOM, target=(${target.latitude},${target.longitude})"
+            )
+            mgr.moveCameraWithPadding(
+                map,
+                CameraUpdateFactory.newLatLngZoom(target, MIN_ZOOM),
+                getMapPaddingArray()
+            )
+        } else {
+            mgr.moveCameraWithPadding(
+                map,
+                CameraUpdateFactory.newLatLngZoom(bestCenter, MIN_ZOOM),
+                getMapPaddingArray()
+            )
+        }
+    }
+
+    private data class Quad(
+        val first: String,
+        val second: LatLng,
+        val third: Double,
+        val fourth: Double
+    )
+
     /**
      * Survey-style padding refresh: store default padding and actively apply it
      * to the current camera position so UI inset changes immediately take effect.
@@ -1121,14 +1318,15 @@ class MapFragment : Fragment() {
                     val boundsBuilder = LatLngBounds.Builder()
                     boundsCoords.forEach { boundsBuilder.include(it) }
                     val bounds = boundsBuilder.build()
-                    val p = getBoundsPaddingEdgesPx(0)
-                    mapManager?.moveCameraWithPadding(
-                        map,
-                        CameraUpdateFactory.newLatLngBounds(bounds, p[0], p[1], p[2], p[3]),
-                        getMapPaddingArray()
+                    moveCameraForAllTrackersWithMinZoom(
+                        map, bounds, coordsByTrackerId, trackers, fitToTrackerId
                     )
                 } else {
-                    mapManager?.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(boundsCoords.single(), 14.0), getMapPaddingArray())
+                    mapManager?.moveCameraWithPadding(
+                        map,
+                        CameraUpdateFactory.newLatLngZoom(boundsCoords.single(), 14.0),
+                        getMapPaddingArray()
+                    )
                 }
             }
         }
@@ -1193,12 +1391,7 @@ class MapFragment : Fragment() {
                         .include(LatLng(bbox[1], bbox[0]))
                         .include(LatLng(bbox[3], bbox[2]))
                         .build()
-                    val p = getBoundsPaddingEdgesPx(0)
-                    mapManager?.moveCameraWithPadding(
-                        map,
-                        CameraUpdateFactory.newLatLngBounds(bounds, p[0], p[1], p[2], p[3]),
-                        getMapPaddingArray()
-                    )
+                    moveCameraToFitBoundsWithMinZoomClamp(map, bounds)
                     zoomToTrackAfterLoad = false
                 } else if (initial.last_point != null && initial.last_point.size >= 2) {
                     mapManager?.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(
@@ -1350,22 +1543,12 @@ class MapFragment : Fragment() {
                                 .include(LatLng(bbox[1], bbox[0]))
                                 .include(LatLng(bbox[3], bbox[2]))
                                 .build()
-                            val p = getBoundsPaddingEdgesPx(0)
-                            mapManager?.moveCameraWithPadding(
-                                map,
-                                CameraUpdateFactory.newLatLngBounds(bounds, p[0], p[1], p[2], p[3]),
-                                getMapPaddingArray()
-                            )
+                            moveCameraToFitBoundsWithMinZoomClamp(map, bounds)
                         } else if (trackPoints.size >= 2) {
                             val bounds = LatLngBounds.Builder().apply {
                                 trackPoints.forEach { include(it) }
                             }.build()
-                            val p = getBoundsPaddingEdgesPx(0)
-                            mapManager?.moveCameraWithPadding(
-                                map,
-                                CameraUpdateFactory.newLatLngBounds(bounds, p[0], p[1], p[2], p[3]),
-                                getMapPaddingArray()
-                            )
+                            moveCameraToFitBoundsWithMinZoomClamp(map, bounds)
                         }
                     }
                     if (followLockEnabled && trackPoints.isNotEmpty()) {
@@ -1579,6 +1762,9 @@ class MapFragment : Fragment() {
         private const val FOLLOW_LOCK_ANIMATION_MS = 300
         /** Target zoom when enabling follow lock from a zoomed-out state. */
         private const val FOLLOW_LOCK_TARGET_ZOOM = 16.0
+        /** Map cannot zoom out past this level (tracker map only). */
+        private const val MIN_ZOOM = 1.0
+        private const val MIN_ZOOM_EPSILON = 0.001
         /** Do not draw track across jumps larger than this (meters). 100 miles. */
         private const val MAX_JUMP_METERS = 100f * 1609.344f
         /** Content padding (dp) so overlays (name card, buttons, spinner) don't cut off the track. */

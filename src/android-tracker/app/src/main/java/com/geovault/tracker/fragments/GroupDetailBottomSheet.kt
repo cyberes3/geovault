@@ -12,6 +12,7 @@ import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
@@ -283,7 +284,7 @@ class GroupDetailBottomSheet : Fragment() {
                 for (tracker in ordered) {
                     val card = layoutInflater.inflate(R.layout.item_group_tracker_card, tracksList, false)
                     card.findViewById<TextView>(R.id.groupTrackerName).text = tracker.name
-                    card.findViewById<View>(R.id.groupTrackerColorBar).setBackgroundColor(
+                    card.findViewById<ImageView>(R.id.groupTrackerChevronIcon).setColorFilter(
                         parseHexToColor(tracker.color, card.context)
                     )
                     val menuBtn = card.findViewById<ImageButton>(R.id.groupTrackerMenu)

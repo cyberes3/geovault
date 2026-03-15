@@ -265,14 +265,36 @@ class MainActivity : AppCompatActivity() {
                     if (supportFragmentManager.backStackEntryCount > 0) {
                         supportFragmentManager.popBackStack()
                     } else if (viewPager.currentItem == 1 && groupContextForMap != null) {
-                        val g = groupContextForMap
+                        val group = groupContextForMap ?: return@handleOnBackPressed
+                        val sourceTab = groupMapOpenedFromTab
                         groupContextForMap = null
-                        g?.let { group ->
-                            supportFragmentManager.beginTransaction()
-                                .add(R.id.fragment_overlay_container, com.geovault.tracker.fragments.GroupActionsFragment.newInstance(group), "group_actions")
-                                .addToBackStack("group_actions")
-                                .commit()
+                        groupMapOpenedFromTab = -1
+                        if (sourceTab >= 0 && tabBackStack.isNotEmpty() && tabBackStack.last() == sourceTab) {
+                            tabBackStack.removeLast()
                         }
+                        val targetTab = if (sourceTab >= 0) sourceTab else 2
+                        val fm = supportFragmentManager
+                        // Stack overlays while still on Map so ViewPager never flashes Trackers (or Shared) underneath.
+                        if (targetTab == 2) {
+                            fm.beginTransaction()
+                                .add(R.id.fragment_overlay_container, com.geovault.tracker.fragments.GroupsFragment(), "groups")
+                                .addToBackStack("groups")
+                                .commit()
+                            fm.beginTransaction()
+                                .add(R.id.fragment_overlay_container, com.geovault.tracker.fragments.GroupActionsFragment.newInstance(group), "group_actions")
+                                .addToBackStack(null)
+                                .commit()
+                            fm.executePendingTransactions()
+                        } else {
+                            fm.beginTransaction()
+                                .add(R.id.fragment_overlay_container, com.geovault.tracker.fragments.GroupActionsFragment.newInstance(group), "group_actions")
+                                .addToBackStack(null)
+                                .commit()
+                            fm.executePendingTransactions()
+                        }
+                        isHandlingTabBack = true
+                        viewPager.setCurrentItem(targetTab, false)
+                        isHandlingTabBack = false
                     } else if (tabBackStack.isNotEmpty()) {
                         isHandlingTabBack = true
                         viewPager.setCurrentItem(tabBackStack.removeLast(), false)
@@ -550,6 +572,8 @@ class MainActivity : AppCompatActivity() {
         private set
     /** Group we're viewing on the map; back from map returns to group-actions overlay when this is set. Cleared when leaving map tab or after showing group actions. */
     private var groupContextForMap: Group? = null
+    /** Tab index when [openMapForGroup] ran (before map), so back restores overlays on the correct tab. */
+    private var groupMapOpenedFromTab: Int = -1
 
     fun setInitialGroupForMap(group: Group?, zoomToTrackerId: String? = null) {
         initialGroupForMap = group
@@ -558,6 +582,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Clears overlays (groups/actions/detail/etc.) and opens the map focused on this group. If [zoomToTrackerId] is set, camera fits that tracker only. */
     fun openMapForGroup(group: Group, zoomToTrackerId: String? = null) {
+        groupMapOpenedFromTab = viewPager.currentItem
         setInitialGroupForMap(group, zoomToTrackerId)
         groupContextForMap = group
         clearOverlayAndThen {
