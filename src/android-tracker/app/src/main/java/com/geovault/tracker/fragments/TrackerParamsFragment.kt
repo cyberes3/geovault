@@ -15,6 +15,7 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.fragment.app.Fragment
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.LiveTrackStreamingService
 import com.geovault.tracker.R
@@ -36,6 +37,7 @@ class TrackerParamsFragment : Fragment() {
     private lateinit var paramsLoadingOverlay: View
     private lateinit var paramsLoadingSpinner: LoadingSpinner
     private lateinit var closeButton: ImageButton
+    private lateinit var paramsSwipeRefresh: SwipeRefreshLayout
     private var trackerId: String? = null
 
     private val streamPointReceiver = object : BroadcastReceiver() {
@@ -73,6 +75,10 @@ class TrackerParamsFragment : Fragment() {
         paramsLoadingOverlay = view.findViewById(R.id.paramsLoadingOverlay)
         paramsLoadingSpinner = view.findViewById(R.id.paramsLoadingSpinner)
         closeButton = view.findViewById(R.id.paramsCloseButton)
+        paramsSwipeRefresh = view.findViewById(R.id.paramsSwipeRefresh)
+
+        paramsSwipeRefresh.setColorSchemeResources(R.color.primary_blue)
+        paramsSwipeRefresh.setOnRefreshListener { loadTrackerData(refresh = true) }
 
         closeButton.setOnClickListener {
             requireActivity().supportFragmentManager.popBackStack()
@@ -94,7 +100,7 @@ class TrackerParamsFragment : Fragment() {
         val lon = args.getDouble(ARG_POSITION_LON, Double.NaN)
         paramsPosition.text = if (!lat.isNaN() && !lon.isNaN()) formatLatLon(lat, lon) else "-"
 
-        loadTrackerData()
+        loadTrackerData(refresh = false)
     }
 
     override fun onStart() {
@@ -134,17 +140,21 @@ class TrackerParamsFragment : Fragment() {
         }
     }
 
-    private fun loadTrackerData() {
+    private fun loadTrackerData(refresh: Boolean = false) {
         val id = trackerId ?: return
         val defaultId = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
             .getString("selected_tracker_id", "") ?: ""
 
-        // Keep the existing name, last update, and position visible
-        // Only hide the params grid and show loading spinner
-        paramsGrid.visibility = View.GONE
-        paramsWaitingCard.visibility = View.GONE
-        paramsLoadingOverlay.visibility = View.VISIBLE
-        paramsLoadingSpinner.start()
+        if (refresh) {
+            paramsSwipeRefresh.isRefreshing = true
+        } else {
+            // Keep the existing name, last update, and position visible
+            // Only hide the params grid and show loading spinner
+            paramsGrid.visibility = View.GONE
+            paramsWaitingCard.visibility = View.GONE
+            paramsLoadingOverlay.visibility = View.VISIBLE
+            paramsLoadingSpinner.start()
+        }
 
         // Default track: fill from local cache (geometryCache from map, etc.) when available.
         if (defaultId.isNotEmpty() && id == defaultId) {
@@ -159,6 +169,7 @@ class TrackerParamsFragment : Fragment() {
                 requireActivity().runOnUiThread {
                     paramsLoadingSpinner.stop(hide = false)
                     paramsLoadingOverlay.visibility = View.GONE
+                    paramsSwipeRefresh.isRefreshing = false
                     if (tracker != null) bindTracker(tracker)
                 }
             }
@@ -182,6 +193,7 @@ class TrackerParamsFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         paramsLoadingSpinner.stop()
+        paramsSwipeRefresh.isRefreshing = false
     }
 
     /**

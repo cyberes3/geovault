@@ -43,6 +43,10 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/paramsSwipeRefresh"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
     <androidx.core.widget.NestedScrollView
         android:id="@+id/paramsContent"
         android:layout_width="match_parent"
@@ -164,6 +168,7 @@
 
     </LinearLayout>
     </androidx.core.widget.NestedScrollView>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
         <FrameLayout
             android:id="@+id/paramsLoadingOverlay"

@@ -143,6 +143,12 @@
     <string name="view_on_map">View on map</string>
     <string name="view_params">View params</string>
     <string name="view_in_trackers_list">View in trackers list</string>
+    <string name="view_in_shared_list">View in shared list</string>
+    <string name="view_in_group_members">View in group members</string>
+    <string name="map_tracker_info_view_params_content_description">View parameters for this tracker</string>
+    <string name="map_tracker_info_view_in_list_content_description">Open list and show this tracker</string>
+    <string name="zoom_and_lock_tracker">Zoom and lock on this tracker</string>
+    <string name="focus_tracker_on_map">Show only this tracker on map</string>
     <string name="tracker_options">Tracker options</string>
     <string name="button_params">Params</string>
     <string name="button_map">Map</string>
@@ -194,6 +200,16 @@
     <string name="last_updated_hour">hr</string>
     <string name="last_updated_days">days</string>
     <string name="last_updated_day">day</string>
+    <!-- Short form for map tracker info panel: Updated x [sec/min/hr/day] ago -->
+    <string name="map_updated_ago">Updated %1$d %2$s ago</string>
+    <string name="map_updated_sec">sec</string>
+    <string name="map_updated_secs">sec</string>
+    <string name="map_updated_min">min</string>
+    <string name="map_updated_mins">min</string>
+    <string name="map_updated_hr">hr</string>
+    <string name="map_updated_hrs">hr</string>
+    <string name="map_updated_day_short">day</string>
+    <string name="map_updated_days_short">days</string>
     <string name="live_track_streaming_title">Streaming tracker</string>
     <string name="live_track_streaming_text">%1$s</string>
     <string name="live_track_streaming_text_anon">Tracker updates</string>

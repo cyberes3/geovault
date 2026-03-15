@@ -31,5 +31,6 @@ We are using Material Design 2 only.
 We have preset color pallets in `android-common`. Please prioritize using those instead of hard-coding hex colors.
 No shadows on anything.
 The "survey app" is symlinked in to `src/android-survey-data-viewer`. It may not show up correctly in your tools.
+`android-common` also has a lot of common UI components that you should use.
 
 External repos are provided for you in the `external sources/` directory. This folder is read-only. If you need to reference the source code of a library please check here before fetching GitHub.

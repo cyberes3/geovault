@@ -10,9 +10,11 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.widget.PopupMenu
 import androidx.fragment.app.Fragment
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.geovault.tracker.Group
+import com.google.android.material.card.MaterialCardView
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
@@ -23,10 +25,12 @@ import com.google.android.material.button.MaterialButton
 class GroupActionsFragment : Fragment() {
 
     private var group: Group? = null
+    private var scrollToTrackerId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         group = arguments?.getParcelable(ARG_GROUP, Group::class.java)
+        scrollToTrackerId = arguments?.getString(ARG_SCROLL_TO_TRACKER_ID)
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
@@ -55,6 +59,7 @@ class GroupActionsFragment : Fragment() {
 
     private fun loadTrackersList(g: Group, trackersList: RecyclerView, emptyView: TextView) {
         val trackIds = g.track_ids ?: emptyList()
+        val targetTrackerId = scrollToTrackerId
         if (trackIds.isEmpty()) {
             trackersList.visibility = View.GONE
             emptyView.visibility = View.VISIBLE
@@ -71,11 +76,23 @@ class GroupActionsFragment : Fragment() {
                 trackersList.adapter = GroupTrackerCardAdapter(
                     ordered,
                     showRemove = false,
+                    highlightedTrackerId = targetTrackerId,
                     onItemClick = { trackerId ->
                         (activity as? MainActivity)?.openMapForGroup(g, trackerId)
                     },
                     onShowMenu = { tracker, anchor -> showGroupTrackerMenu(anchor, g, tracker) }
                 )
+                if (targetTrackerId != null) {
+                    val index = ordered.indexOfFirst { it.id == targetTrackerId }
+                    if (index >= 0) {
+                        trackersList.post {
+                            (trackersList.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(
+                                index,
+                                trackersList.height / 3
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -114,13 +131,14 @@ class GroupActionsFragment : Fragment() {
     private class GroupTrackerCardAdapter(
         private val trackers: List<Tracker>,
         private val showRemove: Boolean,
+        private val highlightedTrackerId: String? = null,
         private val onRemove: ((String) -> Unit)? = null,
         private val onItemClick: ((String) -> Unit)? = null,
         private val onShowMenu: ((Tracker, View) -> Unit)? = null
     ) : RecyclerView.Adapter<GroupTrackerCardAdapter.ViewHolder>() {
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
             val view = LayoutInflater.from(parent.context).inflate(R.layout.item_group_tracker_card, parent, false)
-            return ViewHolder(view, onRemove, onItemClick, onShowMenu)
+            return ViewHolder(view, highlightedTrackerId, onRemove, onItemClick, onShowMenu)
         }
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             holder.bind(trackers[position], showRemove)
@@ -128,6 +146,7 @@ class GroupActionsFragment : Fragment() {
         override fun getItemCount(): Int = trackers.size
         class ViewHolder(
             itemView: View,
+            private val highlightedTrackerId: String?,
             private val onRemove: ((String) -> Unit)?,
             private val onItemClick: ((String) -> Unit)?,
             private val onShowMenu: ((Tracker, View) -> Unit)?
@@ -144,18 +163,34 @@ class GroupActionsFragment : Fragment() {
                 menuBtn.setOnClickListener { onShowMenu?.invoke(tracker, menuBtn) }
                 itemView.isClickable = onItemClick != null
                 itemView.setOnClickListener { onItemClick?.invoke(tracker.id) }
+                (itemView as? MaterialCardView)?.let { card ->
+                    val defaultStrokePx = itemView.resources.getDimensionPixelSize(R.dimen.thin_card_stroke_width)
+                    val highlight = tracker.id == highlightedTrackerId
+                    card.strokeWidth = defaultStrokePx
+                    card.strokeColor = ContextCompat.getColor(itemView.context, R.color.card_stroke_color)
+                    card.setCardBackgroundColor(
+                        ContextCompat.getColor(
+                            itemView.context,
+                            if (highlight) R.color.highlight_card_background else R.color.surface
+                        )
+                    )
+                }
             }
         }
     }
 
     companion object {
         private const val ARG_GROUP = "group"
+        private const val ARG_SCROLL_TO_TRACKER_ID = "scroll_to_tracker_id"
         private const val MENU_VIEW_ON_MAP = 1
         private const val MENU_VIEW_PARAMS = 2
         private const val MENU_VIEW_IN_LIST = 3
-        fun newInstance(group: Group): GroupActionsFragment {
+        fun newInstance(group: Group, scrollToTrackerId: String? = null): GroupActionsFragment {
             return GroupActionsFragment().apply {
-                arguments = Bundle().apply { putParcelable(ARG_GROUP, group) }
+                arguments = Bundle().apply {
+                    putParcelable(ARG_GROUP, group)
+                    scrollToTrackerId?.let { putString(ARG_SCROLL_TO_TRACKER_ID, it) }
+                }
             }
         }
     }

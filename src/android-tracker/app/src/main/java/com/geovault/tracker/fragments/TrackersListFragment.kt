@@ -6,11 +6,14 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.LinearSmoothScroller
 import androidx.recyclerview.widget.RecyclerView
+import android.util.DisplayMetrics
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.parseHexToColor
@@ -58,9 +61,11 @@ class TrackersListFragment : Fragment() {
 
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
-            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                super.onScrolled(recyclerView, dx, dy)
-                if (dx != 0 || dy != 0) clearHighlight()
+            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                super.onScrollStateChanged(recyclerView, newState)
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                    clearHighlight()
+                }
             }
         })
         adapter = TrackersAdapter(emptyList()) { tracker, action ->
@@ -170,6 +175,7 @@ class TrackersListFragment : Fragment() {
             if (isAdded) {
                 requireActivity().runOnUiThread {
                     adapter?.setTrackers(visibleOwnerTrackers(list ?: emptyList()))
+                    applyScrollAndHighlightIfPending()
                     loadingSpinner.stop(hide = false)
                     loadingOverlay.visibility = View.GONE
                     swipeRefresh.isRefreshing = false
@@ -183,6 +189,7 @@ class TrackersListFragment : Fragment() {
             if (isAdded) {
                 requireActivity().runOnUiThread {
                     adapter?.setTrackers(visibleOwnerTrackers(list ?: emptyList()))
+                    applyScrollAndHighlightIfPending()
                     swipeRefresh.isRefreshing = false
                 }
             }
@@ -191,9 +198,16 @@ class TrackersListFragment : Fragment() {
 
     fun requestScrollToTrackerId(trackerId: String?) {
         pendingScrollToTrackerId = trackerId
-        if ((adapter?.itemCount ?: 0) > 0) {
-            applyScrollAndHighlightIfPending()
+        if (trackerId == null) {
+            clearHighlight()
+            return
         }
+        // If target is already in the list, scroll immediately to avoid 2s refresh delay.
+        if ((adapter?.itemCount ?: 0) > 0 && adapter?.indexOfTrackerId(trackerId) ?: -1 >= 0) {
+            applyScrollAndHighlightIfPending()
+            return
+        }
+        loadTrackersInBackground()
     }
 
     private fun clearHighlight() {
@@ -202,14 +216,38 @@ class TrackersListFragment : Fragment() {
 
     private fun applyScrollAndHighlightIfPending() {
         val id = pendingScrollToTrackerId ?: return
-        pendingScrollToTrackerId = null
         val ad = adapter ?: return
         val index = ad.indexOfTrackerId(id)
         if (index < 0) return
         val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return
-        val offset = recyclerView.height / 3
-        layoutManager.scrollToPositionWithOffset(index, offset)
-        ad.setHighlightedTrackerId(id)
+
+        fun doScroll() {
+            if (!isAdded || recyclerView.width <= 0 || recyclerView.height <= 0) return
+            val offsetPx = (recyclerView.height / 3).coerceAtLeast(0)
+            ad.setHighlightedTrackerId(id)
+            pendingScrollToTrackerId = null
+            val scroller = object : LinearSmoothScroller(requireContext()) {
+                override fun calculateDyToMakeVisible(view: View, snapPreference: Int): Int {
+                    val rv = view.parent as? RecyclerView ?: return super.calculateDyToMakeVisible(view, snapPreference)
+                    return calculateDtToFit(view.top, view.bottom, offsetPx, rv.height, SNAP_TO_START)
+                }
+                override fun calculateSpeedPerPixel(displayMetrics: DisplayMetrics): Float {
+                    return 15f / displayMetrics.densityDpi
+                }
+            }
+            scroller.setTargetPosition(index)
+            layoutManager.startSmoothScroll(scroller)
+        }
+
+        recyclerView.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                recyclerView.viewTreeObserver.removeOnPreDrawListener(this)
+                if (isAdded && recyclerView.width > 0 && recyclerView.height > 0) {
+                    doScroll()
+                }
+                return true
+            }
+        })
     }
 
     private fun viewOnMap(tracker: Tracker) {
@@ -375,9 +413,14 @@ class TrackersListFragment : Fragment() {
                 (itemView as? MaterialCardView)?.let { card ->
                     val defaultStrokePx = itemView.resources.getDimensionPixelSize(R.dimen.card_stroke_width)
                     val highlight = tracker.id == highlightedId
-                    val strokePx = if (highlight) (4 * itemView.resources.displayMetrics.density).toInt() else defaultStrokePx
-                    card.setStrokeWidth(strokePx)
+                    card.setStrokeWidth(defaultStrokePx)
                     card.strokeColor = ContextCompat.getColor(itemView.context, R.color.card_stroke_color)
+                    card.setCardBackgroundColor(
+                        ContextCompat.getColor(
+                            itemView.context,
+                            if (highlight) R.color.highlight_card_background else R.color.surface
+                        )
+                    )
                 }
             }
         }

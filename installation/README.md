@@ -190,7 +190,7 @@ To use Google for geocoding, set `geocoding_search_mode: google`
 
 ## Hauk Tracker Compatibility
 
-To support [Hauk](https://github.com/bilde2910/Hauk) clients (such as iOS clients since there is no Tracker app for iOS),
+To support [Hauk](https://github.com/bilde2910/Hauk) clients (such as for iOS since there is no Tracker app for iOS),
 set up `hauk nginx.conf` on your nginx server to pass traffic to the Tracker backend.
 
 ## Done!

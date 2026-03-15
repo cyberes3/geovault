@@ -26,6 +26,7 @@ import androidx.viewpager2.widget.ViewPager2
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ImportantMessageSnackbar
 import com.geovault.common.ServerUrlContract
+import com.geovault.tracker.Group
 import com.geovault.tracker.db.AppDatabase
 import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.*
@@ -620,11 +621,51 @@ class MainActivity : AppCompatActivity() {
     /** Switch to the Trackers tab and scroll the list to the given tracker (e.g. when user taps the name chip on the map). */
     fun openTrackersAndScrollTo(trackerId: String?) {
         viewPager.setCurrentItem(2, false)
+        requestTrackersScrollWhenReady(trackerId)
+    }
+
+    /** Switch to the Shared tab and scroll the list to the given tracker (e.g. from map tap "View in list" for a shared tracker). */
+    fun openSharedAndScrollTo(trackerId: String?) {
+        viewPager.setCurrentItem(3, false)
+        requestSharedScrollWhenReady(trackerId)
+    }
+
+    private fun requestTrackersScrollWhenReady(trackerId: String?, attemptsLeft: Int = 8) {
         viewPager.post {
             val pagerFragment = pagerAdapter.getFragment(2) as? com.geovault.tracker.fragments.TrackersPagerFragment
             pagerFragment?.selectTrackersTab()
-            pagerFragment?.getTrackersListFragment()?.requestScrollToTrackerId(trackerId)
+            val trackersList = pagerFragment?.getTrackersListFragment()
+            if (trackersList != null) {
+                trackersList.requestScrollToTrackerId(trackerId)
+            } else if (attemptsLeft > 0) {
+                Handler(Looper.getMainLooper()).postDelayed(
+                    { requestTrackersScrollWhenReady(trackerId, attemptsLeft - 1) },
+                    50
+                )
+            }
         }
+    }
+
+    private fun requestSharedScrollWhenReady(trackerId: String?, attemptsLeft: Int = 8) {
+        viewPager.post {
+            val sharedFragment = pagerAdapter.getFragment(3) as? com.geovault.tracker.fragments.SharedTrackersFragment
+            if (sharedFragment != null) {
+                sharedFragment.requestScrollToTrackerId(trackerId)
+            } else if (attemptsLeft > 0) {
+                Handler(Looper.getMainLooper()).postDelayed(
+                    { requestSharedScrollWhenReady(trackerId, attemptsLeft - 1) },
+                    50
+                )
+            }
+        }
+    }
+
+    /** Show group members overlay and scroll/highlight the given tracker (e.g. from map tap "View in list" in group context). */
+    fun openGroupMembersAndScrollTo(group: Group, trackerId: String?) {
+        supportFragmentManager.beginTransaction()
+            .add(R.id.fragment_overlay_container, com.geovault.tracker.fragments.GroupActionsFragment.newInstance(group, trackerId), "group_actions")
+            .addToBackStack(null)
+            .commit()
     }
 
     fun showNewTrackerFragment() {

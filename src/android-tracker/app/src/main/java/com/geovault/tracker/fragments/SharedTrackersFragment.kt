@@ -5,13 +5,16 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.LinearSmoothScroller
 import androidx.recyclerview.widget.RecyclerView
+import android.util.DisplayMetrics
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.Group
@@ -37,6 +40,7 @@ class SharedTrackersFragment : Fragment() {
     private lateinit var loadingOverlay: View
     private lateinit var loadingSpinner: LoadingSpinner
     private var adapter: SharedItemsAdapter? = null
+    private var pendingScrollToTrackerId: String? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_shared_trackers, container, false)
@@ -57,9 +61,18 @@ class SharedTrackersFragment : Fragment() {
         swipeRefresh.setOnRefreshListener { loadTrackers() }
 
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
+        recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                super.onScrollStateChanged(recyclerView, newState)
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                    adapter?.setHighlightedTrackerId(null)
+                }
+            }
+        })
         adapter = SharedItemsAdapter(
             emptyList(),
             emptySet(),
+            null,
             onTrackerAction = { tracker, action ->
                 when (action) {
                     TrackerAction.EDIT -> (activity as? MainActivity)?.showEditTrackerFragment(tracker)
@@ -106,9 +119,22 @@ class SharedTrackersFragment : Fragment() {
         loadTrackers()
     }
 
-    private fun loadTrackers() {
-        loadingOverlay.visibility = View.VISIBLE
-        loadingSpinner.start()
+    override fun onPause() {
+        super.onPause()
+        adapter?.setHighlightedTrackerId(null)
+    }
+
+    private fun loadTrackers(showOverlay: Boolean = true) {
+        if (pendingScrollToTrackerId == null) {
+            adapter?.setHighlightedTrackerId(null)
+        }
+        if (showOverlay) {
+            loadingOverlay.visibility = View.VISIBLE
+            loadingSpinner.start()
+        } else {
+            loadingOverlay.visibility = View.GONE
+            swipeRefresh.isRefreshing = false
+        }
         TrackerRepository.getMapVisibility(requireContext()) { visibility ->
             if (!isAdded) return@getMapVisibility
             val hiddenTrackIds = (visibility?.hidden_track_ids ?: emptyList()).toSet()
@@ -133,10 +159,61 @@ class SharedTrackersFragment : Fragment() {
                         loadingOverlay.visibility = View.GONE
                         loadingSpinner.stop(hide = false)
                         swipeRefresh.isRefreshing = false
+                        applyScrollAndHighlightIfPending()
                     }
                 }
             }
         }
+    }
+
+    fun requestScrollToTrackerId(trackerId: String?) {
+        pendingScrollToTrackerId = trackerId
+        if (trackerId == null) {
+            adapter?.setHighlightedTrackerId(null)
+            return
+        }
+        // If target is already in the list, scroll immediately to avoid refresh delay.
+        if ((adapter?.itemCount ?: 0) > 0 && adapter?.indexOfTrackerId(trackerId) ?: -1 >= 0) {
+            applyScrollAndHighlightIfPending()
+            return
+        }
+        loadTrackers(showOverlay = false)
+    }
+
+    private fun applyScrollAndHighlightIfPending() {
+        val id = pendingScrollToTrackerId ?: return
+        val ad = adapter ?: return
+        val index = ad.indexOfTrackerId(id)
+        if (index < 0) return
+        val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return
+
+        fun doScroll() {
+            if (!isAdded || recyclerView.width <= 0 || recyclerView.height <= 0) return
+            val offsetPx = (recyclerView.height / 3).coerceAtLeast(0)
+            ad.setHighlightedTrackerId(id)
+            pendingScrollToTrackerId = null
+            val scroller = object : LinearSmoothScroller(requireContext()) {
+                override fun calculateDyToMakeVisible(view: View, snapPreference: Int): Int {
+                    val rv = view.parent as? RecyclerView ?: return super.calculateDyToMakeVisible(view, snapPreference)
+                    return calculateDtToFit(view.top, view.bottom, offsetPx, rv.height, SNAP_TO_START)
+                }
+                override fun calculateSpeedPerPixel(displayMetrics: DisplayMetrics): Float {
+                    return 15f / displayMetrics.densityDpi
+                }
+            }
+            scroller.setTargetPosition(index)
+            layoutManager.startSmoothScroll(scroller)
+        }
+
+        recyclerView.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                recyclerView.viewTreeObserver.removeOnPreDrawListener(this)
+                if (isAdded && recyclerView.width > 0 && recyclerView.height > 0) {
+                    doScroll()
+                }
+                return true
+            }
+        })
     }
 
     private fun toggleTrackerMapVisibility(tracker: Tracker) {
@@ -204,6 +281,7 @@ class SharedTrackersFragment : Fragment() {
     private class SharedItemsAdapter(
         private var items: List<SharedListItem>,
         private var hiddenTrackIds: Set<String>,
+        private var highlightedTrackerId: String? = null,
         private val onTrackerAction: (Tracker, TrackerAction) -> Unit,
         private val onGroupCardClick: (Group) -> Unit,
         private val onGroupEditClick: (Group) -> Unit
@@ -213,6 +291,22 @@ class SharedTrackersFragment : Fragment() {
             items = list
             hiddenTrackIds = hidden
             notifyDataSetChanged()
+        }
+
+        fun indexOfTrackerId(id: String): Int = items.indexOfFirst { it is SharedListItem.TrackerItem && it.tracker.id == id }
+
+        fun setHighlightedTrackerId(id: String?) {
+            if (highlightedTrackerId == id) return
+            val oldId = highlightedTrackerId
+            highlightedTrackerId = id
+            if (oldId != null) {
+                val oldIndex = indexOfTrackerId(oldId)
+                if (oldIndex >= 0) notifyItemChanged(oldIndex)
+            }
+            if (id != null) {
+                val newIndex = indexOfTrackerId(id)
+                if (newIndex >= 0) notifyItemChanged(newIndex)
+            }
         }
 
         override fun getItemViewType(position: Int): Int = when (items[position]) {
@@ -226,7 +320,7 @@ class SharedTrackersFragment : Fragment() {
                 GroupViewHolder(view, onGroupCardClick, onGroupEditClick)
             } else {
                 val view = LayoutInflater.from(parent.context).inflate(R.layout.item_tracker_card, parent, false)
-                TrackerViewHolder(view, onTrackerAction, { hiddenTrackIds })
+                TrackerViewHolder(view, onTrackerAction, { hiddenTrackIds }, { highlightedTrackerId })
             }
         }
 
@@ -242,7 +336,8 @@ class SharedTrackersFragment : Fragment() {
         class TrackerViewHolder(
             itemView: View,
             private val onAction: (Tracker, TrackerAction) -> Unit,
-            private val getHiddenTrackIds: () -> Set<String>
+            private val getHiddenTrackIds: () -> Set<String>,
+            private val getHighlightedTrackerId: () -> String?
         ) : RecyclerView.ViewHolder(itemView) {
             private val trackerName: TextView = itemView.findViewById(R.id.trackerName)
             private val trackerSelectedCheck: ImageView = itemView.findViewById(R.id.trackerSelectedCheck)
@@ -304,8 +399,18 @@ class SharedTrackersFragment : Fragment() {
                 btnViewParams.setOnClickListener { onAction(tracker, TrackerAction.VIEW_PARAMS) }
                 btnEdit.setOnClickListener { onAction(tracker, TrackerAction.EDIT) }
                 btnViewOnMap.setOnClickListener { onAction(tracker, TrackerAction.VIEW_ON_MAP) }
-                (itemView as? MaterialCardView)?.setStrokeWidth(0)
-                (itemView as? MaterialCardView)?.strokeColor = android.graphics.Color.TRANSPARENT
+                (itemView as? MaterialCardView)?.let { card ->
+                    val defaultStrokePx = itemView.resources.getDimensionPixelSize(R.dimen.card_stroke_width)
+                    val highlight = tracker.id == getHighlightedTrackerId()
+                    card.setStrokeWidth(defaultStrokePx)
+                    card.strokeColor = ContextCompat.getColor(itemView.context, R.color.card_stroke_color)
+                    card.setCardBackgroundColor(
+                        ContextCompat.getColor(
+                            itemView.context,
+                            if (highlight) R.color.highlight_card_background else R.color.surface
+                        )
+                    )
+                }
             }
 
             companion object {
