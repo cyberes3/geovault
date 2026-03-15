@@ -535,9 +535,21 @@ class MainActivity : AppCompatActivity() {
     /** Initial group to fit on map when opening from "View group on map"; cleared after use. */
     var initialGroupForMap: Group? = null
         private set
+    /** When opening map for a group, optional tracker id to zoom to (single item tap); null = fit entire group. */
+    var initialGroupZoomToTrackerId: String? = null
+        private set
 
-    fun setInitialGroupForMap(group: Group?) {
+    fun setInitialGroupForMap(group: Group?, zoomToTrackerId: String? = null) {
         initialGroupForMap = group
+        initialGroupZoomToTrackerId = zoomToTrackerId
+    }
+
+    /** Clears overlays (groups/actions/detail/etc.) and opens the map focused on this group. If [zoomToTrackerId] is set, camera fits that tracker only. */
+    fun openMapForGroup(group: Group, zoomToTrackerId: String? = null) {
+        setInitialGroupForMap(group, zoomToTrackerId)
+        clearOverlayAndThen {
+            setCurrentTab(1, forceRefreshMap = true, delayMs = 0)
+        }
     }
 
     fun getAndClearInitialGroupForMap(): Group? {
@@ -546,12 +558,21 @@ class MainActivity : AppCompatActivity() {
         return g
     }
 
+    /** Returns (group, zoomToTrackerId) and clears both. Use when opening map for a group so zoom-to is passed. */
+    private fun getAndClearInitialGroupAndZoomTo(): Pair<Group?, String?> {
+        val g = initialGroupForMap
+        val z = initialGroupZoomToTrackerId
+        initialGroupForMap = null
+        initialGroupZoomToTrackerId = null
+        return Pair(g, z)
+    }
+
     fun setCurrentTab(index: Int, forceRefreshMap: Boolean = false, delayMs: Long = 0) {
         if (forceRefreshMap && index == 1) {
             val mapFragment = pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.MapFragment
-            val group = getAndClearInitialGroupForMap()
+            val (group, zoomToTrackerId) = getAndClearInitialGroupAndZoomTo()
             if (group != null) {
-                mapFragment?.refreshMapForGroup(group)
+                mapFragment?.refreshMapForGroup(group, zoomToTrackerId)
             } else {
                 mapFragment?.refreshTrackForSelectedTracker()
             }

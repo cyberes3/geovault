@@ -2,6 +2,7 @@ package com.geovault.tracker.fragments
 
 import android.os.Bundle
 import android.view.LayoutInflater
+import android.view.Menu
 import android.view.View
 import android.view.ViewGroup
 import android.content.ClipData
@@ -14,8 +15,9 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
-import androidx.core.content.ContextCompat
+import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.SwitchCompat
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.LoadingSpinner
@@ -24,7 +26,9 @@ import com.geovault.tracker.GroupPatchRequest
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.common.R as CommonR
+import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
+import com.geovault.tracker.parseHexToColor
 import com.google.android.material.button.MaterialButton
 
 class GroupDetailBottomSheet : Fragment() {
@@ -46,7 +50,6 @@ class GroupDetailBottomSheet : Fragment() {
     private lateinit var hideInListRow: LinearLayout
     private lateinit var hideInListSwitch: SwitchCompat
     private lateinit var hideInListHint: TextView
-    private lateinit var viewOnMapButton: com.google.android.material.button.MaterialButton
     private lateinit var closeButton: ImageButton
     private lateinit var titleText: TextView
     private lateinit var loadingOverlay: View
@@ -83,7 +86,6 @@ class GroupDetailBottomSheet : Fragment() {
         hideInListRow = view.findViewById(R.id.groupDetailHideInListRow)
         hideInListSwitch = view.findViewById(R.id.groupDetailHideInListSwitch)
         hideInListHint = view.findViewById(R.id.groupDetailHideInListHint)
-        viewOnMapButton = view.findViewById(R.id.groupDetailViewOnMap)
         closeButton = view.findViewById(R.id.groupDetailCloseButton)
         titleText = view.findViewById(R.id.groupDetailTitle)
         loadingOverlay = view.findViewById(R.id.groupDetailLoadingOverlay)
@@ -122,15 +124,22 @@ class GroupDetailBottomSheet : Fragment() {
         leaveButton.visibility = if (isOwner) View.GONE else View.VISIBLE
         deleteButton.visibility = if (isOwner) View.VISIBLE else View.GONE
         saveButton.visibility = if (isOwner) View.VISIBLE else View.GONE
+        (leaveButton.layoutParams as? LinearLayout.LayoutParams)?.let { params ->
+            if (isOwner) {
+                params.width = 0
+                params.weight = 1f
+                params.marginEnd = (8 * resources.displayMetrics.density).toInt()
+            } else {
+                params.width = ViewGroup.LayoutParams.MATCH_PARENT
+                params.weight = 0f
+                params.marginEnd = 0
+            }
+            leaveButton.layoutParams = params
+        }
 
         addTrackButton.setOnClickListener { showAddTrackDialog(g) }
         leaveButton.setOnClickListener { confirmLeave(g) }
         deleteButton.setOnClickListener { confirmDelete(g) }
-        viewOnMapButton.setOnClickListener {
-            group?.let { (activity as? MainActivity)?.setInitialGroupForMap(it) }
-            (activity as? MainActivity)?.setCurrentTab(1, forceRefreshMap = true, delayMs = 50)
-            closeEditor()
-        }
 
         sharedWithEmailsForSave.clear()
         sharedWithEmailsForSave.addAll(g.shared_with_emails ?: emptyList())
@@ -218,7 +227,38 @@ class GroupDetailBottomSheet : Fragment() {
         }
     }
 
-    /** Load tracker names (from getTrackers) then populate tracksList with display names; owner sees remove. */
+    private fun showGroupTrackerMenu(anchor: View, group: Group, tracker: Tracker) {
+        val popup = PopupMenu(requireContext(), anchor)
+        popup.menu.apply {
+            add(Menu.NONE, MENU_VIEW_ON_MAP, 0, getString(R.string.view_on_map))
+            add(Menu.NONE, MENU_VIEW_PARAMS, 0, getString(R.string.view_params))
+            if (tracker.isOwner()) {
+                add(Menu.NONE, MENU_VIEW_IN_LIST, 0, getString(R.string.view_in_trackers_list))
+            }
+        }
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                MENU_VIEW_ON_MAP -> {
+                    (activity as? MainActivity)?.openMapForGroup(group, tracker.id)
+                    true
+                }
+                MENU_VIEW_PARAMS -> {
+                    (activity as? MainActivity)?.showTrackerParamsFragment(tracker.id, tracker.name)
+                    closeEditor()
+                    true
+                }
+                MENU_VIEW_IN_LIST -> {
+                    closeEditor()
+                    (activity as? MainActivity)?.openTrackersAndScrollTo(tracker.id)
+                    true
+                }
+                else -> false
+            }
+        }
+        popup.show()
+    }
+
+    /** Load trackers (from getTrackers) then populate tracksList with card rows; owner sees remove. */
     private fun loadTrackNamesThenBindTracks(g: Group, isOwner: Boolean, onDone: () -> Unit) {
         tracksList.removeAllViews()
         val trackIds = g.track_ids ?: emptyList()
@@ -228,28 +268,33 @@ class GroupDetailBottomSheet : Fragment() {
         }
         TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { list ->
             if (!isAdded) return@getTrackers
-            val idToName = (list ?: emptyList()).associate { it.id to it.name }
+            val all = list ?: emptyList()
+            val idToTracker = all.associateBy { it.id }
+            val ordered = trackIds.mapNotNull { idToTracker[it] }
+            trackNamesById = all.associate { it.id to it.name }
             requireActivity().runOnUiThread {
-                trackNamesById = idToName
-                for (trackId in trackIds) {
-                    val displayName = idToName[trackId] ?: trackId
-                    val row = layoutInflater.inflate(android.R.layout.simple_list_item_1, tracksList, false)
-                    (row as? TextView)?.text = displayName
+                for (tracker in ordered) {
+                    val card = layoutInflater.inflate(R.layout.item_group_tracker_card, tracksList, false)
+                    card.findViewById<TextView>(R.id.groupTrackerName).text = tracker.name
+                    card.findViewById<View>(R.id.groupTrackerColorBar).setBackgroundColor(
+                        parseHexToColor(tracker.color, card.context)
+                    )
+                    val menuBtn = card.findViewById<ImageButton>(R.id.groupTrackerMenu)
+                    menuBtn.setOnClickListener { showGroupTrackerMenu(it, g, tracker) }
+                    val removeBtn = card.findViewById<ImageButton>(R.id.groupTrackerRemove)
                     if (isOwner) {
-                        val remove = TextView(requireContext()).apply {
-                            text = " ×"
-                            setTextColor(ContextCompat.getColor(requireContext(), R.color.error_red))
-                            setOnClickListener { removeTrack(g.id, trackId) }
-                        }
-                        val rowWrap = android.widget.LinearLayout(requireContext()).apply {
-                            orientation = android.widget.LinearLayout.HORIZONTAL
-                            addView(row, android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                            addView(remove)
-                        }
-                        tracksList.addView(rowWrap)
+                        removeBtn.visibility = View.VISIBLE
+                        removeBtn.setOnClickListener { removeTrack(g.id, tracker.id) }
                     } else {
-                        tracksList.addView(row)
+                        removeBtn.visibility = View.GONE
                     }
+                    card.isClickable = true
+                    card.setOnClickListener {
+                        group?.let {
+                            (activity as? MainActivity)?.openMapForGroup(it, tracker.id)
+                        }
+                    }
+                    tracksList.addView(card)
                 }
                 onDone()
             }
@@ -349,7 +394,6 @@ class GroupDetailBottomSheet : Fragment() {
         addSharedWithButton.isEnabled = enabled
         worldShareSwitch.isEnabled = enabled
         hideInListSwitch.isEnabled = enabled
-        viewOnMapButton.isEnabled = enabled
         leaveButton.isEnabled = enabled
         deleteButton.isEnabled = enabled
         saveButton.isEnabled = enabled
@@ -463,6 +507,9 @@ class GroupDetailBottomSheet : Fragment() {
 
     companion object {
         private const val ARG_GROUP_ID = "group_id"
+        private const val MENU_VIEW_ON_MAP = 1
+        private const val MENU_VIEW_PARAMS = 2
+        private const val MENU_VIEW_IN_LIST = 3
 
         fun newInstance(group: Group): GroupDetailBottomSheet {
             return GroupDetailBottomSheet().apply {

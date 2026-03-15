@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="4dp"
+    android:layout_marginEnd="4dp"
+    android:layout_marginBottom="12dp"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="0dp"
+    app:cardBackgroundColor="@color/surface"
+    app:strokeWidth="@dimen/card_stroke_width"
+    app:strokeColor="@color/card_stroke_color">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="20dp">
+
+        <View
+            android:id="@+id/groupTrackerColorBar"
+            android:layout_width="4dp"
+            android:layout_height="24dp"
+            android:background="@color/primary_blue"
+            android:layout_marginEnd="12dp" />
+
+        <TextView
+            android:id="@+id/groupTrackerName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:minWidth="0dp"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary"
+            android:maxLines="1"
+            android:ellipsize="end"
+            tools:text="My Tracker" />
+
+        <ImageButton
+            android:id="@+id/groupTrackerMenu"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/tracker_options"
+            android:src="@drawable/ic_more_vert"
+            app:tint="@color/primary_blue" />
+
+        <ImageButton
+            android:id="@+id/groupTrackerRemove"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/remove_from_share"
+            android:src="@drawable/ic_remove"
+            android:visibility="gone"
+            app:tint="@color/error_red" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

@@ -189,7 +189,6 @@ class MapFragment : Fragment() {
                     .padding(mgr.defaultPadding!!)
                     .build()
                 map.moveCamera(CameraUpdateFactory.newCameraPosition(padded))
-                map.setMinZoomPreference(MIN_ZOOM_LEVEL)
                 mgr.addMarkerIcon(style, "marker-default", R.drawable.ic_marker_default)
                 MapMarkerUtils.getMarkerBitmapWithTintedForeground(
                     requireContext(),
@@ -661,11 +660,14 @@ class MapFragment : Fragment() {
 
     private fun getMapPaddingArray(): DoubleArray {
         val density = resources.displayMetrics.density
+        val navHeightPx = (activity?.findViewById<View>(R.id.bottomNavContainer)?.height ?: 0).toDouble()
+        val navFallbackPx = (BOTTOM_NAV_HEIGHT_DP * density).toDouble()
+        val bottomNavPx = if (navHeightPx > 0.0) navHeightPx else navFallbackPx
         return doubleArrayOf(
             (MAP_PADDING_LEFT_DP * density).toDouble(),
             (MAP_PADDING_TOP_DP * density).toDouble(),
             (MAP_PADDING_RIGHT_DP * density).toDouble(),
-            (MAP_PADDING_BOTTOM_DP * density).toDouble()
+            (MAP_PADDING_BOTTOM_DP * density).toDouble() + bottomNavPx
         )
     }
 
@@ -772,8 +774,9 @@ class MapFragment : Fragment() {
     /**
      * Fit map to the given group's trackers (show only those tracks and fit bounds).
      * Call when user taps "View group on map" from group detail.
+     * @param zoomToTrackerId when set (e.g. user tapped a single tracker in the group), camera fits that tracker only; otherwise fits entire group.
      */
-    fun refreshMapForGroup(group: Group?) {
+    fun refreshMapForGroup(group: Group?, zoomToTrackerId: String? = null) {
         if (group == null) return
         val map = maplibreMap ?: return
         val style = map.style ?: return
@@ -802,7 +805,7 @@ class MapFragment : Fragment() {
                 setAllTrackLayersVisibility(true)
                 return@getTrackers
             }
-            applyAllTrackersToMap(trackers, emptyMap(), map, style, fitBounds = true)
+            applyAllTrackersToMap(trackers, emptyMap(), map, style, fitBounds = true, fitToTrackerId = zoomToTrackerId)
             val coordsById = mutableMapOf<String, List<List<Double>>>()
             var remaining = trackers.size
             trackers.forEach { tracker ->
@@ -819,7 +822,8 @@ class MapFragment : Fragment() {
                             coordsById,
                             map,
                             style,
-                            fitBounds = remaining == 0
+                            fitBounds = remaining == 0,
+                            fitToTrackerId = zoomToTrackerId
                         )
                     }
                 }
@@ -888,7 +892,8 @@ class MapFragment : Fragment() {
         coordsById: Map<String, List<List<Double>>>,
         map: MapLibreMap,
         style: Style,
-        fitBounds: Boolean
+        fitBounds: Boolean,
+        fitToTrackerId: String? = null
     ) {
         val outlineColor = String.format(
             "#%06X",
@@ -898,12 +903,16 @@ class MapFragment : Fragment() {
         val lineFeatures = mutableListOf<Feature>()
         val pointFeatures = mutableListOf<Feature>()
         val allCoords = mutableListOf<LatLng>()
+        val coordsByTrackerId = mutableMapOf<String, MutableList<LatLng>>()
 
         for (tracker in trackers) {
+            val trackerCoords = mutableListOf<LatLng>()
             val coords = coordsById[tracker.id] ?: tracker.geometry?.coordinates ?: emptyList()
             if (coords.isEmpty()) {
                 tracker.last_point?.takeIf { it.size >= 2 }?.let { lp ->
-                    allCoords.add(LatLng(lp[1], lp[0]))
+                    val pt = LatLng(lp[1], lp[0])
+                    allCoords.add(pt)
+                    trackerCoords.add(pt)
                     val hexColor = tracker.color?.let { if (it.startsWith("#")) it else "#$it" } ?: defaultColor
                     ensureArrowImageInStyle(style, hexColor, chevronOnly = true)
                     val imageId = "track-direction-arrow-simple-${hexColor.replace("#", "")}"
@@ -911,11 +920,13 @@ class MapFragment : Fragment() {
                     pointFeature.addStringProperty("icon", imageId)
                     pointFeatures.add(pointFeature)
                 }
+                coordsByTrackerId[tracker.id] = trackerCoords
                 continue
             }
             val lastN = coords.takeLast(TrackUpdateHelper.MAX_POINTS)
             val points = lastN.map { c -> LatLng((c[1] as Number).toDouble(), (c[0] as Number).toDouble()) }
-            points.forEach { allCoords.add(it) }
+            points.forEach { allCoords.add(it); trackerCoords.add(it) }
+            coordsByTrackerId[tracker.id] = trackerCoords
             val lineColor = (tracker.color?.let { if (it.startsWith("#")) it else "#$it" } ?: defaultColor)
             val segments = splitTrackIntoSegments(points)
             for (segment in segments) {
@@ -944,12 +955,19 @@ class MapFragment : Fragment() {
         updateTrackerLabel()
         updateZoomToLatestButtonState()
 
-        if (fitBounds && allCoords.isNotEmpty()) {
-            val boundsBuilder = LatLngBounds.Builder()
-            allCoords.forEach { boundsBuilder.include(it) }
-            val bounds = boundsBuilder.build()
-            val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-            mapManager?.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
+        if (fitBounds) {
+            val boundsCoords = if (fitToTrackerId != null) (coordsByTrackerId[fitToTrackerId] ?: emptyList()) else allCoords
+            if (boundsCoords.isNotEmpty()) {
+                if (boundsCoords.size >= 2) {
+                    val boundsBuilder = LatLngBounds.Builder()
+                    boundsCoords.forEach { boundsBuilder.include(it) }
+                    val bounds = boundsBuilder.build()
+                    val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
+                    mapManager?.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
+                } else {
+                    mapManager?.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(boundsCoords.single(), 14.0), getMapPaddingArray())
+                }
+            }
         }
     }
 
@@ -1363,8 +1381,6 @@ class MapFragment : Fragment() {
         private const val FOLLOW_LOCK_ANIMATION_MS = 300
         /** Target zoom when enabling follow lock from a zoomed-out state. */
         private const val FOLLOW_LOCK_TARGET_ZOOM = 16.0
-        /** Minimum zoom so the map edge stays constrained (no over-zoom-out). */
-        private const val MIN_ZOOM_LEVEL = 2.0
         /** Do not draw track across jumps larger than this (meters). 100 miles. */
         private const val MAX_JUMP_METERS = 100f * 1609.344f
         /** Content padding (dp) so overlays (name card, buttons, spinner) don't cut off the track. */
@@ -1372,6 +1388,7 @@ class MapFragment : Fragment() {
         private const val MAP_PADDING_TOP_DP = 130
         private const val MAP_PADDING_RIGHT_DP = 60
         private const val MAP_PADDING_BOTTOM_DP = 48
+        private const val BOTTOM_NAV_HEIGHT_DP = 52
         /** Extra padding (dp) when fitting bounds inside the content-padded viewport. */
         private const val BOUNDS_PADDING_DP = 24
 

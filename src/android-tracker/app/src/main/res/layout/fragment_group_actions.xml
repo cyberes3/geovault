@@ -47,21 +47,15 @@
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <androidx.core.widget.NestedScrollView
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/groupActionsTrackersList"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:fillViewport="true">
-
-            <LinearLayout
-                android:id="@+id/groupActionsPointsList"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:paddingTop="8dp"
-                android:paddingBottom="16dp" />
-        </androidx.core.widget.NestedScrollView>
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="16dp"
+            android:clipToPadding="false" />
 
         <TextView
             android:id="@+id/groupActionsEmpty"
@@ -84,40 +78,21 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
+        android:orientation="horizontal"
         android:paddingStart="20dp"
         android:paddingEnd="20dp"
         android:paddingTop="8dp"
-        android:paddingBottom="16dp">
+        android:paddingBottom="8dp"
+        android:background="@color/surface"
+        android:gravity="end">
 
-        <TextView
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/groupActionViewOnMap"
+            style="@style/gv_common_ButtonPrimary"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:gravity="center_vertical"
-            android:text="@string/view_group_on_map"
-            android:textSize="16sp"
-            android:textColor="@color/text_primary"
-            android:background="?attr/selectableItemBackground"
-            android:clickable="true"
-            android:focusable="true"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp" />
-
-        <TextView
-            android:id="@+id/groupActionLeave"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:gravity="center_vertical"
-            android:text="@string/leave_group"
-            android:textSize="16sp"
-            android:textColor="@color/text_primary"
-            android:background="?attr/selectableItemBackground"
-            android:clickable="true"
-            android:focusable="true"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
-            android:layout_marginTop="4dp"
-            android:visibility="gone" />
+            android:layout_height="44dp"
+            android:elevation="0dp"
+            android:stateListAnimator="@null"
+            android:text="@string/view_group_on_map" />
     </LinearLayout>
 </LinearLayout>

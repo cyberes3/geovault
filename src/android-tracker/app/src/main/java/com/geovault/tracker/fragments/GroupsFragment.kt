@@ -192,7 +192,7 @@ class GroupsFragment : Fragment() {
 
             fun bind(group: Group) {
                 name.text = group.name
-                val tracks = group.track_ids?.size ?: 0
+                val tracks = (group.track_ids ?: emptyList()).size
                 val ownerStr = if (group.is_owner == true) " · Owner" else ""
                 meta.text = "$tracks tracks$ownerStr"
                 editButton.visibility = View.VISIBLE
