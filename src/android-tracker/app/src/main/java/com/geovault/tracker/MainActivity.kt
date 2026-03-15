@@ -274,27 +274,19 @@ class MainActivity : AppCompatActivity() {
                         }
                         val targetTab = if (sourceTab >= 0) sourceTab else 2
                         val fm = supportFragmentManager
-                        // Stack overlays while still on Map so ViewPager never flashes Trackers (or Shared) underneath.
-                        if (targetTab == 2) {
-                            fm.beginTransaction()
-                                .add(R.id.fragment_overlay_container, com.geovault.tracker.fragments.GroupsFragment(), "groups")
-                                .addToBackStack("groups")
-                                .commit()
-                            fm.beginTransaction()
-                                .add(R.id.fragment_overlay_container, com.geovault.tracker.fragments.GroupActionsFragment.newInstance(group), "group_actions")
-                                .addToBackStack(null)
-                                .commit()
-                            fm.executePendingTransactions()
-                        } else {
-                            fm.beginTransaction()
-                                .add(R.id.fragment_overlay_container, com.geovault.tracker.fragments.GroupActionsFragment.newInstance(group), "group_actions")
-                                .addToBackStack(null)
-                                .commit()
-                            fm.executePendingTransactions()
-                        }
+                        fm.beginTransaction()
+                            .add(R.id.fragment_overlay_container, com.geovault.tracker.fragments.GroupActionsFragment.newInstance(group), "group_actions")
+                            .addToBackStack(null)
+                            .commit()
+                        fm.executePendingTransactions()
                         isHandlingTabBack = true
                         viewPager.setCurrentItem(targetTab, false)
                         isHandlingTabBack = false
+                        if (targetTab == 2) {
+                            viewPager.post {
+                                (pagerAdapter.getFragment(2) as? com.geovault.tracker.fragments.TrackersPagerFragment)?.selectGroupsTab()
+                            }
+                        }
                     } else if (tabBackStack.isNotEmpty()) {
                         isHandlingTabBack = true
                         viewPager.setCurrentItem(tabBackStack.removeLast(), false)
@@ -629,8 +621,9 @@ class MainActivity : AppCompatActivity() {
     fun openTrackersAndScrollTo(trackerId: String?) {
         viewPager.setCurrentItem(2, false)
         viewPager.post {
-            (pagerAdapter.getFragment(2) as? com.geovault.tracker.fragments.TrackersFragment)
-                ?.requestScrollToTrackerId(trackerId)
+            val pagerFragment = pagerAdapter.getFragment(2) as? com.geovault.tracker.fragments.TrackersPagerFragment
+            pagerFragment?.selectTrackersTab()
+            pagerFragment?.getTrackersListFragment()?.requestScrollToTrackerId(trackerId)
         }
     }
 
@@ -653,11 +646,12 @@ class MainActivity : AppCompatActivity() {
             .commit()
     }
 
+    /** Switch to the Trackers bottom tab and select the Groups sub-tab. */
     fun showGroupsFragment() {
-        supportFragmentManager.beginTransaction()
-            .add(R.id.fragment_overlay_container, com.geovault.tracker.fragments.GroupsFragment(), "groups")
-            .addToBackStack("groups")
-            .commit()
+        viewPager.setCurrentItem(2, false)
+        viewPager.post {
+            (pagerAdapter.getFragment(2) as? com.geovault.tracker.fragments.TrackersPagerFragment)?.selectGroupsTab()
+        }
     }
 
     fun showHiddenTrackersFragment() {

@@ -15,21 +15,18 @@ import com.geovault.tracker.Group
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.TrackerRepository
-import com.google.android.material.floatingactionbutton.FloatingActionButton
 
-class GroupsFragment : Fragment() {
+class GroupsListFragment : Fragment() {
 
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyView: TextView
     private lateinit var loadingOverlay: View
     private lateinit var loadingSpinner: LoadingSpinner
-    private lateinit var closeButton: ImageButton
-    private lateinit var fab: FloatingActionButton
     private var adapter: GroupsAdapter? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
-        return inflater.inflate(R.layout.fragment_groups, container, false)
+        return inflater.inflate(R.layout.fragment_groups_list, container, false)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -39,8 +36,6 @@ class GroupsFragment : Fragment() {
         emptyView = view.findViewById(R.id.groupsEmpty)
         loadingOverlay = view.findViewById(R.id.groupsLoadingOverlay)
         loadingSpinner = view.findViewById(R.id.groupsLoadingSpinner)
-        closeButton = view.findViewById(R.id.groupsCloseButton)
-        fab = view.findViewById(R.id.groupsFab)
 
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         adapter = GroupsAdapter(
@@ -50,14 +45,9 @@ class GroupsFragment : Fragment() {
         )
         recyclerView.adapter = adapter
 
-        closeButton.setOnClickListener {
-            requireActivity().supportFragmentManager.popBackStack()
-        }
-        fab.setOnClickListener { showCreateGroupDialog() }
-
         swipeRefresh.setOnRefreshListener { loadGroups(forceRefresh = true) }
 
-        parentFragmentManager.setFragmentResultListener(REQUEST_GROUPS_REFRESH, viewLifecycleOwner) { _, _ ->
+        requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_GROUPS_REFRESH, viewLifecycleOwner) { _, _ ->
             loadGroups(forceRefresh = true)
         }
 
@@ -100,7 +90,7 @@ class GroupsFragment : Fragment() {
         }
     }
 
-    private fun showCreateGroupDialog() {
+    fun showCreateGroupDialog() {
         val input = android.widget.EditText(requireContext()).apply {
             hint = getString(R.string.new_group_name_hint)
             setPadding(48, 32, 48, 32)

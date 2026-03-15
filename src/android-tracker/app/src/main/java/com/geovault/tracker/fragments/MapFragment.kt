@@ -365,8 +365,8 @@ class MapFragment : Fragment() {
         updateFollowLockButton()
         updateZoomToLatestButtonState()
 
-        requireActivity().supportFragmentManager.setFragmentResultListener(TrackersFragment.REQUEST_REFRESH_LIST, viewLifecycleOwner) { _, bundle ->
-            val hiddenId = bundle?.getString(TrackersFragment.KEY_HIDDEN_TRACKER_ID) ?: return@setFragmentResultListener
+        requireActivity().supportFragmentManager.setFragmentResultListener(TrackersListFragment.REQUEST_REFRESH_LIST, viewLifecycleOwner) { _, bundle ->
+            val hiddenId = bundle?.getString(TrackersListFragment.KEY_HIDDEN_TRACKER_ID) ?: return@setFragmentResultListener
             if (hiddenId == displayedTrackerId) {
                 refreshTrackForSelectedTracker()
             }
@@ -669,7 +669,7 @@ class MapFragment : Fragment() {
         updateBottomRightSpinner(defaultTrackerId)
     }
 
-    /** Extract last update timestamp (ms) from tracker geometry or last_point; same convention as TrackersFragment. */
+    /** Extract last update timestamp (ms) from tracker geometry or last_point; same convention as TrackersListFragment. */
     private fun trackerLastUpdateMs(tracker: Tracker?): Long? {
         if (tracker == null) return null
         val coord = tracker.geometry?.coordinates?.lastOrNull() ?: tracker.last_point ?: return null

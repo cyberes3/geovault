@@ -98,7 +98,7 @@ class NewTrackerFragment : Fragment() {
                                 setActionButtonsEnabled(true)
                                 if (response.isSuccessful && response.body() != null) {
                                     TrackerRepository.clearCache()
-                                    requireActivity().supportFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
+                                    requireActivity().supportFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
                                     requireActivity().supportFragmentManager.popBackStack()
                                     Toast.makeText(requireContext(), "Tracker created", Toast.LENGTH_SHORT).show()
                                 } else {

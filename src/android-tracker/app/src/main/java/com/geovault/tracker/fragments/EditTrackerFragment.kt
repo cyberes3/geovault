@@ -230,7 +230,7 @@ class EditTrackerFragment : Fragment() {
                     .putString("selected_tracker_id", trackerId)
                     .putString("selected_tracker_name", name)
                     .apply()
-                requireActivity().supportFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
+                requireActivity().supportFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
                 TrackerRepository.getTrackerGeometry(requireContext(), trackerId) { }
                 if (TrackingService.isRunning) {
                     val ctx = requireContext()
@@ -246,7 +246,7 @@ class EditTrackerFragment : Fragment() {
                         .remove("selected_tracker_name")
                         .apply()
                     TrackerRepository.clearGeometryCache()
-                    requireActivity().supportFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
+                    requireActivity().supportFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
                 }
             }
         }
@@ -371,23 +371,23 @@ class EditTrackerFragment : Fragment() {
                                         TrackerRepository.clearCurrentTrackerCache()
                                         TrackerRepository.clearGeometryCache()
                                     }
-                                    TrackersFragment.pendingHiddenTrackerId = trackerId
+                                    TrackersListFragment.pendingHiddenTrackerId = trackerId
                                     requireActivity().supportFragmentManager.setFragmentResult(
-                                        TrackersFragment.REQUEST_REFRESH_LIST,
-                                        android.os.Bundle().apply { putString(TrackersFragment.KEY_HIDDEN_TRACKER_ID, trackerId) }
+                                        TrackersListFragment.REQUEST_REFRESH_LIST,
+                                        android.os.Bundle().apply { putString(TrackersListFragment.KEY_HIDDEN_TRACKER_ID, trackerId) }
                                     )
                                 } else {
-                                    TrackersFragment.pendingFullRefresh = true
+                                    TrackersListFragment.pendingFullRefresh = true
                                     requireActivity().supportFragmentManager.setFragmentResult(
-                                        TrackersFragment.REQUEST_REFRESH_LIST,
+                                        TrackersListFragment.REQUEST_REFRESH_LIST,
                                         android.os.Bundle()
                                     )
                                 }
                                 requireActivity().supportFragmentManager.setFragmentResult(
-                                    TrackersFragment.REQUEST_UPDATE_TRACKER,
+                                    TrackersListFragment.REQUEST_UPDATE_TRACKER,
                                     android.os.Bundle().apply {
                                         putParcelable("tracker", updated)
-                                        putBoolean(TrackersFragment.KEY_UPDATED_TRACKER_HIDDEN, hiddenInList)
+                                        putBoolean(TrackersListFragment.KEY_UPDATED_TRACKER_HIDDEN, hiddenInList)
                                     }
                                 )
                                 requireActivity().supportFragmentManager.popBackStack()
@@ -418,7 +418,7 @@ class EditTrackerFragment : Fragment() {
                             requireActivity().runOnUiThread {
                                 if (success) {
                                     historyClearedThisSession = true
-                                    requireActivity().supportFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
+                                    requireActivity().supportFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
                                     Toast.makeText(requireContext(), getString(R.string.history_cleared), Toast.LENGTH_SHORT).show()
                                 } else {
                                     (activity as? MainActivity)?.showSnackbar("Failed to clear history")
@@ -451,7 +451,7 @@ class EditTrackerFragment : Fragment() {
                                             .apply()
                                         TrackerRepository.clearCurrentTrackerCache()
                                     }
-                                    requireActivity().supportFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
+                                    requireActivity().supportFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
                                     requireActivity().supportFragmentManager.popBackStack()
                                     Toast.makeText(requireContext(), getString(R.string.tracker_deleted), Toast.LENGTH_SHORT).show()
                                 } else {

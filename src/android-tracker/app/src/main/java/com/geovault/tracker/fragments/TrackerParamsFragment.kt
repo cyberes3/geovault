@@ -170,7 +170,7 @@ class TrackerParamsFragment : Fragment() {
                 if (isAdded) {
                     requireActivity().runOnUiThread {
                         requireActivity().supportFragmentManager.setFragmentResult(
-                            TrackersFragment.REQUEST_UPDATE_LIST_FROM_CACHE,
+                            TrackersListFragment.REQUEST_UPDATE_LIST_FROM_CACHE,
                             Bundle()
                         )
                     }

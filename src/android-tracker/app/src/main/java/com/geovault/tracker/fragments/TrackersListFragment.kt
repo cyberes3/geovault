@@ -24,16 +24,15 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class TrackersFragment : Fragment() {
+class TrackersListFragment : Fragment() {
 
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var recyclerView: RecyclerView
     private lateinit var loadingOverlay: View
     private lateinit var loadingSpinner: LoadingSpinner
-    private lateinit var createFab: com.google.android.material.floatingactionbutton.FloatingActionButton
-    private lateinit var groupsFab: com.google.android.material.floatingactionbutton.FloatingActionButton
     private var adapter: TrackersAdapter? = null
     private var pendingScrollToTrackerId: String? = null
+
     private fun visibleOwnerTrackers(list: List<Tracker>): List<Tracker> {
         return list.filter { tracker ->
             tracker.isOwner() && ((tracker.settings?.get("hidden_in_list") as? Boolean) != true)
@@ -45,7 +44,7 @@ class TrackersFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-        return inflater.inflate(R.layout.fragment_trackers, container, false)
+        return inflater.inflate(R.layout.fragment_trackers_list, container, false)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -54,11 +53,6 @@ class TrackersFragment : Fragment() {
         recyclerView = view.findViewById(R.id.trackersRecyclerView)
         loadingOverlay = view.findViewById(R.id.trackersLoadingOverlay)
         loadingSpinner = view.findViewById(R.id.trackersLoadingSpinner)
-        createFab = view.findViewById(R.id.trackersCreateFab)
-        groupsFab = view.findViewById(R.id.trackersGroupsFab)
-
-        createFab.setOnClickListener { (activity as? MainActivity)?.showNewTrackerFragment() }
-        groupsFab.setOnClickListener { (activity as? MainActivity)?.showGroupsFragment() }
 
         swipeRefresh.setOnRefreshListener { loadTrackers() }
 
@@ -125,7 +119,6 @@ class TrackersFragment : Fragment() {
                 }
             }
         }
-        // Params fragment refreshes trackers in background; when done we update list from cache
         requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_UPDATE_LIST_FROM_CACHE, viewLifecycleOwner) { _, _ ->
             TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { list ->
                 if (isAdded) {
@@ -159,7 +152,6 @@ class TrackersFragment : Fragment() {
         clearHighlight()
     }
 
-    /** Set by EditTrackerFragment when saving with hide; applied in onResume since we're stopped when the result is sent. */
     companion object {
         const val REQUEST_REFRESH_LIST = "tracker_list_refresh"
         const val KEY_HIDDEN_TRACKER_ID = "hidden_tracker_id"
@@ -186,19 +178,7 @@ class TrackersFragment : Fragment() {
         }
     }
 
-    private fun loadTrackersFromCache() {
-        TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { list ->
-            if (isAdded) {
-                requireActivity().runOnUiThread {
-                    adapter?.setTrackers(visibleOwnerTrackers(list ?: emptyList()))
-                }
-            }
-        }
-    }
-
-    /** Force-refresh without showing the full-screen loading overlay. */
     private fun loadTrackersInBackground() {
-        clearHighlight()
         TrackerRepository.getTrackers(requireContext(), forceRefresh = true) { list ->
             if (isAdded) {
                 requireActivity().runOnUiThread {
@@ -209,7 +189,6 @@ class TrackersFragment : Fragment() {
         }
     }
 
-    /** Called when user taps the name chip on the map: switch to this tab and scroll to the given tracker (or just open list if null). */
     fun requestScrollToTrackerId(trackerId: String?) {
         pendingScrollToTrackerId = trackerId
         if ((adapter?.itemCount ?: 0) > 0) {
@@ -234,7 +213,6 @@ class TrackersFragment : Fragment() {
     }
 
     private fun viewOnMap(tracker: Tracker) {
-        // Do not change default track; only show this track on the map. Reset will load the default.
         TrackerRepository.clearCurrentTrackerCache()
         (activity as? MainActivity)?.setInitialTrackForMap(tracker)
         (activity as? MainActivity)?.setCurrentTab(1, forceRefreshMap = true, delayMs = 50)

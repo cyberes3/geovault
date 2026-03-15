@@ -221,7 +221,7 @@ class GroupDetailBottomSheet : Fragment() {
                                 if (!isAdded) return@patchMapVisibility
                                 requireActivity().runOnUiThread {
                                     if (updated != null) {
-                                        parentFragmentManager.setFragmentResult(GroupsFragment.REQUEST_GROUPS_REFRESH, Bundle())
+                                        parentFragmentManager.setFragmentResult(GroupsListFragment.REQUEST_GROUPS_REFRESH, Bundle())
                                     } else {
                                         (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
                                         hideInListSwitch.isChecked = !isChecked
@@ -365,7 +365,7 @@ class GroupDetailBottomSheet : Fragment() {
                     updated != null -> {
                         group = updated
                         titleText.text = updated.name
-                        parentFragmentManager.setFragmentResult(GroupsFragment.REQUEST_GROUPS_REFRESH, Bundle())
+                        parentFragmentManager.setFragmentResult(GroupsListFragment.REQUEST_GROUPS_REFRESH, Bundle())
                         closeEditor()
                     }
                     !errorMessage.isNullOrBlank() -> {
@@ -426,7 +426,7 @@ class GroupDetailBottomSheet : Fragment() {
                                     requireActivity().runOnUiThread {
                                         group = updated
                                         bindGroup(updated)
-                                        parentFragmentManager.setFragmentResult(GroupsFragment.REQUEST_GROUPS_REFRESH, Bundle())
+                                        parentFragmentManager.setFragmentResult(GroupsListFragment.REQUEST_GROUPS_REFRESH, Bundle())
                                     }
                                 }
                             }
@@ -442,7 +442,7 @@ class GroupDetailBottomSheet : Fragment() {
         TrackerRepository.removeGroupTrack(requireContext(), groupId, trackId) { success ->
             if (isAdded && success) {
                 requireActivity().runOnUiThread { loadGroup(groupId) }
-                parentFragmentManager.setFragmentResult(GroupsFragment.REQUEST_GROUPS_REFRESH, Bundle())
+                parentFragmentManager.setFragmentResult(GroupsListFragment.REQUEST_GROUPS_REFRESH, Bundle())
             }
         }
     }
@@ -456,7 +456,7 @@ class GroupDetailBottomSheet : Fragment() {
                     if (isAdded && success) {
                         requireActivity().runOnUiThread {
                             closeEditor()
-                            parentFragmentManager.setFragmentResult(GroupsFragment.REQUEST_GROUPS_REFRESH, Bundle())
+                            parentFragmentManager.setFragmentResult(GroupsListFragment.REQUEST_GROUPS_REFRESH, Bundle())
                             (activity as? MainActivity)?.showSnackbar(getString(R.string.removed_from_share))
                         }
                     }
@@ -475,7 +475,7 @@ class GroupDetailBottomSheet : Fragment() {
                     if (isAdded && success) {
                         requireActivity().runOnUiThread {
                             closeEditor()
-                            parentFragmentManager.setFragmentResult(GroupsFragment.REQUEST_GROUPS_REFRESH, Bundle())
+                            parentFragmentManager.setFragmentResult(GroupsListFragment.REQUEST_GROUPS_REFRESH, Bundle())
                             (activity as? MainActivity)?.showSnackbar(getString(R.string.tracker_deleted))
                         }
                     }

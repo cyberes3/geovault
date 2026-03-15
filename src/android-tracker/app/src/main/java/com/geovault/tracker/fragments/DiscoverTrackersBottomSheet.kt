@@ -134,7 +134,7 @@ class DiscoverTrackersBottomSheet : BottomSheetDialogFragment() {
             val trackIds = group.track_ids ?: emptyList()
             if (trackIds.isEmpty()) {
                 parent.removeView(row)
-                parentFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, Bundle())
+                parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
                 (activity as? MainActivity)?.showSnackbar(getString(R.string.saved_tracker))
                 return@setOnClickListener
             }
@@ -156,7 +156,7 @@ class DiscoverTrackersBottomSheet : BottomSheetDialogFragment() {
                                         sharedGroupsList.visibility = View.GONE
                                     }
                                 }
-                                parentFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, Bundle())
+                                parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
                                 (activity as? MainActivity)?.showSnackbar(getString(R.string.saved_tracker))
                             } else {
                                 addBtn.isEnabled = true
@@ -190,7 +190,7 @@ class DiscoverTrackersBottomSheet : BottomSheetDialogFragment() {
                                 sharedList.visibility = View.GONE
                             }
                         }
-                        parentFragmentManager.setFragmentResult(TrackersFragment.REQUEST_REFRESH_LIST, Bundle())
+                        parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
                         (activity as? MainActivity)?.showSnackbar(getString(R.string.saved_tracker))
                     } else {
                         row.findViewById<com.google.android.material.button.MaterialButton>(R.id.availableTrackerAdd).isEnabled = true

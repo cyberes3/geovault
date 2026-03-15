@@ -96,10 +96,10 @@ class SharedTrackersFragment : Fragment() {
         )
         recyclerView.adapter = adapter
 
-        parentFragmentManager.setFragmentResultListener(TrackersFragment.REQUEST_REFRESH_LIST, viewLifecycleOwner) { _, _ ->
+        parentFragmentManager.setFragmentResultListener(TrackersListFragment.REQUEST_REFRESH_LIST, viewLifecycleOwner) { _, _ ->
             loadTrackers()
         }
-        parentFragmentManager.setFragmentResultListener(GroupsFragment.REQUEST_GROUPS_REFRESH, viewLifecycleOwner) { _, _ ->
+        parentFragmentManager.setFragmentResultListener(GroupsListFragment.REQUEST_GROUPS_REFRESH, viewLifecycleOwner) { _, _ ->
             loadTrackers()
         }
 

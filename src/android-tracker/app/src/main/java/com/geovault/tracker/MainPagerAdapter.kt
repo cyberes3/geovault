@@ -7,7 +7,7 @@ import com.geovault.tracker.fragments.HomeFragment
 import com.geovault.tracker.fragments.MapFragment
 import com.geovault.tracker.fragments.SettingsFragment
 import com.geovault.tracker.fragments.SharedTrackersFragment
-import com.geovault.tracker.fragments.TrackersFragment
+import com.geovault.tracker.fragments.TrackersPagerFragment
 
 class MainPagerAdapter(private val activity: FragmentActivity) : FragmentStateAdapter(activity) {
 
@@ -17,7 +17,7 @@ class MainPagerAdapter(private val activity: FragmentActivity) : FragmentStateAd
         return when (position) {
             0 -> HomeFragment()
             1 -> MapFragment()
-            2 -> TrackersFragment()
+            2 -> TrackersPagerFragment()
             3 -> SharedTrackersFragment()
             4 -> SettingsFragment()
             else -> throw IllegalStateException("Invalid position $position")

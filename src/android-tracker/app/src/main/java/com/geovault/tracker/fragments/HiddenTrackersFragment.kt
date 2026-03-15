@@ -209,7 +209,7 @@ class HiddenTrackersFragment : Fragment() {
             if (!isAdded) return@updateTrackerSettings
             requireActivity().runOnUiThread {
                 if (updated != null) {
-                    TrackersFragment.pendingFullRefresh = true
+                    TrackersListFragment.pendingFullRefresh = true
                     onSuccess?.invoke()
                 } else {
                     (activity as? MainActivity)?.showSnackbar(
@@ -223,7 +223,7 @@ class HiddenTrackersFragment : Fragment() {
 
     private fun unhideAllTrackers(trackerIds: List<String>, onComplete: () -> Unit, index: Int = 0) {
         if (index >= trackerIds.size) {
-            TrackersFragment.pendingFullRefresh = true
+            TrackersListFragment.pendingFullRefresh = true
             onComplete()
             return
         }
