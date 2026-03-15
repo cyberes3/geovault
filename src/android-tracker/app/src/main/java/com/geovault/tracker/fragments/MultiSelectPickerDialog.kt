@@ -1,8 +1,12 @@
 package com.geovault.tracker.fragments
 
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
+import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
@@ -36,18 +40,34 @@ object MultiSelectPickerDialog {
         val sortedItems = items.distinctBy { it.first }.sortedBy { it.second.lowercase() }
 
         val view = LayoutInflater.from(context).inflate(R.layout.dialog_shared_user_picker, null, false)
+        val searchInput = view.findViewById<EditText>(R.id.sharedUserPickerSearch)
         val hintView = view.findViewById<TextView>(R.id.sharedUserPickerHint)
         val recyclerView = view.findViewById<RecyclerView>(R.id.sharedUserPickerRecycler)
         val emptyView = view.findViewById<TextView>(R.id.sharedUserPickerEmpty)
 
         hintView.text = hintText
         emptyView.text = emptyText
-        emptyView.visibility = if (sortedItems.isEmpty()) View.VISIBLE else View.GONE
-        recyclerView.visibility = if (sortedItems.isEmpty()) View.GONE else View.VISIBLE
         recyclerView.layoutManager = LinearLayoutManager(context)
-        recyclerView.adapter = PickerAdapter(sortedItems, selectedIds)
+        val adapter = PickerAdapter(sortedItems, selectedIds)
+        recyclerView.adapter = adapter
 
-        AlertDialog.Builder(context)
+        fun updateVisibility() {
+            val hasItems = adapter.filteredItemCount > 0
+            emptyView.visibility = if (hasItems) View.GONE else View.VISIBLE
+            recyclerView.visibility = if (hasItems) View.VISIBLE else View.GONE
+        }
+        updateVisibility()
+
+        searchInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                adapter.setFilter(s?.toString() ?: "")
+                updateVisibility()
+            }
+        })
+
+        val dialog = AlertDialog.Builder(context)
             .setTitle(title)
             .setView(view)
             .setNegativeButton(R.string.cancel_button, null)
@@ -55,12 +75,31 @@ object MultiSelectPickerDialog {
                 onApply(selectedIds)
             }
             .show()
+
+        dialog.window?.let { window ->
+            val maxHeight = (context.resources.displayMetrics.heightPixels * 0.75).toInt()
+            window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, maxHeight)
+        }
     }
 
     private class PickerAdapter(
         private val items: List<Pair<String, String>>,
         private val selectedIds: MutableSet<String>
     ) : RecyclerView.Adapter<PickerAdapter.ViewHolder>() {
+
+        private var filterQuery: String = ""
+
+        private val filteredItems: List<Pair<String, String>>
+            get() = if (filterQuery.isBlank()) items
+            else items.filter { it.second.contains(filterQuery, ignoreCase = true) }
+
+        val filteredItemCount: Int get() = filteredItems.size
+
+        fun setFilter(query: String) {
+            if (filterQuery == query) return
+            filterQuery = query
+            notifyDataSetChanged()
+        }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
             val view = LayoutInflater.from(parent.context)
@@ -69,7 +108,7 @@ object MultiSelectPickerDialog {
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            val (id, label) = items[position]
+            val (id, label) = filteredItems[position]
             val selected = id in selectedIds
             holder.bind(label, selected)
             holder.itemView.setOnClickListener {
@@ -78,7 +117,7 @@ object MultiSelectPickerDialog {
             }
         }
 
-        override fun getItemCount(): Int = items.size
+        override fun getItemCount(): Int = filteredItems.size
 
         class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             private val card: MaterialCardView = itemView.findViewById(R.id.sharedUserPickerRowCard)

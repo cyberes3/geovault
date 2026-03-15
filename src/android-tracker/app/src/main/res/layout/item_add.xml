@@ -1,17 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginStart="4dp"
     android:layout_marginEnd="4dp"
-    android:layout_marginBottom="4dp"
+    android:layout_marginBottom="6dp"
     app:cardCornerRadius="8dp"
     app:cardElevation="0dp"
     app:cardBackgroundColor="@color/surface"
-    app:strokeWidth="@dimen/thin_card_stroke_width"
-    app:strokeColor="@color/primary_blue">
+    app:strokeWidth="@dimen/card_stroke_width"
+    app:strokeColor="@color/card_stroke_color">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -20,14 +19,14 @@
         android:gravity="center_vertical"
         android:paddingStart="12dp"
         android:paddingEnd="12dp"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp">
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
 
         <ImageView
-            android:id="@+id/groupTrackerChevronIcon"
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:layout_marginEnd="8dp"
+            android:id="@+id/availableTrackerTypeIcon"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginEnd="10dp"
             android:contentDescription="@null"
             android:src="@drawable/ic_chevron_track"
             app:tint="@color/primary_blue" />
@@ -38,63 +37,76 @@
             android:layout_weight="1"
             android:orientation="vertical"
             android:minWidth="0dp">
-
             <TextView
-                android:id="@+id/groupTrackerName"
+                android:id="@+id/availableTrackerName"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="14sp"
+                android:textSize="15sp"
                 android:textStyle="bold"
                 android:textColor="@color/text_primary"
                 android:maxLines="1"
-                android:ellipsize="end"
-                tools:text="My Tracker" />
-
+                android:ellipsize="end" />
             <TextView
-                android:id="@+id/groupTrackerOwner"
+                android:id="@+id/availableTrackerOwner"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
                 android:textSize="11sp"
                 android:textColor="@color/text_secondary"
                 android:maxLines="1"
                 android:ellipsize="end"
-                android:visibility="gone"
-                tools:text="owner@example.com"
-                tools:visibility="visible" />
+                android:layout_marginTop="1dp" />
         </LinearLayout>
-
-        <ImageButton
-            android:id="@+id/groupTrackerMenu"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/tracker_options"
-            android:src="@drawable/ic_more_vert"
-            app:tint="@color/primary_blue" />
 
         <FrameLayout
             android:layout_width="36dp"
-            android:layout_height="36dp">
+            android:layout_height="36dp"
+            android:layout_marginStart="4dp">
 
             <ImageButton
-                android:id="@+id/groupTrackerRemove"
+                android:id="@+id/availableTrackerAdd"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
                 android:layout_gravity="center"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/remove_from_share"
-                android:src="@drawable/ic_remove"
-                android:visibility="gone"
-                app:tint="@color/error_red" />
+                android:contentDescription="@string/add"
+                android:src="@drawable/ic_add"
+                android:scaleType="centerInside"
+                android:padding="6dp"
+                app:tint="@color/primary_blue" />
 
             <com.geovault.common.LoadingSpinner
-                android:id="@+id/groupTrackerRemoveSpinner"
+                android:id="@+id/availableTrackerSpinner"
                 android:layout_width="20dp"
                 android:layout_height="20dp"
                 android:layout_gravity="center"
                 android:visibility="gone"
                 app:spinnerSize="20dp" />
+
+            <ImageButton
+                android:id="@+id/availableTrackerCheck"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="center"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/add"
+                android:src="@drawable/ic_check"
+                android:scaleType="centerInside"
+                android:padding="6dp"
+                android:visibility="gone"
+                app:tint="@color/success_green" />
+
+            <ImageButton
+                android:id="@+id/availableTrackerDelete"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="center"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/unsubscribe"
+                android:src="@drawable/ic_close"
+                android:scaleType="centerInside"
+                android:padding="6dp"
+                android:visibility="gone"
+                app:tint="@color/error_red" />
         </FrameLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

@@ -34,6 +34,7 @@ class TrackerParamsFragment : Fragment() {
     private lateinit var paramsPosition: TextView
     private lateinit var paramsGrid: RecyclerView
     private lateinit var paramsWaitingCard: View
+    private lateinit var paramsWaitingMessage: TextView
     private lateinit var paramsLoadingOverlay: View
     private lateinit var paramsLoadingSpinner: LoadingSpinner
     private lateinit var closeButton: ImageButton
@@ -72,6 +73,7 @@ class TrackerParamsFragment : Fragment() {
         paramsPosition = view.findViewById(R.id.paramsPosition)
         paramsGrid = view.findViewById(R.id.paramsGrid)
         paramsWaitingCard = view.findViewById(R.id.paramsWaitingCard)
+        paramsWaitingMessage = view.findViewById(R.id.paramsWaitingMessage)
         paramsLoadingOverlay = view.findViewById(R.id.paramsLoadingOverlay)
         paramsLoadingSpinner = view.findViewById(R.id.paramsLoadingSpinner)
         closeButton = view.findViewById(R.id.paramsCloseButton)
@@ -211,6 +213,7 @@ class TrackerParamsFragment : Fragment() {
         } else {
             paramsGrid.visibility = View.GONE
             paramsWaitingCard.visibility = View.VISIBLE
+            paramsWaitingMessage.text = getString(R.string.no_extended_params_latest_point)
         }
     }
 
@@ -272,9 +275,11 @@ class TrackerParamsFragment : Fragment() {
         } else if (lastTimestampMs != null || lastPosition != null) {
             paramsGrid.visibility = View.GONE
             paramsWaitingCard.visibility = View.VISIBLE
+            paramsWaitingMessage.text = getString(R.string.no_extended_params_latest_point)
         } else {
             paramsGrid.visibility = View.GONE
-            paramsWaitingCard.visibility = View.GONE
+            paramsWaitingCard.visibility = View.VISIBLE
+            paramsWaitingMessage.text = getString(R.string.waiting_for_data)
         }
     }
 

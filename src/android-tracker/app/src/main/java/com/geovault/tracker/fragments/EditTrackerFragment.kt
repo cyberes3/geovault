@@ -14,7 +14,6 @@ import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.EditText
 import android.widget.ImageButton
-import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -285,83 +284,19 @@ class EditTrackerFragment : Fragment() {
                 }
             }
         }
-        // Always fetch fresh tracker from server so edit form shows current settings (e.g. recent_data_window).
-        TrackerRepository.getTracker(requireContext(), trackerId, forceRefresh = true) { fetched ->
-            if (isAdded) {
-                requireActivity().runOnUiThread {
-                    showLoadingState(false)
-                    if (fetched != null) {
-                        currentFetchedTracker = fetched
-                        val color = fetched.color ?: defaultTrackerColorHex(requireContext())
-                        nameEdit.setText(fetched.name)
-                        colorEdit.setText(color)
-                        updateColorPreview(colorPreview, color)
-                        initialName = fetched.name
-                        initialColor = normalizeColorForCompare(color)
-                        initialDefaultTrack = defaultTrackSwitch.isChecked
-                        val recentVal = (fetched.settings?.get("recent_data_window") as? String) ?: ""
-                        initialRecentDataWindow = recentVal
-                        val idx = recentDataValues.indexOf(recentVal).coerceAtLeast(0)
-                        selectedRecentDataIndex = idx
-                        val recentDataLabels = arrayOf(
-                            getString(R.string.recent_data_all),
-                            getString(R.string.recent_data_1min),
-                            getString(R.string.recent_data_1h),
-                            getString(R.string.recent_data_1d),
-                            getString(R.string.recent_data_1w),
-                            getString(R.string.recent_data_1m)
-                        )
-                        recentDataWindowSpinner.setText(recentDataLabels[idx], false)
-                        if (fetched.isOwner()) {
-                            sharingSection.visibility = View.VISIBLE
-                            val vis = fetched.visibility ?: "private"
-                            val visIdx = visibilityValues.indexOf(vis).coerceIn(0, visibilityValues.size - 1)
-                            selectedVisibilityIndex = visIdx
-                            val visibilityLabels = arrayOf(
-                                getString(R.string.visibility_private),
-                                getString(R.string.visibility_shared),
-                                getString(R.string.visibility_public)
-                            )
-                            visibilitySpinner.setText(visibilityLabels[visIdx], false)
-                            val showShared = vis == "shared"
-                            pickUsersButton.visibility = if (showShared) View.VISIBLE else View.GONE
-                            sharedWithCountText.visibility = if (showShared) View.VISIBLE else View.GONE
-                            sharedWithEmails.clear()
-                            sharedWithEmails.addAll(fetched.shared_with_emails ?: emptyList())
-                            initialSharedWithEmails = sharedWithEmails.toList()
-                            if (showShared) updateSharedWithCountText()
-                            shareParamsRecipientsSwitch.isChecked = fetched.share_params_with_recipients == true
-                            val allowReshare = (fetched.settings as? Map<*, *>)?.get("allow_group_reshare") == true
-                            allowGroupReshareSwitch.isChecked = allowReshare
-                            shareParamsWorldSwitch.isChecked = fetched.share_params_with_world == true
-                            val worldOn = fetched.world_share_url != null
-                            worldShareEnabledSwitch.isChecked = worldOn
-                            initialVisibility = vis
-                            initialShareParamsRecipients = fetched.share_params_with_recipients == true
-                            initialAllowGroupReshare = allowReshare
-                            initialShareParamsWorld = fetched.share_params_with_world == true
-                            initialWorldShareEnabled = worldOn
-                            worldShareParamsRow.visibility = if (worldOn) View.VISIBLE else View.GONE
-                            copyWorldLinkButton.visibility = if (worldOn && !fetched.world_share_url.isNullOrBlank()) View.VISIBLE else View.GONE
+        if (tracker != null) {
+            populateFormFromTracker(tracker)
+            showLoadingState(false)
+        } else {
+            TrackerRepository.getTracker(requireContext(), trackerId, forceRefresh = false) { fetched ->
+                if (isAdded) {
+                    requireActivity().runOnUiThread {
+                        showLoadingState(false)
+                        if (fetched != null) {
+                            populateFormFromTracker(fetched)
                         } else {
-                            sharingSection.visibility = View.GONE
+                            (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
                         }
-                        if (fetched.isOwner()) {
-                            ownerToolsSection.visibility = View.VISIBLE
-                            exportKmlButton.setOnClickListener { exportKml(trackerId) }
-                        } else {
-                            ownerToolsSection.visibility = View.GONE
-                        }
-                        if (requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).getString("selected_tracker_id", null) == trackerId) {
-                            requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
-                                .putString("selected_tracker_name", fetched.name)
-                                .apply()
-                        }
-                        val hiddenInList = (fetched.settings?.get("hidden_in_list") as? Boolean) == true
-                        initialHiddenInList = hiddenInList
-                        hideOnMapSwitch.isChecked = hiddenInList
-                    } else {
-                        (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
                     }
                 }
             }
@@ -505,6 +440,79 @@ class EditTrackerFragment : Fragment() {
                 ContextCompat.getColor(requireContext(), com.geovault.common.R.color.gv_common_dialog_negative_button)
             )
         }
+    }
+
+    private fun populateFormFromTracker(tracker: Tracker) {
+        val trackerId = tracker.id
+        currentFetchedTracker = tracker
+        val color = tracker.color ?: defaultTrackerColorHex(requireContext())
+        nameEdit.setText(tracker.name)
+        colorEdit.setText(color)
+        updateColorPreview(colorPreview, color)
+        initialName = tracker.name
+        initialColor = normalizeColorForCompare(color)
+        initialDefaultTrack = defaultTrackSwitch.isChecked
+        val recentVal = (tracker.settings?.get("recent_data_window") as? String) ?: ""
+        initialRecentDataWindow = recentVal
+        val idx = recentDataValues.indexOf(recentVal).coerceAtLeast(0)
+        selectedRecentDataIndex = idx
+        val recentDataLabels = arrayOf(
+            getString(R.string.recent_data_all),
+            getString(R.string.recent_data_1min),
+            getString(R.string.recent_data_1h),
+            getString(R.string.recent_data_1d),
+            getString(R.string.recent_data_1w),
+            getString(R.string.recent_data_1m)
+        )
+        recentDataWindowSpinner.setText(recentDataLabels[idx], false)
+        if (tracker.isOwner()) {
+            sharingSection.visibility = View.VISIBLE
+            val vis = tracker.visibility ?: "private"
+            val visIdx = visibilityValues.indexOf(vis).coerceIn(0, visibilityValues.size - 1)
+            selectedVisibilityIndex = visIdx
+            val visibilityLabels = arrayOf(
+                getString(R.string.visibility_private),
+                getString(R.string.visibility_shared),
+                getString(R.string.visibility_public)
+            )
+            visibilitySpinner.setText(visibilityLabels[visIdx], false)
+            val showShared = vis == "shared"
+            pickUsersButton.visibility = if (showShared) View.VISIBLE else View.GONE
+            sharedWithCountText.visibility = if (showShared) View.VISIBLE else View.GONE
+            sharedWithEmails.clear()
+            sharedWithEmails.addAll(tracker.shared_with_emails ?: emptyList())
+            initialSharedWithEmails = sharedWithEmails.toList()
+            if (showShared) updateSharedWithCountText()
+            shareParamsRecipientsSwitch.isChecked = tracker.share_params_with_recipients == true
+            val allowReshare = (tracker.settings as? Map<*, *>)?.get("allow_group_reshare") == true
+            allowGroupReshareSwitch.isChecked = allowReshare
+            shareParamsWorldSwitch.isChecked = tracker.share_params_with_world == true
+            val worldOn = tracker.world_share_url != null
+            worldShareEnabledSwitch.isChecked = worldOn
+            initialVisibility = vis
+            initialShareParamsRecipients = tracker.share_params_with_recipients == true
+            initialAllowGroupReshare = allowReshare
+            initialShareParamsWorld = tracker.share_params_with_world == true
+            initialWorldShareEnabled = worldOn
+            worldShareParamsRow.visibility = if (worldOn) View.VISIBLE else View.GONE
+            copyWorldLinkButton.visibility = if (worldOn && !tracker.world_share_url.isNullOrBlank()) View.VISIBLE else View.GONE
+        } else {
+            sharingSection.visibility = View.GONE
+        }
+        if (tracker.isOwner()) {
+            ownerToolsSection.visibility = View.VISIBLE
+            exportKmlButton.setOnClickListener { exportKml(trackerId) }
+        } else {
+            ownerToolsSection.visibility = View.GONE
+        }
+        if (requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).getString("selected_tracker_id", null) == trackerId) {
+            requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
+                .putString("selected_tracker_name", tracker.name)
+                .apply()
+        }
+        val hiddenInList = (tracker.settings?.get("hidden_in_list") as? Boolean) == true
+        initialHiddenInList = hiddenInList
+        hideOnMapSwitch.isChecked = hiddenInList
     }
 
     private fun normalizeColorForCompare(color: String?): String? {

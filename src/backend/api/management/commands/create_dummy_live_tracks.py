@@ -233,9 +233,10 @@ class Command(BaseCommand):
                     coords, point_params = _generate_track(preset["style"])
                     name = f"{DUMMY_NAME_PREFIX}{preset['name']}"
                     visibility = visibilities[i]
+                    # Keep dummy tracks unwindowed so API metadata always includes
+                    # last_point; otherwise recent_data_window can age out all points
+                    # and Android list views show "waiting for data".
                     settings = {"color": preset["color"]}
-                    if random.random() < 0.3:
-                        settings["recent_data_window"] = random.choice(["1h", "1d", "1w"])
                     track = LiveTrack.objects.create(
                         id=uuid.uuid4(),
                         tracker_secret=secrets.token_urlsafe(32),

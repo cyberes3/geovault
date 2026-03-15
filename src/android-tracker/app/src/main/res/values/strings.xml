@@ -108,6 +108,7 @@
     <string name="show_default_tracker">Show default tracker</string>
     <!-- Extended params: when on, sends full data; when off, sends only position + time to minimize data usage -->
     <string name="extended_params_label">Send Extended Data</string>
+    <string name="no_extended_params_latest_point">No extended parameters for the latest point.</string>
 
     <!-- Logging settings help -->
     <string name="logging_help_button">Tips for Logging Settings</string>
@@ -155,6 +156,7 @@
     <string name="button_params">Params</string>
     <string name="button_map">Map</string>
     <string name="edit">Edit</string>
+    <string name="edit_group">Edit Group</string>
 <string name="edit_tracker">Edit Tracker</string>
 <string name="delete_tracker">Delete Tracker</string>
 <string name="tracker_params_title">Tracker Parameters</string>
@@ -162,7 +164,7 @@
     <string name="last_update_label">Last Update</string>
     <string name="no_points_yet">No points yet. Waiting for data…</string>
     <string name="position_label">Position</string>
-    <string name="waiting_for_data">Waiting for data</string>
+    <string name="waiting_for_data">Waiting for data...</string>
 <string name="tracker_secret_label">Tracker Secret</string>
 <string name="created_at_label">Created At</string>
 <string name="updated_at_label">Updated At</string>
@@ -234,6 +236,7 @@
     <string name="visibility_public">Public</string>
     <string name="shared_with_recipients_label">Shared with</string>
     <string name="shared_with_click_to_toggle">Shared with (click to add or remove)</string>
+    <string name="shared_user_picker_search_hint">Search users</string>
     <string name="no_other_users_found">No other users found</string>
     <string name="add_recipient">Add recipient</string>
     <string name="pick_users_to_share_with">Pick Users to Share With</string>
@@ -253,12 +256,24 @@
     <string name="add_tracker">Add tracker</string>
     <string name="discover_public">Public trackers</string>
     <string name="discover_shared_with_me">Shared with you</string>
+    <string name="discover_search_hint">Search by name or owner</string>
     <string name="discover_empty">No trackers to add.</string>
+    <string name="public_trackers_empty">No public trackers available.</string>
+    <string name="discover_tab_on_my_map">On my Map</string>
+    <string name="discover_tab_incoming">Incoming</string>
     <string name="unsubscribe">Unsubscribe</string>
+    <string name="unsubscribe_confirm_title">Unsubscribe?</string>
+    <string name="unsubscribe_confirm_message">This will remove the tracker from your list and map. You can add it again later from Add Trackers (public trackers) or from Incoming (shared trackers).</string>
     <string name="remove_from_share">Remove from share</string>
+    <string name="remove_from_share_confirm_title">Remove from share?</string>
+    <string name="remove_from_share_confirm_message">This will remove you as a recipient. The owner will no longer have you on their share list, and you won’t see this tracker in Incoming again unless they share it with you again.</string>
     <string name="add">Add</string>
     <string name="unsubscribed">Unsubscribed</string>
     <string name="removed_from_share">Removed from share</string>
+    <string name="edit_shared_tracker_title">Shared tracker</string>
+    <string name="edit_shared_tracker_last_update">Last update: %1$s</string>
+    <string name="edit_shared_tracker_position">Position: %1$s</string>
+    <string name="not_available_short">N/A</string>
 
     <!-- Groups -->
     <string name="groups_title">Groups</string>
@@ -273,6 +288,7 @@
     <string name="delete_group">Delete group</string>
     <string name="rename_group">Rename</string>
     <string name="add_track_to_group">Add tracker</string>
+    <string name="add_trackers">Add Trackers</string>
     <string name="add_member_to_group">Add member</string>
     <string name="group_leave_confirm_title">Leave shared group?</string>
     <string name="group_leave_confirm_message">You will no longer see this group or its shared trackers.</string>
@@ -284,6 +300,7 @@
     <string name="view_group">View group</string>
     <string name="view_group_on_map">View group on map</string>
     <string name="edit_group_content_description">Edit group</string>
+    <string name="edit_shared_group_title">Shared group</string>
 
     <string name="hide_on_map">Hide</string>
     <string name="show_on_map">Show on map</string>

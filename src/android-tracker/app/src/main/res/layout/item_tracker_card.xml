@@ -60,10 +60,11 @@
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/trackerMetaRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="20dp">
+            android:layout_marginBottom="2dp">
 
             <TextView
                 android:id="@+id/trackerLastUpdate"
@@ -97,6 +98,21 @@
                 android:textIsSelectable="true"
                 tools:text="45.123, -122.654" />
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/trackerOwner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textColor="@color/text_secondary"
+            android:alpha="0.8"
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="12dp"
+            android:visibility="gone"
+            android:maxLines="1"
+            android:ellipsize="end"
+            tools:text="owner@example.com"
+            tools:visibility="visible" />
 
         <LinearLayout
             android:layout_width="match_parent"

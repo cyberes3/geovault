@@ -21,7 +21,6 @@ import com.geovault.tracker.Group
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.MapVisibilityRequest
 import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.parseHexToColor
 import com.google.android.material.button.MaterialButton
@@ -33,7 +32,13 @@ import java.util.Locale
 
 class SharedTrackersFragment : Fragment() {
 
+    companion object {
+        /** Pass added trackers/groups for optimistic update; use keys "trackers" and "groups" (ArrayList<Tracker>/ArrayList<Group>). */
+        const val REQUEST_ADD_SHARED_ITEMS = "shared_add_items"
+    }
+
     private lateinit var addFab: FloatingActionButton
+    private lateinit var publicFab: FloatingActionButton
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyView: TextView
@@ -41,6 +46,7 @@ class SharedTrackersFragment : Fragment() {
     private lateinit var loadingSpinner: LoadingSpinner
     private var adapter: SharedItemsAdapter? = null
     private var pendingScrollToTrackerId: String? = null
+    private var pendingScrollToGroupId: String? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_shared_trackers, container, false)
@@ -49,6 +55,7 @@ class SharedTrackersFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         addFab = view.findViewById(R.id.sharedAddTrackerFab)
+        publicFab = view.findViewById(R.id.sharedPublicTrackersFab)
         swipeRefresh = view.findViewById(R.id.sharedSwipeRefresh)
         recyclerView = view.findViewById(R.id.sharedRecyclerView)
         emptyView = view.findViewById(R.id.sharedEmpty)
@@ -56,7 +63,16 @@ class SharedTrackersFragment : Fragment() {
         loadingSpinner = view.findViewById(R.id.sharedLoadingSpinner)
 
         addFab.setOnClickListener {
-            DiscoverTrackersBottomSheet().show(parentFragmentManager, "discover_trackers")
+            parentFragmentManager.beginTransaction()
+                .add(R.id.fragment_overlay_container, DiscoverTrackersFragment(), "discover_trackers")
+                .addToBackStack(null)
+                .commit()
+        }
+        publicFab.setOnClickListener {
+            parentFragmentManager.beginTransaction()
+                .add(R.id.fragment_overlay_container, PublicTrackersFragment(), "public_trackers")
+                .addToBackStack(null)
+                .commit()
         }
         swipeRefresh.setOnRefreshListener { loadTrackers() }
 
@@ -75,11 +91,8 @@ class SharedTrackersFragment : Fragment() {
             null,
             onTrackerAction = { tracker, action ->
                 when (action) {
-                    TrackerAction.EDIT -> (activity as? MainActivity)?.showEditTrackerFragment(tracker)
+                    TrackerAction.EDIT -> (activity as? MainActivity)?.let { if (tracker.isOwner()) it.showEditTrackerFragment(tracker) else it.showEditSharedTrackerFragment(tracker) }
                     TrackerAction.VIEW_ON_MAP -> viewOnMap(tracker)
-                    TrackerAction.UNSUBSCRIBE -> unsubscribeTracker(tracker)
-                    TrackerAction.REMOVE_FROM_SHARE -> removeFromShare(tracker)
-                    TrackerAction.HIDE_ON_MAP -> toggleTrackerMapVisibility(tracker)
                     TrackerAction.VIEW_PARAMS -> (activity as? MainActivity)?.showTrackerParamsFragment(
                         tracker.id,
                         tracker.name,
@@ -101,10 +114,16 @@ class SharedTrackersFragment : Fragment() {
                     .commit()
             },
             onGroupEditClick = { group ->
-                requireActivity().supportFragmentManager.beginTransaction()
-                    .add(R.id.fragment_overlay_container, GroupDetailBottomSheet.newInstance(group), "group_detail")
-                    .addToBackStack(null)
-                    .commit()
+                (activity as? MainActivity)?.let { act ->
+                    if (group.is_owner != true) {
+                        act.showEditSharedGroupFragment(group)
+                    } else {
+                        requireActivity().supportFragmentManager.beginTransaction()
+                            .add(R.id.fragment_overlay_container, GroupDetailBottomSheet.newInstance(group), "group_detail")
+                            .addToBackStack(null)
+                            .commit()
+                    }
+                }
             }
         )
         recyclerView.adapter = adapter
@@ -115,6 +134,9 @@ class SharedTrackersFragment : Fragment() {
         parentFragmentManager.setFragmentResultListener(GroupsListFragment.REQUEST_GROUPS_REFRESH, viewLifecycleOwner) { _, _ ->
             loadTrackers()
         }
+        parentFragmentManager.setFragmentResultListener(REQUEST_ADD_SHARED_ITEMS, viewLifecycleOwner) { _, bundle ->
+            addSharedItemsFromBundle(bundle)
+        }
 
         loadTrackers()
     }
@@ -124,8 +146,24 @@ class SharedTrackersFragment : Fragment() {
         adapter?.setHighlightedTrackerId(null)
     }
 
+    /** Merges trackers/groups from Add Trackers into the current list (optimistic), then refetches in background. */
+    private fun addSharedItemsFromBundle(bundle: Bundle) {
+        val trackers = bundle.getParcelableArrayList("trackers", Tracker::class.java) ?: emptyList()
+        val groups = bundle.getParcelableArrayList("groups", Group::class.java) ?: emptyList()
+        if (trackers.isEmpty() && groups.isEmpty()) return
+        val current = adapter?.getItems()?.toMutableList() ?: mutableListOf()
+        val existingTrackerIds = current.filterIsInstance<SharedListItem.TrackerItem>().map { it.tracker.id }.toSet()
+        val existingGroupIds = current.filterIsInstance<SharedListItem.GroupItem>().map { it.group.id }.toSet()
+        for (t in trackers) if (t.id !in existingTrackerIds) current.add(SharedListItem.TrackerItem(t))
+        for (g in groups) if (g.id !in existingGroupIds) current.add(SharedListItem.GroupItem(g))
+        val sorted = current.sortedBy { it.sortName.lowercase(Locale.getDefault()) }
+        adapter?.setItems(sorted, adapter?.getHiddenTrackIds() ?: emptySet())
+        emptyView.visibility = View.GONE
+        loadTrackers(showOverlay = false)
+    }
+
     private fun loadTrackers(showOverlay: Boolean = true) {
-        if (pendingScrollToTrackerId == null) {
+        if (pendingScrollToTrackerId == null && pendingScrollToGroupId == null) {
             adapter?.setHighlightedTrackerId(null)
         }
         if (showOverlay) {
@@ -146,13 +184,14 @@ class SharedTrackersFragment : Fragment() {
                     requireActivity().runOnUiThread {
                         // Only show shared groups the user has accepted (via Discover -> Add / accept-share).
                         val sharedGroups = (groups ?: emptyList())
-                            .filter { it.is_owner != true && it.id !in hiddenGroupIds }
+                            .filter { it.is_owner != true && it.visibility == "shared" && it.id !in hiddenGroupIds }
                             .filter { it.is_accepted == true }
                         val trackIdsInSharedGroups = sharedGroups
                             .flatMap { it.track_ids ?: emptyList() }
                             .toSet()
                         val sharedTrackers = (list ?: emptyList())
-                            .filter { !it.isOwner() && it.id !in hiddenTrackIds && it.id !in trackIdsInSharedGroups }
+                            .filter { !it.isOwner() && (it.visibility == "shared" || it.visibility == "public") }
+                            .filter { it.id !in hiddenTrackIds && it.id !in trackIdsInSharedGroups }
                         val combined = (sharedGroups.map { SharedListItem.GroupItem(it) } +
                             sharedTrackers.map { SharedListItem.TrackerItem(it) })
                             .sortedBy { it.sortName.lowercase(Locale.getDefault()) }
@@ -169,6 +208,7 @@ class SharedTrackersFragment : Fragment() {
     }
 
     fun requestScrollToTrackerId(trackerId: String?) {
+        pendingScrollToGroupId = null
         pendingScrollToTrackerId = trackerId
         if (trackerId == null) {
             adapter?.setHighlightedTrackerId(null)
@@ -182,18 +222,41 @@ class SharedTrackersFragment : Fragment() {
         loadTrackers(showOverlay = false)
     }
 
+    fun requestScrollToGroupId(groupId: String?) {
+        pendingScrollToTrackerId = null
+        pendingScrollToGroupId = groupId
+        if (groupId == null) return
+        if ((adapter?.itemCount ?: 0) > 0 && adapter?.indexOfGroupId(groupId) ?: -1 >= 0) {
+            applyScrollAndHighlightIfPending()
+            return
+        }
+        loadTrackers(showOverlay = false)
+    }
+
     private fun applyScrollAndHighlightIfPending() {
-        val id = pendingScrollToTrackerId ?: return
         val ad = adapter ?: return
-        val index = ad.indexOfTrackerId(id)
-        if (index < 0) return
         val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return
+        val trackerId = pendingScrollToTrackerId
+        val groupId = pendingScrollToGroupId
+        val index = when {
+            trackerId != null -> ad.indexOfTrackerId(trackerId)
+            groupId != null -> ad.indexOfGroupId(groupId)
+            else -> -1
+        }
+        if (index < 0) return
+
+        // Set highlight immediately so it is applied when the item is bound (before or during scroll).
+        if (trackerId != null) {
+            ad.setHighlightedTrackerId(trackerId)
+        } else if (groupId != null) {
+            ad.setHighlightedGroupId(groupId)
+        }
+        pendingScrollToTrackerId = null
+        pendingScrollToGroupId = null
 
         fun doScroll() {
             if (!isAdded || recyclerView.width <= 0 || recyclerView.height <= 0) return
             val offsetPx = (recyclerView.height / 3).coerceAtLeast(0)
-            ad.setHighlightedTrackerId(id)
-            pendingScrollToTrackerId = null
             val scroller = object : LinearSmoothScroller(requireContext()) {
                 override fun calculateDyToMakeVisible(view: View, snapPreference: Int): Int {
                     val rv = view.parent as? RecyclerView ?: return super.calculateDyToMakeVisible(view, snapPreference)
@@ -218,59 +281,10 @@ class SharedTrackersFragment : Fragment() {
         })
     }
 
-    private fun toggleTrackerMapVisibility(tracker: Tracker) {
-        TrackerRepository.getMapVisibility(requireContext()) { visibility ->
-            if (!isAdded) return@getMapVisibility
-            val current = (visibility?.hidden_track_ids ?: emptyList()).toMutableList()
-            val hidden = current.contains(tracker.id)
-            val newList = if (hidden) current.filter { it != tracker.id } else current + tracker.id
-            TrackerRepository.patchMapVisibility(requireContext(), MapVisibilityRequest(hidden_track_ids = newList)) { updated ->
-                if (isAdded) {
-                    requireActivity().runOnUiThread {
-                        loadTrackers()
-                        (activity as? MainActivity)?.showSnackbar(
-                            if (hidden) getString(R.string.show_on_map) else getString(R.string.hide_on_map)
-                        )
-                    }
-                }
-            }
-        }
-    }
-
     private fun viewOnMap(tracker: Tracker) {
         TrackerRepository.clearCurrentTrackerCache()
         (activity as? MainActivity)?.setInitialTrackForMap(tracker)
         (activity as? MainActivity)?.setCurrentTab(1, forceRefreshMap = true, delayMs = 50)
-    }
-
-    private fun unsubscribeTracker(tracker: Tracker) {
-        TrackerRepository.unsubscribeTracker(requireContext(), tracker.id) { success ->
-            if (isAdded) {
-                requireActivity().runOnUiThread {
-                    if (success) {
-                        loadTrackers()
-                        (activity as? MainActivity)?.showSnackbar(getString(R.string.unsubscribed))
-                    } else {
-                        (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                    }
-                }
-            }
-        }
-    }
-
-    private fun removeFromShare(tracker: Tracker) {
-        TrackerRepository.leaveShareWithMe(requireContext(), tracker.id) { success ->
-            if (isAdded) {
-                requireActivity().runOnUiThread {
-                    if (success) {
-                        loadTrackers()
-                        (activity as? MainActivity)?.showSnackbar(getString(R.string.removed_from_share))
-                    } else {
-                        (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                    }
-                }
-            }
-        }
     }
 
     private sealed class SharedListItem(val sortName: String) {
@@ -278,12 +292,13 @@ class SharedTrackersFragment : Fragment() {
         class GroupItem(val group: Group) : SharedListItem(group.name)
     }
 
-    private enum class TrackerAction { EDIT, VIEW_ON_MAP, VIEW_PARAMS, UNSUBSCRIBE, REMOVE_FROM_SHARE, HIDE_ON_MAP }
+    private enum class TrackerAction { EDIT, VIEW_ON_MAP, VIEW_PARAMS }
 
     private class SharedItemsAdapter(
         private var items: List<SharedListItem>,
         private var hiddenTrackIds: Set<String>,
         private var highlightedTrackerId: String? = null,
+        private var highlightedGroupId: String? = null,
         private val onTrackerAction: (Tracker, TrackerAction) -> Unit,
         private val onGroupCardClick: (Group) -> Unit,
         private val onGroupEditClick: (Group) -> Unit
@@ -295,18 +310,49 @@ class SharedTrackersFragment : Fragment() {
             notifyDataSetChanged()
         }
 
+        fun getItems(): List<SharedListItem> = items
+        fun getHiddenTrackIds(): Set<String> = hiddenTrackIds
+
         fun indexOfTrackerId(id: String): Int = items.indexOfFirst { it is SharedListItem.TrackerItem && it.tracker.id == id }
 
+        fun indexOfGroupId(id: String): Int = items.indexOfFirst { it is SharedListItem.GroupItem && it.group.id == id }
+
         fun setHighlightedTrackerId(id: String?) {
-            if (highlightedTrackerId == id) return
-            val oldId = highlightedTrackerId
+            if (highlightedTrackerId == id && highlightedGroupId == null) return
+            val oldTrackerId = highlightedTrackerId
+            val oldGroupId = highlightedGroupId
             highlightedTrackerId = id
-            if (oldId != null) {
-                val oldIndex = indexOfTrackerId(oldId)
+            highlightedGroupId = null
+            if (oldTrackerId != null) {
+                val oldIndex = indexOfTrackerId(oldTrackerId)
+                if (oldIndex >= 0) notifyItemChanged(oldIndex)
+            }
+            if (oldGroupId != null) {
+                val oldIndex = indexOfGroupId(oldGroupId)
                 if (oldIndex >= 0) notifyItemChanged(oldIndex)
             }
             if (id != null) {
                 val newIndex = indexOfTrackerId(id)
+                if (newIndex >= 0) notifyItemChanged(newIndex)
+            }
+        }
+
+        fun setHighlightedGroupId(id: String?) {
+            if (highlightedGroupId == id && highlightedTrackerId == null) return
+            val oldTrackerId = highlightedTrackerId
+            val oldGroupId = highlightedGroupId
+            highlightedGroupId = id
+            highlightedTrackerId = null
+            if (oldTrackerId != null) {
+                val oldIndex = indexOfTrackerId(oldTrackerId)
+                if (oldIndex >= 0) notifyItemChanged(oldIndex)
+            }
+            if (oldGroupId != null) {
+                val oldIndex = indexOfGroupId(oldGroupId)
+                if (oldIndex >= 0) notifyItemChanged(oldIndex)
+            }
+            if (id != null) {
+                val newIndex = indexOfGroupId(id)
                 if (newIndex >= 0) notifyItemChanged(newIndex)
             }
         }
@@ -319,7 +365,7 @@ class SharedTrackersFragment : Fragment() {
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
             return if (viewType == TYPE_GROUP) {
                 val view = LayoutInflater.from(parent.context).inflate(R.layout.item_group_card, parent, false)
-                GroupViewHolder(view, onGroupCardClick, onGroupEditClick)
+                GroupViewHolder(view, onGroupCardClick, onGroupEditClick, { highlightedGroupId })
             } else {
                 val view = LayoutInflater.from(parent.context).inflate(R.layout.item_tracker_card, parent, false)
                 TrackerViewHolder(view, onTrackerAction, { hiddenTrackIds }, { highlightedTrackerId })
@@ -342,24 +388,31 @@ class SharedTrackersFragment : Fragment() {
             private val getHighlightedTrackerId: () -> String?
         ) : RecyclerView.ViewHolder(itemView) {
             private val trackerName: TextView = itemView.findViewById(R.id.trackerName)
+            private val trackerOwner: TextView = itemView.findViewById(R.id.trackerOwner)
             private val trackerSelectedCheck: ImageView = itemView.findViewById(R.id.trackerSelectedCheck)
             private val trackerChevronIcon: ImageView = itemView.findViewById(R.id.trackerChevronIcon)
+            private val trackerMetaRow: View = itemView.findViewById(R.id.trackerMetaRow)
             private val trackerLastUpdate: TextView = itemView.findViewById(R.id.trackerLastUpdate)
             private val trackerSeparator: TextView = itemView.findViewById(R.id.trackerSeparator)
             private val trackerPosition: TextView = itemView.findViewById(R.id.trackerPosition)
             private val btnViewParams: MaterialButton = itemView.findViewById(R.id.btnViewParams)
             private val btnEdit: MaterialButton = itemView.findViewById(R.id.btnEdit)
             private val btnViewOnMap: MaterialButton = itemView.findViewById(R.id.btnViewOnMap)
-            private val sharedActionsRow: View = itemView.findViewById(R.id.trackerSharedActionsRow)
-            private val btnHideOnMap: MaterialButton = itemView.findViewById(R.id.btnHideOnMap)
-            private val btnUnsubscribe: MaterialButton = itemView.findViewById(R.id.btnUnsubscribe)
-            private val btnRemoveFromShare: MaterialButton = itemView.findViewById(R.id.btnRemoveFromShare)
 
             fun bind(tracker: Tracker) {
                 val selectedId = itemView.context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
                     .getString("selected_tracker_id", "") ?: ""
                 trackerSelectedCheck.visibility = if (tracker.id == selectedId) View.VISIBLE else View.GONE
                 trackerName.text = tracker.name
+                val ownerText = tracker.owner_email?.takeIf { it.isNotBlank() }
+                if (ownerText != null) {
+                    trackerOwner.visibility = View.VISIBLE
+                    trackerOwner.text = ownerText
+                    setMetaRowBottomMarginDp(2)
+                } else {
+                    trackerOwner.visibility = View.GONE
+                    setMetaRowBottomMarginDp(12)
+                }
                 val color = parseHexToColor(tracker.color, itemView.context)
                 trackerChevronIcon.setColorFilter(color)
                 val lastCoord = tracker.last_point
@@ -390,14 +443,6 @@ class SharedTrackersFragment : Fragment() {
                 val hasPoints = lastPosition != null
                 btnViewOnMap.isEnabled = hasPoints
                 btnViewOnMap.alpha = if (hasPoints) 1f else 0.4f
-                sharedActionsRow.visibility = View.VISIBLE
-                val hiddenOnMap = tracker.id in getHiddenTrackIds()
-                btnHideOnMap.text = itemView.context.getString(
-                    if (hiddenOnMap) R.string.show_on_map else R.string.hide_on_map
-                )
-                btnHideOnMap.setOnClickListener { onAction(tracker, TrackerAction.HIDE_ON_MAP) }
-                btnUnsubscribe.setOnClickListener { onAction(tracker, TrackerAction.UNSUBSCRIBE) }
-                btnRemoveFromShare.setOnClickListener { onAction(tracker, TrackerAction.REMOVE_FROM_SHARE) }
                 btnViewParams.setOnClickListener { onAction(tracker, TrackerAction.VIEW_PARAMS) }
                 btnEdit.setOnClickListener { onAction(tracker, TrackerAction.EDIT) }
                 btnViewOnMap.setOnClickListener { onAction(tracker, TrackerAction.VIEW_ON_MAP) }
@@ -415,6 +460,14 @@ class SharedTrackersFragment : Fragment() {
                 }
             }
 
+            private fun setMetaRowBottomMarginDp(dp: Int) {
+                val lp = trackerMetaRow.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+                val px = (dp * itemView.resources.displayMetrics.density).toInt()
+                if (lp.bottomMargin == px) return
+                lp.bottomMargin = px
+                trackerMetaRow.layoutParams = lp
+            }
+
             companion object {
                 private val LIST_DATE_FORMAT = SimpleDateFormat("MMM d, yyyy, h:mm a", Locale.getDefault())
             }
@@ -423,20 +476,41 @@ class SharedTrackersFragment : Fragment() {
         class GroupViewHolder(
             itemView: View,
             private val onCardClick: (Group) -> Unit,
-            private val onEditClick: (Group) -> Unit
+            private val onEditClick: (Group) -> Unit,
+            private val getHighlightedGroupId: () -> String?
         ) : RecyclerView.ViewHolder(itemView) {
             private val name: TextView = itemView.findViewById(R.id.groupName)
+            private val owner: TextView = itemView.findViewById(R.id.groupOwner)
             private val meta: TextView = itemView.findViewById(R.id.groupMeta)
             private val content: View = itemView.findViewById(R.id.groupCardContent)
             private val editButton: ImageButton = itemView.findViewById(R.id.groupCardEdit)
 
             fun bind(group: Group) {
                 name.text = group.name
+                val ownerText = group.owner_email?.takeIf { it.isNotBlank() }
+                if (ownerText != null) {
+                    owner.visibility = View.VISIBLE
+                    owner.text = ownerText
+                } else {
+                    owner.visibility = View.GONE
+                }
                 val tracks = (group.track_ids ?: emptyList()).size
                 meta.text = "$tracks trackers"
                 editButton.visibility = View.VISIBLE
                 content.setOnClickListener { onCardClick(group) }
                 editButton.setOnClickListener { onEditClick(group) }
+                (itemView as? MaterialCardView)?.let { card ->
+                    val defaultStrokePx = itemView.resources.getDimensionPixelSize(R.dimen.card_stroke_width)
+                    val highlight = group.id == getHighlightedGroupId()
+                    card.setStrokeWidth(defaultStrokePx)
+                    card.strokeColor = ContextCompat.getColor(itemView.context, R.color.card_stroke_color)
+                    card.setCardBackgroundColor(
+                        ContextCompat.getColor(
+                            itemView.context,
+                            if (highlight) R.color.highlight_card_background else R.color.surface
+                        )
+                    )
+                }
             }
         }
 

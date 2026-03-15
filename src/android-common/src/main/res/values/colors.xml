@@ -86,7 +86,6 @@
     <color name="gv_common_success_green">@color/gv_common_green_500</color>
     <color name="gv_common_error_red">@color/gv_common_red_500</color>
     <color name="gv_common_warning_yellow">@color/gv_common_yellow_500</color>
-    <color name="gv_common_spinner_blue">#6C93DE</color>
 
     <!-- Error background (light red for error state); matches frontend red-50 / red-200 -->
     <color name="gv_common_error_light">@color/gv_common_red_50</color>

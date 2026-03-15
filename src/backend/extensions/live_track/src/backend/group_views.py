@@ -7,7 +7,7 @@ import uuid
 
 from django.contrib.auth import get_user_model
 from django.db.models import Q
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
@@ -290,7 +290,8 @@ def group_remove_track(request, group_id, track_id):
     if not member:
         return error_response("Tracker not in group", 404)
     member.delete()
-    return JsonResponse({}, status=204)
+    # 204 responses must not include a body; empty HttpResponse avoids client protocol errors.
+    return HttpResponse(status=204)
 
 
 @api_or_login_required_401()

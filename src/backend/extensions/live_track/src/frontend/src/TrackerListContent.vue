@@ -24,11 +24,32 @@
       </div>
 
       <div
+        v-if="!listEmptyForTab"
+        class="relative flex-shrink-0 mb-2"
+      >
+        <input
+          v-model="searchQuery"
+          type="text"
+          :placeholder="searchPlaceholder"
+          class="w-full border border-gray-300 px-3 py-2 rounded-lg pl-9 text-sm"
+        />
+        <MagnifyingGlassIcon class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+      </div>
+
+      <div
         v-if="listEmptyForTab"
         class="flex-1 flex flex-col items-center justify-center py-12 px-6 text-center"
       >
         <h3 class="text-base font-semibold text-gray-900 mb-1">{{ emptyTitle }}</h3>
         <p class="text-sm text-gray-500 max-w-xs">{{ emptyMessage }}</p>
+      </div>
+
+      <div
+        v-else-if="filteredListEmptyForTab"
+        class="flex-1 flex flex-col items-center justify-center py-12 px-6 text-center"
+      >
+        <h3 class="text-base font-semibold text-gray-900 mb-1">No matches</h3>
+        <p class="text-sm text-gray-500 max-w-xs">Try a different search.</p>
       </div>
 
       <div
@@ -39,7 +60,7 @@
       >
         <template v-if="listTab === 'groups'">
           <div
-            v-for="group in visibleGroupsTab"
+            v-for="group in filteredGroupsTab"
             :key="'group-' + group.id"
             :class="[
               'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-colors',
@@ -96,7 +117,7 @@
 
         <template v-else-if="listTab === 'shared'">
           <div
-            v-for="group in visibleSharedGroupsTab"
+            v-for="group in filteredSharedGroupsTab"
             :key="'shared-group-' + group.id"
             :class="[
               'group flex items-center gap-3 p-4 rounded-2xl cursor-pointer border transition-colors',
@@ -152,7 +173,7 @@
             </div>
           </div>
           <div
-            v-for="track in visibleSharedTab"
+            v-for="track in filteredSharedTab"
             :key="track.id"
             :data-track-id="track.id"
             :class="trackRowClass(track)"
@@ -231,7 +252,7 @@
 
         <template v-else>
           <div
-            v-for="track in visibleTrackersTab"
+            v-for="track in filteredTrackersTab"
             :key="track.id"
             :data-track-id="track.id"
             :class="trackRowClass(track)"
@@ -297,8 +318,8 @@
 </template>
 
 <script>
-import { ref, computed } from 'vue';
-import { Square3Stack3DIcon, PencilIcon, TableCellsIcon, CloudIcon, ListBulletIcon, EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline';
+import { ref, computed, watch } from 'vue';
+import { Square3Stack3DIcon, PencilIcon, TableCellsIcon, CloudIcon, ListBulletIcon, EyeIcon, EyeSlashIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
 import Loader from 'platform/components/parts/Loader.vue';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
 import { getTrackDirectionAngle as getTrackDirectionAngleUtil } from './trackGeometry.js';
@@ -321,6 +342,7 @@ export default {
     ListBulletIcon,
     EyeIcon,
     EyeSlashIcon,
+    MagnifyingGlassIcon,
     TrackDirectionIcon
   },
   props: {
@@ -361,8 +383,41 @@ export default {
   ],
   setup(props) {
     const scrollContainerRef = ref(null);
+    const searchQuery = ref('');
+
+    watch(() => props.listTab, () => {
+      searchQuery.value = '';
+    });
+
     const formatTime = (ms) => formatTimestampLocal(ms);
     const getTrackDirectionAngle = getTrackDirectionAngleUtil;
+
+    function filterByQuery(list, nameKey = 'name', ownerKey = 'owner_email') {
+      const q = (searchQuery.value || '').trim().toLowerCase();
+      if (!q) return list;
+      return list.filter(
+        (item) =>
+          (item[nameKey] || '').toLowerCase().includes(q) ||
+          (item[ownerKey] || '').toLowerCase().includes(q)
+      );
+    }
+
+    const filteredTrackersTab = computed(() => filterByQuery(props.visibleTrackersTab || [], 'name'));
+    const filteredGroupsTab = computed(() => filterByQuery(props.visibleGroupsTab || [], 'name'));
+    const filteredSharedTab = computed(() => filterByQuery(props.visibleSharedTab || [], 'name', 'owner_email'));
+    const filteredSharedGroupsTab = computed(() => filterByQuery(props.visibleSharedGroupsTab || [], 'name', 'owner_email'));
+
+    const filteredListEmptyForTab = computed(() => {
+      if (props.listTab === 'trackers') return filteredTrackersTab.value.length === 0;
+      if (props.listTab === 'groups') return filteredGroupsTab.value.length === 0;
+      return filteredSharedTab.value.length === 0 && filteredSharedGroupsTab.value.length === 0;
+    });
+
+    const searchPlaceholder = computed(() => {
+      if (props.listTab === 'trackers') return 'Search trackers...';
+      if (props.listTab === 'groups') return 'Search groups...';
+      return 'Search by name or owner...';
+    });
 
     function isHidden(trackId) {
       const hid = props.hiddenTrackIds;
@@ -414,6 +469,13 @@ export default {
 
     return {
       scrollContainerRef,
+      searchQuery,
+      searchPlaceholder,
+      filteredTrackersTab,
+      filteredGroupsTab,
+      filteredSharedTab,
+      filteredSharedGroupsTab,
+      filteredListEmptyForTab,
       formatTime,
       getTrackDirectionAngle,
       isHidden,

@@ -202,7 +202,6 @@
             :trackers="trackers"
             :incoming-trackers="incomingSharedTrackers"
             :incoming-groups="incomingSharedGroups"
-            :incoming-public-groups="incomingPublicGroups"
             :shared-groups-on-map="visibleSharedGroupsTab"
             :adding-incoming-id="addingIncomingId"
             :adding-incoming-group-id="addingIncomingGroupId"
@@ -279,10 +278,10 @@
           <span class="relative inline-flex">
             <ShareIcon :class="SIDEBAR_ACTION_ICON_CLASS" />
             <span
-              v-if="incomingSharedTrackers.length + incomingSharedGroups.length + incomingPublicGroups.length > 0"
+              v-if="incomingSharedTrackers.length + incomingSharedGroups.length > 0"
               class="absolute -top-1 -right-1 min-w-[0.875rem] h-4 px-0.5 flex items-center justify-center rounded-full bg-blue-500 text-white text-[9px] font-semibold leading-none"
             >
-              {{ incomingSharedTrackers.length + incomingSharedGroups.length + incomingPublicGroups.length > 99 ? '99+' : incomingSharedTrackers.length + incomingSharedGroups.length + incomingPublicGroups.length }}
+              {{ incomingSharedTrackers.length + incomingSharedGroups.length > 99 ? '99+' : incomingSharedTrackers.length + incomingSharedGroups.length }}
             </span>
           </span>
         </button>
@@ -665,7 +664,6 @@ export default {
     const showSharedWithMeSidebar = ref(false);
     const incomingSharedTrackers = ref([]);
     const incomingSharedGroups = ref([]);
-    const incomingPublicGroups = ref([]);
     const addingIncomingId = ref(null);
     const addingIncomingGroupId = ref(null);
     const leavingShareId = ref(null);
@@ -844,7 +842,6 @@ export default {
         const data = res.data || {};
         incomingSharedTrackers.value = Array.isArray(data.shared_with_me) ? data.shared_with_me : [];
         incomingSharedGroups.value = Array.isArray(data.shared_with_me_groups) ? data.shared_with_me_groups : [];
-        incomingPublicGroups.value = Array.isArray(data.public_groups) ? data.public_groups : [];
       } catch (e) {
         const err = api.handleError && api.handleError(e);
         if (window.gv_core?.GeoVault?.toast) {
@@ -852,7 +849,6 @@ export default {
         }
         incomingSharedTrackers.value = [];
         incomingSharedGroups.value = [];
-        incomingPublicGroups.value = [];
       }
     }
 
@@ -2019,7 +2015,6 @@ export default {
     }
 
     function onDiscoverSaved() {
-      showDiscoverModal.value = false;
       fetchTrackers();
     }
 
@@ -2363,7 +2358,6 @@ export default {
       onSharedSidebarSelectGroup,
       incomingSharedTrackers,
       incomingSharedGroups,
-      incomingPublicGroups,
       addingIncomingId,
       addingIncomingGroupId,
       leavingShareId,

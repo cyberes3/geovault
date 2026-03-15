@@ -65,6 +65,18 @@
         </FrameLayout>
 
         <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/sharedPublicTrackersFab"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end|bottom"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="88dp"
+            android:contentDescription="@string/discover_public"
+            app:srcCompat="@drawable/ic_globe"
+            app:tint="@color/content_on_primary"
+            app:backgroundTint="@color/primary_blue" />
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/sharedAddTrackerFab"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

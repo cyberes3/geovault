@@ -203,10 +203,16 @@ class MainActivity : AppCompatActivity() {
                 }
                 lastSelectedTabIndex = position
                 updateNavTabBackground(position)
-                if (position == 2) TrackerRepository.prefetchGroups(this@MainActivity)
+                if (position == 2) {
+                    TrackerRepository.prefetchGroups(this@MainActivity)
+                    TrackerRepository.getTrackers(this@MainActivity, forceRefresh = false) { }
+                }
             }
         })
         if (savedTab == 2) TrackerRepository.prefetchGroups(this)
+        TrackerRepository.getTrackers(this, forceRefresh = false) { }
+        TrackerRepository.prefetchAvailableToAdd(this)
+        TrackerRepository.prefetchSharedPage(this)
 
         findViewById<View>(R.id.navHome).setOnClickListener {
             clearOverlayAndThen { viewPager.setCurrentItem(0, false) }
@@ -426,7 +432,7 @@ class MainActivity : AppCompatActivity() {
         val topName = if (supportFragmentManager.backStackEntryCount > 0) {
             supportFragmentManager.getBackStackEntryAt(supportFragmentManager.backStackEntryCount - 1).name
         } else null
-        val disableNav = topName == "new_tracker" || topName == "edit_tracker"
+        val disableNav = topName == "new_tracker" || topName == "edit_tracker" || topName == "edit_shared_tracker"
         navHome.isEnabled = !disableNav
         navHome.isClickable = !disableNav
         navMap.isEnabled = !disableNav
@@ -624,10 +630,10 @@ class MainActivity : AppCompatActivity() {
         requestTrackersScrollWhenReady(trackerId)
     }
 
-    /** Switch to the Shared tab and scroll the list to the given tracker (e.g. from map tap "View in list" for a shared tracker). */
-    fun openSharedAndScrollTo(trackerId: String?) {
+    /** Switch to the Shared tab and scroll the list to the given tracker or group (e.g. from map name chip or "View in list"). */
+    fun openSharedAndScrollTo(trackerId: String?, groupId: String? = null) {
         viewPager.setCurrentItem(3, false)
-        requestSharedScrollWhenReady(trackerId)
+        requestSharedScrollWhenReady(trackerId, groupId)
     }
 
     private fun requestTrackersScrollWhenReady(trackerId: String?, attemptsLeft: Int = 8) {
@@ -646,14 +652,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun requestSharedScrollWhenReady(trackerId: String?, attemptsLeft: Int = 8) {
+    private fun requestSharedScrollWhenReady(trackerId: String?, groupId: String?, attemptsLeft: Int = 8) {
         viewPager.post {
             val sharedFragment = pagerAdapter.getFragment(3) as? com.geovault.tracker.fragments.SharedTrackersFragment
             if (sharedFragment != null) {
-                sharedFragment.requestScrollToTrackerId(trackerId)
+                if (groupId != null) {
+                    sharedFragment.requestScrollToGroupId(groupId)
+                } else {
+                    sharedFragment.requestScrollToTrackerId(trackerId)
+                }
             } else if (attemptsLeft > 0) {
                 Handler(Looper.getMainLooper()).postDelayed(
-                    { requestSharedScrollWhenReady(trackerId, attemptsLeft - 1) },
+                    { requestSharedScrollWhenReady(trackerId, groupId, attemptsLeft - 1) },
                     50
                 )
             }
@@ -676,6 +686,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun showEditTrackerFragment(tracker: com.geovault.tracker.Tracker) {
+        if (!tracker.isOwner()) {
+            showEditSharedTrackerFragment(tracker)
+            return
+        }
         val fragment = com.geovault.tracker.fragments.EditTrackerFragment().apply {
             arguments = android.os.Bundle().apply {
                 putParcelable(com.geovault.tracker.fragments.EditTrackerFragment.ARG_TRACKER, tracker)
@@ -684,6 +698,30 @@ class MainActivity : AppCompatActivity() {
         supportFragmentManager.beginTransaction()
             .add(R.id.fragment_overlay_container, fragment, "edit_tracker")
             .addToBackStack("edit_tracker")
+            .commit()
+    }
+
+    fun showEditSharedTrackerFragment(tracker: com.geovault.tracker.Tracker) {
+        val fragment = com.geovault.tracker.fragments.EditSharedTrackerFragment().apply {
+            arguments = android.os.Bundle().apply {
+                putParcelable(com.geovault.tracker.fragments.EditSharedTrackerFragment.ARG_TRACKER, tracker)
+            }
+        }
+        supportFragmentManager.beginTransaction()
+            .add(R.id.fragment_overlay_container, fragment, "edit_shared_tracker")
+            .addToBackStack("edit_shared_tracker")
+            .commit()
+    }
+
+    fun showEditSharedGroupFragment(group: com.geovault.tracker.Group) {
+        val fragment = com.geovault.tracker.fragments.EditSharedGroupFragment().apply {
+            arguments = android.os.Bundle().apply {
+                putParcelable(com.geovault.tracker.fragments.EditSharedGroupFragment.ARG_GROUP, group)
+            }
+        }
+        supportFragmentManager.beginTransaction()
+            .add(R.id.fragment_overlay_container, fragment, "edit_shared_group")
+            .addToBackStack("edit_shared_group")
             .commit()
     }
 

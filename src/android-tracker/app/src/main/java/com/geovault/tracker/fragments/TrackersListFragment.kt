@@ -70,7 +70,7 @@ class TrackersListFragment : Fragment() {
         })
         adapter = TrackersAdapter(emptyList()) { tracker, action ->
             when (action) {
-                TrackerAction.EDIT -> (activity as? MainActivity)?.showEditTrackerFragment(tracker)
+                TrackerAction.EDIT -> (activity as? MainActivity)?.let { if (tracker.isOwner()) it.showEditTrackerFragment(tracker) else it.showEditSharedTrackerFragment(tracker) }
                 TrackerAction.VIEW_ON_MAP -> viewOnMap(tracker)
                 TrackerAction.UNSUBSCRIBE -> unsubscribeTracker(tracker)
                 TrackerAction.REMOVE_FROM_SHARE -> removeFromShare(tracker)
@@ -93,8 +93,16 @@ class TrackersListFragment : Fragment() {
             }
         }
         recyclerView.adapter = adapter
-        loadingOverlay.visibility = View.VISIBLE
-        loadingSpinner.start()
+        val cached = TrackerRepository.getTrackersCache()
+        if (cached != null) {
+            adapter?.setTrackers(visibleOwnerTrackers(cached))
+            loadingOverlay.visibility = View.GONE
+            loadingSpinner.stop(hide = false)
+            applyScrollAndHighlightIfPending()
+        } else {
+            loadingOverlay.visibility = View.VISIBLE
+            loadingSpinner.start()
+        }
         TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { list ->
             if (isAdded) {
                 requireActivity().runOnUiThread {
@@ -356,8 +364,10 @@ class TrackersListFragment : Fragment() {
             private val onAction: (Tracker, TrackerAction) -> Unit
         ) : RecyclerView.ViewHolder(itemView) {
             private val trackerName: TextView = itemView.findViewById(R.id.trackerName)
+            private val trackerOwner: TextView = itemView.findViewById(R.id.trackerOwner)
             private val trackerSelectedCheck: ImageView = itemView.findViewById(R.id.trackerSelectedCheck)
             private val trackerChevronIcon: ImageView = itemView.findViewById(R.id.trackerChevronIcon)
+            private val trackerMetaRow: View = itemView.findViewById(R.id.trackerMetaRow)
             private val trackerLastUpdate: TextView = itemView.findViewById(R.id.trackerLastUpdate)
             private val trackerSeparator: TextView = itemView.findViewById(R.id.trackerSeparator)
             private val trackerPosition: TextView = itemView.findViewById(R.id.trackerPosition)
@@ -373,6 +383,15 @@ class TrackersListFragment : Fragment() {
                     .getString("selected_tracker_id", "") ?: ""
                 trackerSelectedCheck.visibility = if (tracker.id == selectedId) View.VISIBLE else View.GONE
                 trackerName.text = tracker.name
+                val ownerText = tracker.owner_email?.takeIf { it.isNotBlank() }
+                if (ownerText != null) {
+                    trackerOwner.visibility = View.VISIBLE
+                    trackerOwner.text = ownerText
+                    setMetaRowBottomMarginDp(2)
+                } else {
+                    trackerOwner.visibility = View.GONE
+                    setMetaRowBottomMarginDp(12)
+                }
                 val color = parseHexToColor(tracker.color, itemView.context)
                 trackerChevronIcon.setColorFilter(color)
                 val lastCoord = tracker.last_point
@@ -422,6 +441,14 @@ class TrackersListFragment : Fragment() {
                         )
                     )
                 }
+            }
+
+            private fun setMetaRowBottomMarginDp(dp: Int) {
+                val lp = trackerMetaRow.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+                val px = (dp * itemView.resources.displayMetrics.density).toInt()
+                if (lp.bottomMargin == px) return
+                lp.bottomMargin = px
+                trackerMetaRow.layoutParams = lp
             }
         }
     }

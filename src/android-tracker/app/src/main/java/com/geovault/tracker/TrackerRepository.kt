@@ -77,6 +77,9 @@ object TrackerRepository {
         trackersCache = trackers
     }
 
+    /** Returns the full trackers list from cache if present; used to show Trackers tab without waiting for network. */
+    fun getTrackersCache(): List<Tracker>? = trackersCache
+
     /** Returns the tracker from the list cache if present; used for "last updated" on first tap before geometry loads. */
     fun getTrackerFromCache(id: String): Tracker? = trackersCache?.find { it.id == id }
 
@@ -415,7 +418,13 @@ object TrackerRepository {
             })
     }
 
-    fun getAvailableToAdd(context: Context, callback: (AvailableToAddResponse?) -> Unit) {
+    private var availableToAddCache: AvailableToAddResponse? = null
+
+    fun getAvailableToAdd(context: Context, forceRefresh: Boolean = false, callback: (AvailableToAddResponse?) -> Unit) {
+        if (!forceRefresh && availableToAddCache != null) {
+            callback(availableToAddCache)
+            return
+        }
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
         if (serverUrl.isEmpty()) {
             callback(null)
@@ -425,13 +434,19 @@ object TrackerRepository {
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
         api.getAvailableToAdd().enqueue(object : Callback<AvailableToAddResponse> {
             override fun onResponse(call: Call<AvailableToAddResponse>, response: Response<AvailableToAddResponse>) {
-                callback(response.body())
+                val body = response.body()
+                if (body != null) availableToAddCache = body
+                callback(body)
             }
             override fun onFailure(call: Call<AvailableToAddResponse>, t: Throwable) {
                 Log.e("TrackerRepository", "Failed to get available-to-add", t)
                 callback(null)
             }
         })
+    }
+
+    fun prefetchAvailableToAdd(context: Context) {
+        getAvailableToAdd(context, forceRefresh = true) { }
     }
 
     fun subscribeTracker(context: Context, trackerId: String, callback: (Tracker?) -> Unit) {
@@ -446,6 +461,7 @@ object TrackerRepository {
             override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
                 if (response.isSuccessful) {
                     trackersCache = null
+                    availableToAddCache = null
                 }
                 callback(response.body())
             }
@@ -466,7 +482,10 @@ object TrackerRepository {
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
         api.unsubscribeTracker(trackerId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
-                if (response.isSuccessful) trackersCache = null
+                if (response.isSuccessful) {
+                    trackersCache = null
+                    availableToAddCache = null
+                }
                 callback(response.isSuccessful)
             }
             override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
@@ -486,7 +505,10 @@ object TrackerRepository {
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
         api.leaveShareWithMe(trackerId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
-                if (response.isSuccessful) trackersCache = null
+                if (response.isSuccessful) {
+                    trackersCache = null
+                    availableToAddCache = null
+                }
                 callback(response.isSuccessful)
             }
             override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
@@ -596,6 +618,13 @@ object TrackerRepository {
         getGroups(context, forceRefresh = true) { }
     }
 
+    /** Prefetch data used by the Shared tab so it opens instantly. Call on app launch. */
+    fun prefetchSharedPage(context: Context) {
+        getMapVisibility(context) { }
+        getGroups(context, forceRefresh = true) { }
+        getTrackers(context, forceRefresh = true) { }
+    }
+
     fun createGroup(context: Context, name: String, callback: (Group?, errorMessage: String?) -> Unit) {
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
         if (serverUrl.isEmpty()) {
@@ -699,22 +728,34 @@ object TrackerRepository {
         })
     }
 
-    fun addGroupTrack(context: Context, groupId: String, trackId: String, callback: (Group?) -> Unit) {
+    fun addGroupTrack(context: Context, groupId: String, trackId: String, callback: (Group?, errorMessage: String?) -> Unit) {
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
         if (serverUrl.isEmpty()) {
-            callback(null)
+            callback(null, null)
             return
         }
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
         api.addGroupTrack(groupId, GroupAddTrackRequest(track_id = trackId)).enqueue(object : Callback<Group> {
             override fun onResponse(call: Call<Group>, response: Response<Group>) {
-                groupsCache = null
-                callback(response.body())
+                if (response.isSuccessful) {
+                    groupsCache = null
+                    callback(response.body(), null)
+                    return
+                }
+                val errorMsg = response.errorBody()?.string()?.let { body ->
+                    try {
+                        val json = org.json.JSONObject(body)
+                        json.optString("detail", json.optString("error", body.take(200)))
+                    } catch (_: Exception) {
+                        body.take(200)
+                    }
+                }
+                callback(null, errorMsg?.takeIf { it.isNotBlank() } ?: "Failed to add tracker")
             }
             override fun onFailure(call: Call<Group>, t: Throwable) {
                 Log.e("TrackerRepository", "Add group track failed", t)
-                callback(null)
+                callback(null, null)
             }
         })
     }
@@ -749,7 +790,11 @@ object TrackerRepository {
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
         api.acceptGroupShare(groupId).enqueue(object : Callback<Group> {
             override fun onResponse(call: Call<Group>, response: Response<Group>) {
-                if (response.isSuccessful) groupsCache = null
+                if (response.isSuccessful) {
+                    groupsCache = null
+                    trackersCache = null
+                    availableToAddCache = null
+                }
                 callback(response.body())
             }
             override fun onFailure(call: Call<Group>, t: Throwable) {
@@ -769,7 +814,11 @@ object TrackerRepository {
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
         api.leaveGroup(groupId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
-                if (response.isSuccessful) groupsCache = null
+                if (response.isSuccessful) {
+                    groupsCache = null
+                    trackersCache = null
+                    availableToAddCache = null
+                }
                 callback(response.isSuccessful)
             }
             override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
