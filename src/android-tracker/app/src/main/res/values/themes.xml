@@ -2,6 +2,9 @@
 <resources>
     <style name="Theme.GeoVault" parent="gv_common_Theme.GeoVault">
         <item name="android:windowAnimationStyle">@style/Animation.NoAnimation</item>
+        <!-- Blue nav bar for bottom nav layout (light; night inherits from common) -->
+        <item name="android:navigationBarColor">@color/primary_blue</item>
+        <item name="android:windowLightNavigationBar">false</item>
     </style>
 
     <style name="Animation.NoAnimation" parent="android:Animation">

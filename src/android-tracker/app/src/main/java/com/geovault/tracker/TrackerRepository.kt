@@ -77,6 +77,9 @@ object TrackerRepository {
         trackersCache = trackers
     }
 
+    /** Returns the tracker from the list cache if present; used for "last updated" on first tap before geometry loads. */
+    fun getTrackerFromCache(id: String): Tracker? = trackersCache?.find { it.id == id }
+
     fun clearCache() {
         trackersCache = null
         groupsCache = null

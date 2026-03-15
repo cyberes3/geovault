@@ -113,17 +113,13 @@ class TrackerParamsFragment : Fragment() {
         }
         // Start streaming for this tracker when it's not the default (so we receive live updates like the website).
         val id = trackerId ?: return
-        val defaultId = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-            .getString("selected_tracker_id", "") ?: ""
-        if (defaultId.isNotEmpty() && id != defaultId) {
-            val name = arguments?.getString(ARG_TRACKER_NAME).orEmpty()
-            val intent = Intent(requireContext(), LiveTrackStreamingService::class.java).apply {
-                action = LiveTrackStreamingService.ACTION_START
-                putExtra(LiveTrackStreamingService.EXTRA_TRACKER_ID, id)
-                putExtra(LiveTrackStreamingService.EXTRA_TRACKER_NAME, name)
-            }
-            ContextCompat.startForegroundService(requireContext(), intent)
+        val name = arguments?.getString(ARG_TRACKER_NAME).orEmpty()
+        val intent = Intent(requireContext(), LiveTrackStreamingService::class.java).apply {
+            action = LiveTrackStreamingService.ACTION_START
+            putExtra(LiveTrackStreamingService.EXTRA_TRACKER_ID, id)
+            putExtra(LiveTrackStreamingService.EXTRA_TRACKER_NAME, name)
         }
+        ContextCompat.startForegroundService(requireContext(), intent)
     }
 
     override fun onStop() {

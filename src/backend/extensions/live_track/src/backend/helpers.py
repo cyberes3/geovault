@@ -172,9 +172,13 @@ def track_to_response(
         "settings": track.settings or {},
         "visibility": getattr(track, "visibility", "private"),
         "share_params_with_recipients": getattr(track, "share_params_with_recipients", False),
+        "is_owner": is_owner,
         "created_at": int(track.created_at.timestamp()) if track.created_at else None,
         "updated_at": int(track.updated_at.timestamp()) if track.updated_at else None,
     }
+    if not is_owner:
+        owner_email = (getattr(track.user, "email", "") or "") if getattr(track, "user_id", None) else ""
+        out["owner_email"] = owner_email.strip()
     if for_world_share:
         out["share_params_with_world"] = getattr(track, "share_params_with_world", False)
     if include_secret and is_owner:
