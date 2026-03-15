@@ -107,7 +107,6 @@ class GroupsListFragment : Fragment() {
                             when {
                                 group != null -> {
                                     loadGroups(forceRefresh = true)
-                                    (activity as? MainActivity)?.showSnackbar(getString(R.string.saved_tracker))
                                     openGroupEditor(group)
                                 }
                                 !errorMessage.isNullOrBlank() -> (activity as? MainActivity)?.showSnackbar(errorMessage)

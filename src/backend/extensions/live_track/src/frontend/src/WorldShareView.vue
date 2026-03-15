@@ -153,6 +153,7 @@ const MAX_ZOOM = 18;
 const LAYER_MAX_ZOOM = 19;
 const POLL_INTERVAL_MS = 5000;
 const MAP_SNAP_DURATION = 200;
+const MAP_EDGE_PADDING_PX = 40;
 const SIDEBAR_ACTION_BUTTON_CLASS =
   'p-1.5 sm:p-2 rounded-lg text-blue-600 hover:bg-blue-50 active:bg-blue-100 focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white [-webkit-tap-highlight-color:transparent]';
 const SIDEBAR_ACTION_ICON_CLASS = 'h-5 w-5 sm:h-6 sm:w-6';
@@ -228,6 +229,22 @@ export default {
       return hasPoints;
     }
 
+    function normalizeTrackForWorld(track) {
+      const geom = track?.geometry || { type: 'LineString', coordinates: [] };
+      const coords = geom.coordinates || [];
+      const last = coords[coords.length - 1] ?? track?.last_point;
+      const pointParams = Array.isArray(track?.point_params) ? track.point_params : [];
+      const latestPointParams = pointParams.length ? pointParams[pointParams.length - 1] : {};
+      return {
+        ...track,
+        geometry: geom,
+        point_params: pointParams,
+        last_position: last && last.length >= 2 ? { lon: last[0], lat: last[1] } : null,
+        last_timestamp_ms: last && last.length >= 3 ? last[2] : null,
+        latestPointParams
+      };
+    }
+
     function openLayerSidebar() {
       showParamsSidebar.value = false;
       showLayerSidebar.value = true;
@@ -243,9 +260,27 @@ export default {
       showParamsSidebar.value = true;
     }
 
+    function getDrawerPeekHeight() {
+      const snap = mobileDrawerRef.value?.snapPx?.[0];
+      if (Number.isFinite(snap) && snap > 0) return snap;
+      return Math.round(worldShareDrawerMaxHeight.value * 0.25);
+    }
+
+    function getMapPadding() {
+      const bottomInset = isMobileView.value && !showLayerSidebar.value && !showParamsSidebar.value
+        ? getDrawerPeekHeight()
+        : 0;
+      return {
+        top: MAP_EDGE_PADDING_PX,
+        left: MAP_EDGE_PADDING_PX,
+        right: MAP_EDGE_PADDING_PX,
+        bottom: MAP_EDGE_PADDING_PX + bottomInset
+      };
+    }
+
     function centerOnSelectedTrack() {
       const track = selectedTrack.value;
-      if (track && map) centerMapOnTrackLastPoint(map, track);
+      if (track && map) centerMapOnTrackLastPoint(map, track, { duration: MAP_SNAP_DURATION, padding: getMapPadding() });
     }
 
     function deselectSelection() {
@@ -260,12 +295,12 @@ export default {
       await updateMapData();
       if (visibleTracks.value.length > 0 && map) {
         if (groupTracks.value?.length) {
-          fitMapToTracks(map, groupTracks.value);
+          fitMapToTracks(map, groupTracks.value, { padding: getMapPadding() });
         } else {
-          fitMapToSingleTrack(map, trackData.value);
+          fitMapToSingleTrack(map, trackData.value, { padding: getMapPadding() });
         }
       } else if (map) {
-        map.easeTo({ center: [0, 0], zoom: 2, duration: MAP_SNAP_DURATION });
+        map.easeTo({ center: [0, 0], zoom: 2, duration: MAP_SNAP_DURATION, padding: getMapPadding() });
       }
     }
 
@@ -284,7 +319,7 @@ export default {
         const last = coords.length ? coords[0] : null;
         if (last) {
           const zoom = Math.max(map.getZoom(), 14);
-          map.easeTo({ center: last, zoom, duration: MAP_SNAP_DURATION });
+          map.easeTo({ center: last, zoom, duration: MAP_SNAP_DURATION, padding: getMapPadding() });
         }
       }
       if (isMobileView.value && mobileDrawerRef.value?.collapseToPeek) {
@@ -385,9 +420,9 @@ export default {
 
     function fitMapToTrack() {
       if (groupTracks.value?.length) {
-        fitMapToTracks(map, groupTracks.value);
+        fitMapToTracks(map, groupTracks.value, { padding: getMapPadding() });
       } else {
-        fitMapToSingleTrack(map, trackData.value);
+        fitMapToSingleTrack(map, trackData.value, { padding: getMapPadding() });
       }
     }
 
@@ -512,11 +547,12 @@ export default {
         const data = await dataRes.json();
         if (info.share_type === 'live_track_group') {
           groupName.value = info.group_name || data.group_name || 'Shared group';
-          groupTracks.value = Array.isArray(data.tracks) ? data.tracks : [];
+          const tracks = Array.isArray(data.tracks) ? data.tracks : [];
+          groupTracks.value = tracks.map((t) => normalizeTrackForWorld(t));
           trackData.value = null;
         } else {
           trackName.value = info.track_name || 'Shared tracker';
-          trackData.value = data;
+          trackData.value = normalizeTrackForWorld(data);
           groupTracks.value = [];
         }
         loading.value = false;
@@ -540,9 +576,9 @@ export default {
               if (!res.ok) return;
               const data = await res.json();
               if (data.share_type === 'live_track_group' && Array.isArray(data.tracks)) {
-                groupTracks.value = data.tracks;
+                groupTracks.value = data.tracks.map((t) => normalizeTrackForWorld(t));
               } else {
-                trackData.value = data;
+                trackData.value = normalizeTrackForWorld(data);
               }
               await updateMapData();
               if (followLocked.value && map && selectedTrack.value) centerOnSelectedTrack();

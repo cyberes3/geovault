@@ -188,6 +188,11 @@ in [Google APIs.md](https://git.evulid.cc/cyberes/geovault/src/branch/master/ins
 
 To use Google for geocoding, set `geocoding_search_mode: google`
 
+## Hauk Tracker Compatibility
+
+To support [Hauk](https://github.com/bilde2910/Hauk) clients (such as iOS clients since there is no Tracker app for iOS),
+set up `hauk nginx.conf` on your nginx server to pass traffic to the Tracker backend.
+
 ## Done!
 
 Everything should be running now and the server will be accessible on `0.0.0.0:8000`. Go ahead and register on the site,

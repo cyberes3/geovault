@@ -11,20 +11,15 @@
 export function trackToParamsModalShape(track) {
   if (!track) return null;
   const coords = track.geometry?.coordinates || [];
-  const lastCoord = coords[coords.length - 1];
+  const lastCoord = coords[coords.length - 1] ?? track.last_point;
   const pointParams = track.point_params || [];
-  const latestParams = pointParams.length ? pointParams[pointParams.length - 1] : {};
-  let lastTimestampMs = null;
-  if (latestParams && typeof latestParams === 'object') {
-    const tsKey = Object.keys(latestParams).find((k) => k.toLowerCase().includes('timestamp'));
-    if (tsKey != null && latestParams[tsKey] != null) {
-      lastTimestampMs = latestParams[tsKey];
-    }
-  }
+  const latestParams = track.latestPointParams && typeof track.latestPointParams === 'object'
+    ? track.latestPointParams
+    : (pointParams.length ? pointParams[pointParams.length - 1] : {});
   return {
     name: track.name,
     last_position: lastCoord && lastCoord.length >= 2 ? { lon: lastCoord[0], lat: lastCoord[1] } : null,
-    last_timestamp_ms: lastTimestampMs,
+    last_timestamp_ms: track.last_timestamp_ms ?? (lastCoord && lastCoord.length >= 3 ? lastCoord[2] : null),
     latestPointParams: latestParams
   };
 }

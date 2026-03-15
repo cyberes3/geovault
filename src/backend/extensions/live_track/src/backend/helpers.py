@@ -13,10 +13,10 @@ DEFAULT_TRACK_COLOR = "#6C93DE"
 
 
 def generate_hauk_password() -> str:
-    """Generate a per-tracker Hauk password in word-word-1234 style (e.g. banana-fork-1234)."""
+    """Generate a per-tracker Hauk password in word.word.1234 style (e.g. banana.fork.1234)."""
     opts = types.SimpleNamespace(
         num=2,
-        delimiter="-",
+        delimiter=".",
         specials=0,
         caps=False,
         randomsource="system",
@@ -26,7 +26,7 @@ def generate_hauk_password() -> str:
         dice_sides=6,
     )
     phrase = diceware.get_passphrase(opts)
-    return f"{phrase}-{secrets.randbelow(10000):04d}"
+    return f"{phrase}.{secrets.randbelow(10000):04d}"
 
 
 import json

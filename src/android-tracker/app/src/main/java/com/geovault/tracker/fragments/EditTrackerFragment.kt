@@ -65,6 +65,7 @@ class EditTrackerFragment : Fragment() {
     private lateinit var worldShareParamsRow: View
     private lateinit var shareParamsWorldSwitch: SwitchCompat
     private lateinit var copyWorldLinkButton: MaterialButton
+    private lateinit var copyWorldLinkSpinner: LoadingSpinner
     private lateinit var ownerToolsSection: View
     private lateinit var exportKmlButton: MaterialButton
 
@@ -152,6 +153,7 @@ class EditTrackerFragment : Fragment() {
         worldShareParamsRow = view.findViewById(R.id.editTrackerWorldShareParamsRow)
         shareParamsWorldSwitch = view.findViewById(R.id.editTrackerShareParamsWorld)
         copyWorldLinkButton = view.findViewById(R.id.editTrackerCopyWorldLink)
+        copyWorldLinkSpinner = view.findViewById(R.id.editTrackerCopyWorldLinkSpinner)
         ownerToolsSection = view.findViewById(R.id.editTrackerOwnerToolsSection)
         exportKmlButton = view.findViewById(R.id.editTrackerExportKml)
 
@@ -176,14 +178,47 @@ class EditTrackerFragment : Fragment() {
 
         worldShareEnabledSwitch.setOnCheckedChangeListener { _, isChecked ->
             worldShareParamsRow.visibility = if (isChecked) View.VISIBLE else View.GONE
-            copyWorldLinkButton.visibility = if (isChecked && currentFetchedTracker?.world_share_url != null) View.VISIBLE else View.GONE
+            if (isChecked) {
+                val id = arguments?.getParcelable<Tracker>(ARG_TRACKER, Tracker::class.java)?.id
+                    ?: arguments?.getString(ARG_TRACKER_ID)
+                if (!id.isNullOrEmpty()) {
+                    worldShareParamsRow.isEnabled = false
+                    copyWorldLinkButton.visibility = View.VISIBLE
+                    copyWorldLinkButton.isEnabled = false
+                    copyWorldLinkButton.text = ""
+                    copyWorldLinkSpinner.show()
+                    TrackerRepository.updateTrackerSettings(
+                        requireContext(),
+                        id,
+                        TrackerSettingsRequest(world_share_enabled = true)
+                    ) { updated, _ ->
+                        if (!isAdded) return@updateTrackerSettings
+                        requireActivity().runOnUiThread {
+                            worldShareParamsRow.isEnabled = true
+                            copyWorldLinkButton.isEnabled = true
+                            copyWorldLinkButton.text = getString(R.string.copy_world_share_link)
+                            copyWorldLinkSpinner.hide()
+                            if (updated != null) {
+                                currentFetchedTracker = updated
+                                copyWorldLinkButton.visibility = if (updated.world_share_url != null) View.VISIBLE else View.GONE
+                            }
+                        }
+                    }
+                } else {
+                    copyWorldLinkButton.visibility = View.GONE
+                }
+            } else {
+                copyWorldLinkButton.visibility = View.GONE
+            }
         }
 
         copyWorldLinkButton.setOnClickListener {
             val url = currentFetchedTracker?.world_share_url
             if (!url.isNullOrBlank()) {
+                val base = GeovaultAuthManager.getServerUrl(requireContext()).trimEnd('/')
+                val fullUrl = if (url.startsWith("http")) url else "$base$url"
                 val cm = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                cm?.setPrimaryClip(ClipData.newPlainText("World share link", url))
+                cm?.setPrimaryClip(ClipData.newPlainText("World share link", fullUrl))
                 Toast.makeText(requireContext(), getString(R.string.world_link_copied), Toast.LENGTH_SHORT).show()
             }
         }
@@ -391,7 +426,6 @@ class EditTrackerFragment : Fragment() {
                                     }
                                 )
                                 requireActivity().supportFragmentManager.popBackStack()
-                                Toast.makeText(requireContext(), getString(R.string.saved_tracker), Toast.LENGTH_SHORT).show()
                             }
                             !errorMessage.isNullOrBlank() -> {
                                 setAllInputsEnabled(true)

@@ -229,32 +229,20 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
                     android:layout_marginBottom="8dp">
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical">
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/allow_adding_to_groups_label"
-                            android:textSize="14sp"
-                            android:textColor="@color/text_primary" />
-                        <androidx.appcompat.widget.SwitchCompat
-                            android:id="@+id/editTrackerAllowGroupReshare"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content" />
-                    </LinearLayout>
                     <TextView
-                        android:layout_width="match_parent"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:text="@string/allow_adding_to_groups_warning"
-                        android:textSize="12sp"
-                        android:textColor="@color/text_secondary"
-                        android:layout_marginTop="4dp" />
+                        android:layout_weight="1"
+                        android:text="@string/allow_adding_to_groups_label"
+                        android:textSize="14sp"
+                        android:textColor="@color/text_primary" />
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/editTrackerAllowGroupReshare"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -297,13 +285,23 @@
                         android:layout_height="wrap_content" />
                 </LinearLayout>
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/editTrackerCopyWorldLink"
-                    style="@style/gv_common_ButtonOutlined"
+                <FrameLayout
                     android:layout_width="wrap_content"
-                    android:layout_height="40dp"
-                    android:text="@string/copy_world_share_link"
-                    android:visibility="gone" />
+                    android:layout_height="wrap_content">
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/editTrackerCopyWorldLink"
+                        style="@style/gv_common_ButtonOutlined"
+                        android:layout_width="192dp"
+                        android:layout_height="40dp"
+                        android:text="@string/copy_world_share_link"
+                        android:visibility="gone" />
+                    <com.geovault.common.LoadingSpinner
+                        android:id="@+id/editTrackerCopyWorldLinkSpinner"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        app:spinnerSize="24dp" />
+                </FrameLayout>
             </LinearLayout>
 
             <LinearLayout

@@ -1,14 +1,16 @@
 from django.http import HttpResponseRedirect
-from django.urls import path
+from django.urls import path, reverse
 
 from . import views
 from . import hauk_views
 from . import world_share_views
 
 
-def _redirect_public_share_to_world(request, share_id):
+def _redirect_public_share_to_world(request, share_id, is_info: bool):
     """Redirect legacy public/share/ URL to world/share/ for backward compatibility."""
-    new_path = request.path.replace("/public/share/", "/world/share/", 1)
+    # Build URL via reverse() from validated share_id only to avoid open redirect (py/url-redirection).
+    url_name = "world_share_info" if is_info else "world_share_data"
+    new_path = reverse(url_name, kwargs={"share_id": share_id})
     return HttpResponseRedirect(request.build_absolute_uri(new_path))
 
 
@@ -19,10 +21,10 @@ urlpatterns = [
     path("api/adopt.php", hauk_views.hauk_adopt_stub),
     path("api/new-link.php", hauk_views.hauk_new_link_stub),
     path("api/fetch.php", hauk_views.hauk_fetch_stub),
-    path("world/share/<str:share_id>/info/", world_share_views.world_share_info),
-    path("world/share/<str:share_id>/", world_share_views.world_share_data),
-    path("public/share/<str:share_id>/info/", lambda r, share_id: _redirect_public_share_to_world(r, share_id)),
-    path("public/share/<str:share_id>/", lambda r, share_id: _redirect_public_share_to_world(r, share_id)),
+    path("world/share/<str:share_id>/info/", world_share_views.world_share_info, name="world_share_info"),
+    path("world/share/<str:share_id>/", world_share_views.world_share_data, name="world_share_data"),
+    path("public/share/<str:share_id>/info/", lambda r, share_id: _redirect_public_share_to_world(r, share_id, True)),
+    path("public/share/<str:share_id>/", lambda r, share_id: _redirect_public_share_to_world(r, share_id, False)),
     path("trackers/", views.tracker_list_create),
     path("trackers/available-to-add/", views.tracker_available_to_add),
     path("tracker-check/", views.tracker_check),

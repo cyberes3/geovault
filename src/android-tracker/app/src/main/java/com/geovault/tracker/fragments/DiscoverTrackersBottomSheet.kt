@@ -135,7 +135,6 @@ class DiscoverTrackersBottomSheet : BottomSheetDialogFragment() {
             if (trackIds.isEmpty()) {
                 parent.removeView(row)
                 parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
-                (activity as? MainActivity)?.showSnackbar(getString(R.string.saved_tracker))
                 return@setOnClickListener
             }
             for (trackId in trackIds) {
@@ -157,7 +156,6 @@ class DiscoverTrackersBottomSheet : BottomSheetDialogFragment() {
                                     }
                                 }
                                 parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
-                                (activity as? MainActivity)?.showSnackbar(getString(R.string.saved_tracker))
                             } else {
                                 addBtn.isEnabled = true
                                 (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
@@ -191,7 +189,6 @@ class DiscoverTrackersBottomSheet : BottomSheetDialogFragment() {
                             }
                         }
                         parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
-                        (activity as? MainActivity)?.showSnackbar(getString(R.string.saved_tracker))
                     } else {
                         row.findViewById<com.google.android.material.button.MaterialButton>(R.id.availableTrackerAdd).isEnabled = true
                         (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))

@@ -29,13 +29,13 @@
         android:textSize="14sp"
         android:textStyle="bold"
         android:textColor="@color/text_secondary"
-        android:layout_marginBottom="6dp" />
+        android:layout_marginBottom="4dp" />
     <LinearLayout
         android:id="@+id/groupDetailTracksList"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:layout_marginBottom="6dp" />
+        android:layout_marginBottom="4dp" />
     <com.google.android.material.button.MaterialButton
         android:id="@+id/groupDetailAddTrack"
         style="@style/gv_common_ButtonOutlined"
@@ -68,13 +68,23 @@
             android:textColor="@color/text_primary"
             android:paddingStart="6dp"
             android:paddingEnd="6dp" />
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/groupDetailCopyWorldLink"
-            style="@style/gv_common_ButtonOutlined"
+        <FrameLayout
             android:layout_width="wrap_content"
-            android:layout_height="36dp"
-            android:text="@string/copy_world_share_link"
-            android:visibility="gone" />
+            android:layout_height="wrap_content">
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/groupDetailCopyWorldLink"
+                style="@style/gv_common_ButtonOutlined"
+                android:layout_width="192dp"
+                android:layout_height="36dp"
+                android:text="@string/copy_world_share_link"
+                android:visibility="gone" />
+            <com.geovault.common.LoadingSpinner
+                android:id="@+id/groupDetailCopyWorldLinkSpinner"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                app:spinnerSize="24dp" />
+        </FrameLayout>
     </LinearLayout>
 
     <LinearLayout
@@ -100,15 +110,6 @@
             android:paddingStart="6dp"
             android:paddingEnd="6dp" />
     </LinearLayout>
-    <TextView
-        android:id="@+id/groupDetailHideInListHint"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/hide_in_list_hint"
-        android:textSize="12sp"
-        android:textColor="@color/text_secondary"
-        android:layout_marginBottom="6dp"
-        android:visibility="gone" />
 
     <LinearLayout
         android:layout_width="match_parent"

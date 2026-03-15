@@ -448,6 +448,7 @@ const VALID_SORT_VALUES = new Set(['alphabetical', 'last_updated', 'num_points',
 const CENTER_DEBOUNCE_MS = 220;
 /** Duration (ms) for minimal map snap animations. */
 const MAP_SNAP_DURATION = 200;
+const MAP_EDGE_PADDING_PX = 80;
 const LIST_TABS = [
   { id: 'trackers', label: 'Trackers' },
   { id: 'groups', label: 'Groups' },
@@ -1293,7 +1294,7 @@ export default {
       const center = getSelectedTrackLastPoint();
       if (!center) return;
       isAutoMoving.value = true;
-      map.panTo(center, { duration: MAP_SNAP_DURATION });
+      map.easeTo({ center, duration: MAP_SNAP_DURATION, padding: getMapPadding() });
       setTimeout(() => {
         isAutoMoving.value = false;
       }, MAP_SNAP_DURATION + 50);
@@ -1366,7 +1367,7 @@ export default {
       if (map && lastPoint.length > 0) {
         isAutoMoving.value = true;
         const zoom = Math.max(map.getZoom(), 14);
-        map.easeTo({ center: lastPoint[0], zoom, duration: MAP_SNAP_DURATION });
+        map.easeTo({ center: lastPoint[0], zoom, duration: MAP_SNAP_DURATION, padding: getMapPadding() });
         setTimeout(() => {
           isAutoMoving.value = false;
         }, MAP_SNAP_DURATION + 50);
@@ -1378,6 +1379,24 @@ export default {
     function collapseDrawerToPeek() {
       if (!isMobileView.value) return;
       mobileDrawerRef.value?.collapseToPeek?.();
+    }
+
+    function getDrawerPeekHeight() {
+      const snap = mobileDrawerRef.value?.snapPx?.[0];
+      if (Number.isFinite(snap) && snap > 0) return snap;
+      return Math.round(trackerMaxHeight.value * 0.25);
+    }
+
+    function getMapPadding() {
+      const bottomInset = isMobileView.value && isSheetOpen.value && !isMapSidebarOpen.value
+        ? getDrawerPeekHeight()
+        : 0;
+      return {
+        top: MAP_EDGE_PADDING_PX,
+        left: MAP_EDGE_PADDING_PX,
+        right: MAP_EDGE_PADDING_PX,
+        bottom: MAP_EDGE_PADDING_PX + bottomInset
+      };
     }
 
     function fitBoundsFromCoords(coords) {
@@ -1393,9 +1412,8 @@ export default {
       const pad = 0.002;
       if (maxLon <= minLon) { minLon -= pad; maxLon += pad; }
       if (maxLat <= minLat) { minLat -= pad; maxLat += pad; }
-      const paddingPx = 80;
       map.fitBounds([[minLon, minLat], [maxLon, maxLat]], {
-        padding: { top: paddingPx, bottom: paddingPx, left: paddingPx, right: paddingPx },
+        padding: getMapPadding(),
         maxZoom: 15,
         duration: MAP_SNAP_DURATION
       });
@@ -1426,7 +1444,7 @@ export default {
       if (trackers.value.length > 0) {
         fitMapToTracks();
       } else if (map) {
-        map.easeTo({ center: [0, 0], zoom: 2, duration: MAP_SNAP_DURATION });
+        map.easeTo({ center: [0, 0], zoom: 2, duration: MAP_SNAP_DURATION, padding: getMapPadding() });
       }
     }
 
@@ -1694,7 +1712,7 @@ export default {
       if (map && lastPoint.length > 0) {
         isAutoMoving.value = true;
         const zoom = Math.max(map.getZoom(), 14);
-        map.easeTo({ center: lastPoint[0], zoom, duration: MAP_SNAP_DURATION });
+        map.easeTo({ center: lastPoint[0], zoom, duration: MAP_SNAP_DURATION, padding: getMapPadding() });
         setTimeout(() => {
           isAutoMoving.value = false;
         }, MAP_SNAP_DURATION + 50);

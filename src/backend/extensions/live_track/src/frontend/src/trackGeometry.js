@@ -98,13 +98,16 @@ export function buildPointFeature(track, selected = false) {
  * @param {import('maplibre-gl').Map} map - MapLibre map instance
  * @param {Object[]} tracks - Array of tracks with geometry.coordinates
  */
-export function fitMapToTracks(map, tracks) {
+export function fitMapToTracks(map, tracks, options = {}) {
   if (!map || !tracks?.length) return;
   const allCoords = [];
   for (const track of tracks) {
     const coords = getCoordsSortedByTime(track).map((c) => [c[0], c[1]]);
     allCoords.push(...coords);
   }
+  const padding = options.padding ?? 40;
+  const maxZoom = options.maxZoom ?? 16;
+  const duration = options.duration ?? 0;
   if (allCoords.length >= 2) {
     const lons = allCoords.map((c) => c[0]);
     const lats = allCoords.map((c) => c[1]);
@@ -113,10 +116,10 @@ export function fitMapToTracks(map, tracks) {
         [Math.min(...lons), Math.min(...lats)],
         [Math.max(...lons), Math.max(...lats)]
       ],
-      { padding: 40, maxZoom: 16, duration: 0 }
+      { padding, maxZoom, duration }
     );
   } else if (allCoords.length === 1) {
-    map.jumpTo({ center: allCoords[0], zoom: 14, duration: 0 });
+    map.jumpTo({ center: allCoords[0], zoom: options.singlePointZoom ?? 14, duration });
   }
 }
 
@@ -125,9 +128,12 @@ export function fitMapToTracks(map, tracks) {
  * @param {import('maplibre-gl').Map} map - MapLibre map instance
  * @param {Object} track - Track with geometry.coordinates
  */
-export function fitMapToSingleTrack(map, track) {
+export function fitMapToSingleTrack(map, track, options = {}) {
   if (!map || !track) return;
   const coords = getCoordsSortedByTime(track).map((c) => [c[0], c[1]]);
+  const padding = options.padding ?? 40;
+  const maxZoom = options.maxZoom ?? 16;
+  const duration = options.duration ?? 0;
   if (coords.length >= 2) {
     const lons = coords.map((c) => c[0]);
     const lats = coords.map((c) => c[1]);
@@ -136,10 +142,10 @@ export function fitMapToSingleTrack(map, track) {
         [Math.min(...lons), Math.min(...lats)],
         [Math.max(...lons), Math.max(...lats)]
       ],
-      { padding: 40, maxZoom: 16, duration: 0 }
+      { padding, maxZoom, duration }
     );
   } else if (coords.length === 1) {
-    map.jumpTo({ center: coords[0], zoom: 14, duration: 0 });
+    map.jumpTo({ center: coords[0], zoom: options.singlePointZoom ?? 14, duration });
   }
 }
 
@@ -148,10 +154,15 @@ export function fitMapToSingleTrack(map, track) {
  * @param {import('maplibre-gl').Map} map - MapLibre map instance
  * @param {Object} track - Track with geometry.coordinates
  */
-export function centerMapOnTrackLastPoint(map, track) {
+export function centerMapOnTrackLastPoint(map, track, options = {}) {
   if (!map || !track) return;
   const coords = getCoordsSortedByTime(track).map((c) => [c[0], c[1]]);
   const last = coords.length ? coords[coords.length - 1] : null;
   if (!last) return;
-  map.panTo(last, { duration: 200 });
+  const duration = options.duration ?? 200;
+  if (options.padding != null) {
+    map.easeTo({ center: last, duration, padding: options.padding });
+    return;
+  }
+  map.panTo(last, { duration });
 }

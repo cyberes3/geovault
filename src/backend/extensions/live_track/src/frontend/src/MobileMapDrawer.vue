@@ -23,15 +23,6 @@
       <div class="mobile-drawer-handle-bar" />
     </div>
     <div class="flex-1 min-h-0 overflow-hidden flex flex-col relative">
-      <div
-        v-if="isDrawerAtPeek"
-        class="mobile-drawer-drag-overlay"
-        aria-label="Drag to Expand"
-        @touchstart.passive="onDrawerDragStart"
-        @touchmove.prevent="onDrawerDragMove"
-        @touchend="onDrawerDragEnd"
-        @mousedown="onDrawerDragStart"
-      />
       <slot :at-peek="isDrawerAtPeek" />
     </div>
   </div>
@@ -236,14 +227,4 @@ export default {
   background: rgba(0, 0, 0, 0.28);
 }
 
-.mobile-drawer-drag-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  cursor: grab;
-}
-
-.mobile-drawer-drag-overlay:active {
-  cursor: grabbing;
-}
 </style>

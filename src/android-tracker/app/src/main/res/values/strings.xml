@@ -235,7 +235,7 @@
     <string name="add_tracker">Add tracker</string>
     <string name="discover_public">Public trackers</string>
     <string name="discover_shared_with_me">Shared with you</string>
-    <string name="discover_empty">No trackers to add. Ask someone to share one with you or make theirs public.</string>
+    <string name="discover_empty">No trackers to add.</string>
     <string name="unsubscribe">Unsubscribe</string>
     <string name="remove_from_share">Remove from share</string>
     <string name="add">Add</string>
