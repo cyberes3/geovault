@@ -101,6 +101,10 @@ class MapFragment : Fragment() {
     private var displayedTrackerId: String? = null
     /** Name of the tracker currently shown on the map; used for the label in the upper left. */
     private var displayedTrackerName: String? = null
+    /** Group currently shown on map, when in group context. */
+    private var displayedGroupName: String? = null
+    /** Explicit map UI context used for chip/button state. */
+    private var mapViewContext: MapViewContext = MapViewContext.DEFAULT_TRACKER
     /** Dirty flag for debounced track line updates. */
     private var trackLineDirty = false
 
@@ -319,6 +323,7 @@ class MapFragment : Fragment() {
                 })
                 mapReady = true
                 mapLoadingOverlay.visibility = View.GONE
+                refreshMapPadding(force = true)
                 updateTrackLine()
                 if (zoomToTrackAfterLoad && trackPoints.isNotEmpty()) {
                     val bbox = (activity as? MainActivity)?.initialTrackForMap?.bbox
@@ -327,13 +332,21 @@ class MapFragment : Fragment() {
                             .include(LatLng(bbox[1], bbox[0]))
                             .include(LatLng(bbox[3], bbox[2]))
                             .build()
-                        val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                        mgr.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
+                        val p = getBoundsPaddingEdgesPx(0)
+                        mgr.moveCameraWithPadding(
+                            map,
+                            CameraUpdateFactory.newLatLngBounds(bounds, p[0], p[1], p[2], p[3]),
+                            getMapPaddingArray()
+                        )
                         zoomToTrackAfterLoad = false
                     } else if (trackPoints.size >= 2) {
                         val bounds = LatLngBounds.Builder().apply { trackPoints.forEach { include(it) } }.build()
-                        val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                        mgr.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
+                        val p = getBoundsPaddingEdgesPx(0)
+                        mgr.moveCameraWithPadding(
+                            map,
+                            CameraUpdateFactory.newLatLngBounds(bounds, p[0], p[1], p[2], p[3]),
+                            getMapPaddingArray()
+                        )
                         zoomToTrackAfterLoad = false
                     }
                 }
@@ -400,12 +413,14 @@ class MapFragment : Fragment() {
                 loadAllTrackersAndApply()
             }
         }
+        view.post { if (isAdded) refreshMapPadding(force = true) }
     }
 
     override fun onResume() {
         super.onResume()
         view?.keepScreenOn = true
         updateTrackerLabel()
+        refreshMapPadding(force = true)
 
         ContextCompat.registerReceiver(
             requireContext(),
@@ -437,17 +452,32 @@ class MapFragment : Fragment() {
         }
 
         if (mapReady) {
+            if (mapViewContext == MapViewContext.GROUP) {
+                updateTrackerLabel()
+                return
+            }
             val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
             val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
             if (defaultTrackerId.isEmpty()) {
-                // No default tracker (e.g. was deleted or unset): clear map so we don't show a stale track.
-                trackPoints.clear()
-                displayedTrackerId = null
-                displayedTrackerName = null
-                stopLiveTrackStreaming()
-                updateTrackLine()
-                updateZoomToLatestButtonState()
-                updateTrackerLabel()
+                val hasSpecificTracker = !displayedTrackerId.isNullOrEmpty()
+                val pendingInitialTracker = (activity as? MainActivity)?.initialTrackForMap != null
+                if (!hasSpecificTracker && !pendingInitialTracker) {
+                    // No default and no explicit tracker target: clear map so we don't show stale data.
+                    trackPoints.clear()
+                    displayedTrackerId = null
+                    displayedTrackerName = null
+                    stopLiveTrackStreaming()
+                    updateTrackLine()
+                    updateZoomToLatestButtonState()
+                    updateTrackerLabel()
+                } else if (hasSpecificTracker && trackPoints.isEmpty()) {
+                    // No default exists, but user is viewing a specific tracker from list/share.
+                    TrackerRepository.clearGeometryCache()
+                    restoreOnlyNoZoom = true
+                    fetchFullGeometryAndApply(displayedTrackerId!!, forceReplace = false)
+                } else {
+                    updateTrackerLabel()
+                }
             } else {
                 val showingDefault = displayedTrackerId == null || displayedTrackerId == defaultTrackerId
                 if (showingDefault && trackPoints.isEmpty()) {
@@ -512,10 +542,34 @@ class MapFragment : Fragment() {
         val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
         val defaultTrackerName = prefs.getString("selected_tracker_name", "") ?: ""
+        if (mapViewContext == MapViewContext.GROUP) {
+            trackerLabelCard.visibility = View.VISIBLE
+            val density = resources.displayMetrics.density
+            val maxAllowedWidth = (resources.displayMetrics.widthPixels * 2) / 3
+            trackerLabelCard.layoutParams = trackerLabelCard.layoutParams.apply {
+                width = ViewGroup.LayoutParams.WRAP_CONTENT
+            }
+            trackerNameLabel.maxWidth = maxAllowedWidth - (58 * density).toInt()
+            val updatedFixedDesiredWidth = (160 * density).toInt()
+            val cappedUpdatedWidth = updatedFixedDesiredWidth.coerceAtMost(maxAllowedWidth - (34 * density).toInt())
+            lastUpdatedLabel.layoutParams = lastUpdatedLabel.layoutParams.apply {
+                width = cappedUpdatedWidth
+            }
+            lastUpdatedLabel.maxWidth = cappedUpdatedWidth
+            trackerNameLabel.text = displayedGroupName?.takeIf { it.isNotBlank() } ?: getString(R.string.groups_title)
+            resetToTrackerButton.visibility = View.VISIBLE
+            resetToTrackerButton.contentDescription = getString(R.string.show_default_tracker)
+            updateStreamingUi(defaultTrackerId)
+            showAllTrackersButton.visibility = View.GONE
+            showAllTrackersButton.contentDescription = getString(R.string.show_all_trackers)
+            return
+        }
         if (defaultTrackerId.isEmpty()) {
             trackerLabelCard.visibility = View.GONE
             displayedTrackerId = null
             displayedTrackerName = null
+            displayedGroupName = null
+            mapViewContext = MapViewContext.DEFAULT_TRACKER
             lastCachedUpdateTimeMs = null
             updateStreamingUi("")
             showAllTrackersButton.visibility = View.VISIBLE
@@ -552,13 +606,19 @@ class MapFragment : Fragment() {
             }
             trackerNameLabel.text = labelName
             // Show reset when we're viewing a track that is not the default (e.g. after "View on map" on another track); hide when showing all trackers
-            resetToTrackerButton.visibility = if (showAllTrackers) View.GONE else if (
-                displayedTrackerId != null && displayedTrackerId != defaultTrackerId
-            ) View.VISIBLE else View.GONE
+            resetToTrackerButton.visibility = if (showAllTrackers) {
+                View.GONE
+            } else if (mapViewContext != MapViewContext.DEFAULT_TRACKER) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+            resetToTrackerButton.contentDescription = getString(R.string.show_default_tracker)
             updateStreamingUi(defaultTrackerId)
-            showAllTrackersButton.visibility = if (isStreaming(defaultTrackerId)) View.GONE else View.VISIBLE
+            showAllTrackersButton.visibility = if (mapViewContext == MapViewContext.DEFAULT_TRACKER) View.VISIBLE else View.GONE
             showAllTrackersButton.contentDescription = if (showAllTrackers) getString(R.string.show_default_tracker) else getString(R.string.show_all_trackers)
         }
+        mapManager?.defaultPadding = getMapPaddingArray()
     }
 
     /** Return true if we are currently viewing a track that is NOT the default one. */
@@ -660,15 +720,106 @@ class MapFragment : Fragment() {
 
     private fun getMapPaddingArray(): DoubleArray {
         val density = resources.displayMetrics.density
-        val navHeightPx = (activity?.findViewById<View>(R.id.bottomNavContainer)?.height ?: 0).toDouble()
-        val navFallbackPx = (BOTTOM_NAV_HEIGHT_DP * density).toDouble()
-        val bottomNavPx = if (navHeightPx > 0.0) navHeightPx else navFallbackPx
-        return doubleArrayOf(
-            (MAP_PADDING_LEFT_DP * density).toDouble(),
-            (MAP_PADDING_TOP_DP * density).toDouble(),
-            (MAP_PADDING_RIGHT_DP * density).toDouble(),
-            (MAP_PADDING_BOTTOM_DP * density).toDouble() + bottomNavPx
+        val mapRoot = view
+        val mapWidthPx = mapRoot?.width ?: 0
+        val mapHeightPx = mapRoot?.height ?: 0
+        val baseLeftPx = (MAP_PADDING_LEFT_DP * density).toInt()
+        val baseTopPx = (MAP_PADDING_TOP_DP * density).toInt()
+        val baseRightPx = (MAP_PADDING_RIGHT_DP * density).toInt()
+        val baseBottomPx = (MAP_PADDING_BOTTOM_DP * density).toInt()
+        val extraPadPx = (MAP_PADDING_EDGE_EXTRA_DP * density).toInt()
+        val leftOverlayInsetPx = if (mapWidthPx > 0 && trackerLabelCard.visibility == View.VISIBLE) {
+            trackerLabelCard.right.coerceAtLeast(0)
+        } else 0
+        val leftPaddingPx = maxOf(
+            baseLeftPx,
+            if (leftOverlayInsetPx > 0) leftOverlayInsetPx + extraPadPx else baseLeftPx
         )
+        val topOverlayBottomPx = listOf(
+            trackerLabelCard,
+            zoomToLatestButton,
+            mapToggle,
+            zoomInButton,
+            zoomOutButton,
+            showAllTrackersButton
+        )
+            .filter { it.visibility == View.VISIBLE }
+            .maxOfOrNull { it.top + it.height }
+            ?: 0
+        val topPaddingPx = maxOf(
+            baseTopPx,
+            if (topOverlayBottomPx > 0) topOverlayBottomPx + extraPadPx else baseTopPx
+        )
+        val rightOverlayInsetPx = if (mapWidthPx > 0) {
+            listOf(zoomToLatestButton, mapToggle, zoomInButton, zoomOutButton, showAllTrackersButton)
+                .filter { it.visibility == View.VISIBLE }
+                .maxOfOrNull { (mapWidthPx - it.left).coerceAtLeast(0) }
+                ?: 0
+        } else 0
+        val rightPaddingPx = maxOf(
+            baseRightPx,
+            if (rightOverlayInsetPx > 0) rightOverlayInsetPx + extraPadPx else baseRightPx
+        )
+        val bottomOverlayInsetPx = if (mapHeightPx > 0 && geometryLoadingSpinner.visibility == View.VISIBLE) {
+            (mapHeightPx - geometryLoadingSpinner.top).coerceAtLeast(0)
+        } else 0
+        val bottomNavOverlapPx = run {
+            val nav = activity?.findViewById<View>(R.id.bottomNavContainer)
+            if (mapRoot == null || nav == null || !nav.isShown) 0
+            else {
+                val mapLoc = IntArray(2)
+                val navLoc = IntArray(2)
+                mapRoot.getLocationOnScreen(mapLoc)
+                nav.getLocationOnScreen(navLoc)
+                val mapBottom = mapLoc[1] + mapRoot.height
+                (mapBottom - navLoc[1]).coerceAtLeast(0)
+            }
+        }
+        val bottomPaddingPx = maxOf(
+            baseBottomPx,
+            if (bottomOverlayInsetPx > 0) bottomOverlayInsetPx + extraPadPx else baseBottomPx,
+            if (bottomNavOverlapPx > 0) bottomNavOverlapPx + extraPadPx else baseBottomPx,
+            ((activity?.findViewById<View>(R.id.bottomNavContainer)?.height ?: 0) + extraPadPx)
+        )
+        return doubleArrayOf(
+            leftPaddingPx.toDouble(),
+            topPaddingPx.toDouble(),
+            rightPaddingPx.toDouble(),
+            bottomPaddingPx.toDouble()
+        )
+    }
+
+    /** Per-edge bounds-fit padding: current map insets plus extra buffer. */
+    private fun getBoundsPaddingEdgesPx(extraBoundsPaddingPx: Int): IntArray {
+        val insets = getMapPaddingArray()
+        return intArrayOf(
+            insets[0].toInt() + extraBoundsPaddingPx,
+            insets[1].toInt() + extraBoundsPaddingPx,
+            insets[2].toInt() + extraBoundsPaddingPx,
+            insets[3].toInt() + extraBoundsPaddingPx
+        )
+    }
+
+    /**
+     * Survey-style padding refresh: store default padding and actively apply it
+     * to the current camera position so UI inset changes immediately take effect.
+     */
+    private fun refreshMapPadding(force: Boolean = false) {
+        val map = maplibreMap ?: return
+        val mgr = mapManager ?: return
+        val targetPadding = getMapPaddingArray()
+        val currentPadding = map.cameraPosition.padding
+        val isSamePadding = currentPadding != null &&
+            kotlin.math.abs(currentPadding[0] - targetPadding[0]) < 1.0 &&
+            kotlin.math.abs(currentPadding[1] - targetPadding[1]) < 1.0 &&
+            kotlin.math.abs(currentPadding[2] - targetPadding[2]) < 1.0 &&
+            kotlin.math.abs(currentPadding[3] - targetPadding[3]) < 1.0
+        mgr.defaultPadding = targetPadding
+        if (!force && isSamePadding) return
+        val padded = CameraPosition.Builder(map.cameraPosition)
+            .padding(targetPadding)
+            .build()
+        map.moveCamera(CameraUpdateFactory.newCameraPosition(padded))
     }
 
     /**
@@ -693,6 +844,7 @@ class MapFragment : Fragment() {
      */
     fun refreshTrackForSelectedTracker() {
         showAllTrackers = false
+        displayedGroupName = null
         clearAllTrackSources()
         setAllTrackLayersVisibility(false)
         setAnnotationLayersVisibility(true)
@@ -701,6 +853,11 @@ class MapFragment : Fragment() {
         val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
         val loadTrackerId = if (initial != null) initial.id else defaultTrackerId
+        mapViewContext = if (loadTrackerId.isNotEmpty() && (defaultTrackerId.isEmpty() || loadTrackerId != defaultTrackerId)) {
+            MapViewContext.SPECIFIC_TRACKER
+        } else {
+            MapViewContext.DEFAULT_TRACKER
+        }
 
         val isSwitching = displayedTrackerId != null && displayedTrackerId != loadTrackerId
 
@@ -718,7 +875,7 @@ class MapFragment : Fragment() {
         followLockEnabled = false
         updateFollowLockButton()
 
-        if (defaultTrackerId.isEmpty()) {
+        if (loadTrackerId.isEmpty()) {
             displayedTrackerId = null
             displayedTrackerName = null
             stopLiveTrackStreaming()
@@ -780,6 +937,8 @@ class MapFragment : Fragment() {
         if (group == null) return
         val map = maplibreMap ?: return
         val style = map.style ?: return
+        mapViewContext = MapViewContext.GROUP
+        displayedGroupName = group.name
         showAllTrackers = true
         clearAllTrackSources()
         setAllTrackLayersVisibility(false)
@@ -962,8 +1121,12 @@ class MapFragment : Fragment() {
                     val boundsBuilder = LatLngBounds.Builder()
                     boundsCoords.forEach { boundsBuilder.include(it) }
                     val bounds = boundsBuilder.build()
-                    val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                    mapManager?.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
+                    val p = getBoundsPaddingEdgesPx(0)
+                    mapManager?.moveCameraWithPadding(
+                        map,
+                        CameraUpdateFactory.newLatLngBounds(bounds, p[0], p[1], p[2], p[3]),
+                        getMapPaddingArray()
+                    )
                 } else {
                     mapManager?.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(boundsCoords.single(), 14.0), getMapPaddingArray())
                 }
@@ -1013,6 +1176,8 @@ class MapFragment : Fragment() {
         if (initial != null) {
             displayedTrackerId = initial.id
             displayedTrackerName = initial.name
+            displayedGroupName = null
+            mapViewContext = if (initial.id != defaultTrackerId) MapViewContext.SPECIFIC_TRACKER else MapViewContext.DEFAULT_TRACKER
             lastCachedUpdateTimeMs = trackerLastUpdateMs(initial)
             currentTrackerColor = (initial.color ?: defaultTrackerColorHex(requireContext())).let { if (it.startsWith("#")) it else "#$it" }
             
@@ -1028,8 +1193,12 @@ class MapFragment : Fragment() {
                         .include(LatLng(bbox[1], bbox[0]))
                         .include(LatLng(bbox[3], bbox[2]))
                         .build()
-                    val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                    mapManager?.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx), getMapPaddingArray())
+                    val p = getBoundsPaddingEdgesPx(0)
+                    mapManager?.moveCameraWithPadding(
+                        map,
+                        CameraUpdateFactory.newLatLngBounds(bounds, p[0], p[1], p[2], p[3]),
+                        getMapPaddingArray()
+                    )
                     zoomToTrackAfterLoad = false
                 } else if (initial.last_point != null && initial.last_point.size >= 2) {
                     mapManager?.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(
@@ -1044,6 +1213,8 @@ class MapFragment : Fragment() {
             displayedTrackerId = defaultTrackerId
             val defaultName = prefs.getString("selected_tracker_name", "") ?: ""
             displayedTrackerName = defaultName.ifEmpty { null }
+            displayedGroupName = null
+            mapViewContext = MapViewContext.DEFAULT_TRACKER
             lastCachedUpdateTimeMs = null
         }
 
@@ -1058,8 +1229,16 @@ class MapFragment : Fragment() {
      */
     fun restoreTrackForSelectedTracker() {
         stopLiveTrackStreaming()
+        showAllTrackers = false
+        clearAllTrackSources()
+        setAllTrackLayersVisibility(false)
+        setAnnotationLayersVisibility(true)
         trackPoints.clear()
         trackTimestamps.clear()
+        displayedTrackerId = null
+        displayedTrackerName = null
+        displayedGroupName = null
+        mapViewContext = MapViewContext.DEFAULT_TRACKER
         restoreOnlyNoZoom = true
         followLockEnabled = false
         updateFollowLockButton()
@@ -1067,15 +1246,24 @@ class MapFragment : Fragment() {
         val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val defaultId = prefs.getString("selected_tracker_id", "") ?: ""
         val defaultName = prefs.getString("selected_tracker_name", "") ?: ""
-        if (defaultId.isNotEmpty()) {
-            displayedTrackerId = defaultId
-            displayedTrackerName = defaultName.ifEmpty { null }
+        if (defaultId.isEmpty()) {
+            updateTrackLine()
+            updateZoomToLatestButtonState()
             updateTrackerLabel()
+            return
         }
+        displayedTrackerId = defaultId
+        displayedTrackerName = defaultName.ifEmpty { null }
+        updateTrackerLabel()
         fetchHistory()
     }
 
     private fun fetchHistory() {
+        if (mapViewContext == MapViewContext.GROUP) {
+            updateZoomToLatestButtonState()
+            updateTrackerLabel()
+            return
+        }
         if ((activity as? MainActivity)?.initialTrackForMap != null) {
             refreshTrackForSelectedTracker()
             return
@@ -1113,10 +1301,12 @@ class MapFragment : Fragment() {
                 displayedTrackerId = trackerId
                 displayedTrackerName = tracker?.name
                 lastCachedUpdateTimeMs = trackerLastUpdateMs(tracker)
+                val defaultId = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+                    .getString("selected_tracker_id", "") ?: ""
+                displayedGroupName = null
+                mapViewContext = if (trackerId != defaultId) MapViewContext.SPECIFIC_TRACKER else MapViewContext.DEFAULT_TRACKER
                 if (tracker != null) {
                     currentTrackerColor = (tracker.color ?: defaultTrackerColorHex(requireContext())).let { if (it.startsWith("#")) it else "#$it" }
-                    val defaultId = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-                        .getString("selected_tracker_id", "") ?: ""
                     if (trackerId != defaultId) {
                         (tracker.point_params?.lastOrNull()?.get("acc") as? Number)?.toFloat()?.takeIf { it > 0f }
                             ?.let { lastStreamedAccuracyMeters = it }
@@ -1160,14 +1350,22 @@ class MapFragment : Fragment() {
                                 .include(LatLng(bbox[1], bbox[0]))
                                 .include(LatLng(bbox[3], bbox[2]))
                                 .build()
-                            val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                            mapManager?.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+                            val p = getBoundsPaddingEdgesPx(0)
+                            mapManager?.moveCameraWithPadding(
+                                map,
+                                CameraUpdateFactory.newLatLngBounds(bounds, p[0], p[1], p[2], p[3]),
+                                getMapPaddingArray()
+                            )
                         } else if (trackPoints.size >= 2) {
                             val bounds = LatLngBounds.Builder().apply {
                                 trackPoints.forEach { include(it) }
                             }.build()
-                            val paddingPx = (BOUNDS_PADDING_DP * resources.displayMetrics.density).toInt()
-                            mapManager?.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+                            val p = getBoundsPaddingEdgesPx(0)
+                            mapManager?.moveCameraWithPadding(
+                                map,
+                                CameraUpdateFactory.newLatLngBounds(bounds, p[0], p[1], p[2], p[3]),
+                                getMapPaddingArray()
+                            )
                         }
                     }
                     if (followLockEnabled && trackPoints.isNotEmpty()) {
@@ -1384,13 +1582,11 @@ class MapFragment : Fragment() {
         /** Do not draw track across jumps larger than this (meters). 100 miles. */
         private const val MAX_JUMP_METERS = 100f * 1609.344f
         /** Content padding (dp) so overlays (name card, buttons, spinner) don't cut off the track. */
-        private const val MAP_PADDING_LEFT_DP = 216
+        private const val MAP_PADDING_LEFT_DP = 28
         private const val MAP_PADDING_TOP_DP = 130
+        private const val MAP_PADDING_EDGE_EXTRA_DP = 12
         private const val MAP_PADDING_RIGHT_DP = 60
         private const val MAP_PADDING_BOTTOM_DP = 48
-        private const val BOTTOM_NAV_HEIGHT_DP = 52
-        /** Extra padding (dp) when fitting bounds inside the content-padded viewport. */
-        private const val BOUNDS_PADDING_DP = 24
 
         // Map source/layer IDs (tracker map only)
         private const val TRACK_SOURCE_ID = "track-source"
@@ -1406,5 +1602,11 @@ class MapFragment : Fragment() {
         private const val ALL_TRACKS_OUTLINE_LAYER_ID = "all-tracks-outline-layer"
         private const val ALL_TRACKS_FILL_LAYER_ID = "all-tracks-fill-layer"
         private const val ALL_TRACKS_POINTS_LAYER_ID = "all-tracks-points-layer"
+    }
+
+    private enum class MapViewContext {
+        DEFAULT_TRACKER,
+        SPECIFIC_TRACKER,
+        GROUP
     }
 }

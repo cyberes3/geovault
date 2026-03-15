@@ -4,7 +4,10 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="20dp"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="14dp"
+    android:paddingBottom="14dp"
     android:minHeight="200dp">
 
     <EditText
@@ -13,11 +16,11 @@
         android:layout_height="wrap_content"
         android:hint="@string/new_group_name_hint"
         android:inputType="text"
-        android:textSize="18sp"
+        android:textSize="16sp"
         android:textColor="@color/text_primary"
-        android:padding="12dp"
+        android:padding="10dp"
         android:background="@drawable/edit_text_background"
-        android:layout_marginBottom="16dp" />
+        android:layout_marginBottom="12dp" />
 
     <TextView
         android:layout_width="match_parent"
@@ -26,80 +29,31 @@
         android:textSize="14sp"
         android:textStyle="bold"
         android:textColor="@color/text_secondary"
-        android:layout_marginBottom="8dp" />
+        android:layout_marginBottom="6dp" />
     <LinearLayout
         android:id="@+id/groupDetailTracksList"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:layout_marginBottom="8dp" />
+        android:layout_marginBottom="6dp" />
     <com.google.android.material.button.MaterialButton
         android:id="@+id/groupDetailAddTrack"
         style="@style/gv_common_ButtonOutlined"
         android:layout_width="wrap_content"
-        android:layout_height="40dp"
+        android:layout_height="36dp"
         android:text="@string/add_track_to_group"
-        android:layout_marginBottom="16dp" />
+        android:layout_marginBottom="12dp" />
 
-    <TextView
-        android:id="@+id/groupDetailSharingSectionHeader"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/sharing_section"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:textColor="@color/text_secondary"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="8dp"
-        android:visibility="gone" />
-    <TextView
-        android:id="@+id/groupDetailSharingHeader"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/visibility_label"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:textColor="@color/text_secondary"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="8dp"
-        android:visibility="gone" />
-    <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/groupDetailVisibilityLayout"
-        style="@style/gv_common_ExposedDropdownMenu"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp"
-        android:visibility="gone">
-        <AutoCompleteTextView
-            android:id="@+id/groupDetailVisibility"
-            style="@style/gv_common_AutoCompleteDropdown"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="40dp"
-            android:hint="@string/visibility_label" />
-    </com.google.android.material.textfield.TextInputLayout>
-    <LinearLayout
-        android:id="@+id/groupDetailSharedWithList"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:layout_marginBottom="8dp"
-        android:visibility="gone" />
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/groupDetailAddSharedWith"
-        style="@style/gv_common_ButtonOutlined"
-        android:layout_width="wrap_content"
-        android:layout_height="40dp"
-        android:text="@string/shared_with_recipients_label"
-        android:layout_marginBottom="8dp"
-        android:visibility="gone" />
+    <include
+        layout="@layout/include_sharing_section"
+        android:id="@+id/sharingSectionInclude" />
     <LinearLayout
         android:id="@+id/groupDetailWorldShareRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:layout_marginBottom="8dp"
+        android:layout_marginBottom="6dp"
         android:visibility="gone">
         <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/groupDetailWorldShareSwitch"
@@ -112,13 +66,13 @@
             android:text="@string/world_share_enabled_label"
             android:textSize="14sp"
             android:textColor="@color/text_primary"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp" />
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp" />
         <com.google.android.material.button.MaterialButton
             android:id="@+id/groupDetailCopyWorldLink"
             style="@style/gv_common_ButtonOutlined"
             android:layout_width="wrap_content"
-            android:layout_height="40dp"
+            android:layout_height="36dp"
             android:text="@string/copy_world_share_link"
             android:visibility="gone" />
     </LinearLayout>
@@ -129,8 +83,8 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="8dp"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="6dp"
         android:visibility="gone">
         <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/groupDetailHideInListSwitch"
@@ -143,8 +97,8 @@
             android:text="@string/hide_in_list_label"
             android:textSize="14sp"
             android:textColor="@color/text_primary"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp" />
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp" />
     </LinearLayout>
     <TextView
         android:id="@+id/groupDetailHideInListHint"
@@ -153,7 +107,7 @@
         android:text="@string/hide_in_list_hint"
         android:textSize="12sp"
         android:textColor="@color/text_secondary"
-        android:layout_marginBottom="8dp"
+        android:layout_marginBottom="6dp"
         android:visibility="gone" />
 
     <LinearLayout
@@ -165,16 +119,16 @@
             android:id="@+id/groupDetailLeave"
             style="@style/gv_common_ButtonOutlined"
             android:layout_width="0dp"
-            android:layout_height="44dp"
+            android:layout_height="40dp"
             android:layout_weight="1"
-            android:layout_marginEnd="8dp"
+            android:layout_marginEnd="6dp"
             android:text="@string/leave_group" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/groupDetailDelete"
             style="@style/gv_common_ButtonOutlinedDestructive"
             android:layout_width="0dp"
-            android:layout_height="44dp"
+            android:layout_height="40dp"
             android:layout_weight="1"
             android:text="@string/delete_group" />
     </LinearLayout>

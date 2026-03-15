@@ -21,9 +21,9 @@
     <string name="no_tracker_selected">No tracker selected</string>
     <string name="no_trackers_found">No trackers found</string>
     <string name="no_trackers_found_message">No trackers yet. Create one to start tracking.</string>
-    <string name="no_tracker_selected_go_to_settings">No tracker selected. Go to Trackers → tap a tracker → Edit → turn on \"Default track\".</string>
-    <string name="tracker_validation_failed_go_to_settings">This tracker is no longer valid. Go to Trackers → Edit → turn on \"Default track\" for another tracker.</string>
-    <string name="default_track_label">Default Track</string>
+    <string name="no_tracker_selected_go_to_settings">No tracker selected. Go to Trackers → tap a tracker → Edit → turn on \"Default tracker\".</string>
+    <string name="tracker_validation_failed_go_to_settings">This tracker is no longer valid. Go to Trackers → Edit → turn on \"Default tracker\" for another tracker.</string>
+    <string name="default_track_label">Default tracker</string>
     <string name="create_new_tracker">Create New Tracker</string>
     <!-- Must match gv_common_blue_400 (default_tracker_color). Used as hint in new/edit tracker forms. -->
     <string name="default_tracker_color_hex">#6C93DE</string>
@@ -164,7 +164,7 @@
     <string name="save">Save</string>
     <string name="saved_tracker">Saved tracker</string>
     <string name="create">Create</string>
-<string name="new_tracker_title">New Track</string>
+<string name="new_tracker_title">New Tracker</string>
 <string name="edit_tracker_title">Edit Tracker</string>
 <string name="discard_changes_confirm_title">Discard Changes?</string>
     <string name="discard_changes_confirm_message">You have unsaved changes. Close without saving?</string>
@@ -194,14 +194,14 @@
     <string name="last_updated_hour">hr</string>
     <string name="last_updated_days">days</string>
     <string name="last_updated_day">day</string>
-    <string name="live_track_streaming_title">Streaming Track</string>
+    <string name="live_track_streaming_title">Streaming tracker</string>
     <string name="live_track_streaming_text">%1$s</string>
-    <string name="live_track_streaming_text_anon">Track updates</string>
-    <string name="live_track_streaming_channel">Track streaming</string>
+    <string name="live_track_streaming_text_anon">Tracker updates</string>
+    <string name="live_track_streaming_channel">Tracker streaming</string>
     <string name="stop_streaming">Stop Streaming</string>
     <string name="connected_as">Connected as %1$s</string>
     <string name="error_enter_server_url">Please enter server URL</string>
-    <string name="track_mode_label">Track mode: %1$s</string>
+    <string name="track_mode_label">Tracker mode: %1$s</string>
     <string name="unknown">Unknown</string>
     <string name="logged_in_as">Logged in as %1$s</string>
     <string name="logged_in">Logged in</string>
@@ -215,7 +215,14 @@
     <string name="visibility_shared">Shared with specific people</string>
     <string name="visibility_public">Public</string>
     <string name="shared_with_recipients_label">Shared with</string>
+    <string name="shared_with_click_to_toggle">Shared with (click to add or remove)</string>
+    <string name="no_other_users_found">No other users found</string>
     <string name="add_recipient">Add recipient</string>
+    <string name="pick_users_to_share_with">Pick Users to Share With</string>
+    <plurals name="shared_with_user_count">
+        <item quantity="one">Shared with 1 user</item>
+        <item quantity="other">Shared with %d users</item>
+    </plurals>
     <string name="share_params_with_recipients_label">Share parameters with recipients</string>
     <string name="allow_adding_to_groups_label">Allow adding to groups</string>
     <string name="allow_adding_to_groups_warning">When on, people who have access can add this tracker to their groups. Groups may share it with more users or world links.</string>
@@ -240,14 +247,14 @@
     <string name="open_groups">Open groups</string>
     <string name="create_group">Create group</string>
     <string name="new_group_name_hint">Group name</string>
-    <string name="group_tracks">Tracks</string>
-    <string name="group_tracks_empty">No tracks in this group.</string>
+    <string name="group_tracks">Trackers</string>
+    <string name="group_tracks_empty">No trackers in this group.</string>
     <string name="group_members">Members</string>
     <string name="group_members_label">Group members</string>
     <string name="leave_group">Leave shared group</string>
     <string name="delete_group">Delete group</string>
     <string name="rename_group">Rename</string>
-    <string name="add_track_to_group">Add track</string>
+    <string name="add_track_to_group">Add tracker</string>
     <string name="add_member_to_group">Add member</string>
     <string name="group_leave_confirm_title">Leave shared group?</string>
     <string name="group_leave_confirm_message">You will no longer see this group or its shared trackers.</string>

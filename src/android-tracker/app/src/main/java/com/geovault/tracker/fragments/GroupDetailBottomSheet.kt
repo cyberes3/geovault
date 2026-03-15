@@ -42,8 +42,8 @@ class GroupDetailBottomSheet : Fragment() {
     private lateinit var visibilityHeader: TextView
     private lateinit var visibilityLayout: View
     private lateinit var visibilitySpinner: AutoCompleteTextView
-    private lateinit var sharedWithList: LinearLayout
-    private lateinit var addSharedWithButton: com.google.android.material.button.MaterialButton
+    private lateinit var pickUsersButton: com.google.android.material.button.MaterialButton
+    private lateinit var sharedWithCountText: TextView
     private lateinit var worldShareRow: LinearLayout
     private lateinit var worldShareSwitch: SwitchCompat
     private lateinit var copyWorldLinkButton: com.google.android.material.button.MaterialButton
@@ -74,12 +74,12 @@ class GroupDetailBottomSheet : Fragment() {
         addTrackButton = view.findViewById(R.id.groupDetailAddTrack)
         leaveButton = view.findViewById(R.id.groupDetailLeave)
         deleteButton = view.findViewById(R.id.groupDetailDelete)
-        sharingSectionHeader = view.findViewById(R.id.groupDetailSharingSectionHeader)
-        visibilityHeader = view.findViewById(R.id.groupDetailSharingHeader)
-        visibilityLayout = view.findViewById(R.id.groupDetailVisibilityLayout)
-        visibilitySpinner = view.findViewById(R.id.groupDetailVisibility)
-        sharedWithList = view.findViewById(R.id.groupDetailSharedWithList)
-        addSharedWithButton = view.findViewById(R.id.groupDetailAddSharedWith)
+        sharingSectionHeader = view.findViewById(R.id.sharing_section_header)
+        visibilityHeader = view.findViewById(R.id.sharing_visibility_header)
+        visibilityLayout = view.findViewById(R.id.sharing_visibility_layout)
+        visibilitySpinner = view.findViewById(R.id.sharing_visibility_spinner)
+        pickUsersButton = view.findViewById(R.id.sharing_pick_users_button)
+        sharedWithCountText = view.findViewById(R.id.sharing_shared_with_count_text)
         worldShareRow = view.findViewById(R.id.groupDetailWorldShareRow)
         worldShareSwitch = view.findViewById(R.id.groupDetailWorldShareSwitch)
         copyWorldLinkButton = view.findViewById(R.id.groupDetailCopyWorldLink)
@@ -93,6 +93,12 @@ class GroupDetailBottomSheet : Fragment() {
         saveButton = view.findViewById(R.id.groupDetailSave)
         closeButton.setOnClickListener { closeEditor() }
         saveButton.setOnClickListener { performSave() }
+
+        val initialGroup = arguments?.getParcelable(ARG_GROUP, Group::class.java)
+        if (initialGroup != null) {
+            titleText.text = initialGroup.name
+            nameEdit.setText(initialGroup.name)
+        }
         showLoading()
 
         val groupId = arguments?.getString(ARG_GROUP_ID) ?: return
@@ -145,7 +151,7 @@ class GroupDetailBottomSheet : Fragment() {
         sharedWithEmailsForSave.addAll(g.shared_with_emails ?: emptyList())
 
         loadTrackNamesThenBindTracks(g, isOwner) { hideLoading() }
-        sharingSectionHeader.visibility = View.VISIBLE
+        view?.findViewById<View>(R.id.sharingSectionInclude)?.visibility = if (isOwner) View.VISIBLE else View.GONE
         if (isOwner) {
             visibilityHeader.visibility = View.VISIBLE
             visibilityLayout.visibility = View.VISIBLE
@@ -158,17 +164,18 @@ class GroupDetailBottomSheet : Fragment() {
             visibilitySpinner.setOnItemClickListener { _, _, position, _ ->
                 selectedVisibilityIndex = position
                 val isShared = visibilityValues[position] == "shared"
-                sharedWithList.visibility = if (isShared) View.VISIBLE else View.GONE
-                addSharedWithButton.visibility = if (isShared) View.VISIBLE else View.GONE
+                pickUsersButton.visibility = if (isShared) View.VISIBLE else View.GONE
+                sharedWithCountText.visibility = if (isShared) View.VISIBLE else View.GONE
+                if (isShared) updateSharedWithCountText()
             }
             if (g.visibility == "shared") {
-                sharedWithList.visibility = View.VISIBLE
-                addSharedWithButton.visibility = View.VISIBLE
-                bindSharedWithList(sharedWithEmailsForSave)
-                addSharedWithButton.setOnClickListener { showAddSharedWithDialog() }
+                pickUsersButton.visibility = View.VISIBLE
+                sharedWithCountText.visibility = View.VISIBLE
+                updateSharedWithCountText()
+                pickUsersButton.setOnClickListener { showAddSharedWithDialog() }
             } else {
-                sharedWithList.visibility = View.GONE
-                addSharedWithButton.visibility = View.GONE
+                pickUsersButton.visibility = View.GONE
+                sharedWithCountText.visibility = View.GONE
             }
             worldShareSwitch.isChecked = !g.world_share_id.isNullOrBlank()
             copyWorldLinkButton.visibility = if (g.world_share_url != null) View.VISIBLE else View.GONE
@@ -185,8 +192,8 @@ class GroupDetailBottomSheet : Fragment() {
         } else {
             visibilityHeader.visibility = View.GONE
             visibilityLayout.visibility = View.GONE
-            sharedWithList.visibility = View.GONE
-            addSharedWithButton.visibility = View.GONE
+            pickUsersButton.visibility = View.GONE
+            sharedWithCountText.visibility = View.GONE
             worldShareRow.visibility = View.GONE
         }
         hideInListRow.visibility = View.VISIBLE
@@ -280,7 +287,7 @@ class GroupDetailBottomSheet : Fragment() {
                         parseHexToColor(tracker.color, card.context)
                     )
                     val menuBtn = card.findViewById<ImageButton>(R.id.groupTrackerMenu)
-                    menuBtn.setOnClickListener { showGroupTrackerMenu(it, g, tracker) }
+                    menuBtn.visibility = View.GONE
                     val removeBtn = card.findViewById<ImageButton>(R.id.groupTrackerRemove)
                     if (isOwner) {
                         removeBtn.visibility = View.VISIBLE
@@ -301,49 +308,35 @@ class GroupDetailBottomSheet : Fragment() {
         }
     }
 
-    private fun bindSharedWithList(emails: List<String>) {
-        sharedWithList.removeAllViews()
-        for (email in emails) {
-            val row = layoutInflater.inflate(android.R.layout.simple_list_item_1, sharedWithList, false)
-            (row as? TextView)?.text = email
-            val remove = TextView(requireContext()).apply {
-                text = " ×"
-                setTextColor(ContextCompat.getColor(requireContext(), R.color.error_red))
-                setOnClickListener {
-                    sharedWithEmailsForSave.remove(email)
-                    bindSharedWithList(sharedWithEmailsForSave)
-                }
-            }
-            val rowWrap = android.widget.LinearLayout(requireContext()).apply {
-                orientation = android.widget.LinearLayout.HORIZONTAL
-                addView(row, android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                addView(remove)
-            }
-            sharedWithList.addView(rowWrap)
-        }
+    private fun updateSharedWithCountText() {
+        val n = sharedWithEmailsForSave.size
+        sharedWithCountText.text = resources.getQuantityString(R.plurals.shared_with_user_count, n, n)
     }
 
     private fun showAddSharedWithDialog() {
         TrackerRepository.getUsers(requireContext()) { response ->
             if (!isAdded) return@getUsers
-            val users = response?.users ?: emptyList()
-            val existing = sharedWithEmailsForSave.map { it.lowercase() }.toSet()
-            val addable = users.filter { !existing.contains(it.email.trim().lowercase()) }
             requireActivity().runOnUiThread {
-                if (addable.isEmpty()) {
-                    (activity as? MainActivity)?.showSnackbar("No users to add")
+                val users = response?.users ?: emptyList()
+                if (users.isEmpty()) {
+                    (activity as? MainActivity)?.showSnackbar(getString(R.string.no_other_users_found))
                     return@runOnUiThread
                 }
-                val emails = addable.map { it.email }
-                AlertDialog.Builder(requireContext())
-                    .setTitle(getString(R.string.shared_with_recipients_label))
-                    .setItems(emails.toTypedArray()) { _, which ->
-                        val email = addable[which].email.trim()
-                        sharedWithEmailsForSave.add(email)
-                        bindSharedWithList(sharedWithEmailsForSave)
-                    }
-                    .setNegativeButton(getString(R.string.cancel_button), null)
-                    .show()
+                val normalizedUsers = users.map { it.email.trim().lowercase() }.toSet()
+                val pinnedExisting = sharedWithEmailsForSave
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() && it.lowercase() !in normalizedUsers }
+                SharedUserPickerDialog.show(
+                    fragment = this,
+                    title = getString(R.string.shared_with_recipients_label),
+                    users = users,
+                    selectedEmails = sharedWithEmailsForSave.toSet()
+                ) { picked ->
+                    sharedWithEmailsForSave.clear()
+                    sharedWithEmailsForSave.addAll(pinnedExisting)
+                    sharedWithEmailsForSave.addAll(picked.sorted())
+                    updateSharedWithCountText()
+                }
             }
         }
     }
@@ -391,7 +384,7 @@ class GroupDetailBottomSheet : Fragment() {
         nameEdit.isEnabled = enabled
         addTrackButton.isEnabled = enabled
         visibilitySpinner.isEnabled = enabled
-        addSharedWithButton.isEnabled = enabled
+        pickUsersButton.isEnabled = enabled
         worldShareSwitch.isEnabled = enabled
         hideInListSwitch.isEnabled = enabled
         leaveButton.isEnabled = enabled
@@ -507,13 +500,17 @@ class GroupDetailBottomSheet : Fragment() {
 
     companion object {
         private const val ARG_GROUP_ID = "group_id"
+        private const val ARG_GROUP = "group"
         private const val MENU_VIEW_ON_MAP = 1
         private const val MENU_VIEW_PARAMS = 2
         private const val MENU_VIEW_IN_LIST = 3
 
         fun newInstance(group: Group): GroupDetailBottomSheet {
             return GroupDetailBottomSheet().apply {
-                arguments = Bundle().apply { putString(ARG_GROUP_ID, group.id) }
+                arguments = Bundle().apply {
+                    putString(ARG_GROUP_ID, group.id)
+                    putParcelable(ARG_GROUP, group)
+                }
             }
         }
     }

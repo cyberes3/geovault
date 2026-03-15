@@ -63,16 +63,8 @@ class GroupsFragment : Fragment() {
 
         val cached = TrackerRepository.getGroupsCache()
         if (cached != null) {
-            TrackerRepository.getMapVisibility(requireContext()) { visibility ->
-                if (!isAdded) return@getMapVisibility
-                val hiddenGroupIds = (visibility?.hidden_group_ids ?: emptyList()).toSet()
-                val visible = cached.filter { g ->
-                    if (g.is_owner == true) g.hidden_in_list != true else g.id !in hiddenGroupIds
-                }
-                requireActivity().runOnUiThread {
-                    applyGroups(visible.sortedBy { it.name.lowercase() })
-                }
-            }
+            val myGroups = cached.filter { g -> g.is_owner == true && g.hidden_in_list != true }
+            applyGroups(myGroups.sortedBy { it.name.lowercase() })
         } else {
             loadingOverlay.visibility = View.VISIBLE
             loadingSpinner.start()
@@ -97,19 +89,13 @@ class GroupsFragment : Fragment() {
             loadingOverlay.visibility = View.VISIBLE
             loadingSpinner.start()
         }
-        TrackerRepository.getMapVisibility(requireContext()) { visibility ->
-            if (!isAdded) return@getMapVisibility
-            val hiddenGroupIds = (visibility?.hidden_group_ids ?: emptyList()).toSet()
-            TrackerRepository.getGroups(requireContext(), forceRefresh = forceRefresh) { list ->
-                if (!isAdded) return@getGroups
-                val raw = list ?: emptyList()
-                val visible = raw.filter { g ->
-                    if (g.is_owner == true) g.hidden_in_list != true else g.id !in hiddenGroupIds
-                }
-                val sorted = visible.sortedBy { it.name.lowercase() }
-                requireActivity().runOnUiThread {
-                    applyGroups(sorted)
-                }
+        TrackerRepository.getGroups(requireContext(), forceRefresh = forceRefresh) { list ->
+            if (!isAdded) return@getGroups
+            val raw = list ?: emptyList()
+            val myGroups = raw.filter { g -> g.is_owner == true && g.hidden_in_list != true }
+            val sorted = myGroups.sortedBy { it.name.lowercase() }
+            requireActivity().runOnUiThread {
+                applyGroups(sorted)
             }
         }
     }
@@ -193,8 +179,7 @@ class GroupsFragment : Fragment() {
             fun bind(group: Group) {
                 name.text = group.name
                 val tracks = (group.track_ids ?: emptyList()).size
-                val ownerStr = if (group.is_owner == true) " · Owner" else ""
-                meta.text = "$tracks tracks$ownerStr"
+                meta.text = "$tracks trackers"
                 editButton.visibility = View.VISIBLE
                 content.setOnClickListener { onCardClick(group) }
                 editButton.setOnClickListener { onEditClick(group) }

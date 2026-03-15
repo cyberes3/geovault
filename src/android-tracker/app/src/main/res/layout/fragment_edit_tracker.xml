@@ -203,64 +203,9 @@
                 android:visibility="gone"
                 android:layout_marginBottom="24dp">
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/sharing_section"
-                    android:textSize="14sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/text_primary"
-                    android:layout_marginBottom="8dp" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/visibility_label"
-                    android:textSize="12sp"
-                    android:textColor="@color/text_secondary"
-                    android:layout_marginBottom="4dp" />
-                <com.google.android.material.textfield.TextInputLayout
-                    style="@style/gv_common_ExposedDropdownMenu"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="12dp">
-                    <AutoCompleteTextView
-                        android:id="@+id/editTrackerVisibilitySpinner"
-                        style="@style/gv_common_AutoCompleteDropdown"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:minHeight="48dp"
-                        android:hint="@string/visibility_label" />
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <LinearLayout
-                    android:id="@+id/editTrackerSharedWithContainer"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone"
-                    android:layout_marginBottom="12dp">
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/shared_with_recipients_label"
-                        android:textSize="12sp"
-                        android:textColor="@color/text_secondary"
-                        android:layout_marginBottom="4dp" />
-                    <LinearLayout
-                        android:id="@+id/editTrackerRecipientsList"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:layout_marginBottom="8dp" />
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/editTrackerAddRecipient"
-                        style="@style/gv_common_ButtonOutlined"
-                        android:layout_width="wrap_content"
-                        android:layout_height="40dp"
-                        android:text="@string/add_recipient"
-                        android:textSize="14sp" />
-                </LinearLayout>
+                <include
+                    layout="@layout/include_sharing_section"
+                    android:id="@+id/editTrackerSharingSectionInclude" />
 
                 <LinearLayout
                     android:layout_width="match_parent"

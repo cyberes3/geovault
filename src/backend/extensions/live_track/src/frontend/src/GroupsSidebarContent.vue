@@ -36,7 +36,7 @@
             >
               Shared by {{ g.owner_email }}
             </div>
-            <div class="text-xs text-gray-500">{{ (g.track_ids || []).length }} tracker(s)</div>
+            <div class="text-xs text-gray-500">{{ (g.track_ids || []).length }} {{ (g.track_ids || []).length === 1 ? 'tracker' : 'trackers' }}</div>
           </div>
           <div class="flex items-center gap-1 flex-shrink-0">
             <template v-if="g.is_owner">

@@ -56,7 +56,7 @@
             </div>
             <div class="flex-1 min-w-0">
               <div class="font-bold text-gray-900 truncate">{{ group.name }}</div>
-              <div class="text-xs text-gray-500">{{ (group.track_ids || []).length }} tracker(s)</div>
+              <div class="text-xs text-gray-500">{{ (group.track_ids || []).length }} {{ (group.track_ids || []).length === 1 ? 'tracker' : 'trackers' }}</div>
             </div>
             <div
               class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -126,7 +126,7 @@
               >
                 Shared by {{ group.owner_email }}
               </div>
-              <div class="text-xs text-gray-500">{{ (group.track_ids || []).length }} tracker(s)</div>
+              <div class="text-xs text-gray-500">{{ (group.track_ids || []).length }} {{ (group.track_ids || []).length === 1 ? 'tracker' : 'trackers' }}</div>
             </div>
             <div
               class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"

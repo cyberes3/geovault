@@ -26,12 +26,14 @@
             android:gravity="center_vertical"
             android:layout_marginBottom="12dp">
 
-            <View
-                android:id="@+id/trackerColorBar"
-                android:layout_width="4dp"
-                android:layout_height="24dp"
-                android:background="@color/primary_blue"
-                android:layout_marginEnd="12dp" />
+            <ImageView
+                android:id="@+id/trackerChevronIcon"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginEnd="12dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_chevron_track"
+                app:tint="@color/primary_blue" />
 
             <TextView
                 android:id="@+id/trackerName"

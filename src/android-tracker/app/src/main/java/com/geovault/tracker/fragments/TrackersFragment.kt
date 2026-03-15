@@ -341,7 +341,7 @@ class TrackersFragment : Fragment() {
         ) : RecyclerView.ViewHolder(itemView) {
             private val trackerName: TextView = itemView.findViewById(R.id.trackerName)
             private val trackerSelectedCheck: ImageView = itemView.findViewById(R.id.trackerSelectedCheck)
-            private val colorBar: View = itemView.findViewById(R.id.trackerColorBar)
+            private val trackerChevronIcon: ImageView = itemView.findViewById(R.id.trackerChevronIcon)
             private val trackerLastUpdate: TextView = itemView.findViewById(R.id.trackerLastUpdate)
             private val trackerSeparator: TextView = itemView.findViewById(R.id.trackerSeparator)
             private val trackerPosition: TextView = itemView.findViewById(R.id.trackerPosition)
@@ -358,7 +358,7 @@ class TrackersFragment : Fragment() {
                 trackerSelectedCheck.visibility = if (tracker.id == selectedId) View.VISIBLE else View.GONE
                 trackerName.text = tracker.name
                 val color = parseHexToColor(tracker.color, itemView.context)
-                colorBar.setBackgroundColor(color)
+                trackerChevronIcon.setColorFilter(color)
                 val lastCoord = tracker.last_point
                 val lastUpdateMs = when {
                     lastCoord != null && lastCoord.size >= 3 -> {

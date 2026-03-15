@@ -17,6 +17,7 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -56,9 +57,8 @@ class EditTrackerFragment : Fragment() {
 
     private lateinit var sharingSection: View
     private lateinit var visibilitySpinner: AutoCompleteTextView
-    private lateinit var sharedWithContainer: View
-    private lateinit var recipientsList: LinearLayout
-    private lateinit var addRecipientButton: MaterialButton
+    private lateinit var pickUsersButton: MaterialButton
+    private lateinit var sharedWithCountText: TextView
     private lateinit var shareParamsRecipientsSwitch: SwitchCompat
     private lateinit var allowGroupReshareSwitch: SwitchCompat
     private lateinit var worldShareEnabledSwitch: SwitchCompat
@@ -99,6 +99,24 @@ class EditTrackerFragment : Fragment() {
     /** Current list of recipient emails (when visibility = shared). */
     private val sharedWithEmails = mutableListOf<String>()
 
+    /** Pending KML bytes to write when user picks save location (system file saver). */
+    private var pendingKmlExportBytes: ByteArray? = null
+
+    private val createKmlDocumentLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/vnd.google-earth.kml+xml")
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        val bytes = pendingKmlExportBytes
+        pendingKmlExportBytes = null
+        if (bytes == null || !isAdded) return@registerForActivityResult
+        try {
+            requireContext().contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+            Toast.makeText(requireContext(), getString(R.string.kml_exported), Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            (activity as? MainActivity)?.showSnackbar("Failed to save KML")
+        }
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -125,10 +143,9 @@ class EditTrackerFragment : Fragment() {
         loadingSpinner = view.findViewById(R.id.editTrackerLoadingSpinner)
 
         sharingSection = view.findViewById(R.id.editTrackerSharingSection)
-        visibilitySpinner = view.findViewById(R.id.editTrackerVisibilitySpinner)
-        sharedWithContainer = view.findViewById(R.id.editTrackerSharedWithContainer)
-        recipientsList = view.findViewById(R.id.editTrackerRecipientsList)
-        addRecipientButton = view.findViewById(R.id.editTrackerAddRecipient)
+        visibilitySpinner = view.findViewById(R.id.sharing_visibility_spinner)
+        pickUsersButton = view.findViewById(R.id.sharing_pick_users_button)
+        sharedWithCountText = view.findViewById(R.id.sharing_shared_with_count_text)
         shareParamsRecipientsSwitch = view.findViewById(R.id.editTrackerShareParamsRecipients)
         allowGroupReshareSwitch = view.findViewById(R.id.editTrackerAllowGroupReshare)
         worldShareEnabledSwitch = view.findViewById(R.id.editTrackerWorldShareEnabled)
@@ -146,10 +163,15 @@ class EditTrackerFragment : Fragment() {
         val visibilityAdapter = ArrayAdapter(requireContext(), CommonR.layout.gv_common_item_dropdown, visibilityLabels)
         visibilitySpinner.setAdapter(visibilityAdapter)
         visibilitySpinner.setText(visibilityLabels[0], false)
+        pickUsersButton.visibility = View.GONE
+        sharedWithCountText.visibility = View.GONE
         visibilitySpinner.setOnItemClickListener { _, _, position, _ ->
             selectedVisibilityIndex = position
             val vis = if (position in visibilityValues.indices) visibilityValues[position] else "private"
-            sharedWithContainer.visibility = if (vis == "shared") View.VISIBLE else View.GONE
+            val showShared = vis == "shared"
+            pickUsersButton.visibility = if (showShared) View.VISIBLE else View.GONE
+            sharedWithCountText.visibility = if (showShared) View.VISIBLE else View.GONE
+            if (showShared) updateSharedWithCountText()
         }
 
         worldShareEnabledSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -166,7 +188,7 @@ class EditTrackerFragment : Fragment() {
             }
         }
 
-        addRecipientButton.setOnClickListener { showAddRecipientDialog() }
+        pickUsersButton.setOnClickListener { showAddRecipientDialog() }
 
         closeButton.setOnClickListener { tryClose() }
 
@@ -266,11 +288,13 @@ class EditTrackerFragment : Fragment() {
                                 getString(R.string.visibility_public)
                             )
                             visibilitySpinner.setText(visibilityLabels[visIdx], false)
-                            sharedWithContainer.visibility = if (vis == "shared") View.VISIBLE else View.GONE
+                            val showShared = vis == "shared"
+                            pickUsersButton.visibility = if (showShared) View.VISIBLE else View.GONE
+                            sharedWithCountText.visibility = if (showShared) View.VISIBLE else View.GONE
                             sharedWithEmails.clear()
                             sharedWithEmails.addAll(fetched.shared_with_emails ?: emptyList())
                             initialSharedWithEmails = sharedWithEmails.toList()
-                            refreshRecipientsList()
+                            if (showShared) updateSharedWithCountText()
                             shareParamsRecipientsSwitch.isChecked = fetched.share_params_with_recipients == true
                             val allowReshare = (fetched.settings as? Map<*, *>)?.get("allow_group_reshare") == true
                             allowGroupReshareSwitch.isChecked = allowReshare
@@ -481,19 +505,6 @@ class EditTrackerFragment : Fragment() {
         return base
     }
 
-    private fun refreshRecipientsList() {
-        recipientsList.removeAllViews()
-        for (email in sharedWithEmails) {
-            val row = layoutInflater.inflate(R.layout.item_recipient_row, recipientsList, false)
-            row.findViewById<TextView>(R.id.recipientEmail).text = email
-            row.findViewById<ImageButton>(R.id.recipientRemove).setOnClickListener {
-                sharedWithEmails.remove(email)
-                refreshRecipientsList()
-            }
-            recipientsList.addView(row)
-        }
-    }
-
     private fun exportKml(trackerId: String) {
         TrackerRepository.fetchTrackerKml(requireContext(), trackerId) { body ->
             if (!isAdded) return@fetchTrackerKml
@@ -505,16 +516,8 @@ class EditTrackerFragment : Fragment() {
                 try {
                     val bytes = body.bytes()
                     val safeName = (currentFetchedTracker?.name?.map { c -> if (c.isLetterOrDigit() || c in " -_") c else "" }?.joinToString("")?.take(40) ?: "track").ifEmpty { "track" }
-                    val file = java.io.File(requireContext().getExternalFilesDir(null), "$safeName.kml")
-                    file.writeBytes(bytes)
-                    val uri = androidx.core.content.FileProvider.getUriForFile(requireContext(), "${requireContext().packageName}.fileprovider", file)
-                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                        type = "application/vnd.google-earth.kml+xml"
-                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    startActivity(android.content.Intent.createChooser(intent, getString(R.string.export_kml)))
-                    Toast.makeText(requireContext(), getString(R.string.kml_exported), Toast.LENGTH_SHORT).show()
+                    pendingKmlExportBytes = bytes
+                    createKmlDocumentLauncher.launch("$safeName.kml")
                 } catch (e: Exception) {
                     (activity as? MainActivity)?.showSnackbar("Failed to save KML")
                 }
@@ -522,29 +525,35 @@ class EditTrackerFragment : Fragment() {
         }
     }
 
+    private fun updateSharedWithCountText() {
+        val n = sharedWithEmails.size
+        sharedWithCountText.text = resources.getQuantityString(R.plurals.shared_with_user_count, n, n)
+    }
+
     private fun showAddRecipientDialog() {
         TrackerRepository.getUsers(requireContext()) { response ->
             if (!isAdded) return@getUsers
             requireActivity().runOnUiThread {
                 val users = response?.users ?: emptyList()
-                val alreadyAdded = sharedWithEmails.map { it.lowercase() }.toSet()
-                val addable = users.filter { !alreadyAdded.contains(it.email.trim().lowercase()) }
-                if (addable.isEmpty()) {
-                    (activity as? MainActivity)?.showSnackbar("No more users to add")
+                if (users.isEmpty()) {
+                    (activity as? MainActivity)?.showSnackbar(getString(R.string.no_other_users_found))
                     return@runOnUiThread
                 }
-                val emails = addable.map { it.email }
-                AlertDialog.Builder(requireContext())
-                    .setTitle(getString(R.string.add_recipient))
-                    .setItems(emails.toTypedArray()) { _, which ->
-                        val email = addable[which].email.trim()
-                        if (email.isNotBlank() && !sharedWithEmails.any { it.equals(email, ignoreCase = true) }) {
-                            sharedWithEmails.add(email)
-                            refreshRecipientsList()
-                        }
-                    }
-                    .setNegativeButton(getString(R.string.cancel_button), null)
-                    .show()
+                val normalizedUsers = users.map { it.email.trim().lowercase() }.toSet()
+                val pinnedExisting = sharedWithEmails
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() && it.lowercase() !in normalizedUsers }
+                SharedUserPickerDialog.show(
+                    fragment = this,
+                    title = getString(R.string.add_recipient),
+                    users = users,
+                    selectedEmails = sharedWithEmails.toSet()
+                ) { picked ->
+                    sharedWithEmails.clear()
+                    sharedWithEmails.addAll(pinnedExisting)
+                    sharedWithEmails.addAll(picked.sorted())
+                    updateSharedWithCountText()
+                }
             }
         }
     }
@@ -610,15 +619,12 @@ class EditTrackerFragment : Fragment() {
             visibilitySpinner.isEnabled = enabled
             visibilitySpinner.isClickable = enabled
             visibilitySpinner.isFocusable = enabled
-            addRecipientButton.isEnabled = enabled
+            pickUsersButton.isEnabled = enabled
             shareParamsRecipientsSwitch.isEnabled = enabled
             allowGroupReshareSwitch.isEnabled = enabled
             worldShareEnabledSwitch.isEnabled = enabled
             shareParamsWorldSwitch.isEnabled = enabled
             copyWorldLinkButton.isEnabled = enabled
-            for (i in 0 until recipientsList.childCount) {
-                recipientsList.getChildAt(i).findViewById<ImageButton>(R.id.recipientRemove).isEnabled = enabled
-            }
         }
         if (ownerToolsSection.visibility == View.VISIBLE) {
             exportKmlButton.isEnabled = enabled

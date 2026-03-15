@@ -196,6 +196,7 @@ class MainActivity : AppCompatActivity() {
         viewPager.registerOnPageChangeCallback(object : androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 super.onPageSelected(position)
+                if (position != 1) groupContextForMap = null
                 if (!isHandlingTabBack && lastSelectedTabIndex >= 0) {
                     tabBackStack.addLast(lastSelectedTabIndex)
                 }
@@ -263,6 +264,15 @@ class MainActivity : AppCompatActivity() {
                 override fun handleOnBackPressed() {
                     if (supportFragmentManager.backStackEntryCount > 0) {
                         supportFragmentManager.popBackStack()
+                    } else if (viewPager.currentItem == 1 && groupContextForMap != null) {
+                        val g = groupContextForMap
+                        groupContextForMap = null
+                        g?.let { group ->
+                            supportFragmentManager.beginTransaction()
+                                .add(R.id.fragment_overlay_container, com.geovault.tracker.fragments.GroupActionsFragment.newInstance(group), "group_actions")
+                                .addToBackStack("group_actions")
+                                .commit()
+                        }
                     } else if (tabBackStack.isNotEmpty()) {
                         isHandlingTabBack = true
                         viewPager.setCurrentItem(tabBackStack.removeLast(), false)
@@ -538,6 +548,8 @@ class MainActivity : AppCompatActivity() {
     /** When opening map for a group, optional tracker id to zoom to (single item tap); null = fit entire group. */
     var initialGroupZoomToTrackerId: String? = null
         private set
+    /** Group we're viewing on the map; back from map returns to group-actions overlay when this is set. Cleared when leaving map tab or after showing group actions. */
+    private var groupContextForMap: Group? = null
 
     fun setInitialGroupForMap(group: Group?, zoomToTrackerId: String? = null) {
         initialGroupForMap = group
@@ -547,6 +559,7 @@ class MainActivity : AppCompatActivity() {
     /** Clears overlays (groups/actions/detail/etc.) and opens the map focused on this group. If [zoomToTrackerId] is set, camera fits that tracker only. */
     fun openMapForGroup(group: Group, zoomToTrackerId: String? = null) {
         setInitialGroupForMap(group, zoomToTrackerId)
+        groupContextForMap = group
         clearOverlayAndThen {
             setCurrentTab(1, forceRefreshMap = true, delayMs = 0)
         }
