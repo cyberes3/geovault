@@ -596,6 +596,11 @@ class MainActivity : AppCompatActivity() {
         return g
     }
 
+    /** Returns (group, zoomToTrackerId) and clears both. For use by MapFragment when consuming deferred group handoff in onMapReady. */
+    fun getAndClearInitialGroupAndZoomForMap(): Pair<Group?, String?> {
+        return getAndClearInitialGroupAndZoomTo()
+    }
+
     /** Returns (group, zoomToTrackerId) and clears both. Use when opening map for a group so zoom-to is passed. */
     private fun getAndClearInitialGroupAndZoomTo(): Pair<Group?, String?> {
         val g = initialGroupForMap
@@ -608,12 +613,16 @@ class MainActivity : AppCompatActivity() {
     fun setCurrentTab(index: Int, forceRefreshMap: Boolean = false, delayMs: Long = 0) {
         if (forceRefreshMap && index == 1) {
             val mapFragment = pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.MapFragment
-            val (group, zoomToTrackerId) = getAndClearInitialGroupAndZoomTo()
-            if (group != null) {
-                mapFragment?.refreshMapForGroup(group, zoomToTrackerId)
-            } else {
-                mapFragment?.refreshTrackForSelectedTracker()
+            if (mapFragment != null) {
+                val (group, zoomToTrackerId) = getAndClearInitialGroupAndZoomTo()
+                if (group != null) {
+                    mapFragment.refreshMapForGroup(group, zoomToTrackerId)
+                } else {
+                    mapFragment.refreshTrackForSelectedTracker()
+                }
             }
+            // If fragment is not yet created, leave initialGroupForMap/initialGroupZoomToTrackerId
+            // for MapFragment to consume in onMapReady (deferred handoff).
         }
         
         if (delayMs > 0) {

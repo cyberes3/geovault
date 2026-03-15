@@ -115,15 +115,6 @@ class TrackerParamsFragment : Fragment() {
         } else {
             requireContext().registerReceiver(streamPointReceiver, filter)
         }
-        // Start streaming for this tracker when it's not the default (so we receive live updates like the website).
-        val id = trackerId ?: return
-        val name = arguments?.getString(ARG_TRACKER_NAME).orEmpty()
-        val intent = Intent(requireContext(), LiveTrackStreamingService::class.java).apply {
-            action = LiveTrackStreamingService.ACTION_START
-            putExtra(LiveTrackStreamingService.EXTRA_TRACKER_ID, id)
-            putExtra(LiveTrackStreamingService.EXTRA_TRACKER_NAME, name)
-        }
-        ContextCompat.startForegroundService(requireContext(), intent)
     }
 
     override fun onStop() {
@@ -131,13 +122,6 @@ class TrackerParamsFragment : Fragment() {
         try {
             requireContext().unregisterReceiver(streamPointReceiver)
         } catch (_: IllegalArgumentException) { /* already unregistered */ }
-        // Stop streaming when params screen closes so we don't leave the service running.
-        if (LiveTrackStreamingService.isRunning) {
-            val intent = Intent(requireContext(), LiveTrackStreamingService::class.java).apply {
-                action = LiveTrackStreamingService.ACTION_STOP
-            }
-            requireContext().startService(intent)
-        }
     }
 
     private fun loadTrackerData(refresh: Boolean = false) {

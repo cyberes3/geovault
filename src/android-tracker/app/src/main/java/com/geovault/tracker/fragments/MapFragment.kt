@@ -161,6 +161,9 @@ class MapFragment : Fragment() {
     private var trackLineDirty = false
     /** When in group map context, the group being displayed (for "View in list" routing). */
     private var currentGroupForMap: Group? = null
+    /** Pending group to apply when map becomes ready (set when refreshMapForGroup is called before maplibreMap is ready). */
+    private var pendingGroupForMap: Group? = null
+    private var pendingGroupZoomToTrackerId: String? = null
     /** Active camera behavior intent used to keep padding/lifecycle moves deterministic. */
     private var activeCameraIntent: CameraIntent = CameraIntent.NONE
     /** Preserve centered all-trackers fit against later padding refresh drift. */
@@ -379,6 +382,8 @@ class MapFragment : Fragment() {
         lastAllTrackers = null
         lastAllTrackersCoordsById = null
         activeCameraIntent = CameraIntent.NONE
+        pendingGroupForMap = null
+        pendingGroupZoomToTrackerId = null
     }
 
     override fun onCreateView(
@@ -613,6 +618,19 @@ class MapFragment : Fragment() {
                         zoomToTrackAfterLoad = false
                     }
                 }
+                val (deferredGroup, deferredZoom) = (activity as? MainActivity)?.getAndClearInitialGroupAndZoomForMap() ?: Pair(null, null)
+                if (deferredGroup != null) {
+                    refreshMapForGroup(deferredGroup, deferredZoom)
+                    return
+                }
+                val pendingGroup = pendingGroupForMap
+                val pendingZoom = pendingGroupZoomToTrackerId
+                if (pendingGroup != null) {
+                    pendingGroupForMap = null
+                    pendingGroupZoomToTrackerId = null
+                    refreshMapForGroup(pendingGroup, pendingZoom)
+                    return
+                }
                 fetchHistory()
             }
         })
@@ -775,6 +793,21 @@ class MapFragment : Fragment() {
             if (mapViewContext == MapViewContext.GROUP || showAllTrackers) {
                 if (activeStreamedTrackerIds.isNotEmpty()) {
                     startLiveTrackStreamingForTrackerSet(activeStreamedTrackerIds)
+                } else if (mapViewContext == MapViewContext.GROUP && currentGroupForMap != null) {
+                    val group = currentGroupForMap!!
+                    val trackIds = group.track_ids?.toSet() ?: emptySet()
+                    if (trackIds.isNotEmpty()) {
+                        TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { list ->
+                            if (!isAdded) return@getTrackers
+                            val allTrackers = list ?: emptyList()
+                            val trackers = allTrackers.filter { it.id in trackIds }
+                            if (trackers.isNotEmpty()) {
+                                startLiveTrackStreamingForTrackerSet(trackers.map { it.id }.toSet())
+                            }
+                            updateTrackerLabel()
+                        }
+                        return
+                    }
                 }
                 updateTrackerLabel()
                 return
@@ -1856,7 +1889,12 @@ class MapFragment : Fragment() {
     fun refreshMapForGroup(group: Group?, zoomToTrackerId: String? = null) {
         if (group == null) return
         clearMultiTrackContextState()
-        val map = maplibreMap ?: return
+        val map = maplibreMap
+        if (map == null) {
+            pendingGroupForMap = group
+            pendingGroupZoomToTrackerId = zoomToTrackerId
+            return
+        }
         val style = map.style ?: return
         mapViewContext = MapViewContext.GROUP
         displayedGroupName = group.name
