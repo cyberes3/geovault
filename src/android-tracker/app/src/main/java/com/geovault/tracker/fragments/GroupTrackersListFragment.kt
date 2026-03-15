@@ -73,7 +73,13 @@ class GroupTrackersListFragment : Fragment() {
         ) { _, bundle ->
             val groupId = bundle.getString(AddGroupTrackersFragment.KEY_GROUP_ID) ?: return@setFragmentResultListener
             if (groupId != group?.id) return@setFragmentResultListener
-            loadGroupAndBind(groupId)
+            val updated = bundle.getParcelable<Group>(AddGroupTrackersFragment.KEY_GROUP, Group::class.java)
+            if (updated != null) {
+                group = updated
+                bindTrackers(updated)
+            } else {
+                loadGroupAndBind(groupId)
+            }
         }
         loadGroupAndBind(group!!.id)
         if (preloadedAddableTrackers == null) preloadAddableTrackers()
@@ -213,12 +219,29 @@ class GroupTrackersListFragment : Fragment() {
             requireActivity().runOnUiThread {
                 removingTrackIds.remove(trackId)
                 if (success) {
-                    parentFragmentManager.setFragmentResult(GroupsListFragment.REQUEST_GROUPS_REFRESH, Bundle())
+                    val updatedGroup = group?.takeIf { it.id == groupId }?.let { current ->
+                        val updatedTrackIds = (current.track_ids ?: emptyList()).filter { it != trackId }
+                        current.copy(track_ids = updatedTrackIds)
+                    }
+                    if (updatedGroup != null) {
+                        group = updatedGroup
+                        parentFragmentManager.setFragmentResult(
+                            GroupsListFragment.REQUEST_GROUP_UPDATED,
+                            Bundle().apply { putParcelable(GroupsListFragment.KEY_UPDATED_GROUP, updatedGroup) }
+                        )
+                    }
                     parentFragmentManager.setFragmentResult(
                         REQUEST_GROUP_TRACK_REMOVED,
-                        Bundle().apply { putString(KEY_GROUP_ID, groupId) }
+                        Bundle().apply {
+                            putString(KEY_GROUP_ID, groupId)
+                            if (updatedGroup != null) putParcelable(AddGroupTrackersFragment.KEY_GROUP, updatedGroup)
+                        }
                     )
-                    loadGroupAndBind(groupId)
+                    if (updatedGroup != null) {
+                        bindTrackers(updatedGroup)
+                    } else {
+                        loadGroupAndBind(groupId)
+                    }
                 } else {
                     (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 }

@@ -3,10 +3,12 @@ package com.geovault.tracker.fragments
 import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
+import android.view.Menu
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.widget.ImageButton
+import androidx.appcompat.widget.PopupMenu
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
@@ -113,6 +115,7 @@ class SharedTrackersFragment : Fragment() {
                     .addToBackStack(null)
                     .commit()
             },
+            onGroupViewOnMapClick = { group -> (activity as? MainActivity)?.openMapForGroup(group, returnToTabOnly = true) },
             onGroupEditClick = { group ->
                 (activity as? MainActivity)?.let { act ->
                     if (group.is_owner != true) {
@@ -128,11 +131,21 @@ class SharedTrackersFragment : Fragment() {
         )
         recyclerView.adapter = adapter
 
-        parentFragmentManager.setFragmentResultListener(TrackersListFragment.REQUEST_REFRESH_LIST, viewLifecycleOwner) { _, _ ->
-            loadTrackers()
+        parentFragmentManager.setFragmentResultListener(TrackersListFragment.REQUEST_REFRESH_LIST, viewLifecycleOwner) { _, bundle ->
+            // Tracker save emits this for owner-tracker list refresh. Shared list should avoid
+            // forcing a groups+trackers refetch in that case and rely on local updates.
+            val skipSharedRefresh = bundle.getBoolean(TrackersListFragment.KEY_SKIP_SHARED_LIST_REFRESH, false)
+            if (!skipSharedRefresh) {
+                loadTrackers()
+            }
         }
         parentFragmentManager.setFragmentResultListener(GroupsListFragment.REQUEST_GROUPS_REFRESH, viewLifecycleOwner) { _, _ ->
             loadTrackers()
+        }
+        parentFragmentManager.setFragmentResultListener(TrackersListFragment.REQUEST_UPDATE_TRACKER, viewLifecycleOwner) { _, bundle ->
+            val updated = bundle.getParcelable<Tracker>("tracker", Tracker::class.java) ?: return@setFragmentResultListener
+            val hiddenInList = bundle.getBoolean(TrackersListFragment.KEY_UPDATED_TRACKER_HIDDEN, false)
+            adapter?.updateTrackerItem(updated, hiddenInList)
         }
         parentFragmentManager.setFragmentResultListener(REQUEST_ADD_SHARED_ITEMS, viewLifecycleOwner) { _, bundle ->
             addSharedItemsFromBundle(bundle)
@@ -301,6 +314,7 @@ class SharedTrackersFragment : Fragment() {
         private var highlightedGroupId: String? = null,
         private val onTrackerAction: (Tracker, TrackerAction) -> Unit,
         private val onGroupCardClick: (Group) -> Unit,
+        private val onGroupViewOnMapClick: (Group) -> Unit,
         private val onGroupEditClick: (Group) -> Unit
     ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
@@ -312,6 +326,31 @@ class SharedTrackersFragment : Fragment() {
 
         fun getItems(): List<SharedListItem> = items
         fun getHiddenTrackIds(): Set<String> = hiddenTrackIds
+
+        fun updateTrackerItem(updated: Tracker, hiddenInList: Boolean) {
+            val currentItems = items.toMutableList()
+            val index = currentItems.indexOfFirst { it is SharedListItem.TrackerItem && it.tracker.id == updated.id }
+            if (index < 0) return
+
+            val hiddenIds = hiddenTrackIds
+            val sharedGroupTrackIds = currentItems
+                .filterIsInstance<SharedListItem.GroupItem>()
+                .flatMap { it.group.track_ids ?: emptyList() }
+                .toSet()
+            val shouldShow = !hiddenInList &&
+                updated.id !in hiddenIds &&
+                updated.id !in sharedGroupTrackIds &&
+                !updated.isOwner() &&
+                (updated.visibility == "shared" || updated.visibility == "public")
+
+            if (shouldShow) {
+                currentItems[index] = SharedListItem.TrackerItem(updated)
+            } else {
+                currentItems.removeAt(index)
+            }
+            val sorted = currentItems.sortedBy { it.sortName.lowercase(Locale.getDefault()) }
+            setItems(sorted, hiddenTrackIds)
+        }
 
         fun indexOfTrackerId(id: String): Int = items.indexOfFirst { it is SharedListItem.TrackerItem && it.tracker.id == id }
 
@@ -365,7 +404,7 @@ class SharedTrackersFragment : Fragment() {
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
             return if (viewType == TYPE_GROUP) {
                 val view = LayoutInflater.from(parent.context).inflate(R.layout.item_group_card, parent, false)
-                GroupViewHolder(view, onGroupCardClick, onGroupEditClick, { highlightedGroupId })
+                GroupViewHolder(view, onGroupCardClick, onGroupViewOnMapClick, onGroupEditClick, { highlightedGroupId })
             } else {
                 val view = LayoutInflater.from(parent.context).inflate(R.layout.item_tracker_card, parent, false)
                 TrackerViewHolder(view, onTrackerAction, { hiddenTrackIds }, { highlightedTrackerId })
@@ -476,6 +515,7 @@ class SharedTrackersFragment : Fragment() {
         class GroupViewHolder(
             itemView: View,
             private val onCardClick: (Group) -> Unit,
+            private val onViewOnMapClick: (Group) -> Unit,
             private val onEditClick: (Group) -> Unit,
             private val getHighlightedGroupId: () -> String?
         ) : RecyclerView.ViewHolder(itemView) {
@@ -498,7 +538,7 @@ class SharedTrackersFragment : Fragment() {
                 meta.text = "$tracks trackers"
                 editButton.visibility = View.VISIBLE
                 content.setOnClickListener { onCardClick(group) }
-                editButton.setOnClickListener { onEditClick(group) }
+                editButton.setOnClickListener { anchor -> showGroupMenu(anchor, group) }
                 (itemView as? MaterialCardView)?.let { card ->
                     val defaultStrokePx = itemView.resources.getDimensionPixelSize(R.dimen.card_stroke_width)
                     val highlight = group.id == getHighlightedGroupId()
@@ -511,6 +551,22 @@ class SharedTrackersFragment : Fragment() {
                         )
                     )
                 }
+            }
+
+            private fun showGroupMenu(anchor: View, group: Group) {
+                val popup = PopupMenu(anchor.context, anchor)
+                popup.menu.apply {
+                    add(Menu.NONE, 1, 0, anchor.context.getString(R.string.view_on_map))
+                    add(Menu.NONE, 2, 0, anchor.context.getString(R.string.edit))
+                }
+                popup.setOnMenuItemClickListener { item ->
+                    when (item.itemId) {
+                        1 -> { onViewOnMapClick(group); true }
+                        2 -> { onEditClick(group); true }
+                        else -> false
+                    }
+                }
+                popup.show()
             }
         }
 

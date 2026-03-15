@@ -108,6 +108,8 @@ class MapFragment : Fragment() {
     private lateinit var geometryLoadingSpinner: LoadingSpinner
     private lateinit var lastUpdatedLabel: TextView
     private lateinit var showAllTrackersButton: View
+    private lateinit var liveActiveFitButton: View
+    private lateinit var liveActiveFitButtonIcon: ImageView
     private lateinit var mapTrackerInfoCard: View
     private lateinit var mapTrackerInfoName: TextView
     private lateinit var mapTrackerInfoCoords: TextView
@@ -121,6 +123,8 @@ class MapFragment : Fragment() {
 
     /** When true, map shows all trackers; when false, single default/displayed tracker. */
     private var showAllTrackers = false
+    /** Group-only mode: fit to trackers with recent live updates. */
+    private var liveActiveFitEnabled = false
 
     /** True while fetchFullGeometryAndApply is in progress; used so bottom-right spinner stays visible if streaming starts. */
     private var geometryLoadingInProgress = false
@@ -371,19 +375,29 @@ class MapFragment : Fragment() {
             val trackers = lastAllTrackers ?: return@launch
             val map = maplibreMap ?: return@launch
             val style = map.style ?: return@launch
-            applyAllTrackersToMap(trackers, multiTrackCoordsCache.mapValues { it.value.toList() }, map, style, fitBounds = false)
+            val useLiveActiveFit = liveActiveFitEnabled && isLiveActiveFitAvailable()
+            applyAllTrackersToMap(
+                trackers,
+                multiTrackCoordsCache.mapValues { it.value.toList() },
+                map,
+                style,
+                fitBounds = useLiveActiveFit,
+                liveActiveOnlyFit = useLiveActiveFit
+            )
         }
     }
 
-    private fun clearMultiTrackContextState() {
+    private fun clearMultiTrackContextState(clearPendingGroupIntent: Boolean = true) {
         multiTrackRenderJob?.cancel()
         multiTrackRenderJob = null
         multiTrackCoordsCache.clear()
         lastAllTrackers = null
         lastAllTrackersCoordsById = null
         activeCameraIntent = CameraIntent.NONE
-        pendingGroupForMap = null
-        pendingGroupZoomToTrackerId = null
+        if (clearPendingGroupIntent) {
+            pendingGroupForMap = null
+            pendingGroupZoomToTrackerId = null
+        }
     }
 
     override fun onCreateView(
@@ -409,6 +423,8 @@ class MapFragment : Fragment() {
         geometryLoadingSpinner = view.findViewById(R.id.geometryLoadingSpinner)
         lastUpdatedLabel = view.findViewById(R.id.lastUpdatedLabel)
         showAllTrackersButton = view.findViewById(R.id.showAllTrackersButton)
+        liveActiveFitButton = view.findViewById(R.id.liveActiveFitButton)
+        liveActiveFitButtonIcon = view.findViewById(R.id.liveActiveFitButtonIcon)
         mapTrackerInfoCard = view.findViewById(R.id.mapTrackerInfoCard)
         mapTrackerInfoName = view.findViewById(R.id.mapTrackerInfoName)
         mapTrackerInfoCoords = view.findViewById(R.id.mapTrackerInfoCoords)
@@ -626,9 +642,13 @@ class MapFragment : Fragment() {
                 val pendingGroup = pendingGroupForMap
                 val pendingZoom = pendingGroupZoomToTrackerId
                 if (pendingGroup != null) {
+                    refreshMapForGroup(pendingGroup, pendingZoom)
                     pendingGroupForMap = null
                     pendingGroupZoomToTrackerId = null
-                    refreshMapForGroup(pendingGroup, pendingZoom)
+                    return
+                }
+                if (mapViewContext == MapViewContext.GROUP && currentGroupForMap != null) {
+                    refreshMapForGroup(currentGroupForMap, null)
                     return
                 }
                 fetchHistory()
@@ -735,6 +755,7 @@ class MapFragment : Fragment() {
                 loadAllTrackersAndApply()
             }
         }
+        liveActiveFitButton.setOnClickListener { onLiveActiveFitButtonClick() }
         view.post { if (isAdded) refreshMapPaddingForCurrentMode(force = true) }
     }
 
@@ -866,8 +887,10 @@ class MapFragment : Fragment() {
         mapFragment = null
         mapManager = null
         maplibreMap = null
+        mapReady = false
         geometryFetchInFlightTrackerId = null
-        clearMultiTrackContextState()
+        // Preserve deferred group handoff across view teardown so onMapReady can still apply it.
+        clearMultiTrackContextState(clearPendingGroupIntent = false)
         super.onDestroyView()
         mainScope.cancel()
     }
@@ -923,7 +946,8 @@ class MapFragment : Fragment() {
             mapToggle,
             zoomInButton,
             zoomOutButton,
-            showAllTrackersButton
+            showAllTrackersButton,
+            liveActiveFitButton
         )
         val visible = ordered.filter { it.visibility == View.VISIBLE }
         val density = resources.displayMetrics.density
@@ -1164,6 +1188,9 @@ class MapFragment : Fragment() {
         val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
         val defaultTrackerName = prefs.getString("selected_tracker_name", "") ?: ""
+        if (!isLiveActiveFitAvailable() && liveActiveFitEnabled) {
+            liveActiveFitEnabled = false
+        }
         if (mapViewContext == MapViewContext.GROUP) {
             trackerLabelCard.visibility = View.VISIBLE
             val density = resources.displayMetrics.density
@@ -1184,9 +1211,11 @@ class MapFragment : Fragment() {
             updateStreamingUi(defaultTrackerId)
             showAllTrackersButton.visibility = View.GONE
             showAllTrackersButton.contentDescription = getString(R.string.show_all_trackers)
+            updateLiveActiveFitButtonUi()
             updateRightStackMargins()
             return
         }
+        updateLiveActiveFitButtonUi()
         val showingSpecificTracker = !showAllTrackers &&
             mapViewContext == MapViewContext.SPECIFIC_TRACKER &&
             !displayedTrackerId.isNullOrEmpty()
@@ -1422,7 +1451,8 @@ class MapFragment : Fragment() {
             mapToggle,
             zoomInButton,
             zoomOutButton,
-            showAllTrackersButton
+            showAllTrackersButton,
+            liveActiveFitButton
         )
             .filter { it.visibility == View.VISIBLE }
             .maxOfOrNull { it.top + it.height }
@@ -1432,7 +1462,7 @@ class MapFragment : Fragment() {
             if (topOverlayBottomPx > 0) topOverlayBottomPx + extraPadPx else baseTopPx
         )
         val rightOverlayInsetPx = if (mapWidthPx > 0) {
-            listOf(zoomToLatestButton, showMyLocationButton, mapToggle, zoomInButton, zoomOutButton, showAllTrackersButton)
+            listOf(zoomToLatestButton, showMyLocationButton, mapToggle, zoomInButton, zoomOutButton, showAllTrackersButton, liveActiveFitButton)
                 .filter { it.visibility == View.VISIBLE }
                 .maxOfOrNull { (mapWidthPx - it.left).coerceAtLeast(0) }
                 ?: 0
@@ -1790,6 +1820,7 @@ class MapFragment : Fragment() {
      * If the list provided an initial track (latest 100 points), shows it immediately then loads full geometry in background.
      */
     fun refreshTrackForSelectedTracker() {
+        liveActiveFitEnabled = false
         clearMultiTrackContextState()
         activeCameraIntent = CameraIntent.SINGLE_TRACKER_FOCUS
         suppressStandaloneAutoZoomForTrackerFocus()
@@ -1888,6 +1919,7 @@ class MapFragment : Fragment() {
      */
     fun refreshMapForGroup(group: Group?, zoomToTrackerId: String? = null) {
         if (group == null) return
+        liveActiveFitEnabled = false
         clearMultiTrackContextState()
         val map = maplibreMap
         if (map == null) {
@@ -1933,7 +1965,16 @@ class MapFragment : Fragment() {
                 return@getTrackers
             }
             startLiveTrackStreamingForTrackerSet(trackers.map { it.id }.toSet())
-            applyAllTrackersToMap(trackers, emptyMap(), map, style, fitBounds = true, fitToTrackerId = zoomToTrackerId)
+            val useLiveActiveFit = liveActiveFitEnabled && zoomToTrackerId.isNullOrBlank()
+            applyAllTrackersToMap(
+                trackers,
+                emptyMap(),
+                map,
+                style,
+                fitBounds = true,
+                fitToTrackerId = zoomToTrackerId,
+                liveActiveOnlyFit = useLiveActiveFit
+            )
             TrackerRepository.getTrackersGeometry(
                 requireContext(),
                 trackers.map { it.id },
@@ -1955,7 +1996,8 @@ class MapFragment : Fragment() {
                         style,
                         // Keep camera stable after initial fit; full-geometry load should only enrich lines.
                         fitBounds = false,
-                        fitToTrackerId = zoomToTrackerId
+                        fitToTrackerId = zoomToTrackerId,
+                        liveActiveOnlyFit = false
                     )
                 }
             }
@@ -1963,6 +2005,7 @@ class MapFragment : Fragment() {
     }
 
     private fun loadAllTrackersAndApply() {
+        liveActiveFitEnabled = false
         clearMultiTrackContextState()
         val map = maplibreMap ?: return
         val style = map.style ?: return
@@ -2034,7 +2077,8 @@ class MapFragment : Fragment() {
         map: MapLibreMap,
         style: Style,
         fitBounds: Boolean,
-        fitToTrackerId: String? = null
+        fitToTrackerId: String? = null,
+        liveActiveOnlyFit: Boolean = false
     ) {
         lastAllTrackers = trackers
         val normalizedCoordsById = mutableMapOf<String, MutableList<List<Double>>>()
@@ -2111,14 +2155,28 @@ class MapFragment : Fragment() {
         updateZoomToLatestButtonState()
 
         if (fitBounds) {
-            val boundsCoords = if (fitToTrackerId != null) (coordsByTrackerId[fitToTrackerId] ?: emptyList()) else allCoords
+            var fitTrackers = trackers
+            var fitCoordsByTrackerId: Map<String, List<LatLng>> = coordsByTrackerId
+            var boundsCoords = if (fitToTrackerId != null) (coordsByTrackerId[fitToTrackerId] ?: emptyList()) else allCoords
+            if (liveActiveOnlyFit && fitToTrackerId == null && isLiveActiveFitAvailable()) {
+                val nowMs = System.currentTimeMillis()
+                val activeTrackerIds = trackers.filter { tracker ->
+                    val lastUpdateMs = resolveTrackerLastUpdateMsForGroupFit(tracker, normalizedCoordsById[tracker.id])
+                    lastUpdateMs != null && (nowMs - lastUpdateMs) <= LIVE_ACTIVE_TRACKER_WINDOW_MS
+                }.map { it.id }.toSet()
+                if (activeTrackerIds.isNotEmpty()) {
+                    fitTrackers = trackers.filter { it.id in activeTrackerIds }
+                    fitCoordsByTrackerId = coordsByTrackerId.filterKeys { it in activeTrackerIds }
+                    boundsCoords = fitCoordsByTrackerId.values.flatten()
+                }
+            }
             if (boundsCoords.isNotEmpty()) {
                 if (boundsCoords.size >= 2) {
                     val boundsBuilder = LatLngBounds.Builder()
                     boundsCoords.forEach { boundsBuilder.include(it) }
                     val bounds = boundsBuilder.build()
                     moveCameraForAllTrackersWithMinZoom(
-                        map, bounds, coordsByTrackerId, trackers, fitToTrackerId
+                        map, bounds, fitCoordsByTrackerId, fitTrackers, fitToTrackerId
                     )
                 } else {
                     val singlePointPaddingMode = if (fitToTrackerId != null) {
@@ -2135,6 +2193,59 @@ class MapFragment : Fragment() {
                 }
             }
         }
+    }
+
+    private fun onLiveActiveFitButtonClick() {
+        if (!isLiveActiveFitAvailable()) return
+        liveActiveFitEnabled = !liveActiveFitEnabled
+        updateLiveActiveFitButtonUi()
+        if (liveActiveFitEnabled) {
+            applyLiveActiveFitNow()
+        }
+    }
+
+    private fun updateLiveActiveFitButtonUi() {
+        val visible = isLiveActiveFitAvailable()
+        liveActiveFitButton.visibility = if (visible) View.VISIBLE else View.GONE
+        liveActiveFitButtonIcon.setImageResource(
+            if (liveActiveFitEnabled) R.drawable.ic_live_active_fit_on else R.drawable.ic_live_active_fit_off
+        )
+        liveActiveFitButtonIcon.contentDescription = if (liveActiveFitEnabled) {
+            getString(R.string.live_active_fit_disable)
+        } else {
+            getString(R.string.live_active_fit_enable)
+        }
+    }
+
+    private fun applyLiveActiveFitNow() {
+        if (!isAdded || !liveActiveFitEnabled || !isLiveActiveFitAvailable()) return
+        val trackers = lastAllTrackers ?: return
+        val map = maplibreMap ?: return
+        val style = map.style ?: return
+        applyAllTrackersToMap(
+            trackers = trackers,
+            coordsById = multiTrackCoordsCache.mapValues { it.value.toList() },
+            map = map,
+            style = style,
+            fitBounds = true,
+            liveActiveOnlyFit = true
+        )
+    }
+
+    private fun resolveTrackerLastUpdateMsForGroupFit(
+        tracker: Tracker,
+        normalizedCoords: List<List<Double>>?
+    ): Long? {
+        val fromCoords = normalizedCoords?.lastOrNull()?.getOrNull(2)?.let { v ->
+            (v as? Number)?.toLong()?.let { if (it in 1L..999_999_999_999L) it * 1000L else it }
+        }?.takeIf { it > 0L }
+        return fromCoords
+            ?: lastKnownUpdateTimeMsByTrackerId[tracker.id]
+            ?: trackerLastUpdateMs(tracker)
+    }
+
+    private fun isLiveActiveFitAvailable(): Boolean {
+        return showAllTrackers || mapViewContext == MapViewContext.GROUP
     }
 
     private fun setupMapTapListener(map: MapLibreMap) {
@@ -2553,6 +2664,7 @@ class MapFragment : Fragment() {
      * Refetch and redraw the selected tracker's track without moving the camera.
      */
     fun restoreTrackForSelectedTracker() {
+        liveActiveFitEnabled = false
         stopLiveTrackStreaming()
         clearMultiTrackContextState()
         activeCameraIntent = CameraIntent.SINGLE_TRACKER_FOCUS
@@ -2590,6 +2702,7 @@ class MapFragment : Fragment() {
     }
 
     private fun fetchHistory() {
+        liveActiveFitEnabled = false
         if (mapViewContext == MapViewContext.GROUP) {
             updateZoomToLatestButtonState()
             updateTrackerLabel()
@@ -2962,6 +3075,8 @@ class MapFragment : Fragment() {
         private const val MAP_TRACKER_INFO_CARD_HEIGHT_DP = 200
         /** Coalesce bursts of multi-tracker streamed points before full layer redraw. */
         private const val MULTI_TRACK_RENDER_DEBOUNCE_MS = 120L
+        /** Tracker is considered live-active if updated in this window. */
+        private const val LIVE_ACTIVE_TRACKER_WINDOW_MS = 15 * 60 * 1000L
 
         // Map source/layer IDs (tracker map only)
         private const val TRACK_SOURCE_ID = "track-source"

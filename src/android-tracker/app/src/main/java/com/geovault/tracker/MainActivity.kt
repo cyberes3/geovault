@@ -580,11 +580,12 @@ class MainActivity : AppCompatActivity() {
         initialGroupZoomToTrackerId = zoomToTrackerId
     }
 
-    /** Clears overlays (groups/actions/detail/etc.) and opens the map focused on this group. If [zoomToTrackerId] is set, camera fits that tracker only. */
-    fun openMapForGroup(group: Group, zoomToTrackerId: String? = null) {
+    /** Clears overlays (groups/actions/detail/etc.) and opens the map focused on this group. If [zoomToTrackerId] is set, camera fits that tracker only.
+     * When [returnToTabOnly] is true (e.g. opened from group card popup menu), back from map returns to the originating tab without showing the group actions overlay. */
+    fun openMapForGroup(group: Group, zoomToTrackerId: String? = null, returnToTabOnly: Boolean = false) {
         groupMapOpenedFromTab = viewPager.currentItem
         setInitialGroupForMap(group, zoomToTrackerId)
-        groupContextForMap = group
+        groupContextForMap = if (returnToTabOnly) null else group
         clearOverlayAndThen {
             setCurrentTab(1, forceRefreshMap = true, delayMs = 0)
         }

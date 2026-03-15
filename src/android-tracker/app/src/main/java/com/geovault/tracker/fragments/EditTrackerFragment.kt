@@ -344,13 +344,18 @@ class EditTrackerFragment : Fragment() {
                                     TrackersListFragment.pendingHiddenTrackerId = trackerId
                                     requireActivity().supportFragmentManager.setFragmentResult(
                                         TrackersListFragment.REQUEST_REFRESH_LIST,
-                                        android.os.Bundle().apply { putString(TrackersListFragment.KEY_HIDDEN_TRACKER_ID, trackerId) }
+                                        android.os.Bundle().apply {
+                                            putString(TrackersListFragment.KEY_HIDDEN_TRACKER_ID, trackerId)
+                                            putBoolean(TrackersListFragment.KEY_SKIP_SHARED_LIST_REFRESH, true)
+                                        }
                                     )
                                 } else {
                                     TrackersListFragment.pendingFullRefresh = true
                                     requireActivity().supportFragmentManager.setFragmentResult(
                                         TrackersListFragment.REQUEST_REFRESH_LIST,
-                                        android.os.Bundle()
+                                        android.os.Bundle().apply {
+                                            putBoolean(TrackersListFragment.KEY_SKIP_SHARED_LIST_REFRESH, true)
+                                        }
                                     )
                                 }
                                 requireActivity().supportFragmentManager.setFragmentResult(

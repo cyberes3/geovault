@@ -102,14 +102,27 @@ class GroupDetailBottomSheet : Fragment() {
         ) { _, bundle ->
             val updatedGroupId = bundle.getString(AddGroupTrackersFragment.KEY_GROUP_ID) ?: return@setFragmentResultListener
             if (updatedGroupId != groupId) return@setFragmentResultListener
-            loadGroup(updatedGroupId)
+            val updatedGroup = bundle.getParcelable<Group>(AddGroupTrackersFragment.KEY_GROUP, Group::class.java)
+            if (updatedGroup != null) {
+                group = updatedGroup
+                bindGroup(updatedGroup)
+            } else {
+                loadGroup(updatedGroupId)
+            }
         }
         parentFragmentManager.setFragmentResultListener(
             GroupTrackersListFragment.REQUEST_GROUP_TRACK_REMOVED,
             viewLifecycleOwner
         ) { _, bundle ->
             val removedGroupId = bundle.getString(GroupTrackersListFragment.KEY_GROUP_ID) ?: return@setFragmentResultListener
-            if (removedGroupId == groupId) loadGroup(removedGroupId)
+            if (removedGroupId != groupId) return@setFragmentResultListener
+            val updatedGroup = bundle.getParcelable<Group>(AddGroupTrackersFragment.KEY_GROUP, Group::class.java)
+            if (updatedGroup != null) {
+                group = updatedGroup
+                bindGroup(updatedGroup)
+            } else {
+                loadGroup(removedGroupId)
+            }
         }
         loadGroup(groupId)
     }

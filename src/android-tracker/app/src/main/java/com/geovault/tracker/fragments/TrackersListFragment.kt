@@ -168,6 +168,7 @@ class TrackersListFragment : Fragment() {
     companion object {
         const val REQUEST_REFRESH_LIST = "tracker_list_refresh"
         const val KEY_HIDDEN_TRACKER_ID = "hidden_tracker_id"
+        const val KEY_SKIP_SHARED_LIST_REFRESH = "skip_shared_list_refresh"
         const val REQUEST_UPDATE_TRACKER = "tracker_list_update_tracker"
         const val KEY_UPDATED_TRACKER_HIDDEN = "updated_tracker_hidden"
         const val REQUEST_UPDATE_LIST_FROM_CACHE = "tracker_list_update_from_cache"

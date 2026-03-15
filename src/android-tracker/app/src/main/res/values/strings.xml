@@ -106,6 +106,8 @@
     <string name="zoom_out_description">Zoom out</string>
     <string name="show_all_trackers">Show all trackers</string>
     <string name="show_default_tracker">Show default tracker</string>
+    <string name="live_active_fit_enable">Enable live active tracker fit</string>
+    <string name="live_active_fit_disable">Disable live active tracker fit</string>
     <!-- Extended params: when on, sends full data; when off, sends only position + time to minimize data usage -->
     <string name="extended_params_label">Send Extended Data</string>
     <string name="no_extended_params_latest_point">No extended parameters for the latest point.</string>

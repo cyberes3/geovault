@@ -160,15 +160,20 @@ class AddGroupTrackersFragment : Fragment() {
                                     putString(KEY_GROUP_ID, requireGroupId())
                                     putString(KEY_TRACK_ID, item.id)
                                     putParcelable(KEY_TRACKER, item.tracker)
+                                    putParcelable(KEY_GROUP, updated)
                                 }
                             )
                             parentFragmentManager.setFragmentResult(
                                 REQUEST_GROUP_TRACK_ADDED_LIST,
                                 Bundle().apply {
                                     putString(KEY_GROUP_ID, requireGroupId())
+                                    putParcelable(KEY_GROUP, updated)
                                 }
                             )
-                            parentFragmentManager.setFragmentResult(GroupsListFragment.REQUEST_GROUPS_REFRESH, Bundle())
+                            parentFragmentManager.setFragmentResult(
+                                GroupsListFragment.REQUEST_GROUP_UPDATED,
+                                Bundle().apply { putParcelable(GroupsListFragment.KEY_UPDATED_GROUP, updated) }
+                            )
                             renderList()
                         } else {
                             applyRowState(RowState.IDLE)
@@ -208,6 +213,7 @@ class AddGroupTrackersFragment : Fragment() {
         const val KEY_GROUP_ID = "group_id"
         const val KEY_TRACK_ID = "track_id"
         const val KEY_TRACKER = "tracker"
+        const val KEY_GROUP = "group"
         private const val ARG_GROUP_ID = "arg_group_id"
         private const val ARG_EXISTING_TRACK_IDS = "arg_existing_track_ids"
         private const val ARG_PRELOADED_TRACKERS = "arg_preloaded_trackers"

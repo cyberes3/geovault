@@ -2,10 +2,12 @@ package com.geovault.tracker.fragments
 
 import android.os.Bundle
 import android.view.LayoutInflater
+import android.view.Menu
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.TextView
+import androidx.appcompat.widget.PopupMenu
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -41,6 +43,7 @@ class GroupsListFragment : Fragment() {
         adapter = GroupsAdapter(
             emptyList(),
             onCardClick = { group -> openGroupActions(group) },
+            onViewOnMapClick = { group -> (activity as? MainActivity)?.openMapForGroup(group, returnToTabOnly = true) },
             onEditClick = { group -> openGroupEditor(group) }
         )
         recyclerView.adapter = adapter
@@ -49,6 +52,10 @@ class GroupsListFragment : Fragment() {
 
         requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_GROUPS_REFRESH, viewLifecycleOwner) { _, _ ->
             loadGroups(forceRefresh = true)
+        }
+        requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_GROUP_UPDATED, viewLifecycleOwner) { _, bundle ->
+            val updated = bundle.getParcelable<Group>(KEY_UPDATED_GROUP, Group::class.java) ?: return@setFragmentResultListener
+            applySingleGroupUpdate(updated)
         }
 
         val cached = TrackerRepository.getGroupsCache()
@@ -64,6 +71,22 @@ class GroupsListFragment : Fragment() {
 
     companion object {
         const val REQUEST_GROUPS_REFRESH = "groups_refresh"
+        const val REQUEST_GROUP_UPDATED = "groups_update_group"
+        const val KEY_UPDATED_GROUP = "updated_group"
+    }
+
+    private fun shouldShowInMyGroups(group: Group): Boolean {
+        return group.is_owner == true && group.hidden_in_list != true
+    }
+
+    private fun applySingleGroupUpdate(updated: Group) {
+        val shouldShow = shouldShowInMyGroups(updated)
+        if (shouldShow) {
+            adapter?.upsertGroup(updated)
+        } else {
+            adapter?.removeGroupById(updated.id)
+        }
+        emptyView.visibility = if ((adapter?.itemCount ?: 0) == 0) View.VISIBLE else View.GONE
     }
 
     private fun applyGroups(groups: List<Group>) {
@@ -136,6 +159,7 @@ class GroupsListFragment : Fragment() {
     private class GroupsAdapter(
         private var groups: List<Group>,
         private val onCardClick: (Group) -> Unit,
+        private val onViewOnMapClick: (Group) -> Unit,
         private val onEditClick: (Group) -> Unit
     ) : RecyclerView.Adapter<GroupsAdapter.ViewHolder>() {
 
@@ -144,9 +168,28 @@ class GroupsListFragment : Fragment() {
             notifyDataSetChanged()
         }
 
+        fun upsertGroup(updated: Group) {
+            val mutable = groups.toMutableList()
+            val idx = mutable.indexOfFirst { it.id == updated.id }
+            if (idx >= 0) {
+                mutable[idx] = updated
+            } else {
+                mutable.add(updated)
+            }
+            groups = mutable.sortedBy { it.name.lowercase() }
+            notifyDataSetChanged()
+        }
+
+        fun removeGroupById(groupId: String) {
+            val idx = groups.indexOfFirst { it.id == groupId }
+            if (idx < 0) return
+            groups = groups.toMutableList().apply { removeAt(idx) }
+            notifyItemRemoved(idx)
+        }
+
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
             val view = LayoutInflater.from(parent.context).inflate(R.layout.item_group_card, parent, false)
-            return ViewHolder(view, onCardClick, onEditClick)
+            return ViewHolder(view, onCardClick, onViewOnMapClick, onEditClick)
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
@@ -155,9 +198,15 @@ class GroupsListFragment : Fragment() {
 
         override fun getItemCount(): Int = groups.size
 
+        companion object {
+            private const val MENU_VIEW_ON_MAP = 1
+            private const val MENU_EDIT = 2
+        }
+
         class ViewHolder(
             itemView: View,
             private val onCardClick: (Group) -> Unit,
+            private val onViewOnMapClick: (Group) -> Unit,
             private val onEditClick: (Group) -> Unit
         ) : RecyclerView.ViewHolder(itemView) {
             private val name: TextView = itemView.findViewById(R.id.groupName)
@@ -171,7 +220,23 @@ class GroupsListFragment : Fragment() {
                 meta.text = "$tracks trackers"
                 editButton.visibility = View.VISIBLE
                 content.setOnClickListener { onCardClick(group) }
-                editButton.setOnClickListener { onEditClick(group) }
+                editButton.setOnClickListener { anchor -> showGroupMenu(anchor, group) }
+            }
+
+            private fun showGroupMenu(anchor: View, group: Group) {
+                val popup = PopupMenu(anchor.context, anchor)
+                popup.menu.apply {
+                    add(Menu.NONE, MENU_VIEW_ON_MAP, 0, anchor.context.getString(R.string.view_on_map))
+                    add(Menu.NONE, MENU_EDIT, 0, anchor.context.getString(R.string.edit))
+                }
+                popup.setOnMenuItemClickListener { item ->
+                    when (item.itemId) {
+                        MENU_VIEW_ON_MAP -> { onViewOnMapClick(group); true }
+                        MENU_EDIT -> { onEditClick(group); true }
+                        else -> false
+                    }
+                }
+                popup.show()
             }
         }
     }
