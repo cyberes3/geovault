@@ -162,6 +162,12 @@ class AddGroupTrackersFragment : Fragment() {
                                     putParcelable(KEY_TRACKER, item.tracker)
                                 }
                             )
+                            parentFragmentManager.setFragmentResult(
+                                REQUEST_GROUP_TRACK_ADDED_LIST,
+                                Bundle().apply {
+                                    putString(KEY_GROUP_ID, requireGroupId())
+                                }
+                            )
                             parentFragmentManager.setFragmentResult(GroupsListFragment.REQUEST_GROUPS_REFRESH, Bundle())
                             renderList()
                         } else {
@@ -198,6 +204,7 @@ class AddGroupTrackersFragment : Fragment() {
 
     companion object {
         const val REQUEST_GROUP_TRACK_ADDED = "group_track_added"
+        const val REQUEST_GROUP_TRACK_ADDED_LIST = "group_track_added_list"
         const val KEY_GROUP_ID = "group_id"
         const val KEY_TRACK_ID = "track_id"
         const val KEY_TRACKER = "tracker"

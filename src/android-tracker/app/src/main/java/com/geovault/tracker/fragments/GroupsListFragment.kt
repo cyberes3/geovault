@@ -129,7 +129,7 @@ class GroupsListFragment : Fragment() {
     private fun openGroupEditor(group: Group) {
         requireActivity().supportFragmentManager.beginTransaction()
             .add(R.id.fragment_overlay_container, GroupDetailBottomSheet.newInstance(group), "group_detail")
-            .addToBackStack(null)
+            .addToBackStack("group_detail")
             .commit()
     }
 

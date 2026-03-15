@@ -66,10 +66,11 @@
             android:id="@+id/paramsName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:minHeight="20dp"
             android:textSize="14sp"
             android:textStyle="bold"
             android:textColor="@color/text_primary"
-            android:visibility="gone"
+            android:visibility="invisible"
             android:layout_marginBottom="12dp"
             tools:text="MY TRACKER"
             tools:visibility="visible" />

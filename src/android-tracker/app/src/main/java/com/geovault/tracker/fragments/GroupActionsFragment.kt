@@ -113,8 +113,8 @@ class GroupActionsFragment : Fragment() {
                     true
                 }
                 MENU_VIEW_PARAMS -> {
+                    // Keep group members list on back stack so closing params returns here.
                     (activity as? MainActivity)?.showTrackerParamsFragment(tracker.id, tracker.name)
-                    requireActivity().supportFragmentManager.popBackStack()
                     true
                 }
                 MENU_VIEW_IN_LIST -> {
@@ -154,10 +154,12 @@ class GroupActionsFragment : Fragment() {
             private val name: TextView = itemView.findViewById(R.id.groupTrackerName)
             private val groupTrackerChevronIcon: ImageView = itemView.findViewById(R.id.groupTrackerChevronIcon)
             private val menuBtn: ImageButton = itemView.findViewById(R.id.groupTrackerMenu)
+            private val removeContainer: View = itemView.findViewById(R.id.groupTrackerRemoveContainer)
             private val removeBtn: ImageButton = itemView.findViewById(R.id.groupTrackerRemove)
             fun bind(tracker: Tracker, showRemove: Boolean) {
                 name.text = tracker.name
                 groupTrackerChevronIcon.setColorFilter(parseHexToColor(tracker.color, itemView.context))
+                removeContainer.visibility = if (showRemove && onRemove != null) View.VISIBLE else View.GONE
                 removeBtn.visibility = if (showRemove && onRemove != null) View.VISIBLE else View.GONE
                 removeBtn.setOnClickListener { onRemove?.invoke(tracker.id) }
                 menuBtn.setOnClickListener { onShowMenu?.invoke(tracker, menuBtn) }

@@ -432,7 +432,8 @@ class MainActivity : AppCompatActivity() {
         val topName = if (supportFragmentManager.backStackEntryCount > 0) {
             supportFragmentManager.getBackStackEntryAt(supportFragmentManager.backStackEntryCount - 1).name
         } else null
-        val disableNav = topName == "new_tracker" || topName == "edit_tracker" || topName == "edit_shared_tracker"
+        val editGroupNames = setOf("group_detail", "group_trackers_list", "add_group_trackers", "edit_shared_group")
+        val disableNav = topName == "new_tracker" || topName == "edit_tracker" || topName == "edit_shared_tracker" || (topName != null && topName in editGroupNames)
         navHome.isEnabled = !disableNav
         navHome.isClickable = !disableNav
         navMap.isEnabled = !disableNav

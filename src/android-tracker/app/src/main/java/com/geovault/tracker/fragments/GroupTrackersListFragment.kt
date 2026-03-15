@@ -63,12 +63,12 @@ class GroupTrackersListFragment : Fragment() {
                         ),
                         "add_group_trackers"
                     )
-                    .addToBackStack(null)
+                    .addToBackStack("add_group_trackers")
                     .commit()
             }
         }
         parentFragmentManager.setFragmentResultListener(
-            AddGroupTrackersFragment.REQUEST_GROUP_TRACK_ADDED,
+            AddGroupTrackersFragment.REQUEST_GROUP_TRACK_ADDED_LIST,
             viewLifecycleOwner
         ) { _, bundle ->
             val groupId = bundle.getString(AddGroupTrackersFragment.KEY_GROUP_ID) ?: return@setFragmentResultListener
@@ -77,6 +77,11 @@ class GroupTrackersListFragment : Fragment() {
         }
         loadGroupAndBind(group!!.id)
         if (preloadedAddableTrackers == null) preloadAddableTrackers()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        group?.id?.let { loadGroupAndBind(it) }
     }
 
     private fun preloadAddableTrackers() {
@@ -167,10 +172,12 @@ class GroupTrackersListFragment : Fragment() {
             parseHexToColor(tracker.color, card.context)
         )
         val menuBtn = card.findViewById<ImageButton>(R.id.groupTrackerMenu)
+        val removeContainer = card.findViewById<View>(R.id.groupTrackerRemoveContainer)
         val removeBtn = card.findViewById<ImageButton>(R.id.groupTrackerRemove)
         val removeSpinner = card.findViewById<LoadingSpinner>(R.id.groupTrackerRemoveSpinner)
         menuBtn.visibility = View.GONE
         if (isOwner) {
+            removeContainer.visibility = View.VISIBLE
             val isRemoving = tracker.id in removingTrackIds
             removeBtn.visibility = if (isRemoving) View.GONE else View.VISIBLE
             removeSpinner.visibility = if (isRemoving) View.VISIBLE else View.GONE
@@ -190,14 +197,13 @@ class GroupTrackersListFragment : Fragment() {
                 }
             }
         } else {
+            removeContainer.visibility = View.GONE
             removeBtn.visibility = View.GONE
             removeSpinner.stop(hide = true)
             removeSpinner.visibility = View.GONE
         }
-        card.isClickable = true
-        card.setOnClickListener {
-            (activity as? MainActivity)?.openMapForGroup(g, tracker.id)
-        }
+        card.isClickable = false
+        card.isFocusable = false
         listContainer.addView(card)
     }
 

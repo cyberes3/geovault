@@ -93,6 +93,8 @@ class TrackerParamsFragment : Fragment() {
             if (name.isNotBlank()) {
                 paramsName.visibility = View.VISIBLE
                 paramsName.text = name.uppercase(Locale.getDefault())
+            } else {
+                paramsName.visibility = View.INVISIBLE
             }
         }
         // args is non-null here (we would have returned above if trackerId was null)
@@ -175,14 +177,15 @@ class TrackerParamsFragment : Fragment() {
         
         // Fire-and-forget: refresh trackers list in background so list is up to date when user goes back. Must not block.
         view?.post {
-            TrackerRepository.getTrackers(requireContext(), forceRefresh = true) { _ ->
-                if (isAdded) {
-                    requireActivity().runOnUiThread {
-                        requireActivity().supportFragmentManager.setFragmentResult(
-                            TrackersListFragment.REQUEST_UPDATE_LIST_FROM_CACHE,
-                            Bundle()
-                        )
-                    }
+            val ctx = context ?: return@post
+            TrackerRepository.getTrackers(ctx, forceRefresh = true) { _ ->
+                if (!isAdded || activity == null) return@getTrackers
+                requireActivity().runOnUiThread {
+                    if (!isAdded || activity == null) return@runOnUiThread
+                    requireActivity().supportFragmentManager.setFragmentResult(
+                        TrackersListFragment.REQUEST_UPDATE_LIST_FROM_CACHE,
+                        Bundle()
+                    )
                 }
             }
         }
@@ -250,7 +253,7 @@ class TrackerParamsFragment : Fragment() {
             paramsName.visibility = View.VISIBLE
             paramsName.text = tracker.name.uppercase(Locale.getDefault())
         } else {
-            paramsName.visibility = View.GONE
+            paramsName.visibility = View.INVISIBLE
         }
 
         paramsLastUpdate.text = if (lastTimestampMs != null) {

@@ -95,21 +95,14 @@ class GroupDetailBottomSheet : Fragment() {
         showLoading()
 
         val groupId = arguments?.getString(ARG_GROUP_ID) ?: return
+        group = initialGroup
         parentFragmentManager.setFragmentResultListener(
             AddGroupTrackersFragment.REQUEST_GROUP_TRACK_ADDED,
             viewLifecycleOwner
         ) { _, bundle ->
             val updatedGroupId = bundle.getString(AddGroupTrackersFragment.KEY_GROUP_ID) ?: return@setFragmentResultListener
             if (updatedGroupId != groupId) return@setFragmentResultListener
-            val addedTracker = bundle.getParcelable(AddGroupTrackersFragment.KEY_TRACKER, Tracker::class.java)
-            if (addedTracker != null) {
-                val current = group ?: return@setFragmentResultListener
-                val currentTrackIds = current.track_ids ?: emptyList()
-                if (addedTracker.id !in currentTrackIds) {
-                    group = current.copy(track_ids = currentTrackIds + addedTracker.id)
-                    updateTracksCountText()
-                }
-            }
+            loadGroup(updatedGroupId)
         }
         parentFragmentManager.setFragmentResultListener(
             GroupTrackersListFragment.REQUEST_GROUP_TRACK_REMOVED,
@@ -250,7 +243,7 @@ class GroupDetailBottomSheet : Fragment() {
                 GroupTrackersListFragment.newInstance(g, preloadedAddableTrackers),
                 "group_trackers_list"
             )
-            .addToBackStack(null)
+            .addToBackStack("group_trackers_list")
             .commit()
     }
 

@@ -120,7 +120,7 @@ class SharedTrackersFragment : Fragment() {
                     } else {
                         requireActivity().supportFragmentManager.beginTransaction()
                             .add(R.id.fragment_overlay_container, GroupDetailBottomSheet.newInstance(group), "group_detail")
-                            .addToBackStack(null)
+                            .addToBackStack("group_detail")
                             .commit()
                     }
                 }
