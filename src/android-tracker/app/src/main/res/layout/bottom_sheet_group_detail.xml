@@ -124,6 +124,47 @@
     </LinearLayout>
 
     <LinearLayout
+        android:id="@+id/groupDetailHideInListRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:visibility="gone">
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/groupDetailHideInListSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/hide_in_list_label"
+            android:textSize="14sp"
+            android:textColor="@color/text_primary"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp" />
+    </LinearLayout>
+    <TextView
+        android:id="@+id/groupDetailHideInListHint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/hide_in_list_hint"
+        android:textSize="12sp"
+        android:textColor="@color/text_secondary"
+        android:layout_marginBottom="8dp"
+        android:visibility="gone" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/groupDetailViewOnMap"
+        style="@style/gv_common_ButtonOutlined"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:text="@string/view_group_on_map"
+        android:layout_marginBottom="12dp" />
+
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal">
@@ -139,11 +180,10 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/groupDetailDelete"
-            style="@style/gv_common_ButtonOutlined"
+            style="@style/gv_common_ButtonOutlinedDestructive"
             android:layout_width="0dp"
             android:layout_height="44dp"
             android:layout_weight="1"
-            android:text="@string/delete_group"
-            app:backgroundTint="@color/error_red" />
+            android:text="@string/delete_group" />
     </LinearLayout>
 </LinearLayout>

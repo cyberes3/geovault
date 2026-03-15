@@ -2,6 +2,7 @@ from django.http import HttpResponseRedirect
 from django.urls import path
 
 from . import views
+from . import hauk_views
 from . import world_share_views
 
 
@@ -12,6 +13,12 @@ def _redirect_public_share_to_world(request, share_id):
 
 
 urlpatterns = [
+    path("api/create.php", hauk_views.hauk_create),
+    path("api/post.php", hauk_views.hauk_post),
+    path("api/stop.php", hauk_views.hauk_stop),
+    path("api/adopt.php", hauk_views.hauk_adopt_stub),
+    path("api/new-link.php", hauk_views.hauk_new_link_stub),
+    path("api/fetch.php", hauk_views.hauk_fetch_stub),
     path("world/share/<str:share_id>/info/", world_share_views.world_share_info),
     path("world/share/<str:share_id>/", world_share_views.world_share_data),
     path("public/share/<str:share_id>/info/", lambda r, share_id: _redirect_public_share_to_world(r, share_id)),
@@ -20,6 +27,7 @@ urlpatterns = [
     path("trackers/available-to-add/", views.tracker_available_to_add),
     path("tracker-check/", views.tracker_check),
     path("trackers/<str:tracker_id>/clear-history/", views.tracker_clear_history),
+    path("trackers/<str:tracker_id>/regenerate-hauk-password/", views.tracker_regenerate_hauk_password),
     path("trackers/<str:tracker_id>/subscribe/", views.tracker_subscribe_delete),
     path("trackers/<str:tracker_id>/share-with-me/", views.tracker_leave_share),
     path("trackers/<str:tracker_id>/settings/", views.tracker_post_settings),

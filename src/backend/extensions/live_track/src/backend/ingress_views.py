@@ -33,6 +33,43 @@ User = get_user_model()
 logger = get_tagged_logger()
 
 
+def append_point_to_track(track, lat: float, lon: float, timestamp_ms: int, extra: dict | None = None) -> int | None:
+    """
+    Append one point to a track (geometry + point_params), broadcast update. Used by ingress and Hauk post.
+    Returns the index of the inserted point for broadcasting, or None if not found.
+    """
+    max_points = get_config_loader().get_int("extensions.live_track.max_points", 1000)
+    extra = extra or {}
+    with transaction.atomic():
+        track_locked = LiveTrack.objects.select_for_update().get(pk=track.id)
+        geom = track_locked.geometry or {"type": "LineString", "coordinates": []}
+        coords = list(geom.get("coordinates") or [])
+        point_params = list(track_locked.point_params or [])
+
+        new_point = [lon, lat, timestamp_ms]
+        ts_list = [c[2] for c in coords]
+        idx = bisect.bisect_right(ts_list, timestamp_ms)
+        coords.insert(idx, new_point)
+        point_params.insert(idx, dict(extra))
+
+        if len(coords) > max_points:
+            n_removed = len(coords) - max_points
+            coords = coords[n_removed:]
+            point_params = point_params[n_removed:]
+
+        track_locked.geometry = {"type": "LineString", "coordinates": coords}
+        track_locked.point_params = point_params
+        track_locked.updated_at = timezone.now()
+        track_locked.save(update_fields=["geometry", "point_params", "updated_at"])
+
+        broadcast_idx = next((i for i, c in enumerate(coords) if c == new_point), None)
+
+    if broadcast_idx is not None:
+        if not queue_broadcast_track_updated(track, new_point, extra, index=broadcast_idx):
+            broadcast_track_updated(track, new_point, extra, index=broadcast_idx)
+    return broadcast_idx
+
+
 def _decode_basic_auth(request):
     auth = request.META.get("HTTP_AUTHORIZATION") or ""
     if not auth.startswith("Basic "):
@@ -90,37 +127,8 @@ def ingress(request):
     if timestamp_ms is None:
         timestamp_ms = int(timezone.now().timestamp() * 1000)
 
-    max_points = get_config_loader().get_int("extensions.live_track.max_points", 1000)
-
-    with transaction.atomic():
-        track_locked = LiveTrack.objects.select_for_update().get(pk=track.id)
-        geom = track_locked.geometry or {"type": "LineString", "coordinates": []}
-        coords = list(geom.get("coordinates") or [])
-        point_params = list(track_locked.point_params or [])
-
-        new_point = [body.lon, body.lat, timestamp_ms]
-        extra = {k: v for k, v in body.model_dump().items() if k not in ("lat", "lon", "timestamp") and v is not None}
-
-        ts_list = [c[2] for c in coords]
-        idx = bisect.bisect_right(ts_list, timestamp_ms)
-        coords.insert(idx, new_point)
-        point_params.insert(idx, extra)
-
-        if len(coords) > max_points:
-            n_removed = len(coords) - max_points
-            coords = coords[n_removed:]
-            point_params = point_params[n_removed:]
-
-        track_locked.geometry = {"type": "LineString", "coordinates": coords}
-        track_locked.point_params = point_params
-        track_locked.updated_at = timezone.now()
-        track_locked.save(update_fields=["geometry", "point_params", "updated_at"])
-
-        broadcast_idx = next((i for i, c in enumerate(coords) if c == new_point), None)
-
-    if broadcast_idx is not None:
-        if not queue_broadcast_track_updated(track, new_point, extra, index=broadcast_idx):
-            broadcast_track_updated(track, new_point, extra, index=broadcast_idx)
+    extra = {k: v for k, v in body.model_dump().items() if k not in ("lat", "lon", "timestamp") and v is not None}
+    append_point_to_track(track, body.lat, body.lon, timestamp_ms, extra)
     return JsonResponse({"ok": True}, status=200)
 
 

@@ -8,10 +8,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
-import android.widget.LinearLayout
 import android.widget.AutoCompleteTextView
 import android.widget.EditText
-import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -25,9 +23,7 @@ import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.R as CommonR
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
-import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
-import com.geovault.tracker.TrackerSettingsRequest
 import com.google.android.material.button.MaterialButton
 
 class SettingsFragment : Fragment() {
@@ -131,140 +127,12 @@ class SettingsFragment : Fragment() {
             saveSetting("auto_tracking_enabled", isChecked)
             updateAutoTrackingUi(isChecked)
         }
-        hiddenTrackersButton.setOnClickListener { showHiddenTrackersDialog() }
+        hiddenTrackersButton.setOnClickListener { (activity as? MainActivity)?.showHiddenTrackersFragment() }
 
         view.findViewById<View>(R.id.loggingHelpButton).setOnClickListener { showLoggingHelpDialog() }
         
         setupProfileSpinner()
     }
-
-    private data class HiddenTrackerItem(val id: String, val name: String)
-
-    private fun isHiddenInList(tracker: Tracker): Boolean {
-        return (tracker.settings?.get("hidden_in_list") as? Boolean) == true
-    }
-
-    private fun showHiddenTrackersDialog() {
-        hiddenTrackersButton.isEnabled = false
-        TrackerRepository.getTrackers(requireContext(), forceRefresh = true) { list ->
-            if (!isAdded) return@getTrackers
-            requireActivity().runOnUiThread {
-                hiddenTrackersButton.isEnabled = true
-                val hiddenTrackers = (list ?: emptyList())
-                    .filter { it.isOwner() && isHiddenInList(it) }
-                    .map { HiddenTrackerItem(id = it.id, name = it.name) }
-                    .sortedBy { it.name.lowercase() }
-                if (hiddenTrackers.isEmpty()) {
-                    AlertDialog.Builder(requireContext())
-                        .setTitle(getString(R.string.hidden_trackers))
-                        .setMessage(getString(R.string.hidden_trackers_empty))
-                        .setPositiveButton(getString(R.string.close), null)
-                        .show()
-                    return@runOnUiThread
-                }
-                val dialogView = layoutInflater.inflate(R.layout.dialog_hidden_trackers, null)
-                val listContainer = dialogView.findViewById<LinearLayout>(R.id.hiddenTrackersList)
-                val showAllButton = dialogView.findViewById<MaterialButton>(R.id.hiddenTrackersShowAll)
-                val closeButton = dialogView.findViewById<TextView>(R.id.hiddenTrackersClose)
-                if (hiddenTrackers.size > 1) {
-                    showAllButton.visibility = View.VISIBLE
-                }
-                val dialog = AlertDialog.Builder(requireContext())
-                    .setView(dialogView)
-                    .setCancelable(true)
-                    .create()
-                fun removeRowAndDismissIfEmpty(row: View) {
-                    listContainer.removeView(row)
-                    if (listContainer.childCount == 0) {
-                        dialog.dismiss()
-                        requireActivity().supportFragmentManager.setFragmentResult(
-                            TrackersFragment.REQUEST_REFRESH_LIST,
-                            Bundle()
-                        )
-                    }
-                }
-                for (item in hiddenTrackers) {
-                    val row = layoutInflater.inflate(R.layout.item_hidden_tracker_row, listContainer, false)
-                    row.findViewById<TextView>(R.id.hiddenTrackerName).text = item.name
-                    val showBtn = row.findViewById<ImageButton>(R.id.hiddenTrackerShow)
-                    showBtn.setOnClickListener {
-                        showBtn.isEnabled = false
-                        unhideTracker(
-                            item.id,
-                            onSuccess = { removeRowAndDismissIfEmpty(row) },
-                            onFailure = { showBtn.isEnabled = true }
-                        )
-                    }
-                    listContainer.addView(row)
-                }
-                showAllButton.setOnClickListener {
-                    showAllButton.isEnabled = false
-                    closeButton.isEnabled = false
-                    for (i in 0 until listContainer.childCount) {
-                        listContainer.getChildAt(i).findViewById<ImageButton>(R.id.hiddenTrackerShow)?.isEnabled = false
-                    }
-                    unhideAllTrackers(
-                        trackerIds = hiddenTrackers.map { it.id },
-                        onComplete = {
-                            dialog.dismiss()
-                            requireActivity().supportFragmentManager.setFragmentResult(
-                                TrackersFragment.REQUEST_REFRESH_LIST,
-                                Bundle()
-                            )
-                        }
-                    )
-                }
-                closeButton.setOnClickListener { dialog.dismiss() }
-                dialog.show()
-            }
-        }
-    }
-
-    private fun unhideTracker(
-        trackerId: String,
-        onSuccess: (() -> Unit)? = null,
-        onFailure: (() -> Unit)? = null
-    ) {
-        TrackerRepository.updateTrackerSettings(
-            requireContext(),
-            trackerId,
-            TrackerSettingsRequest(hidden_in_list = false)
-        ) { updated, errorMessage ->
-            if (!isAdded) return@updateTrackerSettings
-            requireActivity().runOnUiThread {
-                if (updated != null) {
-                    requireActivity().supportFragmentManager.setFragmentResult(
-                        TrackersFragment.REQUEST_REFRESH_LIST,
-                        Bundle()
-                    )
-                    onSuccess?.invoke()
-                } else {
-                    (activity as? MainActivity)?.showSnackbar(
-                        errorMessage ?: getString(R.string.failed_to_load_tracker)
-                    )
-                    onFailure?.invoke()
-                }
-            }
-        }
-    }
-
-    private fun unhideAllTrackers(trackerIds: List<String>, onComplete: () -> Unit, index: Int = 0) {
-        if (index >= trackerIds.size) {
-            onComplete()
-            return
-        }
-        TrackerRepository.updateTrackerSettings(
-            requireContext(),
-            trackerIds[index],
-            TrackerSettingsRequest(hidden_in_list = false)
-        ) { _, _ ->
-            if (!isAdded) return@updateTrackerSettings
-            requireActivity().runOnUiThread {
-                unhideAllTrackers(trackerIds, onComplete, index + 1)
-            }
-        }
-    }
-
 
     private fun toDisplay(meters: Float, isImperial: Boolean): Int {
         return if (isImperial) (meters * 3.28084f).toInt() else meters.toInt()

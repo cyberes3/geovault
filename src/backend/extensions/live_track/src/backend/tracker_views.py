@@ -28,6 +28,7 @@ from .helpers import (
     _strip_ser_from_params,
     can_user_see_track,
     can_user_see_track_via_group_share,
+    generate_hauk_password,
     track_to_response,
     track_to_response_metadata_only,
 )
@@ -175,10 +176,12 @@ def tracker_list_create(request):
     if LiveTrack.objects.filter(user=request.user, name=name).exists():
         return error_response("A track with this name already exists", 409)
     tracker_secret = secrets.token_urlsafe(32)
+    hauk_password = generate_hauk_password()
     track_id = uuid.uuid4()
     track = LiveTrack.objects.create(
         id=track_id,
         tracker_secret=tracker_secret,
+        hauk_password=hauk_password,
         name=name,
         user=request.user,
         settings={"color": color},
@@ -370,6 +373,20 @@ def tracker_clear_history(request, tracker_id):
     track.point_params = new_params
     track.save(update_fields=["geometry", "point_params", "updated_at"])
     return JsonResponse(track_to_response_metadata_only(track, include_secret=False), status=200)
+
+
+@api_or_login_required_401()
+@require_http_methods(["POST"])
+@handle_404
+@csrf_exempt
+def tracker_regenerate_hauk_password(request, tracker_id):
+    """POST trackers/<id>/regenerate-hauk-password/ — generate new Hauk-only password for this tracker. Owner only."""
+    track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
+    if track.user_id != request.user.id:
+        return error_response("Only the owner can regenerate Hauk password", 403)
+    track.hauk_password = generate_hauk_password()
+    track.save(update_fields=["hauk_password", "updated_at"])
+    return JsonResponse({"hauk_password": track.hauk_password}, status=200)
 
 
 LATEST_COORDINATES_LIMIT = 100

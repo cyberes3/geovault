@@ -102,6 +102,8 @@
     <string name="follow_lock_on_description">Unlock camera (stop following track)</string>
     <string name="zoom_in_description">Zoom in</string>
     <string name="zoom_out_description">Zoom out</string>
+    <string name="show_all_trackers">Show all trackers</string>
+    <string name="show_default_tracker">Show default tracker</string>
     <!-- Extended params: when on, sends full data; when off, sends only position + time to minimize data usage -->
     <string name="extended_params_label">Send Extended Data</string>
 
@@ -237,6 +239,7 @@
     <string name="create_group">Create group</string>
     <string name="new_group_name_hint">Group name</string>
     <string name="group_tracks">Tracks</string>
+    <string name="group_tracks_empty">No tracks in this group.</string>
     <string name="group_members">Members</string>
     <string name="group_members_label">Group members</string>
     <string name="leave_group">Leave shared group</string>
@@ -249,14 +252,24 @@
     <string name="group_delete_confirm_title">Delete group?</string>
     <string name="group_delete_confirm_message">This cannot be undone. Members will lose access.</string>
     <string name="no_groups">No groups. Create one to organize trackers.</string>
+    <string name="hide_in_list_label">Hide in List</string>
+    <string name="hide_in_list_hint">When on, this group is hidden from the Groups list. You can unhide it in Settings.</string>
+    <string name="view_group">View group</string>
+    <string name="view_group_on_map">View group on map</string>
+    <string name="edit_group_content_description">Edit group</string>
 
     <string name="hide_on_map">Hide</string>
     <string name="show_on_map">Show on map</string>
-    <string name="hidden_trackers">Hidden trackers</string>
+    <string name="hidden_trackers">Hidden Trackers</string>
+    <string name="hidden_trackers_hint">Tap the eye icon to show a tracker again.</string>
     <string name="hidden_trackers_empty">No hidden trackers.</string>
     <string name="hidden_trackers_show_item">Show %1$s</string>
     <string name="show">Show</string>
     <string name="show_all">Show all</string>
+    <string name="hidden_groups">Hidden Groups</string>
+    <string name="hidden_groups_empty">No hidden groups.</string>
+    <string name="show_all_trackers_in_settings">Show all trackers</string>
+    <string name="show_all_groups">Show all groups</string>
 
     <string name="subscribers_title">Subscribers</string>
     <string name="export_kml">Export KML</string>

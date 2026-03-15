@@ -125,9 +125,11 @@
             :api="api"
             :initial-group-id="groupsSidebarInitialGroupId"
             :refreshing="groupsSidebarRefreshing"
+            :hidden-group-ids="hiddenGroupIds"
             @saved="onGroupsSidebarSaved"
             @refreshed="onGroupsSidebarRefreshed"
             @leave="onGroupsSidebarLeave"
+            @toggle-group-visibility="toggleGroupVisibility"
             @hidden-in-list-changed="onGroupHiddenInListChanged"
           />
           <div

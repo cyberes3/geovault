@@ -24,6 +24,7 @@ class LiveTrack(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tracker_secret = models.CharField(max_length=64, unique=True)
+    hauk_password = models.CharField(max_length=64, default="", blank=True)
     name = models.CharField(max_length=255)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="live_tracks")
     settings = models.JSONField(default=dict)

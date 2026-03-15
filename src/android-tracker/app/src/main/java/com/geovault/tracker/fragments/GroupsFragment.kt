@@ -1,6 +1,5 @@
 package com.geovault.tracker.fragments
 
-import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -44,9 +43,11 @@ class GroupsFragment : Fragment() {
         fab = view.findViewById(R.id.groupsFab)
 
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        adapter = GroupsAdapter(emptyList()) { group ->
-            GroupDetailBottomSheet.newInstance(group).show(parentFragmentManager, "group_detail")
-        }
+        adapter = GroupsAdapter(
+            emptyList(),
+            onCardClick = { group -> openGroupActions(group) },
+            onEditClick = { group -> openGroupEditor(group) }
+        )
         recyclerView.adapter = adapter
 
         closeButton.setOnClickListener {
@@ -62,7 +63,16 @@ class GroupsFragment : Fragment() {
 
         val cached = TrackerRepository.getGroupsCache()
         if (cached != null) {
-            applyGroups(cached)
+            TrackerRepository.getMapVisibility(requireContext()) { visibility ->
+                if (!isAdded) return@getMapVisibility
+                val hiddenGroupIds = (visibility?.hidden_group_ids ?: emptyList()).toSet()
+                val visible = cached.filter { g ->
+                    if (g.is_owner == true) g.hidden_in_list != true else g.id !in hiddenGroupIds
+                }
+                requireActivity().runOnUiThread {
+                    applyGroups(visible.sortedBy { it.name.lowercase() })
+                }
+            }
         } else {
             loadingOverlay.visibility = View.VISIBLE
             loadingSpinner.start()
@@ -87,10 +97,19 @@ class GroupsFragment : Fragment() {
             loadingOverlay.visibility = View.VISIBLE
             loadingSpinner.start()
         }
-        TrackerRepository.getGroups(requireContext(), forceRefresh = forceRefresh) { list ->
-            if (!isAdded) return@getGroups
-            requireActivity().runOnUiThread {
-                applyGroups(list ?: emptyList())
+        TrackerRepository.getMapVisibility(requireContext()) { visibility ->
+            if (!isAdded) return@getMapVisibility
+            val hiddenGroupIds = (visibility?.hidden_group_ids ?: emptyList()).toSet()
+            TrackerRepository.getGroups(requireContext(), forceRefresh = forceRefresh) { list ->
+                if (!isAdded) return@getGroups
+                val raw = list ?: emptyList()
+                val visible = raw.filter { g ->
+                    if (g.is_owner == true) g.hidden_in_list != true else g.id !in hiddenGroupIds
+                }
+                val sorted = visible.sortedBy { it.name.lowercase() }
+                requireActivity().runOnUiThread {
+                    applyGroups(sorted)
+                }
             }
         }
     }
@@ -106,12 +125,16 @@ class GroupsFragment : Fragment() {
             .setPositiveButton(getString(R.string.create)) { _, _ ->
                 val name = input.text?.toString()?.trim()
                 if (!name.isNullOrEmpty()) {
-                    TrackerRepository.createGroup(requireContext(), name) { group ->
-                        if (isAdded && group != null) {
-                            requireActivity().runOnUiThread {
-                                loadGroups(forceRefresh = true)
-                                (activity as? MainActivity)?.showSnackbar(getString(R.string.saved_tracker))
-                                GroupDetailBottomSheet.newInstance(group).show(parentFragmentManager, "group_detail")
+                    TrackerRepository.createGroup(requireContext(), name) { group, errorMessage ->
+                        if (!isAdded) return@createGroup
+                        requireActivity().runOnUiThread {
+                            when {
+                                group != null -> {
+                                    loadGroups(forceRefresh = true)
+                                    (activity as? MainActivity)?.showSnackbar(getString(R.string.saved_tracker))
+                                    openGroupEditor(group)
+                                }
+                                !errorMessage.isNullOrBlank() -> (activity as? MainActivity)?.showSnackbar(errorMessage)
                             }
                         }
                     }
@@ -121,9 +144,24 @@ class GroupsFragment : Fragment() {
             .show()
     }
 
+    private fun openGroupActions(group: Group) {
+        requireActivity().supportFragmentManager.beginTransaction()
+            .add(R.id.fragment_overlay_container, GroupActionsFragment.newInstance(group), "group_actions")
+            .addToBackStack(null)
+            .commit()
+    }
+
+    private fun openGroupEditor(group: Group) {
+        requireActivity().supportFragmentManager.beginTransaction()
+            .add(R.id.fragment_overlay_container, GroupDetailBottomSheet.newInstance(group), "group_detail")
+            .addToBackStack(null)
+            .commit()
+    }
+
     private class GroupsAdapter(
         private var groups: List<Group>,
-        private val onGroupClick: (Group) -> Unit
+        private val onCardClick: (Group) -> Unit,
+        private val onEditClick: (Group) -> Unit
     ) : RecyclerView.Adapter<GroupsAdapter.ViewHolder>() {
 
         fun setGroups(list: List<Group>) {
@@ -133,7 +171,7 @@ class GroupsFragment : Fragment() {
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
             val view = LayoutInflater.from(parent.context).inflate(R.layout.item_group_card, parent, false)
-            return ViewHolder(view, onGroupClick)
+            return ViewHolder(view, onCardClick, onEditClick)
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
@@ -142,16 +180,24 @@ class GroupsFragment : Fragment() {
 
         override fun getItemCount(): Int = groups.size
 
-        class ViewHolder(itemView: View, private val onGroupClick: (Group) -> Unit) : RecyclerView.ViewHolder(itemView) {
+        class ViewHolder(
+            itemView: View,
+            private val onCardClick: (Group) -> Unit,
+            private val onEditClick: (Group) -> Unit
+        ) : RecyclerView.ViewHolder(itemView) {
             private val name: TextView = itemView.findViewById(R.id.groupName)
             private val meta: TextView = itemView.findViewById(R.id.groupMeta)
+            private val content: View = itemView.findViewById(R.id.groupCardContent)
+            private val editButton: ImageButton = itemView.findViewById(R.id.groupCardEdit)
 
             fun bind(group: Group) {
                 name.text = group.name
                 val tracks = group.track_ids?.size ?: 0
                 val ownerStr = if (group.is_owner == true) " · Owner" else ""
                 meta.text = "$tracks tracks$ownerStr"
-                itemView.setOnClickListener { onGroupClick(group) }
+                editButton.visibility = View.VISIBLE
+                content.setOnClickListener { onCardClick(group) }
+                editButton.setOnClickListener { onEditClick(group) }
             }
         }
     }

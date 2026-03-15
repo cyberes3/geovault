@@ -16,6 +16,7 @@ import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.MapVisibilityRequest
 import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.parseHexToColor
 import com.google.android.material.button.MaterialButton
@@ -53,12 +54,13 @@ class SharedTrackersFragment : Fragment() {
         swipeRefresh.setOnRefreshListener { loadTrackers() }
 
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        adapter = SharedTrackersAdapter(emptyList()) { tracker, action ->
+        adapter = SharedTrackersAdapter(emptyList(), emptySet()) { tracker, action ->
             when (action) {
                 TrackerAction.EDIT -> (activity as? MainActivity)?.showEditTrackerFragment(tracker)
                 TrackerAction.VIEW_ON_MAP -> viewOnMap(tracker)
                 TrackerAction.UNSUBSCRIBE -> unsubscribeTracker(tracker)
                 TrackerAction.REMOVE_FROM_SHARE -> removeFromShare(tracker)
+                TrackerAction.HIDE_ON_MAP -> toggleTrackerMapVisibility(tracker)
                 TrackerAction.VIEW_PARAMS -> (activity as? MainActivity)?.showTrackerParamsFragment(
                     tracker.id,
                     tracker.name,
@@ -85,15 +87,38 @@ class SharedTrackersFragment : Fragment() {
     }
 
     private fun loadTrackers() {
-        TrackerRepository.getTrackers(requireContext(), forceRefresh = true) { list ->
-            if (isAdded) {
-                requireActivity().runOnUiThread {
-                    val shared = (list ?: emptyList()).filter { !it.isOwner() }
-                    adapter?.setTrackers(shared)
-                    emptyView.visibility = if (shared.isEmpty()) View.VISIBLE else View.GONE
-                    loadingOverlay.visibility = View.GONE
-                    loadingSpinner.stop(hide = false)
-                    swipeRefresh.isRefreshing = false
+        TrackerRepository.getMapVisibility(requireContext()) { visibility ->
+            if (!isAdded) return@getMapVisibility
+            val hiddenTrackIds = (visibility?.hidden_track_ids ?: emptyList()).toSet()
+            TrackerRepository.getTrackers(requireContext(), forceRefresh = true) { list ->
+                if (isAdded) {
+                    requireActivity().runOnUiThread {
+                        val shared = (list ?: emptyList()).filter { !it.isOwner() }
+                        adapter?.setTrackers(shared, hiddenTrackIds)
+                        emptyView.visibility = if (shared.isEmpty()) View.VISIBLE else View.GONE
+                        loadingOverlay.visibility = View.GONE
+                        loadingSpinner.stop(hide = false)
+                        swipeRefresh.isRefreshing = false
+                    }
+                }
+            }
+        }
+    }
+
+    private fun toggleTrackerMapVisibility(tracker: Tracker) {
+        TrackerRepository.getMapVisibility(requireContext()) { visibility ->
+            if (!isAdded) return@getMapVisibility
+            val current = (visibility?.hidden_track_ids ?: emptyList()).toMutableList()
+            val hidden = current.contains(tracker.id)
+            val newList = if (hidden) current.filter { it != tracker.id } else current + tracker.id
+            TrackerRepository.patchMapVisibility(requireContext(), MapVisibilityRequest(hidden_track_ids = newList)) { updated ->
+                if (isAdded) {
+                    requireActivity().runOnUiThread {
+                        loadTrackers()
+                        (activity as? MainActivity)?.showSnackbar(
+                            if (hidden) getString(R.string.show_on_map) else getString(R.string.hide_on_map)
+                        )
+                    }
                 }
             }
         }
@@ -135,21 +160,23 @@ class SharedTrackersFragment : Fragment() {
         }
     }
 
-    private enum class TrackerAction { EDIT, VIEW_ON_MAP, VIEW_PARAMS, UNSUBSCRIBE, REMOVE_FROM_SHARE }
+    private enum class TrackerAction { EDIT, VIEW_ON_MAP, VIEW_PARAMS, UNSUBSCRIBE, REMOVE_FROM_SHARE, HIDE_ON_MAP }
 
     private class SharedTrackersAdapter(
         private var trackers: List<Tracker>,
+        private var hiddenTrackIds: Set<String>,
         private val onAction: (Tracker, TrackerAction) -> Unit
     ) : RecyclerView.Adapter<SharedTrackersAdapter.ViewHolder>() {
 
-        fun setTrackers(list: List<Tracker>) {
+        fun setTrackers(list: List<Tracker>, hidden: Set<String> = emptySet()) {
             trackers = list
+            hiddenTrackIds = hidden
             notifyDataSetChanged()
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
             val view = LayoutInflater.from(parent.context).inflate(R.layout.item_tracker_card, parent, false)
-            return ViewHolder(view, onAction)
+            return ViewHolder(view, onAction, { hiddenTrackIds })
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
@@ -158,7 +185,11 @@ class SharedTrackersFragment : Fragment() {
 
         override fun getItemCount(): Int = trackers.size
 
-        class ViewHolder(itemView: View, private val onAction: (Tracker, TrackerAction) -> Unit) : RecyclerView.ViewHolder(itemView) {
+        class ViewHolder(
+            itemView: View,
+            private val onAction: (Tracker, TrackerAction) -> Unit,
+            private val getHiddenTrackIds: () -> Set<String>
+        ) : RecyclerView.ViewHolder(itemView) {
             private val trackerName: TextView = itemView.findViewById(R.id.trackerName)
             private val trackerSelectedCheck: ImageView = itemView.findViewById(R.id.trackerSelectedCheck)
             private val colorBar: View = itemView.findViewById(R.id.trackerColorBar)
@@ -169,6 +200,7 @@ class SharedTrackersFragment : Fragment() {
             private val btnEdit: MaterialButton = itemView.findViewById(R.id.btnEdit)
             private val btnViewOnMap: MaterialButton = itemView.findViewById(R.id.btnViewOnMap)
             private val sharedActionsRow: View = itemView.findViewById(R.id.trackerSharedActionsRow)
+            private val btnHideOnMap: MaterialButton = itemView.findViewById(R.id.btnHideOnMap)
             private val btnUnsubscribe: MaterialButton = itemView.findViewById(R.id.btnUnsubscribe)
             private val btnRemoveFromShare: MaterialButton = itemView.findViewById(R.id.btnRemoveFromShare)
 
@@ -208,6 +240,11 @@ class SharedTrackersFragment : Fragment() {
                 btnViewOnMap.isEnabled = hasPoints
                 btnViewOnMap.alpha = if (hasPoints) 1f else 0.4f
                 sharedActionsRow.visibility = View.VISIBLE
+                val hiddenOnMap = tracker.id in getHiddenTrackIds()
+                btnHideOnMap.text = itemView.context.getString(
+                    if (hiddenOnMap) R.string.show_on_map else R.string.hide_on_map
+                )
+                btnHideOnMap.setOnClickListener { onAction(tracker, TrackerAction.HIDE_ON_MAP) }
                 btnUnsubscribe.setOnClickListener { onAction(tracker, TrackerAction.UNSUBSCRIBE) }
                 btnRemoveFromShare.setOnClickListener { onAction(tracker, TrackerAction.REMOVE_FROM_SHARE) }
                 btnViewParams.setOnClickListener { onAction(tracker, TrackerAction.VIEW_PARAMS) }

@@ -29,6 +29,13 @@
         >
           <div class="flex-1 min-w-0">
             <div class="text-sm font-medium text-gray-900 truncate" :title="g.name">{{ g.name }}</div>
+            <div
+              v-if="g.owner_email"
+              class="text-xs text-gray-500 truncate"
+              :title="'Shared by ' + g.owner_email"
+            >
+              Shared by {{ g.owner_email }}
+            </div>
             <div class="text-xs text-gray-500">{{ (g.track_ids || []).length }} tracker(s)</div>
           </div>
           <div class="flex items-center gap-1 flex-shrink-0">
@@ -45,11 +52,12 @@
             <template v-else>
               <button
                 type="button"
-                title="Leave shared group"
-                class="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 text-sm"
-                @click="$emit('leave', g)"
+                :title="isGroupHidden(g) ? 'Show on map' : 'Hide on map'"
+                class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                @click="$emit('toggleGroupVisibility', g)"
               >
-                Leave shared group
+                <EyeIcon v-if="isGroupHidden(g)" class="h-5 w-5" />
+                <EyeSlashIcon v-else class="h-5 w-5" />
               </button>
             </template>
           </div>
@@ -89,13 +97,13 @@
 
 <script>
 import { ref, computed, watch } from 'vue';
-import { ArrowPathIcon, PencilIcon } from '@heroicons/vue/24/outline';
+import { ArrowPathIcon, EyeIcon, EyeSlashIcon, PencilIcon } from '@heroicons/vue/24/outline';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import GroupModal from './GroupModal.vue';
 
 export default {
   name: 'GroupsSidebarContent',
-  components: { BaseButton, GroupModal, ArrowPathIcon, PencilIcon },
+  components: { BaseButton, GroupModal, ArrowPathIcon, EyeIcon, EyeSlashIcon, PencilIcon },
   props: {
     /** When true, show loading state on refresh button */
     refreshing: { type: Boolean, default: false },
@@ -104,8 +112,10 @@ export default {
     api: { type: Object, required: true },
     /** When set, open in edit view for this group id. */
     initialGroupId: { type: [String, Number], default: null },
+    /** Set or array of group ids that are hidden on the map (eye = show, eye-slash = hide). */
+    hiddenGroupIds: { type: [Set, Array], default: () => new Set() },
   },
-  emits: ['saved', 'refreshed', 'leave', 'hidden-in-list-changed'],
+  emits: ['saved', 'refreshed', 'leave', 'hidden-in-list-changed', 'toggleGroupVisibility'],
   setup(props, { emit }) {
     const view = ref('list');
     const selectedGroup = ref(null);
@@ -165,6 +175,14 @@ export default {
       selectedGroup.value = null;
     }
 
+    function isGroupHidden(group) {
+      const groupIds = props.hiddenGroupIds;
+      if (!group?.id) return false;
+      const id = String(group.id);
+      if (groupIds instanceof Set) return groupIds.has(id);
+      return Array.isArray(groupIds) && groupIds.includes(id);
+    }
+
     return {
       view,
       selectedGroup,
@@ -174,6 +192,7 @@ export default {
       onEditSaved,
       onEditRefreshed,
       onLeaveGroup,
+      isGroupHidden,
     };
   },
 };

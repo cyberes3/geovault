@@ -22,6 +22,8 @@ Make sure to explcitly define responses via pydantic for the backend and typescr
 
 We have a bunch of common frontend components in the `parts/` folder. Please use those where possible.
 
+We like `Hidden Trackers` title case instead of `Hidden trackers`.
+
 These apps share visual styles so make sure that changes are made in all apps.
 Apps only target the latest Android version and SDK so do not do things like `if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)`.
 YOU ARE NOT ALLOWED TO DO `@Suppress("DEPRECATION")`!!!!!! YOU MUST FIX IT!!!!!!!

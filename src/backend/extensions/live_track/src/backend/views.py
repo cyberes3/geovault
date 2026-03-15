@@ -24,6 +24,7 @@ from .tracker_views import (
     tracker_list_create,
     tracker_post_settings,
     tracker_profile_properties,
+    tracker_regenerate_hauk_password,
     tracker_subscribe_delete,
     tracker_subscribers,
 )

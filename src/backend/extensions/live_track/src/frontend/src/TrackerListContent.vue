@@ -119,6 +119,13 @@
                 <span class="truncate">{{ group.name }}</span>
                 <CloudIcon class="h-4 w-4 text-gray-500 flex-shrink-0" />
               </div>
+              <div
+                v-if="group.owner_email"
+                class="text-xs text-gray-500 truncate mt-0.5"
+                :title="'Shared by ' + group.owner_email"
+              >
+                Shared by {{ group.owner_email }}
+              </div>
               <div class="text-xs text-gray-500">{{ (group.track_ids || []).length }} tracker(s)</div>
             </div>
             <div

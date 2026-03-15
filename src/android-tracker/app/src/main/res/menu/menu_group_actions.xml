@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/group_action_view" android:title="@string/view_group" />
+    <item android:id="@+id/group_action_view_on_map" android:title="@string/view_group_on_map" />
+    <item android:id="@+id/group_action_leave" android:title="@string/leave_group" />
+</menu>

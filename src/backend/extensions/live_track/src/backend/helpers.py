@@ -3,9 +3,30 @@ Shared helpers for live_track extension (response building, parsing, broadcast).
 """
 
 import copy
+import secrets
+import types
+
+import diceware
 
 # Default track color (blue-400 from frontend scale); used when no color is set.
 DEFAULT_TRACK_COLOR = "#6C93DE"
+
+
+def generate_hauk_password() -> str:
+    """Generate a per-tracker Hauk password in word-word-1234 style (e.g. banana-fork-1234)."""
+    opts = types.SimpleNamespace(
+        num=2,
+        delimiter="-",
+        specials=0,
+        caps=False,
+        randomsource="system",
+        infile=None,
+        wordlist=["en_eff"],
+        verbose=0,
+        dice_sides=6,
+    )
+    phrase = diceware.get_passphrase(opts)
+    return f"{phrase}-{secrets.randbelow(10000):04d}"
 
 
 import json
@@ -158,6 +179,8 @@ def track_to_response(
         out["share_params_with_world"] = getattr(track, "share_params_with_world", False)
     if include_secret and is_owner:
         out["tracker_secret"] = track.tracker_secret
+    if is_owner and getattr(track, "hauk_password", None):
+        out["hauk_password"] = track.hauk_password
     if is_owner:
         emails = list(
             LiveTrackShare.objects.filter(track=track)
@@ -229,6 +252,8 @@ def track_to_response_metadata_only(
     }
     if include_secret and is_owner:
         out["tracker_secret"] = track.tracker_secret
+    if is_owner and getattr(track, "hauk_password", None):
+        out["hauk_password"] = track.hauk_password
     if is_owner:
         emails = list(
             LiveTrackShare.objects.filter(track=track)

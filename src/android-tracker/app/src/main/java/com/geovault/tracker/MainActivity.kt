@@ -207,17 +207,10 @@ class MainActivity : AppCompatActivity() {
         if (savedTab == 2) TrackerRepository.prefetchGroups(this)
 
         findViewById<View>(R.id.navHome).setOnClickListener {
-            if (isParamsOverlayOnTop()) {
-                supportFragmentManager.popBackStack()
-                viewPager.setCurrentItem(0, false)
-                return@setOnClickListener
-            }
-            viewPager.setCurrentItem(0, false)
+            clearOverlayAndThen { viewPager.setCurrentItem(0, false) }
         }
         findViewById<View>(R.id.navMap).setOnClickListener {
-            if (isParamsOverlayOnTop()) {
-                supportFragmentManager.popBackStack()
-            }
+            clearOverlayAndThen {
             val mapFragment = pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.MapFragment
             val isStreaming = mapFragment?.isShowingStreamedTrack() ?: false
 
@@ -247,30 +240,16 @@ class MainActivity : AppCompatActivity() {
                     viewPager.setCurrentItem(1, false)
                 }
             }
+            }
         }
         findViewById<View>(R.id.navTrackers).setOnClickListener {
-            if (isParamsOverlayOnTop()) {
-                supportFragmentManager.popBackStack()
-                viewPager.setCurrentItem(2, false)
-                return@setOnClickListener
-            }
-            viewPager.setCurrentItem(2, false)
+            clearOverlayAndThen { viewPager.setCurrentItem(2, false) }
         }
         findViewById<View>(R.id.navShared).setOnClickListener {
-            if (isParamsOverlayOnTop()) {
-                supportFragmentManager.popBackStack()
-                viewPager.setCurrentItem(3, false)
-                return@setOnClickListener
-            }
-            viewPager.setCurrentItem(3, false)
+            clearOverlayAndThen { viewPager.setCurrentItem(3, false) }
         }
         findViewById<View>(R.id.navSettings).setOnClickListener {
-            if (isParamsOverlayOnTop()) {
-                supportFragmentManager.popBackStack()
-                viewPager.setCurrentItem(4, false)
-                return@setOnClickListener
-            }
-            viewPager.setCurrentItem(4, false)
+            clearOverlayAndThen { viewPager.setCurrentItem(4, false) }
         }
 
         updateNavTabBackground(savedTab)
@@ -405,9 +384,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
-    private fun isParamsOverlayOnTop(): Boolean {
-        if (supportFragmentManager.backStackEntryCount == 0) return false
-        return supportFragmentManager.getBackStackEntryAt(supportFragmentManager.backStackEntryCount - 1).name == "tracker_params"
+    /** Pops all overlay fragments (hidden trackers, groups, params, etc.) so the tapped nav tab is visible. */
+    private fun clearOverlayAndThen(action: () -> Unit) {
+        while (supportFragmentManager.backStackEntryCount > 0) {
+            supportFragmentManager.popBackStackImmediate()
+        }
+        action()
     }
 
     private fun updateBottomNavForOverlay() {
@@ -550,10 +532,29 @@ class MainActivity : AppCompatActivity() {
         return t
     }
 
+    /** Initial group to fit on map when opening from "View group on map"; cleared after use. */
+    var initialGroupForMap: Group? = null
+        private set
+
+    fun setInitialGroupForMap(group: Group?) {
+        initialGroupForMap = group
+    }
+
+    fun getAndClearInitialGroupForMap(): Group? {
+        val g = initialGroupForMap
+        initialGroupForMap = null
+        return g
+    }
+
     fun setCurrentTab(index: Int, forceRefreshMap: Boolean = false, delayMs: Long = 0) {
         if (forceRefreshMap && index == 1) {
             val mapFragment = pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.MapFragment
-            mapFragment?.refreshTrackForSelectedTracker()
+            val group = getAndClearInitialGroupForMap()
+            if (group != null) {
+                mapFragment?.refreshMapForGroup(group)
+            } else {
+                mapFragment?.refreshTrackForSelectedTracker()
+            }
         }
         
         if (delayMs > 0) {
@@ -597,6 +598,13 @@ class MainActivity : AppCompatActivity() {
         supportFragmentManager.beginTransaction()
             .add(R.id.fragment_overlay_container, com.geovault.tracker.fragments.GroupsFragment(), "groups")
             .addToBackStack("groups")
+            .commit()
+    }
+
+    fun showHiddenTrackersFragment() {
+        supportFragmentManager.beginTransaction()
+            .add(R.id.fragment_overlay_container, com.geovault.tracker.fragments.HiddenTrackersFragment(), "hidden_trackers")
+            .addToBackStack("hidden_trackers")
             .commit()
     }
 

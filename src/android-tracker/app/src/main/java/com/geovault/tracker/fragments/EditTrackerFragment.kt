@@ -67,7 +67,6 @@ class EditTrackerFragment : Fragment() {
     private lateinit var copyWorldLinkButton: MaterialButton
     private lateinit var ownerToolsSection: View
     private lateinit var exportKmlButton: MaterialButton
-    private var updatingHideSwitch = false
 
     /** After clear history succeeds, keep the clear button disabled until this fragment is closed. */
     private var historyClearedThisSession = false
@@ -92,6 +91,7 @@ class EditTrackerFragment : Fragment() {
     private var initialAllowGroupReshare: Boolean = false
     private var initialShareParamsWorld: Boolean = false
     private var initialWorldShareEnabled: Boolean = false
+    private var initialHiddenInList: Boolean = false
 
     /** Last fetched tracker (for world_share_url after save). */
     private var currentFetchedTracker: Tracker? = null
@@ -299,52 +299,8 @@ class EditTrackerFragment : Fragment() {
                                 .apply()
                         }
                         val hiddenInList = (fetched.settings?.get("hidden_in_list") as? Boolean) == true
-                        updatingHideSwitch = true
+                        initialHiddenInList = hiddenInList
                         hideOnMapSwitch.isChecked = hiddenInList
-                        updatingHideSwitch = false
-                        hideOnMapSwitch.setOnCheckedChangeListener { _, isChecked ->
-                            if (updatingHideSwitch) return@setOnCheckedChangeListener
-                            hideOnMapSwitch.isEnabled = false
-                            TrackerRepository.updateTrackerSettings(
-                                requireContext(),
-                                trackerId,
-                                TrackerSettingsRequest(hidden_in_list = isChecked)
-                            ) { updated, errorMessage ->
-                                if (!isAdded) return@updateTrackerSettings
-                                requireActivity().runOnUiThread {
-                                    hideOnMapSwitch.isEnabled = true
-                                    if (updated != null) {
-                                        currentFetchedTracker = updated
-                                        if (isChecked) {
-                                            val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-                                            if (trackerId == prefs.getString("selected_tracker_id", null)) {
-                                                prefs.edit()
-                                                    .remove("selected_tracker_id")
-                                                    .remove("selected_tracker_name")
-                                                    .apply()
-                                                TrackerRepository.clearCurrentTrackerCache()
-                                                TrackerRepository.clearGeometryCache()
-                                            }
-                                            requireActivity().supportFragmentManager.setFragmentResult(
-                                                TrackersFragment.REQUEST_REFRESH_LIST,
-                                                android.os.Bundle().apply { putString(TrackersFragment.KEY_HIDDEN_TRACKER_ID, trackerId) }
-                                            )
-                                        } else {
-                                            requireActivity().supportFragmentManager.setFragmentResult(
-                                                TrackersFragment.REQUEST_REFRESH_LIST,
-                                                android.os.Bundle()
-                                            )
-                                        }
-                                    } else {
-                                        updatingHideSwitch = true
-                                        hideOnMapSwitch.isChecked = !isChecked
-                                        updatingHideSwitch = false
-                                        val msg = errorMessage ?: getString(R.string.failed_to_load_tracker)
-                                        (activity as? MainActivity)?.showSnackbar(msg)
-                                    }
-                                }
-                            }
-                        }
                     } else {
                         (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
                     }
@@ -361,6 +317,7 @@ class EditTrackerFragment : Fragment() {
             }
             val recentDataWindow = if (selectedRecentDataIndex in recentDataValues.indices) recentDataValues[selectedRecentDataIndex] else ""
             val visibility = if (selectedVisibilityIndex in visibilityValues.indices) visibilityValues[selectedVisibilityIndex] else "private"
+            val hiddenInList = hideOnMapSwitch.isChecked
             val request = TrackerSettingsRequest(
                 name = name,
                 color = color?.takeIf { it.isNotBlank() },
@@ -370,7 +327,8 @@ class EditTrackerFragment : Fragment() {
                 share_params_with_world = if (sharingSection.visibility == View.VISIBLE) shareParamsWorldSwitch.isChecked else null,
                 shared_with_emails = if (sharingSection.visibility == View.VISIBLE && visibility == "shared") sharedWithEmails.toList() else null,
                 world_share_enabled = if (sharingSection.visibility == View.VISIBLE) worldShareEnabledSwitch.isChecked else null,
-                allow_group_reshare = if (sharingSection.visibility == View.VISIBLE) allowGroupReshareSwitch.isChecked else null
+                allow_group_reshare = if (sharingSection.visibility == View.VISIBLE) allowGroupReshareSwitch.isChecked else null,
+                hidden_in_list = hiddenInList
             )
             setAllInputsEnabled(false)
             TrackerRepository.updateTrackerSettings(requireContext(), trackerId, request) { updated, errorMessage ->
@@ -379,9 +337,34 @@ class EditTrackerFragment : Fragment() {
                         when {
                             updated != null -> {
                                 currentFetchedTracker = updated
+                                if (hiddenInList) {
+                                    val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+                                    if (trackerId == prefs.getString("selected_tracker_id", null)) {
+                                        prefs.edit()
+                                            .remove("selected_tracker_id")
+                                            .remove("selected_tracker_name")
+                                            .apply()
+                                        TrackerRepository.clearCurrentTrackerCache()
+                                        TrackerRepository.clearGeometryCache()
+                                    }
+                                    TrackersFragment.pendingHiddenTrackerId = trackerId
+                                    requireActivity().supportFragmentManager.setFragmentResult(
+                                        TrackersFragment.REQUEST_REFRESH_LIST,
+                                        android.os.Bundle().apply { putString(TrackersFragment.KEY_HIDDEN_TRACKER_ID, trackerId) }
+                                    )
+                                } else {
+                                    TrackersFragment.pendingFullRefresh = true
+                                    requireActivity().supportFragmentManager.setFragmentResult(
+                                        TrackersFragment.REQUEST_REFRESH_LIST,
+                                        android.os.Bundle()
+                                    )
+                                }
                                 requireActivity().supportFragmentManager.setFragmentResult(
                                     TrackersFragment.REQUEST_UPDATE_TRACKER,
-                                    android.os.Bundle().apply { putParcelable("tracker", updated) }
+                                    android.os.Bundle().apply {
+                                        putParcelable("tracker", updated)
+                                        putBoolean(TrackersFragment.KEY_UPDATED_TRACKER_HIDDEN, hiddenInList)
+                                    }
                                 )
                                 requireActivity().supportFragmentManager.popBackStack()
                                 Toast.makeText(requireContext(), getString(R.string.saved_tracker), Toast.LENGTH_SHORT).show()
@@ -484,7 +467,8 @@ class EditTrackerFragment : Fragment() {
         val currentDefault = defaultTrackSwitch.isChecked
         val currentRecent = getSelectedRecentDataWindow()
         val initialRecent = initialRecentDataWindow ?: ""
-        var base = currentName != initialName || currentColorNorm != initialColorNorm || currentDefault != initialDefaultTrack || currentRecent != initialRecent
+        val currentHiddenInList = hideOnMapSwitch.isChecked
+        var base = currentName != initialName || currentColorNorm != initialColorNorm || currentDefault != initialDefaultTrack || currentRecent != initialRecent || currentHiddenInList != initialHiddenInList
         if (sharingSection.visibility == View.VISIBLE) {
             val currentVis = if (selectedVisibilityIndex in visibilityValues.indices) visibilityValues[selectedVisibilityIndex] else "private"
             base = base || currentVis != (initialVisibility ?: "private") ||

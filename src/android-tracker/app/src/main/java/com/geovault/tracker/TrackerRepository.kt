@@ -197,6 +197,27 @@ object TrackerRepository {
         })
     }
 
+    /** Fetches latest coordinates (up to server limit, usually 100) without canceling other requests. */
+    fun getTrackerCoordinates(context: Context, id: String, callback: (TrackerCoordinatesResponse?) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(null)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.getTrackerCoordinates(id).enqueue(object : Callback<TrackerCoordinatesResponse> {
+            override fun onResponse(call: Call<TrackerCoordinatesResponse>, response: Response<TrackerCoordinatesResponse>) {
+                callback(if (response.isSuccessful) response.body() else null)
+            }
+
+            override fun onFailure(call: Call<TrackerCoordinatesResponse>, t: Throwable) {
+                Log.e("TrackerRepository", "Failed to fetch tracker coordinates", t)
+                callback(null)
+            }
+        })
+    }
+
     fun clearCurrentTrackerCache() {
         currentTrackerId = null
         currentTrackerCache = null
@@ -538,22 +559,34 @@ object TrackerRepository {
         getGroups(context, forceRefresh = true) { }
     }
 
-    fun createGroup(context: Context, name: String, callback: (Group?) -> Unit) {
+    fun createGroup(context: Context, name: String, callback: (Group?, errorMessage: String?) -> Unit) {
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
         if (serverUrl.isEmpty()) {
-            callback(null)
+            callback(null, null)
             return
         }
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
         api.createGroup(GroupCreateRequest(name = name)).enqueue(object : Callback<Group> {
             override fun onResponse(call: Call<Group>, response: Response<Group>) {
-                groupsCache = null
-                callback(response.body())
+                if (response.isSuccessful) {
+                    groupsCache = null
+                    callback(response.body(), null)
+                    return
+                }
+                val errorMsg = response.errorBody()?.string()?.let { body ->
+                    try {
+                        val json = org.json.JSONObject(body)
+                        json.optString("detail", json.optString("name", body.take(200)))
+                    } catch (_: Exception) {
+                        body.take(200)
+                    }
+                }
+                callback(null, errorMsg?.takeIf { it.isNotBlank() } ?: "Failed to create group")
             }
             override fun onFailure(call: Call<Group>, t: Throwable) {
                 Log.e("TrackerRepository", "Create group failed", t)
-                callback(null)
+                callback(null, null)
             }
         })
     }
@@ -577,22 +610,34 @@ object TrackerRepository {
         })
     }
 
-    fun patchGroup(context: Context, groupId: String, request: GroupPatchRequest, callback: (Group?) -> Unit) {
+    fun patchGroup(context: Context, groupId: String, request: GroupPatchRequest, callback: (Group?, errorMessage: String?) -> Unit) {
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
         if (serverUrl.isEmpty()) {
-            callback(null)
+            callback(null, null)
             return
         }
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
         api.patchGroup(groupId, request).enqueue(object : Callback<Group> {
             override fun onResponse(call: Call<Group>, response: Response<Group>) {
-                groupsCache = null
-                callback(response.body())
+                if (response.isSuccessful) {
+                    groupsCache = null
+                    callback(response.body(), null)
+                    return
+                }
+                val errorMsg = response.errorBody()?.string()?.let { body ->
+                    try {
+                        val json = org.json.JSONObject(body)
+                        json.optString("detail", json.optString("name", body.take(200)))
+                    } catch (_: Exception) {
+                        body.take(200)
+                    }
+                }
+                callback(null, errorMsg?.takeIf { it.isNotBlank() } ?: "Failed to save group")
             }
             override fun onFailure(call: Call<Group>, t: Throwable) {
                 Log.e("TrackerRepository", "Patch group failed", t)
-                callback(null)
+                callback(null, null)
             }
         })
     }

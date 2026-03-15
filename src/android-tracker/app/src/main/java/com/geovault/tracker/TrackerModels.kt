@@ -106,6 +106,7 @@ data class MapVisibilityRequest(
 )
 
 /** Group payload from GET/POST/PATCH groups. */
+@Parcelize
 data class Group(
     val id: String,
     val name: String,
@@ -119,7 +120,7 @@ data class Group(
     val is_owner: Boolean? = null,
     val owner_email: String? = null,
     val track_ids: List<String>? = null
-)
+) : Parcelable
 
 data class GroupCreateRequest(val name: String)
 

@@ -116,8 +116,13 @@ class TrackersFragment : Fragment() {
         }
         requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_UPDATE_TRACKER, viewLifecycleOwner) { _, bundle ->
             val updated = bundle.getParcelable<Tracker>("tracker", Tracker::class.java)
+            val hiddenInList = bundle.getBoolean(KEY_UPDATED_TRACKER_HIDDEN, false)
             if (updated != null) {
-                adapter?.updateTracker(updated)
+                if (hiddenInList) {
+                    adapter?.removeTrackerId(updated.id)
+                } else {
+                    adapter?.updateTracker(updated)
+                }
             }
         }
         // Params fragment refreshes trackers in background; when done we update list from cache
@@ -132,16 +137,37 @@ class TrackersFragment : Fragment() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        var shouldReload = false
+        pendingHiddenTrackerId?.let { id ->
+            pendingHiddenTrackerId = null
+            adapter?.removeTrackerId(id)
+            shouldReload = true
+        }
+        if (pendingFullRefresh) {
+            pendingFullRefresh = false
+            shouldReload = true
+        }
+        if (shouldReload) {
+            loadTrackersInBackground()
+        }
+    }
+
     override fun onPause() {
         super.onPause()
         clearHighlight()
     }
 
+    /** Set by EditTrackerFragment when saving with hide; applied in onResume since we're stopped when the result is sent. */
     companion object {
         const val REQUEST_REFRESH_LIST = "tracker_list_refresh"
         const val KEY_HIDDEN_TRACKER_ID = "hidden_tracker_id"
         const val REQUEST_UPDATE_TRACKER = "tracker_list_update_tracker"
+        const val KEY_UPDATED_TRACKER_HIDDEN = "updated_tracker_hidden"
         const val REQUEST_UPDATE_LIST_FROM_CACHE = "tracker_list_update_from_cache"
+        var pendingHiddenTrackerId: String? = null
+        var pendingFullRefresh: Boolean = false
     }
 
     private fun loadTrackers() {
@@ -165,6 +191,19 @@ class TrackersFragment : Fragment() {
             if (isAdded) {
                 requireActivity().runOnUiThread {
                     adapter?.setTrackers(visibleOwnerTrackers(list ?: emptyList()))
+                }
+            }
+        }
+    }
+
+    /** Force-refresh without showing the full-screen loading overlay. */
+    private fun loadTrackersInBackground() {
+        clearHighlight()
+        TrackerRepository.getTrackers(requireContext(), forceRefresh = true) { list ->
+            if (isAdded) {
+                requireActivity().runOnUiThread {
+                    adapter?.setTrackers(visibleOwnerTrackers(list ?: emptyList()))
+                    swipeRefresh.isRefreshing = false
                 }
             }
         }

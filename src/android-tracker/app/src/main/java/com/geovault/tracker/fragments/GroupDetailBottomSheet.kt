@@ -10,21 +10,24 @@ import android.content.Context
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.appcompat.widget.SwitchCompat
+import androidx.fragment.app.Fragment
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.Group
 import com.geovault.tracker.GroupPatchRequest
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.common.R as CommonR
 import com.geovault.tracker.TrackerRepository
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.google.android.material.button.MaterialButton
 
-class GroupDetailBottomSheet : BottomSheetDialogFragment() {
+class GroupDetailBottomSheet : Fragment() {
 
     private lateinit var nameEdit: EditText
     private lateinit var tracksList: LinearLayout
@@ -40,12 +43,25 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
     private lateinit var worldShareRow: LinearLayout
     private lateinit var worldShareSwitch: SwitchCompat
     private lateinit var copyWorldLinkButton: com.google.android.material.button.MaterialButton
+    private lateinit var hideInListRow: LinearLayout
+    private lateinit var hideInListSwitch: SwitchCompat
+    private lateinit var hideInListHint: TextView
+    private lateinit var viewOnMapButton: com.google.android.material.button.MaterialButton
+    private lateinit var closeButton: ImageButton
+    private lateinit var titleText: TextView
+    private lateinit var loadingOverlay: View
+    private lateinit var loadingSpinner: LoadingSpinner
+    private lateinit var saveButton: MaterialButton
 
     private var group: Group? = null
+    /** Track id -> display name for group track list (from getTrackers / available-to-add). */
+    private var trackNamesById: Map<String, String> = emptyMap()
     private val visibilityValues = arrayOf("private", "shared", "public")
+    private var selectedVisibilityIndex = 0
+    private val sharedWithEmailsForSave = mutableListOf<String>()
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
-        return inflater.inflate(R.layout.bottom_sheet_group_detail, container, false)
+        return inflater.inflate(R.layout.fragment_group_detail, container, false)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -64,6 +80,18 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
         worldShareRow = view.findViewById(R.id.groupDetailWorldShareRow)
         worldShareSwitch = view.findViewById(R.id.groupDetailWorldShareSwitch)
         copyWorldLinkButton = view.findViewById(R.id.groupDetailCopyWorldLink)
+        hideInListRow = view.findViewById(R.id.groupDetailHideInListRow)
+        hideInListSwitch = view.findViewById(R.id.groupDetailHideInListSwitch)
+        hideInListHint = view.findViewById(R.id.groupDetailHideInListHint)
+        viewOnMapButton = view.findViewById(R.id.groupDetailViewOnMap)
+        closeButton = view.findViewById(R.id.groupDetailCloseButton)
+        titleText = view.findViewById(R.id.groupDetailTitle)
+        loadingOverlay = view.findViewById(R.id.groupDetailLoadingOverlay)
+        loadingSpinner = view.findViewById(R.id.groupDetailLoadingSpinner)
+        saveButton = view.findViewById(R.id.groupDetailSave)
+        closeButton.setOnClickListener { closeEditor() }
+        saveButton.setOnClickListener { performSave() }
+        showLoading()
 
         val groupId = arguments?.getString(ARG_GROUP_ID) ?: return
         loadGroup(groupId)
@@ -74,7 +102,14 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
             if (!isAdded) return@getGroup
             requireActivity().runOnUiThread {
                 group = g
-                if (g != null) bindGroup(g)
+                if (g != null) {
+                    titleText.text = g.name
+                    bindGroup(g)
+                } else {
+                    hideLoading()
+                    (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                    closeEditor()
+                }
             }
         }
     }
@@ -86,63 +121,48 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
         addTrackButton.visibility = if (isOwner) View.VISIBLE else View.GONE
         leaveButton.visibility = if (isOwner) View.GONE else View.VISIBLE
         deleteButton.visibility = if (isOwner) View.VISIBLE else View.GONE
-
-        tracksList.removeAllViews()
-        for (trackId in (g.track_ids ?: emptyList())) {
-            val row = layoutInflater.inflate(android.R.layout.simple_list_item_1, tracksList, false)
-            (row as? TextView)?.text = trackId.take(8) + "…"
-            if (isOwner) {
-                val remove = TextView(requireContext()).apply {
-                    text = " ×"
-                    setTextColor(ContextCompat.getColor(requireContext(), R.color.error_red))
-                    setOnClickListener { removeTrack(g.id, trackId) }
-                }
-                val rowWrap = android.widget.LinearLayout(requireContext()).apply {
-                    orientation = android.widget.LinearLayout.HORIZONTAL
-                    addView(row, android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                    addView(remove)
-                }
-                tracksList.addView(rowWrap)
-            } else {
-                tracksList.addView(row)
-            }
-        }
+        saveButton.visibility = if (isOwner) View.VISIBLE else View.GONE
 
         addTrackButton.setOnClickListener { showAddTrackDialog(g) }
         leaveButton.setOnClickListener { confirmLeave(g) }
         deleteButton.setOnClickListener { confirmDelete(g) }
+        viewOnMapButton.setOnClickListener {
+            group?.let { (activity as? MainActivity)?.setInitialGroupForMap(it) }
+            (activity as? MainActivity)?.setCurrentTab(1, forceRefreshMap = true, delayMs = 50)
+            closeEditor()
+        }
 
+        sharedWithEmailsForSave.clear()
+        sharedWithEmailsForSave.addAll(g.shared_with_emails ?: emptyList())
+
+        loadTrackNamesThenBindTracks(g, isOwner) { hideLoading() }
         sharingSectionHeader.visibility = View.VISIBLE
         if (isOwner) {
             visibilityHeader.visibility = View.VISIBLE
             visibilityLayout.visibility = View.VISIBLE
             worldShareRow.visibility = View.VISIBLE
-            val visIndex = visibilityValues.indexOf(g.visibility ?: "private").coerceIn(0, visibilityValues.size - 1)
+            selectedVisibilityIndex = visibilityValues.indexOf(g.visibility ?: "private").coerceIn(0, visibilityValues.size - 1)
             val labels = listOf(getString(R.string.visibility_private), getString(R.string.visibility_shared), getString(R.string.visibility_public))
             val adapter = ArrayAdapter(requireContext(), CommonR.layout.gv_common_item_dropdown, labels)
             visibilitySpinner.setAdapter(adapter)
-            visibilitySpinner.setText(labels[visIndex], false)
+            visibilitySpinner.setText(labels[selectedVisibilityIndex], false)
             visibilitySpinner.setOnItemClickListener { _, _, position, _ ->
-                val vis = visibilityValues[position]
-                if (vis != (group?.visibility ?: "private")) {
-                    patchGroupSharing(g, visibility = vis, sharedWithEmails = if (vis == "shared") (g.shared_with_emails ?: emptyList()) else null, worldShareEnabled = null)
-                }
+                selectedVisibilityIndex = position
+                val isShared = visibilityValues[position] == "shared"
+                sharedWithList.visibility = if (isShared) View.VISIBLE else View.GONE
+                addSharedWithButton.visibility = if (isShared) View.VISIBLE else View.GONE
             }
-            val sharedWithEmails = g.shared_with_emails ?: emptyList()
             if (g.visibility == "shared") {
                 sharedWithList.visibility = View.VISIBLE
                 addSharedWithButton.visibility = View.VISIBLE
-                bindSharedWithList(g, sharedWithEmails)
-                addSharedWithButton.setOnClickListener { showAddSharedWithDialog(g) }
+                bindSharedWithList(sharedWithEmailsForSave)
+                addSharedWithButton.setOnClickListener { showAddSharedWithDialog() }
             } else {
                 sharedWithList.visibility = View.GONE
                 addSharedWithButton.visibility = View.GONE
             }
             worldShareSwitch.isChecked = !g.world_share_id.isNullOrBlank()
             copyWorldLinkButton.visibility = if (g.world_share_url != null) View.VISIBLE else View.GONE
-            worldShareSwitch.setOnCheckedChangeListener { _, isChecked ->
-                patchGroupSharing(g, visibility = null, sharedWithEmails = null, worldShareEnabled = isChecked)
-            }
             copyWorldLinkButton.setOnClickListener {
                 val url = g.world_share_url
                 if (!url.isNullOrBlank()) {
@@ -160,13 +180,83 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
             addSharedWithButton.visibility = View.GONE
             worldShareRow.visibility = View.GONE
         }
-
-        nameEdit.setOnFocusChangeListener { _, hasFocus ->
-            if (!hasFocus && isOwner) saveName(g)
+        hideInListRow.visibility = View.VISIBLE
+        hideInListHint.visibility = View.VISIBLE
+        if (isOwner) {
+            hideInListSwitch.isChecked = g.hidden_in_list == true
+            hideInListSwitch.setOnCheckedChangeListener(null)
+        } else {
+            TrackerRepository.getMapVisibility(requireContext()) { visibility ->
+                if (!isAdded) return@getMapVisibility
+                val hiddenGroupIds = (visibility?.hidden_group_ids ?: emptyList()).toSet()
+                val isHiddenInMapPrefs = g.id in hiddenGroupIds
+                requireActivity().runOnUiThread {
+                    hideInListSwitch.isChecked = isHiddenInMapPrefs
+                    hideInListSwitch.setOnCheckedChangeListener { _, isChecked ->
+                        TrackerRepository.getMapVisibility(requireContext()) { vis ->
+                            if (!isAdded) return@getMapVisibility
+                            val current = (vis?.hidden_group_ids ?: emptyList()).toSet()
+                            val newIds = if (isChecked) current + g.id else current - g.id
+                            TrackerRepository.patchMapVisibility(
+                                requireContext(),
+                                com.geovault.tracker.MapVisibilityRequest(hidden_group_ids = newIds.toList())
+                            ) { updated ->
+                                if (!isAdded) return@patchMapVisibility
+                                requireActivity().runOnUiThread {
+                                    if (updated != null) {
+                                        parentFragmentManager.setFragmentResult(GroupsFragment.REQUEST_GROUPS_REFRESH, Bundle())
+                                    } else {
+                                        (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                                        hideInListSwitch.isChecked = !isChecked
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
-    private fun bindSharedWithList(g: Group, emails: List<String>) {
+    /** Load tracker names (from getTrackers) then populate tracksList with display names; owner sees remove. */
+    private fun loadTrackNamesThenBindTracks(g: Group, isOwner: Boolean, onDone: () -> Unit) {
+        tracksList.removeAllViews()
+        val trackIds = g.track_ids ?: emptyList()
+        if (trackIds.isEmpty()) {
+            onDone()
+            return
+        }
+        TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { list ->
+            if (!isAdded) return@getTrackers
+            val idToName = (list ?: emptyList()).associate { it.id to it.name }
+            requireActivity().runOnUiThread {
+                trackNamesById = idToName
+                for (trackId in trackIds) {
+                    val displayName = idToName[trackId] ?: trackId
+                    val row = layoutInflater.inflate(android.R.layout.simple_list_item_1, tracksList, false)
+                    (row as? TextView)?.text = displayName
+                    if (isOwner) {
+                        val remove = TextView(requireContext()).apply {
+                            text = " ×"
+                            setTextColor(ContextCompat.getColor(requireContext(), R.color.error_red))
+                            setOnClickListener { removeTrack(g.id, trackId) }
+                        }
+                        val rowWrap = android.widget.LinearLayout(requireContext()).apply {
+                            orientation = android.widget.LinearLayout.HORIZONTAL
+                            addView(row, android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                            addView(remove)
+                        }
+                        tracksList.addView(rowWrap)
+                    } else {
+                        tracksList.addView(row)
+                    }
+                }
+                onDone()
+            }
+        }
+    }
+
+    private fun bindSharedWithList(emails: List<String>) {
         sharedWithList.removeAllViews()
         for (email in emails) {
             val row = layoutInflater.inflate(android.R.layout.simple_list_item_1, sharedWithList, false)
@@ -175,8 +265,8 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
                 text = " ×"
                 setTextColor(ContextCompat.getColor(requireContext(), R.color.error_red))
                 setOnClickListener {
-                    val newList = (g.shared_with_emails ?: emptyList()).filter { it != email }
-                    patchGroupSharing(g, visibility = "shared", sharedWithEmails = newList, worldShareEnabled = null)
+                    sharedWithEmailsForSave.remove(email)
+                    bindSharedWithList(sharedWithEmailsForSave)
                 }
             }
             val rowWrap = android.widget.LinearLayout(requireContext()).apply {
@@ -188,11 +278,11 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
-    private fun showAddSharedWithDialog(g: Group) {
+    private fun showAddSharedWithDialog() {
         TrackerRepository.getUsers(requireContext()) { response ->
             if (!isAdded) return@getUsers
             val users = response?.users ?: emptyList()
-            val existing = (g.shared_with_emails ?: emptyList()).map { it.lowercase() }.toSet()
+            val existing = sharedWithEmailsForSave.map { it.lowercase() }.toSet()
             val addable = users.filter { !existing.contains(it.email.trim().lowercase()) }
             requireActivity().runOnUiThread {
                 if (addable.isEmpty()) {
@@ -204,8 +294,8 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
                     .setTitle(getString(R.string.shared_with_recipients_label))
                     .setItems(emails.toTypedArray()) { _, which ->
                         val email = addable[which].email.trim()
-                        val newList = (g.shared_with_emails ?: emptyList()) + email
-                        patchGroupSharing(g, visibility = "shared", sharedWithEmails = newList, worldShareEnabled = null)
+                        sharedWithEmailsForSave.add(email)
+                        bindSharedWithList(sharedWithEmailsForSave)
                     }
                     .setNegativeButton(getString(R.string.cancel_button), null)
                     .show()
@@ -213,63 +303,99 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
-    private fun patchGroupSharing(g: Group, visibility: String?, sharedWithEmails: List<String>?, worldShareEnabled: Boolean?) {
-        TrackerRepository.patchGroup(requireContext(), g.id, GroupPatchRequest(
+    private fun performSave() {
+        val g = group ?: return
+        val name = nameEdit.text?.toString()?.trim()
+        if (name.isNullOrEmpty()) {
+            (activity as? MainActivity)?.showSnackbar("Name is required")
+            return
+        }
+        val visibility = if (selectedVisibilityIndex in visibilityValues.indices) visibilityValues[selectedVisibilityIndex] else "private"
+        val request = GroupPatchRequest(
+            name = name,
+            hidden_in_list = hideInListSwitch.isChecked,
             visibility = visibility,
-            shared_with_emails = sharedWithEmails,
-            world_share_enabled = worldShareEnabled
-        )) { updated ->
-            if (isAdded && updated != null) {
-                requireActivity().runOnUiThread {
-                    group = updated
-                    bindGroup(updated)
-                    parentFragmentManager.setFragmentResult(GroupsFragment.REQUEST_GROUPS_REFRESH, Bundle())
+            shared_with_emails = if (visibility == "shared") sharedWithEmailsForSave.toList() else null,
+            world_share_enabled = worldShareSwitch.isChecked
+        )
+        setAllInputsEnabled(false)
+        TrackerRepository.patchGroup(requireContext(), g.id, request) { updated, errorMessage ->
+            if (!isAdded) return@patchGroup
+            requireActivity().runOnUiThread {
+                when {
+                    updated != null -> {
+                        group = updated
+                        titleText.text = updated.name
+                        parentFragmentManager.setFragmentResult(GroupsFragment.REQUEST_GROUPS_REFRESH, Bundle())
+                        closeEditor()
+                    }
+                    !errorMessage.isNullOrBlank() -> {
+                        setAllInputsEnabled(true)
+                        (activity as? MainActivity)?.showSnackbar(errorMessage)
+                    }
+                    else -> {
+                        setAllInputsEnabled(true)
+                        (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                    }
                 }
             }
         }
     }
 
-    private fun saveName(g: Group) {
-        val name = nameEdit.text?.toString()?.trim()
-        if (name.isNullOrEmpty() || name == g.name) return
-        TrackerRepository.patchGroup(requireContext(), g.id, GroupPatchRequest(name = name)) { updated ->
-            if (isAdded && updated != null) {
-                requireActivity().runOnUiThread {
-                    group = updated
-                    parentFragmentManager.setFragmentResult(GroupsFragment.REQUEST_GROUPS_REFRESH, Bundle())
-                }
-            }
-        }
+    private fun setAllInputsEnabled(enabled: Boolean) {
+        nameEdit.isEnabled = enabled
+        addTrackButton.isEnabled = enabled
+        visibilitySpinner.isEnabled = enabled
+        addSharedWithButton.isEnabled = enabled
+        worldShareSwitch.isEnabled = enabled
+        hideInListSwitch.isEnabled = enabled
+        viewOnMapButton.isEnabled = enabled
+        leaveButton.isEnabled = enabled
+        deleteButton.isEnabled = enabled
+        saveButton.isEnabled = enabled
     }
 
     private fun showAddTrackDialog(g: Group) {
-        TrackerRepository.getTrackers(requireContext(), forceRefresh = true) { list ->
-            if (!isAdded) return@getTrackers
-            val trackers = list ?: emptyList()
-            val alreadyInGroup = (g.track_ids ?: emptyList()).toSet()
-            val addable = trackers.filter { it.id !in alreadyInGroup }
-            requireActivity().runOnUiThread {
-                if (addable.isEmpty()) {
-                    (activity as? MainActivity)?.showSnackbar("No trackers to add")
-                    return@runOnUiThread
+        val alreadyInGroup = (g.track_ids ?: emptyList()).toSet()
+        TrackerRepository.getAvailableToAdd(requireContext()) { response ->
+            if (!isAdded) return@getAvailableToAdd
+            val avail = response ?: return@getAvailableToAdd
+            val idToName = mutableMapOf<String, String>()
+            (avail.public + avail.shared_with_me).forEach { item ->
+                idToName[item.id] = item.name
+            }
+            val addableIds = (avail.public.map { it.id } + avail.shared_with_me.map { it.id } +
+                avail.shared_with_me_groups.flatMap { it.track_ids } + avail.public_groups.flatMap { it.track_ids })
+                .distinct().filter { it !in alreadyInGroup }
+            if (addableIds.isEmpty()) {
+                requireActivity().runOnUiThread {
+                    (activity as? MainActivity)?.showSnackbar(getString(R.string.discover_empty))
                 }
-                val names = addable.map { it.name }
-                AlertDialog.Builder(requireContext())
-                    .setTitle(getString(R.string.add_track_to_group))
-                    .setItems(names.toTypedArray()) { _, which ->
-                        val trackId = addable[which].id
-                        TrackerRepository.addGroupTrack(requireContext(), g.id, trackId) { updated ->
-                            if (isAdded && updated != null) {
-                                requireActivity().runOnUiThread {
-                                    group = updated
-                                    bindGroup(updated)
-                                    parentFragmentManager.setFragmentResult(GroupsFragment.REQUEST_GROUPS_REFRESH, Bundle())
+                return@getAvailableToAdd
+            }
+            TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { list ->
+                if (!isAdded) return@getTrackers
+                (list ?: emptyList()).forEach { t -> idToName[t.id] = t.name }
+                val addable = addableIds.map { id -> id to (idToName[id] ?: id) }.sortedBy { it.second.lowercase() }
+                requireActivity().runOnUiThread {
+                    val labels = addable.map { it.second }.toTypedArray()
+                    AlertDialog.Builder(requireContext())
+                        .setTitle(getString(R.string.add_track_to_group))
+                        .setItems(labels) { _, which ->
+                            val trackId = addable[which].first
+                            TrackerRepository.addGroupTrack(requireContext(), g.id, trackId) { updated ->
+                                if (isAdded && updated != null) {
+                                    requireActivity().runOnUiThread {
+                                        group = updated
+                                        bindGroup(updated)
+                                        parentFragmentManager.setFragmentResult(GroupsFragment.REQUEST_GROUPS_REFRESH, Bundle())
+                                    }
                                 }
                             }
                         }
-                    }
-                    .setNegativeButton(getString(R.string.cancel_button), null)
-                    .show()
+                        .setNegativeButton(getString(R.string.cancel_button), null)
+                        .show()
+                }
             }
         }
     }
@@ -291,7 +417,7 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
                 TrackerRepository.leaveGroup(requireContext(), g.id) { success ->
                     if (isAdded && success) {
                         requireActivity().runOnUiThread {
-                            dismiss()
+                            closeEditor()
                             parentFragmentManager.setFragmentResult(GroupsFragment.REQUEST_GROUPS_REFRESH, Bundle())
                             (activity as? MainActivity)?.showSnackbar(getString(R.string.removed_from_share))
                         }
@@ -310,7 +436,7 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
                 TrackerRepository.deleteGroup(requireContext(), g.id) { success ->
                     if (isAdded && success) {
                         requireActivity().runOnUiThread {
-                            dismiss()
+                            closeEditor()
                             parentFragmentManager.setFragmentResult(GroupsFragment.REQUEST_GROUPS_REFRESH, Bundle())
                             (activity as? MainActivity)?.showSnackbar(getString(R.string.tracker_deleted))
                         }
@@ -319,6 +445,20 @@ class GroupDetailBottomSheet : BottomSheetDialogFragment() {
             }
             .setNegativeButton(getString(R.string.cancel_button), null)
             .show()
+    }
+
+    private fun closeEditor() {
+        requireActivity().supportFragmentManager.popBackStack()
+    }
+
+    private fun showLoading() {
+        loadingOverlay.visibility = View.VISIBLE
+        loadingSpinner.start()
+    }
+
+    private fun hideLoading() {
+        loadingOverlay.visibility = View.GONE
+        loadingSpinner.stop(hide = false)
     }
 
     companion object {

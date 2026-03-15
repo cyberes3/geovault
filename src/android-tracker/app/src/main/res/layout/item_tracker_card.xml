@@ -143,6 +143,16 @@
             android:layout_marginTop="8dp">
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnHideOnMap"
+                style="@style/gv_common_ButtonOutlined"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:text="@string/hide_on_map"
+                android:textSize="13sp" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnUnsubscribe"
                 style="@style/gv_common_ButtonOutlined"
                 android:layout_width="0dp"
