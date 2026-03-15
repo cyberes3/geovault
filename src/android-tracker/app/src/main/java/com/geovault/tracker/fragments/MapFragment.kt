@@ -837,7 +837,8 @@ class MapFragment : Fragment() {
                 v.layoutParams = params
             }
         }
-        refreshMapPaddingForCurrentMode(force = true)
+        // Stack visibility/layout updates should not move camera; only update manager/default padding.
+        refreshMapPaddingForCurrentMode(force = true, allowCameraMove = false)
     }
 
     private fun updateShowMyLocationButtonVisibility() {
@@ -868,12 +869,15 @@ class MapFragment : Fragment() {
     private fun zoomToStandaloneLocation(location: Location, forceZoomIn: Boolean = true, animate: Boolean = true) {
         val map = maplibreMap ?: return
         val targetZoom = if (forceZoomIn) maxOf(map.cameraPosition.zoom, FOLLOW_LOCK_TARGET_ZOOM) else map.cameraPosition.zoom
-        val update = CameraUpdateFactory.newLatLngZoom(LatLng(location.latitude, location.longitude), targetZoom)
+        val update = CameraUpdateFactory.newCameraPosition(
+            CameraPosition.Builder()
+                .target(LatLng(location.latitude, location.longitude))
+                .zoom(targetZoom)
+                .build()
+        )
         if (animate) {
-            // Match follow-lock recenter behavior: true center with zero per-edge padding.
             mapManager?.animateCameraWithPadding(map, update, FOLLOW_LOCK_PADDING, FOLLOW_LOCK_ANIMATION_MS, null)
         } else {
-            // Keep first-fix snap centered exactly like other lock/recenter flows.
             mapManager?.moveCameraWithPadding(map, update, FOLLOW_LOCK_PADDING)
         }
     }
@@ -889,6 +893,17 @@ class MapFragment : Fragment() {
         if (!activity.hasLocationPermission()) {
             activity.requestLocationPermission()
             return
+        }
+        // GPS recenter is independent from track follow-lock; clear lock UI/state.
+        if (followLockEnabled) {
+            followLockEnabled = false
+            lockTarget = null
+            maplibreMap?.let { LocationComponentHelper.setCameraTracking(it, enabled = false) }
+            updateFollowLockButton()
+            if (selectedMapTracker != null) updateMapSelectionUi()
+            // Re-arm normal overlay-aware padding, but do not move camera yet.
+            // GPS recenter below should be the single camera move to avoid lock->gps offset races.
+            refreshMapPaddingForCurrentMode(force = true, allowCameraMove = false)
         }
         if (showMyLocationEnabled) {
             lastStandaloneLocation?.let { loc ->
@@ -975,7 +990,7 @@ class MapFragment : Fragment() {
                         LocationComponentHelper.forceLocation(map, location)
                     }
                     if (pendingAutoZoomToStandaloneFix) {
-                        zoomToStandaloneLocation(location, forceZoomIn = true, animate = false)
+                        zoomToStandaloneLocation(location, forceZoomIn = true, animate = true)
                         pendingAutoZoomToStandaloneFix = false
                     }
                 }
@@ -994,7 +1009,7 @@ class MapFragment : Fragment() {
                             LocationComponentHelper.forceLocation(map, location)
                         }
                         if (pendingAutoZoomToStandaloneFix) {
-                            zoomToStandaloneLocation(location, forceZoomIn = true, animate = false)
+                            zoomToStandaloneLocation(location, forceZoomIn = true, animate = true)
                             pendingAutoZoomToStandaloneFix = false
                         }
                     }
