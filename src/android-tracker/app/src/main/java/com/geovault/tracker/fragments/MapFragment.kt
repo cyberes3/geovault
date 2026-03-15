@@ -1,14 +1,17 @@
 package com.geovault.tracker.fragments
 
+import android.annotation.SuppressLint
 import android.graphics.Color
 import android.content.*
 import android.location.Location
 import android.os.Bundle
+import android.os.Looper
 import android.view.Choreographer
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.util.Log
+import android.util.TypedValue
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
@@ -32,6 +35,12 @@ import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.TrackingService
 import com.geovault.tracker.TrackUpdateHelper
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import kotlinx.coroutines.*
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -105,6 +114,9 @@ class MapFragment : Fragment() {
     private lateinit var mapTrackerInfoViewParams: MaterialButton
     private lateinit var mapTrackerInfoViewInList: MaterialButton
     private lateinit var mapTrackerInfoZoomLock: ImageView
+    private lateinit var showMyLocationButton: View
+    private lateinit var showMyLocationButtonIcon: ImageView
+    private lateinit var showMyLocationButtonLoading: LoadingSpinner
 
     /** When true, map shows all trackers; when false, single default/displayed tracker. */
     private var showAllTrackers = false
@@ -158,6 +170,19 @@ class MapFragment : Fragment() {
     private val multiTrackCoordsCache = mutableMapOf<String, MutableList<List<Double>>>()
     /** Debounced redraw job used to coalesce bursts of streamed multi-tracker points. */
     private var multiTrackRenderJob: Job? = null
+
+    /** When true, user has enabled non-tracking "show my location" mode (blue dot, camera follow). */
+    private var showMyLocationEnabled = false
+    /** True after we have received at least one GPS fix while not tracking (used for button visibility). */
+    private var hasLiveGpsFix = false
+    /** Last location from standalone/probe callback; used to center camera and force location component. */
+    private var lastStandaloneLocation: Location? = null
+    /** True while location mode is enabled and we're waiting for the first fix. */
+    private var waitingForStandaloneFix = false
+    /** Arms one-time automatic recenter/zoom when the next fix arrives. */
+    private var pendingAutoZoomToStandaloneFix = false
+    private var fusedLocationClient: FusedLocationProviderClient? = null
+    private var standaloneLocationCallback: LocationCallback? = null
 
     private val mainScope = CoroutineScope(Dispatchers.Main + Job())
 
@@ -372,6 +397,10 @@ class MapFragment : Fragment() {
         mapTrackerInfoViewParams = view.findViewById(R.id.mapTrackerInfoViewParams)
         mapTrackerInfoViewInList = view.findViewById(R.id.mapTrackerInfoViewInList)
         mapTrackerInfoZoomLock = view.findViewById(R.id.mapTrackerInfoZoomLock)
+        showMyLocationButton = view.findViewById(R.id.showMyLocationButton)
+        showMyLocationButtonIcon = view.findViewById(R.id.showMyLocationButtonIcon)
+        showMyLocationButtonLoading = view.findViewById(R.id.showMyLocationButtonLoading)
+        showMyLocationButtonLoading.setTintColor(ContextCompat.getColor(requireContext(), R.color.content_on_primary))
         view.findViewById<View>(R.id.mapTrackerInfoFocus).setOnClickListener { onMapTrackerInfoFocus() }
         view.findViewById<View>(R.id.mapTrackerInfoClose).setOnClickListener { clearMapSelection() }
         mapTrackerInfoZoomLock.setOnClickListener { onMapTrackerInfoZoomLock() }
@@ -538,6 +567,7 @@ class MapFragment : Fragment() {
                             updateFollowLockButton()
                             if (selectedMapTracker != null) updateMapSelectionUi()
                         }
+                        // Pan does not turn off standalone location mode; user can recenter by tapping button again.
                     }
                     override fun onMove(detector: org.maplibre.android.gestures.MoveGestureDetector) { }
                     override fun onMoveEnd(detector: org.maplibre.android.gestures.MoveGestureDetector) { }
@@ -576,8 +606,10 @@ class MapFragment : Fragment() {
         }
 
         followLockEnabled = savedInstanceState?.getBoolean(KEY_FOLLOW_LOCK, false) ?: false
+        showMyLocationEnabled = savedInstanceState?.getBoolean(KEY_SHOW_MY_LOCATION, false) ?: false
         updateFollowLockButton()
         updateZoomToLatestButtonState()
+        updateShowMyLocationButtonVisibility()
 
         requireActivity().supportFragmentManager.setFragmentResultListener(TrackersListFragment.REQUEST_REFRESH_LIST, viewLifecycleOwner) { _, bundle ->
             val hiddenId = bundle?.getString(TrackersListFragment.KEY_HIDDEN_TRACKER_ID) ?: return@setFragmentResultListener
@@ -616,6 +648,7 @@ class MapFragment : Fragment() {
             }
         }
 
+        showMyLocationButton.setOnClickListener { onShowMyLocationClick() }
         showAllTrackersButton.setOnClickListener {
             if (showAllTrackers) {
                 showAllTrackers = false
@@ -639,6 +672,23 @@ class MapFragment : Fragment() {
         view?.keepScreenOn = true
         updateTrackerLabel()
         refreshMapPaddingForCurrentMode(force = true)
+
+        if (TrackingService.isRunning) {
+            if (showMyLocationEnabled) {
+                showMyLocationEnabled = false
+                restoreTrackerLocationStyle()
+                lastStandaloneLocation = null
+                waitingForStandaloneFix = false
+                pendingAutoZoomToStandaloneFix = false
+            }
+            stopStandaloneLocationUpdates(clearGpsFix = true)
+        } else {
+            if (showMyLocationEnabled) {
+                waitingForStandaloneFix = true
+                pendingAutoZoomToStandaloneFix = true
+            }
+            startStandaloneLocationUpdates()
+        }
 
         ContextCompat.registerReceiver(
             requireContext(),
@@ -716,6 +766,7 @@ class MapFragment : Fragment() {
     override fun onPause() {
         super.onPause()
         view?.keepScreenOn = false
+        stopStandaloneLocationUpdates(clearGpsFix = true)
         try {
             requireContext().unregisterReceiver(locationReceiver)
         } catch (e: IllegalArgumentException) { }
@@ -738,6 +789,7 @@ class MapFragment : Fragment() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putBoolean(KEY_FOLLOW_LOCK, followLockEnabled)
+        outState.putBoolean(KEY_SHOW_MY_LOCATION, showMyLocationEnabled)
     }
 
     override fun onLowMemory() {
@@ -757,8 +809,220 @@ class MapFragment : Fragment() {
 
     private fun updateZoomToLatestButtonState() {
         val hasTrack = !showAllTrackers && trackPoints.isNotEmpty()
-        zoomToLatestButton.isEnabled = hasTrack
-        zoomToLatestButton.alpha = if (hasTrack) 1f else 0.4f
+        zoomToLatestButton.visibility = if (hasTrack) View.VISIBLE else View.GONE
+        updateRightStackMargins()
+    }
+
+    /** Right-stack buttons in top-to-bottom order. When a button is GONE, no space is reserved; visible buttons are re-stacked from top. */
+    private fun updateRightStackMargins() {
+        val ordered = listOf(
+            zoomToLatestButton,
+            showMyLocationButton,
+            mapToggle,
+            zoomInButton,
+            zoomOutButton,
+            showAllTrackersButton
+        )
+        val visible = ordered.filter { it.visibility == View.VISIBLE }
+        val density = resources.displayMetrics.density
+        val gapPx = (8 * density).toInt()
+        val buttonHeightPx = (44 * density).toInt()
+        val topDp = 16f
+        val stepPx = gapPx + buttonHeightPx
+        visible.forEachIndexed { index, v ->
+            val params = v.layoutParams as? ViewGroup.MarginLayoutParams ?: return@forEachIndexed
+            val topPx = (TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, topDp, resources.displayMetrics) + index * stepPx).toInt()
+            if (params.topMargin != topPx) {
+                params.topMargin = topPx
+                v.layoutParams = params
+            }
+        }
+        refreshMapPaddingForCurrentMode(force = true)
+    }
+
+    private fun updateShowMyLocationButtonVisibility() {
+        // Keep button discoverable on blank maps: show whenever not tracking.
+        // Disabled icon indicates "not yet locked"; spinner appears after user taps and we wait for first fix.
+        val visible = !TrackingService.isRunning
+        showMyLocationButton.visibility = if (visible) View.VISIBLE else View.GONE
+        if (visible) {
+            val showLoading = showMyLocationEnabled && waitingForStandaloneFix
+            if (showLoading) showMyLocationButtonLoading.show() else showMyLocationButtonLoading.hide()
+            showMyLocationButtonIcon.visibility = if (showLoading) View.GONE else View.VISIBLE
+            if (showLoading) {
+                showMyLocationButtonIcon.contentDescription = getString(R.string.waiting_for_gps_lock)
+            } else if (showMyLocationEnabled) {
+                showMyLocationButtonIcon.setImageResource(R.drawable.ic_location_enabled)
+                showMyLocationButtonIcon.contentDescription = getString(R.string.show_my_location_on_description)
+            } else {
+                showMyLocationButtonIcon.setImageResource(R.drawable.ic_location_disabled)
+                showMyLocationButtonIcon.contentDescription = getString(R.string.show_my_location_description)
+            }
+        } else {
+            showMyLocationButtonLoading.hide()
+            showMyLocationButtonIcon.visibility = View.VISIBLE
+        }
+        updateRightStackMargins()
+    }
+
+    private fun zoomToStandaloneLocation(location: Location, forceZoomIn: Boolean = true, animate: Boolean = true) {
+        val map = maplibreMap ?: return
+        val targetZoom = if (forceZoomIn) maxOf(map.cameraPosition.zoom, FOLLOW_LOCK_TARGET_ZOOM) else map.cameraPosition.zoom
+        val update = CameraUpdateFactory.newLatLngZoom(LatLng(location.latitude, location.longitude), targetZoom)
+        if (animate) {
+            // Match follow-lock recenter behavior: true center with zero per-edge padding.
+            mapManager?.animateCameraWithPadding(map, update, FOLLOW_LOCK_PADDING, FOLLOW_LOCK_ANIMATION_MS, null)
+        } else {
+            // Keep first-fix snap centered exactly like other lock/recenter flows.
+            mapManager?.moveCameraWithPadding(map, update, FOLLOW_LOCK_PADDING)
+        }
+    }
+
+    private fun isFreshStandaloneFix(location: Location): Boolean {
+        val now = System.currentTimeMillis()
+        return location.time > 0L && (now - location.time) <= STANDALONE_FIX_FRESHNESS_MS
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun onShowMyLocationClick() {
+        val activity = activity as? MainActivity ?: return
+        if (!activity.hasLocationPermission()) {
+            activity.requestLocationPermission()
+            return
+        }
+        if (showMyLocationEnabled) {
+            lastStandaloneLocation?.let { loc ->
+                zoomToStandaloneLocation(loc, forceZoomIn = true)
+            }
+            return
+        }
+        showMyLocationEnabled = true
+        applyStandaloneLocationStyle()
+        stopStandaloneLocationUpdates(clearGpsFix = false)
+        // Always wait for a fresh live callback fix after enabling location mode.
+        // This guarantees the button shows a spinner and auto-zooms exactly once when fix arrives.
+        waitingForStandaloneFix = true
+        pendingAutoZoomToStandaloneFix = true
+        startStandaloneLocationUpdates()
+        updateShowMyLocationButtonVisibility()
+    }
+
+    /** Apply blue/white/black circle marker for standalone "my location" mode. */
+    private fun applyStandaloneLocationStyle() {
+        val map = maplibreMap ?: return
+        LocationComponentHelper.applyStyle(
+            map,
+            requireContext(),
+            LocationComponentHelper.Config(
+                accuracyColor = parseHexToColor(null, requireContext()),
+                accuracyAlpha = 0.25f,
+                backgroundDrawable = R.drawable.ic_my_location_marker,
+                foregroundDrawable = R.drawable.ic_my_location_marker,
+                renderMode = RenderMode.NORMAL
+            )
+        )
+    }
+
+    /** Restore tracker arrow/circle style when leaving standalone mode. */
+    private fun restoreTrackerLocationStyle() {
+        val map = maplibreMap ?: return
+        LocationComponentHelper.applyStyle(
+            map,
+            requireContext(),
+            LocationComponentHelper.Config(
+                accuracyColor = parseHexToColor(null, requireContext()),
+                accuracyAlpha = 0.25f,
+                backgroundDrawable = R.drawable.ic_track_direction_arrow_circle,
+                foregroundDrawable = R.drawable.ic_track_direction_arrow,
+                renderMode = RenderMode.COMPASS
+            )
+        )
+        // Restore normal position display (track or hidden)
+        updateTrackLine()
+    }
+
+    /** Start location updates when not tracking: provides hasLiveGpsFix for button visibility and, when showMyLocationEnabled, updates map. */
+    @SuppressLint("MissingPermission")
+    private fun startStandaloneLocationUpdates() {
+        if (TrackingService.isRunning) return
+        val activity = activity as? MainActivity ?: return
+        if (!activity.hasLocationPermission()) return
+        if (fusedLocationClient == null) {
+            fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireContext())
+        }
+        val client = fusedLocationClient ?: return
+        if (standaloneLocationCallback != null) return
+        val intervalMs = if (showMyLocationEnabled) 3000L else 10_000L
+        val request = LocationRequest.Builder(
+            if (showMyLocationEnabled) Priority.PRIORITY_HIGH_ACCURACY else Priority.PRIORITY_LOW_POWER,
+            intervalMs
+        ).apply {
+            if (showMyLocationEnabled) {
+                setMinUpdateIntervalMillis(2000L)
+                setMinUpdateDistanceMeters(5f)
+            }
+        }.build()
+        standaloneLocationCallback = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                val location = result.lastLocation ?: return
+                if (!isAdded) return
+                hasLiveGpsFix = true
+                lastStandaloneLocation = location
+                if (showMyLocationEnabled) {
+                    waitingForStandaloneFix = false
+                    maplibreMap?.let { map ->
+                        LocationComponentHelper.setEnabled(map, true)
+                        LocationComponentHelper.forceLocation(map, location)
+                    }
+                    if (pendingAutoZoomToStandaloneFix) {
+                        zoomToStandaloneLocation(location, forceZoomIn = true, animate = false)
+                        pendingAutoZoomToStandaloneFix = false
+                    }
+                }
+                updateShowMyLocationButtonVisibility()
+            }
+        }
+        client.requestLocationUpdates(request, standaloneLocationCallback!!, Looper.getMainLooper())
+        client.lastLocation.addOnSuccessListener { location ->
+            if (location != null && isAdded) {
+                lastStandaloneLocation = location
+                if (showMyLocationEnabled) {
+                    if (isFreshStandaloneFix(location)) {
+                        waitingForStandaloneFix = false
+                        maplibreMap?.let { map ->
+                            LocationComponentHelper.setEnabled(map, true)
+                            LocationComponentHelper.forceLocation(map, location)
+                        }
+                        if (pendingAutoZoomToStandaloneFix) {
+                            zoomToStandaloneLocation(location, forceZoomIn = true, animate = false)
+                            pendingAutoZoomToStandaloneFix = false
+                        }
+                    }
+                }
+                updateShowMyLocationButtonVisibility()
+            }
+        }
+    }
+
+    private fun stopStandaloneLocationUpdates(clearGpsFix: Boolean = true) {
+        standaloneLocationCallback?.let { callback ->
+            fusedLocationClient?.removeLocationUpdates(callback)
+            standaloneLocationCallback = null
+        }
+        if (clearGpsFix) {
+            hasLiveGpsFix = false
+            lastStandaloneLocation = null
+            waitingForStandaloneFix = false
+            pendingAutoZoomToStandaloneFix = false
+        }
+        val map = maplibreMap
+        if (map != null) {
+            LocationComponentHelper.setCameraTracking(map, enabled = false)
+            if (!showMyLocationEnabled) {
+                LocationComponentHelper.setEnabled(map, false)
+            }
+        }
+        updateShowMyLocationButtonVisibility()
     }
 
     private fun updateTrackerLabel() {
@@ -785,6 +1049,7 @@ class MapFragment : Fragment() {
             updateStreamingUi(defaultTrackerId)
             showAllTrackersButton.visibility = View.GONE
             showAllTrackersButton.contentDescription = getString(R.string.show_all_trackers)
+            updateRightStackMargins()
             return
         }
         val showingSpecificTracker = !showAllTrackers &&
@@ -845,7 +1110,7 @@ class MapFragment : Fragment() {
             showAllTrackersButton.visibility = if (mapViewContext == MapViewContext.DEFAULT_TRACKER) View.VISIBLE else View.GONE
             showAllTrackersButton.contentDescription = if (showAllTrackers) getString(R.string.show_default_tracker) else getString(R.string.show_all_trackers)
         }
-        mapManager?.defaultPadding = getMapPaddingArray()
+        updateRightStackMargins()
     }
 
     /** Return true if we are currently viewing a track that is NOT the default one. */
@@ -984,6 +1249,7 @@ class MapFragment : Fragment() {
         val topOverlayBottomPx = listOf(
             trackerLabelCard,
             zoomToLatestButton,
+            showMyLocationButton,
             mapToggle,
             zoomInButton,
             zoomOutButton,
@@ -997,7 +1263,7 @@ class MapFragment : Fragment() {
             if (topOverlayBottomPx > 0) topOverlayBottomPx + extraPadPx else baseTopPx
         )
         val rightOverlayInsetPx = if (mapWidthPx > 0) {
-            listOf(zoomToLatestButton, mapToggle, zoomInButton, zoomOutButton, showAllTrackersButton)
+            listOf(zoomToLatestButton, showMyLocationButton, mapToggle, zoomInButton, zoomOutButton, showAllTrackersButton)
                 .filter { it.visibility == View.VISIBLE }
                 .maxOfOrNull { (mapWidthPx - it.left).coerceAtLeast(0) }
                 ?: 0
@@ -2319,7 +2585,7 @@ class MapFragment : Fragment() {
         }
         val accuracyValue = (accuracyMeters?.takeIf { it > 0f } ?: 0f).toDouble()
 
-        if (showingDefault) {
+        if (showingDefault && !showMyLocationEnabled) {
             val location = Location("tracker-default-location").apply {
                 latitude = toLatLng.latitude
                 longitude = toLatLng.longitude
@@ -2333,7 +2599,9 @@ class MapFragment : Fragment() {
             return
         }
 
-        LocationComponentHelper.setEnabled(map, false)
+        if (!showMyLocationEnabled) {
+            LocationComponentHelper.setEnabled(map, false)
+        }
 
         val point = Point.fromLngLat(toLatLng.longitude, toLatLng.latitude)
         val feature = Feature.fromGeometry(point)
@@ -2416,8 +2684,10 @@ class MapFragment : Fragment() {
     companion object {
         private const val TAG = "MapFragment"
         private const val KEY_FOLLOW_LOCK = "follow_lock"
+        private const val KEY_SHOW_MY_LOCATION = "show_my_location"
         /** Duration (ms) for animating the camera when follow lock is on and the track moves. */
         private const val FOLLOW_LOCK_ANIMATION_MS = 300
+        private const val STANDALONE_FIX_FRESHNESS_MS = 20_000L
         /** No padding so the lock target is centered in the viewport. */
         private val FOLLOW_LOCK_PADDING = doubleArrayOf(0.0, 0.0, 0.0, 0.0)
         /** Target zoom when enabling follow lock from a zoomed-out state. */

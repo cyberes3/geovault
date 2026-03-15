@@ -115,11 +115,45 @@
     </com.google.android.material.card.MaterialCardView>
 
     <com.google.android.material.card.MaterialCardView
-        android:id="@+id/mapToggle"
+        android:id="@+id/showMyLocationButton"
         android:layout_width="44dp"
         android:layout_height="44dp"
         android:layout_gravity="top|end"
         android:layout_marginTop="68dp"
+        android:layout_marginEnd="16dp"
+        android:visibility="gone"
+        android:clickable="true"
+        android:focusable="true"
+        app:cardCornerRadius="22dp"
+        app:cardElevation="0dp"
+        app:cardBackgroundColor="@color/primary_blue">
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+            <ImageView
+                android:id="@+id/showMyLocationButtonIcon"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/ic_location_enabled"
+                android:contentDescription="@string/show_my_location_description"
+                app:tint="@color/content_on_primary"
+                android:padding="10dp" />
+            <com.geovault.common.LoadingSpinner
+                android:id="@+id/showMyLocationButtonLoading"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:visibility="gone"
+                app:spinnerSize="20dp" />
+        </FrameLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/mapToggle"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="120dp"
         android:layout_marginEnd="16dp"
         android:clickable="true"
         android:focusable="true"
@@ -140,7 +174,7 @@
         android:layout_width="44dp"
         android:layout_height="44dp"
         android:layout_gravity="top|end"
-        android:layout_marginTop="120dp"
+        android:layout_marginTop="172dp"
         android:layout_marginEnd="16dp"
         android:clickable="true"
         android:focusable="true"
@@ -161,7 +195,7 @@
         android:layout_width="44dp"
         android:layout_height="44dp"
         android:layout_gravity="top|end"
-        android:layout_marginTop="168dp"
+        android:layout_marginTop="220dp"
         android:layout_marginEnd="16dp"
         android:clickable="true"
         android:focusable="true"
@@ -182,7 +216,7 @@
         android:layout_width="44dp"
         android:layout_height="44dp"
         android:layout_gravity="top|end"
-        android:layout_marginTop="216dp"
+        android:layout_marginTop="268dp"
         android:layout_marginEnd="16dp"
         android:visibility="gone"
         android:clickable="true"
