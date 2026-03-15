@@ -759,23 +759,27 @@ export default {
       try {
         const res = await api.get('/trackers/');
         const raw = Array.isArray(res.data) ? res.data : [];
-        // Fetch full geometry for each tracker (list endpoint returns metadata only)
-        const withGeometry = await Promise.all(
-          raw.map(async (t) => {
-            try {
-              const geomRes = await api.get(`/trackers/${t.id}/geometry/`);
-              // Preserve list-only fields (is_owner, owner_email, visibility) — geometry endpoint doesn't return them
-              return normalizeTrackForMemory({
-                ...geomRes.data,
-                is_owner: t.is_owner,
-                owner_email: t.owner_email,
-                visibility: t.visibility
-              });
-            } catch {
-              return normalizeTrackForMemory({ ...t, geometry: { type: 'LineString', coordinates: [] } });
-            }
-          })
-        );
+        let withGeometry = [];
+        const ids = raw.map((t) => t.id).filter((id) => id != null && id !== '');
+
+        const bulkRes = await api.post('/trackers/geometry/', {
+          tracker_ids: ids,
+          all_data: true
+        });
+        const bulkList = Array.isArray(bulkRes.data) ? bulkRes.data : [];
+        const bulkById = new Map(bulkList.map((t) => [String(t.id), t]));
+        withGeometry = raw.map((t) => {
+          const merged = bulkById.get(String(t.id));
+          if (!merged) return normalizeTrackForMemory({ ...t, geometry: { type: 'LineString', coordinates: [] } });
+          return normalizeTrackForMemory({
+            ...merged,
+            // Preserve list-only fields (is_owner, owner_email, visibility)
+            is_owner: t.is_owner,
+            owner_email: t.owner_email,
+            visibility: t.visibility
+          });
+        });
+
         trackers.value = withGeometry;
         updateMapFeatures();
       } catch (e) {

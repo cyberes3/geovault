@@ -17,6 +17,7 @@ from .tracker_views import (
     tracker_check,
     tracker_clear_history,
     tracker_get_geometry,
+    tracker_get_geometry_bulk,
     tracker_get_latest_coordinates,
     tracker_get_patch_delete,
     tracker_kml,

@@ -28,6 +28,9 @@ interface TrackerApi {
     @GET("/api/extensions/live-track/trackers/{id}/geometry/")
     fun getTrackerGeometry(@Path("id") id: String): Call<Tracker>
 
+    @POST("/api/extensions/live-track/trackers/geometry/")
+    fun getTrackersGeometry(@Body request: TrackerBulkGeometryRequest): Call<List<Tracker>>
+
     @GET("/api/extensions/live-track/trackers/{id}/coordinates/")
     fun getTrackerCoordinates(@Path("id") id: String): Call<TrackerCoordinatesResponse>
 

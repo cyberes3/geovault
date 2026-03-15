@@ -25,6 +25,7 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
+import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit
 
@@ -40,6 +41,7 @@ class LiveTrackStreamingService : Service() {
         const val ACTION_START = "com.geovault.tracker.LIVE_TRACK_STREAMING_START"
         const val ACTION_STOP = "com.geovault.tracker.LIVE_TRACK_STREAMING_STOP"
         const val EXTRA_TRACKER_ID = "tracker_id"
+        const val EXTRA_TRACKER_IDS = "tracker_ids"
         const val EXTRA_TRACKER_NAME = "tracker_name"
         const val NOTIFICATION_ID = 102
         private const val CHANNEL_ID = "live_track_streaming"
@@ -87,7 +89,7 @@ class LiveTrackStreamingService : Service() {
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private var webSocket: WebSocket? = null
-    private var currentTrackerId: String? = null
+    private var currentTrackerIds: Set<String> = emptySet()
     private var currentTrackerName: String? = null
     private var connectJob: Job? = null
     private var reconnectAttempts = 0
@@ -99,32 +101,32 @@ class LiveTrackStreamingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
-                val trackerId = intent.getStringExtra(EXTRA_TRACKER_ID)
+                val trackerIds = extractTrackerIds(intent)
                 val trackerName = intent.getStringExtra(EXTRA_TRACKER_NAME)
 
                 // Show notification immediately to satisfy Android 14+ contract
-                val notification = createNotification(trackerName)
+                val notification = createNotification(trackerName, trackerIds.size)
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
                 isRunning = true
 
-                if (!trackerId.isNullOrBlank()) {
-                    // Debounce: If already streaming this tracker, don't restart WebSocket
-                    if (trackerId == currentTrackerId && webSocket != null) {
-                        Log.d(TAG, "Already streaming tracker $trackerId, skipping reset")
+                if (trackerIds.isNotEmpty()) {
+                    // Debounce: If already streaming this exact tracker set, don't restart WebSocket.
+                    if (trackerIds == currentTrackerIds && webSocket != null) {
+                        Log.d(TAG, "Already streaming tracker set (${trackerIds.size}), skipping reset")
                         return START_NOT_STICKY
                     }
 
-                    // Close previous WebSocket if switching trackers
+                    // Close previous WebSocket if switching targets.
                     disconnectWebSocket()
                     pointBuffer.clear()
-                    currentTrackerId = trackerId
+                    currentTrackerIds = trackerIds
                     currentTrackerName = trackerName
                     reconnectAttempts = 0
                     
                     connectJob?.cancel()
-                    connectJob = serviceScope.launch { connect(trackerName) }
+                    connectJob = serviceScope.launch { connect() }
                 } else {
-                    Log.w(TAG, "ACTION_START received with null/empty trackerId")
+                    Log.w(TAG, "ACTION_START received with empty tracker target set")
                     isRunning = false
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
@@ -163,7 +165,7 @@ class LiveTrackStreamingService : Service() {
         super.onTaskRemoved(rootIntent)
     }
 
-    private fun createNotification(trackerName: String?): Notification {
+    private fun createNotification(trackerName: String?, trackerCount: Int): Notification {
         val pendingIntent = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java),
@@ -176,9 +178,11 @@ class LiveTrackStreamingService : Service() {
             this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val title = getString(R.string.live_track_streaming_title)
-        val text = trackerName?.takeIf { it.isNotBlank() }?.let {
-            getString(R.string.live_track_streaming_text, it)
-        } ?: getString(R.string.live_track_streaming_text_anon)
+        val text = when {
+            trackerCount > 1 -> String.format(Locale.US, "%d trackers", trackerCount)
+            trackerName?.isNotBlank() == true -> getString(R.string.live_track_streaming_text, trackerName)
+            else -> getString(R.string.live_track_streaming_text_anon)
+        }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(text)
@@ -197,8 +201,18 @@ class LiveTrackStreamingService : Service() {
             .build()
     }
 
-    private suspend fun connect(trackerName: String?) {
-        while (serviceScope.isActive && currentTrackerId != null) {
+    private fun extractTrackerIds(intent: Intent): Set<String> {
+        val idsFromArray = intent.getStringArrayListExtra(EXTRA_TRACKER_IDS)
+            ?.mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }
+            ?.toSet()
+            ?: emptySet()
+        if (idsFromArray.isNotEmpty()) return idsFromArray
+        val legacyId = intent.getStringExtra(EXTRA_TRACKER_ID)?.trim()
+        return legacyId?.takeIf { it.isNotEmpty() }?.let { setOf(it) } ?: emptySet()
+    }
+
+    private suspend fun connect() {
+        while (serviceScope.isActive && currentTrackerIds.isNotEmpty()) {
             val token = kotlinx.coroutines.withContext(Dispatchers.IO) {
                 try {
                     GeovaultAuthManager.getValidAccessToken(applicationContext, null)
@@ -228,8 +242,9 @@ class LiveTrackStreamingService : Service() {
                 .url(wsUrl)
                 .addHeader("Authorization", "Bearer $token")
                 .build()
+            val trackerIdsSnapshot = currentTrackerIds
             val listener = TrackersWebSocketListener(
-                currentTrackerId!!,
+                trackerIdsSnapshot,
                 onPoint = { bufferAndBroadcast(it) },
                 onDisconnect = { scheduleReconnect() }
             )
@@ -274,14 +289,14 @@ class LiveTrackStreamingService : Service() {
     }
 
     private fun scheduleReconnect() {
-        if (currentTrackerId == null) return
+        if (currentTrackerIds.isEmpty()) return
         connectJob?.cancel()
         connectJob = serviceScope.launch {
             val delayMs = (RECONNECT_BASE_DELAY_MS * (1L shl reconnectAttempts.coerceAtMost(4)))
                 .coerceAtMost(RECONNECT_MAX_DELAY_MS)
             reconnectAttempts++
             delay(delayMs)
-            if (currentTrackerId != null) connect(currentTrackerName)
+            if (currentTrackerIds.isNotEmpty()) connect()
         }
     }
 
@@ -290,7 +305,7 @@ class LiveTrackStreamingService : Service() {
      * Does NOT update isRunning (the caller is responsible for that).
      */
     private fun disconnectWebSocket() {
-        currentTrackerId = null
+        currentTrackerIds = emptySet()
         currentTrackerName = null
         connectJob?.cancel()
         connectJob = null
@@ -312,7 +327,7 @@ class LiveTrackStreamingService : Service() {
     )
 
     private class TrackersWebSocketListener(
-        private val filterTrackId: String,
+        private val filterTrackIds: Set<String>,
         private val onPoint: (TrackPointBroadcast) -> Unit,
         private val onDisconnect: () -> Unit = {}
     ) : WebSocketListener() {
@@ -325,7 +340,7 @@ class LiveTrackStreamingService : Service() {
                 if (module != "live_track" || type != "track_updated") return
                 val data = json.optJSONObject("data") ?: return
                 val trackId = data.optString("track_id", "")
-                if (trackId != filterTrackId) return
+                if (trackId !in filterTrackIds) return
                 val pointArr = data.optJSONArray("point") ?: return
                 if (pointArr.length() < 2) return
                 val lon = pointArr.getDouble(0)

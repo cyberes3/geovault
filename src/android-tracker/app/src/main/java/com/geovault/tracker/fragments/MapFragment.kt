@@ -141,6 +141,12 @@ class MapFragment : Fragment() {
     private var selectedMapTracker: SelectedMapTracker? = null
     /** When set, follow lock centers on this point (e.g. from info-panel crosshair); cleared on pan or clear selection. */
     private var lockTarget: LatLng? = null
+    /** Active tracker ids currently requested from live streaming service. */
+    private var activeStreamedTrackerIds: Set<String> = emptySet()
+    /** In-memory history cache for multi-tracker map contexts (group/all-trackers). */
+    private val multiTrackCoordsCache = mutableMapOf<String, MutableList<List<Double>>>()
+    /** Debounced redraw job used to coalesce bursts of streamed multi-tracker points. */
+    private var multiTrackRenderJob: Job? = null
 
     private val mainScope = CoroutineScope(Dispatchers.Main + Job())
 
@@ -159,26 +165,159 @@ class MapFragment : Fragment() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action != LiveTrackStreamingService.BROADCAST_TRACK_POINT) return
             val trackId = intent.getStringExtra(LiveTrackStreamingService.EXTRA_TRACK_ID) ?: return
-            if (trackId != displayedTrackerId) return
             val tsMs = intent.getLongExtra(LiveTrackStreamingService.EXTRA_POINT_TS_MS, 0L)
-            if (tsMs > 0L) {
-                lastStreamedPointTimeMs = tsMs
-                val defaultTrackerId = context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-                    .getString("selected_tracker_id", "") ?: ""
-                if (isAdded) updateStreamingUi(defaultTrackerId)
-            }
             if (intent.hasExtra(LiveTrackStreamingService.EXTRA_ACCURACY_METERS)) {
                 lastStreamedAccuracyMeters = intent.getFloatExtra(LiveTrackStreamingService.EXTRA_ACCURACY_METERS, 0f).takeIf { it > 0f }
             }
             val lat = intent.getDoubleExtra(LiveTrackStreamingService.EXTRA_POINT_LAT, 0.0)
             val lon = intent.getDoubleExtra(LiveTrackStreamingService.EXTRA_POINT_LON, 0.0)
-            TrackUpdateHelper.updateTrack(trackPoints, trackTimestamps, LatLng(lat, lon), tsMs.takeIf { it > 0L } ?: System.currentTimeMillis())
-            scheduleTrackLineUpdate()
-            updateZoomToLatestButtonState()
-            if (followLockEnabled) {
-                lockTarget?.let { centerCameraOnTrackLocked(it) }
+            applyLiveStreamPoint(trackId, lat, lon, tsMs.takeIf { it > 0L } ?: System.currentTimeMillis(), fromBuffered = false)
+        }
+    }
+
+    private fun applyLiveStreamPoint(
+        trackId: String,
+        lat: Double,
+        lon: Double,
+        timestampMs: Long,
+        fromBuffered: Boolean
+    ) {
+        val defaultTrackerId = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+            .getString("selected_tracker_id", "") ?: ""
+        val isMultiContext = showAllTrackers || mapViewContext == MapViewContext.GROUP
+        if (isMultiContext) {
+            if (trackId !in activeStreamedTrackerIds) return
+            val trackers = lastAllTrackers ?: return
+            val tracker = trackers.firstOrNull { it.id == trackId } ?: return
+            val trackerCoords = getTrackerBaseCoordsForMultiContext(tracker, trackId)
+            val accepted = appendStreamedPointIfNewer(trackerCoords, lon, lat, timestampMs)
+            if (!accepted) return
+            multiTrackCoordsCache[trackId] = trackerCoords
+            if (selectedMapTracker?.id == trackId) {
+                selectedMapTracker = selectedMapTracker?.copy(
+                    lat = lat,
+                    lon = lon,
+                    lastUpdateMs = timestampMs
+                )
+                val updatedTarget = LatLng(lat, lon)
+                if (followLockEnabled && lockTarget != null) {
+                    lockTarget = updatedTarget
+                    centerCameraOnTrackLocked(updatedTarget)
+                }
+            }
+            scheduleDebouncedMultiTrackRender()
+            if (selectedMapTracker?.id == trackId) {
+                updateMapSelectionUi()
+            }
+            return
+        }
+
+        if (trackId != displayedTrackerId) return
+        lastStreamedPointTimeMs = timestampMs
+        if (!fromBuffered && isAdded) updateStreamingUi(defaultTrackerId)
+        TrackUpdateHelper.updateTrack(trackPoints, trackTimestamps, LatLng(lat, lon), timestampMs)
+        scheduleTrackLineUpdate()
+        updateZoomToLatestButtonState()
+        if (followLockEnabled) {
+            lockTarget?.let { centerCameraOnTrackLocked(it) }
+        }
+    }
+
+    private fun getTrackerBaseCoordsForMultiContext(tracker: Tracker, trackId: String): MutableList<List<Double>> {
+        val cached = normalizeRawCoordinates(multiTrackCoordsCache[trackId] ?: emptyList())
+        val lastRendered = normalizeRawCoordinates(lastAllTrackersCoordsById?.get(trackId) ?: emptyList())
+        val geometry = normalizeRawCoordinates(tracker.geometry?.coordinates ?: emptyList())
+
+        val historyBase = when {
+            lastRendered.size >= geometry.size -> lastRendered
+            else -> geometry
+        }
+
+        val base = when {
+            cached.size >= historyBase.size && cached.isNotEmpty() -> cached
+            historyBase.isNotEmpty() -> historyBase
+            else -> seedCoordsFromLastPoint(tracker)
+        }
+
+        // If cache is shorter than loaded history (race while geometry is still fetching),
+        // preserve history and append only newer live points from cache.
+        if (cached.isNotEmpty() && base !== cached) {
+            mergeNewerPointsInto(base, cached)
+        }
+        return base
+    }
+
+    private fun normalizeRawCoordinates(rawCoords: List<List<Double>>): MutableList<List<Double>> {
+        val normalized = mutableListOf<List<Double>>()
+        for (coord in rawCoords) {
+            if (coord.size < 2) continue
+            val lon = (coord[0] as? Number)?.toDouble() ?: continue
+            val lat = (coord[1] as? Number)?.toDouble() ?: continue
+            val tsRaw = (coord.getOrNull(2) as? Number)?.toDouble() ?: 0.0
+            val tsMs = if (tsRaw in 1.0..999999999999.0) tsRaw * 1000.0 else tsRaw
+            normalized.add(listOf(lon, lat, tsMs))
+        }
+        return normalized.takeLast(TrackUpdateHelper.MAX_POINTS).toMutableList()
+    }
+
+    private fun seedCoordsFromLastPoint(tracker: Tracker): MutableList<List<Double>> {
+        val lp = tracker.last_point
+        if (lp == null || lp.size < 2) return mutableListOf()
+        val tsMs = trackerLastUpdateMs(tracker)?.toDouble() ?: 0.0
+        return mutableListOf(listOf(lp[0], lp[1], tsMs))
+    }
+
+    private fun appendStreamedPointIfNewer(
+        coords: MutableList<List<Double>>,
+        lon: Double,
+        lat: Double,
+        timestampMs: Long
+    ): Boolean {
+        val last = coords.lastOrNull()
+        if (last != null) {
+            val lastTs = (last.getOrNull(2) as? Number)?.toLong() ?: 0L
+            if (lastTs > 0L && timestampMs > 0L && timestampMs < lastTs) return false
+            val lastLon = (last.getOrNull(0) as? Number)?.toDouble()
+            val lastLat = (last.getOrNull(1) as? Number)?.toDouble()
+            if (lastLon != null && lastLat != null && abs(lastLon - lon) < 1e-9 && abs(lastLat - lat) < 1e-9 && timestampMs == lastTs) {
+                return false
             }
         }
+        coords.add(listOf(lon, lat, timestampMs.toDouble()))
+        while (coords.size > TrackUpdateHelper.MAX_POINTS) {
+            coords.removeAt(0)
+        }
+        return true
+    }
+
+    private fun mergeNewerPointsInto(target: MutableList<List<Double>>, source: List<List<Double>>) {
+        for (coord in source) {
+            if (coord.size < 2) continue
+            val lon = (coord.getOrNull(0) as? Number)?.toDouble() ?: continue
+            val lat = (coord.getOrNull(1) as? Number)?.toDouble() ?: continue
+            val ts = (coord.getOrNull(2) as? Number)?.toLong() ?: 0L
+            appendStreamedPointIfNewer(target, lon, lat, ts)
+        }
+    }
+
+    private fun scheduleDebouncedMultiTrackRender() {
+        multiTrackRenderJob?.cancel()
+        multiTrackRenderJob = mainScope.launch {
+            delay(MULTI_TRACK_RENDER_DEBOUNCE_MS)
+            if (!isAdded || !(showAllTrackers || mapViewContext == MapViewContext.GROUP)) return@launch
+            val trackers = lastAllTrackers ?: return@launch
+            val map = maplibreMap ?: return@launch
+            val style = map.style ?: return@launch
+            applyAllTrackersToMap(trackers, multiTrackCoordsCache.mapValues { it.value.toList() }, map, style, fitBounds = false)
+        }
+    }
+
+    private fun clearMultiTrackContextState() {
+        multiTrackRenderJob?.cancel()
+        multiTrackRenderJob = null
+        multiTrackCoordsCache.clear()
+        lastAllTrackers = null
+        lastAllTrackersCoordsById = null
     }
 
     override fun onCreateView(
@@ -446,6 +585,8 @@ class MapFragment : Fragment() {
         showAllTrackersButton.setOnClickListener {
             if (showAllTrackers) {
                 showAllTrackers = false
+                stopLiveTrackStreaming()
+                clearMultiTrackContextState()
                 clearMapSelection()
                 clearAllTrackSources()
                 setAllTrackLayersVisibility(false)
@@ -482,20 +623,22 @@ class MapFragment : Fragment() {
         val buffered = LiveTrackStreamingService.drainBufferedPoints()
         if (buffered.isNotEmpty()) {
             for (p in buffered) {
-                TrackUpdateHelper.updateTrack(trackPoints, trackTimestamps, LatLng(p.lat, p.lon), p.timestampMs)
+                applyLiveStreamPoint(
+                    p.trackId,
+                    p.lat,
+                    p.lon,
+                    p.timestampMs.takeIf { it > 0L } ?: System.currentTimeMillis(),
+                    fromBuffered = true
+                )
                 p.accuracyMeters?.let { lastStreamedAccuracyMeters = it }
-            }
-            val lastTs = buffered.last().timestampMs
-            if (lastTs > 0L) lastStreamedPointTimeMs = lastTs
-            scheduleTrackLineUpdate()
-            updateZoomToLatestButtonState()
-            if (followLockEnabled) {
-                lockTarget?.let { centerCameraOnTrackLocked(it) }
             }
         }
 
         if (mapReady) {
-            if (mapViewContext == MapViewContext.GROUP) {
+            if (mapViewContext == MapViewContext.GROUP || showAllTrackers) {
+                if (activeStreamedTrackerIds.isNotEmpty()) {
+                    startLiveTrackStreamingForTrackerSet(activeStreamedTrackerIds)
+                }
                 updateTrackerLabel()
                 return
             }
@@ -551,6 +694,7 @@ class MapFragment : Fragment() {
         mapFragment = null
         mapManager = null
         maplibreMap = null
+        clearMultiTrackContextState()
         super.onDestroyView()
         mainScope.cancel()
     }
@@ -749,7 +893,6 @@ class MapFragment : Fragment() {
     private fun centerCameraOnTrackLocked(target: LatLng, forceZoomIn: Boolean = false) {
         val map = maplibreMap ?: return
         val shouldForceZoom = forceZoomIn || followLockNeedsInitialZoom
-        if (shouldForceZoom) followLockNeedsInitialZoom = false
         val zoom = if (shouldForceZoom) {
             maxOf(map.cameraPosition.zoom, FOLLOW_LOCK_TARGET_ZOOM)
         } else {
@@ -758,7 +901,22 @@ class MapFragment : Fragment() {
         val update = CameraUpdateFactory.newCameraPosition(
             CameraPosition.Builder().target(target).zoom(zoom).build()
         )
-        mapManager?.animateCameraWithPadding(map, update, getMapPaddingArray(), FOLLOW_LOCK_ANIMATION_MS)
+        val callback = if (shouldForceZoom) {
+            object : MapLibreMap.CancelableCallback {
+                override fun onFinish() {
+                    if (!isAdded) return
+                    val reachedTarget = map.cameraPosition.zoom >= (FOLLOW_LOCK_TARGET_ZOOM - FOLLOW_LOCK_TARGET_ZOOM_EPSILON)
+                    if (reachedTarget) followLockNeedsInitialZoom = false
+                }
+
+                override fun onCancel() {
+                    // Keep initial-zoom request armed so the next lock update can complete it.
+                }
+            }
+        } else {
+            null
+        }
+        mapManager?.animateCameraWithPadding(map, update, getMapPaddingArray(), FOLLOW_LOCK_ANIMATION_MS, callback)
     }
 
     private fun getMapPaddingArray(): DoubleArray {
@@ -1092,6 +1250,7 @@ class MapFragment : Fragment() {
      * If the list provided an initial track (latest 100 points), shows it immediately then loads full geometry in background.
      */
     fun refreshTrackForSelectedTracker() {
+        clearMultiTrackContextState()
         showAllTrackers = false
         displayedGroupName = null
         currentGroupForMap = null
@@ -1186,6 +1345,7 @@ class MapFragment : Fragment() {
      */
     fun refreshMapForGroup(group: Group?, zoomToTrackerId: String? = null) {
         if (group == null) return
+        clearMultiTrackContextState()
         val map = maplibreMap ?: return
         val style = map.style ?: return
         mapViewContext = MapViewContext.GROUP
@@ -1206,6 +1366,7 @@ class MapFragment : Fragment() {
         updateZoomToLatestButtonState()
         val trackIds = group.track_ids?.toSet() ?: emptySet()
         if (trackIds.isEmpty()) {
+            stopLiveTrackStreaming()
             setAllTrackLayersVisibility(true)
             return
         }
@@ -1214,36 +1375,41 @@ class MapFragment : Fragment() {
             val allTrackers = list ?: emptyList()
             val trackers = allTrackers.filter { it.id in trackIds }
             if (trackers.isEmpty()) {
+                stopLiveTrackStreaming()
                 setAllTrackLayersVisibility(true)
                 return@getTrackers
             }
+            startLiveTrackStreamingForTrackerSet(trackers.map { it.id }.toSet())
             applyAllTrackersToMap(trackers, emptyMap(), map, style, fitBounds = true, fitToTrackerId = zoomToTrackerId)
-            val coordsById = mutableMapOf<String, List<List<Double>>>()
-            var remaining = trackers.size
-            trackers.forEach { tracker ->
-                TrackerRepository.getTrackerCoordinates(requireContext(), tracker.id) { response ->
-                    mainScope.launch {
-                        if (!isAdded || !showAllTrackers) return@launch
-                        val coords = response?.coordinates ?: emptyList()
+            TrackerRepository.getTrackersGeometry(
+                requireContext(),
+                trackers.map { it.id },
+                allData = true
+            ) { fullTrackers ->
+                mainScope.launch {
+                    if (!isAdded || !showAllTrackers) return@launch
+                    val coordsById = mutableMapOf<String, List<List<Double>>>()
+                    (fullTrackers ?: emptyList()).forEach { full ->
+                        val coords = full.geometry?.coordinates ?: emptyList()
                         if (coords.isNotEmpty()) {
-                            coordsById[tracker.id] = coords
+                            coordsById[full.id] = coords
                         }
-                        remaining--
-                        applyAllTrackersToMap(
-                            trackers,
-                            coordsById,
-                            map,
-                            style,
-                            fitBounds = remaining == 0,
-                            fitToTrackerId = zoomToTrackerId
-                        )
                     }
+                    applyAllTrackersToMap(
+                        trackers,
+                        coordsById,
+                        map,
+                        style,
+                        fitBounds = true,
+                        fitToTrackerId = zoomToTrackerId
+                    )
                 }
             }
         }
     }
 
     private fun loadAllTrackersAndApply() {
+        clearMultiTrackContextState()
         val map = maplibreMap ?: return
         val style = map.style ?: return
         TrackerRepository.getMapVisibility(requireContext()) { visibility ->
@@ -1263,6 +1429,7 @@ class MapFragment : Fragment() {
                     val allTrackers = list ?: emptyList()
                     val trackers = allTrackers.filter { it.id !in allHiddenTrackIds }
                     if (trackers.isEmpty()) {
+                        stopLiveTrackStreaming()
                         showAllTrackers = true
                         clearAllTrackSources()
                         setAllTrackLayersVisibility(true)
@@ -1272,26 +1439,29 @@ class MapFragment : Fragment() {
                         return@getTrackers
                     }
                     showAllTrackers = true
+                    startLiveTrackStreamingForTrackerSet(trackers.map { it.id }.toSet())
                     applyAllTrackersToMap(trackers, emptyMap(), map, style, fitBounds = true)
-                    val coordsById = mutableMapOf<String, List<List<Double>>>()
-                    var remaining = trackers.size
-                    trackers.forEach { tracker ->
-                        TrackerRepository.getTrackerCoordinates(requireContext(), tracker.id) { response ->
-                            mainScope.launch {
-                                if (!isAdded || !showAllTrackers) return@launch
-                                val coords = response?.coordinates ?: emptyList()
+                    TrackerRepository.getTrackersGeometry(
+                        requireContext(),
+                        trackers.map { it.id },
+                        allData = true
+                    ) { fullTrackers ->
+                        mainScope.launch {
+                            if (!isAdded || !showAllTrackers) return@launch
+                            val coordsById = mutableMapOf<String, List<List<Double>>>()
+                            (fullTrackers ?: emptyList()).forEach { full ->
+                                val coords = full.geometry?.coordinates ?: emptyList()
                                 if (coords.isNotEmpty()) {
-                                    coordsById[tracker.id] = coords
+                                    coordsById[full.id] = coords
                                 }
-                                remaining--
-                                applyAllTrackersToMap(
-                                    trackers,
-                                    coordsById,
-                                    map,
-                                    style,
-                                    fitBounds = remaining == 0
-                                )
                             }
+                            applyAllTrackersToMap(
+                                trackers,
+                                coordsById,
+                                map,
+                                style,
+                                fitBounds = true
+                            )
                         }
                     }
                 }
@@ -1312,7 +1482,7 @@ class MapFragment : Fragment() {
         fitToTrackerId: String? = null
     ) {
         lastAllTrackers = trackers
-        lastAllTrackersCoordsById = coordsById
+        val normalizedCoordsById = mutableMapOf<String, MutableList<List<Double>>>()
         val outlineColor = String.format(
             "#%06X",
             0xFFFFFF and ContextCompat.getColor(requireContext(), R.color.track_line_outline)
@@ -1328,6 +1498,7 @@ class MapFragment : Fragment() {
             val coords = coordsById[tracker.id] ?: tracker.geometry?.coordinates ?: emptyList()
             if (coords.isEmpty()) {
                 tracker.last_point?.takeIf { it.size >= 2 }?.let { lp ->
+                    normalizedCoordsById[tracker.id] = seedCoordsFromLastPoint(tracker)
                     val pt = LatLng(lp[1], lp[0])
                     allCoords.add(pt)
                     trackerCoords.add(pt)
@@ -1344,6 +1515,7 @@ class MapFragment : Fragment() {
                 coordsByTrackerId[tracker.id] = trackerCoords
                 continue
             }
+            normalizedCoordsById[tracker.id] = normalizeRawCoordinates(coords)
             val lastN = coords.takeLast(TrackUpdateHelper.MAX_POINTS)
             val points = lastN.map { c -> LatLng((c[1] as Number).toDouble(), (c[0] as Number).toDouble()) }
             points.forEach { allCoords.add(it); trackerCoords.add(it) }
@@ -1372,6 +1544,9 @@ class MapFragment : Fragment() {
             addTrackerPropertiesToPointFeature(pointFeature, tracker, lastPoint.latitude, lastPoint.longitude, lastUpdateMs)
             pointFeatures.add(pointFeature)
         }
+        multiTrackCoordsCache.clear()
+        multiTrackCoordsCache.putAll(normalizedCoordsById)
+        lastAllTrackersCoordsById = normalizedCoordsById.mapValues { it.value.toList() }
 
         style.getSourceAs<GeoJsonSource>(ALL_TRACKS_SOURCE_ID)?.setGeoJson(FeatureCollection.fromFeatures(lineFeatures))
         style.getSourceAs<GeoJsonSource>(ALL_TRACKS_POINTS_SOURCE_ID)?.setGeoJson(FeatureCollection.fromFeatures(pointFeatures))
@@ -1574,6 +1749,7 @@ class MapFragment : Fragment() {
     private fun onMapTrackerInfoFocus() {
         val sel = selectedMapTracker ?: return
         stopLiveTrackStreaming()
+        clearMultiTrackContextState()
         showAllTrackers = false
         currentGroupForMap = null
         clearMapSelection()
@@ -1720,6 +1896,7 @@ class MapFragment : Fragment() {
      */
     fun restoreTrackForSelectedTracker() {
         stopLiveTrackStreaming()
+        clearMultiTrackContextState()
         showAllTrackers = false
         currentGroupForMap = null
         clearMapSelection()
@@ -1863,21 +2040,39 @@ class MapFragment : Fragment() {
         }
     }
 
-    /** Start live track streaming only when the displayed tracker is not the default. The default track is local (this device); only non-default tracks need server streaming. */
+    /** Start live streaming for a specific displayed tracker when it's not the default local tracker. */
     private fun startLiveTrackStreamingForDisplayedTracker() {
         val id = displayedTrackerId ?: return
         val defaultId = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
             .getString("selected_tracker_id", "") ?: ""
-        if (defaultId.isEmpty() || id == defaultId) return
+        if (defaultId.isEmpty() || id == defaultId) {
+            stopLiveTrackStreaming()
+            return
+        }
+        startLiveTrackStreamingForTrackerSet(setOf(id), displayedTrackerName)
+    }
+
+    /** Start live streaming for a set of trackers (group/all-trackers context). */
+    private fun startLiveTrackStreamingForTrackerSet(trackerIds: Set<String>, trackerName: String? = null) {
+        val cleanedIds = trackerIds.mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toSet()
+        if (cleanedIds.isEmpty()) {
+            stopLiveTrackStreaming()
+            return
+        }
+        activeStreamedTrackerIds = cleanedIds
         val intent = Intent(requireContext(), LiveTrackStreamingService::class.java).apply {
             action = LiveTrackStreamingService.ACTION_START
-            putExtra(LiveTrackStreamingService.EXTRA_TRACKER_ID, id)
-            putExtra(LiveTrackStreamingService.EXTRA_TRACKER_NAME, displayedTrackerName)
+            putStringArrayListExtra(LiveTrackStreamingService.EXTRA_TRACKER_IDS, ArrayList(cleanedIds))
+            if (cleanedIds.size == 1) {
+                putExtra(LiveTrackStreamingService.EXTRA_TRACKER_ID, cleanedIds.first())
+            }
+            putExtra(LiveTrackStreamingService.EXTRA_TRACKER_NAME, trackerName)
         }
         ContextCompat.startForegroundService(requireContext(), intent)
     }
 
     private fun stopLiveTrackStreaming() {
+        activeStreamedTrackerIds = emptySet()
         if (!LiveTrackStreamingService.isRunning) return
         val intent = Intent(requireContext(), LiveTrackStreamingService::class.java).apply {
             action = LiveTrackStreamingService.ACTION_STOP
@@ -2062,6 +2257,7 @@ class MapFragment : Fragment() {
         private const val FOLLOW_LOCK_ANIMATION_MS = 300
         /** Target zoom when enabling follow lock from a zoomed-out state. */
         private const val FOLLOW_LOCK_TARGET_ZOOM = 16.0
+        private const val FOLLOW_LOCK_TARGET_ZOOM_EPSILON = 0.05
         /** Map cannot zoom out past this level (tracker map only). */
         private const val MIN_ZOOM = 1.0
         private const val MIN_ZOOM_EPSILON = 0.001
@@ -2075,6 +2271,8 @@ class MapFragment : Fragment() {
         private const val MAP_PADDING_BOTTOM_DP = 48
         /** Approximate height (dp) of the tracker info card when visible for padding. */
         private const val MAP_TRACKER_INFO_CARD_HEIGHT_DP = 200
+        /** Coalesce bursts of multi-tracker streamed points before full layer redraw. */
+        private const val MULTI_TRACK_RENDER_DEBOUNCE_MS = 120L
 
         // Map source/layer IDs (tracker map only)
         private const val TRACK_SOURCE_ID = "track-source"

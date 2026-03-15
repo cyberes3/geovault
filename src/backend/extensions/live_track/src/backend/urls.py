@@ -34,6 +34,7 @@ urlpatterns = [
     path("trackers/<str:tracker_id>/share-with-me/", views.tracker_leave_share),
     path("trackers/<str:tracker_id>/settings/", views.tracker_post_settings),
     path("trackers/<str:tracker_id>/subscribers/", views.tracker_subscribers),
+    path("trackers/geometry/", views.tracker_get_geometry_bulk),
     path("trackers/<str:tracker_id>/", views.tracker_get_patch_delete),
     path("trackers/<str:tracker_id>/geometry/", views.tracker_get_geometry),
     path("trackers/<str:tracker_id>/coordinates/", views.tracker_get_latest_coordinates),

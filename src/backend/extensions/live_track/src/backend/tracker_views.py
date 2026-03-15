@@ -48,6 +48,7 @@ from .world_share_views import build_live_track_share_url
 from .validation import (
     PARAM_PRETTY_NAMES,
     MapVisibilityPrefsRequest,
+    TrackerBulkGeometryRequest,
     TrackerCheckRequest,
     TrackerCheckResponse,
     TrackSettingsRequest,
@@ -355,6 +356,56 @@ def tracker_get_geometry(request, tracker_id):
     is_owner = track.user_id == request.user.id
     all_data = request.GET.get("all", "").lower() == "true"
     return JsonResponse(track_to_response(track, include_secret=False, is_owner=is_owner, all_data=all_data))
+
+
+@api_or_login_required_401()
+@require_http_methods(["POST"])
+@csrf_exempt
+def tracker_get_geometry_bulk(request):
+    """POST trackers/geometry/ — full geometry for multiple trackers. Body: {tracker_ids: [...], all_data?: bool}."""
+    from django.http import Http404
+
+    data, err = _get_json_body(request)
+    if err is not None:
+        return err
+    try:
+        body = TrackerBulkGeometryRequest.model_validate(data or {})
+    except PydanticValidationError as e:
+        errs = e.errors()
+        msg = errs[0].get("msg", "Invalid body") if errs else "Invalid body"
+        return error_response(msg, 400)
+
+    # Keep request bounded and deterministic.
+    ordered_ids = []
+    seen = set()
+    for raw in body.tracker_ids:
+        if not isinstance(raw, str):
+            continue
+        tracker_id = raw.strip()
+        if not tracker_id or tracker_id in seen:
+            continue
+        ordered_ids.append(tracker_id)
+        seen.add(tracker_id)
+        if len(ordered_ids) >= 200:
+            break
+
+    result = []
+    for tracker_id in ordered_ids:
+        try:
+            track = _get_track_for_user_or_404(request.user, tracker_id)
+        except Http404:
+            # Omit trackers that are inaccessible, invalid, or missing.
+            continue
+        is_owner = track.user_id == request.user.id
+        result.append(
+            track_to_response(
+                track,
+                include_secret=False,
+                is_owner=is_owner,
+                all_data=body.all_data,
+            )
+        )
+    return JsonResponse(result, safe=False)
 
 
 @api_or_login_required_401()

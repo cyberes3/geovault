@@ -133,6 +133,18 @@ class MapVisibilityPrefsRequest(BaseModel):
     )
 
 
+class TrackerBulkGeometryRequest(BaseModel):
+    """Request body for POST trackers/geometry/."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    tracker_ids: list[str] = Field(default_factory=list, description="Tracker UUIDs to fetch geometry for")
+    all_data: bool = Field(
+        default=False,
+        description="When true, bypass recent_data_window filtering and return full geometry",
+    )
+
+
 # Optional params we accept (subset of GPSLogger; exclude profile, filename, act, timeoffset, spd, aid)
 
 

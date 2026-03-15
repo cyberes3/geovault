@@ -62,6 +62,12 @@ data class TrackerCoordinatesResponse(
     val point_params: List<Map<String, Any?>>? = null
 )
 
+/** POST trackers/geometry/ request body. */
+data class TrackerBulkGeometryRequest(
+    val tracker_ids: List<String> = emptyList(),
+    val all_data: Boolean = false
+)
+
 /** GET trackers/available-to-add/ response. */
 data class AvailableToAddResponse(
     val public: List<AvailableToAddItem> = emptyList(),

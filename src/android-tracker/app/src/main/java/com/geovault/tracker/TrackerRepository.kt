@@ -218,6 +218,40 @@ object TrackerRepository {
         })
     }
 
+    /** Fetch full geometry for multiple trackers in one request. */
+    fun getTrackersGeometry(
+        context: Context,
+        trackerIds: List<String>,
+        allData: Boolean = true,
+        callback: (List<Tracker>?) -> Unit
+    ) {
+        if (trackerIds.isEmpty()) {
+            callback(emptyList())
+            return
+        }
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(null)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val request = TrackerBulkGeometryRequest(
+            tracker_ids = trackerIds,
+            all_data = allData
+        )
+        api.getTrackersGeometry(request).enqueue(object : Callback<List<Tracker>> {
+            override fun onResponse(call: Call<List<Tracker>>, response: Response<List<Tracker>>) {
+                callback(if (response.isSuccessful) (response.body() ?: emptyList()) else null)
+            }
+
+            override fun onFailure(call: Call<List<Tracker>>, t: Throwable) {
+                Log.e("TrackerRepository", "Failed to fetch trackers geometry", t)
+                callback(null)
+            }
+        })
+    }
+
     fun clearCurrentTrackerCache() {
         currentTrackerId = null
         currentTrackerCache = null
