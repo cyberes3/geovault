@@ -163,6 +163,8 @@ class MapFragment : Fragment() {
     private var currentGroupForMap: Group? = null
     /** Active camera behavior intent used to keep padding/lifecycle moves deterministic. */
     private var activeCameraIntent: CameraIntent = CameraIntent.NONE
+    /** Preserve centered all-trackers fit against later padding refresh drift. */
+    private var preserveCenteredAllTrackersFit: Boolean = false
     /** Selected tracker from a map tap in all-trackers or group mode; null when none selected. */
     private var selectedMapTracker: SelectedMapTracker? = null
     /** When set, follow lock centers on this point (e.g. from info-panel crosshair); cleared on pan or clear selection. */
@@ -578,6 +580,7 @@ class MapFragment : Fragment() {
                     override fun onMoveBegin(detector: org.maplibre.android.gestures.MoveGestureDetector) {
                         // User panned the map manually; clear sticky camera intent.
                         activeCameraIntent = CameraIntent.NONE
+                        preserveCenteredAllTrackersFit = false
                         if (followLockEnabled) {
                             followLockEnabled = false
                             lockTarget = null
@@ -680,7 +683,7 @@ class MapFragment : Fragment() {
                 applyUnifiedCameraMove(
                     map = map,
                     update = CameraUpdateFactory.zoomBy(1.0),
-                    paddingMode = CameraPaddingMode.OVERLAY_AWARE,
+                    paddingMode = zoomButtonsPaddingMode(),
                     animate = true,
                     durationMs = 200
                 )
@@ -691,7 +694,7 @@ class MapFragment : Fragment() {
                 applyUnifiedCameraMove(
                     map = map,
                     update = CameraUpdateFactory.zoomBy(-1.0),
-                    paddingMode = CameraPaddingMode.OVERLAY_AWARE,
+                    paddingMode = zoomButtonsPaddingMode(),
                     animate = true,
                     durationMs = 200
                 )
@@ -848,6 +851,17 @@ class MapFragment : Fragment() {
     }
 
     private fun isFollowLockActive(): Boolean = followLockEnabled && lockTarget != null
+
+    private fun zoomButtonsPaddingMode(): CameraPaddingMode {
+        val centeredIntent = activeCameraIntent == CameraIntent.GROUP_MEMBER_FOCUS ||
+            activeCameraIntent == CameraIntent.SINGLE_TRACKER_FOCUS ||
+            activeCameraIntent == CameraIntent.FOLLOW_LOCK
+        return if (isFollowLockActive() || centeredIntent) {
+            CameraPaddingMode.CENTERED
+        } else {
+            CameraPaddingMode.OVERLAY_AWARE
+        }
+    }
 
     private fun updateFollowLockButton() {
         if (isFollowLockActive()) {
@@ -1546,6 +1560,7 @@ class MapFragment : Fragment() {
         fitToTrackerId: String?
     ) {
         if (fitToTrackerId != null) {
+            preserveCenteredAllTrackersFit = false
             val selectedTrackerPoint = coordsByTrackerId[fitToTrackerId]?.lastOrNull()
                 ?: trackers.firstOrNull { it.id == fitToTrackerId }?.last_point
                     ?.takeIf { it.size >= 2 }
@@ -1567,12 +1582,17 @@ class MapFragment : Fragment() {
             return
         }
         val mgr = mapManager ?: return
+        val repTrackerPoints = trackers.mapNotNull { t ->
+            coordsByTrackerId[t.id]?.lastOrNull()?.let { t.id to it }
+        }
         val p = getBoundsPaddingEdgesPx(0)
+        val fitPaddingMode = CameraPaddingMode.OVERLAY_AWARE
         val boundsUpdate = CameraUpdateFactory.newLatLngBounds(bounds, p[0], p[1], p[2], p[3])
         val pos = boundsUpdate.getCameraPosition(map)
         // If fit computes exactly MIN_ZOOM, that can still mean "clamped from lower zoom";
         // in that case we should run fit-most instead of assuming all points fit.
         if (pos != null && pos.zoom.toDouble() > (MIN_ZOOM + MIN_ZOOM_EPSILON)) {
+            preserveCenteredAllTrackersFit = false
             Log.d(
                 TAG,
                 "all-trackers fit all: zoom=${pos.zoom}, minZoom=$MIN_ZOOM, trackerCount=${trackers.size}"
@@ -1580,15 +1600,13 @@ class MapFragment : Fragment() {
             applyUnifiedCameraMove(
                 map = map,
                 update = boundsUpdate,
-                paddingMode = CameraPaddingMode.OVERLAY_AWARE,
+                paddingMode = fitPaddingMode,
                 intent = CameraIntent.BOUNDS_FIT
             )
             return
         }
-        val repTrackerPoints = trackers.mapNotNull { t ->
-            coordsByTrackerId[t.id]?.lastOrNull()?.let { t.id to it }
-        }
         if (repTrackerPoints.size <= 1) {
+            preserveCenteredAllTrackersFit = false
             val target = repTrackerPoints.firstOrNull()?.second
                 ?: trackers.firstNotNullOfOrNull { t -> coordsByTrackerId[t.id]?.lastOrNull() }
                 ?: bounds.center
@@ -1599,11 +1617,12 @@ class MapFragment : Fragment() {
             applyUnifiedCameraMove(
                 map = map,
                 update = CameraUpdateFactory.newLatLngZoom(target, MIN_ZOOM),
-                paddingMode = CameraPaddingMode.OVERLAY_AWARE,
+                paddingMode = fitPaddingMode,
                 intent = CameraIntent.BOUNDS_FIT
             )
             return
         }
+        preserveCenteredAllTrackersFit = true
         val visibleW = (map.width - p[0] - p[2]).coerceAtLeast(1f).toDouble()
         val visibleH = (map.height - p[1] - p[3]).coerceAtLeast(1f).toDouble()
         val halfW = visibleW * 0.5
@@ -1611,60 +1630,47 @@ class MapFragment : Fragment() {
         val worldSize = 256.0 * 2.0.pow(MIN_ZOOM)
 
         val pointsProjected = repTrackerPoints.map { (trackerId, pt) ->
-            Quad(
-                trackerId,
-                pt,
-                worldXAtZoom(pt.longitude, MIN_ZOOM),
-                worldYAtZoom(pt.latitude, MIN_ZOOM)
+            ProjectedTrackerPoint(
+                trackerId = trackerId,
+                latitude = pt.latitude,
+                longitude = pt.longitude,
+                worldX = worldXAtZoom(pt.longitude, MIN_ZOOM),
+                worldY = worldYAtZoom(pt.latitude, MIN_ZOOM)
             )
         }
-
-        // Max-coverage search for fixed-size viewport at MIN_ZOOM.
-        // Candidate centers are derived from projected point edges, not only point positions.
-        val candidateXs = mutableSetOf<Double>()
-        val candidateYs = mutableSetOf<Double>()
-        for ((_, _, px, py) in pointsProjected) {
-            candidateXs.add(px)
-            candidateXs.add(px - halfW)
-            candidateXs.add(px + halfW)
-            candidateYs.add(py)
-            candidateYs.add(py - halfH)
-            candidateYs.add(py + halfH)
-        }
         val center = bounds.center
-        candidateXs.add(worldXAtZoom(center.longitude, MIN_ZOOM))
-        candidateYs.add(worldYAtZoom(center.latitude, MIN_ZOOM))
-
-        var bestCount = 0
-        var bestCx = candidateXs.first()
-        var bestCy = candidateYs.first()
-        for (cx in candidateXs) {
-            for (cy in candidateYs) {
-                val cnt = pointsProjected.count { (_, _, px, py) ->
-                    wrappedPixelDelta(px, cx, worldSize) <= halfW && abs(py - cy) <= halfH
-                }
-                if (cnt > bestCount) {
-                    bestCount = cnt
-                    bestCx = cx
-                    bestCy = cy
-                }
-            }
+        val selection = BestEffortViewportSelector.select(
+            points = pointsProjected,
+            worldSize = worldSize,
+            halfWidthPx = halfW,
+            halfHeightPx = halfH,
+            preferredCenterX = worldXAtZoom(center.longitude, MIN_ZOOM),
+            preferredCenterY = worldYAtZoom(center.latitude, MIN_ZOOM)
+        )
+        val best = selection ?: run {
+            preserveCenteredAllTrackersFit = false
+            val fallbackTarget = repTrackerPoints.first().second
+            applyUnifiedCameraMove(
+                map = map,
+                update = CameraUpdateFactory.newLatLngZoom(fallbackTarget, MIN_ZOOM),
+                paddingMode = fitPaddingMode,
+                intent = CameraIntent.BOUNDS_FIT
+            )
+            return
         }
         val bestCenter = LatLng(
-            worldYToLatDeg(bestCy, worldSize),
-            worldXToLonDeg(bestCx, worldSize)
+            worldYToLatDeg(best.centerY, worldSize),
+            worldXToLonDeg(best.centerX, worldSize)
         )
-        val includedTrackerIds = pointsProjected
-            .filter { (_, _, px, py) ->
-                wrappedPixelDelta(px, bestCx, worldSize) <= halfW && abs(py - bestCy) <= halfH
-            }
-            .map { it.first }
+        val includedTrackerIds = best.includedTrackerIds
+        val bestCount = includedTrackerIds.size
         val excludedTrackerIds = repTrackerPoints.map { it.first }.filterNot { includedTrackerIds.contains(it) }
         Log.d(
             TAG,
-            "all-trackers fit-most: total=${repTrackerPoints.size}, included=${includedTrackerIds.size}, excluded=${excludedTrackerIds.size}, minZoom=$MIN_ZOOM, visiblePx=(${visibleW.toInt()}x${visibleH.toInt()}), center=(${bestCenter.latitude},${bestCenter.longitude}), includedIds=$includedTrackerIds, excludedIds=$excludedTrackerIds"
+            "all-trackers fit-most: total=${repTrackerPoints.size}, included=${includedTrackerIds.size}, excluded=${excludedTrackerIds.size}, minZoom=$MIN_ZOOM, visiblePx=(${visibleW.toInt()}x${visibleH.toInt()}), center=(${bestCenter.latitude},${bestCenter.longitude}), tieBreak=${best.tieBreakReason}, extentArea=${best.extentArea}, includedIds=$includedTrackerIds, excludedIds=$excludedTrackerIds"
         )
         if (bestCount <= 1) {
+            preserveCenteredAllTrackersFit = false
             val ordered = trackers.mapNotNull { t -> coordsByTrackerId[t.id]?.lastOrNull() }
             val target = ordered.firstOrNull() ?: repTrackerPoints.first().second
             Log.d(
@@ -1674,25 +1680,18 @@ class MapFragment : Fragment() {
             applyUnifiedCameraMove(
                 map = map,
                 update = CameraUpdateFactory.newLatLngZoom(target, MIN_ZOOM),
-                paddingMode = CameraPaddingMode.OVERLAY_AWARE,
+                paddingMode = fitPaddingMode,
                 intent = CameraIntent.BOUNDS_FIT
             )
         } else {
             applyUnifiedCameraMove(
                 map = map,
                 update = CameraUpdateFactory.newLatLngZoom(bestCenter, MIN_ZOOM),
-                paddingMode = CameraPaddingMode.OVERLAY_AWARE,
+                paddingMode = fitPaddingMode,
                 intent = CameraIntent.BOUNDS_FIT
             )
         }
     }
-
-    private data class Quad(
-        val first: String,
-        val second: LatLng,
-        val third: Double,
-        val fourth: Double
-    )
 
     /**
      * Survey-style padding refresh: store default padding and optionally apply it
@@ -1730,7 +1729,10 @@ class MapFragment : Fragment() {
         val preserveCenteredGroupFocus = activeCameraIntent == CameraIntent.GROUP_MEMBER_FOCUS
         refreshMapPadding(
             force = force,
-            applyToCamera = allowCameraMove && !isFollowLockActive() && !preserveCenteredGroupFocus
+            applyToCamera = allowCameraMove &&
+                !isFollowLockActive() &&
+                !preserveCenteredGroupFocus &&
+                !(showAllTrackers && activeCameraIntent == CameraIntent.BOUNDS_FIT && preserveCenteredAllTrackersFit)
         )
     }
 
@@ -1913,7 +1915,8 @@ class MapFragment : Fragment() {
                         coordsById,
                         map,
                         style,
-                        fitBounds = true,
+                        // Keep camera stable after initial fit; full-geometry load should only enrich lines.
+                        fitBounds = false,
                         fitToTrackerId = zoomToTrackerId
                     )
                 }
@@ -1973,7 +1976,8 @@ class MapFragment : Fragment() {
                                 coordsById,
                                 map,
                                 style,
-                                fitBounds = true
+                                // Keep camera stable after initial fit; full-geometry load should only enrich lines.
+                                fitBounds = false
                             )
                         }
                     }
