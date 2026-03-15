@@ -562,7 +562,10 @@ class MapFragment : Fragment() {
             showAllTrackersButton.contentDescription = getString(R.string.show_all_trackers)
             return
         }
-        if (defaultTrackerId.isEmpty()) {
+        val showingSpecificTracker = !showAllTrackers &&
+            mapViewContext == MapViewContext.SPECIFIC_TRACKER &&
+            !displayedTrackerId.isNullOrEmpty()
+        if (defaultTrackerId.isEmpty() && !showingSpecificTracker) {
             trackerLabelCard.visibility = View.GONE
             displayedTrackerId = null
             displayedTrackerName = null

@@ -68,10 +68,11 @@ export function buildLineFeatures(track, selected = false) {
   const segments = splitTrackIntoSegments(coords);
   const color = track.color || '#6C93DE';
   const features = [];
+  const trackId = track.id != null ? track.id : undefined;
   for (const segment of segments) {
     features.push({
       type: 'Feature',
-      properties: { color, selected: !!selected },
+      properties: { color, selected: !!selected, trackId },
       geometry: { type: 'LineString', coordinates: segment }
     });
   }
@@ -86,9 +87,10 @@ export function buildPointFeature(track, selected = false) {
   const color = track.color || '#6C93DE';
   const iconImage = getArrowImageId(color, selected);
   const rotation = getTrackDirectionAngle(track);
+  const trackId = track.id != null ? track.id : undefined;
   return {
     type: 'Feature',
-    properties: { color, iconImage, rotation, selected: !!selected },
+    properties: { color, iconImage, rotation, selected: !!selected, trackId },
     geometry: { type: 'Point', coordinates: pos }
   };
 }

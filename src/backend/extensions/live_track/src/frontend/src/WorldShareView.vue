@@ -438,6 +438,48 @@ export default {
       });
     }
 
+    const TRACK_CLICK_HIT_RADIUS_PX = 15;
+    function setupMapClickHandler() {
+      if (!map) return;
+      const trackLayers = [POINTS_LAYER_ID, LINES_LAYER_ID, LINES_BLACK_OUTLINE_LAYER_ID];
+      const getLayers = () => trackLayers.filter((id) => map.getLayer(id));
+      const isOverTrack = (point) => {
+        const layers = getLayers();
+        if (layers.length === 0) return false;
+        const bbox = [
+          [point.x - TRACK_CLICK_HIT_RADIUS_PX, point.y - TRACK_CLICK_HIT_RADIUS_PX],
+          [point.x + TRACK_CLICK_HIT_RADIUS_PX, point.y + TRACK_CLICK_HIT_RADIUS_PX]
+        ];
+        const features = map.queryRenderedFeatures(bbox, { layers });
+        return features.some((f) => f.properties?.trackId != null);
+      };
+      map.on('mousemove', (e) => {
+        map.getCanvas().style.cursor = isOverTrack(e.point) ? 'pointer' : '';
+      });
+      map.on('mouseout', () => {
+        map.getCanvas().style.cursor = '';
+      });
+      map.on('click', (e) => {
+        const layers = getLayers();
+        if (layers.length === 0) return;
+        const bbox = [
+          [e.point.x - TRACK_CLICK_HIT_RADIUS_PX, e.point.y - TRACK_CLICK_HIT_RADIUS_PX],
+          [e.point.x + TRACK_CLICK_HIT_RADIUS_PX, e.point.y + TRACK_CLICK_HIT_RADIUS_PX]
+        ];
+        const features = map.queryRenderedFeatures(bbox, { layers });
+        const feature = features.find((f) => f.properties?.trackId != null);
+        if (feature) {
+          const trackId = feature.properties.trackId;
+          const track = visibleTracks.value.find(
+            (t) => t.id != null && String(t.id) === String(trackId)
+          );
+          if (track) onTrackListClick(track);
+        } else {
+          deselectSelection();
+        }
+      });
+    }
+
     function onLayerChange() {
       if (!map) return;
       const maplibregl = window.gv_core?.maplibre || window.maplibregl;
@@ -631,6 +673,7 @@ export default {
             map.resize();
             await addWorldShareTrackLayers();
             setupMapFollowListenersForView();
+            setupMapClickHandler();
             requestAnimationFrame(() => {
               if (!map) {
                 resolve();
@@ -705,6 +748,7 @@ export default {
           }
           await addWorldShareTrackLayers();
           setupMapFollowListenersForView();
+          setupMapClickHandler();
           requestAnimationFrame(() => {
             if (!map) {
               resolve();
