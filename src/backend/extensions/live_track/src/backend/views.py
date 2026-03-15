@@ -3,6 +3,7 @@ Live track extension views. Re-exports from tracker_views and ingress_views so u
 """
 
 from .group_views import (
+    group_accept_share,
     group_add_track,
     group_get_patch_delete,
     group_leave,

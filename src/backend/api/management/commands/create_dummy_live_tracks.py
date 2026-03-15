@@ -18,6 +18,7 @@ import uuid
 from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
+from django.db.models import Q
 
 User = get_user_model()
 
@@ -186,6 +187,13 @@ class Command(BaseCommand):
                 user=user, name__startswith=DUMMY_GROUP_PREFIX
             )
             deleted_groups, _ = to_delete_groups.delete()
+            # Also clean cross-user dummy re-share groups that target this user,
+            # even when those groups are owned by a different user.
+            cross_user_groups = LiveTrackGroup.objects.filter(
+                Q(name=f"{DUMMY_GROUP_PREFIX}Re-share from {user.email}")
+                | Q(name=f"{DUMMY_GROUP_PREFIX}{user.email} Shared Picks")
+            )
+            cross_user_groups.delete()
 
         if options.get("delete"):
             if selected_user:
@@ -198,99 +206,110 @@ class Command(BaseCommand):
                 ))
             return
 
+        self.stdout.write(
+            self.style.NOTICE(
+                f"Creating dummy tracks and groups for {len(target_users)} user(s) "
+                f"({', '.join(u.email or str(u.pk) for u in target_users)})..."
+            )
+        )
         user_data = {}
         total_tracks = 0
         total_groups = 0
 
-        for user in target_users:
-            other_users = [u for u in all_users if u.pk != user.pk]
+        try:
+            for user in target_users:
+                other_users = [u for u in all_users if u.pk != user.pk]
 
-            # Visibility: 3 public, 5 shared (with other users), 2 private
-            visibilities = (
-                ["public"] * NUM_PUBLIC_TRACKS
-                + ["shared"] * NUM_TRACKS_SHARED_WITH_USERS
-                + ["private"] * (NUM_TRACKS - NUM_PUBLIC_TRACKS - NUM_TRACKS_SHARED_WITH_USERS)
-            )
-            random.shuffle(visibilities)
-
-            tracks = []
-            for i, preset in enumerate(TRACK_PRESETS[:NUM_TRACKS]):
-                coords, point_params = _generate_track(preset["style"])
-                name = f"{DUMMY_NAME_PREFIX}{preset['name']}"
-                visibility = visibilities[i]
-                settings = {"color": preset["color"]}
-                if random.random() < 0.3:
-                    settings["recent_data_window"] = random.choice(["1h", "1d", "1w"])
-                track = LiveTrack.objects.create(
-                    id=uuid.uuid4(),
-                    tracker_secret=secrets.token_urlsafe(32),
-                    name=name,
-                    user=user,
-                    settings=settings,
-                    visibility=visibility,
-                    share_params_with_recipients=(visibility != "private" and random.random() < 0.5),
-                    geometry={"type": "LineString", "coordinates": coords},
-                    point_params=point_params,
+                # Visibility: 3 public, 5 shared (with other users), 2 private
+                visibilities = (
+                    ["public"] * NUM_PUBLIC_TRACKS
+                    + ["shared"] * NUM_TRACKS_SHARED_WITH_USERS
+                    + ["private"] * (NUM_TRACKS - NUM_PUBLIC_TRACKS - NUM_TRACKS_SHARED_WITH_USERS)
                 )
-                tracks.append(track)
+                random.shuffle(visibilities)
+
+                tracks = []
+                for i, preset in enumerate(TRACK_PRESETS[:NUM_TRACKS]):
+                    coords, point_params = _generate_track(preset["style"])
+                    name = f"{DUMMY_NAME_PREFIX}{preset['name']}"
+                    visibility = visibilities[i]
+                    settings = {"color": preset["color"]}
+                    if random.random() < 0.3:
+                        settings["recent_data_window"] = random.choice(["1h", "1d", "1w"])
+                    track = LiveTrack.objects.create(
+                        id=uuid.uuid4(),
+                        tracker_secret=secrets.token_urlsafe(32),
+                        name=name,
+                        user=user,
+                        settings=settings,
+                        visibility=visibility,
+                        share_params_with_recipients=(visibility != "private" and random.random() < 0.5),
+                        geometry={"type": "LineString", "coordinates": coords},
+                        point_params=point_params,
+                    )
+                    tracks.append(track)
+                    self.stdout.write(self.style.SUCCESS(
+                        f"  [{user.email}] Created: {name} ({visibility}, {len(coords)} pts)"
+                    ))
+
+                # Groups: 3 groups, 2 + 2 + 3 track members; visibility: Family=shared, Team=shared, Public=public
+                group_track_assignments = [
+                    (0, [0, 1]),           # group 0: Family, 2 tracks
+                    (1, [2, 3]),           # group 1: Team, 2 tracks
+                    (2, [4, 5, 6]),        # group 2: Public, 3 tracks
+                ]
+                group_visibilities = ["shared", "shared", "public"]  # Family, Team, Public
+                groups = []
+                for gidx, gname in enumerate(GROUP_NAMES):
+                    grp = LiveTrackGroup.objects.create(
+                    name=f"{DUMMY_GROUP_PREFIX}{gname} ({user.email})",
+                        user=user,
+                        visibility=group_visibilities[gidx],
+                    )
+                    groups.append(grp)
+                    for track_idx in group_track_assignments[gidx][1]:
+                        LiveTrackGroupMember.objects.create(group=grp, track=tracks[track_idx])
+                    self.stdout.write(self.style.SUCCESS(
+                        f"  [{user.email}] Group: {grp.name} ({group_visibilities[gidx]}, "
+                        f"{len(group_track_assignments[gidx][1])} tracks)"
+                    ))
+
+                # World share: a few tracks
+                world_share_indices = random.sample(range(NUM_TRACKS), min(NUM_WORLD_SHARES, NUM_TRACKS))
+                for idx in world_share_indices:
+                    LiveTrackWorldShare.objects.create(
+                        track=tracks[idx],
+                        share_id=str(uuid.uuid4()),
+                    )
+                    tracks[idx].share_params_with_world = random.choice([True, False])
+                    tracks[idx].save(update_fields=["share_params_with_world"])
                 self.stdout.write(self.style.SUCCESS(
-                    f"  [{user.email}] Created: {name} ({visibility}, {len(coords)} pts)"
+                    f"  [{user.email}] World share enabled on {len(world_share_indices)} track(s)."
                 ))
 
-            # Groups: 3 groups, 2 + 2 + 3 track members; visibility: Family=shared, Team=shared, Public=public
-            group_track_assignments = [
-                (0, [0, 1]),           # group 0: Family, 2 tracks
-                (1, [2, 3]),           # group 1: Team, 2 tracks
-                (2, [4, 5, 6]),        # group 2: Public, 3 tracks
-            ]
-            group_visibilities = ["shared", "shared", "public"]  # Family, Team, Public
-            groups = []
-            for gidx, gname in enumerate(GROUP_NAMES):
-                grp = LiveTrackGroup.objects.create(
-                    name=f"{DUMMY_GROUP_PREFIX}{gname}",
-                    user=user,
-                    visibility=group_visibilities[gidx],
+                # Group world share: enable for at least one group (e.g. Public)
+                group_world_share_idx = NUM_GROUPS - 1
+                LiveTrackGroupWorldShare.objects.get_or_create(
+                    group=groups[group_world_share_idx],
+                    defaults={"share_id": str(uuid.uuid4())},
                 )
-                groups.append(grp)
-                for track_idx in group_track_assignments[gidx][1]:
-                    LiveTrackGroupMember.objects.create(group=grp, track=tracks[track_idx])
                 self.stdout.write(self.style.SUCCESS(
-                    f"  [{user.email}] Group: {grp.name} ({group_visibilities[gidx]}, "
-                    f"{len(group_track_assignments[gidx][1])} tracks)"
+                    f"  [{user.email}] Group world share: enabled on {groups[group_world_share_idx].name}."
                 ))
 
-            # World share: a few tracks
-            world_share_indices = random.sample(range(NUM_TRACKS), min(NUM_WORLD_SHARES, NUM_TRACKS))
-            for idx in world_share_indices:
-                LiveTrackWorldShare.objects.create(
-                    track=tracks[idx],
-                    share_id=str(uuid.uuid4()),
-                )
-                tracks[idx].share_params_with_world = random.choice([True, False])
-                tracks[idx].save(update_fields=["share_params_with_world"])
-            self.stdout.write(self.style.SUCCESS(
-                f"  [{user.email}] World share enabled on {len(world_share_indices)} track(s)."
-            ))
+                user_data[user.pk] = {
+                    "user": user,
+                    "other_users": other_users,
+                    "tracks": tracks,
+                    "groups": groups,
+                    "visibilities": visibilities,
+                }
+                total_tracks += len(tracks)
+                total_groups += len(groups)
 
-            # Group world share: enable for at least one group (e.g. Public)
-            group_world_share_idx = NUM_GROUPS - 1
-            LiveTrackGroupWorldShare.objects.get_or_create(
-                group=groups[group_world_share_idx],
-                defaults={"share_id": str(uuid.uuid4())},
-            )
-            self.stdout.write(self.style.SUCCESS(
-                f"  [{user.email}] Group world share: enabled on {groups[group_world_share_idx].name}."
-            ))
-
-            user_data[user.pk] = {
-                "user": user,
-                "other_users": other_users,
-                "tracks": tracks,
-                "groups": groups,
-                "visibilities": visibilities,
-            }
-            total_tracks += len(tracks)
-            total_groups += len(groups)
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f"Error creating dummy data: {e}"))
+            raise
 
         # Share each user's shared tracks with several other users.
         for payload in user_data.values():
@@ -348,33 +367,44 @@ class Command(BaseCommand):
                     f"  [{user.email}] No other users; skipped group direct shares."
                 ))
 
-        # Cross-user reshare: each user's first shared track is reshared by another user.
+        # Cross-user re-share seed data:
+        # owner shares track -> other user adds to group -> shares group back to owner.
+        # Keep acceptance pending (no auto-subscriptions), and hide owner-side re-share
+        # groups from the owner's group list so this test fixture does not look like
+        # an auto-accepted share in normal UI views.
         for payload in user_data.values():
             user = payload["user"]
             other_users = payload["other_users"]
             tracks = payload["tracks"]
             shared_track_indices = payload.get("shared_track_indices") or []
 
-            if other_users and shared_track_indices:
-                reshare_track = tracks[shared_track_indices[0]]
-                reshare_track.settings = {**(reshare_track.settings or {}), "allow_group_reshare": True}
-                reshare_track.save(update_fields=["settings"])
-                reshare_user = other_users[0]
-                reshare_group = LiveTrackGroup.objects.create(
-                    name=f"{DUMMY_GROUP_PREFIX}{user.username} Shared Picks",
-                    user=reshare_user,
-                    visibility="shared",
-                )
-                LiveTrackGroupMember.objects.get_or_create(group=reshare_group, track=reshare_track)
-                LiveTrackGroupShare.objects.get_or_create(group=reshare_group, shared_with=user)
-                self.stdout.write(self.style.SUCCESS(
-                    f"  Cross-user reshare: {reshare_user.email} added '{reshare_track.name}' "
-                    f"to '{reshare_group.name}' and shared back with {user.email}."
-                ))
-            else:
+            if not (other_users and shared_track_indices):
                 self.stdout.write(self.style.WARNING(
-                    f"  [{user.email}] No other users or shared tracks; skipped cross-user reshare."
+                    f"  [{user.email}] No other users or shared tracks; skipped cross-user re-share."
                 ))
+                continue
+
+            reshare_track = tracks[shared_track_indices[0]]
+            reshare_track.settings = {**(reshare_track.settings or {}), "allow_group_reshare": True}
+            reshare_track.save(update_fields=["settings"])
+
+            reshare_user = other_users[0]
+            reshare_group = LiveTrackGroup.objects.create(
+                name=f"{DUMMY_GROUP_PREFIX}Re-share from {user.email}",
+                user=reshare_user,
+                visibility="shared",
+                hidden_in_list=True,
+            )
+            LiveTrackGroupMember.objects.get_or_create(group=reshare_group, track=reshare_track)
+            LiveTrackGroupShare.objects.get_or_create(
+                group=reshare_group,
+                shared_with=user,
+            )
+            self.stdout.write(self.style.SUCCESS(
+                f"  Cross-user re-share: {user.email} shared '{reshare_track.name}', "
+                f"{reshare_user.email} added it to '{reshare_group.name}', and shared group back "
+                f"to {user.email} (pending acceptance)."
+            ))
 
         if selected_user:
             self.stdout.write(self.style.SUCCESS(

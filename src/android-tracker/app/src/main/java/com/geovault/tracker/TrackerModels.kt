@@ -124,6 +124,7 @@ data class Group(
     val created_at: Long? = null,
     val updated_at: Long? = null,
     val is_owner: Boolean? = null,
+    val is_accepted: Boolean? = null,
     val owner_email: String? = null,
     val track_ids: List<String>? = null
 ) : Parcelable

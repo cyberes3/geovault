@@ -124,6 +124,28 @@ class LiveTrackGroupShare(models.Model):
         ]
 
 
+class LiveTrackGroupSubscription(models.Model):
+    """User has explicitly accepted a shared group."""
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="live_track_group_subscriptions",
+    )
+    group = models.ForeignKey(
+        LiveTrackGroup,
+        on_delete=models.CASCADE,
+        related_name="accepted_subscriptions",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "live_track"
+        constraints = [
+            models.UniqueConstraint(fields=["user", "group"], name="live_track_group_subscription_unique")
+        ]
+
+
 class LiveTrackGroupWorldShare(models.Model):
     """World (unauthenticated) share link for a group; one per group. When enabled, anyone with the URL can view the group's tracks (read-only)."""
 

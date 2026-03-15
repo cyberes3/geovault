@@ -88,6 +88,9 @@ interface TrackerApi {
     @DELETE("/api/extensions/live-track/groups/{id}/tracks/{track_id}/")
     fun removeGroupTrack(@Path("id") id: String, @Path("track_id") trackId: String): Call<ResponseBody>
 
+    @POST("/api/extensions/live-track/groups/{id}/accept-share/")
+    fun acceptGroupShare(@Path("id") id: String): Call<Group>
+
     @DELETE("/api/extensions/live-track/groups/{id}/leave/")
     fun leaveGroup(@Path("id") id: String): Call<ResponseBody>
 

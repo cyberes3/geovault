@@ -120,7 +120,7 @@
           />
           <GroupsSidebarContent
             v-else-if="showGroupsSidebar"
-            :groups="sortedGroups"
+            :groups="visibleGroupsTab"
             :trackers="trackers"
             :api="api"
             :initial-group-id="groupsSidebarInitialGroupId"
@@ -518,8 +518,7 @@ export default {
 
     function isAcceptedOrOwnedGroup(group) {
       if (group?.is_owner === true) return true;
-      const trackIds = group?.track_ids || [];
-      return trackIds.some((id) => trackerIdsOnMap.value.has(String(id)));
+      return group?.is_accepted === true;
     }
 
     const sortedGroups = computed(() => {
@@ -568,7 +567,13 @@ export default {
       sortedGroups.value.filter((g) => g.is_owner === true && !g.hidden_in_list)
     );
     const visibleSharedGroupsTab = computed(() =>
-      sortedGroups.value.filter((g) => g.is_owner !== true && !hiddenGroupIds.value.has(String(g.id)))
+      groups.value.filter(
+        (g) =>
+          g.is_owner !== true &&
+          g.visibility === 'shared' &&
+          g.is_accepted === true &&
+          !hiddenGroupIds.value.has(String(g.id))
+      )
     );
     const hiddenTrackersForSettings = computed(() => {
       const listHidden = trackers.value
@@ -647,7 +652,8 @@ export default {
     const listContentMobileRef = ref(null);
     const listScrollContainer = computed(() => {
       const c = isMobileView.value ? listContentMobileRef.value : listContentDesktopRef.value;
-      return c?.scrollContainerRef?.value ?? null;
+      // Vue component refs can expose child refs either wrapped (.value) or already unwrapped.
+      return c?.scrollContainerRef?.value ?? c?.scrollContainerRef ?? null;
     });
     const showGroupsSidebar = ref(false);
     const groupsSidebarInitialGroupId = ref(null);
@@ -1325,10 +1331,54 @@ export default {
         const feature = features[0];
         if (feature?.properties?.trackId) {
           const trackId = feature.properties.trackId;
+          const track = trackers.value.find((t) => String(t.id) === String(trackId));
+          if (track) {
+            if (visibleTrackersTab.value.some((t) => String(t.id) === String(trackId))) {
+              listTab.value = 'trackers';
+            } else if (visibleSharedTab.value.some((t) => String(t.id) === String(trackId))) {
+              listTab.value = 'shared';
+            }
+          }
           highlightedId.value = trackId;
+          if (isMobileView.value) {
+            const snap = mobileDrawerRef.value?.snapPx?.value ?? mobileDrawerRef.value?.snapPx;
+            const maxH = Array.isArray(snap) ? snap[1] : undefined;
+            if (maxH != null) {
+              const hp = mobileDrawerRef.value?.heightPx;
+              if (hp && typeof hp === 'object' && 'value' in hp) hp.value = maxH;
+            }
+          }
+          function scrollListToTrack() {
+            const container = listScrollContainer.value;
+            if (!container) {
+              // Last-resort fallback if list container ref is not resolved yet.
+              const rowOnly = document.querySelector(`[data-track-id="${trackId}"]`);
+              rowOnly?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+              return;
+            }
+            const row = container.querySelector(`[data-track-id="${trackId}"]`);
+            if (!row) return;
+            const padding = 8;
+            const rowTop = row.offsetTop;
+            const rowHeight = row.offsetHeight;
+            const containerHeight = container.clientHeight;
+            const scrollTop = container.scrollTop;
+            if (rowTop < scrollTop) {
+              container.scrollTo({ top: Math.max(0, rowTop - padding), behavior: 'smooth' });
+            } else if (rowTop + rowHeight > scrollTop + containerHeight) {
+              container.scrollTo({
+                top: rowTop + rowHeight - containerHeight + padding,
+                behavior: 'smooth'
+              });
+            }
+          }
           nextTick(() => {
-            const el = listScrollContainer.value?.querySelector(`[data-track-id="${trackId}"]`);
-            el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            scrollListToTrack();
+            nextTick(() => {
+              if (!listScrollContainer.value?.querySelector(`[data-track-id="${trackId}"]`)) {
+                setTimeout(scrollListToTrack, 80);
+              }
+            });
           });
         } else {
           highlightedId.value = null;
@@ -2037,23 +2087,34 @@ export default {
       if (!group?.id || addingIncomingGroupId.value != null) return;
       const preservedListTab = listTab.value;
       addingIncomingGroupId.value = group.id;
+      const isSharedIncoming = incomingSharedGroups.value.some((g) => String(g.id) === String(group.id));
       let success = true;
       try {
-        for (const trackId of group.track_ids || []) {
-          try {
-            await api.post(`/trackers/${trackId}/subscribe/`);
-          } catch (e) {
-            const err = api.handleError?.(e);
-            if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to add group');
-            success = false;
-            break;
+        if (isSharedIncoming) {
+          await api.post(`/groups/${group.id}/accept-share/`);
+        } else {
+          for (const trackId of group.track_ids || []) {
+            try {
+              await api.post(`/trackers/${trackId}/subscribe/`);
+            } catch (e) {
+              const err = api.handleError?.(e);
+              if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to add group');
+              success = false;
+              break;
+            }
           }
         }
-        if (success && window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Group added');
+        if (success && window.gv_core?.GeoVault?.toast) {
+          window.gv_core.GeoVault.toast.success(isSharedIncoming ? 'Group accepted' : 'Group added');
+        }
+      } catch (e) {
+        const err = api.handleError?.(e);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to add group');
       } finally {
         addingIncomingGroupId.value = null;
         await fetchTrackers();
         await fetchIncomingShared();
+        await fetchGroups();
         updateMapFeatures();
         listTab.value = preservedListTab;
       }

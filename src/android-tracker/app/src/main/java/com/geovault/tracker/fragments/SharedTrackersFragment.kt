@@ -141,14 +141,16 @@ class SharedTrackersFragment : Fragment() {
             val hiddenGroupIds = (visibility?.hidden_group_ids ?: emptyList()).toSet()
             TrackerRepository.getGroups(requireContext(), forceRefresh = true) { groups ->
                 if (!isAdded) return@getGroups
-                val sharedGroups = (groups ?: emptyList())
-                    .filter { it.is_owner != true && it.id !in hiddenGroupIds }
-                val trackIdsInSharedGroups = sharedGroups
-                    .flatMap { it.track_ids ?: emptyList() }
-                    .toSet()
                 TrackerRepository.getTrackers(requireContext(), forceRefresh = true) { list ->
                     if (!isAdded) return@getTrackers
                     requireActivity().runOnUiThread {
+                        // Only show shared groups the user has accepted (via Discover -> Add / accept-share).
+                        val sharedGroups = (groups ?: emptyList())
+                            .filter { it.is_owner != true && it.id !in hiddenGroupIds }
+                            .filter { it.is_accepted == true }
+                        val trackIdsInSharedGroups = sharedGroups
+                            .flatMap { it.track_ids ?: emptyList() }
+                            .toSet()
                         val sharedTrackers = (list ?: emptyList())
                             .filter { !it.isOwner() && it.id !in hiddenTrackIds && it.id !in trackIdsInSharedGroups }
                         val combined = (sharedGroups.map { SharedListItem.GroupItem(it) } +

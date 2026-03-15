@@ -27,6 +27,7 @@ from .helpers import (
     _filter_coords_by_recent_window,
     _strip_ser_from_params,
     can_user_see_track,
+    can_user_see_track_via_accepted_group_share,
     can_user_see_track_via_group_share,
     generate_hauk_password,
     track_to_response,
@@ -68,8 +69,19 @@ def _get_json_body(request):
         return None, error_response("Invalid JSON", 400)
 
 
+def _accepted_group_track_ids_for_user(user):
+    """Track IDs available via accepted shared groups."""
+    return set(
+        LiveTrackGroupMember.objects.filter(
+            group__visibility=VISIBILITY_SHARED,
+            group__share_entries__shared_with=user,
+            group__accepted_subscriptions__user=user,
+        ).values_list("track_id", flat=True)
+    )
+
+
 def _get_track_for_user_or_404(user, tracker_id):
-    """Return LiveTrack if user owns it, can see it (subscribed + visible), or can see it via group share. Raises Http404 otherwise."""
+    """Return LiveTrack for owners, track subscribers (direct/public), or accepted group shares; raise Http404 otherwise."""
     from django.http import Http404
 
     try:
@@ -78,9 +90,10 @@ def _get_track_for_user_or_404(user, tracker_id):
         raise Http404
     if track.user_id == user.id:
         return track
-    if can_user_see_track(user, track) and LiveTrackSubscription.objects.filter(user=user, track=track).exists():
+    has_track_subscription = LiveTrackSubscription.objects.filter(user=user, track=track).exists()
+    if has_track_subscription and can_user_see_track(user, track):
         return track
-    if can_user_see_track_via_group_share(user, track):
+    if can_user_see_track_via_accepted_group_share(user, track):
         return track
     raise Http404
 
@@ -123,22 +136,28 @@ def tracker_check(request):
 def tracker_list_create(request):
     if request.method == "GET":
         owned = list(LiveTrack.objects.filter(user=request.user).order_by("name"))
+        accepted_group_track_ids = _accepted_group_track_ids_for_user(request.user)
         subs = (
             LiveTrackSubscription.objects.filter(user=request.user)
             .select_related("track", "track__user")
             .exclude(track__user=request.user)
         )
-        visible_subscribed = []
+        visible_non_owned_by_id = {}
         for sub in subs:
             t = sub.track
             if t.visibility == VISIBILITY_PUBLIC:
-                visible_subscribed.append((t, False))
+                visible_non_owned_by_id[t.id] = t
             elif t.visibility == VISIBILITY_SHARED and LiveTrackShare.objects.filter(
                 track=t, shared_with=request.user
             ).exists():
-                visible_subscribed.append((t, False))
-            elif can_user_see_track_via_group_share(request.user, t):
-                visible_subscribed.append((t, False))
+                visible_non_owned_by_id[t.id] = t
+        if accepted_group_track_ids:
+            for t in (
+                LiveTrack.objects.filter(id__in=accepted_group_track_ids)
+                .exclude(user=request.user)
+                .select_related("user")
+            ):
+                visible_non_owned_by_id[t.id] = t
         owned_ids = [t.id for t in owned]
         subscriber_counts = (
             LiveTrackSubscription.objects.filter(track_id__in=owned_ids)
@@ -158,7 +177,7 @@ def tracker_list_create(request):
                 payload["world_share_id"] = world_share.share_id
                 payload["world_share_url"] = build_live_track_share_url(world_share.share_id)
             out.append(payload)
-        for t, _ in visible_subscribed:
+        for t in visible_non_owned_by_id.values():
             payload = track_to_response_metadata_only(t, include_secret=False, is_owner=False)
             payload["is_owner"] = False
             payload["owner_email"] = (t.user.email or "") if t.user_id else ""
@@ -576,7 +595,7 @@ def tracker_kml(request, tracker_id):
 @handle_404
 @csrf_exempt
 def tracker_subscribe_delete(request, tracker_id):
-    """POST: subscribe (add track to list). DELETE: unsubscribe and remove from all groups the user owns."""
+    """POST: subscribe to track (add to list). DELETE: unsubscribe from track and remove from all groups the user owns. For group-shared tracks use groups/<id>/accept-share/ instead."""
     from django.http import Http404
 
     try:
@@ -586,7 +605,7 @@ def tracker_subscribe_delete(request, tracker_id):
     if request.method == "POST":
         if track.user_id == request.user.id:
             return JsonResponse({"error": "You already own this tracker"}, status=400)
-        if not (can_user_see_track(request.user, track) or can_user_see_track_via_group_share(request.user, track)):
+        if not can_user_see_track(request.user, track):
             return error_response("You do not have access to this tracker", 403)
         LiveTrackSubscription.objects.get_or_create(user=request.user, track=track)
         return JsonResponse(
@@ -610,7 +629,7 @@ def tracker_subscribe_delete(request, tracker_id):
 @handle_404
 @csrf_exempt
 def tracker_leave_share(request, tracker_id):
-    """DELETE trackers/<id>/share-with-me/ — Remove yourself from a share. Deletes the share entry (owner no longer has you as recipient) and your subscription. Only for tracks that are shared with you (visibility=shared and you are in shared_with)."""
+    """DELETE trackers/<id>/share-with-me/ — Remove yourself from a direct track share. Deletes the share entry and your track subscription. Only for tracks shared with you (visibility=shared and you in shared_with)."""
     try:
         track = LiveTrack.objects.get(id=tracker_id)
     except (LiveTrack.DoesNotExist, ValueError):
@@ -631,12 +650,13 @@ def tracker_leave_share(request, tracker_id):
 @require_http_methods(["GET"])
 @csrf_exempt
 def tracker_available_to_add(request):
-    """GET trackers/available-to-add/ — trackers the user can add (public = all auth users, or shared with me) and does not yet have."""
+    """GET trackers/available-to-add/ — trackers and groups the user can add. Direct track shares: subscribe via trackers/<id>/subscribe/. Shared groups: accept via groups/<id>/accept-share/ (no per-track subscribe)."""
     owned_ids = set(LiveTrack.objects.filter(user=request.user).values_list("id", flat=True))
     subscribed_ids = set(
         LiveTrackSubscription.objects.filter(user=request.user).values_list("track_id", flat=True)
     )
-    have_ids = owned_ids | subscribed_ids
+    accepted_group_track_ids = _accepted_group_track_ids_for_user(request.user)
+    have_ids = owned_ids | subscribed_ids | accepted_group_track_ids
     public = list(
         LiveTrack.objects.filter(visibility=VISIBILITY_PUBLIC)
         .exclude(user=request.user)
@@ -682,6 +702,7 @@ def tracker_available_to_add(request):
             visibility=VISIBILITY_SHARED,
             share_entries__shared_with=request.user,
         )
+        .exclude(accepted_subscriptions__user=request.user)
         .exclude(user=request.user)
         .select_related("user")
         .distinct()
@@ -692,13 +713,14 @@ def tracker_available_to_add(request):
     for group in groups_shared_with_me:
         seen_group_ids.add(group.id)
         addable = addable_track_ids_for_group(group)
-        if addable:
-            shared_with_me_groups.append({
-                "id": str(group.id),
-                "name": group.name,
-                "owner_email": (group.user.email or "") if group.user_id else "",
-                "track_ids": addable,
-            })
+        # Shared groups are accepted at the group level via groups/<id>/accept-share/,
+        # so they must appear in Incoming even when no per-track "addable" IDs remain.
+        shared_with_me_groups.append({
+            "id": str(group.id),
+            "name": group.name,
+            "owner_email": (group.user.email or "") if group.user_id else "",
+            "track_ids": addable,
+        })
 
     public_groups = []
     for group in (

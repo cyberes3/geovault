@@ -279,11 +279,21 @@ def can_user_see_track(user, track: LiveTrack) -> bool:
 
 
 def can_user_see_track_via_group_share(user, track: LiveTrack) -> bool:
-    """True if user has group shared with them (LiveTrackGroupShare) for a group that contains this track."""
+    """True if user has a group shared with them (pending or accepted) that contains this track. Used for available-to-add only; access gating uses can_user_see_track_via_accepted_group_share."""
     return LiveTrackGroupMember.objects.filter(
         track=track,
         group__visibility=VISIBILITY_SHARED,
         group__share_entries__shared_with=user,
+    ).exists()
+
+
+def can_user_see_track_via_accepted_group_share(user, track: LiveTrack) -> bool:
+    """True if user has accepted the shared group (LiveTrackGroupSubscription) that contains this track. Grants track access; use for list/geometry/KML gating."""
+    return LiveTrackGroupMember.objects.filter(
+        track=track,
+        group__visibility=VISIBILITY_SHARED,
+        group__share_entries__shared_with=user,
+        group__accepted_subscriptions__user=user,
     ).exists()
 
 

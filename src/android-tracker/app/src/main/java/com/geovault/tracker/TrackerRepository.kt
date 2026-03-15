@@ -739,6 +739,26 @@ object TrackerRepository {
         })
     }
 
+    fun acceptGroupShare(context: Context, groupId: String, callback: (Group?) -> Unit) {
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(null)
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        api.acceptGroupShare(groupId).enqueue(object : Callback<Group> {
+            override fun onResponse(call: Call<Group>, response: Response<Group>) {
+                if (response.isSuccessful) groupsCache = null
+                callback(response.body())
+            }
+            override fun onFailure(call: Call<Group>, t: Throwable) {
+                Log.e("TrackerRepository", "Accept group share failed", t)
+                callback(null)
+            }
+        })
+    }
+
     fun leaveGroup(context: Context, groupId: String, callback: (Boolean) -> Unit) {
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
         if (serverUrl.isEmpty()) {

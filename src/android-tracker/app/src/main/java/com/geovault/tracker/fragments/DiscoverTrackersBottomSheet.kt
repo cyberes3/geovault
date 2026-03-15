@@ -102,7 +102,7 @@ class DiscoverTrackersBottomSheet : BottomSheetDialogFragment() {
                     publicGroupsHeader.visibility = View.VISIBLE
                     publicGroupsList.visibility = View.VISIBLE
                     for (group in publicGroups) {
-                        addGroupRow(publicGroupsList, group)
+                        addGroupRow(publicGroupsList, group, acceptAsGroup = false)
                     }
                 } else {
                     publicGroupsHeader.visibility = View.GONE
@@ -112,7 +112,7 @@ class DiscoverTrackersBottomSheet : BottomSheetDialogFragment() {
                     sharedGroupsHeader.visibility = View.VISIBLE
                     sharedGroupsList.visibility = View.VISIBLE
                     for (group in sharedGroups) {
-                        addGroupRow(sharedGroupsList, group)
+                        addGroupRow(sharedGroupsList, group, acceptAsGroup = true)
                     }
                 } else {
                     sharedGroupsHeader.visibility = View.GONE
@@ -122,13 +122,33 @@ class DiscoverTrackersBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
-    private fun addGroupRow(parent: LinearLayout, group: AvailableToAddGroup) {
+    private fun addGroupRow(parent: LinearLayout, group: AvailableToAddGroup, acceptAsGroup: Boolean) {
         val row = layoutInflater.inflate(R.layout.item_available_tracker, parent, false)
         row.findViewById<TextView>(R.id.availableTrackerName).text = group.name
         row.findViewById<TextView>(R.id.availableTrackerOwner).text = (group.owner_email?.takeIf { it.isNotBlank() } ?: "") + " (group)"
         val addBtn = row.findViewById<com.google.android.material.button.MaterialButton>(R.id.availableTrackerAdd)
         addBtn.setOnClickListener {
             addBtn.isEnabled = false
+            // Shared groups: accept via group accept-share (one action for whole group).
+            if (acceptAsGroup) {
+                TrackerRepository.acceptGroupShare(requireContext(), group.id) { accepted ->
+                    if (!isAdded) return@acceptGroupShare
+                    requireActivity().runOnUiThread {
+                        if (accepted != null) {
+                            parent.removeView(row)
+                            if (parent.childCount == 0) {
+                                sharedGroupsHeader.visibility = View.GONE
+                                sharedGroupsList.visibility = View.GONE
+                            }
+                            parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
+                        } else {
+                            addBtn.isEnabled = true
+                            (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                        }
+                    }
+                }
+                return@setOnClickListener
+            }
             var failed = false
             var done = 0
             val trackIds = group.track_ids ?: emptyList()

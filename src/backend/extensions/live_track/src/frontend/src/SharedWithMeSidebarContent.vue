@@ -87,7 +87,7 @@
               </button>
               <button
                 type="button"
-                title="Add Group to My Trackers"
+                title="Accept shared group"
                 class="p-2 rounded-lg text-blue-600 hover:bg-blue-50 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center size-9"
                 :disabled="isAddingGroup(group.id)"
                 @click="$emit('addIncomingGroup', group)"
