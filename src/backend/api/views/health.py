@@ -11,6 +11,8 @@ from geo_lib.website.auth import api_or_login_required_401
 from website.config_loader import get_config_loader
 from website.settings_utils import get_required_setting, get_setting
 from website.startup_checks import (
+    check_celery_beat,
+    check_celery_worker,
     check_database_connection,
     check_redis_connection,
     check_postgis_installation,
@@ -47,7 +49,9 @@ def health_check(request):
         checks_to_run = [
             ("database", lambda: check_database_connection(suppress_logging=True)),
             ("redis", lambda: check_redis_connection(suppress_logging=True)),
-            ("postgis", lambda: check_postgis_installation(suppress_logging=True))
+            ("postgis", lambda: check_postgis_installation(suppress_logging=True)),
+            ("celery_worker", lambda: check_celery_worker(suppress_logging=True)),
+            ("celery_beat", lambda: check_celery_beat(suppress_logging=True, wait_for_heartbeat=False)),
         ]
 
         # Check areas server only if reverse geocoding is enabled

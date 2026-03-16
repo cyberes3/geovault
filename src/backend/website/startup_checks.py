@@ -898,9 +898,12 @@ def _log_celery_service_help(service_name: str, additional_hint: str = "") -> No
         _logger.error(f"  - Hint: {additional_hint}")
 
 
-def check_celery_worker():
+def check_celery_worker(suppress_logging=False):
     """
     Verify Celery worker availability by dispatching a lightweight task and awaiting result.
+
+    Args:
+        suppress_logging: If True, do not log success or failure (for health endpoint).
     """
     try:
         config_loader = get_config_loader()
@@ -908,29 +911,38 @@ def check_celery_worker():
         result = celery_app.send_task("api.celery_health.ping_worker", queue="maintenance")
         value = result.get(timeout=timeout_seconds)
         if value != "pong":
-            _logger.error("✗ Celery worker check failed: unexpected response %r", value)
+            if not suppress_logging:
+                _logger.error("✗ Celery worker check failed: unexpected response %r", value)
             return False
-        _logger.info("✓ Celery worker is reachable")
+        if not suppress_logging:
+            _logger.info("✓ Celery worker is reachable")
         return True
     except CeleryTimeoutError:
-        _logger.error(
-            "✗ Celery worker check failed: timed out waiting for ping task result "
-            "(worker did not respond before timeout)."
-        )
-        _log_celery_service_help(
-            "geovault-celery",
-            "Ensure the worker is running and subscribed to the 'maintenance' queue.",
-        )
+        if not suppress_logging:
+            _logger.error(
+                "✗ Celery worker check failed: timed out waiting for ping task result "
+                "(worker did not respond before timeout)."
+            )
+            _log_celery_service_help(
+                "geovault-celery",
+                "Ensure the worker is running and subscribed to the 'maintenance' queue.",
+            )
         return False
     except Exception as e:
-        _logger.error(f"✗ Celery worker check failed: {e}")
-        _log_celery_service_help("geovault-celery")
+        if not suppress_logging:
+            _logger.error(f"✗ Celery worker check failed: {e}")
+            _log_celery_service_help("geovault-celery")
         return False
 
 
-def check_celery_beat():
+def check_celery_beat(suppress_logging=False, wait_for_heartbeat=True):
     """
     Verify celery-beat scheduling by checking for a recent Redis heartbeat timestamp.
+
+    Args:
+        suppress_logging: If True, do not log success or failure (for health endpoint).
+        wait_for_heartbeat: If True, loop until deadline waiting for a recent heartbeat.
+            If False, check once and return immediately (for health endpoint).
     """
     try:
         config_loader = get_config_loader()
@@ -945,24 +957,27 @@ def check_celery_beat():
                 try:
                     heartbeat_ts = float(raw)
                     if (time.time() - heartbeat_ts) <= max_age:
-                        _logger.info("✓ Celery beat heartbeat is recent")
+                        if not suppress_logging:
+                            _logger.info("✓ Celery beat heartbeat is recent")
                         return True
                 except (TypeError, ValueError):
                     pass
 
-            if time.time() >= deadline:
+            if not wait_for_heartbeat or time.time() >= deadline:
                 break
             time.sleep(1)
 
-        _logger.error("✗ Celery beat check failed: heartbeat missing or stale.")
-        _log_celery_service_help(
-            "geovault-celery-beat",
-            "Beat must be running so periodic tasks can update the heartbeat key.",
-        )
+        if not suppress_logging:
+            _logger.error("✗ Celery beat check failed: heartbeat missing or stale.")
+            _log_celery_service_help(
+                "geovault-celery-beat",
+                "Beat must be running so periodic tasks can update the heartbeat key.",
+            )
         return False
     except Exception as e:
-        _logger.error(f"✗ Celery beat check failed: {e}")
-        _log_celery_service_help("geovault-celery-beat")
+        if not suppress_logging:
+            _logger.error(f"✗ Celery beat check failed: {e}")
+            _log_celery_service_help("geovault-celery-beat")
         return False
 
 
