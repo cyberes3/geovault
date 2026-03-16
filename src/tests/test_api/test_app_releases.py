@@ -130,28 +130,30 @@ class TestAppDownloadRedirect(TestCase):
         )
         self.client.force_login(self.user)
 
-    def test_download_redirect_requires_auth(self):
-        """Unauthenticated request returns 401."""
+    def test_download_redirect_public_no_auth_required(self):
+        """Download redirect is public; unauthenticated request returns 302 to APK or fallback."""
         self.client.logout()
         response = self.client.get("/api/apps/download/uploader/")
-        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.status_code, 302)
+        location = response.get("Location", "")
+        self.assertTrue(location.startswith("http"))
 
     def test_download_redirect_uploader_302(self):
-        """Authenticated request for uploader returns 302 to real APK URL."""
+        """Request for uploader returns 302 to real APK URL."""
         response = self.client.get("/api/apps/download/uploader/")
         self.assertEqual(response.status_code, 302)
         location = response.get("Location", "")
         self.assertTrue(location.startswith("http") and location.endswith(".apk"))
 
     def test_download_redirect_places_302(self):
-        """Authenticated request for places returns 302 to real APK URL."""
+        """Request for places returns 302 to real APK URL."""
         response = self.client.get("/api/apps/download/places/")
         self.assertEqual(response.status_code, 302)
         location = response.get("Location", "")
         self.assertTrue(location.startswith("http") and location.endswith(".apk"))
 
     def test_download_redirect_tracker_302(self):
-        """Authenticated request for tracker returns 302 to real APK URL (Gitea has real releases)."""
+        """Request for tracker returns 302 to real APK URL (Gitea has real releases)."""
         response = self.client.get("/api/apps/download/tracker/")
         self.assertEqual(response.status_code, 302)
         location = response.get("Location", "")

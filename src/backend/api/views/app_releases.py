@@ -161,12 +161,12 @@ def get_app_releases(request):
     return response
 
 
-@api_or_login_required_401()
 @require_http_methods(["GET"])
 def app_download_redirect(request, name: str):
     """
     Redirect to the real APK download URL for the given app (uploader, places, tracker).
     If that app has no URL, redirect to the releases page. Invalid name returns 404.
+    Public endpoint (no authentication required).
     """
     name = (name or "").strip().lower()
     if name not in DOWNLOAD_APP_NAMES:
