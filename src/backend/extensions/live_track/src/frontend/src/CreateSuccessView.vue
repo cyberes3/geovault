@@ -38,9 +38,14 @@
         <button type="button" class="px-2 py-1 bg-gray-200 rounded text-sm" @click="copy(trackerSecret)">Copy</button>
       </div>
     </div>
-    <BaseButton variant="primary" color="blue" size="sm" @click="$emit('open-instructions')">
-      GPSLogger Instructions
-    </BaseButton>
+    <div class="flex flex-wrap gap-2">
+      <BaseButton variant="primary" color="blue" size="sm" @click="$emit('open-instructions')">
+        GPSLogger Instructions
+      </BaseButton>
+      <BaseButton v-if="haukDomain" variant="white" size="sm" @click="$emit('open-hauk-instructions')">
+        Hauk Setup
+      </BaseButton>
+    </div>
   </div>
 </template>
 
@@ -52,8 +57,10 @@ export default {
     bodyTemplate: { type: String, default: '' },
     userLogin: { type: String, default: '' },
     trackerSecret: { type: String, default: '' },
-    copy: { type: Function, required: true }
+    copy: { type: Function, required: true },
+    /** When set, the Hauk Setup button is shown. */
+    haukDomain: { type: String, default: '' }
   },
-  emits: ['open-instructions']
+  emits: ['open-instructions', 'open-hauk-instructions']
 };
 </script>

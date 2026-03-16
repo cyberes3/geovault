@@ -183,7 +183,7 @@ export default {
             public: (available.value.public || []).filter((x) => x.id !== item.id),
           };
         }
-        emit('saved');
+        emit('saved', { action: 'removed', kind: item.kind, item });
       } catch (e) {
         const err = props.api.handleError?.(e);
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to remove');
@@ -198,6 +198,7 @@ export default {
     async function subscribeOne(item) {
       if (!item?.id) return;
       const key = itemKey(item);
+      let savedItem = item;
       subscribingIds.value = new Set([...subscribingIds.value, key]);
       try {
         if (item.kind === 'group') {
@@ -206,10 +207,11 @@ export default {
           }
           if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Group added');
         } else {
-          await props.api.post(`/trackers/${item.id}/subscribe/`);
+          const res = await props.api.post(`/trackers/${item.id}/subscribe/`);
           if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Tracker added');
+          savedItem = { ...item, ...(res?.data || {}) };
         }
-        emit('saved');
+        emit('saved', { action: 'added', kind: item.kind, item: savedItem });
         addedPhase.value = { ...addedPhase.value, [key]: 'checkmark' };
         setTimeout(() => {
           addedPhase.value = { ...addedPhase.value, [key]: 'remove' };

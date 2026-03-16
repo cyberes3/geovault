@@ -26,7 +26,7 @@ export default {
     color: {
       type: String,
       default: 'blue',
-      validator: (value) => ['blue', 'red', 'green', 'yellow', 'purple'].includes(value)
+      validator: (value) => ['blue', 'red', 'green', 'yellow', 'purple', 'gray'].includes(value)
     },
     size: {
       type: String,
@@ -146,6 +146,19 @@ export default {
             border: 'border-purple-500',
             focus: 'focus:ring-purple-500'
           }
+        },
+        gray: {
+          primary: {
+            bg: 'bg-gray-600',
+            hover: 'hover:bg-gray-700',
+            focus: 'focus:ring-gray-500'
+          },
+          secondary: {
+            bg: 'bg-gray-100',
+            hover: 'hover:bg-gray-200',
+            border: 'border-gray-400',
+            focus: 'focus:ring-gray-500'
+          }
         }
       }
 
@@ -162,7 +175,8 @@ export default {
         base.push('disabled:hover:bg-gray-100')
         base.push('disabled:border-gray-300')
       } else {
-        const colorConfig = colorClasses[this.color][this.variant]
+        const colorEntry = colorClasses[this.color] || colorClasses.blue
+        const colorConfig = colorEntry[this.variant] || colorEntry.primary
 
         if (this.variant === 'primary') {
           // Primary: solid background with white text

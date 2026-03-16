@@ -12,7 +12,9 @@
       :user-login="userLogin"
       :tracker-secret="createdTrack?.tracker_secret ?? ''"
       :copy="copy"
+      :hauk-domain="haukDomain"
       @open-instructions="showInstructions = true"
+      @open-hauk-instructions="showHaukInstructions = true"
     />
     <CreateTrackForm
       v-else-if="mode === 'create'"
@@ -39,9 +41,11 @@
       :error="error"
       :deleting="deleting"
       :clearing="clearing"
+      :regenerating-tokens="regeneratingTokens"
       :unsubscribing="unsubscribing"
       :clear-history-disabled="clearing || historyClearedThisSession"
       :copy="copy"
+      :tracker-secret="effectiveTrackerSecret"
       :world-share-enabled="worldShareEnabled"
       :world-share-url="worldShareUrl"
       :hidden-in-list="hiddenInList"
@@ -62,6 +66,7 @@
       @open-hauk-instructions="showHaukInstructions = true"
       @download-kml="downloadKml"
       @clear-history="confirmClearHistory"
+      @regenerate-tokens="confirmRegenerateTokens"
       @delete="confirmDelete"
       @unsubscribe="confirmUnsubscribe"
     />
@@ -102,7 +107,9 @@
         :user-login="userLogin"
         :tracker-secret="createdTrack?.tracker_secret ?? ''"
         :copy="copy"
+        :hauk-domain="haukDomain"
         @open-instructions="showInstructions = true"
+        @open-hauk-instructions="showHaukInstructions = true"
       />
       <CreateTrackForm
         v-else-if="mode === 'create'"
@@ -129,9 +136,11 @@
         :error="error"
         :deleting="deleting"
         :clearing="clearing"
+        :regenerating-tokens="regeneratingTokens"
         :unsubscribing="unsubscribing"
         :clear-history-disabled="clearing || historyClearedThisSession"
         :copy="copy"
+        :tracker-secret="effectiveTrackerSecret"
         :world-share-enabled="worldShareEnabled"
         :world-share-url="worldShareUrl"
         :hidden-in-list="hiddenInList"
@@ -152,6 +161,7 @@
         @open-hauk-instructions="showHaukInstructions = true"
         @download-kml="downloadKml"
         @clear-history="confirmClearHistory"
+        @regenerate-tokens="confirmRegenerateTokens"
         @delete="confirmDelete"
         @unsubscribe="confirmUnsubscribe"
       />
@@ -229,6 +239,7 @@ export default {
     const saving = ref(false);
     const deleting = ref(false);
     const clearing = ref(false);
+    const regeneratingTokens = ref(false);
     /** After clear history succeeds, keep the clear button disabled until the sidebar is closed. */
     const historyClearedThisSession = ref(false);
     const worldShareEnabled = ref(false);
@@ -242,6 +253,8 @@ export default {
     const showInstructions = ref(false);
     const showHaukInstructions = ref(false);
     const haukDomain = ref('');
+    const trackerSecretOverride = ref('');
+    const haukPasswordOverride = ref('');
     let autosaveTimerId = null;
     let autosaveInFlight = false;
     let autosaveQueued = false;
@@ -296,7 +309,9 @@ export default {
       if (/^https?:\/\//i.test(d)) return d.replace(/\/+$/, '');
       return `https://${d}`;
     });
-    const haukPassword = computed(() => props.track?.hauk_password || '');
+    const effectiveTrackerSecret = computed(() => trackerSecretOverride.value || props.track?.tracker_secret || '');
+    const effectiveHaukPassword = computed(() => haukPasswordOverride.value || props.track?.hauk_password || createdTrack.value?.hauk_password || '');
+    const haukPassword = computed(() => effectiveHaukPassword.value);
     onMounted(async () => {
       const data = await getIngressBodyTemplate(api);
       if (data?.body_template) bodyTemplate.value = data.body_template;
@@ -310,7 +325,7 @@ export default {
     });
     const ingressUrl = computed(() => (createdTrack.value ? `${baseUrl}/ingress/` : ''));
     const instructionsIngressUrl = computed(() => `${baseUrl}/ingress/`);
-    const instructionsPassword = computed(() => createdTrack.value?.tracker_secret || props.track?.tracker_secret || '');
+    const instructionsPassword = computed(() => createdTrack.value?.tracker_secret || effectiveTrackerSecret.value || '');
     const trackIdForProfile = computed(() => createdTrack.value?.id ?? props.track?.id);
     const profileDisplayName = computed(() => {
       const raw = (createdTrack.value?.name ?? props.track?.name ?? 'track').replace(/[^a-zA-Z0-9 \-_]/g, '').trim().slice(0, 41);
@@ -471,6 +486,7 @@ export default {
       try {
         const res = await api.post('/trackers/', { name: name.value.trim(), color: displayColor.value });
         createdTrack.value = res.data;
+        emit('saved', { action: 'created', tracker: res?.data || null });
       } catch (e) {
         const err = api.handleError?.(e);
         error.value = err?.message || 'Failed to create tracker';
@@ -508,7 +524,7 @@ export default {
       clearing.value = true;
       api.post(`/trackers/${props.track.id}/clear-history/`).then(() => {
         historyClearedThisSession.value = true;
-        emit('saved');
+        emit('saved', { action: 'history-cleared', trackId: props.track?.id ?? null });
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('History cleared');
       }).catch((e) => {
         const err = api.handleError?.(e);
@@ -523,7 +539,7 @@ export default {
       if (!confirm('Delete this tracker? This cannot be undone.')) return;
       deleting.value = true;
       api.delete(`/trackers/${props.track.id}/`).then(() => {
-        emit('deleted');
+        emit('deleted', { trackId: props.track?.id ?? null });
       }).catch((e) => {
         const err = api.handleError?.(e);
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Delete failed');
@@ -532,8 +548,29 @@ export default {
       });
     }
 
+    async function confirmRegenerateTokens() {
+      if (!props.track?.id || regeneratingTokens.value) return;
+      if (!confirm('Regenerate all tracker tokens (API and Hauk)? Existing integrations using old tokens will stop working until updated.')) return;
+      regeneratingTokens.value = true;
+      try {
+        const res = await api.post(`/trackers/${props.track.id}/regenerate-tokens/`);
+        const nextSecret = String(res?.data?.tracker_secret || '');
+        const nextHaukPassword = String(res?.data?.hauk_password || '');
+        if (nextSecret) trackerSecretOverride.value = nextSecret;
+        if (nextHaukPassword) haukPasswordOverride.value = nextHaukPassword;
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Tracker tokens regenerated');
+      } catch (e) {
+        const err = api.handleError?.(e);
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to regenerate tokens');
+      } finally {
+        regeneratingTokens.value = false;
+      }
+    }
+
     watch(() => props.track, (t) => {
       isInitializingDraft.value = true;
+      trackerSecretOverride.value = '';
+      haukPasswordOverride.value = '';
       if (t) {
         name.value = t.name || '';
         color.value = t.color || '#6C93DE';
@@ -649,7 +686,9 @@ export default {
       saving,
       deleting,
       clearing,
+      regeneratingTokens,
       historyClearedThisSession,
+      effectiveTrackerSecret,
       createdTrack,
       showInstructions,
       showHaukInstructions,
@@ -666,6 +705,7 @@ export default {
       create,
       downloadKml,
       confirmClearHistory,
+      confirmRegenerateTokens,
       confirmDelete,
       confirmUnsubscribe
     };

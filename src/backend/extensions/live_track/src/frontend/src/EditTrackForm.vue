@@ -82,8 +82,8 @@
     <div class="space-y-2">
       <label class="text-sm font-medium text-gray-700">API Password</label>
       <div class="flex gap-2">
-        <input :value="track?.tracker_secret" readonly class="flex-1 px-2 py-1 text-sm border rounded bg-gray-50" />
-        <button type="button" class="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm" @click="copy(track?.tracker_secret || '')">Copy</button>
+        <input :value="trackerSecret" readonly class="flex-1 px-2 py-1 text-sm border rounded bg-gray-50" />
+        <button type="button" class="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm" @click="copy(trackerSecret)">Copy</button>
       </div>
     </div>
     <div class="grid grid-cols-2 gap-3 pb-2">
@@ -93,6 +93,10 @@
       <BaseButton v-if="isOwner" variant="white" size="sm" :disabled="clearHistoryDisabled" @click="$emit('clear-history')">
         <Loader v-if="clearing" size="sm" layout="inline" :show-message="false" class="mr-1" />
         Clear tracker
+      </BaseButton>
+      <BaseButton v-if="isOwner" variant="secondary" color="gray" size="sm" class="col-span-2" :disabled="regeneratingTokens" @click="$emit('regenerate-tokens')">
+        <Loader v-if="regeneratingTokens" size="sm" layout="inline" :show-message="false" class="mr-1" />
+        Regenerate All Tokens
       </BaseButton>
       <BaseButton v-if="!isOwner" variant="secondary" color="gray" size="sm" :disabled="unsubscribing" @click="$emit('unsubscribe')">
         <Loader v-if="unsubscribing" size="sm" layout="inline" :show-message="false" class="mr-1" />
@@ -130,7 +134,9 @@ export default {
     unsubscribing: { type: Boolean, default: false },
     /** When true, Clear history button is disabled (e.g. after clear succeeded until sidebar is closed). */
     clearHistoryDisabled: { type: Boolean, default: false },
+    regeneratingTokens: { type: Boolean, default: false },
     copy: { type: Function, required: true },
+    trackerSecret: { type: String, default: '' },
     worldShareEnabled: { type: Boolean, default: false },
     worldShareUrl: { type: String, default: '' },
     shareParamsWithWorld: { type: Boolean, default: false },
@@ -139,7 +145,7 @@ export default {
     /** When set, the Hauk Setup button is shown (admin configured hauk_domain). */
     haukDomain: { type: String, default: '' }
   },
-  emits: ['update:name', 'update:color', 'update:recentDataWindow', 'update:visibility', 'update:shareParamsWithRecipients', 'update:shareParamsWithWorld', 'update:sharedWithEmails', 'update:worldShareEnabled', 'update:allowGroupReshare', 'update:hidden-in-list', 'reset-color', 'open-instructions', 'open-hauk-instructions', 'download-kml', 'clear-history', 'delete', 'unsubscribe'],
+  emits: ['update:name', 'update:color', 'update:recentDataWindow', 'update:visibility', 'update:shareParamsWithRecipients', 'update:shareParamsWithWorld', 'update:sharedWithEmails', 'update:worldShareEnabled', 'update:allowGroupReshare', 'update:hidden-in-list', 'reset-color', 'open-instructions', 'open-hauk-instructions', 'download-kml', 'clear-history', 'regenerate-tokens', 'delete', 'unsubscribe'],
   setup(props, { emit }) {
     const fullWorldShareUrl = computed(() => {
       const path = props.worldShareUrl || '';

@@ -42,7 +42,7 @@
           <img
             :src="fdroidBadgeUrl"
             alt="Get it on F-Droid"
-            class="h-8 w-auto max-w-[140px] object-contain"
+            class="h-10 w-auto max-w-[180px] object-contain"
           />
         </a>
       </div>
@@ -135,9 +135,6 @@
             </div>
           </div>
         </div>
-      </div>
-      <div class="flex justify-end pt-2">
-        <BaseButton variant="white" size="sm" @click="$emit('close')">Close</BaseButton>
       </div>
     </div>
   </BaseModal>

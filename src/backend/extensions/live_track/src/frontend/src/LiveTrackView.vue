@@ -883,7 +883,7 @@ export default {
 
     function onSharedWithMeLeaveGroup(group) {
       if (!group?.id) return;
-      groups.value = groups.value.filter((g) => String(g.id) !== String(group.id));
+      removeGroupFromLocalState(group, { removeTrackers: true, patchVisibility: true });
     }
 
     function onSharedSidebarSelectTrack(track) {
@@ -1755,31 +1755,106 @@ export default {
       }
     }
 
-    function onShareSettingsSaved(updated) {
-      if (!updated?.id) return;
-      const idStr = String(updated.id);
+    function upsertTrackerInLocalState(tracker, options = {}) {
+      if (!tracker?.id) return false;
+      const idStr = String(tracker.id);
       const idx = trackers.value.findIndex((t) => String(t.id) === idStr);
+      const existing = idx >= 0 ? trackers.value[idx] : null;
+      const normalized = normalizeTrackForMemory({
+        ...(existing || {}),
+        ...(tracker || {}),
+        geometry: tracker?.geometry ?? existing?.geometry ?? { type: 'LineString', coordinates: [] },
+      });
       if (idx >= 0) {
-        const t = trackers.value[idx];
-        trackers.value = trackers.value.slice(0, idx).concat({ ...t, ...updated }).concat(trackers.value.slice(idx + 1));
+        trackers.value = trackers.value.slice(0, idx).concat(normalized).concat(trackers.value.slice(idx + 1));
+      } else {
+        trackers.value = [...trackers.value, normalized];
       }
+      if (options.updateMap !== false) updateMapFeatures();
+      return true;
+    }
+
+    function removeTrackerFromLocalState(trackId, options = {}) {
+      if (trackId == null) return;
+      const idStr = String(trackId);
+      if (options.moveToIncoming === true) moveTrackToIncoming(trackId);
+      trackers.value = trackers.value.filter((t) => String(t.id) !== idStr);
+      groups.value = groups.value.map((g) => ({
+        ...g,
+        track_ids: (g.track_ids || []).filter((id) => String(id) !== idStr),
+      }));
+      if (options.removeFromIncoming === true) {
+        incomingSharedTrackers.value = incomingSharedTrackers.value.filter((t) => String(t.id) !== idStr);
+      }
+      if (String(selectedId.value) === idStr) selectedId.value = null;
+      const s = new Set(hiddenTrackIds.value);
+      s.delete(idStr);
+      hiddenTrackIds.value = s;
+      if (options.updateMap !== false) updateMapFeatures();
+      if (options.patchVisibility === true) patchMapVisibility();
+    }
+
+    function upsertGroupInLocalState(group, options = {}) {
+      if (!group?.id) return false;
+      const idStr = String(group.id);
+      const idx = groups.value.findIndex((g) => String(g.id) === idStr);
+      const existing = idx >= 0 ? groups.value[idx] : null;
+      const merged = {
+        ...(existing || {}),
+        ...(group || {}),
+        track_ids: Array.isArray(group.track_ids)
+          ? [...group.track_ids]
+          : [...(existing?.track_ids || [])],
+      };
+      if (idx >= 0) {
+        groups.value = groups.value.slice(0, idx).concat(merged).concat(groups.value.slice(idx + 1));
+      } else {
+        groups.value = [...groups.value, merged];
+      }
+      if (options.removeIncoming !== false) {
+        incomingSharedGroups.value = incomingSharedGroups.value.filter((g) => String(g.id) !== idStr);
+      }
+      if (options.updateMap !== false) updateMapFeatures();
+      return true;
+    }
+
+    function onShareSettingsSaved(updated) {
+      if (updated?.id) upsertTrackerInLocalState(updated, { updateMap: false });
       shareSettingsModalTrack.value = null;
     }
 
     function onPublicShareDeleted(updated) {
-      if (!updated?.id) return;
-      const idStr = String(updated.id);
-      const idx = trackers.value.findIndex((t) => String(t.id) === idStr);
-      if (idx >= 0) {
-        const t = trackers.value[idx];
-        trackers.value = trackers.value.slice(0, idx).concat({ ...t, ...updated }).concat(trackers.value.slice(idx + 1));
-      }
+      if (updated?.id) upsertTrackerInLocalState(updated, { updateMap: false });
       publicSharePopupTrack.value = null;
     }
 
-    function onGroupsSidebarSaved() {
-      fetchGroups();
-      fetchTrackers();
+    async function fetchAndMergeGroup(groupId) {
+      if (!groupId) return;
+      try {
+        const res = await api.get(`/groups/${groupId}/`);
+        upsertGroupInLocalState(res?.data || null, { updateMap: false });
+      } catch {
+        // Keep optimistic group payload when targeted fetch fails.
+      }
+    }
+
+    function onGroupsSidebarSaved(payload) {
+      const group = payload?.group;
+      if (!group?.id) {
+        fetchGroups();
+        return;
+      }
+      upsertGroupInLocalState(group, { updateMap: false });
+      const trackIds = Array.isArray(group.track_ids) ? group.track_ids : [];
+      for (const trackId of trackIds) {
+        const idStr = String(trackId);
+        const hasTrack = trackers.value.some((t) => String(t.id) === idStr);
+        if (!hasTrack) fetchAndMergeTracker(trackId);
+      }
+      if (trackIds.length === 0 && payload?.action === 'created') {
+        fetchAndMergeGroup(group.id);
+      }
+      updateMapFeatures();
     }
 
     async function onGroupsSidebarRefreshed() {
@@ -1791,19 +1866,37 @@ export default {
       }
     }
 
-    function removeGroupFromLocalState(group) {
+    function removeGroupFromLocalState(group, options = {}) {
       const groupId = group?.id;
       if (groupId == null) return;
-      const trackIdsInGroup = new Set((group.track_ids || []).map((id) => String(id)));
+      const existingGroup = groups.value.find((g) => String(g.id) === String(groupId));
+      const sourceGroup = existingGroup || group;
+      const trackIdsInGroup = new Set((sourceGroup?.track_ids || []).map((id) => String(id)));
       groups.value = groups.value.filter((g) => String(g.id) !== String(groupId));
-      trackers.value = trackers.value.filter((t) => !trackIdsInGroup.has(String(t.id)));
+      if (options.removeIncoming !== false) {
+        incomingSharedGroups.value = incomingSharedGroups.value.filter((g) => String(g.id) !== String(groupId));
+      }
+      if (options.removeTrackers === true) {
+        trackers.value = trackers.value.filter((t) => !trackIdsInGroup.has(String(t.id)));
+      }
       if (String(activeGroupId.value) === String(groupId)) activeGroupId.value = null;
       if (groupQuickViewGroup.value && String(groupQuickViewGroup.value.id) === String(groupId)) {
         showGroupQuickViewSidebar.value = false;
         groupQuickViewGroup.value = null;
       }
-      if (selectedId.value != null && trackIdsInGroup.has(String(selectedId.value))) selectedId.value = null;
+      if (options.removeTrackers === true && selectedId.value != null && trackIdsInGroup.has(String(selectedId.value))) {
+        selectedId.value = null;
+      }
+      const gs = new Set(hiddenGroupIds.value);
+      gs.delete(String(groupId));
+      hiddenGroupIds.value = gs;
+      if (options.removeTrackers === true) {
+        const s = new Set(hiddenTrackIds.value);
+        trackIdsInGroup.forEach((id) => s.delete(id));
+        hiddenTrackIds.value = s;
+      }
       updateMapFeatures();
+      if (options.patchVisibility === true) patchMapVisibility();
     }
 
     async function onGroupsSidebarLeave(group) {
@@ -1812,7 +1905,7 @@ export default {
       try {
         await api.delete(`/groups/${group.id}/leave/`);
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Left shared group');
-        removeGroupFromLocalState(group);
+        removeGroupFromLocalState(group, { removeTrackers: true, patchVisibility: true });
       } catch (e) {
         const err = api.handleError?.(e);
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to leave shared group');
@@ -1905,7 +1998,7 @@ export default {
       try {
         await api.delete(`/groups/${group.id}/leave/`);
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Left shared group');
-        removeGroupFromLocalState(group);
+        removeGroupFromLocalState(group, { removeTrackers: true, patchVisibility: true });
       } catch (e) {
         const err = api.handleError?.(e);
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to leave shared group');
@@ -1933,9 +2026,19 @@ export default {
       });
     }
 
-    function onTrackSidebarSaved() {
+    function onTrackSidebarSaved(payload) {
+      const action = payload?.action;
+      if (action === 'created') {
+        if (payload?.tracker?.id) {
+          upsertTrackerInLocalState(payload.tracker);
+          return;
+        }
+        fetchTrackers();
+      }
       showTrackSidebar.value = false;
-      fetchTrackers();
+      if (action === 'history-cleared' && payload?.trackId) {
+        fetchAndMergeTracker(payload.trackId);
+      }
     }
 
     function onTrackSettingsChanged(payload) {
@@ -1953,24 +2056,27 @@ export default {
     function onTrackSidebarUnsubscribed(trackId) {
       showTrackSidebar.value = false;
       if (!trackId) return;
-      const idStr = String(trackId);
-      moveTrackToIncoming(trackId);
-      trackers.value = trackers.value.filter((t) => String(t.id) !== idStr);
-      if (String(selectedId.value) === idStr) selectedId.value = null;
-      const s = new Set(hiddenTrackIds.value);
-      s.delete(trackId);
-      hiddenTrackIds.value = s;
-      updateMapFeatures();
+      removeTrackerFromLocalState(trackId, { moveToIncoming: true, patchVisibility: true });
     }
 
-    function onTrackDeleted() {
+    function onTrackDeleted(payload) {
       showTrackSidebar.value = false;
-      fetchTrackers();
+      const trackId = payload?.trackId ?? trackSidebarTrack.value?.id ?? null;
+      if (trackId) {
+        removeTrackerFromLocalState(trackId, { patchVisibility: true });
+      } else {
+        fetchTrackers();
+      }
     }
 
-    function onCreateGroupSaved() {
+    function onCreateGroupSaved(payload) {
       closeMapSidebar();
-      fetchGroups();
+      const group = payload?.group;
+      if (group?.id) {
+        upsertGroupInLocalState(group, { updateMap: false });
+      } else {
+        fetchGroups();
+      }
     }
 
     function onGroupHiddenInListChanged(payload) {
@@ -2024,18 +2130,7 @@ export default {
           await api.delete(`/trackers/${trackId}/subscribe/`);
         }
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Group removed from map');
-        groups.value = groups.value.filter((g) => String(g.id) !== String(group.id));
-        trackers.value = trackers.value.filter((t) => !trackIds.includes(String(t.id)));
-        const s = new Set(hiddenTrackIds.value);
-        trackIds.forEach((id) => s.delete(id));
-        hiddenTrackIds.value = s;
-        const gs = new Set(hiddenGroupIds.value);
-        gs.delete(String(group.id));
-        hiddenGroupIds.value = gs;
-        if (selectedId.value && trackIds.includes(String(selectedId.value))) selectedId.value = null;
-        if (activeGroupId.value && String(activeGroupId.value) === String(group.id)) activeGroupId.value = null;
-        updateMapFeatures();
-        patchMapVisibility();
+        removeGroupFromLocalState(group, { removeTrackers: true, patchVisibility: true });
       } catch (e) {
         const err = api.handleError?.(e);
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to remove group');
@@ -2070,15 +2165,7 @@ export default {
       try {
         await api.delete(`/trackers/${trackId}/share-with-me/`);
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Removed from share');
-        const idStr = String(trackId);
-        trackers.value = trackers.value.filter((t) => String(t.id) !== idStr);
-        incomingSharedTrackers.value = incomingSharedTrackers.value.filter((t) => String(t.id) !== idStr);
-        if (String(selectedId.value) === idStr) selectedId.value = null;
-        const s = new Set(hiddenTrackIds.value);
-        s.delete(trackId);
-        hiddenTrackIds.value = s;
-        updateMapFeatures();
-        patchMapVisibility();
+        removeTrackerFromLocalState(trackId, { removeFromIncoming: true, patchVisibility: true });
       } catch (e) {
         const err = api.handleError?.(e);
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to leave share');
@@ -2096,15 +2183,7 @@ export default {
       try {
         await api.delete(`/trackers/${trackId}/subscribe/`);
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Tracker removed');
-        const idStr = String(trackId);
-        if (!isPublic) moveTrackToIncoming(trackId);
-        trackers.value = trackers.value.filter((t) => String(t.id) !== idStr);
-        if (String(selectedId.value) === idStr) selectedId.value = null;
-        const s = new Set(hiddenTrackIds.value);
-        s.delete(trackId);
-        hiddenTrackIds.value = s;
-        updateMapFeatures();
-        patchMapVisibility();
+        removeTrackerFromLocalState(trackId, { moveToIncoming: !isPublic, patchVisibility: true });
       } catch (e) {
         const err = api.handleError?.(e);
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to remove');
@@ -2113,8 +2192,45 @@ export default {
       }
     }
 
-    function onDiscoverSaved() {
-      fetchTrackers();
+    function onDiscoverSaved(payload) {
+      const item = payload?.item;
+      if (!item?.id || !payload?.action || !payload?.kind) {
+        fetchTrackers();
+        return;
+      }
+      if (payload.kind === 'tracker') {
+        if (payload.action === 'added') {
+          upsertTrackerInLocalState({
+            ...item,
+            is_owner: false,
+            visibility: item.visibility || 'public',
+            owner_email: item.owner_email || '',
+          });
+          fetchAndMergeTracker(item.id);
+        } else if (payload.action === 'removed') {
+          removeTrackerFromLocalState(item.id, { patchVisibility: true });
+        }
+        return;
+      }
+      if (payload.kind === 'group') {
+        if (payload.action === 'added') {
+          upsertGroupInLocalState({
+            ...item,
+            is_owner: false,
+            is_accepted: true,
+            visibility: item.visibility || 'public',
+            track_ids: Array.isArray(item.track_ids) ? item.track_ids : [],
+          }, { updateMap: false, removeIncoming: false });
+          for (const trackId of item.track_ids || []) {
+            if (!trackers.value.some((t) => String(t.id) === String(trackId))) {
+              fetchAndMergeTracker(trackId);
+            }
+          }
+          updateMapFeatures();
+        } else if (payload.action === 'removed') {
+          removeGroupFromLocalState(item, { removeTrackers: true, patchVisibility: true, removeIncoming: false });
+        }
+      }
     }
 
     function addOptimisticTracker(incoming) {
@@ -2182,20 +2298,41 @@ export default {
       const preservedListTab = listTab.value;
       addingIncomingGroupId.value = group.id;
       const isSharedIncoming = incomingSharedGroups.value.some((g) => String(g.id) === String(group.id));
+      const subscribedTrackIds = [];
       let success = true;
       try {
         if (isSharedIncoming) {
-          await api.post(`/groups/${group.id}/accept-share/`);
+          const res = await api.post(`/groups/${group.id}/accept-share/`);
+          const acceptedGroup = res?.data || {
+            ...group,
+            visibility: 'shared',
+            is_owner: false,
+            is_accepted: true,
+          };
+          upsertGroupInLocalState(acceptedGroup, { updateMap: false });
+          for (const trackId of acceptedGroup.track_ids || []) {
+            subscribedTrackIds.push(trackId);
+          }
         } else {
           for (const trackId of group.track_ids || []) {
             try {
               await api.post(`/trackers/${trackId}/subscribe/`);
+              subscribedTrackIds.push(trackId);
             } catch (e) {
               const err = api.handleError?.(e);
               if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to add group');
               success = false;
               break;
             }
+          }
+          if (success) {
+            upsertGroupInLocalState({
+              ...group,
+              visibility: group.visibility || 'public',
+              is_owner: false,
+              is_accepted: true,
+              track_ids: [...(group.track_ids || [])],
+            }, { updateMap: false, removeIncoming: false });
           }
         }
         if (success && window.gv_core?.GeoVault?.toast) {
@@ -2206,10 +2343,20 @@ export default {
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to add group');
       } finally {
         addingIncomingGroupId.value = null;
-        await fetchTrackers();
-        await fetchIncomingShared();
-        await fetchGroups();
-        updateMapFeatures();
+        if (success) {
+          incomingSharedGroups.value = incomingSharedGroups.value.filter((g) => String(g.id) !== String(group.id));
+          for (const trackId of subscribedTrackIds) {
+            const incomingTracker = incomingSharedTrackers.value.find((t) => String(t.id) === String(trackId));
+            if (incomingTracker) {
+              addOptimisticTracker(incomingTracker);
+              incomingSharedTrackers.value = incomingSharedTrackers.value.filter((t) => String(t.id) !== String(trackId));
+            } else if (!trackers.value.some((t) => String(t.id) === String(trackId))) {
+              addOptimisticTracker({ id: trackId, name: '', owner_email: '' });
+            }
+            fetchAndMergeTracker(trackId);
+          }
+          updateMapFeatures();
+        }
         listTab.value = preservedListTab;
       }
     }

@@ -29,6 +29,7 @@ urlpatterns = [
     path("trackers/available-to-add/", views.tracker_available_to_add),
     path("tracker-check/", views.tracker_check),
     path("trackers/<str:tracker_id>/clear-history/", views.tracker_clear_history),
+    path("trackers/<str:tracker_id>/regenerate-tokens/", views.tracker_regenerate_tokens),
     path("trackers/<str:tracker_id>/regenerate-hauk-password/", views.tracker_regenerate_hauk_password),
     path("trackers/<str:tracker_id>/subscribe/", views.tracker_subscribe_delete),
     path("trackers/<str:tracker_id>/share-with-me/", views.tracker_leave_share),

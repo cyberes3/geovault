@@ -86,6 +86,13 @@ class TrackerCheckResponse(BaseModel):
     name: Optional[str] = Field(default=None, description="Tracker name when valid")
 
 
+class RegenerateTrackerTokensResponse(BaseModel):
+    """Response payload for tracker token regeneration endpoint."""
+
+    tracker_secret: str = Field(..., description="New tracker API password")
+    hauk_password: str = Field(..., description="New tracker Hauk password")
+
+
 class TrackSettingsRequest(BaseModel):
     """Request body for POST trackers/<id>/settings/. Name, visibility, share_params, shared_with_emails; color and recent_data_window in settings JSON."""
 

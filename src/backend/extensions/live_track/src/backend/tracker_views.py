@@ -50,6 +50,7 @@ from .world_share_views import build_live_track_share_url
 from .validation import (
     PARAM_PRETTY_NAMES,
     MapVisibilityPrefsRequest,
+    RegenerateTrackerTokensResponse,
     TrackerBulkGeometryRequest,
     TrackerCheckRequest,
     TrackerCheckResponse,
@@ -458,6 +459,25 @@ def tracker_regenerate_hauk_password(request, tracker_id):
     track.hauk_password = generate_hauk_password()
     track.save(update_fields=["hauk_password", "updated_at"])
     return JsonResponse({"hauk_password": track.hauk_password}, status=200)
+
+
+@api_or_login_required_401()
+@require_http_methods(["POST"])
+@handle_404
+@csrf_exempt
+def tracker_regenerate_tokens(request, tracker_id):
+    """POST trackers/<id>/regenerate-tokens/ — regenerate tracker API + Hauk credentials. Owner only."""
+    track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
+    if track.user_id != request.user.id:
+        return error_response("Only the owner can regenerate tracker tokens", 403)
+    track.tracker_secret = secrets.token_urlsafe(32)
+    track.hauk_password = generate_hauk_password()
+    track.save(update_fields=["tracker_secret", "hauk_password", "updated_at"])
+    response = RegenerateTrackerTokensResponse(
+        tracker_secret=track.tracker_secret,
+        hauk_password=track.hauk_password,
+    )
+    return JsonResponse(response.model_dump(), status=200)
 
 
 LATEST_COORDINATES_LIMIT = 100

@@ -154,13 +154,13 @@ export default {
       view.value = 'edit';
     }
 
-    function onCreateSaved() {
-      emit('saved');
+    function onCreateSaved(payload) {
+      emit('saved', payload);
       view.value = 'list';
     }
 
-    function onEditSaved() {
-      emit('saved');
+    function onEditSaved(payload) {
+      emit('saved', payload);
       view.value = 'list';
       selectedGroup.value = null;
     }

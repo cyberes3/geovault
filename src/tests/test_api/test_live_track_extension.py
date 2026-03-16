@@ -1552,6 +1552,76 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual((track.geometry or {}).get("coordinates", []), [])
         self.assertEqual(track.point_params or [], [])
 
+    def test_regenerate_tokens_rotates_api_and_hauk_tokens(self):
+        """POST regenerate-tokens rotates tracker_secret and hauk_password for owner."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Rotate Tokens"}),
+                content_type="application/json",
+            )
+        self.assertEqual(create_resp.status_code, 201)
+        track_id = create_resp.json()["id"]
+        old_tracker_secret = create_resp.json()["tracker_secret"]
+        old_hauk_password = create_resp.json()["hauk_password"]
+
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/regenerate-tokens/"
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("tracker_secret", data)
+        self.assertIn("hauk_password", data)
+        self.assertNotEqual(data["tracker_secret"], old_tracker_secret)
+        self.assertNotEqual(data["hauk_password"], old_hauk_password)
+
+        track = LiveTrack.objects.get(id=track_id)
+        self.assertEqual(track.tracker_secret, data["tracker_secret"])
+        self.assertEqual(track.hauk_password, data["hauk_password"])
+
+        with _patch_live_track_enabled():
+            old_secret_check = self.client.post(
+                "/api/extensions/live-track/tracker-check/",
+                data=json.dumps({"tracker_id": track_id, "password": old_tracker_secret}),
+                content_type="application/json",
+            )
+        self.assertEqual(old_secret_check.status_code, 200)
+        self.assertFalse(old_secret_check.json()["valid"])
+
+        with _patch_live_track_enabled():
+            new_secret_check = self.client.post(
+                "/api/extensions/live-track/tracker-check/",
+                data=json.dumps({"tracker_id": track_id, "password": data["tracker_secret"]}),
+                content_type="application/json",
+            )
+        self.assertEqual(new_secret_check.status_code, 200)
+        self.assertTrue(new_secret_check.json()["valid"])
+
+    def test_regenerate_tokens_other_user_cannot_rotate(self):
+        """POST regenerate-tokens for another user's tracker returns 404."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Owner Track"}),
+                content_type="application/json",
+            )
+        self.assertEqual(create_resp.status_code, 201)
+        track_id = create_resp.json()["id"]
+        old_tracker_secret = create_resp.json()["tracker_secret"]
+        old_hauk_password = create_resp.json()["hauk_password"]
+
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/regenerate-tokens/"
+            )
+        self.assertEqual(response.status_code, 404)
+
+        track = LiveTrack.objects.get(id=track_id)
+        self.assertEqual(track.tracker_secret, old_tracker_secret)
+        self.assertEqual(track.hauk_password, old_hauk_password)
+
     def test_kml_download(self):
         """GET trackers/<id>/kml/ returns 200 with KML and Content-Disposition."""
         with _patch_live_track_enabled():

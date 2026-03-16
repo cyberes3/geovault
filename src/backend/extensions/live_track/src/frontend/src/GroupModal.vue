@@ -293,9 +293,9 @@ export default {
       if (!name.value.trim()) return;
       saving.value = true;
       try {
-        await props.api.post('/groups/', { name: name.value.trim() });
+        const res = await props.api.post('/groups/', { name: name.value.trim() });
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Group created');
-        emit('saved');
+        emit('saved', { action: 'created', group: res?.data || null });
       } catch (e) {
         const err = props.api.handleError?.(e);
         nameError.value = err?.message || 'Failed to create group';
@@ -335,7 +335,12 @@ export default {
           await props.api.post(`/groups/${props.group.id}/tracks/`, { track_id: trackId });
         }
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Group updated');
-        emit('saved');
+        const groupData = {
+          ...(props.group || {}),
+          ...(patchData || {}),
+          track_ids: [...(groupTrackIds.value || [])],
+        };
+        emit('saved', { action: 'updated', group: groupData });
       } catch (e) {
         const err = props.api.handleError?.(e);
         nameError.value = err?.message || 'Failed to save';

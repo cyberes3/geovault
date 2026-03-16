@@ -63,9 +63,6 @@
           </div>
         </div>
       </div>
-      <div class="flex justify-end pt-2">
-        <BaseButton variant="white" size="sm" @click="$emit('close')">Close</BaseButton>
-      </div>
     </div>
   </BaseModal>
 </template>

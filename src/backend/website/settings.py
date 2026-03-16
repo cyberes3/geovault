@@ -45,9 +45,13 @@ SITE_NAME = config.get_str('site.name', 'GeoVault')
 # Allowed hosts (required when DEBUG is False)
 # By default, allow the primary site domain from site.domain
 # To add more, set security.additional_allowed_hosts in config.yaml to a list
-# of additional domains or proxy IPs
+# of additional domains or proxy IPs. extensions.live_track.hauk_domain is
+# automatically added when set (so the Hauk-compatible API host is allowed).
 _additional_allowed_hosts = config.get_list('security.additional_allowed_hosts', [])
 ALLOWED_HOSTS = [SITE_DOMAIN] + _additional_allowed_hosts
+_hauk_domain = config.get_str('extensions.live_track.hauk_domain', '').strip()
+if _hauk_domain and _hauk_domain not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_hauk_domain)
 
 # CORS Configuration
 # Additional CORS origins from config (user-specified)
