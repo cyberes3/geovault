@@ -1832,8 +1832,11 @@ class TestLiveTrackAPI(TestCase):
 
     def test_hauk_config_returns_domain(self):
         """GET hauk-config/ returns 200 and JSON with hauk_domain (empty when not configured)."""
+        mock_loader = MagicMock()
+        mock_loader.get_str.side_effect = lambda key, default="": default
         with _patch_live_track_enabled():
-            response = self.client.get("/api/extensions/live-track/hauk-config/")
+            with patch("extensions.live_track.src.backend.tracker_views.get_config_loader", return_value=mock_loader):
+                response = self.client.get("/api/extensions/live-track/hauk-config/")
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("hauk_domain", data)

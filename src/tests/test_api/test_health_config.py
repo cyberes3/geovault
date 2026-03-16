@@ -20,6 +20,21 @@ class TestHealthConfigAPI(TestCase):
             username='testuser'
         )
         self.client.force_login(self.user)
+        # Prevent real health dependencies/endpoints from running in tests.
+        self._health_patchers = [
+            patch('api.views.health.check_database_connection', return_value=True),
+            patch('api.views.health.check_redis_connection', return_value=True),
+            patch('api.views.health.check_postgis_installation', return_value=True),
+            patch('api.views.health.check_celery_worker', return_value=True),
+            patch('api.views.health.check_celery_beat', return_value=True),
+            patch('api.views.health.check_areas_server', return_value=True),
+            patch('api.views.health.check_elevation_api', return_value=True),
+            patch('api.views.health.check_maptiler_geocoding_api', return_value=True),
+            patch('api.views.health.check_google_geocoding_api', return_value=True),
+        ]
+        for patcher in self._health_patchers:
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def test_health_check(self):
         """Test health check endpoint."""

@@ -655,13 +655,13 @@ class TestEnsureOAuth2AppCommand(TestCase):
         )
 
     def test_creates_android_oauth_applications(self):
-        """Command creates places, uploader and tracker OAuth applications with correct client_ids and redirect URIs."""
+        """Command creates Android OAuth applications with correct client_ids and redirect URIs."""
         from django.core.management import call_command
         from io import StringIO
 
         out = StringIO()
         call_command("ensure_oauth2_app", stdout=out)
-        self.assertEqual(Application.objects.count(), 3)
+        self.assertEqual(Application.objects.count(), 4)
         places = Application.objects.get(client_id="geovault-android-places")
         self.assertEqual(places.name, "GeoVault Android Places")
         self.assertEqual(
@@ -680,7 +680,13 @@ class TestEnsureOAuth2AppCommand(TestCase):
             set(tracker.redirect_uris.strip().split()),
             {"com.geovault.tracker://oauth/callback", "com.geovault.tracker.debug://oauth/callback"},
         )
-        for app in (places, uploader, tracker):
+        survey = Application.objects.get(client_id="geovault-android-survey")
+        self.assertEqual(survey.name, "GeoVault Android Survey")
+        self.assertEqual(
+            set(survey.redirect_uris.strip().split()),
+            {"com.geovault.survey://oauth/callback", "com.geovault.survey.debug://oauth/callback"},
+        )
+        for app in (places, uploader, tracker, survey):
             self.assertFalse(app.skip_authorization, f"{app.client_id} should show authorize screen")
         out_val = out.getvalue()
         self.assertTrue(
@@ -694,10 +700,11 @@ class TestEnsureOAuth2AppCommand(TestCase):
 
         call_command("ensure_oauth2_app")
         call_command("ensure_oauth2_app")
-        self.assertEqual(Application.objects.count(), 3)
+        self.assertEqual(Application.objects.count(), 4)
         self.assertEqual(Application.objects.filter(client_id="geovault-android-places").count(), 1)
         self.assertEqual(Application.objects.filter(client_id="geovault-android-uploader").count(), 1)
         self.assertEqual(Application.objects.filter(client_id="geovault-android-tracker").count(), 1)
+        self.assertEqual(Application.objects.filter(client_id="geovault-android-survey").count(), 1)
 
     def test_deletes_legacy_app(self):
         """Command deletes the legacy geovault-android application if present."""
