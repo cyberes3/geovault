@@ -31,6 +31,12 @@
         <item name="strokeColor">@color/gv_common_primary_blue</item>
     </style>
 
+    <!-- Outlined secondary: muted secondary text and stroke -->
+    <style name="gv_common_ButtonSecondary" parent="gv_common_ButtonOutlinedBase">
+        <item name="android:textColor">@color/gv_common_text_secondary</item>
+        <item name="strokeColor">@color/gv_common_text_secondary</item>
+    </style>
+
     <!-- Outlined destructive: red stroke and text (e.g. delete actions) -->
     <style name="gv_common_ButtonOutlinedDestructive" parent="gv_common_ButtonOutlinedBase">
         <item name="android:textColor">@color/gv_common_error_red</item>
