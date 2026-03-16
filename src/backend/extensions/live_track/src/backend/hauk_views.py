@@ -52,11 +52,11 @@ def _get_hauk_session(sid: str) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
-def _set_hauk_session(sid: str, track_id: str, user_id: int, duration_seconds: int) -> None:
+def _set_hauk_session(sid: str, track_id: str, user_id: int, share_id: str, duration_seconds: int) -> None:
     timeout = min(max(1, duration_seconds), HAUK_SESSION_CACHE_TIMEOUT_MAX)
     cache.set(
         HAUK_SESSION_CACHE_PREFIX + sid,
-        {"track_id": str(track_id), "user_id": user_id},
+        {"track_id": str(track_id), "user_id": user_id, "share_id": str(share_id)},
         timeout=timeout,
     )
 
@@ -71,7 +71,7 @@ def hauk_create(request):
     """
     POST api/create.php — Hauk session initiation.
     Body: usr (email), pwd (Hauk password), dur (seconds), int (interval). Optional: mod, ado, etc.
-    Returns OK\\nsid\\nview_url\\nshare_id (solo mode). Unsupported options (group, E2E) are ignored; we behave as solo.
+    Returns OK\\nsid\\nview_url\\nview_id (solo mode). Unsupported options (group, E2E) are ignored; we behave as solo.
     """
     raw = parse_ingress_body(request)
     usr = (raw.get("usr") or "").strip() if isinstance(raw.get("usr"), str) else ""
@@ -97,14 +97,17 @@ def hauk_create(request):
     share_id = world_share.share_id
 
     sid = secrets.token_urlsafe(24)
-    _set_hauk_session(sid, track.id, track.user_id, dur)
+    _set_hauk_session(sid, track.id, track.user_id, share_id, dur)
 
     host = request.get_host().split(",")[0].strip()
     scheme = request.META.get("HTTP_X_FORWARDED_PROTO") or request.scheme or "https"
     base = f"{scheme}://{host}"
     view_url = base + build_live_track_share_url(share_id)
 
-    return _hauk_text_response(["OK", sid, view_url, share_id])
+    # Hauk Android uses line 4 as "view_id" shown in the active share list.
+    # Return the tracker name for friendly UX instead of a UUID-like share_id.
+    view_id = (track.name or "").replace("\r", " ").replace("\n", " ").strip() or share_id
+    return _hauk_text_response(["OK", sid, view_url, view_id])
 
 
 @require_http_methods(["POST"])
@@ -160,7 +163,16 @@ def hauk_post(request):
         extra["prov"] = "fine" if str(raw.get("prv")) == "0" else "coarse"
 
     append_point_to_track(track, lat, lon, timestamp_ms, extra)
-    return _hauk_text_response(["OK"])
+
+    # Hauk >= 1.2 expects post.php to return active-share metadata:
+    # line 2 = link format (String.format-style), line 3 = comma-separated share IDs.
+    share_id = str(session.get("share_id") or "").strip()
+    host = request.get_host().split(",")[0].strip()
+    scheme = request.META.get("HTTP_X_FORWARDED_PROTO") or request.scheme or "https"
+    base = f"{scheme}://{host}"
+    link_format = base + build_live_track_share_url("%s")
+    share_csv = share_id if share_id else ""
+    return _hauk_text_response(["OK", link_format, share_csv])
 
 
 @require_http_methods(["POST"])

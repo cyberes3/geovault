@@ -71,9 +71,10 @@ class TestHaukClientCreatePostStop(TestCase):
         self.assertTrue(hauk_password, "New track must have hauk_password")
         return track_id, hauk_password
 
-    def test_hauk_create_returns_ok_sid_view_url_share_id(self):
-        """POST api/create.php with usr/pwd returns OK, sid, view_url, share_id (solo)."""
-        _, hauk_password = self._create_track_with_hauk_password()
+    def test_hauk_create_returns_ok_sid_view_url_tracker_name(self):
+        """POST api/create.php with usr/pwd returns OK, sid, view_url, and tracker name as view_id (solo)."""
+        track_name = "Hauk Track"
+        _, hauk_password = self._create_track_with_hauk_password(name=track_name)
         form = _hauk_create_form(self.user.email, hauk_password, dur=120, interval=10)
         with _patch_live_track_enabled():
             response = self.client.post(
@@ -88,11 +89,10 @@ class TestHaukClientCreatePostStop(TestCase):
         self.assertEqual(lines[0], "OK")
         sid = lines[1]
         view_url = lines[2]
-        share_id = lines[3]
+        view_id = lines[3]
         self.assertIsNotNone(sid)
         self.assertIn("/extensions/live-track/share", view_url or "")
-        self.assertIn(share_id, view_url or "")
-        self.assertEqual(len(share_id), 36)  # UUID
+        self.assertEqual(view_id, track_name)
 
     def test_hauk_create_wrong_password_returns_401(self):
         """POST api/create.php with wrong pwd returns 401 and 'Incorrect password'."""
@@ -142,7 +142,12 @@ class TestHaukClientCreatePostStop(TestCase):
                 content_type="application/x-www-form-urlencoded",
             )
         self.assertEqual(post_resp1.status_code, 200)
-        self.assertEqual(_parse_hauk_lines(post_resp1)[0], "OK")
+        post_lines = _parse_hauk_lines(post_resp1)
+        self.assertEqual(post_lines[0], "OK")
+        self.assertGreaterEqual(len(post_lines), 3, post_lines)
+        self.assertIn("%s", post_lines[1])
+        self.assertIn("/extensions/live-track/share", post_lines[1])
+        self.assertTrue(post_lines[2], "Expected share CSV (at least one share ID)")
 
         with _patch_live_track_enabled():
             post_resp2 = self.client.post(
