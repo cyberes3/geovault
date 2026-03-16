@@ -173,7 +173,7 @@ class PlaceEditActivity : AppCompatActivity() {
         Log.d(TAG, "onMapReadyFromFragment: clearing old refs, style.uri=${style.uri}")
         symbolManager = null
         placeSymbol = null
-        val bitmap = MapMarkerUtils.getMarkerBitmap(this, CommonR.drawable.gv_common_ic_marker_default)
+        val bitmap = MapMarkerUtils.getMarkerBitmap(this, com.geovault.common.maps.R.drawable.gv_common_ic_marker_default)
         if (bitmap != null) {
             style.addImage(ICON_MARKER_PLACE, bitmap, false)
         }

@@ -77,5 +77,4 @@ object MapMarkerUtils {
         strokeDrawable.draw(canvas)
         return result
     }
-
 }

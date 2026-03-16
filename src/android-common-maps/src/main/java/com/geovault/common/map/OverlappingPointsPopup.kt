@@ -15,7 +15,7 @@ import android.widget.ImageView
 import android.widget.ListView
 import android.widget.PopupWindow
 import android.widget.TextView
-import com.geovault.common.R
+import com.geovault.common.maps.R
 import kotlin.math.ceil
 
 /**

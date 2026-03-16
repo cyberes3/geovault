@@ -264,8 +264,8 @@ class MapActivity : AppCompatActivity() {
     }
 
     private fun clearSelectionUi() {
-        findViewById<android.widget.TextView>(R.id.placeName).text = getString(CommonR.string.gv_common_map_select_place)
-        findViewById<android.widget.TextView>(R.id.placeDescription).text = getString(CommonR.string.gv_common_map_tap_marker_hint)
+        findViewById<android.widget.TextView>(R.id.placeName).text = getString(com.geovault.common.maps.R.string.gv_common_map_select_place)
+        findViewById<android.widget.TextView>(R.id.placeDescription).text = getString(com.geovault.common.maps.R.string.gv_common_map_tap_marker_hint)
         val viewInListButton = findViewById<android.widget.Button>(R.id.viewInListButton)
         val editPlaceButton = findViewById<android.widget.Button>(R.id.editPlaceButton)
         val navigateButton = findViewById<android.widget.Button>(R.id.navigateButton)
@@ -294,8 +294,8 @@ class MapActivity : AppCompatActivity() {
         selectionSymbol = null
         symbolManager = null
         selectionSymbolManager = null
-        val defaultBitmap = MapMarkerUtils.getMarkerBitmap(this, CommonR.drawable.gv_common_ic_marker_default)
-        val selectedBitmap = MapMarkerUtils.getMarkerBitmap(this, CommonR.drawable.gv_common_ic_marker_selected)
+        val defaultBitmap = MapMarkerUtils.getMarkerBitmap(this, com.geovault.common.maps.R.drawable.gv_common_ic_marker_default)
+        val selectedBitmap = MapMarkerUtils.getMarkerBitmap(this, com.geovault.common.maps.R.drawable.gv_common_ic_marker_selected)
         if (defaultBitmap == null || selectedBitmap == null) {
             Log.e(TAG, "addMarkersIfReady: failed to load marker bitmaps")
             return

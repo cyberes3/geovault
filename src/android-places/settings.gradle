@@ -16,4 +16,6 @@ dependencyResolutionManagement {
 rootProject.name = "android-places"
 include ':app'
 include ':android-common'
+include ':android-common-maps'
 project(':android-common').projectDir = file("../android-common")
+project(':android-common-maps').projectDir = file("../android-common-maps")

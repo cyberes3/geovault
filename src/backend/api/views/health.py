@@ -114,7 +114,7 @@ def health_check(request):
 
         return JsonResponse({
             "status": status,
-            "components": components
+            "components": dict(sorted(components.items())),
         }, status=status_code)
 
     except Exception:
@@ -122,7 +122,7 @@ def health_check(request):
         _logger.error(f"Health check failed with exception:\n{traceback.format_exc()}")
         return JsonResponse({
             "status": "unhealthy",
-            "components": components
+            "components": dict(sorted(components.items())),
         }, status=500)
 
 
