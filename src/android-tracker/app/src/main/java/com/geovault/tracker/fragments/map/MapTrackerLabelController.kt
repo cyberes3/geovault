@@ -1,0 +1,140 @@
+package com.geovault.tracker.fragments.map
+
+import android.content.Context
+import android.content.res.Resources
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
+import com.geovault.tracker.R
+
+internal sealed class TrackerLabelState {
+    data class GroupMode(
+        val labelText: String,
+        val resetContentDescription: String,
+        val showAllTrackersContentDescription: String
+    ) : TrackerLabelState()
+
+    object HideCardClearDisplayed : TrackerLabelState()
+
+    data class ShowTrackerMode(
+        val labelText: String,
+        val resetButtonVisibility: Int,
+        val resetContentDescription: String,
+        val showAllTrackersVisibility: Int,
+        val showAllTrackersContentDescription: String
+    ) : TrackerLabelState()
+}
+
+internal object MapTrackerLabelController {
+    fun computeLabelState(
+        mapViewContext: MapViewContext,
+        showAllTrackers: Boolean,
+        displayedTrackerId: String?,
+        displayedTrackerName: String?,
+        displayedGroupName: String?,
+        defaultTrackerId: String,
+        defaultTrackerName: String,
+        context: Context
+    ): TrackerLabelState {
+        if (mapViewContext == MapViewContext.GROUP) {
+            return TrackerLabelState.GroupMode(
+                labelText = displayedGroupName?.takeIf { it.isNotBlank() } ?: context.getString(R.string.groups_title),
+                resetContentDescription = context.getString(R.string.show_default_tracker),
+                showAllTrackersContentDescription = context.getString(R.string.show_all_trackers)
+            )
+        }
+        val showingSpecificTracker = !showAllTrackers &&
+            mapViewContext == MapViewContext.SPECIFIC_TRACKER &&
+            !displayedTrackerId.isNullOrEmpty()
+        if (defaultTrackerId.isEmpty() && !showingSpecificTracker) {
+            return TrackerLabelState.HideCardClearDisplayed
+        }
+        val labelName = if (showAllTrackers) {
+            context.getString(R.string.show_all_trackers)
+        } else {
+            displayedTrackerName?.takeIf { it.isNotBlank() }
+                ?: defaultTrackerName.takeIf { it.isNotBlank() }
+                ?: context.getString(R.string.select_tracker)
+        }
+        val resetVisibility = when {
+            showAllTrackers -> View.GONE
+            mapViewContext != MapViewContext.DEFAULT_TRACKER -> View.VISIBLE
+            else -> View.GONE
+        }
+        val showAllTrackersVisibility = if (mapViewContext == MapViewContext.DEFAULT_TRACKER) View.VISIBLE else View.GONE
+        val showAllTrackersContentDescription = if (showAllTrackers) context.getString(R.string.show_default_tracker) else context.getString(R.string.show_all_trackers)
+        return TrackerLabelState.ShowTrackerMode(
+            labelText = labelName,
+            resetButtonVisibility = resetVisibility,
+            resetContentDescription = context.getString(R.string.show_default_tracker),
+            showAllTrackersVisibility = showAllTrackersVisibility,
+            showAllTrackersContentDescription = showAllTrackersContentDescription
+        )
+    }
+
+    fun isStreaming(displayedTrackerId: String?, defaultTrackerId: String): Boolean {
+        return displayedTrackerId != null && defaultTrackerId.isNotEmpty() && displayedTrackerId != defaultTrackerId
+    }
+
+    internal data class StreamingLabelState(val visible: Boolean, val labelText: String?)
+
+    fun computeStreamingLabelState(
+        displayedTrackerId: String?,
+        defaultTrackerId: String,
+        lastStreamedPointTimeMs: Long?,
+        lastCachedUpdateTimeMs: Long?,
+        context: Context
+    ): StreamingLabelState {
+        if (!isStreaming(displayedTrackerId, defaultTrackerId)) {
+            return StreamingLabelState(visible = false, labelText = null)
+        }
+        val effectiveTs = lastStreamedPointTimeMs ?: lastCachedUpdateTimeMs
+        val labelText = formatStreamingLastUpdated(context, effectiveTs)
+        return StreamingLabelState(visible = labelText != null, labelText = labelText)
+    }
+
+    fun formatStreamingLastUpdated(context: Context, effectiveTs: Long?): String? {
+        if (effectiveTs == null) return null
+        val diffMs = System.currentTimeMillis() - effectiveTs
+        val diffSec = (diffMs / 1000).coerceAtLeast(0)
+        val (n, unitResId) = when {
+            diffSec < 60 -> {
+                val n = diffSec.toInt()
+                n to if (n == 1) R.string.last_updated_second else R.string.last_updated_seconds
+            }
+            diffSec < 3600 -> {
+                val n = (diffSec / 60).toInt()
+                n to if (n == 1) R.string.last_updated_minute else R.string.last_updated_minutes
+            }
+            diffSec < 86400 -> {
+                val n = (diffSec / 3600).toInt()
+                n to if (n == 1) R.string.last_updated_hour else R.string.last_updated_hours
+            }
+            else -> {
+                val n = (diffSec / 86400).toInt()
+                n to if (n == 1) R.string.last_updated_day else R.string.last_updated_days
+            }
+        }
+        return context.getString(R.string.last_updated_streaming, n, context.getString(unitResId))
+    }
+
+    fun applyLabelWidthConstraints(
+        resources: Resources,
+        trackerLabelCard: View,
+        trackerNameLabel: TextView,
+        lastUpdatedLabel: TextView
+    ) {
+        val density = resources.displayMetrics.density
+        val maxAllowedWidth = (resources.displayMetrics.widthPixels * 2) / 3
+        trackerLabelCard.layoutParams = trackerLabelCard.layoutParams.apply {
+            width = ViewGroup.LayoutParams.WRAP_CONTENT
+        }
+        trackerNameLabel.maxWidth = maxAllowedWidth - (90 * density).toInt()
+        val updatedFixedDesiredWidth = (160 * density).toInt()
+        val cappedUpdatedWidth = updatedFixedDesiredWidth.coerceAtMost(maxAllowedWidth - (34 * density).toInt())
+        lastUpdatedLabel.layoutParams = lastUpdatedLabel.layoutParams.apply {
+            width = cappedUpdatedWidth
+        }
+        lastUpdatedLabel.maxWidth = cappedUpdatedWidth
+    }
+}

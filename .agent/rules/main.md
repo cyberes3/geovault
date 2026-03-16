@@ -13,7 +13,7 @@ YES: `./run-tests.sh test_api/test_app_releases.py` NO: `src/tests/run-tests.sh 
 
 Do not re-export modules or use __all__. Instead, do direct imports.
 
-DO NOT MANUALLY CREATE OR EDIT DJANGO MIGRATIONS!!!!! Use `manage.py` to generate them. 
+DO NOT MANUALLY CREATE OR EDIT DJANGO MIGRATIONS!!!!! Use `manage.py` to generate them.
 
 Prioritize using the provided Heroicons components for icons on the frontend instead of creating custom SVGs.
 For example `import { ChevronDownIcon, Bars3Icon, XMarkIcon } from '@heroicons/vue/24/{outline or solid}';`
@@ -29,9 +29,10 @@ These apps share visual styles so make sure that changes are made in all apps.
 Apps only target the latest Android version and SDK so do not do things like `if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)`.
 YOU ARE NOT ALLOWED TO DO `@Suppress("DEPRECATION")`!!!!!! YOU MUST FIX IT!!!!!!!
 We are using Material Design 2 only.
-We have preset color pallets in `android-common`. Please prioritize using those instead of hard-coding hex colors. 
+We have preset color pallets in `android-common`. Please prioritize using those instead of hard-coding hex colors.
 No shadows on anything.
 The "survey app" is symlinked in to `src/android-survey-data-viewer`. It may not show up correctly in your tools.
 `android-common` also has a lot of common UI components that you should use.
+DO NOT DO MEGA FILES! Logically put code in separate files rather than in one giant file.
 
-External repos are provided for you in the `external sources/` directory. This folder is read-only. If you need to reference the source code of a library please check here before fetching GitHub. 
+External repos are provided for you in the `external sources/` directory. This folder is read-only. If you need to reference the source code of a library please check here before fetching GitHub.

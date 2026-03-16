@@ -1,4 +1,4 @@
-package com.geovault.tracker.fragments
+package com.geovault.tracker.fragments.map
 
 import kotlin.math.abs
 import kotlin.math.min

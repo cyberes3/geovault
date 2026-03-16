@@ -1,4 +1,4 @@
-package com.geovault.tracker.fragments
+package com.geovault.tracker.fragments.map
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

@@ -4,10 +4,10 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import com.geovault.tracker.fragments.HomeFragment
-import com.geovault.tracker.fragments.MapFragment
 import com.geovault.tracker.fragments.SettingsFragment
 import com.geovault.tracker.fragments.SharedTrackersFragment
 import com.geovault.tracker.fragments.TrackersPagerFragment
+import com.geovault.tracker.fragments.map.MapFragment
 
 class MainPagerAdapter(private val activity: FragmentActivity) : FragmentStateAdapter(activity) {
 

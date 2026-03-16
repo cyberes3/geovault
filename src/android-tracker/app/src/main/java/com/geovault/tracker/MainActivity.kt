@@ -101,7 +101,7 @@ class MainActivity : AppCompatActivity() {
         } else if (action == LiveTrackStreamingService.ACTION_STOP) {
             startService(Intent(this, LiveTrackStreamingService::class.java).apply { this.action = action })
             if (isMainContentSetup) {
-                (pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.MapFragment)?.restoreTrackForSelectedTracker()
+                (pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.map.MapFragment)?.restoreTrackForSelectedTracker()
             }
         }
     }
@@ -223,7 +223,7 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<View>(R.id.navMap).setOnClickListener {
             clearOverlayAndThen {
-            val mapFragment = pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.MapFragment
+            val mapFragment = pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.map.MapFragment
             val isStreaming = mapFragment?.isShowingStreamedTrack() ?: false
 
             // Predict what tracker to load on the map and pass metadata instantly
@@ -628,7 +628,7 @@ class MainActivity : AppCompatActivity() {
 
     fun setCurrentTab(index: Int, forceRefreshMap: Boolean = false, delayMs: Long = 0) {
         if (forceRefreshMap && index == 1) {
-            val mapFragment = pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.MapFragment
+            val mapFragment = pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.map.MapFragment
             if (mapFragment != null) {
                 val (group, zoomToTrackerId) = getAndClearInitialGroupAndZoomTo()
                 if (group != null) {
