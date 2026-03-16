@@ -34,8 +34,8 @@ internal object MapStreamingServiceHelper {
     }
 
     /**
-     * Updates streaming for the displayed tracker: stop if not in SPECIFIC_TRACKER context,
-     * otherwise start streaming for the displayed tracker id.
+     * Updates streaming for the displayed tracker: stream whenever map is in single-tracker
+     * context and a tracker id is available.
      */
     fun updateStreamingForDisplayedTracker(
         displayedTrackerId: String?,
@@ -44,7 +44,7 @@ internal object MapStreamingServiceHelper {
         startStreaming: (Set<String>, String?) -> Unit,
         stopStreaming: () -> Unit
     ) {
-        if (mapViewContext != MapViewContext.SPECIFIC_TRACKER) {
+        if (mapViewContext == MapViewContext.GROUP) {
             stopStreaming()
             return
         }

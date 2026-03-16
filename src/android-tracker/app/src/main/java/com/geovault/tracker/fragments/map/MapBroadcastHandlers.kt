@@ -3,20 +3,9 @@ package com.geovault.tracker.fragments.map
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.location.Location
-import androidx.core.content.IntentCompat
 import com.geovault.tracker.LiveTrackStreamingService
 
 internal object MapBroadcastHandlers {
-    fun createLocationReceiver(onLocationUpdate: (Location) -> Unit): BroadcastReceiver {
-        return object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                val location = IntentCompat.getParcelableExtra(intent, "location", Location::class.java)
-                if (location != null) onLocationUpdate(location)
-            }
-        }
-    }
-
     fun createLiveTrackPointReceiver(
         onTrackPoint: (trackId: String, lat: Double, lon: Double, tsMs: Long, accuracyMeters: Float?) -> Unit
     ): BroadcastReceiver {

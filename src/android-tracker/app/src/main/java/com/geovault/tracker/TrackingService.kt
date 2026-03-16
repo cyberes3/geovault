@@ -304,11 +304,7 @@ class TrackingService : Service() {
 
         lastLocation = smoothedLocation
 
-        val intent = Intent("com.geovault.tracker.LOCATION_UPDATE").apply {
-            setPackage(packageName)
-            putExtra("location", smoothedLocation)
-        }
-        sendBroadcast(intent)
+        broadcastTrackPoint(smoothedLocation)
 
         serviceScope.launch {
             val queued = QueuedLocation.fromLocation(smoothedLocation, totalDistanceMeters)
@@ -326,7 +322,7 @@ class TrackingService : Service() {
         
         try {
             val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-            val trackerIdStr = prefs.getString("selected_tracker_id", "") ?: ""
+            val trackerIdStr = SelectedTrackerPrefs.selectedTrackerId(this)
             if (trackerIdStr.isEmpty()) {
                 Log.e(TAG, "No tracker selected, cannot push locations")
                 updateNotificationCount()
@@ -335,7 +331,7 @@ class TrackingService : Service() {
             val trackerId = try {
                 java.util.UUID.fromString(trackerIdStr)
             } catch (e: IllegalArgumentException) {
-                Log.e(TAG, "Invalid selected_tracker_id, cannot push locations", e)
+                Log.e(TAG, "Invalid selected tracker id, cannot push locations", e)
                 updateNotificationCount()
                 return
             }
@@ -425,6 +421,26 @@ class TrackingService : Service() {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.notify(NOTIFICATION_ID, createNotification(pointsSentThisSession, count))
         }
+    }
+
+    /**
+     * Broadcast track points using the same contract as LiveTrackStreamingService so map updates
+     * are handled by a single receiver/pipeline regardless of source.
+     */
+    private fun broadcastTrackPoint(location: Location) {
+        val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
+        if (trackerId.isEmpty()) return
+        val intent = Intent(LiveTrackStreamingService.BROADCAST_TRACK_POINT).apply {
+            setPackage(packageName)
+            putExtra(LiveTrackStreamingService.EXTRA_TRACK_ID, trackerId)
+            putExtra(LiveTrackStreamingService.EXTRA_POINT_LAT, location.latitude)
+            putExtra(LiveTrackStreamingService.EXTRA_POINT_LON, location.longitude)
+            putExtra(LiveTrackStreamingService.EXTRA_POINT_TS_MS, location.time)
+            if (location.hasAccuracy()) {
+                putExtra(LiveTrackStreamingService.EXTRA_ACCURACY_METERS, location.accuracy)
+            }
+        }
+        sendBroadcast(intent)
     }
 
     private fun createNotification(sentCount: Int, queuedCount: Int): Notification {

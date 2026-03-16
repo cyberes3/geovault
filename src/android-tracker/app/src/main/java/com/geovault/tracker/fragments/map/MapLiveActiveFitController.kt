@@ -24,7 +24,7 @@ internal object MapLiveActiveFitController {
         hasTrackPoints: Boolean
     ): Boolean {
         val singleTrackerVisible = !showAllTrackers &&
-            (mapViewContext == MapViewContext.DEFAULT_TRACKER || mapViewContext == MapViewContext.SPECIFIC_TRACKER) &&
+            mapViewContext == MapViewContext.SINGLE_TRACKER &&
             hasTrackPoints
         return showAllTrackers || mapViewContext == MapViewContext.GROUP || singleTrackerVisible
     }
@@ -37,7 +37,7 @@ internal object MapLiveActiveFitController {
     ): Boolean {
         if (!available) return false
         val singleTrackerMode = !showAllTrackers &&
-            (mapViewContext == MapViewContext.DEFAULT_TRACKER || mapViewContext == MapViewContext.SPECIFIC_TRACKER)
+            mapViewContext == MapViewContext.SINGLE_TRACKER
         return !singleTrackerMode || showMyLocationEnabled
     }
 }

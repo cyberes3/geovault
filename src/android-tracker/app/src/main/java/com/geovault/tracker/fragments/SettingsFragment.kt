@@ -347,9 +347,8 @@ class SettingsFragment : Fragment() {
                 GeovaultAuthManager.revokeToken(requireContext(), GeovaultAuthManager.getAccessToken(requireContext()))
                 GeovaultAuthManager.revokeToken(requireContext(), GeovaultAuthManager.getRefreshToken(requireContext()))
                 GeovaultAuthManager.clearTokens(requireContext())
-                TrackerRepository.clearCache()
-                TrackerRepository.clearCurrentTrackerCache()
-                TrackerRepository.clearGeometryCache()
+                TrackerRepository.clearListCaches()
+                TrackerRepository.clearSelectedTrackerCaches()
                 updateUi()
                 Toast.makeText(requireContext(), getString(R.string.disconnect), Toast.LENGTH_SHORT).show()
             }

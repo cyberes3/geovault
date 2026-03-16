@@ -1,7 +1,6 @@
 package com.geovault.tracker.fragments.map
 
 import android.content.Context
-import android.location.Location
 import com.geovault.common.map.LocationComponentHelper
 import com.geovault.tracker.defaultTrackerColorHex
 import org.maplibre.android.geometry.LatLng
@@ -13,6 +12,13 @@ import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
 
 internal object MapTrackLineUpdater {
+    private fun isValidPoint(latLng: LatLng): Boolean {
+        return latLng.latitude.isFinite() &&
+            latLng.longitude.isFinite() &&
+            latLng.latitude in -90.0..90.0 &&
+            latLng.longitude in -180.0..180.0
+    }
+
     fun updateTrackLine(
         style: Style,
         trackSourceId: String,
@@ -45,8 +51,6 @@ internal object MapTrackLineUpdater {
         style: Style,
         trackPoints: List<LatLng>,
         currentTrackerColor: String?,
-        displayedTrackerId: String?,
-        defaultTrackerId: String,
         showMyLocationEnabled: Boolean,
         lastStreamedAccuracyMeters: Float?,
         trackingServiceAccuracyMeters: Float?,
@@ -63,7 +67,12 @@ internal object MapTrackLineUpdater {
             return
         }
 
-        val toLatLng = trackPoints.last()
+        val toLatLng = trackPoints.lastOrNull(::isValidPoint)
+        if (toLatLng == null) {
+            source.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+            accuracySource?.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+            return
+        }
         val toRotation = MapTrackGeometryRenderer.getTrackDirectionDegrees(trackPoints)
         val hexColor = currentTrackerColor ?: defaultTrackerColorHex(context)
         val imageId = "track-direction-arrow-${hexColor.replace("#", "")}"
@@ -74,23 +83,10 @@ internal object MapTrackLineUpdater {
             symbolIconId = "track-direction-arrow"
         }
 
-        val showingDefault = displayedTrackerId == null || displayedTrackerId == defaultTrackerId
-        val accuracyMeters = if (showingDefault) trackingServiceAccuracyMeters else lastStreamedAccuracyMeters
+        // Unify marker behavior for all trackers: use one symbol pipeline and prefer streamed accuracy
+        // while still falling back to tracking-service accuracy when needed.
+        val accuracyMeters = lastStreamedAccuracyMeters ?: trackingServiceAccuracyMeters
         val accuracyValue = (accuracyMeters?.takeIf { it > 0f } ?: 0f).toDouble()
-
-        if (showingDefault && !showMyLocationEnabled) {
-            val location = Location("tracker-default-location").apply {
-                latitude = toLatLng.latitude
-                longitude = toLatLng.longitude
-                accuracy = accuracyValue.toFloat()
-                bearing = toRotation
-            }
-            LocationComponentHelper.setEnabled(map, true)
-            LocationComponentHelper.forceLocation(map, location)
-            source.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
-            accuracySource?.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
-            return
-        }
 
         if (!showMyLocationEnabled) {
             LocationComponentHelper.setEnabled(map, false)
@@ -105,8 +101,12 @@ internal object MapTrackLineUpdater {
 
         if (accuracyValue > 0.0) {
             val circle = MapTrackGeometryRenderer.buildAccuracyPolygon(toLatLng, accuracyValue)
-            val accuracyFeature = Feature.fromGeometry(circle)
-            accuracySource?.setGeoJson(accuracyFeature)
+            if (circle != null) {
+                val accuracyFeature = Feature.fromGeometry(circle)
+                accuracySource?.setGeoJson(accuracyFeature)
+            } else {
+                accuracySource?.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+            }
         } else {
             accuracySource?.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
         }

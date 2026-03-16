@@ -5,7 +5,12 @@ internal object MapLiveStreamHandler {
         return showAllTrackers || mapViewContext == MapViewContext.GROUP
     }
 
-    fun shouldHandleSingleTrackPoint(trackId: String, displayedTrackerId: String?): Boolean {
-        return trackId == displayedTrackerId
+    fun shouldHandleSingleTrackPoint(
+        trackId: String,
+        displayedTrackerId: String?,
+        selectedTrackerId: String?
+    ): Boolean {
+        val expectedTrackId = displayedTrackerId ?: selectedTrackerId
+        return !expectedTrackId.isNullOrEmpty() && trackId == expectedTrackId
     }
 }

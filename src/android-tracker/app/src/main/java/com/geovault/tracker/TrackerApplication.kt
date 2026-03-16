@@ -20,9 +20,8 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
         fun prefetchIfNeeded(context: Context) {
             if (!GeovaultAuthManager.isLoggedIn(context)) return
             TrackerRepository.getTrackers(context, forceRefresh = true) {
-                val prefs = context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-                val trackerId = prefs.getString("selected_tracker_id", null)
-                if (!trackerId.isNullOrBlank()) {
+                val trackerId = SelectedTrackerPrefs.selectedTrackerId(context)
+                if (trackerId.isNotBlank()) {
                     TrackerRepository.getTracker(context, trackerId) { }
                 }
             }
@@ -53,9 +52,9 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
         context.startService(Intent(context, TrackingService::class.java).apply { action = TrackingService.ACTION_STOP })
         context.startService(Intent(context, LiveTrackStreamingService::class.java).apply { action = LiveTrackStreamingService.ACTION_STOP })
         
-        // 3. Clear repository cache
-        TrackerRepository.clearCache()
-        TrackerRepository.clearCurrentTrackerCache()
+        // 3. Clear repository caches (list + selected-tracker)
+        TrackerRepository.clearListCaches()
+        TrackerRepository.clearSelectedTrackerCaches()
         
         // 4. Return to login/guest screen
         val intent = Intent(context, MainActivity::class.java).apply {

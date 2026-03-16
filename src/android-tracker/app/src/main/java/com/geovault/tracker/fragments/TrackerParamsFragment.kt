@@ -19,6 +19,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.LiveTrackStreamingService
 import com.geovault.tracker.R
+import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
 import org.json.JSONObject
@@ -126,8 +127,7 @@ class TrackerParamsFragment : Fragment() {
 
     private fun loadTrackerData(refresh: Boolean = false) {
         val id = trackerId ?: return
-        val defaultId = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-            .getString("selected_tracker_id", "") ?: ""
+        val selectedId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
 
         if (refresh) {
             paramsSwipeRefresh.isRefreshing = true
@@ -140,11 +140,11 @@ class TrackerParamsFragment : Fragment() {
             paramsLoadingSpinner.start()
         }
 
-        // Default track: fill from local cache (geometryCache from map, etc.) when available.
-        if (defaultId.isNotEmpty() && id == defaultId) {
+        // Selected track: fill from local cache (geometryCache from map, etc.) when available.
+        if (selectedId.isNotEmpty() && id == selectedId) {
             // Don't clear cache so getTrackerGeometry can return cached geometry/params if available.
         } else {
-            TrackerRepository.clearCurrentTrackerCache()
+            TrackerRepository.clearSelectedTrackerCaches()
         }
 
         // Important: only the single-tracker call drives the params UI. Use geometry endpoint for full track + params.

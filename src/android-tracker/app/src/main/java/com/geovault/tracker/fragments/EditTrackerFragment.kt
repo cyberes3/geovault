@@ -3,10 +3,7 @@ package com.geovault.tracker.fragments
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -25,9 +22,10 @@ import com.geovault.common.GeovaultAuthManager
 import com.geovault.tracker.defaultTrackerColorHex
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
+import com.geovault.tracker.SelectedTrackerManager
+import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
-import com.geovault.tracker.TrackingService
 import com.geovault.tracker.UserItem
 import com.geovault.common.LoadingSpinner
 import com.geovault.common.R as CommonR
@@ -43,7 +41,7 @@ class EditTrackerFragment : Fragment() {
     private lateinit var colorEdit: EditText
     private lateinit var colorPreview: View
     private lateinit var pickColorButton: MaterialButton
-    private lateinit var defaultTrackSwitch: SwitchCompat
+    private lateinit var selectedTrackSwitch: SwitchCompat
     private lateinit var hideOnMapSwitch: SwitchCompat
     private lateinit var saveButton: MaterialButton
     private lateinit var clearHistoryButton: MaterialButton
@@ -131,7 +129,7 @@ class EditTrackerFragment : Fragment() {
         colorEdit = view.findViewById(R.id.editTrackerColor)
         colorPreview = view.findViewById(R.id.colorPreview)
         pickColorButton = view.findViewById(R.id.pickColorButton)
-        defaultTrackSwitch = view.findViewById(R.id.editTrackerDefaultSwitch)
+        selectedTrackSwitch = view.findViewById(R.id.editTrackerDefaultSwitch)
         hideOnMapSwitch = view.findViewById(R.id.editTrackerHideOnMapSwitch)
         saveButton = view.findViewById(R.id.editTrackerSave)
         clearHistoryButton = view.findViewById(R.id.editTrackerClearHistory)
@@ -255,31 +253,21 @@ class EditTrackerFragment : Fragment() {
 
         val tracker = arguments?.getParcelable<Tracker>(ARG_TRACKER, Tracker::class.java)
         val trackerId: String = tracker?.id ?: arguments?.getString(ARG_TRACKER_ID) ?: return
-        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        defaultTrackSwitch.isChecked = prefs.getString("selected_tracker_id", null) == trackerId
-        defaultTrackSwitch.setOnCheckedChangeListener { _, isChecked ->
+        selectedTrackSwitch.isChecked = SelectedTrackerPrefs.selectedTrackerId(requireContext()) == trackerId
+        selectedTrackSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
                 val name = nameEdit.text?.toString()?.takeIf { it.isNotBlank() } ?: ""
-                prefs.edit()
-                    .putString("selected_tracker_id", trackerId)
-                    .putString("selected_tracker_name", name)
-                    .apply()
+                SelectedTrackerManager.setSelectedTracker(
+                    context = requireContext(),
+                    trackerId = trackerId,
+                    trackerName = name,
+                    restartTrackingIfRunning = true
+                )
                 requireActivity().supportFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
                 TrackerRepository.getTrackerGeometry(requireContext(), trackerId) { }
-                if (TrackingService.isRunning) {
-                    val ctx = requireContext()
-                    ctx.startService(Intent(ctx, TrackingService::class.java).apply { action = TrackingService.ACTION_STOP })
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        ctx.startForegroundService(Intent(ctx, TrackingService::class.java).apply { action = TrackingService.ACTION_START })
-                    }, 400)
-                }
             } else {
-                if (prefs.getString("selected_tracker_id", null) == trackerId) {
-                    prefs.edit()
-                        .remove("selected_tracker_id")
-                        .remove("selected_tracker_name")
-                        .apply()
-                    TrackerRepository.clearGeometryCache()
+                if (SelectedTrackerPrefs.selectedTrackerId(requireContext()) == trackerId) {
+                    SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
                     requireActivity().supportFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
                 }
             }
@@ -332,14 +320,8 @@ class EditTrackerFragment : Fragment() {
                             updated != null -> {
                                 currentFetchedTracker = updated
                                 if (hiddenInList) {
-                                    val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-                                    if (trackerId == prefs.getString("selected_tracker_id", null)) {
-                                        prefs.edit()
-                                            .remove("selected_tracker_id")
-                                            .remove("selected_tracker_name")
-                                            .apply()
-                                        TrackerRepository.clearCurrentTrackerCache()
-                                        TrackerRepository.clearGeometryCache()
+                                    if (trackerId == SelectedTrackerPrefs.selectedTrackerId(requireContext())) {
+                                        SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
                                     }
                                     TrackersListFragment.pendingHiddenTrackerId = trackerId
                                     requireActivity().supportFragmentManager.setFragmentResult(
@@ -411,19 +393,14 @@ class EditTrackerFragment : Fragment() {
                 .setTitle(getString(R.string.delete_tracker_confirm_title))
                 .setMessage(getString(R.string.delete_tracker_confirm_message))
                 .setPositiveButton(getString(R.string.delete_tracker)) { _, _ ->
-                    val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-                    val selectedId = prefs.getString("selected_tracker_id", null)
+                    val selectedId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
                     setAllInputsEnabled(false)
                     TrackerRepository.deleteTracker(requireContext(), trackerId) { success ->
                         if (isAdded) {
                             requireActivity().runOnUiThread {
                                 if (success) {
                                     if (trackerId == selectedId) {
-                                        prefs.edit()
-                                            .remove("selected_tracker_id")
-                                            .remove("selected_tracker_name")
-                                            .apply()
-                                        TrackerRepository.clearCurrentTrackerCache()
+                                        SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
                                     }
                                     requireActivity().supportFragmentManager.setFragmentResult(
                                         TrackersListFragment.REQUEST_REFRESH_LIST,
@@ -461,7 +438,7 @@ class EditTrackerFragment : Fragment() {
         updateColorPreview(colorPreview, color)
         initialName = tracker.name
         initialColor = normalizeColorForCompare(color)
-        initialDefaultTrack = defaultTrackSwitch.isChecked
+        initialDefaultTrack = selectedTrackSwitch.isChecked
         val recentVal = (tracker.settings?.get("recent_data_window") as? String) ?: ""
         initialRecentDataWindow = recentVal
         val idx = recentDataValues.indexOf(recentVal).coerceAtLeast(0)
@@ -515,10 +492,8 @@ class EditTrackerFragment : Fragment() {
         } else {
             ownerToolsSection.visibility = View.GONE
         }
-        if (requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).getString("selected_tracker_id", null) == trackerId) {
-            requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
-                .putString("selected_tracker_name", tracker.name)
-                .apply()
+        if (SelectedTrackerPrefs.selectedTrackerId(requireContext()) == trackerId) {
+            SelectedTrackerPrefs.updateSelectedTrackerName(requireContext(), tracker.name)
         }
         val hiddenInList = (tracker.settings?.get("hidden_in_list") as? Boolean) == true
         initialHiddenInList = hiddenInList
@@ -540,7 +515,7 @@ class EditTrackerFragment : Fragment() {
         val defaultHex = defaultTrackerColorHex(requireContext())
         val currentColorNorm = normalizeColorForCompare(colorEdit.text?.toString()?.trim()?.ifEmpty { null }) ?: defaultHex
         val initialColorNorm = initialColor ?: defaultHex
-        val currentDefault = defaultTrackSwitch.isChecked
+        val currentDefault = selectedTrackSwitch.isChecked
         val currentRecent = getSelectedRecentDataWindow()
         val initialRecent = initialRecentDataWindow ?: ""
         val currentHiddenInList = hideOnMapSwitch.isChecked
@@ -662,7 +637,7 @@ class EditTrackerFragment : Fragment() {
         nameEdit.isEnabled = enabled
         colorEdit.isEnabled = enabled
         pickColorButton.isEnabled = enabled
-        defaultTrackSwitch.isEnabled = enabled
+        selectedTrackSwitch.isEnabled = enabled
         hideOnMapSwitch.isEnabled = enabled
         recentDataWindowSpinner.isEnabled = enabled
         recentDataWindowSpinner.isClickable = enabled

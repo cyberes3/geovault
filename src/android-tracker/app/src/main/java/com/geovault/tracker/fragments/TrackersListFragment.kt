@@ -19,6 +19,7 @@ import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.parseHexToColor
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
+import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
 import com.google.android.material.card.MaterialCardView
@@ -275,7 +276,7 @@ class TrackersListFragment : Fragment() {
     }
 
     private fun viewOnMap(tracker: Tracker) {
-        TrackerRepository.clearCurrentTrackerCache()
+        TrackerRepository.clearSelectedTrackerCaches()
         (activity as? MainActivity)?.setInitialTrackForMap(tracker)
         (activity as? MainActivity)?.setCurrentTab(1, forceRefreshMap = true, delayMs = 50)
     }
@@ -395,8 +396,7 @@ class TrackersListFragment : Fragment() {
             private val btnRemoveFromShare: MaterialButton = itemView.findViewById(R.id.btnRemoveFromShare)
 
             fun bind(tracker: Tracker, highlightedId: String?) {
-                val selectedId = itemView.context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-                    .getString("selected_tracker_id", "") ?: ""
+                val selectedId = SelectedTrackerPrefs.selectedTrackerId(itemView.context)
                 trackerSelectedCheck.visibility = if (tracker.id == selectedId) View.VISIBLE else View.GONE
                 trackerName.text = tracker.name
                 val ownerText = tracker.owner_email?.takeIf { it.isNotBlank() }

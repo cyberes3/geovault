@@ -9,6 +9,18 @@ import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 
+/**
+ * Single source for tracker list and per-tracker data. Cache invalidation follows this policy:
+ *
+ * - **clearListCaches()**: Trackers list, groups, map visibility. Use on logout/auth failure or when
+ *   list data may be stale globally.
+ * - **clearSelectedTrackerCaches()**: Current tracker object, geometry, and coordinates (all data
+ *   tied to the selected tracker). Use when the selected tracker is cleared, changed, deleted, or
+ *   hidden; or when switching to "view" another tracker (e.g. View on map, params for non-selected)
+ *   so the next load is fresh.
+ * - **clearGeometryCache()**: Only geometry and coordinates. Use when geometry is invalidated but
+ *   selection is unchanged (e.g. user cleared tracker history).
+ */
 object TrackerRepository {
     private var trackersCache: List<Tracker>? = null
     private var isFetching = false
@@ -91,23 +103,23 @@ object TrackerRepository {
     /** Returns the tracker from the list cache if present; used for "last updated" on first tap before geometry loads. */
     fun getTrackerFromCache(id: String): Tracker? = trackersCache?.find { it.id == id }
 
-    fun clearCache() {
+    /** Clears list-level caches (trackers, groups, map visibility). Use on logout or when list data may be stale. */
+    fun clearListCaches() {
         trackersCache = null
         groupsCache = null
         mapVisibilityCache = null
     }
 
     fun getTracker(context: Context, id: String, forceRefresh: Boolean = false, callback: (Tracker?) -> Unit) {
-        val defaultId = context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-            .getString("selected_tracker_id", "") ?: ""
+        val selectedId = SelectedTrackerPrefs.selectedTrackerId(context)
         if (!forceRefresh) {
-            if (id == defaultId && id == currentTrackerId && currentTrackerCache != null) {
+            if (id == selectedId && id == currentTrackerId && currentTrackerCache != null) {
                 callback(currentTrackerCache)
                 return
             }
             val cached = trackersCache?.find { it.id == id }
             if (cached != null) {
-                if (id == defaultId) {
+                if (id == selectedId) {
                     currentTrackerId = id
                     currentTrackerCache = cached
                 }
@@ -129,7 +141,7 @@ object TrackerRepository {
             override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
                 trackerCall = null
                 val tracker = if (response.isSuccessful) response.body() else null
-                if (tracker != null && id == defaultId) {
+                if (tracker != null && id == selectedId) {
                     currentTrackerId = id
                     currentTrackerCache = tracker
                 }
@@ -167,9 +179,7 @@ object TrackerRepository {
         geometryCall = null
     }
 
-    /**
-     * Clears the cached full geometry. Call when the default track is unset so stale data is not shown.
-     */
+    /** Clears only geometry and coordinates caches. Use when geometry is invalidated but selection unchanged (e.g. clear tracker history). */
     fun clearGeometryCache() {
         geometryCache = null
         coordinatesCache = null
@@ -203,8 +213,7 @@ object TrackerRepository {
             callback(null)
             return
         }
-        val selectedId = context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-            .getString("selected_tracker_id", "") ?: ""
+        val selectedId = SelectedTrackerPrefs.selectedTrackerId(context)
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
         val call = api.getTrackerGeometry(id)
@@ -299,7 +308,8 @@ object TrackerRepository {
         })
     }
 
-    fun clearCurrentTrackerCache() {
+    /** Clears all caches tied to the selected tracker (current tracker, geometry, coordinates). Use when selection changes or when switching to view another tracker. */
+    fun clearSelectedTrackerCaches() {
         currentTrackerId = null
         currentTrackerCache = null
         geometryCache = null
@@ -344,9 +354,8 @@ object TrackerRepository {
                     if (response.isSuccessful) {
                         val tracker = response.body()
                         if (tracker != null) {
-                            val defaultId = context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-                                .getString("selected_tracker_id", "") ?: ""
-                            if (id == defaultId) {
+                            val selectedId = SelectedTrackerPrefs.selectedTrackerId(context)
+                            if (id == selectedId) {
                                 currentTrackerId = id
                                 currentTrackerCache = tracker
                             }
@@ -417,9 +426,6 @@ object TrackerRepository {
         api.clearTrackerHistory(trackerId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
                 if (response.isSuccessful) {
-                    if (geometryCache?.first == trackerId) {
-                        geometryCache = null
-                    }
                     clearGeometryCache()
                     trackersCache = null
                 }

@@ -9,7 +9,7 @@ import kotlinx.coroutines.launch
 internal class MapSingleTrackFetchCallbacks(
     val getScope: () -> CoroutineScope,
     val getDisplayedTrackerId: () -> String?,
-    val getDefaultTrackerId: () -> String,
+    val getSelectedTrackerId: () -> String,
     val getShowAllTrackers: () -> Boolean,
     val getMapViewContext: () -> MapViewContext,
     val getTrackPointsEmpty: () -> Boolean,
@@ -18,7 +18,7 @@ internal class MapSingleTrackFetchCallbacks(
     val getGeometryFetchInFlightTrackerId: () -> String?,
     val setGeometryFetchInFlightTrackerId: (String?) -> Unit,
     val setGeometryLoadingInProgress: (Boolean) -> Unit,
-    val updateBottomRightSpinner: (String) -> Unit,
+    val updateBottomRightSpinner: () -> Unit,
     val onSkipped: () -> Unit,
     val onSetZoomToTrackAfterLoad: (Boolean) -> Unit,
     /** Returns true if the Fragment applied the preview (so coordinator considers seeded). Optional accuracy from point_params (e.g. cached tail). */
@@ -31,8 +31,8 @@ internal class MapSingleTrackFetchCallbacks(
 
 internal object MapSingleTrackFetch {
     fun loadHistory(context: Context, callbacks: MapSingleTrackFetchCallbacks) {
-        val defaultTrackerId = callbacks.getDefaultTrackerId()
-        val trackerId = MapDataLoader.resolveHistoryTrackerId(callbacks.getDisplayedTrackerId(), defaultTrackerId)
+        val selectedTrackerId = callbacks.getSelectedTrackerId()
+        val trackerId = MapDataLoader.resolveHistoryTrackerId(callbacks.getDisplayedTrackerId(), selectedTrackerId)
 
         if (trackerId.isEmpty()) {
             callbacks.onSkipped()
@@ -46,7 +46,7 @@ internal object MapSingleTrackFetch {
         TrackerRepository.getTrackers(context, forceRefresh = false) { }
         seedFromCacheOrTail(context, trackerId, null, true, callbacks)
 
-        if (MapDataLoader.shouldAutoZoomDefaultTracker(trackerId, defaultTrackerId, callbacks.getTrackPointsEmpty())) {
+        if (MapDataLoader.shouldAutoZoomSingleTracker(callbacks.getTrackPointsEmpty())) {
             callbacks.onSetZoomToTrackAfterLoad(true)
         }
         fetchFullGeometry(context, trackerId, false, callbacks)
@@ -92,8 +92,8 @@ internal object MapSingleTrackFetch {
                     callbacks.setCoordinatesFetchInFlightTrackerId(null)
                 }
                 if (!callbacks.getIsAdded() || callbacks.getShowAllTrackers() || callbacks.getMapViewContext() == MapViewContext.GROUP) return@launch
-                val defaultId = callbacks.getDefaultTrackerId()
-                val activeTrackerId = MapDataLoader.resolveActiveTrackerId(callbacks.getDisplayedTrackerId(), defaultId)
+                val selectedId = callbacks.getSelectedTrackerId()
+                val activeTrackerId = MapDataLoader.resolveActiveTrackerId(callbacks.getDisplayedTrackerId(), selectedId)
                 if (activeTrackerId != trackerId) return@launch
                 val coords = response?.coordinates ?: return@launch
                 callbacks.onSeededFromNetwork(coords, response.point_params)
@@ -105,7 +105,7 @@ internal object MapSingleTrackFetch {
         if (callbacks.getGeometryFetchInFlightTrackerId() == trackerId) return
         callbacks.setGeometryFetchInFlightTrackerId(trackerId)
         callbacks.setGeometryLoadingInProgress(true)
-        callbacks.updateBottomRightSpinner(callbacks.getDefaultTrackerId())
+        callbacks.updateBottomRightSpinner()
 
         TrackerRepository.getTrackerGeometry(context, trackerId) { tracker ->
             callbacks.getScope().launch {
@@ -113,7 +113,7 @@ internal object MapSingleTrackFetch {
                     callbacks.setGeometryFetchInFlightTrackerId(null)
                 }
                 callbacks.setGeometryLoadingInProgress(false)
-                callbacks.updateBottomRightSpinner(callbacks.getDefaultTrackerId())
+                callbacks.updateBottomRightSpinner()
                 callbacks.onGeometryLoaded(tracker, trackerId, forceReplace)
             }
         }

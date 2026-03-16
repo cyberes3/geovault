@@ -11,13 +11,13 @@ import androidx.core.content.ContextCompat
 import com.flask.colorpicker.ColorPickerView
 import com.flask.colorpicker.builder.ColorPickerDialogBuilder
 
-/** Default tracker color hex from [R.color.default_tracker_color] (gv_common_blue_400). */
+/** Fallback tracker color hex from [R.color.default_tracker_color] (gv_common_blue_400). */
 fun defaultTrackerColorHex(context: Context): String =
     colorToHex(ContextCompat.getColor(context, R.color.default_tracker_color))
 
 /**
  * Parses a hex color string (with or without #) to Android color int.
- * Returns default tracker color from resources when [hex] is null or invalid.
+ * Returns fallback tracker color from resources when [hex] is null or invalid.
  */
 fun parseHexToColor(hex: String?, context: Context): Int {
     val normalized = hex?.trim()?.let { if (it.startsWith("#")) it else "#$it" }?.takeIf { it.isNotEmpty() }

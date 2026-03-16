@@ -4,7 +4,6 @@ import com.geovault.tracker.Tracker
 import org.maplibre.android.geometry.LatLng
 
 internal class MapLiveStreamPointCallbacks(
-    val getDefaultTrackerId: () -> String,
     val getShowAllTrackers: () -> Boolean,
     val getMapViewContext: () -> MapViewContext,
     val getActiveStreamedTrackerIds: () -> Set<String>,
@@ -20,9 +19,10 @@ internal class MapLiveStreamPointCallbacks(
     val scheduleDebouncedMultiTrackRender: () -> Unit,
     val updateMapSelectionUi: () -> Unit,
     val getDisplayedTrackerId: () -> String?,
+    val getSelectedTrackerId: () -> String?,
     val getIsAdded: () -> Boolean,
     val setLastStreamedPointTimeMs: (Long?) -> Unit,
-    val updateStreamingUi: (String) -> Unit,
+    val updateStreamingUi: () -> Unit,
     val addTrackPoint: (LatLng, Long) -> Unit,
     val scheduleTrackLineUpdate: () -> Unit,
     val updateZoomToLatestButtonState: () -> Unit,
@@ -31,6 +31,10 @@ internal class MapLiveStreamPointCallbacks(
 )
 
 internal object MapLiveStreamPointHandler {
+    private fun isValidLatLon(lat: Double, lon: Double): Boolean {
+        return lat.isFinite() && lon.isFinite() && lat in -90.0..90.0 && lon in -180.0..180.0
+    }
+
     fun applyLiveStreamPoint(
         trackId: String,
         lat: Double,
@@ -38,8 +42,8 @@ internal object MapLiveStreamPointHandler {
         timestampMs: Long,
         callbacks: MapLiveStreamPointCallbacks
     ) {
+        if (!isValidLatLon(lat, lon)) return
         val normalizedTimestampMs = MapCoordinateUtils.normalizeTimestampToMs(timestampMs)
-        val defaultTrackerId = callbacks.getDefaultTrackerId()
         val isMultiContext = MapLiveStreamHandler.isMultiContext(callbacks.getShowAllTrackers(), callbacks.getMapViewContext())
 
         if (isMultiContext) {
@@ -65,7 +69,12 @@ internal object MapLiveStreamPointHandler {
             return
         }
 
-        if (!MapLiveStreamHandler.shouldHandleSingleTrackPoint(trackId, callbacks.getDisplayedTrackerId())) return
+        if (!MapLiveStreamHandler.shouldHandleSingleTrackPoint(
+                trackId = trackId,
+                displayedTrackerId = callbacks.getDisplayedTrackerId(),
+                selectedTrackerId = callbacks.getSelectedTrackerId()
+            )
+        ) return
         callbacks.setLastStreamedPointTimeMs(normalizedTimestampMs)
         callbacks.setLastKnownUpdateTimeMsByTrackerId(trackId, normalizedTimestampMs)
         val selection = callbacks.getSelectedMapTracker()
@@ -73,7 +82,7 @@ internal object MapLiveStreamPointHandler {
             callbacks.onUpdateSelectedMapTracker(trackId, lat, lon, normalizedTimestampMs)
             callbacks.updateMapSelectionUi()
         }
-        if (callbacks.getIsAdded()) callbacks.updateStreamingUi(defaultTrackerId)
+        if (callbacks.getIsAdded()) callbacks.updateStreamingUi()
         callbacks.addTrackPoint(LatLng(lat, lon), normalizedTimestampMs)
         callbacks.scheduleTrackLineUpdate()
         callbacks.updateZoomToLatestButtonState()

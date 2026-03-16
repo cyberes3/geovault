@@ -32,60 +32,62 @@ internal object MapTrackerLabelController {
         displayedTrackerId: String?,
         displayedTrackerName: String?,
         displayedGroupName: String?,
-        defaultTrackerId: String,
-        defaultTrackerName: String,
+        selectedTrackerName: String,
+        trackingRunning: Boolean,
         context: Context
     ): TrackerLabelState {
+        if (trackingRunning) {
+            return TrackerLabelState.HideCardClearDisplayed
+        }
         if (mapViewContext == MapViewContext.GROUP) {
             return TrackerLabelState.GroupMode(
                 labelText = displayedGroupName?.takeIf { it.isNotBlank() } ?: context.getString(R.string.groups_title),
-                resetContentDescription = context.getString(R.string.show_default_tracker),
+                resetContentDescription = context.getString(R.string.show_selected_tracker),
                 showAllTrackersContentDescription = context.getString(R.string.show_all_trackers)
             )
         }
-        val showingSpecificTracker = !showAllTrackers &&
-            mapViewContext == MapViewContext.SPECIFIC_TRACKER &&
+        val showingSingleTracker = !showAllTrackers &&
+            mapViewContext != MapViewContext.GROUP &&
             !displayedTrackerId.isNullOrEmpty()
-        if (defaultTrackerId.isEmpty() && !showingSpecificTracker) {
+        if (!showingSingleTracker) {
             return TrackerLabelState.HideCardClearDisplayed
         }
         val labelName = if (showAllTrackers) {
             context.getString(R.string.show_all_trackers)
         } else {
             displayedTrackerName?.takeIf { it.isNotBlank() }
-                ?: defaultTrackerName.takeIf { it.isNotBlank() }
+                ?: selectedTrackerName.takeIf { it.isNotBlank() }
                 ?: context.getString(R.string.select_tracker)
         }
         val resetVisibility = when {
             showAllTrackers -> View.GONE
-            mapViewContext != MapViewContext.DEFAULT_TRACKER -> View.VISIBLE
+            showingSingleTracker -> View.VISIBLE
             else -> View.GONE
         }
-        val showAllTrackersVisibility = if (mapViewContext == MapViewContext.DEFAULT_TRACKER) View.VISIBLE else View.GONE
-        val showAllTrackersContentDescription = if (showAllTrackers) context.getString(R.string.show_default_tracker) else context.getString(R.string.show_all_trackers)
+        val showAllTrackersVisibility = if (showingSingleTracker || showAllTrackers) View.VISIBLE else View.GONE
+        val showAllTrackersContentDescription = if (showAllTrackers) context.getString(R.string.show_selected_tracker) else context.getString(R.string.show_all_trackers)
         return TrackerLabelState.ShowTrackerMode(
             labelText = labelName,
             resetButtonVisibility = resetVisibility,
-            resetContentDescription = context.getString(R.string.show_default_tracker),
+            resetContentDescription = context.getString(R.string.show_selected_tracker),
             showAllTrackersVisibility = showAllTrackersVisibility,
             showAllTrackersContentDescription = showAllTrackersContentDescription
         )
     }
 
-    fun isStreaming(displayedTrackerId: String?, defaultTrackerId: String): Boolean {
-        return displayedTrackerId != null && defaultTrackerId.isNotEmpty() && displayedTrackerId != defaultTrackerId
+    fun isStreaming(displayedTrackerId: String?): Boolean {
+        return !displayedTrackerId.isNullOrEmpty()
     }
 
     internal data class StreamingLabelState(val visible: Boolean, val labelText: String?)
 
     fun computeStreamingLabelState(
         displayedTrackerId: String?,
-        defaultTrackerId: String,
         lastStreamedPointTimeMs: Long?,
         lastCachedUpdateTimeMs: Long?,
         context: Context
     ): StreamingLabelState {
-        if (!isStreaming(displayedTrackerId, defaultTrackerId)) {
+        if (!isStreaming(displayedTrackerId)) {
             return StreamingLabelState(visible = false, labelText = null)
         }
         val effectiveTs = lastStreamedPointTimeMs ?: lastCachedUpdateTimeMs

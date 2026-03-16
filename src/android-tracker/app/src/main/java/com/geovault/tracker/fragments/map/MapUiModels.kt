@@ -12,8 +12,7 @@ internal data class SelectedMapTracker(
 )
 
 internal enum class MapViewContext {
-    DEFAULT_TRACKER,
-    SPECIFIC_TRACKER,
+    SINGLE_TRACKER,
     GROUP
 }
 

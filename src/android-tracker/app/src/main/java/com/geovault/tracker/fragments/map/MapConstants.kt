@@ -51,6 +51,6 @@ internal object MapConstants {
     const val ALL_TRACKS_OUTLINE_LAYER_ID = "all-tracks-outline-layer"
     const val ALL_TRACKS_FILL_LAYER_ID = "all-tracks-fill-layer"
     const val ALL_TRACKS_POINTS_LAYER_ID = "all-tracks-points-layer"
-    /** Max distance (px) from tracker position to count as tap-on-tracker in single-tracker mode (default tracker uses location dot). */
+    /** Max distance (px) from tracker position to count as tap-on-tracker in single-tracker mode. */
     const val TAP_NEAR_POINT_PX = 80f
 }

@@ -31,8 +31,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Foreground service that holds a WebSocket connection to the trackers-live endpoint
- * and broadcasts incoming track_updated points to the map. Runs while a non-default
- * track is shown on the map so streaming continues in the background.
+ * and broadcasts incoming track_updated points to the map for active tracker contexts.
  */
 class LiveTrackStreamingService : Service() {
 

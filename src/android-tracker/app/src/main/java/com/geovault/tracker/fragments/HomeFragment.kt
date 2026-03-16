@@ -14,12 +14,12 @@ import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
-import androidx.core.content.IntentCompat
 import androidx.fragment.app.Fragment
 import com.geovault.tracker.BuildConfig
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.LiveTrackStreamingService
+import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.TrackingService
 import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.*
@@ -63,11 +63,13 @@ class HomeFragment : Fragment() {
         }
     }
 
-    private val locationReceiver = object : BroadcastReceiver() {
+    private val trackPointReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            val location = IntentCompat.getParcelableExtra(intent, "location", android.location.Location::class.java)
-            if (location != null) {
-                currentLocationText.text = "Last point: ${String.format("%.6f", location.latitude)}, ${String.format("%.6f", location.longitude)}"
+            if (intent.action != LiveTrackStreamingService.BROADCAST_TRACK_POINT) return
+            val lat = intent.getDoubleExtra(LiveTrackStreamingService.EXTRA_POINT_LAT, Double.NaN)
+            val lon = intent.getDoubleExtra(LiveTrackStreamingService.EXTRA_POINT_LON, Double.NaN)
+            if (!lat.isNaN() && !lon.isNaN()) {
+                currentLocationText.text = "Last point: ${String.format("%.6f", lat)}, ${String.format("%.6f", lon)}"
             }
             updateQueueCount()
             updateSessionStats()
@@ -202,8 +204,8 @@ class HomeFragment : Fragment() {
         val context = requireContext()
         ContextCompat.registerReceiver(
             context,
-            locationReceiver,
-            IntentFilter("com.geovault.tracker.LOCATION_UPDATE"),
+            trackPointReceiver,
+            IntentFilter(LiveTrackStreamingService.BROADCAST_TRACK_POINT),
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
         ContextCompat.registerReceiver(
@@ -230,7 +232,7 @@ class HomeFragment : Fragment() {
         sessionStatsHandler.removeCallbacks(sessionStatsTicker)
 
         try {
-            requireContext().unregisterReceiver(locationReceiver)
+            requireContext().unregisterReceiver(trackPointReceiver)
             requireContext().unregisterReceiver(sessionStatsReceiver)
         } catch (e: IllegalArgumentException) {
             // Already unregistered
@@ -253,8 +255,7 @@ class HomeFragment : Fragment() {
             debugSimulateStreamButton.text = getString(R.string.debug_simulate_stream)
             return
         }
-        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val trackId = prefs.getString("selected_tracker_id", "")?.trim().orEmpty()
+        val trackId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
         if (trackId.isEmpty()) {
             Toast.makeText(requireContext(), getString(R.string.debug_select_tracker_first), Toast.LENGTH_LONG).show()
             return
@@ -329,8 +330,7 @@ class HomeFragment : Fragment() {
 
     private fun updateTrackingTrackName() {
         if (!::trackingTrackNameText.isInitialized) return
-        val name = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-            .getString("selected_tracker_name", null)?.takeIf { it.isNotBlank() }
+        val name = SelectedTrackerPrefs.selectedTrackerName(requireContext()).takeIf { it.isNotBlank() }
         if (name != null) {
             trackingTrackNameText.text = name
             trackingTrackNameText.setTextColor(ContextCompat.getColor(requireContext(), R.color.text_secondary))

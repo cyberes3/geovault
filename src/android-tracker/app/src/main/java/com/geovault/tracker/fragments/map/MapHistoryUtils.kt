@@ -4,6 +4,15 @@ import com.geovault.tracker.TrackUpdateHelper
 import org.maplibre.android.geometry.LatLng
 
 internal object MapHistoryUtils {
+    private fun parseValidLatLng(coord: List<Double>): LatLng? {
+        if (coord.size < 2) return null
+        val lon = coord[0]
+        val lat = coord[1]
+        if (!lat.isFinite() || !lon.isFinite()) return null
+        if (lat !in -90.0..90.0 || lon !in -180.0..180.0) return null
+        return LatLng(lat, lon)
+    }
+
     fun applyCoordinatesPreview(
         coordinates: List<List<Double>>,
         forceReplace: Boolean,
@@ -14,8 +23,7 @@ internal object MapHistoryUtils {
         val fallbackBaseMs = System.currentTimeMillis()
         val normalized = coordinates.takeLast(TrackUpdateHelper.MAX_POINTS)
             .mapIndexedNotNull { index, coord ->
-                if (coord.size < 2) return@mapIndexedNotNull null
-                val latLng = LatLng(coord[1], coord[0])
+                val latLng = parseValidLatLng(coord) ?: return@mapIndexedNotNull null
                 val timestampMs = MapCoordinateUtils.timestampFromCoordinateMs(coord, fallbackBaseMs + index)
                     ?: (fallbackBaseMs + index)
                 latLng to timestampMs
@@ -41,7 +49,9 @@ internal object MapHistoryUtils {
         trackPoints: MutableList<LatLng>,
         trackTimestamps: MutableList<Long>
     ) {
-        val lastCoords = normalizedCoords.takeLast(TrackUpdateHelper.MAX_POINTS)
+        val lastCoords = normalizedCoords
+            .takeLast(TrackUpdateHelper.MAX_POINTS)
+            .filter { parseValidLatLng(it) != null }
         if (mergeExternalStreaming) {
             val geomLatestTs = lastCoords.lastOrNull()
                 ?.let { MapCoordinateUtils.timestampFromCoordinateMs(it) }
@@ -50,7 +60,7 @@ internal object MapHistoryUtils {
                 .filter { it.second > geomLatestTs }
             trackPoints.clear()
             trackTimestamps.clear()
-            trackPoints.addAll(lastCoords.map { LatLng(it[1], it[0]) })
+            trackPoints.addAll(lastCoords.mapNotNull(::parseValidLatLng))
             trackTimestamps.addAll(
                 lastCoords.mapIndexed { index, coord ->
                     MapCoordinateUtils.timestampFromCoordinateMs(coord, geomLatestTs + index)
@@ -65,7 +75,7 @@ internal object MapHistoryUtils {
 
         trackPoints.clear()
         trackTimestamps.clear()
-        trackPoints.addAll(lastCoords.map { LatLng(it[1], it[0]) })
+        trackPoints.addAll(lastCoords.mapNotNull(::parseValidLatLng))
         val fallbackBase = System.currentTimeMillis()
         trackTimestamps.addAll(
             lastCoords.mapIndexed { index, coord ->

@@ -181,18 +181,17 @@ class MainActivity : AppCompatActivity() {
         val savedTab = (savedInstanceState?.getInt(KEY_CURRENT_TAB, 0) ?: 0).coerceIn(0, 4)
         viewPager.setCurrentItem(savedTab, false)
 
-        // When launching on the Map tab, pre-fetch default tracker so the map can zoom to its extent
+        // When launching on the Map tab, pre-fetch selected tracker so the map can zoom to its extent
         if (savedTab == 1) {
-            val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-            val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
-            if (defaultTrackerId.isNotEmpty()) {
-                TrackerRepository.getTrackerFromCache(defaultTrackerId)?.let { cachedDefault ->
-                    setInitialTrackForMap(cachedDefault)
+            val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
+            if (selectedTrackerId.isNotEmpty()) {
+                TrackerRepository.getTrackerFromCache(selectedTrackerId)?.let { cachedSelected ->
+                    setInitialTrackForMap(cachedSelected)
                 }
                 TrackerRepository.getTrackers(this, forceRefresh = false) { list ->
-                    val defaultTracker = list?.find { it.id == defaultTrackerId }
-                    if (defaultTracker != null) {
-                        setInitialTrackForMap(defaultTracker)
+                    val selectedTracker = list?.find { it.id == selectedTrackerId }
+                    if (selectedTracker != null) {
+                        setInitialTrackForMap(selectedTracker)
                     }
                 }
             }
@@ -227,12 +226,11 @@ class MainActivity : AppCompatActivity() {
             val isStreaming = mapFragment?.isShowingStreamedTrack() ?: false
 
             // Predict what tracker to load on the map and pass metadata instantly
-            val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-            val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
+            val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
 
-            if (defaultTrackerId.isNotEmpty() && initialTrackForMap == null && !isStreaming) {
-                TrackerRepository.getTrackerFromCache(defaultTrackerId)?.let { cachedDefault ->
-                    setInitialTrackForMap(cachedDefault)
+            if (selectedTrackerId.isNotEmpty() && initialTrackForMap == null && !isStreaming) {
+                TrackerRepository.getTrackerFromCache(selectedTrackerId)?.let { cachedSelected ->
+                    setInitialTrackForMap(cachedSelected)
                 }
                 if (viewPager.currentItem != 1) { // If not already on map
                     setCurrentTab(1, forceRefreshMap = true, delayMs = 0)
@@ -240,9 +238,9 @@ class MainActivity : AppCompatActivity() {
                     viewPager.setCurrentItem(1, false)
                 }
                 TrackerRepository.getTrackers(this, forceRefresh = false) { list ->
-                    val defaultTracker = list?.find { it.id == defaultTrackerId }
-                    if (defaultTracker != null) {
-                        setInitialTrackForMap(defaultTracker)
+                    val selectedTracker = list?.find { it.id == selectedTrackerId }
+                    if (selectedTracker != null) {
+                        setInitialTrackForMap(selectedTracker)
                     }
                 }
             } else {
@@ -352,20 +350,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun tryResumeTrackingAfterKill() {
         val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val trackerId = prefs.getString("selected_tracker_id", "") ?: ""
+        val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (trackerId.isEmpty()) {
             prefs.edit().remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).commit()
             return
         }
         tryStartTrackingSilently(
             onInvalid = {
-                prefs.edit()
-                    .remove("selected_tracker_id")
-                    .remove("selected_tracker_name")
-                    .remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT)
-                    .commit()
-                TrackerRepository.clearCurrentTrackerCache()
-                TrackerRepository.clearCache()
+                SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(this, clearTrackersListCache = true)
+                prefs.edit().remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).commit()
                 TrackerRepository.getTrackers(this, forceRefresh = true) { list ->
                     runOnUiThread { setServerAccessibility(list != null) }
                 }
@@ -386,17 +379,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun tryStartTrackingOnLaunch() {
-        val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val trackerId = prefs.getString("selected_tracker_id", "") ?: ""
+        val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (trackerId.isEmpty()) return
         tryStartTrackingSilently(
             onInvalid = {
-                prefs.edit()
-                    .remove("selected_tracker_id")
-                    .remove("selected_tracker_name")
-                    .apply()
-                TrackerRepository.clearCurrentTrackerCache()
-                TrackerRepository.clearCache()
+                SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(this, clearTrackersListCache = true)
                 TrackerRepository.getTrackers(this, forceRefresh = true) { list ->
                     runOnUiThread { setServerAccessibility(list != null) }
                 }
@@ -420,8 +407,7 @@ class MainActivity : AppCompatActivity() {
         onInvalid: () -> Unit,
         onValid: () -> Unit
     ) {
-        val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val trackerId = prefs.getString("selected_tracker_id", "") ?: ""
+        val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (trackerId.isEmpty()) return
         TrackerRepository.checkTracker(this, trackerId) { valid ->
             runOnUiThread {
@@ -884,7 +870,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val trackerId = prefs.getString("selected_tracker_id", "") ?: ""
+        val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (trackerId.isEmpty()) {
             showSnackbar(getString(R.string.no_tracker_selected_go_to_settings))
             return
@@ -896,12 +882,10 @@ class MainActivity : AppCompatActivity() {
                 if (!isPreparingToTrack) return@runOnUiThread
                 isPreparingToTrack = false
                 if (!valid) {
-                    prefs.edit()
-                        .remove("selected_tracker_id")
-                        .remove("selected_tracker_name")
-                        .apply()
-                    TrackerRepository.clearCurrentTrackerCache()
-                    TrackerRepository.clearCache()
+                    SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(
+                        this@MainActivity,
+                        clearTrackersListCache = true
+                    )
                     TrackerRepository.getTrackers(this@MainActivity, forceRefresh = true) { list ->
                         runOnUiThread { setServerAccessibility(list != null) }
                     }

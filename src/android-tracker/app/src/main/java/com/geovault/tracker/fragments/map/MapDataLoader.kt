@@ -23,26 +23,24 @@ internal object MapDataLoader {
         return trackerId.isEmpty() || showAllTrackers || mapViewContext == MapViewContext.GROUP
     }
 
-    fun resolveActiveTrackerId(displayedTrackerId: String?, defaultId: String): String {
-        return displayedTrackerId?.takeIf { it.isNotEmpty() } ?: defaultId
+    fun resolveActiveTrackerId(displayedTrackerId: String?, selectedTrackerId: String): String {
+        return displayedTrackerId?.takeIf { it.isNotEmpty() } ?: selectedTrackerId
     }
 
-    fun resolveHistoryTrackerId(displayedTrackerId: String?, defaultId: String): String {
-        return displayedTrackerId?.takeIf { it.isNotEmpty() } ?: defaultId
+    fun resolveHistoryTrackerId(displayedTrackerId: String?, selectedTrackerId: String): String {
+        return displayedTrackerId?.takeIf { it.isNotEmpty() } ?: selectedTrackerId
     }
 
     fun isExternalStreaming(
         forceReplace: Boolean,
         hasTrackPoints: Boolean,
-        displayedTrackerId: String?,
-        defaultId: String
+        displayedTrackerId: String?
     ): Boolean {
-        return !forceReplace && hasTrackPoints &&
-            displayedTrackerId != null && displayedTrackerId != defaultId
+        return !forceReplace && hasTrackPoints && displayedTrackerId != null
     }
 
-    fun shouldAutoZoomDefaultTracker(trackerId: String, defaultTrackerId: String, trackPointsEmpty: Boolean): Boolean {
-        return trackerId == defaultTrackerId && trackPointsEmpty
+    fun shouldAutoZoomSingleTracker(trackPointsEmpty: Boolean): Boolean {
+        return trackPointsEmpty
     }
 
     fun shouldAllowTrackerCameraMoveInMyLocation(
@@ -57,13 +55,13 @@ internal object MapDataLoader {
 
     fun buildInitialTargetMeta(
         initial: Tracker?,
-        defaultTrackerId: String,
-        defaultTrackerName: String,
-        defaultTrackerColor: String,
+        selectedTrackerId: String,
+        selectedTrackerName: String,
+        baseTrackerColor: String,
         trackerLastUpdateMs: (Tracker) -> Long?
     ): InitialTargetMeta {
         if (initial != null) {
-            val resolvedColor = (initial.color ?: defaultTrackerColor).let { if (it.startsWith("#")) it else "#$it" }
+            val resolvedColor = (initial.color ?: baseTrackerColor).let { if (it.startsWith("#")) it else "#$it" }
             val streamedAccuracy = (initial.point_params?.lastOrNull()?.get("acc") as? Number)
                 ?.toFloat()
                 ?.takeIf { it > 0f }
@@ -73,7 +71,7 @@ internal object MapDataLoader {
                 displayedTrackerName = initial.name,
                 displayedTrackerIsOwner = initial.isOwner(),
                 displayedGroupName = null,
-                mapViewContext = if (initial.id != defaultTrackerId) MapViewContext.SPECIFIC_TRACKER else MapViewContext.DEFAULT_TRACKER,
+                mapViewContext = MapViewContext.SINGLE_TRACKER,
                 lastCachedUpdateTimeMs = trackerLastUpdateMs(initial),
                 currentTrackerColor = resolvedColor,
                 lastStreamedAccuracyMeters = streamedAccuracy
@@ -82,11 +80,11 @@ internal object MapDataLoader {
 
         return InitialTargetMeta(
             displayedTracker = null,
-            displayedTrackerId = defaultTrackerId,
-            displayedTrackerName = defaultTrackerName.ifEmpty { null },
+            displayedTrackerId = selectedTrackerId,
+            displayedTrackerName = selectedTrackerName.ifEmpty { null },
             displayedTrackerIsOwner = true,
             displayedGroupName = null,
-            mapViewContext = MapViewContext.DEFAULT_TRACKER,
+            mapViewContext = MapViewContext.SINGLE_TRACKER,
             lastCachedUpdateTimeMs = null,
             currentTrackerColor = null,
             lastStreamedAccuracyMeters = null
