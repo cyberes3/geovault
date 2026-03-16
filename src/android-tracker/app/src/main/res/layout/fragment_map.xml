@@ -2,12 +2,14 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:overScrollMode="never">
 
     <FrameLayout
         android:id="@+id/mapContainer"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        android:overScrollMode="never" />
 
     <FrameLayout
         android:id="@+id/mapLoadingOverlay"
@@ -44,17 +46,29 @@
             android:paddingTop="10dp"
             android:paddingBottom="10dp">
 
+            <ImageView
+                android:id="@+id/trackerLabelIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_location"
+                app:tint="@color/content_on_primary"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="@+id/trackerNameLabel"
+                app:layout_constraintBottom_toBottomOf="@+id/trackerNameLabel" />
+
             <TextView
                 android:id="@+id/trackerNameLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:textSize="14sp"
                 android:textColor="@color/content_on_primary"
                 android:text="@string/select_tracker"
                 app:layout_constrainedWidth="true"
-                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintStart_toEndOf="@+id/trackerLabelIcon"
                 app:layout_constraintTop_toTopOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/resetToTrackerButton"
                 app:layout_constraintHorizontal_bias="0.0"

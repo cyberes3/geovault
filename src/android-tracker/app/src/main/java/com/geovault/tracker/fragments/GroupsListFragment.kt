@@ -1,6 +1,7 @@
 package com.geovault.tracker.fragments
 
 import android.os.Bundle
+import android.text.InputType
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.View
@@ -50,7 +51,13 @@ class GroupsListFragment : Fragment() {
 
         swipeRefresh.setOnRefreshListener { loadGroups(forceRefresh = true) }
 
-        requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_GROUPS_REFRESH, viewLifecycleOwner) { _, _ ->
+        requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_GROUPS_REFRESH, viewLifecycleOwner) { _, bundle ->
+            val deletedGroupId = bundle?.getString(KEY_DELETED_GROUP_ID)
+            if (!deletedGroupId.isNullOrEmpty()) {
+                adapter?.removeGroupById(deletedGroupId)
+                emptyView.visibility = if ((adapter?.itemCount ?: 0) == 0) View.VISIBLE else View.GONE
+                return@setFragmentResultListener
+            }
             loadGroups(forceRefresh = true)
         }
         requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_GROUP_UPDATED, viewLifecycleOwner) { _, bundle ->
@@ -73,6 +80,7 @@ class GroupsListFragment : Fragment() {
         const val REQUEST_GROUPS_REFRESH = "groups_refresh"
         const val REQUEST_GROUP_UPDATED = "groups_update_group"
         const val KEY_UPDATED_GROUP = "updated_group"
+        const val KEY_DELETED_GROUP_ID = "deleted_group_id"
     }
 
     private fun shouldShowInMyGroups(group: Group): Boolean {
@@ -116,6 +124,7 @@ class GroupsListFragment : Fragment() {
     fun showCreateGroupDialog() {
         val input = android.widget.EditText(requireContext()).apply {
             hint = getString(R.string.new_group_name_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
             setPadding(48, 32, 48, 32)
         }
         androidx.appcompat.app.AlertDialog.Builder(requireContext())
@@ -129,7 +138,13 @@ class GroupsListFragment : Fragment() {
                         requireActivity().runOnUiThread {
                             when {
                                 group != null -> {
-                                    loadGroups(forceRefresh = true)
+                                    val cache = TrackerRepository.getGroupsCache()
+                                    if (cache != null) {
+                                        val myGroups = cache.filter { shouldShowInMyGroups(it) }.sortedBy { it.name.lowercase() }
+                                        applyGroups(myGroups)
+                                    } else {
+                                        loadGroups(forceRefresh = true)
+                                    }
                                     openGroupEditor(group)
                                 }
                                 !errorMessage.isNullOrBlank() -> (activity as? MainActivity)?.showSnackbar(errorMessage)

@@ -253,3 +253,7 @@ extensions:
     enabled: true
     # Maximum number of points to keep per track. Oldest points are removed when exceeded.
     max_points: 1000
+    # Domain used for the Hauk-compatible API (e.g. hauk.geovault.example.com).
+    # Configure your reverse proxy to route this host to the live_track extension root so the app sees /api/create.php etc.
+    # Instructions are in the installation docs.
+    # hauk_domain: hauk.geovault.example.com

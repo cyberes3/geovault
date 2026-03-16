@@ -12,6 +12,7 @@ from .group_views import (
 )
 from .ingress_views import app_ingress, ingress
 from .tracker_views import (
+    hauk_config,
     ingress_body_template,
     map_visibility_get_patch,
     tracker_available_to_add,

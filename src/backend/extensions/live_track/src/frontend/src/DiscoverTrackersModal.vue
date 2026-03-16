@@ -70,7 +70,7 @@
             <PlusIcon class="h-5 w-5" />
           </button>
         </div>
-        <p v-if="!loading && filteredList.length === 0" class="px-3 py-4 text-sm text-gray-500">No public trackers or groups available</p>
+        <p v-if="!loading && filteredList.length === 0" class="px-3 py-4 text-sm text-gray-500">No Public Trackers or Groups Available</p>
       </div>
     </div>
     <template #actions>

@@ -78,7 +78,7 @@
             <div class="flex items-center gap-1 flex-shrink-0">
               <button
                 type="button"
-                title="Leave shared group"
+                title="Leave Shared Group"
                 class="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center size-9 flex-shrink-0"
                 :disabled="isAddingGroup(group.id)"
                 @click="onLeaveGroup(group)"
@@ -87,7 +87,7 @@
               </button>
               <button
                 type="button"
-                title="Accept shared group"
+                title="Accept Shared Group"
                 class="p-2 rounded-lg text-blue-600 hover:bg-blue-50 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center size-9"
                 :disabled="isAddingGroup(group.id)"
                 @click="$emit('addIncomingGroup', group)"
@@ -102,7 +102,7 @@
       </div>
       <div class="flex-1 min-h-0 flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div class="flex-shrink-0 px-3 py-2 border-b border-gray-200 bg-gray-50/80 rounded-t-xl">
-          <p class="text-xs font-semibold text-gray-600 uppercase tracking-wider">On your map</p>
+          <p class="text-xs font-semibold text-gray-600 uppercase tracking-wider">On Your Map</p>
         </div>
         <div class="flex-1 min-h-0 overflow-y-auto p-2 space-y-2 custom-scrollbar">
           <div
@@ -196,7 +196,7 @@
               </button>
               <button
                 type="button"
-                title="Leave shared group"
+                title="Leave Shared Group"
                 class="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 flex items-center justify-center size-9 flex-shrink-0"
                 :disabled="isUnsubscribingGroup(group.id)"
                 @click="onLeaveGroup(group)"

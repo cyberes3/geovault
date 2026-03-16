@@ -77,6 +77,14 @@ object TrackerRepository {
         trackersCache = trackers
     }
 
+    /** Inserts a newly created tracker into the cache at the correct sorted position (by name). No network call. */
+    fun insertTrackerInCache(tracker: Tracker) {
+        val current = trackersCache?.toMutableList() ?: mutableListOf()
+        current.add(tracker)
+        current.sortBy { it.name.lowercase() }
+        trackersCache = current
+    }
+
     /** Returns the full trackers list from cache if present; used to show Trackers tab without waiting for network. */
     fun getTrackersCache(): List<Tracker>? = trackersCache
 
@@ -144,8 +152,11 @@ object TrackerRepository {
     }
 
     private var geometryCall: Call<Tracker>? = null
+    private var coordinatesCall: Call<TrackerCoordinatesResponse>? = null
     /** Cached full geometry for the selected tracker; used when default track is changed so the map can show full track without a second fetch. */
     private var geometryCache: Pair<String, Tracker>? = null
+    /** Cached recent coordinates response keyed by tracker id for map warm start. */
+    private var coordinatesCache: Pair<String, TrackerCoordinatesResponse>? = null
 
     /**
      * Cancels any in-flight full geometry request. Call when the map reset is tapped so the
@@ -161,6 +172,19 @@ object TrackerRepository {
      */
     fun clearGeometryCache() {
         geometryCache = null
+        coordinatesCache = null
+    }
+
+    /** Returns cached full geometry for the provided tracker id without making a network request. */
+    fun getTrackerGeometryFromCache(id: String): Tracker? {
+        val cached = geometryCache
+        return if (cached != null && cached.first == id) cached.second else null
+    }
+
+    /** Returns cached recent coordinates for the provided tracker id without making a network request. */
+    fun getTrackerCoordinatesFromCache(id: String): TrackerCoordinatesResponse? {
+        val cached = coordinatesCache
+        return if (cached != null && cached.first == id) cached.second else null
     }
 
     /**
@@ -191,6 +215,13 @@ object TrackerRepository {
                 val tracker = if (response.isSuccessful) response.body() else null
                 if (tracker != null && tracker.id == selectedId) {
                     geometryCache = tracker.id to tracker
+                    val coords = tracker.geometry?.coordinates
+                    if (!coords.isNullOrEmpty()) {
+                        coordinatesCache = tracker.id to TrackerCoordinatesResponse(
+                            coordinates = coords,
+                            point_params = tracker.point_params
+                        )
+                    }
                 }
                 callback(tracker)
             }
@@ -212,12 +243,22 @@ object TrackerRepository {
         }
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
-        api.getTrackerCoordinates(id).enqueue(object : Callback<TrackerCoordinatesResponse> {
+        coordinatesCall?.cancel()
+        val call = api.getTrackerCoordinates(id)
+        coordinatesCall = call
+        call.enqueue(object : Callback<TrackerCoordinatesResponse> {
             override fun onResponse(call: Call<TrackerCoordinatesResponse>, response: Response<TrackerCoordinatesResponse>) {
-                callback(if (response.isSuccessful) response.body() else null)
+                coordinatesCall = null
+                val body = if (response.isSuccessful) response.body() else null
+                if (body != null) {
+                    coordinatesCache = id to body
+                }
+                callback(body)
             }
 
             override fun onFailure(call: Call<TrackerCoordinatesResponse>, t: Throwable) {
+                coordinatesCall = null
+                if (call.isCanceled()) return
                 Log.e("TrackerRepository", "Failed to fetch tracker coordinates", t)
                 callback(null)
             }
@@ -262,6 +303,7 @@ object TrackerRepository {
         currentTrackerId = null
         currentTrackerCache = null
         geometryCache = null
+        coordinatesCache = null
     }
 
     fun updateTrackerSettings(
@@ -348,7 +390,8 @@ object TrackerRepository {
         api.deleteTracker(id).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
                 if (response.isSuccessful) {
-                    trackersCache = null
+                    trackersCache = trackersCache?.filterNot { it.id == id }
+                    geometryCache = geometryCache?.takeUnless { it.first == id }
                     if (id == currentTrackerId) {
                         currentTrackerId = null
                         currentTrackerCache = null
@@ -483,7 +526,7 @@ object TrackerRepository {
         api.unsubscribeTracker(trackerId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
                 if (response.isSuccessful) {
-                    trackersCache = null
+                    trackersCache = trackersCache?.filterNot { it.id == trackerId }
                     availableToAddCache = null
                 }
                 callback(response.isSuccessful)
@@ -506,7 +549,7 @@ object TrackerRepository {
         api.leaveShareWithMe(trackerId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
                 if (response.isSuccessful) {
-                    trackersCache = null
+                    trackersCache = trackersCache?.filterNot { it.id == trackerId }
                     availableToAddCache = null
                 }
                 callback(response.isSuccessful)
@@ -588,6 +631,14 @@ object TrackerRepository {
 
     fun getGroupsCache(): List<Group>? = groupsCache
 
+    /** Inserts a newly created group into the cache at the correct sorted position (by name). No network call. */
+    fun insertGroupInCache(group: Group) {
+        val current = groupsCache?.toMutableList() ?: mutableListOf()
+        current.add(group)
+        current.sortBy { it.name.lowercase() }
+        groupsCache = current
+    }
+
     fun getGroups(context: Context, forceRefresh: Boolean = false, callback: (List<Group>?) -> Unit) {
         if (!forceRefresh && groupsCache != null) {
             callback(groupsCache)
@@ -636,7 +687,7 @@ object TrackerRepository {
         api.createGroup(GroupCreateRequest(name = name)).enqueue(object : Callback<Group> {
             override fun onResponse(call: Call<Group>, response: Response<Group>) {
                 if (response.isSuccessful) {
-                    groupsCache = null
+                    response.body()?.let { insertGroupInCache(it) }
                     callback(response.body(), null)
                     return
                 }
@@ -718,7 +769,7 @@ object TrackerRepository {
         val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
         api.deleteGroup(groupId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
-                if (response.isSuccessful) groupsCache = null
+                if (response.isSuccessful) groupsCache = groupsCache?.filterNot { it.id == groupId }
                 callback(response.isSuccessful)
             }
             override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
@@ -815,8 +866,7 @@ object TrackerRepository {
         api.leaveGroup(groupId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
                 if (response.isSuccessful) {
-                    groupsCache = null
-                    trackersCache = null
+                    groupsCache = groupsCache?.filterNot { it.id == groupId }
                     availableToAddCache = null
                 }
                 callback(response.isSuccessful)

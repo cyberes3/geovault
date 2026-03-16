@@ -87,9 +87,20 @@
         android:gravity="end">
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/groupActionEditButton"
+            style="@style/gv_common_ButtonOutlined"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginEnd="8dp"
+            android:elevation="0dp"
+            android:stateListAnimator="@null"
+            android:text="@string/edit_group" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/groupActionViewOnMap"
             style="@style/gv_common_ButtonPrimary"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
+            android:layout_weight="1"
             android:layout_height="40dp"
             android:elevation="0dp"
             android:stateListAnimator="@null"

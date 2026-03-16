@@ -15,6 +15,7 @@ from django.views.decorators.http import require_http_methods
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, handle_404
 from geo_lib.website.auth import api_or_login_required_401
+from website.config_loader import get_config_loader
 
 from pydantic import ValidationError as PydanticValidationError
 
@@ -235,7 +236,7 @@ def tracker_get_patch_delete(request, tracker_id):
         if not is_owner:
             return error_response("Only the owner can delete this tracker", 403)
         track.delete()
-        return JsonResponse({"message": "Deleted"}, status=204)
+        return HttpResponse(status=204)
     return error_response("Method not allowed", 405)
 
 
@@ -559,6 +560,15 @@ def ingress_body_template(request):
 
 @api_or_login_required_401()
 @require_http_methods(["GET"])
+@csrf_exempt
+def hauk_config(request):
+    """Return Hauk-related config for the frontend (e.g. instructions modal). hauk_domain is used to build the server URL."""
+    domain = get_config_loader().get_str("extensions.live_track.hauk_domain", "").strip()
+    return JsonResponse({"hauk_domain": domain})
+
+
+@api_or_login_required_401()
+@require_http_methods(["GET"])
 @handle_404
 @csrf_exempt
 def tracker_kml(request, tracker_id):
@@ -620,7 +630,7 @@ def tracker_subscribe_delete(request, tracker_id):
             return error_response("Not subscribed", 404)
         sub.delete()
         LiveTrackGroupMember.objects.filter(group__user=request.user, track=track).delete()
-        return JsonResponse({}, status=204)
+        return HttpResponse(status=204)
     return error_response("Method not allowed", 405)
 
 
@@ -643,7 +653,7 @@ def tracker_leave_share(request, tracker_id):
     share_entry.delete()
     LiveTrackSubscription.objects.filter(user=request.user, track=track).delete()
     LiveTrackGroupMember.objects.filter(group__user=request.user, track=track).delete()
-    return JsonResponse({}, status=204)
+    return HttpResponse(status=204)
 
 
 @api_or_login_required_401()

@@ -44,17 +44,38 @@ class GroupActionsFragment : Fragment() {
         val closeButton = view.findViewById<ImageButton>(R.id.groupActionsCloseButton)
         val trackersList = view.findViewById<RecyclerView>(R.id.groupActionsTrackersList)
         val emptyView = view.findViewById<TextView>(R.id.groupActionsEmpty)
+        val actionEdit = view.findViewById<MaterialButton>(R.id.groupActionEditButton)
         val actionViewOnMap = view.findViewById<MaterialButton>(R.id.groupActionViewOnMap)
 
         title.text = g.name
         closeButton.setOnClickListener { requireActivity().supportFragmentManager.popBackStack() }
 
+        actionEdit.visibility = if (g.is_owner == true) View.VISIBLE else View.GONE
+        actionEdit.setOnClickListener {
+            requireActivity().supportFragmentManager.beginTransaction()
+                .add(R.id.fragment_overlay_container, GroupDetailBottomSheet.newInstance(g), "group_detail")
+                .addToBackStack("group_detail")
+                .commit()
+        }
+
         actionViewOnMap.setOnClickListener {
-            (activity as? MainActivity)?.openMapForGroup(g)
+            group?.let { (activity as? MainActivity)?.openMapForGroup(it) }
         }
 
         trackersList.layoutManager = LinearLayoutManager(requireContext())
         loadTrackersList(g, trackersList, emptyView)
+
+        requireActivity().supportFragmentManager.setFragmentResultListener(
+            GroupsListFragment.REQUEST_GROUP_UPDATED,
+            viewLifecycleOwner
+        ) { _, bundle ->
+            val updated = bundle.getParcelable<Group>(GroupsListFragment.KEY_UPDATED_GROUP, Group::class.java)
+                ?: return@setFragmentResultListener
+            if (updated.id != group?.id) return@setFragmentResultListener
+            group = updated
+            title.text = updated.name
+            loadTrackersList(updated, trackersList, emptyView)
+        }
     }
 
     private fun loadTrackersList(g: Group, trackersList: RecyclerView, emptyView: TextView) {

@@ -235,7 +235,7 @@ def group_get_patch_delete(request, group_id):
         if not _group_can_edit(group, request.user):
             return error_response("Only the owner can delete this group", 403)
         group.delete()
-        return JsonResponse({}, status=204)
+        return HttpResponse(status=204)
     return error_response("Method not allowed", 405)
 
 
@@ -310,7 +310,7 @@ def group_leave(request, group_id):
         return error_response("You are not shared with this group", 404)
     LiveTrackGroupSubscription.objects.filter(group=group, user=request.user).delete()
     share.delete()
-    return JsonResponse({}, status=204)
+    return HttpResponse(status=204)
 
 
 @api_or_login_required_401()

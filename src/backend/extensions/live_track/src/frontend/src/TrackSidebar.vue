@@ -46,6 +46,7 @@
       :world-share-url="worldShareUrl"
       :hidden-in-list="hiddenInList"
       :allow-group-reshare="allowGroupReshare"
+      :hauk-domain="haukDomain"
       @update:name="name = $event"
       @update:color="color = $event"
       @update:recentDataWindow="recentDataWindow = $event"
@@ -58,6 +59,7 @@
       @update:hidden-in-list="onHiddenInListChange($event)"
       @reset-color="resetColorToDeterministic"
       @open-instructions="showInstructions = true"
+      @open-hauk-instructions="showHaukInstructions = true"
       @download-kml="downloadKml"
       @clear-history="confirmClearHistory"
       @delete="confirmDelete"
@@ -81,6 +83,13 @@
       :password="instructionsPassword"
       :profile-url="profileUrl"
       @close="showInstructions = false"
+    />
+    <HaukInstructionsModal
+      v-if="showHaukInstructions && haukDomain && haukServerUrl && userLogin && haukPassword"
+      :server-url="haukServerUrl"
+      :user-email="userLogin"
+      :hauk-password="haukPassword"
+      @close="showHaukInstructions = false"
     />
   </LiveTrackSidebar>
   <!-- Embedded: content + footer only (shell is provided by parent) -->
@@ -127,6 +136,7 @@
         :world-share-url="worldShareUrl"
         :hidden-in-list="hiddenInList"
         :allow-group-reshare="allowGroupReshare"
+        :hauk-domain="haukDomain"
         @update:name="name = $event"
         @update:color="color = $event"
         @update:recentDataWindow="recentDataWindow = $event"
@@ -139,6 +149,7 @@
         @update:hidden-in-list="onHiddenInListChange($event)"
         @reset-color="resetColorToDeterministic"
         @open-instructions="showInstructions = true"
+        @open-hauk-instructions="showHaukInstructions = true"
         @download-kml="downloadKml"
         @clear-history="confirmClearHistory"
         @delete="confirmDelete"
@@ -169,6 +180,13 @@
       :profile-url="profileUrl"
       @close="showInstructions = false"
     />
+    <HaukInstructionsModal
+      v-if="showHaukInstructions && haukDomain && haukServerUrl && userLogin && haukPassword"
+      :server-url="haukServerUrl"
+      :user-email="userLogin"
+      :hauk-password="haukPassword"
+      @close="showHaukInstructions = false"
+    />
   </div>
 </template>
 
@@ -181,10 +199,11 @@ import CreateTrackForm from './CreateTrackForm.vue';
 import CreateSuccessView from './CreateSuccessView.vue';
 import EditTrackForm from './EditTrackForm.vue';
 import GpsLoggerInstructionsModal from './GpsLoggerInstructionsModal.vue';
+import HaukInstructionsModal from './HaukInstructionsModal.vue';
 
 export default {
   name: 'TrackSidebar',
-  components: { LiveTrackSidebar, Loader, CreateTrackForm, CreateSuccessView, EditTrackForm, GpsLoggerInstructionsModal },
+  components: { LiveTrackSidebar, Loader, CreateTrackForm, CreateSuccessView, EditTrackForm, GpsLoggerInstructionsModal, HaukInstructionsModal },
   props: {
     mode: { type: String, required: true },
     track: { type: Object, default: null },
@@ -221,6 +240,8 @@ export default {
     const isInitializingDraft = ref(false);
     const createdTrack = ref(null);
     const showInstructions = ref(false);
+    const showHaukInstructions = ref(false);
+    const haukDomain = ref('');
     let autosaveTimerId = null;
     let autosaveInFlight = false;
     let autosaveQueued = false;
@@ -269,9 +290,23 @@ export default {
 
     const baseUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/extensions/live-track` : '';
     const bodyTemplate = ref('lat=%LAT&lon=%LON&timestamp=%TIMESTAMP');
+    const haukServerUrl = computed(() => {
+      const d = (haukDomain.value || '').trim();
+      if (!d) return '';
+      if (/^https?:\/\//i.test(d)) return d.replace(/\/+$/, '');
+      return `https://${d}`;
+    });
+    const haukPassword = computed(() => props.track?.hauk_password || '');
     onMounted(async () => {
       const data = await getIngressBodyTemplate(api);
       if (data?.body_template) bodyTemplate.value = data.body_template;
+      try {
+        const res = await api.get('hauk-config/');
+        const domain = (res?.data?.hauk_domain ?? '').trim();
+        if (domain) haukDomain.value = domain;
+      } catch {
+        // hauk_domain not configured or request failed; Hauk Setup button will be hidden
+      }
     });
     const ingressUrl = computed(() => (createdTrack.value ? `${baseUrl}/ingress/` : ''));
     const instructionsIngressUrl = computed(() => `${baseUrl}/ingress/`);
@@ -617,6 +652,10 @@ export default {
       historyClearedThisSession,
       createdTrack,
       showInstructions,
+      showHaukInstructions,
+      haukDomain,
+      haukServerUrl,
+      haukPassword,
       sidebarTitle,
       ingressUrl,
       bodyTemplate,

@@ -145,11 +145,11 @@
                 :disabled="!(groupQuickViewGroup.track_ids || []).length"
                 @click="onGroupQuickViewFitMap"
               >
-                Fit map to group
+                Fit Map to Group
               </BaseButton>
             </div>
             <div class="flex-1 min-h-0 overflow-y-auto mt-3 space-y-2">
-              <p class="text-sm font-medium text-gray-700">Trackers in group</p>
+              <p class="text-sm font-medium text-gray-700">Trackers in Group</p>
               <div
                 v-for="track in groupQuickViewTracks"
                 :key="track.id"
@@ -194,7 +194,7 @@
                   </button>
                 </div>
               </div>
-              <p v-if="groupQuickViewTracks.length === 0" class="text-sm text-gray-500 py-2">No trackers in this group</p>
+              <p v-if="groupQuickViewTracks.length === 0" class="text-sm text-gray-500 py-2">No Trackers in This Group</p>
             </div>
           </div>
           <SharedWithMeSidebarContent
@@ -294,6 +294,18 @@
           @click="openSidebar('settings')"
         >
           <Cog6ToothIcon :class="SIDEBAR_ACTION_ICON_CLASS" />
+        </button>
+        <button
+          type="button"
+          :title="trackingEnabled ? 'Stop Location Tracking' : 'Show My Location'"
+          :class="SIDEBAR_ACTION_BUTTON_CLASS"
+          @click="toggleLocationTracking"
+        >
+          <LocationIcon
+            size="h-5 w-5 sm:h-6 sm:w-6"
+            :show-center-dot="trackingEnabled"
+            :class="trackingEnabled ? 'text-blue-600' : 'text-gray-700'"
+          />
         </button>
         <button
           type="button"
@@ -403,6 +415,9 @@ import { useWindowSize, useScrollLock } from '@vueuse/core';
 import { getIngressBodyTemplate } from './ingressBodyTemplateCache.js';
 import { trackersLiveSocket } from './trackersLiveSocket.js';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
+import LocationIcon from 'platform/components/parts/LocationIcon.vue';
+import { geolocationManager } from 'platform/utils/map/geolocationManager.js';
+import { createUserLocationMarker, updateUserLocationMarker, removeUserLocationMarker } from 'platform/utils/map/maplibre/locationMarker.js';
 import TrackSidebar from './TrackSidebar.vue';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
 import LatestParamsModal from './LatestParamsModal.vue';
@@ -429,6 +444,8 @@ const maplibregl = window.gv_core?.maplibre || window.maplibregl;
 const LINES_SOURCE_ID = 'live-track-lines';
 const POINTS_SOURCE_ID = 'live-track-points';
 const LINES_LAYER_ID = 'live-track-lines';
+const LINES_WHITE_OUTLINE_LAYER_ID = 'live-track-lines-white-outline';
+const LINES_BLACK_OUTLINE_LAYER_ID = 'live-track-lines-black-outline';
 const POINTS_LAYER_ID = 'live-track-points';
 const ACCURACY_CIRCLE_LAYER_ID = 'live-track-accuracy-circle';
 const BASE_SOURCE_ID = 'base-raster';
@@ -456,7 +473,7 @@ const LIST_TABS = [
 
 export default {
   name: 'LiveTrackView',
-  components: { BaseButton, TrackSidebar, TrackDirectionIcon, LatestParamsModal, GroupsSidebarContent, DiscoverTrackersModal, SharedItemsModal, ShareSettingsModal, PublicSharePopup, MapLayerSidebar, MapSidebarPanel, SharedWithMeSidebarContent, LiveTrackSettingsSidebarContent, TrackerListContent, MobileMapDrawer, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon },
+  components: { BaseButton, LocationIcon, TrackSidebar, TrackDirectionIcon, LatestParamsModal, GroupsSidebarContent, DiscoverTrackersModal, SharedItemsModal, ShareSettingsModal, PublicSharePopup, MapLayerSidebar, MapSidebarPanel, SharedWithMeSidebarContent, LiveTrackSettingsSidebarContent, TrackerListContent, MobileMapDrawer, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon },
   setup() {
     const api = inject('extensionApi');
     const trackers = ref([]);
@@ -669,6 +686,9 @@ export default {
     const leavingShareId = ref(null);
     const sharedWithMeRefreshing = ref(false);
     const actionStripRefreshing = ref(false);
+    const trackingEnabled = ref(false);
+    const userLocation = ref(null);
+    const locationMarker = ref(null);
     const showLayerSidebar = ref(false);
     const showSettingsSidebar = ref(false);
 
@@ -887,6 +907,60 @@ export default {
       }
     }
 
+    function syncUserLocationMarker() {
+      if (!trackingEnabled.value || !userLocation.value || !map) return;
+      if (locationMarker.value) {
+        removeUserLocationMarker(locationMarker.value);
+      }
+      locationMarker.value = createUserLocationMarker(map, userLocation.value);
+    }
+
+    function stopLocationTracking() {
+      geolocationManager.stopTracking();
+      trackingEnabled.value = false;
+      userLocation.value = null;
+      if (locationMarker.value) {
+        removeUserLocationMarker(locationMarker.value);
+        locationMarker.value = null;
+      }
+    }
+
+    function handleLocationUpdate(coords) {
+      userLocation.value = coords;
+      if (!map || !coords) return;
+      if (!locationMarker.value) {
+        locationMarker.value = createUserLocationMarker(map, coords);
+        return;
+      }
+      updateUserLocationMarker(locationMarker.value, coords);
+    }
+
+    function handleLocationError(error) {
+      console.error('Geolocation error:', error);
+      stopLocationTracking();
+      if (error?.code === 1) {
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error('Location permission denied.');
+      } else {
+        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error('Failed to get your location.');
+      }
+    }
+
+    function toggleLocationTracking() {
+      if (trackingEnabled.value) {
+        stopLocationTracking();
+        return;
+      }
+      // Use getCurrentPosition first to trigger the browser's permission prompt (more reliable
+      // on localhost and in some browsers). Then start watchPosition for ongoing updates.
+      trackingEnabled.value = true;
+      geolocationManager.getCurrentPosition()
+        .then((coords) => {
+          handleLocationUpdate(coords);
+          geolocationManager.startTracking(handleLocationUpdate, handleLocationError);
+        })
+        .catch(handleLocationError);
+    }
+
     function buildLinesGeoJSON() {
       const hidden = hiddenTrackIds.value;
       const groupId = activeGroupId.value;
@@ -982,8 +1056,19 @@ export default {
       pointSource.setData(pointsGeoJSON);
     }
 
+    const lineWhiteOutlineLayerSpec = {
+      id: LINES_WHITE_OUTLINE_LAYER_ID,
+      type: 'line',
+      source: LINES_SOURCE_ID,
+      paint: {
+        'line-color': '#fff',
+        'line-width': ['case', ['get', 'selected'], 7, 5],
+        'line-opacity': 1
+      },
+      layout: { 'line-join': 'round', 'line-cap': 'round' }
+    };
     const lineBlackOutlineLayerSpec = {
-      id: `${LINES_LAYER_ID}-black-outline`,
+      id: LINES_BLACK_OUTLINE_LAYER_ID,
       type: 'line',
       source: LINES_SOURCE_ID,
       paint: {
@@ -1056,14 +1141,17 @@ export default {
         await ensureArrowImage(map, '#6C93DE', false);
         map.addLayer(pointsLayerSpec);
       }
-      if (!map.getLayer(`${LINES_LAYER_ID}-black-outline`)) {
+      if (!map.getLayer(LINES_WHITE_OUTLINE_LAYER_ID)) {
+        map.addLayer(lineWhiteOutlineLayerSpec, POINTS_LAYER_ID);
+      }
+      if (!map.getLayer(LINES_BLACK_OUTLINE_LAYER_ID)) {
         map.addLayer(lineBlackOutlineLayerSpec, POINTS_LAYER_ID);
       }
       if (!map.getLayer(LINES_LAYER_ID)) {
         map.addLayer(lineLayerSpec, POINTS_LAYER_ID);
       }
       if (!map.getLayer(ACCURACY_CIRCLE_LAYER_ID)) {
-        map.addLayer(accuracyCircleLayerSpec, `${LINES_LAYER_ID}-black-outline`);
+        map.addLayer(accuracyCircleLayerSpec, LINES_WHITE_OUTLINE_LAYER_ID);
       }
       await updateMapFeatures();
     }
@@ -1086,6 +1174,7 @@ export default {
           if (!map) return;
           map.resize();
           await addLiveTrackLayersAndData();
+          syncUserLocationMarker();
           setTimeout(() => {
             if (map) {
               map.resize();
@@ -1099,6 +1188,10 @@ export default {
           const center = map.getCenter();
           const zoom = map.getZoom();
           const bearing = map.getBearing();
+          if (locationMarker.value) {
+            removeUserLocationMarker(locationMarker.value);
+            locationMarker.value = null;
+          }
           map.remove();
           map = null;
           const rasterSpec = getRasterSourceSpec(layerValue, tileSource);
@@ -1113,6 +1206,7 @@ export default {
             layers: [
               { id: BASE_LAYER_ID, type: 'raster', source: BASE_SOURCE_ID, minzoom: clientConfig.minzoom ?? 0, maxzoom: layerMaxZoom },
               accuracyCircleLayerSpec,
+              lineWhiteOutlineLayerSpec,
               lineBlackOutlineLayerSpec,
               lineLayerSpec
             ]
@@ -1138,6 +1232,7 @@ export default {
               if (!map || !map.getStyle()) return;
               if (!map.getLayer(POINTS_LAYER_ID)) map.addLayer(pointsLayerSpec);
               updateMapFeatures().then(() => {
+                syncUserLocationMarker();
                 setTimeout(() => {
                   if (map) {
                     map.resize();
@@ -1204,6 +1299,7 @@ export default {
           if (!map) return;
           map.resize();
           addLiveTrackLayersAndData().then(() => {
+            syncUserLocationMarker();
             setTimeout(() => {
               if (map) {
                 map.resize();
@@ -1234,6 +1330,7 @@ export default {
         layers: [
           { id: BASE_LAYER_ID, type: 'raster', source: BASE_SOURCE_ID, minzoom: clientConfig.minzoom ?? 0, maxzoom: layerMaxZoom },
           accuracyCircleLayerSpec,
+          lineWhiteOutlineLayerSpec,
           lineBlackOutlineLayerSpec,
           lineLayerSpec
         ]
@@ -1261,6 +1358,7 @@ export default {
           if (!map || !map.getStyle()) return;
           if (!map.getLayer(POINTS_LAYER_ID)) map.addLayer(pointsLayerSpec);
           updateMapFeatures().then(() => {
+            syncUserLocationMarker();
             setTimeout(() => {
               if (map) {
                 map.resize();
@@ -1315,7 +1413,8 @@ export default {
       const TRACK_LAYER_IDS = [
         POINTS_LAYER_ID,
         LINES_LAYER_ID,
-        `${LINES_LAYER_ID}-black-outline`
+        LINES_BLACK_OUTLINE_LAYER_ID,
+        LINES_WHITE_OUTLINE_LAYER_ID
       ];
       function getClickableTrackLayers() {
         return TRACK_LAYER_IDS.filter((id) => map.getLayer(id));
@@ -2284,6 +2383,7 @@ export default {
         trackersLiveSocket.unsubscribe('track_updated', trackUpdatedHandler);
       }
       trackersLiveSocket.disconnect();
+      stopLocationTracking();
       if (map && mapContainer.value) {
         map.remove();
         map = null;
@@ -2375,6 +2475,8 @@ export default {
       onUnhideAllGroups,
       onUnhideGroupFromMap,
       actionStripRefreshing,
+      trackingEnabled,
+      toggleLocationTracking,
       onFullRefresh,
       isMapSidebarOpen,
       userLogin,

@@ -425,7 +425,12 @@ class EditTrackerFragment : Fragment() {
                                             .apply()
                                         TrackerRepository.clearCurrentTrackerCache()
                                     }
-                                    requireActivity().supportFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
+                                    requireActivity().supportFragmentManager.setFragmentResult(
+                                        TrackersListFragment.REQUEST_REFRESH_LIST,
+                                        android.os.Bundle().apply {
+                                            putString(TrackersListFragment.KEY_DELETED_TRACKER_ID, trackerId)
+                                        }
+                                    )
                                     requireActivity().supportFragmentManager.popBackStack()
                                     Toast.makeText(requireContext(), getString(R.string.tracker_deleted), Toast.LENGTH_SHORT).show()
                                 } else {

@@ -350,7 +350,12 @@ class GroupDetailBottomSheet : Fragment() {
                     if (isAdded && success) {
                         requireActivity().runOnUiThread {
                             closeEditor()
-                            parentFragmentManager.setFragmentResult(GroupsListFragment.REQUEST_GROUPS_REFRESH, Bundle())
+                            parentFragmentManager.setFragmentResult(
+                                GroupsListFragment.REQUEST_GROUPS_REFRESH,
+                                Bundle().apply {
+                                    putString(GroupsListFragment.KEY_DELETED_GROUP_ID, g.id)
+                                }
+                            )
                             (activity as? MainActivity)?.showSnackbar(getString(R.string.tracker_deleted))
                         }
                     }

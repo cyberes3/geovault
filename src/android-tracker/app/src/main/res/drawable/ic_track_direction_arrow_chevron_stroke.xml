@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Black outline around the chevron (selected/white-circle variant); matches website stroke. -->
+<!-- Chevron stroke disabled for selected (white-circle) marker so fill stays true to tracker color. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="32dp"
     android:height="32dp"
@@ -12,7 +12,7 @@
         android:pivotY="2.6">
         <path
             android:fillColor="@android:color/transparent"
-            android:strokeColor="@color/black"
+            android:strokeColor="@android:color/transparent"
             android:strokeWidth="1.2"
             android:strokeLineCap="round"
             android:strokeLineJoin="round"

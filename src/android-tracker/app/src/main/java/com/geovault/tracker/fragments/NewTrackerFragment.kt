@@ -1,18 +1,24 @@
 package com.geovault.tracker.fragments
 
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.geovault.common.RetrofitClient
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.TrackerApi
+import com.geovault.tracker.TrackingService
 import com.geovault.tracker.showHueColorPickerDialog
 import com.geovault.tracker.updateColorPreview
 import com.geovault.tracker.defaultTrackerColorHex
@@ -28,6 +34,7 @@ class NewTrackerFragment : Fragment() {
     private lateinit var nameEdit: EditText
     private lateinit var colorEdit: EditText
     private lateinit var colorPreview: View
+    private lateinit var defaultTrackSwitch: SwitchCompat
     private lateinit var pickColorButton: MaterialButton
     private lateinit var createButton: MaterialButton
     private lateinit var cancelButton: MaterialButton
@@ -49,9 +56,13 @@ class NewTrackerFragment : Fragment() {
         nameEdit = view.findViewById(R.id.newTrackerName)
         colorEdit = view.findViewById(R.id.newTrackerColor)
         colorPreview = view.findViewById(R.id.colorPreview)
+        defaultTrackSwitch = view.findViewById(R.id.newTrackerDefaultSwitch)
         pickColorButton = view.findViewById(R.id.pickColorButton)
         createButton = view.findViewById(R.id.newTrackerCreate)
         cancelButton = view.findViewById(R.id.newTrackerCancel)
+
+        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+        defaultTrackSwitch.isChecked = false
 
         val defaultHex = defaultTrackerColorHex(requireContext())
         colorEdit.setText(defaultHex)
@@ -97,8 +108,26 @@ class NewTrackerFragment : Fragment() {
                             requireActivity().runOnUiThread {
                                 setActionButtonsEnabled(true)
                                 if (response.isSuccessful && response.body() != null) {
-                                    TrackerRepository.clearCache()
-                                    requireActivity().supportFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
+                                    val newTracker = response.body()!!
+                                    TrackerRepository.insertTrackerInCache(newTracker)
+                                    if (defaultTrackSwitch.isChecked) {
+                                        prefs.edit()
+                                            .putString("selected_tracker_id", newTracker.id)
+                                            .putString("selected_tracker_name", newTracker.name)
+                                            .apply()
+                                        TrackerRepository.getTrackerGeometry(requireContext(), newTracker.id) { }
+                                        if (TrackingService.isRunning) {
+                                            val ctx = requireContext()
+                                            ctx.startService(Intent(ctx, TrackingService::class.java).apply { action = TrackingService.ACTION_STOP })
+                                            Handler(Looper.getMainLooper()).postDelayed({
+                                                ctx.startForegroundService(Intent(ctx, TrackingService::class.java).apply { action = TrackingService.ACTION_START })
+                                            }, 400)
+                                        }
+                                    }
+                                    requireActivity().supportFragmentManager.setFragmentResult(
+                                        TrackersListFragment.REQUEST_REFRESH_LIST,
+                                        android.os.Bundle().apply { putParcelable(TrackersListFragment.KEY_NEW_TRACKER, newTracker) }
+                                    )
                                     requireActivity().supportFragmentManager.popBackStack()
                                     Toast.makeText(requireContext(), "Tracker created", Toast.LENGTH_SHORT).show()
                                 } else {

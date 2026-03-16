@@ -77,7 +77,7 @@
         <div class="flex gap-3">
           <span class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center font-medium">4</span>
           <div>
-            <p class="font-medium text-gray-900">Discard offline locations</p>
+            <p class="font-medium text-gray-900">Discard Offline Locations</p>
             <p class="text-gray-900">In the Custom URL settings, turn on <strong>Discard offline locations</strong>. Points are then sent only when the device has a network connection, which is recommended for live tracking so the map updates in real time and no points are queued while offline.</p>
           </div>
         </div>

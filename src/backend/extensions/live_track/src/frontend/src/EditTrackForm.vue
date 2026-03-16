@@ -88,6 +88,7 @@
     </div>
     <div class="grid grid-cols-2 gap-3 pb-2">
       <BaseButton v-if="isOwner" variant="white" size="sm" @click="$emit('open-instructions')">GPSLogger Setup</BaseButton>
+      <BaseButton v-if="isOwner && haukDomain" variant="white" size="sm" @click="$emit('open-hauk-instructions')">Hauk Setup</BaseButton>
       <BaseButton variant="white" size="sm" @click="$emit('download-kml')">Download KML</BaseButton>
       <BaseButton v-if="isOwner" variant="white" size="sm" :disabled="clearHistoryDisabled" @click="$emit('clear-history')">
         <Loader v-if="clearing" size="sm" layout="inline" :show-message="false" class="mr-1" />
@@ -134,9 +135,11 @@ export default {
     worldShareUrl: { type: String, default: '' },
     shareParamsWithWorld: { type: Boolean, default: false },
     hiddenInList: { type: Boolean, default: false },
-    allowGroupReshare: { type: Boolean, default: false }
+    allowGroupReshare: { type: Boolean, default: false },
+    /** When set, the Hauk Setup button is shown (admin configured hauk_domain). */
+    haukDomain: { type: String, default: '' }
   },
-  emits: ['update:name', 'update:color', 'update:recentDataWindow', 'update:visibility', 'update:shareParamsWithRecipients', 'update:shareParamsWithWorld', 'update:sharedWithEmails', 'update:worldShareEnabled', 'update:allowGroupReshare', 'update:hidden-in-list', 'reset-color', 'open-instructions', 'download-kml', 'clear-history', 'delete', 'unsubscribe'],
+  emits: ['update:name', 'update:color', 'update:recentDataWindow', 'update:visibility', 'update:shareParamsWithRecipients', 'update:shareParamsWithWorld', 'update:sharedWithEmails', 'update:worldShareEnabled', 'update:allowGroupReshare', 'update:hidden-in-list', 'reset-color', 'open-instructions', 'open-hauk-instructions', 'download-kml', 'clear-history', 'delete', 'unsubscribe'],
   setup(props, { emit }) {
     const fullWorldShareUrl = computed(() => {
       const path = props.worldShareUrl || '';

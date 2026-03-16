@@ -8,6 +8,7 @@ import com.geovault.common.GeovaultAuthManager
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.style.layers.RasterLayer
 import org.maplibre.android.style.sources.RasterSource
 import org.maplibre.android.style.sources.TileSet
@@ -67,6 +68,7 @@ class MapLibreManager(private val activity: Activity, private val mapView: MapVi
         map.uiSettings.setLogoEnabled(false)
         map.uiSettings.setAttributionEnabled(false)
         map.uiSettings.isRotateGesturesEnabled = false
+        map.setLatLngBoundsForCameraTarget(LatLngBounds.world())
         map.setMaxZoomPreference(MAX_ZOOM_LEVEL.toDouble())
     }
 

@@ -1760,6 +1760,27 @@ class TestLiveTrackAPI(TestCase):
             )
         self.assertEqual(response.status_code, 404)
 
+    def test_hauk_config_returns_domain(self):
+        """GET hauk-config/ returns 200 and JSON with hauk_domain (empty when not configured)."""
+        with _patch_live_track_enabled():
+            response = self.client.get("/api/extensions/live-track/hauk-config/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("hauk_domain", data)
+        self.assertEqual(data["hauk_domain"], "")
+
+    def test_hauk_config_returns_configured_domain(self):
+        """GET hauk-config/ returns hauk_domain from config when set."""
+        mock_loader = MagicMock()
+        mock_loader.get_str.side_effect = (
+            lambda key, default="": "hauk.example.com" if key == "extensions.live_track.hauk_domain" else default
+        )
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.tracker_views.get_config_loader", return_value=mock_loader):
+                response = self.client.get("/api/extensions/live-track/hauk-config/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["hauk_domain"], "hauk.example.com")
+
     def test_profile_properties_ingress_url_absolute(self):
         """Profile body log_customurl_url is an absolute URL containing /ingress/."""
         with _patch_live_track_enabled():

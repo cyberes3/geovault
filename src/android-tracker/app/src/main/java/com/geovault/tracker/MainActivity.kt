@@ -171,6 +171,7 @@ class MainActivity : AppCompatActivity() {
         database = AppDatabase.getDatabase(this)
 
         viewPager = findViewById(R.id.viewPager)
+        viewPager.overScrollMode = View.OVER_SCROLL_NEVER
         pagerAdapter = MainPagerAdapter(this)
         viewPager.adapter = pagerAdapter
         
@@ -185,6 +186,9 @@ class MainActivity : AppCompatActivity() {
             val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
             val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
             if (defaultTrackerId.isNotEmpty()) {
+                TrackerRepository.getTrackerFromCache(defaultTrackerId)?.let { cachedDefault ->
+                    setInitialTrackForMap(cachedDefault)
+                }
                 TrackerRepository.getTrackers(this, forceRefresh = false) { list ->
                     val defaultTracker = list?.find { it.id == defaultTrackerId }
                     if (defaultTracker != null) {
@@ -227,15 +231,18 @@ class MainActivity : AppCompatActivity() {
             val defaultTrackerId = prefs.getString("selected_tracker_id", "") ?: ""
 
             if (defaultTrackerId.isNotEmpty() && initialTrackForMap == null && !isStreaming) {
+                TrackerRepository.getTrackerFromCache(defaultTrackerId)?.let { cachedDefault ->
+                    setInitialTrackForMap(cachedDefault)
+                }
+                if (viewPager.currentItem != 1) { // If not already on map
+                    setCurrentTab(1, forceRefreshMap = true, delayMs = 0)
+                } else {
+                    viewPager.setCurrentItem(1, false)
+                }
                 TrackerRepository.getTrackers(this, forceRefresh = false) { list ->
                     val defaultTracker = list?.find { it.id == defaultTrackerId }
                     if (defaultTracker != null) {
                         setInitialTrackForMap(defaultTracker)
-                    }
-                    if (viewPager.currentItem != 1) { // If not already on map
-                        setCurrentTab(1, forceRefreshMap = true, delayMs = 0)
-                    } else {
-                        viewPager.setCurrentItem(1, false)
                     }
                 }
             } else {
@@ -251,7 +258,15 @@ class MainActivity : AppCompatActivity() {
             }
         }
         findViewById<View>(R.id.navTrackers).setOnClickListener {
-            clearOverlayAndThen { viewPager.setCurrentItem(2, false) }
+            clearOverlayAndThen {
+                if (viewPager.currentItem == 2) {
+                    viewPager.post {
+                        (pagerAdapter.getFragment(2) as? com.geovault.tracker.fragments.TrackersPagerFragment)?.selectTrackersTab()
+                    }
+                } else {
+                    viewPager.setCurrentItem(2, false)
+                }
+            }
         }
         findViewById<View>(R.id.navShared).setOnClickListener {
             clearOverlayAndThen { viewPager.setCurrentItem(3, false) }
@@ -936,6 +951,15 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+    }
+
+    override fun onDestroy() {
+        if (isFinishing && !isChangingConfigurations && LiveTrackStreamingService.isRunning) {
+            startService(Intent(this, LiveTrackStreamingService::class.java).apply {
+                action = LiveTrackStreamingService.ACTION_STOP
+            })
+        }
+        super.onDestroy()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

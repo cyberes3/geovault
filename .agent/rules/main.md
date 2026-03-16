@@ -22,7 +22,7 @@ Make sure to explcitly define responses via pydantic for the backend and typescr
 
 We have a bunch of common frontend components in the `parts/` folder. Please use those where possible.
 
-We like `Hidden Trackers` title case instead of `Hidden trackers`.
+We like titles like `Example Title` in this case instead of `Example title`.
 
 Android apps should be built with `./build-android.sh` located in the root of each app src dir.
 These apps share visual styles so make sure that changes are made in all apps.

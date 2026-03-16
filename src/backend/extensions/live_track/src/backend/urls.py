@@ -42,6 +42,7 @@ urlpatterns = [
     path("trackers/<str:tracker_id>/profile.properties", views.tracker_profile_properties),
     path("trackers/<str:tracker_id>/<str:profile_basename>.properties", views.tracker_profile_properties),
     path("ingress-body-template/", views.ingress_body_template),
+    path("hauk-config/", views.hauk_config),
     path("ingress/", views.ingress),
     path("ingress", views.ingress),  # no slash: GPSLogger may send here; redirect would drop POST body
     path("app-ingress/", views.app_ingress),

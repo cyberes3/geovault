@@ -144,6 +144,7 @@ const BASE_URL = '/api/extensions/live-track/world/share';
 const LINES_SOURCE_ID = 'world-share-lines';
 const POINTS_SOURCE_ID = 'world-share-points';
 const LINES_LAYER_ID = 'world-share-lines-layer';
+const LINES_WHITE_OUTLINE_LAYER_ID = 'world-share-lines-layer-white-outline';
 const LINES_BLACK_OUTLINE_LAYER_ID = 'world-share-lines-layer-black-outline';
 const POINTS_LAYER_ID = 'world-share-points-layer';
 const BASE_SOURCE_ID = 'world-share-base';
@@ -375,6 +376,21 @@ export default {
           layout: { 'line-join': 'round', 'line-cap': 'round' }
         });
       }
+      if (!map.getLayer(LINES_WHITE_OUTLINE_LAYER_ID)) {
+        map.addLayer({
+          id: LINES_WHITE_OUTLINE_LAYER_ID,
+          type: 'line',
+          source: LINES_SOURCE_ID,
+          paint: {
+            'line-color': '#fff',
+            'line-width': ['case', ['get', 'selected'], 7, 5],
+            'line-opacity': 1
+          },
+          layout: { 'line-join': 'round', 'line-cap': 'round' }
+        },
+        LINES_LAYER_ID
+        );
+      }
       if (!map.getLayer(LINES_BLACK_OUTLINE_LAYER_ID)) {
         map.addLayer({
           id: LINES_BLACK_OUTLINE_LAYER_ID,
@@ -441,7 +457,7 @@ export default {
     const TRACK_CLICK_HIT_RADIUS_PX = 15;
     function setupMapClickHandler() {
       if (!map) return;
-      const trackLayers = [POINTS_LAYER_ID, LINES_LAYER_ID, LINES_BLACK_OUTLINE_LAYER_ID];
+      const trackLayers = [POINTS_LAYER_ID, LINES_LAYER_ID, LINES_BLACK_OUTLINE_LAYER_ID, LINES_WHITE_OUTLINE_LAYER_ID];
       const getLayers = () => trackLayers.filter((id) => map.getLayer(id));
       const isOverTrack = (point) => {
         const layers = getLayers();
@@ -703,6 +719,17 @@ export default {
         },
         layers: [
           { id: BASE_LAYER_ID, type: 'raster', source: BASE_SOURCE_ID, minzoom: clientConfig.minzoom ?? 0, maxzoom: layerMaxZoom },
+          {
+            id: LINES_WHITE_OUTLINE_LAYER_ID,
+            type: 'line',
+            source: LINES_SOURCE_ID,
+            paint: {
+              'line-color': '#fff',
+              'line-width': ['case', ['get', 'selected'], 7, 5],
+              'line-opacity': 1
+            },
+            layout: { 'line-join': 'round', 'line-cap': 'round' }
+          },
           {
             id: LINES_BLACK_OUTLINE_LAYER_ID,
             type: 'line',

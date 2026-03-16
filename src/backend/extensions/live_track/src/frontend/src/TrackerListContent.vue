@@ -104,11 +104,11 @@
               <template v-else>
                 <button
                   type="button"
-                  title="Leave shared group"
+                  title="Leave Shared Group"
                   class="p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-white text-sm"
                   @click.stop="$emit('leaveGroup', group)"
                 >
-                  Leave shared group
+                  Leave Shared Group
                 </button>
               </template>
             </div>
@@ -155,7 +155,7 @@
             >
               <button
                 type="button"
-                :title="isGroupHidden(group) ? 'Show on map' : 'Hide on map'"
+                :title="isGroupHidden(group) ? 'Show on Map' : 'Hide on Map'"
                 class="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-white"
                 @click.stop="$emit('toggleGroupVisibility', group)"
               >
@@ -221,7 +221,7 @@
             >
               <button
                 type="button"
-                :title="isHidden(track.id) ? 'Show on map' : 'Hide on map'"
+                :title="isHidden(track.id) ? 'Show on Map' : 'Hide on Map'"
                 class="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
                 @click.stop="$emit('toggleVisibility', track.id)"
               >
@@ -439,9 +439,9 @@ export default {
     }
 
     const emptyTitle = computed(() => {
-      if (props.listTab === 'trackers') return 'No trackers yet';
-      if (props.listTab === 'groups') return 'No groups yet';
-      return 'No shared trackers or groups';
+      if (props.listTab === 'trackers') return 'No Trackers Yet';
+      if (props.listTab === 'groups') return 'No Groups Yet';
+      return 'No Shared Trackers or Groups';
     });
 
     const emptyMessage = computed(() => {

@@ -98,7 +98,12 @@ class EditSharedTrackerFragment : Fragment() {
                         requireActivity().runOnUiThread {
                             if (success) {
                                 (activity as? MainActivity)?.showSnackbar(getString(R.string.unsubscribed))
-                                requireActivity().supportFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
+                                requireActivity().supportFragmentManager.setFragmentResult(
+                                    TrackersListFragment.REQUEST_REFRESH_LIST,
+                                    Bundle().apply {
+                                        putString(SharedTrackersFragment.KEY_REMOVED_SHARED_TRACKER_ID, trackerId)
+                                    }
+                                )
                                 parentFragmentManager.popBackStack()
                             } else {
                                 (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
@@ -122,7 +127,12 @@ class EditSharedTrackerFragment : Fragment() {
                         requireActivity().runOnUiThread {
                             if (success) {
                                 (activity as? MainActivity)?.showSnackbar(getString(R.string.removed_from_share))
-                                requireActivity().supportFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
+                                requireActivity().supportFragmentManager.setFragmentResult(
+                                    TrackersListFragment.REQUEST_REFRESH_LIST,
+                                    Bundle().apply {
+                                        putString(SharedTrackersFragment.KEY_REMOVED_SHARED_TRACKER_ID, trackerId)
+                                    }
+                                )
                                 parentFragmentManager.popBackStack()
                             } else {
                                 (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))

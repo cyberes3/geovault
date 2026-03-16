@@ -17,14 +17,30 @@
         cy="16"
         r="15"
         :fill="selected ? 'white' : 'transparent'"
+        :stroke="selected ? '#fff' : 'transparent'"
+        stroke-width="1.4"
+      />
+      <circle
+        v-if="selected || reserveCircle"
+        cx="16"
+        cy="16"
+        r="15"
+        fill="none"
         :stroke="selected ? '#000' : 'transparent'"
-        stroke-width="1.5"
+        stroke-width="1.0"
       />
       <g transform="translate(16,2.6) scale(0.8) translate(-16,-2.6)">
         <path
           :fill="color"
+          :stroke="'#fff'"
+          :stroke-width="selected ? 1.6 : 1.8"
+          stroke-linejoin="round"
+          :d="ARROW_PATH_D"
+        />
+        <path
+          :fill="color"
           :stroke="'#000'"
-          :stroke-width="selected ? 1 : 2"
+          :stroke-width="1.2"
           stroke-linejoin="round"
           :d="ARROW_PATH_D"
         />

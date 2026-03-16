@@ -1,7 +1,7 @@
 import json
 import traceback
 from django.contrib.gis.geos import Point
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from .models import ExampleItem
@@ -67,8 +67,7 @@ def item_delete(request, item_id):
     try:
         item = ExampleItem.objects.get(id=item_id)
         item.delete()
-        # 204 No Content is the standard response for successful deletion
-        return JsonResponse({'message': 'Deleted'}, status=204)
+        return HttpResponse(status=204)
     except ExampleItem.DoesNotExist:
         return JsonResponse({'error': 'Not found'}, status=404)
 

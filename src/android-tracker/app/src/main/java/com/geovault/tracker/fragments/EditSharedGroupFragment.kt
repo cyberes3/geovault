@@ -98,7 +98,12 @@ class EditSharedGroupFragment : Fragment() {
                         requireActivity().runOnUiThread {
                             if (success) {
                                 (activity as? MainActivity)?.showSnackbar(getString(R.string.removed_from_share))
-                                parentFragmentManager.setFragmentResult(GroupsListFragment.REQUEST_GROUPS_REFRESH, Bundle())
+                                parentFragmentManager.setFragmentResult(
+                                    GroupsListFragment.REQUEST_GROUPS_REFRESH,
+                                    Bundle().apply {
+                                        putString(SharedTrackersFragment.KEY_REMOVED_SHARED_GROUP_ID, g.id)
+                                    }
+                                )
                                 parentFragmentManager.popBackStack()
                             } else {
                                 (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))

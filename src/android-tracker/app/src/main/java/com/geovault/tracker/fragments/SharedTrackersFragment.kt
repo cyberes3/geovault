@@ -37,6 +37,8 @@ class SharedTrackersFragment : Fragment() {
     companion object {
         /** Pass added trackers/groups for optimistic update; use keys "trackers" and "groups" (ArrayList<Tracker>/ArrayList<Group>). */
         const val REQUEST_ADD_SHARED_ITEMS = "shared_add_items"
+        const val KEY_REMOVED_SHARED_TRACKER_ID = "removed_shared_tracker_id"
+        const val KEY_REMOVED_SHARED_GROUP_ID = "removed_shared_group_id"
     }
 
     private lateinit var addFab: FloatingActionButton
@@ -49,6 +51,7 @@ class SharedTrackersFragment : Fragment() {
     private var adapter: SharedItemsAdapter? = null
     private var pendingScrollToTrackerId: String? = null
     private var pendingScrollToGroupId: String? = null
+    private var preloadStarted: Boolean = false
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_shared_trackers, container, false)
@@ -135,11 +138,23 @@ class SharedTrackersFragment : Fragment() {
             // Tracker save emits this for owner-tracker list refresh. Shared list should avoid
             // forcing a groups+trackers refetch in that case and rely on local updates.
             val skipSharedRefresh = bundle.getBoolean(TrackersListFragment.KEY_SKIP_SHARED_LIST_REFRESH, false)
+            val removedTrackerId = bundle.getString(KEY_REMOVED_SHARED_TRACKER_ID)
+            if (!removedTrackerId.isNullOrEmpty()) {
+                adapter?.removeTrackerById(removedTrackerId)
+                emptyView.visibility = if ((adapter?.itemCount ?: 0) == 0) View.VISIBLE else View.GONE
+                return@setFragmentResultListener
+            }
             if (!skipSharedRefresh) {
                 loadTrackers()
             }
         }
-        parentFragmentManager.setFragmentResultListener(GroupsListFragment.REQUEST_GROUPS_REFRESH, viewLifecycleOwner) { _, _ ->
+        parentFragmentManager.setFragmentResultListener(GroupsListFragment.REQUEST_GROUPS_REFRESH, viewLifecycleOwner) { _, bundle ->
+            val removedGroupId = bundle.getString(KEY_REMOVED_SHARED_GROUP_ID)
+            if (!removedGroupId.isNullOrEmpty()) {
+                adapter?.removeGroupById(removedGroupId)
+                emptyView.visibility = if ((adapter?.itemCount ?: 0) == 0) View.VISIBLE else View.GONE
+                return@setFragmentResultListener
+            }
             loadTrackers()
         }
         parentFragmentManager.setFragmentResultListener(TrackersListFragment.REQUEST_UPDATE_TRACKER, viewLifecycleOwner) { _, bundle ->
@@ -151,12 +166,28 @@ class SharedTrackersFragment : Fragment() {
             addSharedItemsFromBundle(bundle)
         }
 
+        preloadAddShareViewsData()
         loadTrackers()
     }
 
     override fun onPause() {
         super.onPause()
         adapter?.setHighlightedTrackerId(null)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Warm data used by Discover/Public add-share overlays before user taps the FABs.
+        preloadAddShareViewsData()
+    }
+
+    private fun preloadAddShareViewsData() {
+        if (!isAdded || preloadStarted) return
+        preloadStarted = true
+        TrackerRepository.getAvailableToAdd(requireContext(), forceRefresh = false) { }
+        TrackerRepository.getMapVisibility(requireContext()) { }
+        TrackerRepository.getGroups(requireContext(), forceRefresh = false) { }
+        TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { }
     }
 
     /** Merges trackers/groups from Add Trackers into the current list (optimistic), then refetches in background. */
@@ -350,6 +381,24 @@ class SharedTrackersFragment : Fragment() {
             }
             val sorted = currentItems.sortedBy { it.sortName.lowercase(Locale.getDefault()) }
             setItems(sorted, hiddenTrackIds)
+        }
+
+        fun removeTrackerById(trackerId: String) {
+            val mutable = items.toMutableList()
+            val idx = mutable.indexOfFirst { it is SharedListItem.TrackerItem && it.tracker.id == trackerId }
+            if (idx < 0) return
+            mutable.removeAt(idx)
+            items = mutable
+            notifyItemRemoved(idx)
+        }
+
+        fun removeGroupById(groupId: String) {
+            val mutable = items.toMutableList()
+            val idx = mutable.indexOfFirst { it is SharedListItem.GroupItem && it.group.id == groupId }
+            if (idx < 0) return
+            mutable.removeAt(idx)
+            items = mutable
+            notifyItemRemoved(idx)
         }
 
         fun indexOfTrackerId(id: String): Int = items.indexOfFirst { it is SharedListItem.TrackerItem && it.tracker.id == id }

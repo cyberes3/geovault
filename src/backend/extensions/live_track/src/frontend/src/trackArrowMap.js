@@ -17,10 +17,13 @@ export function getTrackArrowDataURL(color, selected) {
   const fill = color || '#6C93DE';
   const circle =
     selected
-      ? '<circle cx="16" cy="16" r="15" fill="white" stroke="#000" stroke-width="1.5"/>'
+      ? '<circle cx="16" cy="16" r="15" fill="white" stroke="#fff" stroke-width="1.4"/>' +
+        '<circle cx="16" cy="16" r="15" fill="none" stroke="#000" stroke-width="1.0"/>'
       : '';
-  const chevronStroke = '#000';
-  const chevronStrokeWidth = selected ? '1' : '2';
+  const chevronBlackStroke = '#000';
+  const chevronBlackStrokeWidth = '1.2';
+  const chevronWhiteStroke = '#fff';
+  const chevronWhiteStrokeWidth = selected ? '1.6' : '1.8';
   const pathTransform = ' transform="translate(16,2.6) scale(0.8) translate(-16,-2.6)"';
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="' +
@@ -34,9 +37,20 @@ export function getTrackArrowDataURL(color, selected) {
     ' fill="' +
     fill +
     '" stroke="' +
-    chevronStroke +
+    chevronWhiteStroke +
     '" stroke-width="' +
-    chevronStrokeWidth +
+    chevronWhiteStrokeWidth +
+    '" stroke-linejoin="round" shape-rendering="geometricPrecision" d="' +
+    ARROW_PATH_D +
+    '"/>' +
+    '<path' +
+    pathTransform +
+    ' fill="' +
+    fill +
+    '" stroke="' +
+    chevronBlackStroke +
+    '" stroke-width="' +
+    chevronBlackStrokeWidth +
     '" stroke-linejoin="round" shape-rendering="geometricPrecision" d="' +
     ARROW_PATH_D +
     '"/>' +

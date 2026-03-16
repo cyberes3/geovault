@@ -23,7 +23,16 @@ fun parseHexToColor(hex: String?, context: Context): Int {
     val normalized = hex?.trim()?.let { if (it.startsWith("#")) it else "#$it" }?.takeIf { it.isNotEmpty() }
     if (normalized == null) return Color.parseColor(defaultTrackerColorHex(context))
     return try {
-        Color.parseColor(normalized)
+        // Android parses 8-digit hex as #AARRGGBB, but some tracker colors can arrive as
+        // #RRGGBBAA. Convert that form so icon tint matches map line color rendering.
+        val parsedHex = if (normalized.length == 9 && normalized.substring(1).all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }) {
+            val rrggbb = normalized.substring(1, 7)
+            val aa = normalized.substring(7, 9)
+            "#$aa$rrggbb"
+        } else {
+            normalized
+        }
+        Color.parseColor(parsedHex)
     } catch (_: Exception) {
         Color.parseColor(defaultTrackerColorHex(context))
     }

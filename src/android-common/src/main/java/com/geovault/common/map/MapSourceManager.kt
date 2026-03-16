@@ -7,8 +7,7 @@ import com.geovault.common.GeovaultAuthManager
 class MapSourceManager(private val context: Context) {
     private val prefs = context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
     private var availableSources: List<TileSource> = listOf(
-        TileSource(SOURCE_OSM, "OpenStreetMap", "xyz", client_config = TileClientConfig(url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png")),
-        TileSource(OPTION_SATELLITE, "Google Satellite Hybrid", "xyz", client_config = TileClientConfig(url = "/api/tiles/google-satellite-hybrid/{z}/{x}/{y}"))
+        TileSource(SOURCE_OSM, "OpenStreetMap", "xyz", client_config = TileClientConfig(url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"))
     )
 
     fun setSources(sources: List<TileSource>) {
@@ -25,14 +24,7 @@ class MapSourceManager(private val context: Context) {
         filtered.find { it.id == SOURCE_OSM_DARK }?.let { baseSources.add(it) }
         filtered.find { it.id == SOURCE_MAPTILER_STREETS }?.let { baseSources.add(it) }
 
-        val maptilerHybrid = filtered.find { it.id == SOURCE_MAPTILER_HYBRID }
-        if (maptilerHybrid != null) {
-            baseSources.add(maptilerHybrid)
-        } else if (filtered.none { it.id == OPTION_SATELLITE }) {
-            baseSources.add(TileSource(OPTION_SATELLITE, "Google Satellite Hybrid", "xyz", client_config = TileClientConfig(url = "/api/tiles/google-satellite-hybrid/{z}/{x}/{y}")))
-        } else {
-            baseSources.add(filtered.find { it.id == OPTION_SATELLITE }!!)
-        }
+        filtered.find { it.id == SOURCE_MAPTILER_HYBRID }?.let { baseSources.add(it) }
 
         availableSources = baseSources
     }
@@ -73,11 +65,11 @@ class MapSourceManager(private val context: Context) {
         return if (availableSources.any { it.id == SOURCE_MAPTILER_STREETS }) SOURCE_MAPTILER_STREETS else SOURCE_OSM
     }
 
-    /** Effective source id to load (street source or satellite: MapTiler hybrid-v4 when available, else Google). */
+    /** Effective source id to load (street source or satellite: MapTiler hybrid-v4 when available, else street). */
     fun getEffectiveSourceId(): String {
         return when (getSelectedSourceId()) {
             OPTION_STREET -> getEffectiveStreetSourceId()
-            else -> if (availableSources.any { it.id == SOURCE_MAPTILER_HYBRID }) SOURCE_MAPTILER_HYBRID else OPTION_SATELLITE
+            else -> if (availableSources.any { it.id == SOURCE_MAPTILER_HYBRID }) SOURCE_MAPTILER_HYBRID else getEffectiveStreetSourceId()
         }
     }
 

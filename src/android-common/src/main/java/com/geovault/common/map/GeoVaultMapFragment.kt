@@ -26,6 +26,8 @@ class GeoVaultMapFragment : Fragment(), OnMapReadyCallback, MapView.OnDidFailLoa
     private var _mapView: MapView? = null
     val mapView: MapView
         get() = _mapView!!
+    val mapViewOrNull: MapView?
+        get() = _mapView
 
     lateinit var mapManager: MapLibreManager
         private set
@@ -50,6 +52,7 @@ class GeoVaultMapFragment : Fragment(), OnMapReadyCallback, MapView.OnDidFailLoa
         super.onViewCreated(view, savedInstanceState)
         _mapView = view.findViewById(R.id.gv_common_mapView)
         val mapViewRef = _mapView!!
+        mapViewRef.overScrollMode = View.OVER_SCROLL_NEVER
         mapViewRef.foreground = ColorDrawable(ContextCompat.getColor(requireContext(), R.color.gv_common_map_underlay))
         mapViewRef.addOnDidFailLoadingMapListener(this)
         mapViewRef.onCreate(savedInstanceState)
@@ -88,6 +91,20 @@ class GeoVaultMapFragment : Fragment(), OnMapReadyCallback, MapView.OnDidFailLoa
                 }
             }
         }
+        applyOverScrollNever()
+    }
+
+    private fun applyOverScrollNever() {
+        _mapView?.let { applyOverScrollNever(it) }
+    }
+
+    private fun applyOverScrollNever(mapViewRef: MapView) {
+        mapViewRef.overScrollMode = View.OVER_SCROLL_NEVER
+        var parent = mapViewRef.parent as? View
+        while (parent != null) {
+            parent.overScrollMode = View.OVER_SCROLL_NEVER
+            parent = parent.parent as? View
+        }
     }
 
     override fun onDidFailLoadingMap(errorMessage: String) {
@@ -119,7 +136,10 @@ class GeoVaultMapFragment : Fragment(), OnMapReadyCallback, MapView.OnDidFailLoa
 
     override fun onResume() {
         super.onResume()
-        _mapView?.onResume()
+        _mapView?.let {
+            applyOverScrollNever(it)
+            it.onResume()
+        }
     }
 
     override fun onPause() {

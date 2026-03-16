@@ -115,11 +115,24 @@ class TrackersListFragment : Fragment() {
         }
 
         requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_REFRESH_LIST, viewLifecycleOwner) { _, bundle ->
-            val hiddenTrackerId = bundle?.getString(KEY_HIDDEN_TRACKER_ID)
-            if (!hiddenTrackerId.isNullOrEmpty()) {
-                adapter?.removeTrackerId(hiddenTrackerId)
+            val newTracker = bundle?.getParcelable(KEY_NEW_TRACKER, Tracker::class.java)
+            if (newTracker != null) {
+                val cache = TrackerRepository.getTrackersCache()
+                if (cache != null) {
+                    adapter?.setTrackers(visibleOwnerTrackers(cache))
+                }
+            } else {
+                val deletedTrackerId = bundle?.getString(KEY_DELETED_TRACKER_ID)
+                if (!deletedTrackerId.isNullOrEmpty()) {
+                    adapter?.removeTrackerId(deletedTrackerId)
+                    return@setFragmentResultListener
+                }
+                val hiddenTrackerId = bundle?.getString(KEY_HIDDEN_TRACKER_ID)
+                if (!hiddenTrackerId.isNullOrEmpty()) {
+                    adapter?.removeTrackerId(hiddenTrackerId)
+                }
+                loadTrackers()
             }
-            loadTrackers()
         }
         requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_UPDATE_TRACKER, viewLifecycleOwner) { _, bundle ->
             val updated = bundle.getParcelable<Tracker>("tracker", Tracker::class.java)
@@ -167,6 +180,8 @@ class TrackersListFragment : Fragment() {
 
     companion object {
         const val REQUEST_REFRESH_LIST = "tracker_list_refresh"
+        const val KEY_NEW_TRACKER = "new_tracker"
+        const val KEY_DELETED_TRACKER_ID = "deleted_tracker_id"
         const val KEY_HIDDEN_TRACKER_ID = "hidden_tracker_id"
         const val KEY_SKIP_SHARED_LIST_REFRESH = "skip_shared_list_refresh"
         const val REQUEST_UPDATE_TRACKER = "tracker_list_update_tracker"

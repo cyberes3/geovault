@@ -15,7 +15,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="@string/new_group_name_hint"
-        android:inputType="text"
+        android:inputType="text|textCapWords"
         android:textSize="16sp"
         android:textColor="@color/text_primary"
         android:padding="10dp"
