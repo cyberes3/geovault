@@ -46,10 +46,10 @@ class AppReleasesResponse(BaseModel):
 
 
 def _find_uploader_asset(assets: list) -> str | None:
-    """Return browser_download_url for the first asset whose name suggests Uploader APK."""
+    """Return browser_download_url for the first asset whose name starts with 'GeoVault Uploader' and ends with .apk."""
     for a in assets:
         name = (a.get("name") or "").strip()
-        if "Uploader" in name and name.lower().endswith(".apk"):
+        if name.startswith("GeoVault Uploader") and name.lower().endswith(".apk"):
             url = (a.get("browser_download_url") or "").strip()
             if url and is_url_safe_for_fetch(url):
                 return url
@@ -57,10 +57,10 @@ def _find_uploader_asset(assets: list) -> str | None:
 
 
 def _find_places_asset(assets: list) -> str | None:
-    """Return browser_download_url for the first asset whose name matches 'GeoVault Places [release info].apk'."""
+    """Return browser_download_url for the first asset whose name starts with 'GeoVault Places' and ends with .apk."""
     for a in assets:
         name = (a.get("name") or "").strip()
-        if name.startswith("GeoVault Places ") and name.lower().endswith(".apk"):
+        if name.startswith("GeoVault Places") and name.lower().endswith(".apk"):
             url = (a.get("browser_download_url") or "").strip()
             if url and is_url_safe_for_fetch(url):
                 return url
@@ -68,10 +68,10 @@ def _find_places_asset(assets: list) -> str | None:
 
 
 def _find_tracker_asset(assets: list) -> str | None:
-    """Return browser_download_url for the first asset whose name contains 'GeoVault Live Tracker' and ends with .apk."""
+    """Return browser_download_url for the first asset whose name starts with 'GeoVault Live Tracker' and ends with .apk."""
     for a in assets:
         name = (a.get("name") or "").strip()
-        if "GeoVault Live Tracker" in name and name.lower().endswith(".apk"):
+        if name.startswith("GeoVault Live Tracker") and name.lower().endswith(".apk"):
             url = (a.get("browser_download_url") or "").strip()
             if url and is_url_safe_for_fetch(url):
                 return url
