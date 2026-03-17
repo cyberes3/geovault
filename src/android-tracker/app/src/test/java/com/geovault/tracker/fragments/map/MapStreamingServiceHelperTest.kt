@@ -13,6 +13,7 @@ class MapStreamingServiceHelperTest {
         MapStreamingServiceHelper.updateStreamingForDisplayedTracker(
             displayedTrackerId = "tracker-1",
             displayedTrackerName = "Tracker 1",
+            selectedTrackerId = "tracker-selected",
             mapViewContext = MapViewContext.GROUP,
             startStreaming = { _, _ -> started = true },
             stopStreaming = { stopped = true }
@@ -29,6 +30,7 @@ class MapStreamingServiceHelperTest {
         MapStreamingServiceHelper.updateStreamingForDisplayedTracker(
             displayedTrackerId = "tracker-1",
             displayedTrackerName = "Tracker 1",
+            selectedTrackerId = "tracker-selected",
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             startStreaming = { ids, name ->
                 startedIds = ids
@@ -48,11 +50,28 @@ class MapStreamingServiceHelperTest {
         MapStreamingServiceHelper.updateStreamingForDisplayedTracker(
             displayedTrackerId = null,
             displayedTrackerName = "Tracker 1",
+            selectedTrackerId = "tracker-selected",
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             startStreaming = { _, _ -> started = true },
             stopStreaming = { stopped = true }
         )
         assertTrue(!stopped)
+        assertTrue(!started)
+    }
+
+    @Test
+    fun updateStreamingForDisplayedTracker_stopsWhenDisplayedIsSelectedDefault() {
+        var stopped = false
+        var started = false
+        MapStreamingServiceHelper.updateStreamingForDisplayedTracker(
+            displayedTrackerId = "tracker-1",
+            displayedTrackerName = "Tracker 1",
+            selectedTrackerId = "tracker-1",
+            mapViewContext = MapViewContext.SINGLE_TRACKER,
+            startStreaming = { _, _ -> started = true },
+            stopStreaming = { stopped = true }
+        )
+        assertTrue(stopped)
         assertTrue(!started)
     }
 }

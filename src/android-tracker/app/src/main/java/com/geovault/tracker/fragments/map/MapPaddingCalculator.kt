@@ -9,7 +9,7 @@ internal object MapPaddingCalculator {
         mapRoot: View?,
         trackerLabelCard: View,
         rightControls: List<View>,
-        geometryLoadingSpinner: View,
+        bottomRightIndicatorContainer: View,
         mapTrackerInfoCard: View,
         bottomNavContainer: View?,
         baseLeftDp: Int,
@@ -61,8 +61,8 @@ internal object MapPaddingCalculator {
         )
 
         val bottomOverlayInsetPx = if (mapHeightPx > 0) {
-            val spinnerInset = if (geometryLoadingSpinner.visibility == View.VISIBLE) {
-                (mapHeightPx - geometryLoadingSpinner.top).coerceAtLeast(0)
+            val spinnerInset = if (bottomRightIndicatorContainer.visibility == View.VISIBLE) {
+                (mapHeightPx - bottomRightIndicatorContainer.top).coerceAtLeast(0)
             } else {
                 0
             }

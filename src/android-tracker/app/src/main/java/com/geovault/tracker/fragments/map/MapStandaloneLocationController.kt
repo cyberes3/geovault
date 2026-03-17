@@ -32,6 +32,7 @@ internal object MapStandaloneLocationController {
         trackingRunning: Boolean,
         showMyLocationEnabled: Boolean,
         waitingForFix: Boolean,
+        gpsLockActive: Boolean,
         context: Context
     ): MyLocationButtonState {
         val visible = !trackingRunning
@@ -46,7 +47,8 @@ internal object MapStandaloneLocationController {
         val showLoading = showMyLocationEnabled && waitingForFix
         val (iconResId, contentDescriptionResId) = when {
             showLoading -> R.drawable.ic_location_disabled to R.string.waiting_for_gps_lock
-            showMyLocationEnabled -> R.drawable.ic_location_enabled to R.string.show_my_location_on_description
+            showMyLocationEnabled && gpsLockActive ->
+                R.drawable.ic_location_enabled to R.string.show_my_location_on_description
             else -> R.drawable.ic_location_disabled to R.string.show_my_location_description
         }
         return MyLocationButtonState(

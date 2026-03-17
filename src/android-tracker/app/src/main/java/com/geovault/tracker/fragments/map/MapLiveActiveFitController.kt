@@ -36,8 +36,9 @@ internal object MapLiveActiveFitController {
         showMyLocationEnabled: Boolean
     ): Boolean {
         if (!available) return false
-        val singleTrackerMode = !showAllTrackers &&
+        // Live-active fit should only be user-toggleable while My Location mode is enabled.
+        val contextRequiresGps = showAllTrackers || mapViewContext == MapViewContext.GROUP ||
             mapViewContext == MapViewContext.SINGLE_TRACKER
-        return !singleTrackerMode || showMyLocationEnabled
+        return showMyLocationEnabled && contextRequiresGps
     }
 }

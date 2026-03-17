@@ -15,6 +15,8 @@ import org.maplibre.android.maps.Style
  * Shared LocationComponent activation/config for GeoVault maps.
  */
 object LocationComponentHelper {
+    private const val FIXED_LOCATION_ICON_SCALE = 0.45f
+
     data class Config(
         val accuracyColor: Int,
         val accuracyAlpha: Float = 0.25f,
@@ -65,8 +67,9 @@ object LocationComponentHelper {
             .trackingAnimationDurationMultiplier(0f)
             .enableStaleState(false)
             .elevation(0f)
-            .minZoomIconScale(0.45f)
-            .maxZoomIconScale(0.75f)
+            // Keep one consistent marker size across all zoom levels.
+            .minZoomIconScale(FIXED_LOCATION_ICON_SCALE)
+            .maxZoomIconScale(FIXED_LOCATION_ICON_SCALE)
             .accuracyColor(config.accuracyColor)
             .accuracyAlpha(config.accuracyAlpha)
         config.backgroundDrawable?.let {

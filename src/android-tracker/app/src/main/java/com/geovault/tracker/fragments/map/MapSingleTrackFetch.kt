@@ -15,8 +15,12 @@ internal class MapSingleTrackFetchCallbacks(
     val getTrackPointsEmpty: () -> Boolean,
     val getCoordinatesFetchInFlightTrackerId: () -> String?,
     val setCoordinatesFetchInFlightTrackerId: (String?) -> Unit,
+    val getCoordinatesFetchInFlightEpoch: () -> Long?,
+    val setCoordinatesFetchInFlightEpoch: (Long?) -> Unit,
     val getGeometryFetchInFlightTrackerId: () -> String?,
     val setGeometryFetchInFlightTrackerId: (String?) -> Unit,
+    val getGeometryFetchInFlightEpoch: () -> Long?,
+    val setGeometryFetchInFlightEpoch: (Long?) -> Unit,
     val setGeometryLoadingInProgress: (Boolean) -> Unit,
     val updateBottomRightSpinner: () -> Unit,
     val onSkipped: () -> Unit,
@@ -93,14 +97,21 @@ internal object MapSingleTrackFetch {
 
         if (seeded) return
 
-        if (!allowCoordinatesNetwork || callbacks.getCoordinatesFetchInFlightTrackerId() == trackerId) return
+        if (!allowCoordinatesNetwork) return
+        val inFlightCoordinatesId = callbacks.getCoordinatesFetchInFlightTrackerId()
+        val inFlightCoordinatesEpoch = callbacks.getCoordinatesFetchInFlightEpoch()
+        if (inFlightCoordinatesId == trackerId && inFlightCoordinatesEpoch == requestEpoch) return
         callbacks.setCoordinatesFetchInFlightTrackerId(trackerId)
+        callbacks.setCoordinatesFetchInFlightEpoch(requestEpoch)
         TrackerRepository.getTrackerCoordinates(context, trackerId) { response ->
             callbacks.getScope().launch {
-                if (callbacks.getTrackerRequestEpoch() != requestEpoch) return@launch
-                if (callbacks.getCoordinatesFetchInFlightTrackerId() == trackerId) {
+                if (callbacks.getCoordinatesFetchInFlightTrackerId() == trackerId &&
+                    callbacks.getCoordinatesFetchInFlightEpoch() == requestEpoch
+                ) {
                     callbacks.setCoordinatesFetchInFlightTrackerId(null)
+                    callbacks.setCoordinatesFetchInFlightEpoch(null)
                 }
+                if (callbacks.getTrackerRequestEpoch() != requestEpoch) return@launch
                 if (!callbacks.getIsAdded() || !isSingleTrackerContext(callbacks)) return@launch
                 if (!isActiveTracker(callbacks, trackerId)) return@launch
                 val coords = response?.coordinates ?: return@launch
@@ -116,19 +127,25 @@ internal object MapSingleTrackFetch {
         callbacks: MapSingleTrackFetchCallbacks,
         requestEpoch: Long = callbacks.getTrackerRequestEpoch()
     ) {
-        if (callbacks.getGeometryFetchInFlightTrackerId() == trackerId) return
+        val inFlightGeometryId = callbacks.getGeometryFetchInFlightTrackerId()
+        val inFlightGeometryEpoch = callbacks.getGeometryFetchInFlightEpoch()
+        if (inFlightGeometryId == trackerId && inFlightGeometryEpoch == requestEpoch) return
         callbacks.setGeometryFetchInFlightTrackerId(trackerId)
+        callbacks.setGeometryFetchInFlightEpoch(requestEpoch)
         callbacks.setGeometryLoadingInProgress(true)
         callbacks.updateBottomRightSpinner()
 
         TrackerRepository.getTrackerGeometry(context, trackerId) { tracker ->
             callbacks.getScope().launch {
-                if (callbacks.getTrackerRequestEpoch() != requestEpoch) return@launch
-                if (callbacks.getGeometryFetchInFlightTrackerId() == trackerId) {
+                if (callbacks.getGeometryFetchInFlightTrackerId() == trackerId &&
+                    callbacks.getGeometryFetchInFlightEpoch() == requestEpoch
+                ) {
                     callbacks.setGeometryFetchInFlightTrackerId(null)
+                    callbacks.setGeometryFetchInFlightEpoch(null)
+                    callbacks.setGeometryLoadingInProgress(false)
+                    callbacks.updateBottomRightSpinner()
                 }
-                callbacks.setGeometryLoadingInProgress(false)
-                callbacks.updateBottomRightSpinner()
+                if (callbacks.getTrackerRequestEpoch() != requestEpoch) return@launch
                 if (!callbacks.getIsAdded()) return@launch
                 if (!isSingleTrackerContext(callbacks)) return@launch
                 if (!isActiveTracker(callbacks, trackerId)) return@launch

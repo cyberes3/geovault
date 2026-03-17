@@ -40,6 +40,7 @@ internal object MapStreamingServiceHelper {
     fun updateStreamingForDisplayedTracker(
         displayedTrackerId: String?,
         displayedTrackerName: String?,
+        selectedTrackerId: String?,
         mapViewContext: MapViewContext,
         startStreaming: (Set<String>, String?) -> Unit,
         stopStreaming: () -> Unit
@@ -49,6 +50,10 @@ internal object MapStreamingServiceHelper {
             return
         }
         val id = displayedTrackerId ?: return
+        if (!selectedTrackerId.isNullOrEmpty() && id == selectedTrackerId) {
+            stopStreaming()
+            return
+        }
         startStreaming(setOf(id), displayedTrackerName)
     }
 }

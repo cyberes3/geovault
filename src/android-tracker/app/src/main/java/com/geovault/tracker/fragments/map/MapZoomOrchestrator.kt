@@ -10,6 +10,7 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import kotlin.math.max
+import kotlin.math.min
 
 internal object MapZoomOrchestrator {
     fun applyUnifiedCameraMove(
@@ -61,7 +62,9 @@ internal object MapZoomOrchestrator {
     ): Boolean {
         val currentMap = map ?: return false
         val targetZoom = if (forceZoomIn) {
-            max(currentMap.cameraPosition.zoom, followLockTargetZoom)
+            // Treat explicit recenter taps as "zoom in now", not just "enforce minimum zoom once".
+            val steppedZoom = currentMap.cameraPosition.zoom + 1.0
+            min(currentMap.maxZoomLevel, max(steppedZoom, followLockTargetZoom))
         } else {
             currentMap.cameraPosition.zoom
         }
@@ -128,7 +131,7 @@ internal object MapZoomOrchestrator {
             update,
             CameraPaddingMode.CENTERED,
             CameraIntent.FOLLOW_LOCK,
-            shouldForceZoom,
+            true,
             MapConstants.FOLLOW_LOCK_ANIMATION_MS,
             callback
         )
@@ -150,7 +153,7 @@ internal object MapZoomOrchestrator {
         val target = MapDataLoader.resolveSingleTrackerZoomTarget(trackPoints, fallbackLastPoint) ?: return
         applyMove(
             CameraUpdateFactory.newLatLngZoom(target, followLockTargetZoom),
-            CameraPaddingMode.OVERLAY_AWARE,
+            CameraPaddingMode.CENTERED,
             CameraIntent.SINGLE_TRACKER_FOCUS,
             false,
             MapConstants.FOLLOW_LOCK_ANIMATION_MS,
@@ -327,7 +330,9 @@ internal object MapZoomOrchestrator {
         mapViewContext: MapViewContext,
         preserveCenteredAllTrackersFit: Boolean
     ): Boolean {
-        val preserveCenteredGroupFocus = activeCameraIntent == CameraIntent.GROUP_MEMBER_FOCUS
+        // Keep centered focus targets (single/group member) from drifting when UI padding refreshes.
+        val preserveCenteredGroupFocus = activeCameraIntent == CameraIntent.GROUP_MEMBER_FOCUS ||
+            activeCameraIntent == CameraIntent.SINGLE_TRACKER_FOCUS
         val preserveSingleLiveFit = liveActiveFitEnabled &&
             !showAllTrackers &&
             mapViewContext == MapViewContext.SINGLE_TRACKER

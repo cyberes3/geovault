@@ -401,14 +401,26 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <com.geovault.common.LoadingSpinner
-        android:id="@+id/geometryLoadingSpinner"
+    <FrameLayout
+        android:id="@+id/bottomRightIndicatorContainer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_marginBottom="16dp"
         android:layout_marginEnd="16dp"
         android:elevation="0dp"
-        app:spinnerSize="32dp" />
+        android:visibility="gone">
+        <com.geovault.common.LoadingSpinner
+            android:id="@+id/geometryLoadingSpinner"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:spinnerSize="32dp" />
+        <View
+            android:id="@+id/streamingIndicator"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:background="@drawable/gv_common_bg_red_circle"
+            android:visibility="gone" />
+    </FrameLayout>
 
 </FrameLayout>
