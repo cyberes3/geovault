@@ -53,20 +53,26 @@ internal object MapHistoryUtils {
             .takeLast(TrackUpdateHelper.MAX_POINTS)
             .filter { parseValidLatLng(it) != null }
         if (mergeExternalStreaming) {
-            val geomLatestTs = lastCoords.lastOrNull()
-                ?.let { MapCoordinateUtils.timestampFromCoordinateMs(it) }
-                ?: Long.MAX_VALUE
+            if (lastCoords.isEmpty()) return
+            val parsedGeomTs = lastCoords.map { MapCoordinateUtils.timestampFromCoordinateMs(it) }
+            val hasGeometryTimestamps = parsedGeomTs.any { it != null }
+            val geometryTimestamps = if (hasGeometryTimestamps) {
+                val fallbackBase = parsedGeomTs.filterNotNull().maxOrNull() ?: System.currentTimeMillis()
+                parsedGeomTs.mapIndexed { index, ts -> ts ?: (fallbackBase + index) }
+            } else {
+                // Geometry has no server timestamps (lon/lat only). Keep live-streamed points by
+                // placing geometry in the past relative to already-streamed points.
+                val streamBase = trackTimestamps.minOrNull() ?: System.currentTimeMillis()
+                val fallbackStart = streamBase - lastCoords.size - 1L
+                lastCoords.indices.map { idx -> fallbackStart + idx }
+            }
+            val geomLatestTs = geometryTimestamps.last()
             val streamedAfterGeom = trackPoints.zip(trackTimestamps)
                 .filter { it.second > geomLatestTs }
             trackPoints.clear()
             trackTimestamps.clear()
             trackPoints.addAll(lastCoords.mapNotNull(::parseValidLatLng))
-            trackTimestamps.addAll(
-                lastCoords.mapIndexed { index, coord ->
-                    MapCoordinateUtils.timestampFromCoordinateMs(coord, geomLatestTs + index)
-                        ?: (geomLatestTs + index)
-                }
-            )
+            trackTimestamps.addAll(geometryTimestamps)
             for ((pt, ts) in streamedAfterGeom) {
                 TrackUpdateHelper.updateTrack(trackPoints, trackTimestamps, pt, ts)
             }

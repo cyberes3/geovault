@@ -26,11 +26,13 @@ internal class MapSingleTrackFetchCallbacks(
     /** Fragment applies coords and optionally updates label; called from repository callback. */
     val onSeededFromNetwork: (List<List<Double>>, List<Map<String, Any?>>?) -> Unit,
     val getIsAdded: () -> Boolean,
+    val getTrackerRequestEpoch: () -> Long,
     val onGeometryLoaded: (Tracker?, String, Boolean) -> Unit
 )
 
 internal object MapSingleTrackFetch {
     fun loadHistory(context: Context, callbacks: MapSingleTrackFetchCallbacks) {
+        val requestEpoch = callbacks.getTrackerRequestEpoch()
         val selectedTrackerId = callbacks.getSelectedTrackerId()
         val trackerId = MapDataLoader.resolveHistoryTrackerId(callbacks.getDisplayedTrackerId(), selectedTrackerId)
 
@@ -44,12 +46,12 @@ internal object MapSingleTrackFetch {
         }
 
         TrackerRepository.getTrackers(context, forceRefresh = false) { }
-        seedFromCacheOrTail(context, trackerId, null, true, callbacks)
+        seedFromCacheOrTail(context, trackerId, null, true, callbacks, requestEpoch)
 
         if (MapDataLoader.shouldAutoZoomSingleTracker(callbacks.getTrackPointsEmpty())) {
             callbacks.onSetZoomToTrackAfterLoad(true)
         }
-        fetchFullGeometry(context, trackerId, false, callbacks)
+        fetchFullGeometry(context, trackerId, false, callbacks, requestEpoch)
     }
 
     fun seedFromCacheOrTail(
@@ -57,7 +59,8 @@ internal object MapSingleTrackFetch {
         trackerId: String,
         initialTracker: Tracker?,
         allowCoordinatesNetwork: Boolean,
-        callbacks: MapSingleTrackFetchCallbacks
+        callbacks: MapSingleTrackFetchCallbacks,
+        requestEpoch: Long = callbacks.getTrackerRequestEpoch()
     ) {
         if (MapDataLoader.shouldSkipSeedTrack(trackerId, callbacks.getShowAllTrackers(), callbacks.getMapViewContext())) return
 
@@ -88,6 +91,7 @@ internal object MapSingleTrackFetch {
         callbacks.setCoordinatesFetchInFlightTrackerId(trackerId)
         TrackerRepository.getTrackerCoordinates(context, trackerId) { response ->
             callbacks.getScope().launch {
+                if (callbacks.getTrackerRequestEpoch() != requestEpoch) return@launch
                 if (callbacks.getCoordinatesFetchInFlightTrackerId() == trackerId) {
                     callbacks.setCoordinatesFetchInFlightTrackerId(null)
                 }
@@ -101,7 +105,13 @@ internal object MapSingleTrackFetch {
         }
     }
 
-    fun fetchFullGeometry(context: Context, trackerId: String, forceReplace: Boolean, callbacks: MapSingleTrackFetchCallbacks) {
+    fun fetchFullGeometry(
+        context: Context,
+        trackerId: String,
+        forceReplace: Boolean,
+        callbacks: MapSingleTrackFetchCallbacks,
+        requestEpoch: Long = callbacks.getTrackerRequestEpoch()
+    ) {
         if (callbacks.getGeometryFetchInFlightTrackerId() == trackerId) return
         callbacks.setGeometryFetchInFlightTrackerId(trackerId)
         callbacks.setGeometryLoadingInProgress(true)
@@ -109,11 +119,17 @@ internal object MapSingleTrackFetch {
 
         TrackerRepository.getTrackerGeometry(context, trackerId) { tracker ->
             callbacks.getScope().launch {
+                if (callbacks.getTrackerRequestEpoch() != requestEpoch) return@launch
                 if (callbacks.getGeometryFetchInFlightTrackerId() == trackerId) {
                     callbacks.setGeometryFetchInFlightTrackerId(null)
                 }
                 callbacks.setGeometryLoadingInProgress(false)
                 callbacks.updateBottomRightSpinner()
+                if (!callbacks.getIsAdded()) return@launch
+                if (callbacks.getShowAllTrackers() || callbacks.getMapViewContext() == MapViewContext.GROUP) return@launch
+                val selectedId = callbacks.getSelectedTrackerId()
+                val activeTrackerId = MapDataLoader.resolveActiveTrackerId(callbacks.getDisplayedTrackerId(), selectedId)
+                if (activeTrackerId != trackerId) return@launch
                 callbacks.onGeometryLoaded(tracker, trackerId, forceReplace)
             }
         }

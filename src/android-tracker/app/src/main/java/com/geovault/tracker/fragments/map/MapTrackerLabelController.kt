@@ -15,6 +15,7 @@ internal sealed class TrackerLabelState {
     ) : TrackerLabelState()
 
     object HideCardClearDisplayed : TrackerLabelState()
+    object HideCardKeepDisplayed : TrackerLabelState()
 
     data class ShowTrackerMode(
         val labelText: String,
@@ -37,7 +38,7 @@ internal object MapTrackerLabelController {
         context: Context
     ): TrackerLabelState {
         if (trackingRunning) {
-            return TrackerLabelState.HideCardClearDisplayed
+            return TrackerLabelState.HideCardKeepDisplayed
         }
         if (mapViewContext == MapViewContext.GROUP) {
             return TrackerLabelState.GroupMode(

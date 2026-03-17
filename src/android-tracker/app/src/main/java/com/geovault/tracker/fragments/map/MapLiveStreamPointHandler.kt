@@ -19,7 +19,6 @@ internal class MapLiveStreamPointCallbacks(
     val scheduleDebouncedMultiTrackRender: () -> Unit,
     val updateMapSelectionUi: () -> Unit,
     val getDisplayedTrackerId: () -> String?,
-    val getSelectedTrackerId: () -> String?,
     val getIsAdded: () -> Boolean,
     val setLastStreamedPointTimeMs: (Long?) -> Unit,
     val updateStreamingUi: () -> Unit,
@@ -69,12 +68,7 @@ internal object MapLiveStreamPointHandler {
             return
         }
 
-        if (!MapLiveStreamHandler.shouldHandleSingleTrackPoint(
-                trackId = trackId,
-                displayedTrackerId = callbacks.getDisplayedTrackerId(),
-                selectedTrackerId = callbacks.getSelectedTrackerId()
-            )
-        ) return
+        if (!MapLiveStreamHandler.shouldHandleSingleTrackPoint(trackId, callbacks.getDisplayedTrackerId())) return
         callbacks.setLastStreamedPointTimeMs(normalizedTimestampMs)
         callbacks.setLastKnownUpdateTimeMsByTrackerId(trackId, normalizedTimestampMs)
         val selection = callbacks.getSelectedMapTracker()

@@ -60,7 +60,11 @@ internal object MapGroupRefreshHandler {
             callbacks.setPendingGroup(group, zoomToTrackerId)
             return
         }
-        val style = callbacks.getStyle() ?: return
+        val style = callbacks.getStyle()
+        if (style == null) {
+            callbacks.setPendingGroup(group, zoomToTrackerId)
+            return
+        }
         callbacks.setMapViewContext(MapViewContext.GROUP)
         callbacks.setDisplayedGroupName(group.name)
         callbacks.setCurrentGroupForMap(group)

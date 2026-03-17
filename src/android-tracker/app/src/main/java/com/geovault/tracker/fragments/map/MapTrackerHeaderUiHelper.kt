@@ -46,6 +46,17 @@ internal object MapTrackerHeaderUiHelper {
                 }
             }
 
+            is TrackerLabelState.HideCardKeepDisplayed -> {
+                trackerLabelCard.visibility = View.GONE
+                updateStreamingUi()
+                showAllTrackersButton.visibility = View.VISIBLE
+                showAllTrackersButton.contentDescription = if (showAllTrackers) {
+                    getString(R.string.show_selected_tracker)
+                } else {
+                    getString(R.string.show_all_trackers)
+                }
+            }
+
             is TrackerLabelState.ShowTrackerMode -> {
                 trackerLabelCard.visibility = View.VISIBLE
                 MapTrackerLabelController.applyLabelWidthConstraints(resources, trackerLabelCard, trackerNameLabel, lastUpdatedLabel)

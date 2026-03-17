@@ -25,8 +25,10 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPOutputStream
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
 import kotlin.random.Random
@@ -66,6 +68,16 @@ class TrackingService : Service() {
         @Volatile
         var lastAccuracyMeters: Float? = null
 
+        /** Latest locally tracked point snapshot for UI consumers (e.g. params view). */
+        @Volatile
+        var lastTrackedLatitude: Double? = null
+        @Volatile
+        var lastTrackedLongitude: Double? = null
+        @Volatile
+        var lastTrackedTimestampMs: Long = 0L
+        @Volatile
+        var lastTrackedPropsJson: String? = null
+
         // Settings keys
         const val PREF_INTERVAL = "logging_interval"
         const val PREF_DISTANCE = "logging_distance"
@@ -84,6 +96,20 @@ class TrackingService : Service() {
 
         /** Max batches to send in one push call to avoid holding the lock too long. */
         private const val MAX_BATCHES_PER_PUSH = 10
+
+        /** Keep recent locally tracked points so map can catch up after pause/background. */
+        private const val MAX_BUFFERED_TRACK_POINTS = 1000
+        private val pointBuffer = ConcurrentLinkedQueue<LiveTrackStreamingService.TrackPointBroadcast>()
+
+        @JvmStatic
+        fun drainBufferedTrackPoints(): List<LiveTrackStreamingService.TrackPointBroadcast> {
+            val result = mutableListOf<LiveTrackStreamingService.TrackPointBroadcast>()
+            while (true) {
+                val p = pointBuffer.poll() ?: break
+                result.add(p)
+            }
+            return result
+        }
     }
 
     private var isTracking = false
@@ -162,6 +188,11 @@ class TrackingService : Service() {
         totalDistanceMeters = 0f
         sessionTotalDistanceMeters = 0f
         lastAccuracyMeters = null
+        lastTrackedLatitude = null
+        lastTrackedLongitude = null
+        lastTrackedTimestampMs = 0L
+        lastTrackedPropsJson = null
+        pointBuffer.clear()
         broadcastSessionStats()
 
         runBlocking(Dispatchers.IO) {
@@ -220,6 +251,11 @@ class TrackingService : Service() {
         isTracking = false
         isRunning = false
         sessionStartTimeMs = 0
+        lastTrackedLatitude = null
+        lastTrackedLongitude = null
+        lastTrackedTimestampMs = 0L
+        lastTrackedPropsJson = null
+        pointBuffer.clear()
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
             .remove(PREF_WAS_TRACKING_BEFORE_EXIT).commit()
         fusedLocationClient.removeLocationUpdates(locationCallback)
@@ -430,17 +466,60 @@ class TrackingService : Service() {
     private fun broadcastTrackPoint(location: Location) {
         val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (trackerId.isEmpty()) return
+        val propsJson = buildLocalPointPropsJson(location, totalDistanceMeters)
+        lastTrackedLatitude = location.latitude
+        lastTrackedLongitude = location.longitude
+        lastTrackedTimestampMs = location.time
+        lastTrackedPropsJson = propsJson
+        val point = LiveTrackStreamingService.TrackPointBroadcast(
+            trackId = trackerId,
+            lon = location.longitude,
+            lat = location.latitude,
+            timestampMs = location.time,
+            accuracyMeters = if (location.hasAccuracy()) location.accuracy else null,
+            propsJson = propsJson
+        )
+        pointBuffer.add(point)
+        while (pointBuffer.size > MAX_BUFFERED_TRACK_POINTS) {
+            pointBuffer.poll()
+        }
         val intent = Intent(LiveTrackStreamingService.BROADCAST_TRACK_POINT).apply {
             setPackage(packageName)
-            putExtra(LiveTrackStreamingService.EXTRA_TRACK_ID, trackerId)
-            putExtra(LiveTrackStreamingService.EXTRA_POINT_LAT, location.latitude)
-            putExtra(LiveTrackStreamingService.EXTRA_POINT_LON, location.longitude)
-            putExtra(LiveTrackStreamingService.EXTRA_POINT_TS_MS, location.time)
-            if (location.hasAccuracy()) {
-                putExtra(LiveTrackStreamingService.EXTRA_ACCURACY_METERS, location.accuracy)
-            }
+            putExtra(LiveTrackStreamingService.EXTRA_TRACK_ID, point.trackId)
+            putExtra(LiveTrackStreamingService.EXTRA_POINT_LAT, point.lat)
+            putExtra(LiveTrackStreamingService.EXTRA_POINT_LON, point.lon)
+            putExtra(LiveTrackStreamingService.EXTRA_POINT_TS_MS, point.timestampMs)
+            point.accuracyMeters?.let { putExtra(LiveTrackStreamingService.EXTRA_ACCURACY_METERS, it) }
+            point.propsJson?.let { putExtra(LiveTrackStreamingService.EXTRA_PROPS_JSON, it) }
         }
         sendBroadcast(intent)
+    }
+
+    private fun buildLocalPointPropsJson(location: Location, distanceMeters: Float): String? {
+        val useExtendedParams = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+            .getBoolean(PREF_EXTENDED_PARAMS, true)
+        if (!useExtendedParams) return null
+        return try {
+            val props = JSONObject()
+            val timestampMs = location.time
+            val timestampSec = if (timestampMs >= 1_000_000_000_000L) timestampMs / 1000L else timestampMs
+            props.put("timestamp", timestampSec)
+            props.put("starttimestamp", sessionStartTimeMs)
+            if (location.hasAccuracy()) props.put("acc", location.accuracy.toDouble())
+            if (location.hasAltitude()) props.put("alt", location.altitude)
+            if (location.hasBearing()) props.put("bearing", location.bearing.toDouble())
+            if (location.hasSpeed()) props.put("spd_kph", location.speed * 3.6f)
+            props.put("prov", location.provider ?: "geovault")
+            props.put("dist", distanceMeters.toDouble())
+            val sat = location.extras?.getInt("satellites", 0)?.takeIf { it > 0 }
+            if (sat != null) props.put("sat", sat)
+            val (batteryLevel, isCharging) = getBatteryStatus()
+            props.put("batt", batteryLevel)
+            props.put("ischarging", isCharging)
+            props.toString()
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun createNotification(sentCount: Int, queuedCount: Int): Notification {

@@ -89,6 +89,7 @@ class MapFragment : Fragment() {
     private lateinit var mapTrackerInfoViewParams: MaterialButton
     private lateinit var mapTrackerInfoViewInList: MaterialButton
     private lateinit var mapTrackerInfoZoomLock: ImageView
+    private lateinit var mapTrackerInfoFocus: View
     private lateinit var showMyLocationButton: View
     private lateinit var showMyLocationButtonIcon: ImageView
     private lateinit var showMyLocationButtonLoading: LoadingSpinner
@@ -143,6 +144,8 @@ class MapFragment : Fragment() {
     /** Pending group to apply when map becomes ready (set when refreshMapForGroup is called before maplibreMap is ready). */
     private var pendingGroupForMap: Group? = null
     private var pendingGroupZoomToTrackerId: String? = null
+    /** Pending all-trackers intent to replay once map/style is ready. */
+    private var pendingShowAllTrackers = false
     /** Active camera behavior intent used to keep padding/lifecycle moves deterministic. */
     private var activeCameraIntent: CameraIntent = CameraIntent.NONE
     /** Preserve centered all-trackers fit against later padding refresh drift. */
@@ -155,6 +158,8 @@ class MapFragment : Fragment() {
     private var activeStreamedTrackerIds: Set<String> = emptySet()
     /** In-memory history cache for multi-tracker map contexts (group/all-trackers). */
     private val multiTrackCoordsCache = mutableMapOf<String, MutableList<List<Double>>>()
+    /** Monotonic token used to reject stale single-tracker async callbacks. */
+    private var trackerRequestEpoch: Long = 0L
     /** When true, user has enabled non-tracking "show my location" mode (blue dot, camera follow). */
     private var showMyLocationEnabled = false
     /** True after we have received at least one GPS fix while not tracking (used for button visibility). */
@@ -216,7 +221,6 @@ class MapFragment : Fragment() {
             scheduleDebouncedMultiTrackRender = { scheduleDebouncedMultiTrackRender() },
             updateMapSelectionUi = { updateMapSelectionUi() },
             getDisplayedTrackerId = { displayedTrackerId },
-            getSelectedTrackerId = { SelectedTrackerPrefs.selectedTrackerId(requireContext()) },
             getIsAdded = { isAdded },
             setLastStreamedPointTimeMs = { lastStreamedPointTimeMs = it },
             updateStreamingUi = { updateStreamingUi() },
@@ -261,7 +265,12 @@ class MapFragment : Fragment() {
         if (clearPendingGroupIntent) {
             pendingGroupForMap = null
             pendingGroupZoomToTrackerId = null
+            pendingShowAllTrackers = false
         }
+    }
+
+    private fun bumpTrackerRequestEpoch() {
+        trackerRequestEpoch++
     }
 
     override fun onCreateView(
@@ -302,7 +311,8 @@ class MapFragment : Fragment() {
         showMyLocationButtonIcon = view.findViewById(R.id.showMyLocationButtonIcon)
         showMyLocationButtonLoading = view.findViewById(R.id.showMyLocationButtonLoading)
         showMyLocationButtonLoading.setTintColor(ContextCompat.getColor(requireContext(), R.color.content_on_primary))
-        view.findViewById<View>(R.id.mapTrackerInfoFocus).setOnClickListener { onMapTrackerInfoFocus() }
+        mapTrackerInfoFocus = view.findViewById(R.id.mapTrackerInfoFocus)
+        mapTrackerInfoFocus.setOnClickListener { onMapTrackerInfoFocus() }
         view.findViewById<View>(R.id.mapTrackerInfoClose).setOnClickListener { clearMapSelection() }
         mapTrackerInfoZoomLock.setOnClickListener { onMapTrackerInfoZoomLock() }
         mapTrackerInfoViewParams.setOnClickListener { onMapTrackerInfoViewParams() }
@@ -392,17 +402,22 @@ class MapFragment : Fragment() {
                 mapLoadingOverlay.visibility = View.GONE
                 refreshMapPaddingForCurrentMode(force = true)
                 updateTrackLine()
-                if (zoomToTrackAfterLoad && trackPoints.isNotEmpty()) {
-                    val bbox = (activity as? MainActivity)?.initialTrackForMap?.bbox
-                    val boundsFromBbox = MapCameraMath.bboxToLatLngBounds(bbox)
-                    if (boundsFromBbox != null) {
-                        moveCameraToFitBoundsWithMinZoomClamp(map, boundsFromBbox)
-                        zoomToTrackAfterLoad = false
-                    } else if (trackPoints.size >= 2) {
-                        val bounds = LatLngBounds.Builder().apply { trackPoints.forEach { include(it) } }.build()
-                        moveCameraToFitBoundsWithMinZoomClamp(map, bounds)
-                        zoomToTrackAfterLoad = false
+                if (showMyLocationEnabled && pendingAutoZoomToStandaloneFix) {
+                    val loc = lastStandaloneLocation
+                    val zoomApplied = loc != null && zoomToStandaloneLocation(loc, forceZoomIn = true, animate = true)
+                    if (MapStandaloneLocationController.shouldConsumePendingAutoZoom(
+                            pendingAutoZoom = pendingAutoZoomToStandaloneFix,
+                            trackerFocusIntentActive = isTrackerFocusIntentActive(),
+                            suppressStandaloneAutoZoom = suppressStandaloneAutoZoom,
+                            zoomApplied = zoomApplied
+                        )
+                    ) {
+                        pendingAutoZoomToStandaloneFix = false
                     }
+                }
+                if (zoomToTrackAfterLoad && trackPoints.isNotEmpty()) {
+                    zoomToLatestTrackPoint(map)
+                    zoomToTrackAfterLoad = false
                 }
                 val (deferredGroup, deferredZoom) = (activity as? MainActivity)?.getAndClearInitialGroupAndZoomForMap() ?: Pair(null, null)
                 if (deferredGroup != null) {
@@ -415,6 +430,11 @@ class MapFragment : Fragment() {
                     refreshMapForGroup(pendingGroup, pendingZoom)
                     pendingGroupForMap = null
                     pendingGroupZoomToTrackerId = null
+                    return
+                }
+                if (pendingShowAllTrackers) {
+                    pendingShowAllTrackers = false
+                    loadAllTrackersAndApply()
                     return
                 }
                 if (mapViewContext == MapViewContext.GROUP && currentGroupForMap != null) {
@@ -585,27 +605,46 @@ class MapFragment : Fragment() {
             startStandaloneLocationUpdates()
         }
 
+        // Drain first, then register receiver. This avoids duplicate processing windows where
+        // one point can be consumed both via broadcast and buffer replay.
+        if (TrackingService.isRunning) {
+            val trackedBuffered = TrackingService.drainBufferedTrackPoints()
+            if (trackedBuffered.isNotEmpty()) {
+                for (p in trackedBuffered) {
+                    applyLiveStreamPoint(
+                        p.trackId,
+                        p.lat,
+                        p.lon,
+                        p.timestampMs.takeIf { it > 0L } ?: System.currentTimeMillis(),
+                        fromBuffered = true
+                    )
+                    p.accuracyMeters?.let { lastStreamedAccuracyMeters = it }
+                }
+            }
+            // Tracking mode should not replay stale websocket points.
+            LiveTrackStreamingService.drainBufferedPoints()
+        } else {
+            val buffered = LiveTrackStreamingService.drainBufferedPoints()
+            if (buffered.isNotEmpty()) {
+                for (p in buffered) {
+                    applyLiveStreamPoint(
+                        p.trackId,
+                        p.lat,
+                        p.lon,
+                        p.timestampMs.takeIf { it > 0L } ?: System.currentTimeMillis(),
+                        fromBuffered = true
+                    )
+                    p.accuracyMeters?.let { lastStreamedAccuracyMeters = it }
+                }
+            }
+        }
+
         ContextCompat.registerReceiver(
             requireContext(),
             liveTrackPointReceiver,
             IntentFilter(LiveTrackStreamingService.BROADCAST_TRACK_POINT),
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
-
-        // Drain any points buffered while the map was not visible
-        val buffered = LiveTrackStreamingService.drainBufferedPoints()
-        if (buffered.isNotEmpty()) {
-            for (p in buffered) {
-                applyLiveStreamPoint(
-                    p.trackId,
-                    p.lat,
-                    p.lon,
-                    p.timestampMs.takeIf { it > 0L } ?: System.currentTimeMillis(),
-                    fromBuffered = true
-                )
-                p.accuracyMeters?.let { lastStreamedAccuracyMeters = it }
-            }
-        }
 
         if (mapReady) {
             if (mapViewContext == MapViewContext.GROUP || showAllTrackers) {
@@ -631,7 +670,11 @@ class MapFragment : Fragment() {
                 return
             }
             val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
-            val activeTrackerId = displayedTrackerId ?: selectedTrackerId
+            val activeTrackerId = if (TrackingService.isRunning) {
+                selectedTrackerId
+            } else {
+                displayedTrackerId ?: selectedTrackerId
+            }
             val pendingInitialTracker = (activity as? MainActivity)?.initialTrackForMap != null
             if (activeTrackerId.isEmpty() && !pendingInitialTracker) {
                 // No selected tracker and no explicit tracker target: clear stale map state.
@@ -643,6 +686,15 @@ class MapFragment : Fragment() {
                 updateTrackLine()
                 updateZoomToLatestButtonState()
                 updateTrackerLabel()
+            } else if (TrackingService.isRunning && activeTrackerId.isNotEmpty()) {
+                // Tracking may continue while app/map is backgrounded; always refresh tail + full
+                // geometry on resume to catch up even if in-memory broadcast buffer was capped/reset.
+                if (displayedTrackerId != activeTrackerId) {
+                    displayedTrackerId = activeTrackerId
+                    mapViewContext = MapViewContext.SINGLE_TRACKER
+                }
+                seedTrackFromCacheOrTail(activeTrackerId, allowCoordinatesNetwork = true)
+                fetchFullGeometryAndApply(activeTrackerId, forceReplace = false)
             } else if (trackPoints.isEmpty() && activeTrackerId.isNotEmpty()) {
                 // Rehydrate from cache/history regardless of whether this is selected or directly opened.
                 if (displayedTrackerId == null) {
@@ -700,7 +752,7 @@ class MapFragment : Fragment() {
     private fun isFollowLockActive(): Boolean = followLockEnabled && lockTarget != null
 
     private fun zoomButtonsPaddingMode(): CameraPaddingMode =
-        MapCameraController.zoomButtonsPaddingMode(activeCameraIntent, isFollowLockActive())
+        MapZoomOrchestrator.zoomButtonsPaddingMode(activeCameraIntent, isFollowLockActive())
 
     private fun updateFollowLockButton() {
         val (iconResId, contentDescResId) = MapCameraController.followLockButtonContent(isFollowLockActive())
@@ -754,22 +806,30 @@ class MapFragment : Fragment() {
         updateRightStackMargins()
     }
 
-    private fun zoomToStandaloneLocation(location: Location, forceZoomIn: Boolean = true, animate: Boolean = true) {
-        val map = maplibreMap ?: return
-        val targetZoom = if (forceZoomIn) maxOf(map.cameraPosition.zoom, MapConstants.FOLLOW_LOCK_TARGET_ZOOM) else map.cameraPosition.zoom
-        val update = CameraUpdateFactory.newCameraPosition(
-            CameraPosition.Builder()
-                .target(LatLng(location.latitude, location.longitude))
-                .zoom(targetZoom)
-                .build()
-        )
-        applyUnifiedCameraMove(
-            map = map,
-            update = update,
-            paddingMode = CameraPaddingMode.CENTERED,
+    private fun zoomToStandaloneLocation(
+        location: Location,
+        forceZoomIn: Boolean = true,
+        animate: Boolean = true
+    ): Boolean {
+        return MapZoomOrchestrator.zoomToStandaloneLocation(
+            map = maplibreMap,
+            location = location,
+            forceZoomIn = forceZoomIn,
             animate = animate,
-            durationMs = MapConstants.FOLLOW_LOCK_ANIMATION_MS
-        )
+            followLockTargetZoom = MapConstants.FOLLOW_LOCK_TARGET_ZOOM
+        ) { update, paddingMode, intent, moveAnimate, durationMs, callback ->
+            maplibreMap?.let { map ->
+                applyUnifiedCameraMove(
+                    map = map,
+                    update = update,
+                    paddingMode = paddingMode,
+                    intent = intent,
+                    animate = moveAnimate,
+                    durationMs = durationMs,
+                    callback = callback
+                )
+            }
+        }
     }
 
     private fun isFreshStandaloneFix(location: Location): Boolean {
@@ -902,8 +962,13 @@ class MapFragment : Fragment() {
                         LocationComponentHelper.setEnabled(map, true)
                         LocationComponentHelper.forceLocation(map, location)
                     }
-                    if (pendingAutoZoomToStandaloneFix && !isTrackerFocusIntentActive() && !suppressStandaloneAutoZoom) {
-                        zoomToStandaloneLocation(location, forceZoomIn = true, animate = true)
+                    if (MapStandaloneLocationController.shouldConsumePendingAutoZoom(
+                            pendingAutoZoom = pendingAutoZoomToStandaloneFix,
+                            trackerFocusIntentActive = isTrackerFocusIntentActive(),
+                            suppressStandaloneAutoZoom = suppressStandaloneAutoZoom,
+                            zoomApplied = zoomToStandaloneLocation(location, forceZoomIn = true, animate = true)
+                        )
+                    ) {
                         pendingAutoZoomToStandaloneFix = false
                     }
                 }
@@ -924,8 +989,13 @@ class MapFragment : Fragment() {
                             LocationComponentHelper.setEnabled(map, true)
                             LocationComponentHelper.forceLocation(map, location)
                         }
-                        if (pendingAutoZoomToStandaloneFix && !isTrackerFocusIntentActive() && !suppressStandaloneAutoZoom) {
-                            zoomToStandaloneLocation(location, forceZoomIn = true, animate = true)
+                        if (MapStandaloneLocationController.shouldConsumePendingAutoZoom(
+                                pendingAutoZoom = pendingAutoZoomToStandaloneFix,
+                                trackerFocusIntentActive = isTrackerFocusIntentActive(),
+                                suppressStandaloneAutoZoom = suppressStandaloneAutoZoom,
+                                zoomApplied = zoomToStandaloneLocation(location, forceZoomIn = true, animate = true)
+                            )
+                        ) {
                             pendingAutoZoomToStandaloneFix = false
                         }
                     }
@@ -1065,38 +1135,28 @@ class MapFragment : Fragment() {
      * When [forceZoomIn] is true, make sure we jump to follow zoom first.
      */
     private fun centerCameraOnTrackLocked(target: LatLng, forceZoomIn: Boolean = false) {
-        val map = maplibreMap ?: return
-        val (update, shouldForceZoom) = MapCameraController.buildFollowLockCameraUpdate(
-            map = map,
+        MapZoomOrchestrator.centerCameraOnTrackLocked(
+            map = maplibreMap,
             target = target,
-            followLockNeedsInitialZoom = followLockNeedsInitialZoom,
             forceZoomIn = forceZoomIn,
-            followLockTargetZoom = MapConstants.FOLLOW_LOCK_TARGET_ZOOM
-        )
-        val callback = if (shouldForceZoom) {
-            object : MapLibreMap.CancelableCallback {
-                override fun onFinish() {
-                    if (!isAdded) return
-                    val reachedTarget = map.cameraPosition.zoom >= (MapConstants.FOLLOW_LOCK_TARGET_ZOOM - MapConstants.FOLLOW_LOCK_TARGET_ZOOM_EPSILON)
-                    if (reachedTarget) followLockNeedsInitialZoom = false
-                }
-
-                override fun onCancel() {
-                    // Keep initial-zoom request armed so the next lock update can complete it.
-                }
+            followLockNeedsInitialZoom = followLockNeedsInitialZoom,
+            followLockTargetZoom = MapConstants.FOLLOW_LOCK_TARGET_ZOOM,
+            followLockTargetZoomEpsilon = MapConstants.FOLLOW_LOCK_TARGET_ZOOM_EPSILON,
+            isAdded = { isAdded },
+            onFollowLockNeedsInitialZoomChanged = { followLockNeedsInitialZoom = it }
+        ) { update, paddingMode, intent, animate, durationMs, callback ->
+            maplibreMap?.let { map ->
+                applyUnifiedCameraMove(
+                    map = map,
+                    update = update,
+                    paddingMode = paddingMode,
+                    intent = intent,
+                    animate = animate,
+                    durationMs = durationMs,
+                    callback = callback
+                )
             }
-        } else {
-            null
         }
-        applyUnifiedCameraMove(
-            map = map,
-            update = update,
-            paddingMode = CameraPaddingMode.CENTERED,
-            intent = CameraIntent.FOLLOW_LOCK,
-            animate = true,
-            durationMs = MapConstants.FOLLOW_LOCK_ANIMATION_MS,
-            callback = callback
-        )
     }
 
     /**
@@ -1112,15 +1172,15 @@ class MapFragment : Fragment() {
         durationMs: Int = MapConstants.FOLLOW_LOCK_ANIMATION_MS,
         callback: MapLibreMap.CancelableCallback? = null
     ) {
-        val mgr = mapManager ?: return
-        intent?.let { activeCameraIntent = it }
-        MapCameraController.applyUnifiedCameraMove(
-            mapManager = mgr,
+        MapZoomOrchestrator.applyUnifiedCameraMove(
+            mapManager = mapManager,
             map = map,
             update = update,
             paddingMode = paddingMode,
             followLockPadding = MapConstants.FOLLOW_LOCK_PADDING,
             overlayAwarePadding = getMapPaddingArray(),
+            intent = intent,
+            onIntent = { activeCameraIntent = it },
             animate = animate,
             durationMs = durationMs,
             callback = callback
@@ -1156,13 +1216,7 @@ class MapFragment : Fragment() {
 
     /** Per-edge bounds-fit padding: current map insets plus extra buffer. */
     private fun getBoundsPaddingEdgesPx(extraBoundsPaddingPx: Int): IntArray {
-        val insets = getMapPaddingArray()
-        return intArrayOf(
-            insets[0].toInt() + extraBoundsPaddingPx,
-            insets[1].toInt() + extraBoundsPaddingPx,
-            insets[2].toInt() + extraBoundsPaddingPx,
-            insets[3].toInt() + extraBoundsPaddingPx
-        )
+        return MapZoomOrchestrator.boundsPaddingEdgesFromInsets(getMapPaddingArray(), extraBoundsPaddingPx)
     }
 
     /**
@@ -1170,9 +1224,8 @@ class MapFragment : Fragment() {
      * This prevents extreme zoom-out when overlay insets are very large.
      */
     private fun sanitizeBoundsFitPaddingPx(map: MapLibreMap, rawPaddingPx: IntArray): IntArray {
-        return MapCameraMath.sanitizeBoundsFitPaddingPx(
-            mapWidthPxRaw = map.width.toInt(),
-            mapHeightPxRaw = map.height.toInt(),
+        return MapZoomOrchestrator.sanitizeBoundsFitPaddingPx(
+            map = map,
             rawPaddingPx = rawPaddingPx,
             minViewportWidthFraction = MapConstants.MIN_BOUNDS_FIT_VIEWPORT_WIDTH_FRACTION,
             minViewportHeightFraction = MapConstants.MIN_BOUNDS_FIT_VIEWPORT_HEIGHT_FRACTION
@@ -1184,33 +1237,63 @@ class MapFragment : Fragment() {
         bounds: LatLngBounds,
         intent: CameraIntent? = null
     ) {
-        MapBoundsFitController.moveCameraToFitBoundsWithMinZoomClamp(
+        MapZoomOrchestrator.moveCameraToFitBoundsWithMinZoomClamp(
             map = map,
             bounds = bounds,
             minZoom = MapConstants.MIN_ZOOM,
+            minViewportWidthFraction = MapConstants.MIN_BOUNDS_FIT_VIEWPORT_WIDTH_FRACTION,
+            minViewportHeightFraction = MapConstants.MIN_BOUNDS_FIT_VIEWPORT_HEIGHT_FRACTION,
             intent = intent,
             getBoundsPaddingEdgesPx = ::getBoundsPaddingEdgesPx
-        ) { update, paddingMode, moveIntent ->
+        ) { update, paddingMode, moveIntent, animate, durationMs, callback ->
             applyUnifiedCameraMove(
                 map = map,
                 update = update,
                 paddingMode = paddingMode,
-                intent = moveIntent
+                intent = moveIntent,
+                animate = animate,
+                durationMs = durationMs,
+                callback = callback
             )
         }
     }
 
     private fun moveCameraToFitBoundsCenteredWithMinZoomClamp(map: MapLibreMap, bounds: LatLngBounds) {
-        MapBoundsFitController.moveCameraToFitBoundsCenteredWithMinZoomClamp(
+        MapZoomOrchestrator.moveCameraToFitBoundsCenteredWithMinZoomClamp(
             map = map,
             bounds = bounds,
-            minZoom = MapConstants.MIN_ZOOM
-        ) { update, paddingMode, moveIntent ->
+            minZoom = MapConstants.MIN_ZOOM,
+            intent = CameraIntent.BOUNDS_FIT
+        ) { update, paddingMode, moveIntent, animate, durationMs, callback ->
             applyUnifiedCameraMove(
                 map = map,
                 update = update,
                 paddingMode = paddingMode,
-                intent = moveIntent
+                intent = moveIntent,
+                animate = animate,
+                durationMs = durationMs,
+                callback = callback
+            )
+        }
+    }
+
+    /**
+     * Single-tracker open behavior: zoom to latest point (chevron), not full-history extent.
+     */
+    private fun zoomToLatestTrackPoint(map: MapLibreMap, fallbackLastPoint: List<Double>? = null) {
+        MapZoomOrchestrator.zoomToLatestTrackPoint(
+            trackPoints = trackPoints,
+            fallbackLastPoint = fallbackLastPoint,
+            followLockTargetZoom = MapConstants.FOLLOW_LOCK_TARGET_ZOOM
+        ) { update, paddingMode, intent, animate, durationMs, callback ->
+            applyUnifiedCameraMove(
+                map = map,
+                update = update,
+                paddingMode = paddingMode,
+                intent = intent,
+                animate = animate,
+                durationMs = durationMs,
+                callback = callback
             )
         }
     }
@@ -1222,24 +1305,28 @@ class MapFragment : Fragment() {
         trackers: List<Tracker>,
         fitToTrackerId: String?
     ) {
-        preserveCenteredAllTrackersFit = MapBoundsFitController.moveCameraForAllTrackersWithMinZoom(
+        preserveCenteredAllTrackersFit = MapZoomOrchestrator.moveCameraForAllTrackersWithMinZoom(
             map = map,
             bounds = bounds,
             coordsByTrackerId = coordsByTrackerId,
             trackers = trackers,
             fitToTrackerId = fitToTrackerId,
             minZoom = MapConstants.MIN_ZOOM,
-            minZoomEpsilon = MapConstants.MIN_ZOOM_EPSILON,
             trackerCardFocusZoom = MapConstants.TRACKER_CARD_FOCUS_ZOOM,
             preserveCenteredAllTrackersFit = preserveCenteredAllTrackersFit,
             tag = TAG,
+            minViewportWidthFraction = MapConstants.MIN_BOUNDS_FIT_VIEWPORT_WIDTH_FRACTION,
+            minViewportHeightFraction = MapConstants.MIN_BOUNDS_FIT_VIEWPORT_HEIGHT_FRACTION,
             getBoundsPaddingEdgesPx = ::getBoundsPaddingEdgesPx
-        ) { update, paddingMode, moveIntent ->
+        ) { update, paddingMode, moveIntent, animate, durationMs, callback ->
             applyUnifiedCameraMove(
                 map = map,
                 update = update,
                 paddingMode = paddingMode,
-                intent = moveIntent
+                intent = moveIntent,
+                animate = animate,
+                durationMs = durationMs,
+                callback = callback
             )
         }
     }
@@ -1249,21 +1336,27 @@ class MapFragment : Fragment() {
      * to the current camera position so UI inset changes take effect immediately.
      */
     private fun refreshMapPadding(force: Boolean = false, applyToCamera: Boolean = true) {
-        val map = maplibreMap ?: return
-        val mgr = mapManager ?: return
-        val targetPadding = getMapPaddingArray()
-        val isSamePadding = MapPaddingRefresher.isSamePadding(map.cameraPosition, targetPadding)
-        mgr.defaultPadding = targetPadding
-        if (!applyToCamera) return
-        if (!force && isSamePadding) return
-        val padded = CameraPosition.Builder(map.cameraPosition)
-            .padding(targetPadding)
-            .build()
-        applyUnifiedCameraMove(
+        val map = maplibreMap
+        MapZoomOrchestrator.refreshMapPadding(
             map = map,
-            update = CameraUpdateFactory.newCameraPosition(padded),
-            paddingMode = CameraPaddingMode.OVERLAY_AWARE
-        )
+            mapManager = mapManager,
+            targetPadding = getMapPaddingArray(),
+            force = force,
+            applyToCamera = applyToCamera
+        ) { update, paddingMode, intent, animate, durationMs, callback ->
+            val currentMap = map
+            if (currentMap != null) {
+                applyUnifiedCameraMove(
+                    map = currentMap,
+                    update = update,
+                    paddingMode = paddingMode,
+                    intent = intent,
+                    animate = animate,
+                    durationMs = durationMs,
+                    callback = callback
+                )
+            }
+        }
     }
 
     /**
@@ -1272,21 +1365,16 @@ class MapFragment : Fragment() {
      * - Do not move camera while follow lock is active unless explicitly allowed.
      */
     private fun refreshMapPaddingForCurrentMode(force: Boolean = false, allowCameraMove: Boolean = true) {
-        val preserveCenteredGroupFocus = activeCameraIntent == CameraIntent.GROUP_MEMBER_FOCUS
-        val preserveSingleLiveFit = liveActiveFitEnabled &&
-            !showAllTrackers &&
-            mapViewContext == MapViewContext.SINGLE_TRACKER
-        val preserveCenteredAllTrackers = showAllTrackers &&
-            activeCameraIntent == CameraIntent.BOUNDS_FIT &&
-            preserveCenteredAllTrackersFit
         refreshMapPadding(
             force = force,
-            applyToCamera = MapPaddingRefresher.shouldApplyCameraPadding(
+            applyToCamera = MapZoomOrchestrator.shouldApplyPaddingForCurrentMode(
                 allowCameraMove = allowCameraMove,
                 isFollowLockActive = isFollowLockActive(),
-                preserveCenteredGroupFocus = preserveCenteredGroupFocus,
-                preserveSingleLiveFit = preserveSingleLiveFit,
-                preserveCenteredAllTrackersFit = preserveCenteredAllTrackers
+                activeCameraIntent = activeCameraIntent,
+                liveActiveFitEnabled = liveActiveFitEnabled,
+                showAllTrackers = showAllTrackers,
+                mapViewContext = mapViewContext,
+                preserveCenteredAllTrackersFit = preserveCenteredAllTrackersFit
             )
         )
     }
@@ -1299,10 +1387,19 @@ class MapFragment : Fragment() {
         if (trackLineDirty) return
         trackLineDirty = true
         Choreographer.getInstance().postFrameCallback {
-            if (trackLineDirty) {
+            if (!trackLineDirty) return@postFrameCallback
+            if (!isAdded) {
                 trackLineDirty = false
-                updateTrackLine()
+                return@postFrameCallback
             }
+            if (maplibreMap?.style == null) {
+                // Style may be reloading; keep dirty bit set and try again next frame.
+                trackLineDirty = false
+                scheduleTrackLineUpdate()
+                return@postFrameCallback
+            }
+            trackLineDirty = false
+            updateTrackLine()
         }
     }
 
@@ -1312,6 +1409,7 @@ class MapFragment : Fragment() {
      * If the list provided an initial track (latest 100 points), shows it immediately then loads full geometry in background.
      */
     fun refreshTrackForSelectedTracker() {
+        bumpTrackerRequestEpoch()
         liveActiveFitEnabled = false
         clearMultiTrackContextState()
         activeCameraIntent = CameraIntent.SINGLE_TRACKER_FOCUS
@@ -1386,6 +1484,7 @@ class MapFragment : Fragment() {
      */
     fun refreshMapForGroup(group: Group?, zoomToTrackerId: String? = null) {
         if (group == null) return
+        bumpTrackerRequestEpoch()
         MapGroupRefreshHandler.refresh(
             group = group,
             zoomToTrackerId = zoomToTrackerId,
@@ -1433,10 +1532,26 @@ class MapFragment : Fragment() {
     }
 
     private fun loadAllTrackersAndApply() {
+        bumpTrackerRequestEpoch()
         liveActiveFitEnabled = false
         clearMultiTrackContextState()
-        val map = maplibreMap ?: return
-        val style = map.style ?: return
+        val map = maplibreMap
+        if (map == null) {
+            pendingShowAllTrackers = true
+            showAllTrackers = true
+            mapViewContext = MapViewContext.SINGLE_TRACKER
+            updateTrackerLabel()
+            return
+        }
+        val style = map.style
+        if (style == null) {
+            // Keep intent; onMapReady/style-ready path will replay all-trackers load.
+            pendingShowAllTrackers = true
+            showAllTrackers = true
+            mapViewContext = MapViewContext.SINGLE_TRACKER
+            updateTrackerLabel()
+            return
+        }
         val callbacks = MapAllTrackersCallbacks(
             isAdded = { isAdded },
             onEmpty = {
@@ -1926,6 +2041,11 @@ class MapFragment : Fragment() {
         mapTrackerInfoLastUpdated.text = state.lastUpdatedText
         mapTrackerInfoViewParams.contentDescription = state.viewParamsContentDescription
         mapTrackerInfoViewInList.contentDescription = state.viewInListContentDescription
+        mapTrackerInfoFocus.visibility = if (showAllTrackers || mapViewContext == MapViewContext.GROUP) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
         updateFollowLockButton()
         refreshMapPaddingForCurrentMode(force = true, allowCameraMove = false)
         if (state.shouldRecenterOnOpen) {
@@ -2065,6 +2185,7 @@ class MapFragment : Fragment() {
                 handleSeededFromNetwork(coords, pointParams)
             },
             getIsAdded = { isAdded },
+            getTrackerRequestEpoch = { trackerRequestEpoch },
             onGeometryLoaded = { tracker, trackerId, forceReplace ->
                 handleSingleTrackGeometryLoaded(tracker, trackerId, forceReplace)
             }
@@ -2156,19 +2277,7 @@ class MapFragment : Fragment() {
             if (map != null && trackPoints.isNotEmpty() &&
                 (!showMyLocationEnabled || allowTrackerCameraMoveInMyLocation)
             ) {
-                val bbox = tracker.bbox
-                val boundsFromBbox = MapCameraMath.bboxToLatLngBounds(bbox)
-                if (boundsFromBbox != null) {
-                    moveCameraToFitBoundsWithMinZoomClamp(map, boundsFromBbox)
-                } else if (trackPoints.size >= 2) {
-                    val bounds = LatLngBounds.Builder().apply {
-                        trackPoints.forEach { include(it) }
-                    }.build()
-                    moveCameraToFitBoundsWithMinZoomClamp(map, bounds)
-                }
-            }
-            if (!showMyLocationEnabled && isFollowLockActive()) {
-                lockTarget?.let { centerCameraOnTrackLocked(it, forceZoomIn = true) }
+                zoomToLatestTrackPoint(map, tracker.last_point)
             }
             if (!showAllTrackers && trackPoints.isNotEmpty() && !showMyLocationEnabled) {
                 disableLiveActiveFitForFollowLock()
@@ -2226,25 +2335,11 @@ class MapFragment : Fragment() {
         lastStreamedAccuracyMeters = initialMeta.lastStreamedAccuracyMeters
 
         if (initial != null) {
-            // Position camera using bbox or last_point; track line is seeded from cache/tail below.
+            // Position camera to latest point (chevron); do not fit full-history extent.
             val map = maplibreMap
             if (map != null && MapDataLoader.shouldAllowTrackerCameraMoveInMyLocation(showMyLocationEnabled, activeCameraIntent)) {
-                val bbox = initial.bbox
-                val boundsFromBbox = MapCameraMath.bboxToLatLngBounds(bbox)
-                if (boundsFromBbox != null) {
-                    moveCameraToFitBoundsWithMinZoomClamp(map, boundsFromBbox)
-                    zoomToTrackAfterLoad = false
-                } else if (initial.last_point != null && initial.last_point.size >= 2) {
-                    applyUnifiedCameraMove(
-                        map = map,
-                        update = CameraUpdateFactory.newLatLngZoom(
-                            LatLng(initial.last_point[1], initial.last_point[0]),
-                            14.0
-                        ),
-                        paddingMode = CameraPaddingMode.OVERLAY_AWARE
-                    )
-                    zoomToTrackAfterLoad = false
-                }
+                zoomToLatestTrackPoint(map, initial.last_point)
+                zoomToTrackAfterLoad = false
             }
             updateZoomToLatestButtonState()
         }
@@ -2260,6 +2355,7 @@ class MapFragment : Fragment() {
      * Refetch and redraw the selected tracker's track without moving the camera.
      */
     fun restoreTrackForSelectedTracker() {
+        bumpTrackerRequestEpoch()
         liveActiveFitEnabled = false
         stopLiveTrackStreaming()
         clearMultiTrackContextState()

@@ -16,10 +16,19 @@ internal object MapBoundsFitController {
         bounds: LatLngBounds,
         minZoom: Double,
         intent: CameraIntent?,
+        minViewportWidthFraction: Double,
+        minViewportHeightFraction: Double,
         getBoundsPaddingEdgesPx: (Int) -> IntArray,
         applyMove: (CameraUpdate, CameraPaddingMode, CameraIntent?) -> Unit
     ) {
-        val p = getBoundsPaddingEdgesPx(0)
+        val rawPadding = getBoundsPaddingEdgesPx(0)
+        val p = MapCameraMath.sanitizeBoundsFitPaddingPx(
+            mapWidthPxRaw = map.width.toInt(),
+            mapHeightPxRaw = map.height.toInt(),
+            rawPaddingPx = rawPadding,
+            minViewportWidthFraction = minViewportWidthFraction,
+            minViewportHeightFraction = minViewportHeightFraction
+        )
         val boundsUpdate = CameraUpdateFactory.newLatLngBounds(bounds, p[0], p[1], p[2], p[3])
         val pos = boundsUpdate.getCameraPosition(map)
         if (pos != null && pos.zoom.toDouble() >= minZoom) {
@@ -45,12 +54,13 @@ internal object MapBoundsFitController {
         map: MapLibreMap,
         bounds: LatLngBounds,
         minZoom: Double,
+        intent: CameraIntent? = null,
         applyMove: (CameraUpdate, CameraPaddingMode, CameraIntent?) -> Unit
     ) {
         val boundsUpdate = CameraUpdateFactory.newLatLngBounds(bounds, 0, 0, 0, 0)
         val pos = boundsUpdate.getCameraPosition(map)
         if (pos != null && pos.zoom.toDouble() >= minZoom) {
-            applyMove(boundsUpdate, CameraPaddingMode.CENTERED, null)
+            applyMove(boundsUpdate, CameraPaddingMode.CENTERED, intent)
         } else {
             val center = bounds.center
             applyMove(
@@ -63,7 +73,7 @@ internal object MapBoundsFitController {
                         .build()
                 ),
                 CameraPaddingMode.CENTERED,
-                null
+                intent
             )
         }
     }
@@ -75,10 +85,11 @@ internal object MapBoundsFitController {
         trackers: List<Tracker>,
         fitToTrackerId: String?,
         minZoom: Double,
-        minZoomEpsilon: Double,
         trackerCardFocusZoom: Double,
         preserveCenteredAllTrackersFit: Boolean,
         tag: String,
+        minViewportWidthFraction: Double,
+        minViewportHeightFraction: Double,
         getBoundsPaddingEdgesPx: (Int) -> IntArray,
         applyMove: (CameraUpdate, CameraPaddingMode, CameraIntent?) -> Unit
     ): Boolean {
@@ -100,7 +111,13 @@ internal object MapBoundsFitController {
                     CameraIntent.GROUP_MEMBER_FOCUS
                 )
             } else {
-                moveCameraToFitBoundsCenteredWithMinZoomClamp(map, bounds, minZoom, applyMove)
+                moveCameraToFitBoundsCenteredWithMinZoomClamp(
+                    map = map,
+                    bounds = bounds,
+                    minZoom = minZoom,
+                    intent = CameraIntent.BOUNDS_FIT,
+                    applyMove = applyMove
+                )
             }
             return preserveCentered
         }
@@ -108,11 +125,18 @@ internal object MapBoundsFitController {
         val repTrackerPoints = trackers.mapNotNull { t ->
             coordsByTrackerId[t.id]?.lastOrNull()?.let { t.id to it }
         }
-        val p = getBoundsPaddingEdgesPx(0)
+        val rawPadding = getBoundsPaddingEdgesPx(0)
+        val p = MapCameraMath.sanitizeBoundsFitPaddingPx(
+            mapWidthPxRaw = map.width.toInt(),
+            mapHeightPxRaw = map.height.toInt(),
+            rawPaddingPx = rawPadding,
+            minViewportWidthFraction = minViewportWidthFraction,
+            minViewportHeightFraction = minViewportHeightFraction
+        )
         val fitPaddingMode = CameraPaddingMode.OVERLAY_AWARE
         val boundsUpdate = CameraUpdateFactory.newLatLngBounds(bounds, p[0], p[1], p[2], p[3])
         val pos = boundsUpdate.getCameraPosition(map)
-        if (pos != null && pos.zoom.toDouble() > (minZoom + minZoomEpsilon)) {
+        if (pos != null && pos.zoom.toDouble() >= minZoom) {
             preserveCentered = false
             Log.d(
                 tag,

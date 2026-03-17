@@ -23,45 +23,16 @@ class MapLiveStreamHandlerTest {
 
     @Test
     fun shouldHandleSingleTrackPoint_trueWhenDisplayedMatches() {
-        assertTrue(
-            MapLiveStreamHandler.shouldHandleSingleTrackPoint(
-                trackId = "abc",
-                displayedTrackerId = "abc",
-                selectedTrackerId = "def"
-            )
-        )
+        assertTrue(MapLiveStreamHandler.shouldHandleSingleTrackPoint(trackId = "abc", displayedTrackerId = "abc"))
     }
 
     @Test
     fun shouldHandleSingleTrackPoint_falseWhenDisplayedDiffers() {
-        assertFalse(
-            MapLiveStreamHandler.shouldHandleSingleTrackPoint(
-                trackId = "abc",
-                displayedTrackerId = "def",
-                selectedTrackerId = "ghi"
-            )
-        )
+        assertFalse(MapLiveStreamHandler.shouldHandleSingleTrackPoint(trackId = "abc", displayedTrackerId = "def"))
     }
 
     @Test
-    fun shouldHandleSingleTrackPoint_trueWhenDisplayedNullAndSelectedMatches() {
-        assertTrue(
-            MapLiveStreamHandler.shouldHandleSingleTrackPoint(
-                trackId = "abc",
-                displayedTrackerId = null,
-                selectedTrackerId = "abc"
-            )
-        )
-    }
-
-    @Test
-    fun shouldHandleSingleTrackPoint_falseWhenBothDisplayedAndSelectedMissing() {
-        assertFalse(
-            MapLiveStreamHandler.shouldHandleSingleTrackPoint(
-                trackId = "abc",
-                displayedTrackerId = null,
-                selectedTrackerId = null
-            )
-        )
+    fun shouldHandleSingleTrackPoint_falseWhenDisplayedIsNull() {
+        assertFalse(MapLiveStreamHandler.shouldHandleSingleTrackPoint(trackId = "abc", displayedTrackerId = null))
     }
 }

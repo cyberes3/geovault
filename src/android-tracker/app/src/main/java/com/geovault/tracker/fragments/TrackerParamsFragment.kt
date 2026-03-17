@@ -22,6 +22,7 @@ import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
+import com.geovault.tracker.TrackingService
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -128,6 +129,9 @@ class TrackerParamsFragment : Fragment() {
     private fun loadTrackerData(refresh: Boolean = false) {
         val id = trackerId ?: return
         val selectedId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
+        val isLocalTrackingMode = TrackingService.isRunning &&
+            selectedId.isNotEmpty() &&
+            id == selectedId
 
         if (refresh) {
             paramsSwipeRefresh.isRefreshing = true
@@ -145,6 +149,18 @@ class TrackerParamsFragment : Fragment() {
             // Don't clear cache so getTrackerGeometry can return cached geometry/params if available.
         } else {
             TrackerRepository.clearSelectedTrackerCaches()
+        }
+
+        if (isLocalTrackingMode) {
+            if (isAdded) {
+                requireActivity().runOnUiThread {
+                    paramsLoadingSpinner.stop(hide = false)
+                    paramsLoadingOverlay.visibility = View.GONE
+                    paramsSwipeRefresh.isRefreshing = false
+                    applyLatestLocalTrackingPoint()
+                }
+            }
+            return
         }
 
         // Important: only the single-tracker call drives the params UI. Use geometry endpoint for full track + params.
@@ -173,6 +189,18 @@ class TrackerParamsFragment : Fragment() {
                 }
             }
         }
+    }
+
+    private fun applyLatestLocalTrackingPoint() {
+        val lat = TrackingService.lastTrackedLatitude
+        val lon = TrackingService.lastTrackedLongitude
+        val tsMs = TrackingService.lastTrackedTimestampMs
+        updateFromStreamPoint(
+            lat = lat ?: Double.NaN,
+            lon = lon ?: Double.NaN,
+            timestampMs = tsMs,
+            propsJson = TrackingService.lastTrackedPropsJson
+        )
     }
 
     override fun onDestroyView() {

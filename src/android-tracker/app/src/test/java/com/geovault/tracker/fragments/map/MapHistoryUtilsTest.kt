@@ -46,4 +46,25 @@ class MapHistoryUtilsTest {
         assertEquals(LatLng(1.0, 1.0), trackPoints.last())
         assertEquals(1_700_000_002_000L, trackTimestamps.last())
     }
+
+    @Test
+    fun applyGeometryToTrack_mergeExternalStreaming_withoutGeometryTimestamps_keepsStreamedPoints() {
+        val streamedPoint = LatLng(50.0, 60.0)
+        val trackPoints = mutableListOf(streamedPoint)
+        val trackTimestamps = mutableListOf(1_700_000_100_000L)
+
+        MapHistoryUtils.applyGeometryToTrack(
+            normalizedCoords = listOf(
+                listOf(0.0, 0.0),
+                listOf(0.1, 0.1)
+            ),
+            mergeExternalStreaming = true,
+            trackPoints = trackPoints,
+            trackTimestamps = trackTimestamps
+        )
+
+        assertEquals(3, trackPoints.size)
+        assertEquals(streamedPoint, trackPoints.last())
+        assertEquals(1_700_000_100_000L, trackTimestamps.last())
+    }
 }

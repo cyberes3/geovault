@@ -1,6 +1,7 @@
 package com.geovault.tracker.fragments.map
 
 import com.geovault.tracker.Tracker
+import org.maplibre.android.geometry.LatLng
 
 internal data class InitialTargetMeta(
     val displayedTracker: Tracker?,
@@ -89,5 +90,19 @@ internal object MapDataLoader {
             currentTrackerColor = null,
             lastStreamedAccuracyMeters = null
         )
+    }
+
+    /**
+     * Resolve the single-tracker camera zoom target. Prefer the latest rendered point so the
+     * chevron target matches what is drawn, and fall back to tracker.last_point when needed.
+     */
+    fun resolveSingleTrackerZoomTarget(
+        trackPoints: List<LatLng>,
+        fallbackLastPoint: List<Double>?
+    ): LatLng? {
+        trackPoints.lastOrNull()?.let { return it }
+        val lp = fallbackLastPoint ?: return null
+        if (lp.size < 2) return null
+        return LatLng(lp[1], lp[0])
     }
 }

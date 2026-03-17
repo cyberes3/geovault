@@ -16,6 +16,18 @@ internal data class MyLocationButtonState(
 )
 
 internal object MapStandaloneLocationController {
+    fun shouldConsumePendingAutoZoom(
+        pendingAutoZoom: Boolean,
+        trackerFocusIntentActive: Boolean,
+        suppressStandaloneAutoZoom: Boolean,
+        zoomApplied: Boolean
+    ): Boolean {
+        return pendingAutoZoom &&
+            !trackerFocusIntentActive &&
+            !suppressStandaloneAutoZoom &&
+            zoomApplied
+    }
+
     fun myLocationButtonState(
         trackingRunning: Boolean,
         showMyLocationEnabled: Boolean,
