@@ -3,15 +3,12 @@ package com.geovault.tracker.fragments.map
 import org.maplibre.android.geometry.LatLng
 
 internal object MapDataLoader {
-    fun shouldSkipSeedTrack(
-        trackerId: String,
-        showAllTrackers: Boolean,
-        mapViewContext: MapViewContext
-    ): Boolean {
-        return trackerId.isEmpty() || showAllTrackers || mapViewContext == MapViewContext.GROUP
-    }
-
-    fun resolveActiveTrackerId(displayedTrackerId: String?, selectedTrackerId: String): String {
+    fun resolveActiveSingleTrackerId(
+        trackingRunning: Boolean,
+        displayedTrackerId: String?,
+        selectedTrackerId: String
+    ): String {
+        if (trackingRunning) return selectedTrackerId
         return displayedTrackerId?.takeIf { it.isNotEmpty() } ?: selectedTrackerId
     }
 

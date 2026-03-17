@@ -228,15 +228,11 @@ class MainActivity : AppCompatActivity() {
             // Predict what tracker to load on the map and pass metadata instantly
             val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
 
-            if (selectedTrackerId.isNotEmpty() && initialTrackForMap == null && !isStreaming) {
+            if (viewPager.currentItem != 1 && selectedTrackerId.isNotEmpty() && initialTrackForMap == null && !isStreaming) {
                 TrackerRepository.getTrackerFromCache(selectedTrackerId)?.let { cachedSelected ->
                     setInitialTrackForMap(cachedSelected)
                 }
-                if (viewPager.currentItem != 1) { // If not already on map
-                    setCurrentTab(1, forceRefreshMap = true, delayMs = 0)
-                } else {
-                    viewPager.setCurrentItem(1, false)
-                }
+                setCurrentTab(1, forceRefreshMap = true, delayMs = 0)
                 TrackerRepository.getTrackers(this, forceRefresh = false) { list ->
                     val selectedTracker = list?.find { it.id == selectedTrackerId }
                     if (selectedTracker != null) {
@@ -607,12 +603,6 @@ class MainActivity : AppCompatActivity() {
                     ?.showAllTrackersFromSettings()
             }
         }
-    }
-
-    fun getAndClearInitialGroupForMap(): Group? {
-        val g = initialGroupForMap
-        initialGroupForMap = null
-        return g
     }
 
     /** Returns (group, zoomToTrackerId) and clears both. For use by MapFragment when consuming deferred group handoff in onMapReady. */

@@ -6,21 +6,21 @@ import com.geovault.tracker.TrackerRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
+internal data class InFlightRequestToken(
+    val trackerId: String? = null,
+    val epoch: Long? = null
+)
+
 internal class MapSingleTrackFetchCallbacks(
     val getScope: () -> CoroutineScope,
-    val getDisplayedTrackerId: () -> String?,
     val getSelectedTrackerId: () -> String,
-    val getShowAllTrackers: () -> Boolean,
-    val getMapViewContext: () -> MapViewContext,
+    val getIsSingleTrackerContext: () -> Boolean,
+    val getActiveTrackerId: () -> String,
     val getTrackPointsEmpty: () -> Boolean,
-    val getCoordinatesFetchInFlightTrackerId: () -> String?,
-    val setCoordinatesFetchInFlightTrackerId: (String?) -> Unit,
-    val getCoordinatesFetchInFlightEpoch: () -> Long?,
-    val setCoordinatesFetchInFlightEpoch: (Long?) -> Unit,
-    val getGeometryFetchInFlightTrackerId: () -> String?,
-    val setGeometryFetchInFlightTrackerId: (String?) -> Unit,
-    val getGeometryFetchInFlightEpoch: () -> Long?,
-    val setGeometryFetchInFlightEpoch: (Long?) -> Unit,
+    val getCoordinatesFetchToken: () -> InFlightRequestToken,
+    val setCoordinatesFetchToken: (InFlightRequestToken) -> Unit,
+    val getGeometryFetchToken: () -> InFlightRequestToken,
+    val setGeometryFetchToken: (InFlightRequestToken) -> Unit,
     val setGeometryLoadingInProgress: (Boolean) -> Unit,
     val updateBottomRightSpinner: () -> Unit,
     val onSkipped: () -> Unit,
@@ -36,12 +36,11 @@ internal class MapSingleTrackFetchCallbacks(
 
 internal object MapSingleTrackFetch {
     private fun isSingleTrackerContext(callbacks: MapSingleTrackFetchCallbacks): Boolean {
-        return !callbacks.getShowAllTrackers() && callbacks.getMapViewContext() != MapViewContext.GROUP
+        return callbacks.getIsSingleTrackerContext()
     }
 
     private fun isActiveTracker(callbacks: MapSingleTrackFetchCallbacks, trackerId: String): Boolean {
-        val selectedId = callbacks.getSelectedTrackerId()
-        val activeTrackerId = MapDataLoader.resolveActiveTrackerId(callbacks.getDisplayedTrackerId(), selectedId)
+        val activeTrackerId = callbacks.getActiveTrackerId()
         return activeTrackerId == trackerId
     }
 
@@ -54,7 +53,7 @@ internal object MapSingleTrackFetch {
         val requestEpoch = callbacks.getTrackerRequestEpoch()
         val selectedTrackerId = callbacks.getSelectedTrackerId()
         val trackerId = trackerIdOverride?.takeIf { it.isNotEmpty() }
-            ?: MapDataLoader.resolveActiveTrackerId(callbacks.getDisplayedTrackerId(), selectedTrackerId)
+            ?: callbacks.getActiveTrackerId().ifEmpty { selectedTrackerId }
 
         if (trackerId.isEmpty() || !isSingleTrackerContext(callbacks)) {
             callbacks.onSkipped()
@@ -78,7 +77,7 @@ internal object MapSingleTrackFetch {
         callbacks: MapSingleTrackFetchCallbacks,
         requestEpoch: Long = callbacks.getTrackerRequestEpoch()
     ) {
-        if (MapDataLoader.shouldSkipSeedTrack(trackerId, callbacks.getShowAllTrackers(), callbacks.getMapViewContext())) return
+        if (trackerId.isEmpty() || !isSingleTrackerContext(callbacks)) return
 
         var seeded = false
         val trackerPreview = initialTracker ?: TrackerRepository.getTrackerFromCache(trackerId)
@@ -104,18 +103,14 @@ internal object MapSingleTrackFetch {
         if (seeded) return
 
         if (!allowCoordinatesNetwork) return
-        val inFlightCoordinatesId = callbacks.getCoordinatesFetchInFlightTrackerId()
-        val inFlightCoordinatesEpoch = callbacks.getCoordinatesFetchInFlightEpoch()
-        if (inFlightCoordinatesId == trackerId && inFlightCoordinatesEpoch == requestEpoch) return
-        callbacks.setCoordinatesFetchInFlightTrackerId(trackerId)
-        callbacks.setCoordinatesFetchInFlightEpoch(requestEpoch)
+        val inFlightCoordinates = callbacks.getCoordinatesFetchToken()
+        if (inFlightCoordinates.trackerId == trackerId && inFlightCoordinates.epoch == requestEpoch) return
+        callbacks.setCoordinatesFetchToken(InFlightRequestToken(trackerId = trackerId, epoch = requestEpoch))
         TrackerRepository.getTrackerCoordinates(context, trackerId) { response ->
             callbacks.getScope().launch {
-                if (callbacks.getCoordinatesFetchInFlightTrackerId() == trackerId &&
-                    callbacks.getCoordinatesFetchInFlightEpoch() == requestEpoch
-                ) {
-                    callbacks.setCoordinatesFetchInFlightTrackerId(null)
-                    callbacks.setCoordinatesFetchInFlightEpoch(null)
+                val currentToken = callbacks.getCoordinatesFetchToken()
+                if (currentToken.trackerId == trackerId && currentToken.epoch == requestEpoch) {
+                    callbacks.setCoordinatesFetchToken(InFlightRequestToken())
                 }
                 if (callbacks.getTrackerRequestEpoch() != requestEpoch) return@launch
                 if (!callbacks.getIsAdded() || !isSingleTrackerContext(callbacks)) return@launch
@@ -133,21 +128,17 @@ internal object MapSingleTrackFetch {
         callbacks: MapSingleTrackFetchCallbacks,
         requestEpoch: Long = callbacks.getTrackerRequestEpoch()
     ) {
-        val inFlightGeometryId = callbacks.getGeometryFetchInFlightTrackerId()
-        val inFlightGeometryEpoch = callbacks.getGeometryFetchInFlightEpoch()
-        if (inFlightGeometryId == trackerId && inFlightGeometryEpoch == requestEpoch) return
-        callbacks.setGeometryFetchInFlightTrackerId(trackerId)
-        callbacks.setGeometryFetchInFlightEpoch(requestEpoch)
+        val inFlightGeometry = callbacks.getGeometryFetchToken()
+        if (inFlightGeometry.trackerId == trackerId && inFlightGeometry.epoch == requestEpoch) return
+        callbacks.setGeometryFetchToken(InFlightRequestToken(trackerId = trackerId, epoch = requestEpoch))
         callbacks.setGeometryLoadingInProgress(true)
         callbacks.updateBottomRightSpinner()
 
         TrackerRepository.getTrackerGeometry(context, trackerId) { tracker ->
             callbacks.getScope().launch {
-                if (callbacks.getGeometryFetchInFlightTrackerId() == trackerId &&
-                    callbacks.getGeometryFetchInFlightEpoch() == requestEpoch
-                ) {
-                    callbacks.setGeometryFetchInFlightTrackerId(null)
-                    callbacks.setGeometryFetchInFlightEpoch(null)
+                val currentToken = callbacks.getGeometryFetchToken()
+                if (currentToken.trackerId == trackerId && currentToken.epoch == requestEpoch) {
+                    callbacks.setGeometryFetchToken(InFlightRequestToken())
                     callbacks.setGeometryLoadingInProgress(false)
                     callbacks.updateBottomRightSpinner()
                 }

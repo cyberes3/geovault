@@ -9,13 +9,27 @@ import org.maplibre.android.geometry.LatLng
 class MapDataLoaderTest {
 
     @Test
-    fun resolveActiveTrackerId_prefersDisplayed() {
-        assertEquals("displayed", MapDataLoader.resolveActiveTrackerId("displayed", "selected"))
+    fun resolveActiveSingleTrackerId_prefersDisplayedWhenNotTracking() {
+        assertEquals(
+            "displayed",
+            MapDataLoader.resolveActiveSingleTrackerId(
+                trackingRunning = false,
+                displayedTrackerId = "displayed",
+                selectedTrackerId = "selected"
+            )
+        )
     }
 
     @Test
-    fun resolveActiveTrackerId_fallsBackToSelected() {
-        assertEquals("selected", MapDataLoader.resolveActiveTrackerId(null, "selected"))
+    fun resolveActiveSingleTrackerId_usesSelectedWhenTracking() {
+        assertEquals(
+            "selected",
+            MapDataLoader.resolveActiveSingleTrackerId(
+                trackingRunning = true,
+                displayedTrackerId = "displayed",
+                selectedTrackerId = "selected"
+            )
+        )
     }
 
     @Test
