@@ -45,10 +45,16 @@ internal object MapSingleTrackFetch {
         return activeTrackerId == trackerId
     }
 
-    fun loadHistory(context: Context, callbacks: MapSingleTrackFetchCallbacks) {
+    fun loadHistory(
+        context: Context,
+        callbacks: MapSingleTrackFetchCallbacks,
+        trackerIdOverride: String? = null,
+        initialTracker: Tracker? = null
+    ) {
         val requestEpoch = callbacks.getTrackerRequestEpoch()
         val selectedTrackerId = callbacks.getSelectedTrackerId()
-        val trackerId = MapDataLoader.resolveActiveTrackerId(callbacks.getDisplayedTrackerId(), selectedTrackerId)
+        val trackerId = trackerIdOverride?.takeIf { it.isNotEmpty() }
+            ?: MapDataLoader.resolveActiveTrackerId(callbacks.getDisplayedTrackerId(), selectedTrackerId)
 
         if (trackerId.isEmpty() || !isSingleTrackerContext(callbacks)) {
             callbacks.onSkipped()
@@ -56,7 +62,7 @@ internal object MapSingleTrackFetch {
         }
 
         TrackerRepository.getTrackers(context, forceRefresh = false) { }
-        seedFromCacheOrTail(context, trackerId, null, true, callbacks, requestEpoch)
+        seedFromCacheOrTail(context, trackerId, initialTracker, true, callbacks, requestEpoch)
 
         if (MapDataLoader.shouldAutoZoomSingleTracker(callbacks.getTrackPointsEmpty())) {
             callbacks.onSetZoomToTrackAfterLoad(true)

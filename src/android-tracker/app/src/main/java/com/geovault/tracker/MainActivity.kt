@@ -191,7 +191,7 @@ class MainActivity : AppCompatActivity() {
                 TrackerRepository.getTrackers(this, forceRefresh = false) { list ->
                     val selectedTracker = list?.find { it.id == selectedTrackerId }
                     if (selectedTracker != null) {
-                        setInitialTrackForMap(selectedTracker)
+                        updateInitialTrackForMapIfPending(selectedTracker)
                     }
                 }
             }
@@ -240,7 +240,7 @@ class MainActivity : AppCompatActivity() {
                 TrackerRepository.getTrackers(this, forceRefresh = false) { list ->
                     val selectedTracker = list?.find { it.id == selectedTrackerId }
                     if (selectedTracker != null) {
-                        setInitialTrackForMap(selectedTracker)
+                        updateInitialTrackForMapIfPending(selectedTracker)
                     }
                 }
             } else {
@@ -557,6 +557,13 @@ class MainActivity : AppCompatActivity() {
 
     fun setInitialTrackForMap(tracker: Tracker?) {
         initialTrackForMap = tracker
+    }
+
+    private fun updateInitialTrackForMapIfPending(tracker: Tracker) {
+        val pending = initialTrackForMap ?: return
+        if (pending.id == tracker.id) {
+            initialTrackForMap = tracker
+        }
     }
 
     fun getAndClearInitialTrackForMap(): Tracker? {
