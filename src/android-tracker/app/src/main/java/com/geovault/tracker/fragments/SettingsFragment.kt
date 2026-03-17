@@ -44,6 +44,7 @@ class SettingsFragment : Fragment() {
     private lateinit var startTrackingOnLaunchSwitch: SwitchCompat
     private lateinit var autoTrackingSwitch: SwitchCompat
     private lateinit var hiddenTrackersButton: MaterialButton
+    private lateinit var viewAllTrackersButton: MaterialButton
     private lateinit var distanceLabel: TextView
     private lateinit var accuracyLabel: TextView
 
@@ -91,6 +92,7 @@ class SettingsFragment : Fragment() {
         startTrackingOnLaunchSwitch = view.findViewById(R.id.startTrackingOnLaunchSwitch)
         autoTrackingSwitch = view.findViewById(R.id.autoTrackingSwitch)
         hiddenTrackersButton = view.findViewById(R.id.hiddenTrackersButton)
+        viewAllTrackersButton = view.findViewById(R.id.viewAllTrackersButton)
         distanceLabel = view.findViewById(R.id.distanceLabel)
         accuracyLabel = view.findViewById(R.id.accuracyLabel)
 
@@ -128,6 +130,7 @@ class SettingsFragment : Fragment() {
             updateAutoTrackingUi(isChecked)
         }
         hiddenTrackersButton.setOnClickListener { (activity as? MainActivity)?.showHiddenTrackersFragment() }
+        viewAllTrackersButton.setOnClickListener { (activity as? MainActivity)?.openMapAllTrackers() }
 
         view.findViewById<View>(R.id.loggingHelpButton).setOnClickListener { showLoggingHelpDialog() }
         

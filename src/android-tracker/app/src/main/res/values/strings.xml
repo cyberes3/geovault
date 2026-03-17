@@ -105,6 +105,7 @@
     <string name="zoom_in_description">Zoom in</string>
     <string name="zoom_out_description">Zoom out</string>
     <string name="show_all_trackers">Show all trackers</string>
+    <string name="all_trackers">All Trackers</string>
     <string name="show_selected_tracker">Show selected tracker</string>
     <string name="live_active_fit_enable">Enable live active tracker fit</string>
     <string name="live_active_fit_disable">Disable live active tracker fit</string>

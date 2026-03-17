@@ -10,8 +10,7 @@ import com.geovault.tracker.R
 internal sealed class TrackerLabelState {
     data class GroupMode(
         val labelText: String,
-        val resetContentDescription: String,
-        val showAllTrackersContentDescription: String
+        val resetContentDescription: String
     ) : TrackerLabelState()
 
     object HideCardClearDisplayed : TrackerLabelState()
@@ -20,9 +19,7 @@ internal sealed class TrackerLabelState {
     data class ShowTrackerMode(
         val labelText: String,
         val resetButtonVisibility: Int,
-        val resetContentDescription: String,
-        val showAllTrackersVisibility: Int,
-        val showAllTrackersContentDescription: String
+        val resetContentDescription: String
     ) : TrackerLabelState()
 }
 
@@ -43,8 +40,14 @@ internal object MapTrackerLabelController {
         if (mapViewContext == MapViewContext.GROUP) {
             return TrackerLabelState.GroupMode(
                 labelText = displayedGroupName?.takeIf { it.isNotBlank() } ?: context.getString(R.string.groups_title),
-                resetContentDescription = context.getString(R.string.show_selected_tracker),
-                showAllTrackersContentDescription = context.getString(R.string.show_all_trackers)
+                resetContentDescription = context.getString(R.string.show_selected_tracker)
+            )
+        }
+        if (showAllTrackers) {
+            return TrackerLabelState.ShowTrackerMode(
+                labelText = context.getString(R.string.all_trackers),
+                resetButtonVisibility = View.VISIBLE,
+                resetContentDescription = context.getString(R.string.show_selected_tracker)
             )
         }
         val showingSingleTracker = !showAllTrackers &&
@@ -53,26 +56,18 @@ internal object MapTrackerLabelController {
         if (!showingSingleTracker) {
             return TrackerLabelState.HideCardClearDisplayed
         }
-        val labelName = if (showAllTrackers) {
-            context.getString(R.string.show_all_trackers)
-        } else {
-            displayedTrackerName?.takeIf { it.isNotBlank() }
-                ?: selectedTrackerName.takeIf { it.isNotBlank() }
-                ?: context.getString(R.string.select_tracker)
-        }
+        val labelName = displayedTrackerName?.takeIf { it.isNotBlank() }
+            ?: selectedTrackerName.takeIf { it.isNotBlank() }
+            ?: context.getString(R.string.select_tracker)
         val resetVisibility = when {
             showAllTrackers -> View.GONE
             showingSingleTracker -> View.VISIBLE
             else -> View.GONE
         }
-        val showAllTrackersVisibility = if (showingSingleTracker || showAllTrackers) View.VISIBLE else View.GONE
-        val showAllTrackersContentDescription = if (showAllTrackers) context.getString(R.string.show_selected_tracker) else context.getString(R.string.show_all_trackers)
         return TrackerLabelState.ShowTrackerMode(
             labelText = labelName,
             resetButtonVisibility = resetVisibility,
-            resetContentDescription = context.getString(R.string.show_selected_tracker),
-            showAllTrackersVisibility = showAllTrackersVisibility,
-            showAllTrackersContentDescription = showAllTrackersContentDescription
+            resetContentDescription = context.getString(R.string.show_selected_tracker)
         )
     }
 

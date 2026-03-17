@@ -15,9 +15,6 @@ internal object MapTrackerHeaderUiHelper {
         trackerNameLabel: TextView,
         lastUpdatedLabel: TextView,
         resetToTrackerButton: View,
-        showAllTrackersButton: View,
-        showAllTrackers: Boolean,
-        getString: (Int) -> String,
         onHideCardClearDisplayed: () -> Unit,
         updateStreamingUi: () -> Unit
     ) {
@@ -30,31 +27,17 @@ internal object MapTrackerHeaderUiHelper {
                 resetToTrackerButton.visibility = View.VISIBLE
                 resetToTrackerButton.contentDescription = state.resetContentDescription
                 updateStreamingUi()
-                showAllTrackersButton.visibility = View.GONE
-                showAllTrackersButton.contentDescription = state.showAllTrackersContentDescription
             }
 
             is TrackerLabelState.HideCardClearDisplayed -> {
                 trackerLabelCard.visibility = View.GONE
                 onHideCardClearDisplayed()
                 updateStreamingUi()
-                showAllTrackersButton.visibility = View.VISIBLE
-                showAllTrackersButton.contentDescription = if (showAllTrackers) {
-                    getString(R.string.show_selected_tracker)
-                } else {
-                    getString(R.string.show_all_trackers)
-                }
             }
 
             is TrackerLabelState.HideCardKeepDisplayed -> {
                 trackerLabelCard.visibility = View.GONE
                 updateStreamingUi()
-                showAllTrackersButton.visibility = View.VISIBLE
-                showAllTrackersButton.contentDescription = if (showAllTrackers) {
-                    getString(R.string.show_selected_tracker)
-                } else {
-                    getString(R.string.show_all_trackers)
-                }
             }
 
             is TrackerLabelState.ShowTrackerMode -> {
@@ -65,8 +48,6 @@ internal object MapTrackerHeaderUiHelper {
                 resetToTrackerButton.visibility = state.resetButtonVisibility
                 resetToTrackerButton.contentDescription = state.resetContentDescription
                 updateStreamingUi()
-                showAllTrackersButton.visibility = state.showAllTrackersVisibility
-                showAllTrackersButton.contentDescription = state.showAllTrackersContentDescription
             }
         }
     }

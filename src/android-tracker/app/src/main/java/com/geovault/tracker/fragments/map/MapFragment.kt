@@ -84,7 +84,6 @@ class MapFragment : Fragment() {
     private lateinit var geometryLoadingSpinner: LoadingSpinner
     private lateinit var streamingIndicator: View
     private lateinit var lastUpdatedLabel: TextView
-    private lateinit var showAllTrackersButton: View
     private lateinit var liveActiveFitButton: MaterialCardView
     private lateinit var liveActiveFitButtonIcon: ImageView
     private lateinit var mapTrackerInfoCard: View
@@ -337,7 +336,6 @@ class MapFragment : Fragment() {
         geometryLoadingSpinner = view.findViewById(R.id.geometryLoadingSpinner)
         streamingIndicator = view.findViewById(R.id.streamingIndicator)
         lastUpdatedLabel = view.findViewById(R.id.lastUpdatedLabel)
-        showAllTrackersButton = view.findViewById(R.id.showAllTrackersButton)
         liveActiveFitButton = view.findViewById(R.id.liveActiveFitButton)
         liveActiveFitButtonIcon = view.findViewById(R.id.liveActiveFitButtonIcon)
         mapTrackerInfoCard = view.findViewById(R.id.mapTrackerInfoCard)
@@ -594,21 +592,6 @@ class MapFragment : Fragment() {
             onShowMyLocationLongClick()
             true
         }
-        showAllTrackersButton.setOnClickListener {
-            if (showAllTrackers) {
-                showAllTrackers = false
-                stopLiveTrackStreaming()
-                clearMultiTrackContextState()
-                clearMapSelection()
-                clearAllTrackSources()
-                setAllTrackLayersVisibility(false)
-                setAnnotationLayersVisibility(true)
-                fetchHistory()
-                updateTrackerLabel()
-            } else {
-                loadAllTrackersAndApply()
-            }
-        }
         liveActiveFitButton.setOnClickListener { onLiveActiveFitButtonClick() }
         view.post { if (isAdded) refreshMapPaddingForCurrentMode(force = true) }
     }
@@ -793,7 +776,6 @@ class MapFragment : Fragment() {
                 mapToggle,
                 zoomInButton,
                 zoomOutButton,
-                showAllTrackersButton,
                 liveActiveFitButton
             )
         )
@@ -1114,9 +1096,6 @@ class MapFragment : Fragment() {
             trackerNameLabel = trackerNameLabel,
             lastUpdatedLabel = lastUpdatedLabel,
             resetToTrackerButton = resetToTrackerButton,
-            showAllTrackersButton = showAllTrackersButton,
-            showAllTrackers = showAllTrackers,
-            getString = ::getString,
             onHideCardClearDisplayed = {
                 displayedTracker = null
                 displayedTrackerId = null
@@ -1129,9 +1108,6 @@ class MapFragment : Fragment() {
         )
         if (isSelectedDefaultTrackerMode()) {
             resetToTrackerButton.visibility = View.GONE
-        }
-        if (trackingRunning) {
-            showAllTrackersButton.visibility = View.GONE
         }
         // Keep right-side controls in sync immediately when tracker context changes.
         updateShowMyLocationButtonVisibility()
@@ -1341,7 +1317,6 @@ class MapFragment : Fragment() {
                 mapToggle,
                 zoomInButton,
                 zoomOutButton,
-                showAllTrackersButton,
                 liveActiveFitButton
             ),
             bottomRightIndicatorContainer = bottomRightIndicatorContainer,
@@ -1671,6 +1646,16 @@ class MapFragment : Fragment() {
                 getShowAllTrackers = { showAllTrackers }
             )
         )
+    }
+
+    fun showAllTrackersFromSettings() {
+        if (!isAdded) {
+            pendingShowAllTrackers = true
+            showAllTrackers = true
+            mapViewContext = MapViewContext.SINGLE_TRACKER
+            return
+        }
+        loadAllTrackersAndApply()
     }
 
     private fun loadAllTrackersAndApply() {

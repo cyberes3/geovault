@@ -78,6 +78,14 @@
                 android:text="@string/hidden_trackers"
                 android:layout_marginBottom="16dp" />
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/viewAllTrackersButton"
+                style="@style/gv_common_ButtonOutlined"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="@string/show_all_trackers_in_settings"
+                android:layout_marginBottom="16dp" />
+
             <!-- HR between toggles and logging/filter -->
             <View
                 android:layout_width="match_parent"

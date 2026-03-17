@@ -592,6 +592,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    fun openMapAllTrackers() {
+        clearOverlayAndThen {
+            setCurrentTab(1, forceRefreshMap = false, delayMs = 0)
+            viewPager.post {
+                (pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.map.MapFragment)
+                    ?.showAllTrackersFromSettings()
+            }
+        }
+    }
+
     fun getAndClearInitialGroupForMap(): Group? {
         val g = initialGroupForMap
         initialGroupForMap = null
