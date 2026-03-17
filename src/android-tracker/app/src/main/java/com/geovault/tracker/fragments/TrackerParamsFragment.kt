@@ -1,28 +1,27 @@
 package com.geovault.tracker.fragments
 
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.TextView
-import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
-import com.geovault.tracker.LiveTrackStreamingService
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.TrackingService
+import com.geovault.tracker.pipeline.TrackPointBus
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -42,22 +41,7 @@ class TrackerParamsFragment : Fragment() {
     private lateinit var closeButton: ImageButton
     private lateinit var paramsSwipeRefresh: SwipeRefreshLayout
     private var trackerId: String? = null
-
-    private val streamPointReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action != LiveTrackStreamingService.BROADCAST_TRACK_POINT) return
-            val trackId = intent.getStringExtra(LiveTrackStreamingService.EXTRA_TRACK_ID) ?: return
-            if (trackId != this@TrackerParamsFragment.trackerId) return
-            if (!isAdded) return
-            val lat = intent.getDoubleExtra(LiveTrackStreamingService.EXTRA_POINT_LAT, Double.NaN)
-            val lon = intent.getDoubleExtra(LiveTrackStreamingService.EXTRA_POINT_LON, Double.NaN)
-            val tsMs = intent.getLongExtra(LiveTrackStreamingService.EXTRA_POINT_TS_MS, 0L)
-            val propsJson = intent.getStringExtra(LiveTrackStreamingService.EXTRA_PROPS_JSON)
-            requireActivity().runOnUiThread {
-                updateFromStreamPoint(lat, lon, tsMs, propsJson)
-            }
-        }
-    }
+    private var streamCollectionJob: Job? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -111,19 +95,25 @@ class TrackerParamsFragment : Fragment() {
 
     override fun onStart() {
         super.onStart()
-        val filter = IntentFilter(LiveTrackStreamingService.BROADCAST_TRACK_POINT)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            requireContext().registerReceiver(streamPointReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            requireContext().registerReceiver(streamPointReceiver, filter)
+        if (streamCollectionJob?.isActive == true) return
+        streamCollectionJob = viewLifecycleOwner.lifecycleScope.launch {
+            TrackPointBus.events.collect { event ->
+                if (event.trackId != trackerId) return@collect
+                if (!isAdded) return@collect
+                updateFromStreamPoint(
+                    lat = event.lat,
+                    lon = event.lon,
+                    timestampMs = event.timestampMs,
+                    propsJson = event.propsJson
+                )
+            }
         }
     }
 
     override fun onStop() {
         super.onStop()
-        try {
-            requireContext().unregisterReceiver(streamPointReceiver)
-        } catch (_: IllegalArgumentException) { /* already unregistered */ }
+        streamCollectionJob?.cancel()
+        streamCollectionJob = null
     }
 
     private fun loadTrackerData(refresh: Boolean = false) {
@@ -211,7 +201,7 @@ class TrackerParamsFragment : Fragment() {
 
     /**
      * Update displayed params from a streamed point (same track as this fragment).
-     * Called when we receive BROADCAST_TRACK_POINT for our trackerId so the params modal stays in sync.
+     * Called when we receive TrackPointBus events for our trackerId so the params modal stays in sync.
      */
     private fun updateFromStreamPoint(lat: Double, lon: Double, timestampMs: Long, propsJson: String?) {
         if (!isAdded) return

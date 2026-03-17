@@ -31,16 +31,22 @@ internal class MapSingleTrackFetchCallbacks(
 )
 
 internal object MapSingleTrackFetch {
+    private fun isSingleTrackerContext(callbacks: MapSingleTrackFetchCallbacks): Boolean {
+        return !callbacks.getShowAllTrackers() && callbacks.getMapViewContext() != MapViewContext.GROUP
+    }
+
+    private fun isActiveTracker(callbacks: MapSingleTrackFetchCallbacks, trackerId: String): Boolean {
+        val selectedId = callbacks.getSelectedTrackerId()
+        val activeTrackerId = MapDataLoader.resolveActiveTrackerId(callbacks.getDisplayedTrackerId(), selectedId)
+        return activeTrackerId == trackerId
+    }
+
     fun loadHistory(context: Context, callbacks: MapSingleTrackFetchCallbacks) {
         val requestEpoch = callbacks.getTrackerRequestEpoch()
         val selectedTrackerId = callbacks.getSelectedTrackerId()
-        val trackerId = MapDataLoader.resolveHistoryTrackerId(callbacks.getDisplayedTrackerId(), selectedTrackerId)
+        val trackerId = MapDataLoader.resolveActiveTrackerId(callbacks.getDisplayedTrackerId(), selectedTrackerId)
 
-        if (trackerId.isEmpty()) {
-            callbacks.onSkipped()
-            return
-        }
-        if (callbacks.getMapViewContext() == MapViewContext.GROUP) {
+        if (trackerId.isEmpty() || !isSingleTrackerContext(callbacks)) {
             callbacks.onSkipped()
             return
         }
@@ -95,10 +101,8 @@ internal object MapSingleTrackFetch {
                 if (callbacks.getCoordinatesFetchInFlightTrackerId() == trackerId) {
                     callbacks.setCoordinatesFetchInFlightTrackerId(null)
                 }
-                if (!callbacks.getIsAdded() || callbacks.getShowAllTrackers() || callbacks.getMapViewContext() == MapViewContext.GROUP) return@launch
-                val selectedId = callbacks.getSelectedTrackerId()
-                val activeTrackerId = MapDataLoader.resolveActiveTrackerId(callbacks.getDisplayedTrackerId(), selectedId)
-                if (activeTrackerId != trackerId) return@launch
+                if (!callbacks.getIsAdded() || !isSingleTrackerContext(callbacks)) return@launch
+                if (!isActiveTracker(callbacks, trackerId)) return@launch
                 val coords = response?.coordinates ?: return@launch
                 callbacks.onSeededFromNetwork(coords, response.point_params)
             }
@@ -126,10 +130,8 @@ internal object MapSingleTrackFetch {
                 callbacks.setGeometryLoadingInProgress(false)
                 callbacks.updateBottomRightSpinner()
                 if (!callbacks.getIsAdded()) return@launch
-                if (callbacks.getShowAllTrackers() || callbacks.getMapViewContext() == MapViewContext.GROUP) return@launch
-                val selectedId = callbacks.getSelectedTrackerId()
-                val activeTrackerId = MapDataLoader.resolveActiveTrackerId(callbacks.getDisplayedTrackerId(), selectedId)
-                if (activeTrackerId != trackerId) return@launch
+                if (!isSingleTrackerContext(callbacks)) return@launch
+                if (!isActiveTracker(callbacks, trackerId)) return@launch
                 callbacks.onGeometryLoaded(tracker, trackerId, forceReplace)
             }
         }

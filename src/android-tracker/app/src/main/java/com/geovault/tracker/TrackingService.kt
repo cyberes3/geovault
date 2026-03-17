@@ -17,6 +17,8 @@ import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
 import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.db.QueuedLocation
+import com.geovault.tracker.pipeline.TrackPointSource
+import com.geovault.tracker.pipeline.TrackPointServiceBase
 import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
 import com.geovault.tracker.sensor.SignificantMotionResumeBridge
 import com.google.android.gms.location.*
@@ -28,12 +30,11 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPOutputStream
-import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
 import kotlin.random.Random
 
-class TrackingService : Service() {
+class TrackingService : TrackPointServiceBase() {
 
     companion object {
         const val TAG = "TrackingService"
@@ -97,19 +98,6 @@ class TrackingService : Service() {
         /** Max batches to send in one push call to avoid holding the lock too long. */
         private const val MAX_BATCHES_PER_PUSH = 10
 
-        /** Keep recent locally tracked points so map can catch up after pause/background. */
-        private const val MAX_BUFFERED_TRACK_POINTS = 1000
-        private val pointBuffer = ConcurrentLinkedQueue<LiveTrackStreamingService.TrackPointBroadcast>()
-
-        @JvmStatic
-        fun drainBufferedTrackPoints(): List<LiveTrackStreamingService.TrackPointBroadcast> {
-            val result = mutableListOf<LiveTrackStreamingService.TrackPointBroadcast>()
-            while (true) {
-                val p = pointBuffer.poll() ?: break
-                result.add(p)
-            }
-            return result
-        }
     }
 
     private var isTracking = false
@@ -192,7 +180,6 @@ class TrackingService : Service() {
         lastTrackedLongitude = null
         lastTrackedTimestampMs = 0L
         lastTrackedPropsJson = null
-        pointBuffer.clear()
         broadcastSessionStats()
 
         runBlocking(Dispatchers.IO) {
@@ -255,7 +242,6 @@ class TrackingService : Service() {
         lastTrackedLongitude = null
         lastTrackedTimestampMs = 0L
         lastTrackedPropsJson = null
-        pointBuffer.clear()
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
             .remove(PREF_WAS_TRACKING_BEFORE_EXIT).commit()
         fusedLocationClient.removeLocationUpdates(locationCallback)
@@ -459,10 +445,6 @@ class TrackingService : Service() {
         }
     }
 
-    /**
-     * Broadcast track points using the same contract as LiveTrackStreamingService so map updates
-     * are handled by a single receiver/pipeline regardless of source.
-     */
     private fun broadcastTrackPoint(location: Location) {
         val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (trackerId.isEmpty()) return
@@ -479,20 +461,15 @@ class TrackingService : Service() {
             accuracyMeters = if (location.hasAccuracy()) location.accuracy else null,
             propsJson = propsJson
         )
-        pointBuffer.add(point)
-        while (pointBuffer.size > MAX_BUFFERED_TRACK_POINTS) {
-            pointBuffer.poll()
-        }
-        val intent = Intent(LiveTrackStreamingService.BROADCAST_TRACK_POINT).apply {
-            setPackage(packageName)
-            putExtra(LiveTrackStreamingService.EXTRA_TRACK_ID, point.trackId)
-            putExtra(LiveTrackStreamingService.EXTRA_POINT_LAT, point.lat)
-            putExtra(LiveTrackStreamingService.EXTRA_POINT_LON, point.lon)
-            putExtra(LiveTrackStreamingService.EXTRA_POINT_TS_MS, point.timestampMs)
-            point.accuracyMeters?.let { putExtra(LiveTrackStreamingService.EXTRA_ACCURACY_METERS, it) }
-            point.propsJson?.let { putExtra(LiveTrackStreamingService.EXTRA_PROPS_JSON, it) }
-        }
-        sendBroadcast(intent)
+        publishTrackPoint(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = point.trackId,
+            lon = point.lon,
+            lat = point.lat,
+            timestampMs = point.timestampMs,
+            accuracyMeters = point.accuracyMeters,
+            propsJson = point.propsJson
+        )
     }
 
     private fun buildLocalPointPropsJson(location: Location, distanceMeters: Float): String? {

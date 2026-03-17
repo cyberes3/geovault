@@ -1,14 +1,16 @@
 package com.geovault.tracker
 
-import android.content.Intent
-import com.geovault.tracker.fragments.map.MapBroadcastHandlers
+import com.geovault.tracker.pipeline.TrackPointBus
+import com.geovault.tracker.pipeline.TrackPointEvent
+import com.geovault.tracker.pipeline.TrackPointSource
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
 
 /**
  * Regression tests for selected-tracker map update behavior.
@@ -33,42 +35,20 @@ class SelectedTrackerMapUpdateTest {
     }
 
     @Test
-    fun liveTrackBroadcast_constantsMatchContract() {
-        assertFalse(LiveTrackStreamingService.BROADCAST_TRACK_POINT.isBlank())
-        assertFalse(LiveTrackStreamingService.EXTRA_TRACK_ID.isBlank())
-        assertFalse(LiveTrackStreamingService.EXTRA_POINT_LAT.isBlank())
-        assertFalse(LiveTrackStreamingService.EXTRA_POINT_LON.isBlank())
-        assertFalse(LiveTrackStreamingService.EXTRA_POINT_TS_MS.isBlank())
-    }
+    fun trackPointBus_emitsPublishedEventPayload() = runBlocking {
+        val expected = TrackPointEvent(
+            source = TrackPointSource.REMOTE_STREAM,
+            trackId = "tracker-1",
+            lon = 56.78,
+            lat = 12.34,
+            timestampMs = 123456789L,
+            accuracyMeters = 8.5f,
+            propsJson = "{\"acc\":8.5}"
+        )
 
-    @Test
-    fun liveTrackPointReceiver_parsesBroadcastPayload() {
-        var trackId: String? = null
-        var lat = 0.0
-        var lon = 0.0
-        var tsMs = 0L
-        var accuracy: Float? = null
-        val receiver = MapBroadcastHandlers.createLiveTrackPointReceiver { id, aLat, aLon, aTs, aAccuracy ->
-            trackId = id
-            lat = aLat
-            lon = aLon
-            tsMs = aTs
-            accuracy = aAccuracy
-        }
-        val intent = Intent(LiveTrackStreamingService.BROADCAST_TRACK_POINT).apply {
-            putExtra(LiveTrackStreamingService.EXTRA_TRACK_ID, "tracker-1")
-            putExtra(LiveTrackStreamingService.EXTRA_POINT_LAT, 12.34)
-            putExtra(LiveTrackStreamingService.EXTRA_POINT_LON, 56.78)
-            putExtra(LiveTrackStreamingService.EXTRA_POINT_TS_MS, 123456789L)
-            putExtra(LiveTrackStreamingService.EXTRA_ACCURACY_METERS, 8.5f)
-        }
+        TrackPointBus.publish(expected)
 
-        receiver.onReceive(RuntimeEnvironment.getApplication(), intent)
-
-        assertEquals("tracker-1", trackId)
-        assertEquals(12.34, lat, 0.0)
-        assertEquals(56.78, lon, 0.0)
-        assertEquals(123456789L, tsMs)
-        assertEquals(8.5f, accuracy)
+        val actual = withTimeout(1000L) { TrackPointBus.events.first { it.trackId == "tracker-1" } }
+        assertEquals(expected, actual)
     }
 }

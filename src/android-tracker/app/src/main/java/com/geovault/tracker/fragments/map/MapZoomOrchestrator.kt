@@ -293,8 +293,18 @@ internal object MapZoomOrchestrator {
         val isSamePadding = MapPaddingRefresher.isSamePadding(currentMap.cameraPosition, targetPadding)
         manager.defaultPadding = targetPadding
         if (!applyToCamera) return
-        if (isSamePadding && !force) return
-        if (isSamePadding) return
+        if (isSamePadding) {
+            if (!force) return
+            applyMove(
+                CameraUpdateFactory.newCameraPosition(currentMap.cameraPosition),
+                CameraPaddingMode.OVERLAY_AWARE,
+                null,
+                false,
+                MapConstants.FOLLOW_LOCK_ANIMATION_MS,
+                null
+            )
+            return
+        }
         val padded = CameraPosition.Builder(currentMap.cameraPosition)
             .padding(targetPadding)
             .build()

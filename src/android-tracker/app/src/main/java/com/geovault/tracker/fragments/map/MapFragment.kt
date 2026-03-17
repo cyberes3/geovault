@@ -17,6 +17,7 @@ import com.geovault.common.LoadingSpinner
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.core.os.bundleOf
+import androidx.lifecycle.lifecycleScope
 import com.geovault.common.map.GeoVaultMapFragment
 import com.geovault.common.map.LocationComponentHelper
 import com.geovault.common.map.MapLibreManager
@@ -31,6 +32,8 @@ import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.TrackingService
 import com.geovault.tracker.TrackUpdateHelper
 import com.geovault.tracker.fragments.TrackersListFragment
+import com.geovault.tracker.pipeline.TrackPointBus
+import com.geovault.tracker.pipeline.TrackPointEvent
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -175,24 +178,50 @@ class MapFragment : Fragment() {
     private var fusedLocationClient: FusedLocationProviderClient? = null
     private var standaloneLocationCallback: LocationCallback? = null
 
-    private val mainScope = CoroutineScope(Dispatchers.Main + Job())
-    private val liveStreamCoordinator = MapLiveStreamCoordinator(mainScope)
-
-    private val liveTrackPointReceiver by lazy {
-        MapBroadcastHandlers.createLiveTrackPointReceiver { trackId, lat, lon, tsMs, accuracyMeters ->
-            if (accuracyMeters != null) lastStreamedAccuracyMeters = accuracyMeters
-            applyLiveStreamPoint(trackId, lat, lon, tsMs.takeIf { it > 0L } ?: System.currentTimeMillis(), fromBuffered = false)
-        }
-    }
+    private val liveStreamCoordinator = MapLiveStreamCoordinator(lifecycleScope)
+    private var trackPointCollectionJob: Job? = null
 
     private fun applyLiveStreamPoint(
         trackId: String,
         lat: Double,
         lon: Double,
-        timestampMs: Long,
-        fromBuffered: Boolean
+        timestampMs: Long
     ) {
         MapLiveStreamPointHandler.applyLiveStreamPoint(trackId, lat, lon, timestampMs, buildLiveStreamPointCallbacks())
+    }
+
+    private fun currentTrackPointContext(): MapTrackPointContext {
+        return MapTrackPointContext(
+            trackingRunning = TrackingService.isRunning,
+            showAllTrackers = showAllTrackers,
+            mapViewContext = mapViewContext,
+            displayedTrackerId = displayedTrackerId,
+            activeStreamedTrackerIds = activeStreamedTrackerIds
+        )
+    }
+
+    private fun shouldAcceptTrackPoint(event: TrackPointEvent): Boolean {
+        val trackPointState = MapTrackPointReducer.stateFromContext(currentTrackPointContext())
+        return MapTrackPointReducer.shouldAcceptPoint(
+            event = event,
+            state = trackPointState
+        )
+    }
+
+    private fun startTrackPointCollection() {
+        if (trackPointCollectionJob?.isActive == true) return
+        trackPointCollectionJob = lifecycleScope.launch {
+            TrackPointBus.events.collect { event ->
+                if (!shouldAcceptTrackPoint(event)) return@collect
+                event.accuracyMeters?.let { lastStreamedAccuracyMeters = it }
+                applyLiveStreamPoint(
+                    trackId = event.trackId,
+                    lat = event.lat,
+                    lon = event.lon,
+                    timestampMs = event.timestampMs.takeIf { it > 0L } ?: System.currentTimeMillis()
+                )
+            }
+        }
     }
 
     private fun buildLiveStreamPointCallbacks(): MapLiveStreamPointCallbacks {
@@ -605,46 +634,7 @@ class MapFragment : Fragment() {
             startStandaloneLocationUpdates()
         }
 
-        // Drain first, then register receiver. This avoids duplicate processing windows where
-        // one point can be consumed both via broadcast and buffer replay.
-        if (TrackingService.isRunning) {
-            val trackedBuffered = TrackingService.drainBufferedTrackPoints()
-            if (trackedBuffered.isNotEmpty()) {
-                for (p in trackedBuffered) {
-                    applyLiveStreamPoint(
-                        p.trackId,
-                        p.lat,
-                        p.lon,
-                        p.timestampMs.takeIf { it > 0L } ?: System.currentTimeMillis(),
-                        fromBuffered = true
-                    )
-                    p.accuracyMeters?.let { lastStreamedAccuracyMeters = it }
-                }
-            }
-            // Tracking mode should not replay stale websocket points.
-            LiveTrackStreamingService.drainBufferedPoints()
-        } else {
-            val buffered = LiveTrackStreamingService.drainBufferedPoints()
-            if (buffered.isNotEmpty()) {
-                for (p in buffered) {
-                    applyLiveStreamPoint(
-                        p.trackId,
-                        p.lat,
-                        p.lon,
-                        p.timestampMs.takeIf { it > 0L } ?: System.currentTimeMillis(),
-                        fromBuffered = true
-                    )
-                    p.accuracyMeters?.let { lastStreamedAccuracyMeters = it }
-                }
-            }
-        }
-
-        ContextCompat.registerReceiver(
-            requireContext(),
-            liveTrackPointReceiver,
-            IntentFilter(LiveTrackStreamingService.BROADCAST_TRACK_POINT),
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
+        startTrackPointCollection()
 
         if (mapReady) {
             if (mapViewContext == MapViewContext.GROUP || showAllTrackers) {
@@ -688,7 +678,7 @@ class MapFragment : Fragment() {
                 updateTrackerLabel()
             } else if (TrackingService.isRunning && activeTrackerId.isNotEmpty()) {
                 // Tracking may continue while app/map is backgrounded; always refresh tail + full
-                // geometry on resume to catch up even if in-memory broadcast buffer was capped/reset.
+                // geometry on resume so server/cached history and live bus events converge quickly.
                 if (displayedTrackerId != activeTrackerId) {
                     displayedTrackerId = activeTrackerId
                     mapViewContext = MapViewContext.SINGLE_TRACKER
@@ -715,9 +705,8 @@ class MapFragment : Fragment() {
         super.onPause()
         view?.keepScreenOn = false
         stopStandaloneLocationUpdates(clearGpsFix = true)
-        try {
-            requireContext().unregisterReceiver(liveTrackPointReceiver)
-        } catch (e: IllegalArgumentException) { }
+        trackPointCollectionJob?.cancel()
+        trackPointCollectionJob = null
     }
 
     override fun onDestroyView() {
@@ -735,7 +724,6 @@ class MapFragment : Fragment() {
         // Preserve deferred group handoff across view teardown so onMapReady can still apply it.
         clearMultiTrackContextState(clearPendingGroupIntent = false)
         super.onDestroyView()
-        mainScope.cancel()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -1489,7 +1477,7 @@ class MapFragment : Fragment() {
             group = group,
             zoomToTrackerId = zoomToTrackerId,
             context = requireContext(),
-            scope = mainScope,
+            scope = lifecycleScope,
             callbacks = MapGroupRefreshCallbacks(
                 isAdded = { isAdded },
                 getMap = { maplibreMap },
@@ -1569,7 +1557,7 @@ class MapFragment : Fragment() {
                 applyAllTrackersToMap(trackers, emptyMap(), map, style, fitBounds = true)
             },
             onHasGeometry = { trackers, coordsById ->
-                mainScope.launch {
+                lifecycleScope.launch {
                     if (!isAdded || !showAllTrackers) return@launch
                     applyAllTrackersToMap(
                         trackers,
@@ -2161,7 +2149,7 @@ class MapFragment : Fragment() {
 
     private fun buildSingleTrackFetchCallbacks(): MapSingleTrackFetchCallbacks {
         return MapSingleTrackFetchCallbacks(
-            getScope = { mainScope },
+            getScope = { lifecycleScope },
             getDisplayedTrackerId = { displayedTrackerId },
             getSelectedTrackerId = { SelectedTrackerPrefs.selectedTrackerId(requireContext()) },
             getShowAllTrackers = { showAllTrackers },

@@ -10,8 +10,7 @@ internal data class InfoCardUiState(
     val lastUpdatedText: String,
     val viewInListContentDescription: String,
     val viewParamsContentDescription: String,
-    val shouldRecenterOnOpen: Boolean,
-    val shouldRefreshPointIcons: Boolean
+    val shouldRecenterOnOpen: Boolean
 )
 
 internal object MapTrackerInfoCardController {
@@ -38,8 +37,7 @@ internal object MapTrackerInfoCardController {
             lastUpdatedText = lastUpdatedText,
             viewInListContentDescription = viewInListContentDescription,
             viewParamsContentDescription = viewParamsContentDescription,
-            shouldRecenterOnOpen = shouldRecenterOnOpen,
-            shouldRefreshPointIcons = selectionIdChanged
+            shouldRecenterOnOpen = shouldRecenterOnOpen
         )
     }
 }

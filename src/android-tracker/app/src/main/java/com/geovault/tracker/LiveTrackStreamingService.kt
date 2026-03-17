@@ -4,7 +4,6 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
@@ -13,6 +12,8 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
+import com.geovault.tracker.pipeline.TrackPointSource
+import com.geovault.tracker.pipeline.TrackPointServiceBase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -26,14 +27,13 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
 import java.util.Locale
-import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit
 
 /**
  * Foreground service that holds a WebSocket connection to the trackers-live endpoint
  * and broadcasts incoming track_updated points to the map for active tracker contexts.
  */
-class LiveTrackStreamingService : Service() {
+class LiveTrackStreamingService : TrackPointServiceBase() {
 
     companion object {
         private const val TAG = "LiveTrackStreaming"
@@ -44,46 +44,16 @@ class LiveTrackStreamingService : Service() {
         const val EXTRA_TRACKER_NAME = "tracker_name"
         const val NOTIFICATION_ID = 102
         private const val CHANNEL_ID = "live_track_streaming"
-        const val BROADCAST_TRACK_POINT = "com.geovault.tracker.LIVE_TRACK_POINT"
-        const val EXTRA_TRACK_ID = "track_id"
-        const val EXTRA_POINT_LON = "point_lon"
-        const val EXTRA_POINT_LAT = "point_lat"
-        const val EXTRA_POINT_TS_MS = "point_ts_ms"
-        const val EXTRA_ACCURACY_METERS = "accuracy_meters"
-        /** JSON object string of extended point params (props), so params UI can update live. */
-        const val EXTRA_PROPS_JSON = "props_json"
         private const val RECONNECT_BASE_DELAY_MS = 3000L
         private const val RECONNECT_MAX_DELAY_MS = 60000L
         private const val WS_READ_TIMEOUT_SEC = 90L
         private const val WS_PING_INTERVAL_SEC = 30L
-        private const val MAX_BUFFERED_POINTS = 1000
-
         /** True while the service is actively running in foreground. */
         @Volatile
         @JvmStatic
         var isRunning = false
             private set
 
-        /**
-         * In-memory buffer of streamed points. Points are added by the service
-         * and drained by MapFragment on resume so no data is lost when the
-         * map tab is not visible.
-         */
-        private val pointBuffer = ConcurrentLinkedQueue<TrackPointBroadcast>()
-
-        /**
-         * Drain all buffered points and return them as a list.
-         * Call from MapFragment.onResume() to catch up on missed points.
-         */
-        @JvmStatic
-        fun drainBufferedPoints(): List<TrackPointBroadcast> {
-            val result = mutableListOf<TrackPointBroadcast>()
-            while (true) {
-                val p = pointBuffer.poll() ?: break
-                result.add(p)
-            }
-            return result
-        }
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
@@ -117,7 +87,6 @@ class LiveTrackStreamingService : Service() {
 
                     // Close previous WebSocket if switching targets.
                     disconnectWebSocket()
-                    pointBuffer.clear()
                     currentTrackerIds = trackerIds
                     currentTrackerName = trackerName
                     reconnectAttempts = 0
@@ -268,23 +237,15 @@ class LiveTrackStreamingService : Service() {
     }
 
     private fun bufferAndBroadcast(point: TrackPointBroadcast) {
-        // Buffer the point so MapFragment can catch up on resume
-        pointBuffer.add(point)
-        while (pointBuffer.size > MAX_BUFFERED_POINTS) {
-            pointBuffer.poll()
-        }
-
-        // Also broadcast for the live case (map is visible right now; params fragment can update too)
-        val intent = Intent(BROADCAST_TRACK_POINT).apply {
-            setPackage(packageName)
-            putExtra(EXTRA_TRACK_ID, point.trackId)
-            putExtra(EXTRA_POINT_LON, point.lon)
-            putExtra(EXTRA_POINT_LAT, point.lat)
-            putExtra(EXTRA_POINT_TS_MS, point.timestampMs)
-            point.accuracyMeters?.let { putExtra(EXTRA_ACCURACY_METERS, it) }
-            point.propsJson?.let { putExtra(EXTRA_PROPS_JSON, it) }
-        }
-        sendBroadcast(intent)
+        publishTrackPoint(
+            source = TrackPointSource.REMOTE_STREAM,
+            trackId = point.trackId,
+            lon = point.lon,
+            lat = point.lat,
+            timestampMs = point.timestampMs,
+            accuracyMeters = point.accuracyMeters,
+            propsJson = point.propsJson
+        )
     }
 
     private fun scheduleReconnect() {
@@ -312,7 +273,6 @@ class LiveTrackStreamingService : Service() {
             webSocket?.close(1000, null)
         } catch (_: Exception) { }
         webSocket = null
-        pointBuffer.clear()
     }
 
     data class TrackPointBroadcast(

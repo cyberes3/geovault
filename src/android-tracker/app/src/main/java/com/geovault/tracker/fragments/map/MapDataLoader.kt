@@ -28,10 +28,6 @@ internal object MapDataLoader {
         return displayedTrackerId?.takeIf { it.isNotEmpty() } ?: selectedTrackerId
     }
 
-    fun resolveHistoryTrackerId(displayedTrackerId: String?, selectedTrackerId: String): String {
-        return displayedTrackerId?.takeIf { it.isNotEmpty() } ?: selectedTrackerId
-    }
-
     fun isExternalStreaming(
         forceReplace: Boolean,
         hasTrackPoints: Boolean,
