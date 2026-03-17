@@ -1,5 +1,7 @@
 package com.geovault.tracker.fragments.map
 
+import android.util.Log
+import org.maplibre.geojson.Feature
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.maps.Style
@@ -33,5 +35,25 @@ internal object MapLayerVisibility {
     fun clearAllTrackSources(style: Style) {
         style.getSourceAs<GeoJsonSource>(MapConstants.ALL_TRACKS_SOURCE_ID)?.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
         style.getSourceAs<GeoJsonSource>(MapConstants.ALL_TRACKS_POINTS_SOURCE_ID)?.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+    }
+
+    fun updateAllTrackSources(
+        style: Style,
+        lineFeatures: List<Feature>,
+        pointFeatures: List<Feature>,
+        logTag: String
+    ): Boolean {
+        val lineSource = style.getSourceAs<GeoJsonSource>(MapConstants.ALL_TRACKS_SOURCE_ID)
+        val pointSource = style.getSourceAs<GeoJsonSource>(MapConstants.ALL_TRACKS_POINTS_SOURCE_ID)
+        if (lineSource == null || pointSource == null) {
+            Log.e(
+                logTag,
+                "all-trackers source missing: lineSource=${lineSource != null}, pointSource=${pointSource != null}"
+            )
+            return false
+        }
+        lineSource.setGeoJson(FeatureCollection.fromFeatures(lineFeatures))
+        pointSource.setGeoJson(FeatureCollection.fromFeatures(pointFeatures))
+        return true
     }
 }

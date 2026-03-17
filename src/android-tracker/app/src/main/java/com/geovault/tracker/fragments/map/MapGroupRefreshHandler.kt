@@ -41,6 +41,7 @@ internal class MapGroupRefreshCallbacks(
         fitToTrackerId: String?,
         liveActiveOnlyFit: Boolean
     ) -> Unit,
+    val shouldRefitOnGeometryUpdate: () -> Boolean,
     val getLiveActiveFitEnabled: () -> Boolean,
     val getShowAllTrackers: () -> Boolean
 )
@@ -127,7 +128,7 @@ internal object MapGroupRefreshHandler {
                         coordsById,
                         currentMap,
                         currentStyle,
-                        false,
+                        callbacks.shouldRefitOnGeometryUpdate(),
                         zoomToTrackerId,
                         false
                     )

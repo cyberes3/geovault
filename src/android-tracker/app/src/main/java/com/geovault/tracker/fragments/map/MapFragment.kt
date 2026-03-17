@@ -167,6 +167,8 @@ class MapFragment : Fragment() {
     private var activeStreamedTrackerIds: Set<String> = emptySet()
     /** In-memory history cache for multi-tracker map contexts (group/all-trackers). */
     private val multiTrackCoordsCache = mutableMapOf<String, MutableList<List<Double>>>()
+    /** Single source of truth for all-trackers render/fit snapshot. */
+    private var allTrackersState: AllTrackersMapState? = null
     /** Monotonic token used to reject stale single-tracker async callbacks. */
     private var trackerRequestEpoch: Long = 0L
     /** When true, user has enabled non-tracking "show my location" mode (blue dot, camera follow). */
@@ -237,10 +239,10 @@ class MapFragment : Fragment() {
             getShowAllTrackers = { showAllTrackers },
             getMapViewContext = { mapViewContext },
             getActiveStreamedTrackerIds = { activeStreamedTrackerIds },
-            getLastAllTrackers = { lastAllTrackers },
+            getLastAllTrackers = { allTrackersState?.trackers },
             getTrackerBaseCoordsForMultiContext = { tracker, trackId ->
                 MapStreamingDataHelper.getTrackerBaseCoordsForMultiContext(
-                    tracker, trackId, multiTrackCoordsCache, lastAllTrackersCoordsById
+                    tracker, trackId, multiTrackCoordsCache, allTrackersState?.normalizedCoordsById
                 ) { t -> MapStreamingDataHelper.seedCoordsFromLastPoint(t, ::trackerLastUpdateMs) }
             },
             setMultiTrackCoordsCache = { id, coords -> multiTrackCoordsCache[id] = coords },
@@ -272,12 +274,12 @@ class MapFragment : Fragment() {
     private fun scheduleDebouncedMultiTrackRender() {
         liveStreamCoordinator.scheduleMultiTrackRender(MapConstants.MULTI_TRACK_RENDER_DEBOUNCE_MS) stream@{
             if (!isAdded || !(showAllTrackers || mapViewContext == MapViewContext.GROUP)) return@stream
-            val trackers = lastAllTrackers ?: return@stream
+            val state = allTrackersState ?: return@stream
             val map = maplibreMap ?: return@stream
             val style = map.style ?: return@stream
             val useLiveActiveFit = liveActiveFitEnabled && isLiveActiveFitAvailable()
             applyAllTrackersToMap(
-                trackers,
+                state.trackers,
                 multiTrackCoordsCache.mapValues { it.value.toList() },
                 map,
                 style,
@@ -296,8 +298,7 @@ class MapFragment : Fragment() {
     private fun clearMultiTrackContextState(clearPendingGroupIntent: Boolean = true) {
         liveStreamCoordinator.clearAll()
         multiTrackCoordsCache.clear()
-        lastAllTrackers = null
-        lastAllTrackersCoordsById = null
+        allTrackersState = null
         activeCameraIntent = CameraIntent.NONE
         if (clearPendingGroupIntent) {
             pendingGroupForMap = null
@@ -1244,6 +1245,9 @@ class MapFragment : Fragment() {
     /**
      * Single camera entrypoint for all zoom/focus/lock actions.
      * Every camera move should go through this so padding behavior stays consistent.
+     * BOUNDS_FIT updates are applied directly to the map so MapLibre uses the padding
+     * embedded in the bounds update; going through moveCameraWithPadding would overwrite
+     * that padding and can produce a wrong visible extent.
      */
     private fun applyUnifiedCameraMove(
         map: MapLibreMap,
@@ -1254,18 +1258,74 @@ class MapFragment : Fragment() {
         durationMs: Int = MapConstants.FOLLOW_LOCK_ANIMATION_MS,
         callback: MapLibreMap.CancelableCallback? = null
     ) {
+        intent?.let { activeCameraIntent = it }
+        if (intent == CameraIntent.BOUNDS_FIT) {
+            val targetPos = update.getCameraPosition(map)
+            // MapLibre Transform skips move when new position equals current (isValidCameraPosition).
+            // If they're equal the map never updates; nudge then re-apply so the move runs.
+            if (targetPos != null && targetPos.equals(map.cameraPosition)) {
+                val nudgeZoom = (targetPos.zoom - 0.01).coerceAtLeast(MapConstants.MIN_ZOOM)
+                map.moveCamera(
+                    CameraUpdateFactory.newCameraPosition(
+                        CameraPosition.Builder(targetPos).zoom(nudgeZoom).build()
+                    ),
+                    null
+                )
+                view?.post {
+                    if (!isAdded) return@post
+                    if (animate) {
+                        map.animateCamera(update, durationMs, callback)
+                    } else {
+                        map.moveCamera(update, callback)
+                    }
+                }
+                return
+            }
+            if (animate) {
+                map.animateCamera(update, durationMs, callback)
+            } else {
+                map.moveCamera(update, callback)
+            }
+            return
+        }
+        val overlayPaddingForMove = resolveOverlayPaddingForIntent(map, intent)
         MapZoomOrchestrator.applyUnifiedCameraMove(
             mapManager = mapManager,
             map = map,
             update = update,
             paddingMode = paddingMode,
             followLockPadding = MapConstants.FOLLOW_LOCK_PADDING,
-            overlayAwarePadding = getMapPaddingArray(),
+            overlayAwarePadding = overlayPaddingForMove,
             intent = intent,
             onIntent = { activeCameraIntent = it },
             animate = animate,
             durationMs = durationMs,
             callback = callback
+        )
+    }
+
+    private fun resolveOverlayPaddingForIntent(map: MapLibreMap, intent: CameraIntent?): DoubleArray {
+        if (intent != CameraIntent.BOUNDS_FIT) {
+            return getMapPaddingArray()
+        }
+        val rawInsets = getMapPaddingArray()
+        val rawPaddingPx = intArrayOf(
+            rawInsets[0].toInt(),
+            rawInsets[1].toInt(),
+            rawInsets[2].toInt(),
+            rawInsets[3].toInt()
+        )
+        val sanitizedPx = MapZoomOrchestrator.sanitizeBoundsFitPaddingPx(
+            map = map,
+            rawPaddingPx = rawPaddingPx,
+            minViewportWidthFraction = MapConstants.MIN_BOUNDS_FIT_VIEWPORT_WIDTH_FRACTION,
+            minViewportHeightFraction = MapConstants.MIN_BOUNDS_FIT_VIEWPORT_HEIGHT_FRACTION
+        )
+        return doubleArrayOf(
+            sanitizedPx[0].toDouble(),
+            sanitizedPx[1].toDouble(),
+            sanitizedPx[2].toDouble(),
+            sanitizedPx[3].toDouble()
         )
     }
 
@@ -1299,19 +1359,6 @@ class MapFragment : Fragment() {
     /** Per-edge bounds-fit padding: current map insets plus extra buffer. */
     private fun getBoundsPaddingEdgesPx(extraBoundsPaddingPx: Int): IntArray {
         return MapZoomOrchestrator.boundsPaddingEdgesFromInsets(getMapPaddingArray(), extraBoundsPaddingPx)
-    }
-
-    /**
-     * Keep bounds-fit padding from consuming almost the whole viewport.
-     * This prevents extreme zoom-out when overlay insets are very large.
-     */
-    private fun sanitizeBoundsFitPaddingPx(map: MapLibreMap, rawPaddingPx: IntArray): IntArray {
-        return MapZoomOrchestrator.sanitizeBoundsFitPaddingPx(
-            map = map,
-            rawPaddingPx = rawPaddingPx,
-            minViewportWidthFraction = MapConstants.MIN_BOUNDS_FIT_VIEWPORT_WIDTH_FRACTION,
-            minViewportHeightFraction = MapConstants.MIN_BOUNDS_FIT_VIEWPORT_HEIGHT_FRACTION
-        )
     }
 
     private fun moveCameraToFitBoundsWithMinZoomClamp(
@@ -1567,6 +1614,11 @@ class MapFragment : Fragment() {
     fun refreshMapForGroup(group: Group?, zoomToTrackerId: String? = null) {
         if (group == null) return
         bumpTrackerRequestEpoch()
+        if (gpsLocationLockActive) {
+            gpsLocationLockActive = false
+            maplibreMap?.let { LocationComponentHelper.setCameraTracking(it, enabled = false) }
+        }
+        pendingAutoZoomToStandaloneFix = false
         MapGroupRefreshHandler.refresh(
             group = group,
             zoomToTrackerId = zoomToTrackerId,
@@ -1610,6 +1662,11 @@ class MapFragment : Fragment() {
                 applyAllTrackersToMap = { t, c, m, s, fit, fitId, liveOnly ->
                     applyAllTrackersToMap(t, c, m, s, fit, fitId, liveOnly)
                 },
+                shouldRefitOnGeometryUpdate = {
+                    zoomToTrackerId.isNullOrBlank() &&
+                        showAllTrackers &&
+                        selectedMapTracker == null
+                },
                 getLiveActiveFitEnabled = { liveActiveFitEnabled },
                 getShowAllTrackers = { showAllTrackers }
             )
@@ -1619,8 +1676,15 @@ class MapFragment : Fragment() {
     private fun loadAllTrackersAndApply() {
         bumpTrackerRequestEpoch()
         liveActiveFitEnabled = false
+        if (gpsLocationLockActive) {
+            gpsLocationLockActive = false
+            maplibreMap?.let { LocationComponentHelper.setCameraTracking(it, enabled = false) }
+        }
+        pendingAutoZoomToStandaloneFix = false
         updateShowMyLocationButtonVisibility()
         clearMultiTrackContextState()
+        activeCameraIntent = CameraIntent.BOUNDS_FIT
+        preserveCenteredAllTrackersFit = false
         val map = maplibreMap
         if (map == null) {
             pendingShowAllTrackers = true
@@ -1652,17 +1716,20 @@ class MapFragment : Fragment() {
             onHasTrackers = { trackers ->
                 showAllTrackers = true
                 startLiveTrackStreamingForTrackerSet(trackers.map { it.id }.toSet())
-                applyAllTrackersToMap(trackers, emptyMap(), map, style, fitBounds = true)
+                // Fit immediately from last_point while geometry fetch runs; refine again on geometry callback.
+                val shouldInitialFit = selectedMapTracker == null
+                applyAllTrackersToMap(trackers, emptyMap(), map, style, fitBounds = shouldInitialFit)
             },
             onHasGeometry = { trackers, coordsById ->
                 lifecycleScope.launch {
                     if (!isAdded || !showAllTrackers) return@launch
+                    val shouldRefit = selectedMapTracker == null
                     applyAllTrackersToMap(
                         trackers,
                         coordsById,
                         map,
                         style,
-                        fitBounds = false
+                        fitBounds = shouldRefit
                     )
                 }
             }
@@ -1670,18 +1737,15 @@ class MapFragment : Fragment() {
         MapAllTrackersFlow.loadAllTrackersAndApply(requireContext(), callbacks)
     }
 
-    /** Cached for refreshing point icons when selection changes (all-trackers or group map). */
-    private var lastAllTrackers: List<Tracker>? = null
-    private var lastAllTrackersCoordsById: Map<String, List<List<Double>>>? = null
-
     /**
      * Rehydrate all-trackers sources after style reload when we have local tail cache.
      * Returns false when cache is too thin, so caller can fall back to network reload.
      */
     private fun restoreAllTrackersFromCacheIfAvailable(map: MapLibreMap, style: Style): Boolean {
+        val state = allTrackersState
         val result = MapAllTrackersFlow.restoreAllTrackersFromCacheIfAvailable(
-            lastAllTrackers,
-            lastAllTrackersCoordsById,
+            state?.trackers,
+            state?.normalizedCoordsById,
             multiTrackCoordsCache
         ) ?: return false
         applyAllTrackersToMap(
@@ -1703,7 +1767,6 @@ class MapFragment : Fragment() {
         fitToTrackerId: String? = null,
         liveActiveOnlyFit: Boolean = false
     ) {
-        lastAllTrackers = trackers
         val outlineColor = String.format(
             "#%06X",
             0xFFFFFF and ContextCompat.getColor(requireContext(), R.color.track_line_outline)
@@ -1727,12 +1790,17 @@ class MapFragment : Fragment() {
         )
         multiTrackCoordsCache.clear()
         multiTrackCoordsCache.putAll(renderData.normalizedCoordsById)
-        lastAllTrackersCoordsById = renderData.normalizedCoordsById.mapValues { it.value.toList() }
-
-        style.getSourceAs<GeoJsonSource>(MapConstants.ALL_TRACKS_SOURCE_ID)
-            ?.setGeoJson(FeatureCollection.fromFeatures(renderData.lineFeatures))
-        style.getSourceAs<GeoJsonSource>(MapConstants.ALL_TRACKS_POINTS_SOURCE_ID)
-            ?.setGeoJson(FeatureCollection.fromFeatures(renderData.pointFeatures))
+        allTrackersState = AllTrackersMapState(
+            trackers = trackers,
+            normalizedCoordsById = renderData.normalizedCoordsById.mapValues { it.value.toList() }
+        )
+        val sourcesUpdated = MapLayerVisibility.updateAllTrackSources(
+            style = style,
+            lineFeatures = renderData.lineFeatures,
+            pointFeatures = renderData.pointFeatures,
+            logTag = TAG
+        )
+        if (!sourcesUpdated) return
         setAllTrackLayersVisibility(true)
         setAnnotationLayersVisibility(false)
         updateTrackerLabel()
@@ -1741,10 +1809,14 @@ class MapFragment : Fragment() {
         if (fitBounds) {
             var fitTrackers = trackers
             var fitCoordsByTrackerId: Map<String, List<LatLng>> = renderData.coordsByTrackerId
+            /** One point per tracker (last position); used for best-effort selection. */
+            fun representativePoints(coordsByTrackerId: Map<String, List<LatLng>>): List<LatLng> {
+                return coordsByTrackerId.values.mapNotNull { coords -> coords.lastOrNull() }
+            }
             var boundsCoords = if (fitToTrackerId != null) {
                 renderData.coordsByTrackerId[fitToTrackerId] ?: emptyList()
             } else {
-                renderData.allCoords
+                representativePoints(fitCoordsByTrackerId)
             }
             if (liveActiveOnlyFit && fitToTrackerId == null && isLiveActiveFitAvailable()) {
                 val nowMs = System.currentTimeMillis()
@@ -1755,7 +1827,7 @@ class MapFragment : Fragment() {
                 if (activeTrackerIds.isNotEmpty()) {
                     fitTrackers = trackers.filter { it.id in activeTrackerIds }
                     fitCoordsByTrackerId = renderData.coordsByTrackerId.filterKeys { it in activeTrackerIds }
-                    boundsCoords = fitCoordsByTrackerId.values.flatten()
+                    boundsCoords = representativePoints(fitCoordsByTrackerId)
                 }
             }
             if (boundsCoords.isNotEmpty()) {
@@ -1763,9 +1835,14 @@ class MapFragment : Fragment() {
                     val boundsBuilder = LatLngBounds.Builder()
                     boundsCoords.forEach { boundsBuilder.include(it) }
                     val bounds = boundsBuilder.build()
-                    moveCameraForAllTrackersWithMinZoom(
-                        map, bounds, fitCoordsByTrackerId, fitTrackers, fitToTrackerId
-                    )
+                    // Defer fit until map view has valid size; post on MapView then short delay.
+                    val mapView = mapFragment?.mapViewOrNull ?: view
+                    mapView?.postDelayed({
+                        if (!isAdded || !showAllTrackers || map.style == null) return@postDelayed
+                        moveCameraForAllTrackersWithMinZoom(
+                            map, bounds, fitCoordsByTrackerId, fitTrackers, fitToTrackerId
+                        )
+                    }, 150L)
                 } else {
                     val singlePointPaddingMode = if (fitToTrackerId != null) {
                         CameraPaddingMode.CENTERED
@@ -1870,11 +1947,11 @@ class MapFragment : Fragment() {
             applySingleTrackerLiveFitNow()
             return
         }
-        val trackers = lastAllTrackers ?: return
+        val state = allTrackersState ?: return
         val map = maplibreMap ?: return
         val style = map.style ?: return
         applyAllTrackersToMap(
-            trackers = trackers,
+            trackers = state.trackers,
             coordsById = multiTrackCoordsCache.mapValues { it.value.toList() },
             map = map,
             style = style,
@@ -1887,7 +1964,6 @@ class MapFragment : Fragment() {
         if (!isAdded || !liveActiveFitEnabled) return
         if (showAllTrackers || mapViewContext == MapViewContext.GROUP) return
         val map = maplibreMap ?: return
-        val mgr = mapManager ?: return
         val trackerPoint = trackPoints.lastOrNull()
         val gpsPoint = if (showMyLocationEnabled) {
             lastStandaloneLocation?.takeIf { isFreshStandaloneFix(it) }?.let { LatLng(it.latitude, it.longitude) }
@@ -1902,41 +1978,53 @@ class MapFragment : Fragment() {
         trackerPoint?.let { points.add(it) }
         gpsPoint?.let { points.add(it) }
         if (points.isEmpty()) return
-        val paddingSnapshot = getMapPaddingArray()
-        val paddingSnapshotPx = intArrayOf(
-            paddingSnapshot[0].toInt(),
-            paddingSnapshot[1].toInt(),
-            paddingSnapshot[2].toInt(),
-            paddingSnapshot[3].toInt()
-        )
         if (points.size == 1) {
-            activeCameraIntent = CameraIntent.SINGLE_TRACKER_FOCUS
-            mgr.moveCameraWithPadding(
-                map,
-                CameraUpdateFactory.newLatLngZoom(points.single(), MapConstants.TRACKER_CARD_FOCUS_ZOOM),
-                paddingSnapshot
+            applyUnifiedCameraMove(
+                map = map,
+                update = CameraUpdateFactory.newLatLngZoom(points.single(), MapConstants.TRACKER_CARD_FOCUS_ZOOM),
+                paddingMode = CameraPaddingMode.CENTERED,
+                intent = CameraIntent.SINGLE_TRACKER_FOCUS
             )
             return
         }
         val boundsBuilder = LatLngBounds.Builder()
         points.forEach { boundsBuilder.include(it) }
         val bounds = boundsBuilder.build()
-        val fitPaddingPx = sanitizeBoundsFitPaddingPx(map, paddingSnapshotPx)
-        val fitPadding = doubleArrayOf(
-            fitPaddingPx[0].toDouble(),
-            fitPaddingPx[1].toDouble(),
-            fitPaddingPx[2].toDouble(),
-            fitPaddingPx[3].toDouble()
+        val rawPaddingPx = getBoundsPaddingEdgesPx(0)
+        val fitPaddingPx = MapZoomOrchestrator.sanitizeBoundsFitPaddingPx(
+            map = map,
+            rawPaddingPx = rawPaddingPx,
+            minViewportWidthFraction = MapConstants.MIN_BOUNDS_FIT_VIEWPORT_WIDTH_FRACTION,
+            minViewportHeightFraction = MapConstants.MIN_BOUNDS_FIT_VIEWPORT_HEIGHT_FRACTION
         )
-        val boundsUpdate = CameraUpdateFactory.newLatLngBounds(
-            bounds,
-            fitPaddingPx[0],
-            fitPaddingPx[1],
-            fitPaddingPx[2],
-            fitPaddingPx[3]
+        val boundsUpdate = CameraUpdateFactory.newLatLngBounds(bounds, fitPaddingPx[0], fitPaddingPx[1], fitPaddingPx[2], fitPaddingPx[3])
+        val fittedPosition = boundsUpdate.getCameraPosition(map)
+        val targetZoom = fittedPosition?.zoom?.toDouble()?.coerceAtLeast(MapConstants.MIN_ZOOM) ?: map.cameraPosition.zoom
+        val visibleW = (map.width - fitPaddingPx[0] - fitPaddingPx[2]).coerceAtLeast(1f).toDouble()
+        val visibleH = (map.height - fitPaddingPx[1] - fitPaddingPx[3]).coerceAtLeast(1f).toDouble()
+        val best = MapBoundsFitController.selectBestEffortAtZoom(
+            representativeTrackerPoints = points.mapIndexed { idx, latLng -> "live-$idx" to latLng },
+            boundsCenter = bounds.center,
+            zoom = targetZoom,
+            visibleWidthPx = visibleW,
+            visibleHeightPx = visibleH
         )
-        activeCameraIntent = CameraIntent.SINGLE_TRACKER_FOCUS
-        mgr.moveCameraWithPadding(map, boundsUpdate, fitPadding)
+        val moveUpdate = if (best != null) {
+            val worldSize = MapCameraMath.worldSizeAtZoom(targetZoom)
+            val targetCenter = LatLng(
+                MapCameraMath.worldYToLatDeg(best.centerY, worldSize),
+                MapCameraMath.worldXToLonDeg(best.centerX, worldSize)
+            )
+            CameraUpdateFactory.newLatLngZoom(targetCenter, targetZoom)
+        } else {
+            boundsUpdate
+        }
+        applyUnifiedCameraMove(
+            map = map,
+            update = moveUpdate,
+            paddingMode = CameraPaddingMode.OVERLAY_AWARE,
+            intent = CameraIntent.BOUNDS_FIT
+        )
     }
 
     private fun resolveTrackerLastUpdateMsForGroupFit(
@@ -2067,8 +2155,9 @@ class MapFragment : Fragment() {
     /** Rebuilds all-track point features with correct icon (white circle for selected) and updates the source. */
     private fun refreshAllTrackPointIcons() {
         val style = maplibreMap?.style ?: return
-        val trackers = lastAllTrackers ?: return
-        val coordsById = lastAllTrackersCoordsById ?: return
+        val state = allTrackersState ?: return
+        val trackers = state.trackers
+        val coordsById = state.normalizedCoordsById
         val source = style.getSourceAs<GeoJsonSource>(MapConstants.ALL_TRACKS_POINTS_SOURCE_ID) ?: return
         val defaultColor = defaultTrackerColorHex(requireContext()).let { if (it.startsWith("#")) it else "#$it" }
         val pointFeatures = mutableListOf<Feature>()

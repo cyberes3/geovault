@@ -11,6 +11,14 @@ import kotlin.math.sinh
 import kotlin.math.tan
 
 internal object MapCameraMath {
+    fun worldSizeAtZoom(zoom: Double): Double = 256.0 * 2.0.pow(zoom)
+
+    fun normalizeWrapped(value: Double, worldSize: Double): Double {
+        var normalized = value % worldSize
+        if (normalized < 0.0) normalized += worldSize
+        return normalized
+    }
+
     fun sanitizeBoundsFitPaddingPx(
         mapWidthPxRaw: Int,
         mapHeightPxRaw: Int,
@@ -48,14 +56,14 @@ internal object MapCameraMath {
     }
 
     fun worldXAtZoom(lonDeg: Double, zoom: Double): Double {
-        val worldSize = 256.0 * 2.0.pow(zoom)
+        val worldSize = worldSizeAtZoom(zoom)
         var norm = ((lonDeg + 180.0) / 360.0) % 1.0
         if (norm < 0.0) norm += 1.0
         return norm * worldSize
     }
 
     fun worldYAtZoom(latDeg: Double, zoom: Double): Double {
-        val worldSize = 256.0 * 2.0.pow(zoom)
+        val worldSize = worldSizeAtZoom(zoom)
         val lat = latDeg.coerceIn(-85.05112878, 85.05112878)
         val latRad = lat * kotlin.math.PI / 180.0
         val mercN = ln(tan(kotlin.math.PI / 4.0 + latRad / 2.0))

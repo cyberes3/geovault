@@ -1,7 +1,6 @@
 package com.geovault.tracker.fragments.map
 
 import kotlin.math.abs
-import kotlin.math.min
 
 internal data class ProjectedTrackerPoint(
     val trackerId: String,
@@ -24,6 +23,8 @@ internal data class BestEffortViewportSelection(
 )
 
 internal object BestEffortViewportSelector {
+    private const val INCLUSION_EPSILON_PX = 1e-6
+
     fun select(
         points: List<ProjectedTrackerPoint>,
         worldSize: Double,
@@ -47,7 +48,7 @@ internal object BestEffortViewportSelector {
         candidateXs.add(preferredCenterX)
         candidateYs.add(preferredCenterY)
 
-        val sortedXs = candidateXs.map { normalizeWrapped(it, worldSize) }.distinct().sorted()
+        val sortedXs = candidateXs.map { MapCameraMath.normalizeWrapped(it, worldSize) }.distinct().sorted()
         val sortedYs = candidateYs.map { clampViewportCenterY(it, halfHeightPx, worldSize) }.distinct().sorted()
 
         var best: BestEffortViewportSelection? = null
@@ -58,8 +59,8 @@ internal object BestEffortViewportSelector {
             for (rawCy in sortedYs) {
                 val cy = clampViewportCenterY(rawCy, halfHeightPx, worldSize)
                 val included = points.filter { point ->
-                    wrappedPixelDelta(point.worldX, cx, worldSize) <= halfWidthPx &&
-                        abs(point.worldY - cy) <= halfHeightPx
+                    MapCameraMath.wrappedPixelDelta(point.worldX, cx, worldSize) <= halfWidthPx + INCLUSION_EPSILON_PX &&
+                        abs(point.worldY - cy) <= halfHeightPx + INCLUSION_EPSILON_PX
                 }
                 val coverage = included.size
                 val extentArea = computeExtentArea(included, cx, worldSize)
@@ -71,7 +72,7 @@ internal object BestEffortViewportSelector {
                     halfWidthPx = halfWidthPx,
                     halfHeightPx = halfHeightPx
                 )
-                val distanceToPreferred = wrappedPixelDelta(cx, preferredCenterX, worldSize) +
+                val distanceToPreferred = MapCameraMath.wrappedPixelDelta(cx, preferredCenterX, worldSize) +
                     abs(cy - preferredCenterY)
                 val candidate = BestEffortViewportSelection(
                     centerX = cx,
@@ -84,7 +85,6 @@ internal object BestEffortViewportSelector {
                     distanceToPreferredCenter = distanceToPreferred,
                     tieBreakReason = "coverage"
                 )
-
                 if (candidateBeats(
                         candidate = candidate,
                         candidateCoverage = coverage,
@@ -113,7 +113,8 @@ internal object BestEffortViewportSelector {
             halfWidthPx = halfWidthPx,
             halfHeightPx = halfHeightPx,
             preferredCenterX = preferredCenterX,
-            preferredCenterY = preferredCenterY
+            preferredCenterY = preferredCenterY,
+            requiredCoverage = bestCoverage
         )
         val recenteredApplied = recentered.centerX != bestSelection.centerX || recentered.centerY != bestSelection.centerY
         val finalTieBreakReason = if (recenteredApplied) {
@@ -131,7 +132,8 @@ internal object BestEffortViewportSelector {
         halfWidthPx: Double,
         halfHeightPx: Double,
         preferredCenterX: Double,
-        preferredCenterY: Double
+        preferredCenterY: Double,
+        requiredCoverage: Int
     ): BestEffortViewportSelection {
         if (current.includedPoints.size <= 1) return current
 
@@ -178,7 +180,7 @@ internal object BestEffortViewportSelector {
             balancedX to feasibleMaxY
         )
         val currentIds = current.includedTrackerIds.toSet()
-        val exactCandidates = candidateCenters.map { (cx, cy) ->
+        val coverageCandidates = candidateCenters.map { (cx, cy) ->
             buildSelectionForCenter(
                 allPoints = allPoints,
                 centerX = cx,
@@ -189,16 +191,13 @@ internal object BestEffortViewportSelector {
                 preferredCenterX = preferredCenterX,
                 preferredCenterY = preferredCenterY
             )
-        }.filter { it.includedTrackerIds.toSet() == currentIds }
+        }.filter { candidate ->
+            candidate.includedPoints.size >= requiredCoverage &&
+                candidate.includedTrackerIds.toSet() == currentIds
+        }
 
-        if (exactCandidates.isEmpty()) return current
-        return exactCandidates.minWithOrNull(
-            compareBy<BestEffortViewportSelection> { it.centeringImbalance }
-                .thenByDescending { it.minEdgeSlack }
-                .thenBy { it.distanceToPreferredCenter }
-                .thenBy { it.centerX }
-                .thenBy { it.centerY }
-        ) ?: current
+        if (coverageCandidates.isEmpty()) return current
+        return coverageCandidates.minWithOrNull(bestSelectionComparator()) ?: current
     }
 
     private fun signedWrappedDelta(a: Double, b: Double, worldSize: Double): Double {
@@ -231,6 +230,15 @@ internal object BestEffortViewportSelector {
         return imbalance to minSlack
     }
 
+    private fun bestSelectionComparator(): Comparator<BestEffortViewportSelection> {
+        return compareBy<BestEffortViewportSelection> { it.centeringImbalance }
+            .thenByDescending { it.minEdgeSlack }
+            .thenBy { it.distanceToPreferredCenter }
+            .thenBy { it.extentArea }
+            .thenBy { it.centerX }
+            .thenBy { it.centerY }
+    }
+
     private fun candidateBeats(
         candidate: BestEffortViewportSelection,
         candidateCoverage: Int,
@@ -246,6 +254,7 @@ internal object BestEffortViewportSelector {
         if (candidate.distanceToPreferredCenter != best.distanceToPreferredCenter) {
             return candidate.distanceToPreferredCenter < best.distanceToPreferredCenter
         }
+        if (candidate.extentArea != best.extentArea) return candidate.extentArea < best.extentArea
         if (candidate.centerX != best.centerX) return candidate.centerX < best.centerX
         if (candidate.centerY != best.centerY) return candidate.centerY < best.centerY
         return false
@@ -258,24 +267,13 @@ internal object BestEffortViewportSelector {
         return centerY.coerceIn(minCenterY, maxCenterY)
     }
 
-    private fun normalizeWrapped(value: Double, worldSize: Double): Double {
-        var normalized = value % worldSize
-        if (normalized < 0.0) normalized += worldSize
-        return normalized
-    }
-
-    private fun wrappedPixelDelta(a: Double, b: Double, worldSize: Double): Double {
-        val direct = abs(a - b)
-        return min(direct, worldSize - direct)
-    }
-
     private fun computeExtentArea(
         included: List<ProjectedTrackerPoint>,
         centerX: Double,
         worldSize: Double
     ): Double {
         if (included.isEmpty()) return Double.POSITIVE_INFINITY
-        val xRadius = included.maxOf { wrappedPixelDelta(it.worldX, centerX, worldSize) }
+        val xRadius = included.maxOf { MapCameraMath.wrappedPixelDelta(it.worldX, centerX, worldSize) }
         val minY = included.minOf { it.worldY }
         val maxY = included.maxOf { it.worldY }
         val width = xRadius * 2.0
@@ -293,11 +291,11 @@ internal object BestEffortViewportSelector {
         preferredCenterX: Double,
         preferredCenterY: Double
     ): BestEffortViewportSelection {
-        val normalizedX = normalizeWrapped(centerX, worldSize)
+        val normalizedX = MapCameraMath.normalizeWrapped(centerX, worldSize)
         val clampedY = clampViewportCenterY(centerY, halfHeightPx, worldSize)
         val included = allPoints.filter { point ->
-            wrappedPixelDelta(point.worldX, normalizedX, worldSize) <= halfWidthPx &&
-                abs(point.worldY - clampedY) <= halfHeightPx
+            MapCameraMath.wrappedPixelDelta(point.worldX, normalizedX, worldSize) <= halfWidthPx + INCLUSION_EPSILON_PX &&
+                abs(point.worldY - clampedY) <= halfHeightPx + INCLUSION_EPSILON_PX
         }
         val extentArea = computeExtentArea(included, normalizedX, worldSize)
         val centering = computeCenteringMetrics(
@@ -308,7 +306,7 @@ internal object BestEffortViewportSelector {
             halfWidthPx = halfWidthPx,
             halfHeightPx = halfHeightPx
         )
-        val distanceToPreferred = wrappedPixelDelta(normalizedX, preferredCenterX, worldSize) +
+        val distanceToPreferred = MapCameraMath.wrappedPixelDelta(normalizedX, preferredCenterX, worldSize) +
             abs(clampedY - preferredCenterY)
         return BestEffortViewportSelection(
             centerX = normalizedX,
