@@ -42,9 +42,6 @@
     <string name="start_tracking">Start Tracking</string>
     <string name="stop_tracking">Stop Tracking</string>
     <string name="stop_tracking_confirm_title">Stop Tracking?</string>
-    <string name="debug_simulate_stream">Simulate Stream</string>
-    <string name="debug_stop_simulation">Stop Simulation</string>
-    <string name="debug_select_tracker_first">Select a tracker first (Trackers tab)</string>
     <string name="tracking_duration">Tracking for %1$s</string>
     <string name="last_point_sent">Last point sent %1$s</string>
     <string name="points_sent_session">%1$d points sent this session</string>

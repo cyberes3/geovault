@@ -12,20 +12,14 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import android.widget.Toast
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import androidx.fragment.app.Fragment
-import com.geovault.tracker.BuildConfig
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
-import com.geovault.tracker.LiveTrackStreamingService
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.TrackingService
 import com.google.android.material.button.MaterialButton
-import kotlinx.coroutines.*
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 
 class HomeFragment : Fragment() {
 
@@ -42,16 +36,13 @@ class HomeFragment : Fragment() {
     private lateinit var accuracyText: TextView
 
     private lateinit var debugTrackModeText: TextView
-    private lateinit var debugSimulateStreamButton: MaterialButton
     private lateinit var trackingContentContainer: View
     private lateinit var permissionsContainer: View
     private lateinit var radarDishIcon: android.widget.ImageView
     private lateinit var serverFailureOverlay: View
     private var isAccuracyRed = false
 
-    private val homeScope = CoroutineScope(Dispatchers.Main + Job())
     private val sessionStatsHandler = Handler(Looper.getMainLooper())
-    private var debugSimulationJob: Job? = null
     private val sessionStatsTickerIntervalMs = 1000L
 
     private val sessionStatsTicker = object : Runnable {
@@ -63,13 +54,11 @@ class HomeFragment : Fragment() {
         }
     }
 
-    private val trackPointReceiver = object : BroadcastReceiver() {
+    private val locationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action != LiveTrackStreamingService.BROADCAST_TRACK_POINT) return
-            val lat = intent.getDoubleExtra(LiveTrackStreamingService.EXTRA_POINT_LAT, Double.NaN)
-            val lon = intent.getDoubleExtra(LiveTrackStreamingService.EXTRA_POINT_LON, Double.NaN)
-            if (!lat.isNaN() && !lon.isNaN()) {
-                currentLocationText.text = "Last point: ${String.format("%.6f", lat)}, ${String.format("%.6f", lon)}"
+            val location = IntentCompat.getParcelableExtra(intent, "location", android.location.Location::class.java)
+            if (location != null) {
+                currentLocationText.text = "Last point: ${String.format("%.6f", location.latitude)}, ${String.format("%.6f", location.longitude)}"
             }
             updateQueueCount()
             updateSessionStats()
@@ -103,7 +92,6 @@ class HomeFragment : Fragment() {
         trackingStatusText = view.findViewById(R.id.trackingStatusText)
         trackingTrackNameText = view.findViewById(R.id.trackingTrackNameText)
         debugTrackModeText = view.findViewById(R.id.debugTrackModeText)
-        debugSimulateStreamButton = view.findViewById(R.id.debugSimulateStreamButton)
         queueCountText = view.findViewById(R.id.queueCountText)
         sessionStatsContainer = view.findViewById(R.id.sessionStatsContainer)
         trackingDurationText = view.findViewById(R.id.trackingDurationText)
@@ -116,13 +104,6 @@ class HomeFragment : Fragment() {
 
         startStopButton.setOnClickListener {
             (requireActivity() as MainActivity).toggleTracking()
-        }
-
-        if (BuildConfig.DEBUG) {
-            debugSimulateStreamButton.visibility = View.VISIBLE
-            debugSimulateStreamButton.setOnClickListener { toggleDebugSimulation() }
-        } else {
-            debugSimulateStreamButton.visibility = View.GONE
         }
 
         setupPermissionButtons(view)
@@ -204,8 +185,8 @@ class HomeFragment : Fragment() {
         val context = requireContext()
         ContextCompat.registerReceiver(
             context,
-            trackPointReceiver,
-            IntentFilter(LiveTrackStreamingService.BROADCAST_TRACK_POINT),
+            locationReceiver,
+            IntentFilter("com.geovault.tracker.LOCATION_UPDATE"),
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
         ContextCompat.registerReceiver(
@@ -232,7 +213,7 @@ class HomeFragment : Fragment() {
         sessionStatsHandler.removeCallbacks(sessionStatsTicker)
 
         try {
-            requireContext().unregisterReceiver(trackPointReceiver)
+            requireContext().unregisterReceiver(locationReceiver)
             requireContext().unregisterReceiver(sessionStatsReceiver)
         } catch (e: IllegalArgumentException) {
             // Already unregistered
@@ -241,56 +222,6 @@ class HomeFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
-        stopDebugSimulation()
-        homeScope.cancel()
-    }
-
-    /**
-     * Debug-only: simulate live stream by broadcasting mock GPS points so the map
-     * receives them via the same [LiveTrackStreamingService.BROADCAST_TRACK_POINT] path.
-     */
-    private fun toggleDebugSimulation() {
-        if (debugSimulationJob?.isActive == true) {
-            stopDebugSimulation()
-            debugSimulateStreamButton.text = getString(R.string.debug_simulate_stream)
-            return
-        }
-        val trackId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
-        if (trackId.isEmpty()) {
-            Toast.makeText(requireContext(), getString(R.string.debug_select_tracker_first), Toast.LENGTH_LONG).show()
-            return
-        }
-        debugSimulateStreamButton.text = getString(R.string.debug_stop_simulation)
-        val intervalMs = 2000L
-        val baseLat = 37.7749
-        val baseLon = -122.4194
-        val radiusDeg = 0.0003
-        var pointIndex = 0
-        debugSimulationJob = homeScope.launch(Dispatchers.Default) {
-            while (isActive) {
-                val angle = 2.0 * PI * pointIndex / 24.0
-                val lat = baseLat + radiusDeg * sin(angle)
-                val lon = baseLon + radiusDeg * cos(angle)
-                pointIndex++
-                val intent = Intent(LiveTrackStreamingService.BROADCAST_TRACK_POINT).apply {
-                    setPackage(requireContext().packageName)
-                    putExtra(LiveTrackStreamingService.EXTRA_TRACK_ID, trackId)
-                    putExtra(LiveTrackStreamingService.EXTRA_POINT_LAT, lat)
-                    putExtra(LiveTrackStreamingService.EXTRA_POINT_LON, lon)
-                    putExtra(LiveTrackStreamingService.EXTRA_POINT_TS_MS, System.currentTimeMillis())
-                    putExtra(LiveTrackStreamingService.EXTRA_ACCURACY_METERS, 10f)
-                }
-                withContext(Dispatchers.Main) {
-                    if (isAdded) requireContext().sendBroadcast(intent)
-                }
-                delay(intervalMs)
-            }
-        }
-    }
-
-    private fun stopDebugSimulation() {
-        debugSimulationJob?.cancel()
-        debugSimulationJob = null
     }
 
     /** Show "Preparing" and "Stop Tracking" button while pre-tracking validation/setup is in progress. */
