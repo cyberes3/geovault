@@ -1,10 +1,8 @@
 package com.geovault.tracker.fragments.map
 
 import android.content.Context
-import com.geovault.common.map.LocationComponentHelper
 import com.geovault.tracker.defaultTrackerColorHex
 import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
@@ -47,11 +45,9 @@ internal object MapTrackLineUpdater {
 
     fun applyPositionSymbolUpdate(
         context: Context,
-        map: MapLibreMap,
         style: Style,
         trackPoints: List<LatLng>,
         currentTrackerColor: String?,
-        showMyLocationEnabled: Boolean,
         lastStreamedAccuracyMeters: Float?,
         trackingServiceAccuracyMeters: Float?,
         trackPositionSourceId: String,
@@ -87,10 +83,6 @@ internal object MapTrackLineUpdater {
         // while still falling back to tracking-service accuracy when needed.
         val accuracyMeters = lastStreamedAccuracyMeters ?: trackingServiceAccuracyMeters
         val accuracyValue = (accuracyMeters?.takeIf { it > 0f } ?: 0f).toDouble()
-
-        if (!showMyLocationEnabled) {
-            LocationComponentHelper.setEnabled(map, false)
-        }
 
         val point = Point.fromLngLat(toLatLng.longitude, toLatLng.latitude)
         val feature = Feature.fromGeometry(point)

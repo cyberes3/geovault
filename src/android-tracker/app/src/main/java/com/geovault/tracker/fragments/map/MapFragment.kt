@@ -404,6 +404,7 @@ class MapFragment : Fragment() {
                     styleReloadListener = MapView.OnDidFinishLoadingStyleListener {
                         if (!isAdded) return@OnDidFinishLoadingStyleListener
                         reapplyLocationMarkerStyleForCurrentMode()
+                        updateShowMyLocationButtonVisibility()
                     }
                     mapFragment?.mapViewOrNull?.addOnDidFinishLoadingStyleListener(styleReloadListener!!)
                 }
@@ -412,7 +413,8 @@ class MapFragment : Fragment() {
                 mapLoadingSpinner.stop()
                 refreshMapPaddingForCurrentMode(force = true)
                 updateTrackLine()
-                if (showMyLocationEnabled && pendingAutoZoomToStandaloneFix) {
+                updateShowMyLocationButtonVisibility()
+                if (resolveMyLocationPolicy().myLocationModeActive && pendingAutoZoomToStandaloneFix) {
                     val loc = lastStandaloneLocation
                     if (loc != null) consumePendingStandaloneAutoZoom(loc, animate = true)
                 }
@@ -753,8 +755,7 @@ class MapFragment : Fragment() {
 
     private fun updateZoomToLatestButtonState() {
         val hasTrack = !showAllTrackers &&
-            trackPoints.isNotEmpty() &&
-            !isSelectedDefaultTrackerMode()
+            trackPoints.isNotEmpty()
         zoomToLatestButton.visibility = if (hasTrack) View.VISIBLE else View.GONE
         if (zoomToLatestButton.visibility == View.VISIBLE) {
             zoomToLatestButton.alpha = 1f
@@ -780,27 +781,20 @@ class MapFragment : Fragment() {
     }
 
     private fun updateShowMyLocationButtonVisibility() {
-        val isSelectedDefaultTracker = isSelectedDefaultTrackerMode()
-        val trackerOrLiveLockActive = isFollowLockActive() || liveActiveFitEnabled
-        val effectiveGpsLockActive = gpsLocationLockActive && !trackerOrLiveLockActive
+        val policy = resolveMyLocationPolicy()
         maplibreMap?.let { map ->
-            val shouldTrackGpsCamera = !trackingRuntimeSnapshot().isRunning &&
-                showMyLocationEnabled &&
-                effectiveGpsLockActive &&
-                !isSelectedDefaultTracker
-            if (shouldTrackGpsCamera) {
-                LocationComponentHelper.setEnabled(map, true)
-            }
-            LocationComponentHelper.setCameraTracking(map, enabled = shouldTrackGpsCamera)
+            // Invariant: if the button is hidden for selected/default mode, GPS puck must also be disabled.
+            LocationComponentHelper.setEnabled(map, policy.shouldEnablePuck)
+            LocationComponentHelper.setCameraTracking(map, enabled = policy.shouldTrackGpsCamera)
         }
         val state = MapStandaloneLocationController.myLocationButtonState(
             trackingRunning = trackingRuntimeSnapshot().isRunning,
-            showMyLocationEnabled = showMyLocationEnabled,
+            showMyLocationEnabled = policy.myLocationModeActive,
             waitingForFix = waitingForStandaloneFix,
-            gpsLockActive = effectiveGpsLockActive,
+            gpsLockActive = policy.effectiveGpsLockActive,
             context = requireContext()
         )
-        showMyLocationButton.visibility = if (isSelectedDefaultTracker) View.GONE else state.visibility
+        showMyLocationButton.visibility = if (policy.shouldShowButton) state.visibility else View.GONE
         if (showMyLocationButton.visibility == View.VISIBLE) {
             if (state.showLoading) showMyLocationButtonLoading.show() else showMyLocationButtonLoading.hide()
             showMyLocationButtonIcon.visibility = if (state.showLoading) View.GONE else View.VISIBLE
@@ -812,6 +806,18 @@ class MapFragment : Fragment() {
         }
         updateLiveActiveFitButtonUi()
         updateRightStackMargins()
+    }
+
+    private fun resolveMyLocationPolicy(): MyLocationPolicyDecision {
+        return MapMyLocationPolicy.compute(
+            MyLocationPolicyInput(
+                trackingRunning = trackingRuntimeSnapshot().isRunning,
+                showMyLocationEnabledIntent = showMyLocationEnabled,
+                isSelectedDefaultTracker = isSelectedDefaultTrackerMode(),
+                gpsLockRequested = gpsLocationLockActive,
+                trackerOrLiveLockActive = isFollowLockActive() || liveActiveFitEnabled
+            )
+        )
     }
 
     private fun zoomToStandaloneLocation(
@@ -959,7 +965,7 @@ class MapFragment : Fragment() {
     }
 
     private fun reapplyLocationMarkerStyleForCurrentMode() {
-        if (showMyLocationEnabled) {
+        if (resolveMyLocationPolicy().myLocationModeActive) {
             applyStandaloneLocationStyle()
         } else {
             restoreTrackerLocationStyle()
@@ -992,12 +998,13 @@ class MapFragment : Fragment() {
         }
         val client = fusedLocationClient ?: return
         if (standaloneLocationCallback != null) return
-        val intervalMs = if (showMyLocationEnabled) 3000L else 10_000L
+        val myLocationModeActive = resolveMyLocationPolicy().myLocationModeActive
+        val intervalMs = if (myLocationModeActive) 3000L else 10_000L
         val request = LocationRequest.Builder(
-            if (showMyLocationEnabled) Priority.PRIORITY_HIGH_ACCURACY else Priority.PRIORITY_LOW_POWER,
+            if (myLocationModeActive) Priority.PRIORITY_HIGH_ACCURACY else Priority.PRIORITY_LOW_POWER,
             intervalMs
         ).apply {
-            if (showMyLocationEnabled) {
+            if (myLocationModeActive) {
                 setMinUpdateIntervalMillis(2000L)
                 setMinUpdateDistanceMeters(5f)
             }
@@ -1008,10 +1015,9 @@ class MapFragment : Fragment() {
                 if (!isAdded) return
                 hasLiveGpsFix = true
                 lastStandaloneLocation = location
-                if (showMyLocationEnabled) {
+                if (resolveMyLocationPolicy().shouldEnablePuck) {
                     waitingForStandaloneFix = false
                     maplibreMap?.let { map ->
-                        LocationComponentHelper.setEnabled(map, true)
                         LocationComponentHelper.forceLocation(map, location)
                     }
                     consumePendingStandaloneAutoZoom(location, animate = true)
@@ -1026,11 +1032,10 @@ class MapFragment : Fragment() {
         client.lastLocation.addOnSuccessListener { location ->
             if (location != null && isAdded) {
                 lastStandaloneLocation = location
-                if (showMyLocationEnabled) {
+                if (resolveMyLocationPolicy().shouldEnablePuck) {
                     if (isFreshStandaloneFix(location)) {
                         waitingForStandaloneFix = false
                         maplibreMap?.let { map ->
-                            LocationComponentHelper.setEnabled(map, true)
                             LocationComponentHelper.forceLocation(map, location)
                         }
                         consumePendingStandaloneAutoZoom(location, animate = true)
@@ -1056,13 +1061,6 @@ class MapFragment : Fragment() {
             waitingForStandaloneFix = false
             pendingAutoZoomToStandaloneFix = false
             suppressStandaloneAutoZoom = false
-        }
-        val map = maplibreMap
-        if (map != null) {
-            LocationComponentHelper.setCameraTracking(map, enabled = false)
-            if (!showMyLocationEnabled) {
-                LocationComponentHelper.setEnabled(map, false)
-            }
         }
         updateShowMyLocationButtonVisibility()
     }
@@ -2152,7 +2150,7 @@ class MapFragment : Fragment() {
         mapTrackerInfoLastUpdated.text = state.lastUpdatedText
         mapTrackerInfoViewParams.contentDescription = state.viewParamsContentDescription
         mapTrackerInfoViewInList.contentDescription = state.viewInListContentDescription
-        mapTrackerInfoZoomLock.visibility = if (isSelectedDefaultTrackerMode()) View.GONE else View.VISIBLE
+        mapTrackerInfoZoomLock.visibility = View.VISIBLE
         mapTrackerInfoFocus.visibility = if (showAllTrackers || mapViewContext == MapViewContext.GROUP) {
             View.VISIBLE
         } else {
@@ -2433,11 +2431,9 @@ class MapFragment : Fragment() {
         val style = map.style ?: return
         MapTrackLineUpdater.applyPositionSymbolUpdate(
             context = requireContext(),
-            map = map,
             style = style,
             trackPoints = trackPoints,
             currentTrackerColor = currentTrackerColor,
-            showMyLocationEnabled = showMyLocationEnabled,
             lastStreamedAccuracyMeters = lastStreamedAccuracyMeters,
             trackingServiceAccuracyMeters = trackingRuntimeSnapshot().lastAccuracyMeters,
             trackPositionSourceId = MapConstants.TRACK_POSITION_SOURCE_ID,
