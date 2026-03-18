@@ -63,6 +63,10 @@ android {
     namespace = 'com.geovault.tracker'
     compileSdk = 36
 
+    hilt {
+        enableAggregatingTask = true
+    }
+
     defaultConfig {
         applicationId = "com.geovault.tracker"
         minSdk = 34
