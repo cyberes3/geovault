@@ -13,6 +13,7 @@ com.geovault.uploader://), we return an HTML handoff page instead of a 302 so th
 and in-app browsers can open the redirect URL (e.g. in a new tab) and hand off to the app.
 """
 from django.forms.models import modelform_factory
+from django.http import HttpResponseRedirect
 from django.http import JsonResponse
 from django.shortcuts import render
 from oauth2_provider import views as dot_views
@@ -20,6 +21,7 @@ from oauth2_provider.exceptions import OAuthToolkitError
 from oauth2_provider.models import get_application_model
 
 from website.settings_utils import get_setting
+from users.views.oauth_authorized import _revoke_access_token_grant
 
 
 class SessionOnlyMixin:
@@ -161,3 +163,9 @@ class AuthorizedTokensListView(SessionOnlyMixin, dot_views.AuthorizedTokensListV
 
 class AuthorizedTokenDeleteView(SessionOnlyMixin, dot_views.AuthorizedTokenDeleteView):
     """Revoke an authorized OAuth token. Session-only (API keys and OAuth tokens cannot access)."""
+
+    def post(self, request, *args, **kwargs):
+        token = self.get_object()
+        self.object = token
+        _revoke_access_token_grant(token)
+        return HttpResponseRedirect(self.get_success_url())

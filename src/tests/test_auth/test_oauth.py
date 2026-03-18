@@ -9,7 +9,7 @@ import hashlib
 import base64
 import json
 from datetime import timedelta
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
@@ -894,6 +894,65 @@ class TestOAuthAuthorizedTokenRevoke(TestCase):
         response = self.client.post(f"/api/oauth/authorized_tokens/{token.pk}/delete/")
         self.assertEqual(response.status_code, 404)
         self.assertTrue(AccessToken.objects.filter(pk=token.pk).exists())
+
+    def test_revoke_invalidates_refresh_token_grant(self):
+        """Revoking from authorized tokens should invalidate refresh_token reuse."""
+        self.client.force_login(self.user)
+        redirect_uri = "https://app.example/cb"
+        code_verifier = "r" * 43
+        code_challenge = _pkce_code_challenge(code_verifier)
+        state = "revoke_refresh_state"
+        authorize_url = (
+            "/api/oauth/authorize/"
+            f"?response_type=code&client_id={self.app.client_id}"
+            f"&redirect_uri={quote(redirect_uri, safe='')}"
+            "&scope=api"
+            f"&state={state}"
+            f"&code_challenge={quote(code_challenge, safe='')}"
+            "&code_challenge_method=S256"
+        )
+        auth_response = self.client.get(authorize_url)
+        self.assertEqual(auth_response.status_code, 302, auth_response.content)
+        parsed = urlparse(auth_response.get("Location", ""))
+        params = parse_qs(parsed.query)
+        self.assertIn("code", params)
+        code = params["code"][0]
+
+        self.client.logout()
+        token_response = self.client.post(
+            "/api/oauth/token/",
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "client_id": self.app.client_id,
+                "code_verifier": code_verifier,
+            },
+        )
+        self.assertEqual(token_response.status_code, 200, token_response.content)
+        token_data = json.loads(token_response.content)
+        access_token_value = token_data["access_token"]
+        refresh_token_value = token_data.get("refresh_token")
+        self.assertTrue(refresh_token_value, "Token response must include refresh_token")
+
+        token_obj = AccessToken.objects.get(token=access_token_value)
+
+        self.client.force_login(self.user)
+        revoke_response = self.client.post(f"/api/oauth/authorized_tokens/{token_obj.pk}/delete/")
+        self.assertEqual(revoke_response.status_code, 302)
+        self.assertEqual(revoke_response["Location"], "/api/oauth/authorized_tokens/")
+        self.assertFalse(AccessToken.objects.filter(pk=token_obj.pk).exists())
+
+        self.client.logout()
+        refresh_response = self.client.post(
+            "/api/oauth/token/",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token_value,
+                "client_id": self.app.client_id,
+            },
+        )
+        self.assertNotEqual(refresh_response.status_code, 200, refresh_response.content)
 
 
 class TestOAuthApplicationRegistration(TestCase):

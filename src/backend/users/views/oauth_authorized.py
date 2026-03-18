@@ -13,6 +13,48 @@ from geo_lib.website.auth import api_or_login_required_401
 _logger = get_tagged_logger(__name__)
 
 
+def _revoke_access_token_grant(token):
+    """
+    Revoke access token and linked refresh token/grant state.
+
+    django-oauth-toolkit provides revoke() on token models; prefer that when available.
+    """
+    from oauth2_provider.models import get_access_token_model, get_refresh_token_model
+
+    AccessToken = get_access_token_model()
+    RefreshToken = get_refresh_token_model()
+
+    source_refresh = getattr(token, "source_refresh_token", None)
+    if source_refresh is None:
+        source_refresh = getattr(token, "refresh_token", None)
+
+    if source_refresh is not None:
+        refresh_qs = RefreshToken.objects.filter(
+            user=token.user,
+            application=token.application,
+        )
+        if getattr(source_refresh, "token_family", None):
+            refresh_qs = refresh_qs.filter(token_family=source_refresh.token_family)
+        else:
+            refresh_qs = refresh_qs.filter(pk=source_refresh.pk)
+
+        refresh_ids = list(refresh_qs.values_list("id", flat=True))
+        if refresh_ids:
+            AccessToken.objects.filter(source_refresh_token_id__in=refresh_ids).delete()
+            for refresh in refresh_qs:
+                refresh_revoke = getattr(refresh, "revoke", None)
+                if callable(refresh_revoke):
+                    refresh_revoke()
+                else:
+                    refresh.delete()
+
+    revoke_method = getattr(token, "revoke", None)
+    if callable(revoke_method):
+        revoke_method()
+    else:
+        token.delete()
+
+
 @api_or_login_required_401(allow_api_keys=False)
 @require_http_methods(["GET"])
 def list_authorized_oauth_tokens(request):
@@ -68,5 +110,5 @@ def revoke_oauth_token(request, token_id):
     except AccessToken.DoesNotExist:
         return JsonResponse({"error": "Token not found"}, status=404)
 
-    token.delete()
+    _revoke_access_token_grant(token)
     return JsonResponse({"message": "Authorization revoked"})
