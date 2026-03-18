@@ -5,8 +5,8 @@
 
 import { getArrowImageId } from './trackArrowMap.js';
 
-/** Do not draw track across jumps larger than this (meters). 100 miles. Same as Android tracker. */
-export const MAX_JUMP_METERS = 100 * 1609.344;
+/** Do not draw track across jumps larger than this (meters). 30 miles. Same as Android tracker. */
+export const MAX_JUMP_METERS = 30 * 1609.344;
 
 export function distanceMeters(lon1, lat1, lon2, lat2) {
   const R = 6371000;
