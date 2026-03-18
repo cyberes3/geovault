@@ -16,20 +16,11 @@ def getGitCommitHash() {
             def error = new ByteArrayOutputStream()
             process.consumeProcessOutput(output, error)
             
-            def completed = false
-            Thread.start {
-                process.waitFor()
-                completed = true
-            }
-            
-            for (int i = 0; i < 10 && !completed; i++) {
-                Thread.sleep(100)
-            }
-            
+            def completed = process.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)
             if (completed && process.exitValue() == 0) {
                 project.ext.gitCommitHash = output.toString().trim()
             } else {
-                if (!completed) process.destroy()
+                if (!completed) process.destroyForcibly()
                 project.ext.gitCommitHash = 'unknown'
             }
         } catch (Exception e) {
@@ -49,20 +40,11 @@ def getGitCommitDate() {
             def error = new ByteArrayOutputStream()
             process.consumeProcessOutput(output, error)
             
-            def completed = false
-            Thread.start {
-                process.waitFor()
-                completed = true
-            }
-            
-            for (int i = 0; i < 10 && !completed; i++) {
-                Thread.sleep(100)
-            }
-            
+            def completed = process.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)
             if (completed && process.exitValue() == 0) {
                 project.ext.gitCommitDate = output.toString().trim()
             } else {
-                if (!completed) process.destroy()
+                if (!completed) process.destroyForcibly()
                 project.ext.gitCommitDate = new Date().format('yyyy-MM-dd')
             }
         } catch (Exception e) {
@@ -103,8 +85,8 @@ android {
             def keyPwd = project.findProperty('RELEASE_KEY_PASSWORD')
             
             if (gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }) {
-                if (!storePwd) throw new GradleException('RELEASE_STORE_PASSWORD not provided.')
-                if (!keyPwd) throw new GradleException('RELEASE_KEY_PASSWORD not provided.')
+                if (!storePwd) throw new org.gradle.api.GradleException('RELEASE_STORE_PASSWORD not provided.')
+                if (!keyPwd) throw new org.gradle.api.GradleException('RELEASE_KEY_PASSWORD not provided.')
             }
             
             if (storePwd) storePassword = storePwd
@@ -141,6 +123,7 @@ android {
             useLegacyPackaging = false
         }
     }
+
 }
 
 
@@ -166,6 +149,7 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.10.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0'
 
     implementation 'com.github.QuadFlask:colorpicker:0.0.15'
 
@@ -177,4 +161,5 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.robolectric:robolectric:4.11.1'
     testImplementation 'androidx.test:core:1.5.0'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
 }

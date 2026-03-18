@@ -2,7 +2,10 @@ package com.geovault.tracker.fragments.map
 
 import android.content.Context
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.TrackerGeometryRepository
+import com.geovault.tracker.TrackerGroupsRepository
 import com.geovault.tracker.TrackerRepository
+import com.geovault.tracker.TrackerVisibilityRepository
 
 internal data class MapAllTrackersCallbacks(
     val isAdded: () -> Boolean,
@@ -18,10 +21,10 @@ internal object MapAllTrackersFlow {
      * Caller supplies callbacks for side effects (streaming, apply to map, etc.).
      */
     fun loadAllTrackersAndApply(context: Context, callbacks: MapAllTrackersCallbacks) {
-        TrackerRepository.getMapVisibility(context) { visibility ->
+        TrackerVisibilityRepository.getMapVisibility(context) { visibility ->
             if (!callbacks.isAdded()) return@getMapVisibility
             val hiddenTrackIds = (visibility?.hidden_track_ids ?: emptyList()).toSet()
-            TrackerRepository.getGroups(context, forceRefresh = false) { groupsList ->
+            TrackerGroupsRepository.getGroups(context, forceRefresh = false) { groupsList ->
                 if (!callbacks.isAdded()) return@getGroups
                 val hiddenGroupIds = (visibility?.hidden_group_ids ?: emptyList()).toSet()
                 val groupsToHideFromMap = (groupsList ?: emptyList())
@@ -39,7 +42,7 @@ internal object MapAllTrackersFlow {
                         return@getTrackers
                     }
                     callbacks.onHasTrackers(trackers)
-                    TrackerRepository.getTrackersGeometry(
+                    TrackerGeometryRepository.getTrackersGeometry(
                         context,
                         trackers.map { it.id },
                         allData = true

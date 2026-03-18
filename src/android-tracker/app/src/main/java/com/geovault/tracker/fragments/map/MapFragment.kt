@@ -1,6 +1,8 @@
 package com.geovault.tracker.fragments.map
 
 import android.annotation.SuppressLint
+import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityManager
 import android.graphics.Color
 import android.content.*
 import android.location.Location
@@ -16,6 +18,7 @@ import android.widget.TextView
 import com.geovault.common.LoadingSpinner
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
 import androidx.core.os.bundleOf
 import androidx.lifecycle.lifecycleScope
 import com.geovault.common.map.GeoVaultMapFragment
@@ -61,6 +64,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 
 class MapFragment : Fragment() {
+    private val mapStateViewModel: MapStateViewModel by viewModels()
 
     private var mapFragment: GeoVaultMapFragment? = null
     private var mapManager: MapLibreManager? = null
@@ -482,7 +486,7 @@ class MapFragment : Fragment() {
                     updateTrackerLabel()
                     return
                 }
-                if ((activity as? MainActivity)?.initialTrackForMap != null) {
+                if ((activity as? MainActivity)?.hasInitialTrackForMap() == true) {
                     refreshTrackForSelectedTracker()
                     return
                 }
@@ -505,8 +509,14 @@ class MapFragment : Fragment() {
             restoreTrackForSelectedTracker()
         }
 
-        followLockEnabled = savedInstanceState?.getBoolean(KEY_FOLLOW_LOCK, false) ?: false
-        showMyLocationEnabled = savedInstanceState?.getBoolean(KEY_SHOW_MY_LOCATION, false) ?: false
+        val restoredState = mapStateViewModel.latestSavedState ?: MapSavedState.readFrom(savedInstanceState)
+        followLockEnabled = restoredState.followLockEnabled
+        showMyLocationEnabled = restoredState.showMyLocationEnabled
+        showAllTrackers = restoredState.showAllTrackers
+        displayedTrackerId = restoredState.displayedTrackerId
+        displayedTrackerName = restoredState.displayedTrackerName
+        displayedGroupName = restoredState.displayedGroupName
+        mapViewContext = restoredState.mapViewContext
         updateFollowLockButton()
         updateZoomToLatestButtonState()
         updateShowMyLocationButtonVisibility()
@@ -715,8 +725,17 @@ class MapFragment : Fragment() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putBoolean(KEY_FOLLOW_LOCK, followLockEnabled)
-        outState.putBoolean(KEY_SHOW_MY_LOCATION, showMyLocationEnabled)
+        val state = MapSavedState(
+            followLockEnabled = followLockEnabled,
+            showMyLocationEnabled = showMyLocationEnabled,
+            displayedTrackerId = displayedTrackerId,
+            displayedTrackerName = displayedTrackerName,
+            displayedGroupName = displayedGroupName,
+            showAllTrackers = showAllTrackers,
+            mapViewContext = mapViewContext
+        )
+        mapStateViewModel.latestSavedState = state
+        state.writeTo(outState)
     }
 
     override fun onLowMemory() {
@@ -2223,6 +2242,7 @@ class MapFragment : Fragment() {
         if (selectionIdChanged) {
             lastSelectedTrackerIdForIcons = sel.id
             refreshAllTrackPointIcons()
+            announceSelectionForAccessibility(getString(R.string.selected_tracker, sel.name))
         }
         val state = MapTrackerInfoCardController.computeUiState(
             selection = sel,
@@ -2671,10 +2691,16 @@ class MapFragment : Fragment() {
     private fun splitTrackIntoSegments(points: List<LatLng>): List<List<LatLng>> =
         MapTrackGeometryRenderer.splitTrackIntoSegments(points, MapConstants.MAX_JUMP_METERS)
 
+    private fun announceSelectionForAccessibility(message: String) {
+        val accessibilityManager = context?.getSystemService(AccessibilityManager::class.java) ?: return
+        if (!accessibilityManager.isEnabled) return
+        val event = AccessibilityEvent.obtain(AccessibilityEvent.TYPE_ANNOUNCEMENT)
+        event.text.add(message)
+        accessibilityManager.sendAccessibilityEvent(event)
+    }
+
     companion object {
         private const val TAG = "MapFragment"
-        private const val KEY_FOLLOW_LOCK = "follow_lock"
-        private const val KEY_SHOW_MY_LOCATION = "show_my_location"
     }
 
 }

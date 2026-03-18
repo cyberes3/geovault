@@ -3,6 +3,7 @@ package com.geovault.tracker
 import com.geovault.tracker.pipeline.TrackPointBus
 import com.geovault.tracker.pipeline.TrackPointEvent
 import com.geovault.tracker.pipeline.TrackPointSource
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -18,6 +19,10 @@ import kotlinx.coroutines.withTimeout
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class SelectedTrackerMapUpdateTest {
+    @After
+    fun tearDown() {
+        TrackPointBus.resetForTests()
+    }
 
     @Test
     fun trackerRepository_clearGeometryCache_existsAndCallable() {

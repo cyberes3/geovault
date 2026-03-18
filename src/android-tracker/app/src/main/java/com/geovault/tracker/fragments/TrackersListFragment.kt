@@ -10,6 +10,8 @@ import android.view.ViewTreeObserver
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.LinearSmoothScroller
 import androidx.recyclerview.widget.RecyclerView
@@ -22,16 +24,21 @@ import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
+import com.geovault.tracker.lastPosition
+import com.geovault.tracker.lastUpdateMs
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.button.MaterialButton
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 class TrackersListFragment : Fragment() {
+    private val viewModel: TrackersListViewModel by viewModels()
 
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var recyclerView: RecyclerView
+    private lateinit var emptyView: View
     private lateinit var loadingOverlay: View
     private lateinit var loadingSpinner: LoadingSpinner
     private var adapter: TrackersAdapter? = null
@@ -55,6 +62,7 @@ class TrackersListFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         swipeRefresh = view.findViewById(R.id.trackersSwipeRefresh)
         recyclerView = view.findViewById(R.id.trackersRecyclerView)
+        emptyView = view.findViewById(R.id.trackersEmpty)
         loadingOverlay = view.findViewById(R.id.trackersLoadingOverlay)
         loadingSpinner = view.findViewById(R.id.trackersLoadingSpinner)
 
@@ -78,25 +86,32 @@ class TrackersListFragment : Fragment() {
                 TrackerAction.VIEW_PARAMS -> (activity as? MainActivity)?.showTrackerParamsFragment(
                     tracker.id,
                     tracker.name,
-                    lastUpdateMs = tracker.last_point?.let { c ->
-                        if (c.size >= 3) {
-                            val t = (c[2] as? Number)?.toLong() ?: return@let null
-                            if (t < 1e12) t * 1000 else t
-                        } else null
-                    },
-                    positionLat = tracker.last_point?.let { c ->
-                        if (c.size >= 2) (c[1] as? Number)?.toDouble() else null
-                    },
-                    positionLon = tracker.last_point?.let { c ->
-                        if (c.size >= 2) (c[0] as? Number)?.toDouble() else null
-                    }
+                    lastUpdateMs = tracker.lastUpdateMs(),
+                    positionLat = tracker.lastPosition()?.first,
+                    positionLon = tracker.lastPosition()?.second
                 )
             }
         }
         recyclerView.adapter = adapter
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.uiState.collect { state ->
+                setTrackers(visibleOwnerTrackers(state.trackers))
+                if (state.isLoading) {
+                    loadingOverlay.visibility = View.VISIBLE
+                    loadingSpinner.start()
+                } else {
+                    loadingOverlay.visibility = View.GONE
+                    loadingSpinner.stop(hide = false)
+                    swipeRefresh.isRefreshing = false
+                    applyScrollAndHighlightIfPending()
+                }
+            }
+        }
+
         val cached = TrackerRepository.getTrackersCache()
         if (cached != null) {
-            adapter?.setTrackers(visibleOwnerTrackers(cached))
+            viewModel.setCached(cached)
             loadingOverlay.visibility = View.GONE
             loadingSpinner.stop(hide = false)
             applyScrollAndHighlightIfPending()
@@ -104,23 +119,14 @@ class TrackersListFragment : Fragment() {
             loadingOverlay.visibility = View.VISIBLE
             loadingSpinner.start()
         }
-        TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { list ->
-            if (isAdded) {
-                requireActivity().runOnUiThread {
-                    adapter?.setTrackers(visibleOwnerTrackers(list ?: emptyList()))
-                    loadingSpinner.stop(hide = false)
-                    loadingOverlay.visibility = View.GONE
-                    applyScrollAndHighlightIfPending()
-                }
-            }
-        }
+        viewModel.load(requireContext(), forceRefresh = false, showLoading = false)
 
         requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_REFRESH_LIST, viewLifecycleOwner) { _, bundle ->
             val newTracker = bundle?.getParcelable(KEY_NEW_TRACKER, Tracker::class.java)
             if (newTracker != null) {
                 val cache = TrackerRepository.getTrackersCache()
                 if (cache != null) {
-                    adapter?.setTrackers(visibleOwnerTrackers(cache))
+                    setTrackers(visibleOwnerTrackers(cache))
                 }
             } else {
                 val deletedTrackerId = bundle?.getString(KEY_DELETED_TRACKER_ID)
@@ -150,7 +156,7 @@ class TrackersListFragment : Fragment() {
             TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { list ->
                 if (isAdded) {
                     requireActivity().runOnUiThread {
-                        adapter?.setTrackers(visibleOwnerTrackers(list ?: emptyList()))
+                        viewModel.setCached(list ?: emptyList())
                     }
                 }
             }
@@ -194,31 +200,16 @@ class TrackersListFragment : Fragment() {
 
     private fun loadTrackers() {
         clearHighlight()
-        loadingOverlay.visibility = View.VISIBLE
-        loadingSpinner.start()
-        TrackerRepository.getTrackers(requireContext(), forceRefresh = true) { list ->
-            if (isAdded) {
-                requireActivity().runOnUiThread {
-                    adapter?.setTrackers(visibleOwnerTrackers(list ?: emptyList()))
-                    applyScrollAndHighlightIfPending()
-                    loadingSpinner.stop(hide = false)
-                    loadingOverlay.visibility = View.GONE
-                    swipeRefresh.isRefreshing = false
-                }
-            }
-        }
+        viewModel.load(requireContext(), forceRefresh = true, showLoading = true)
     }
 
     private fun loadTrackersInBackground() {
-        TrackerRepository.getTrackers(requireContext(), forceRefresh = true) { list ->
-            if (isAdded) {
-                requireActivity().runOnUiThread {
-                    adapter?.setTrackers(visibleOwnerTrackers(list ?: emptyList()))
-                    applyScrollAndHighlightIfPending()
-                    swipeRefresh.isRefreshing = false
-                }
-            }
-        }
+        viewModel.load(requireContext(), forceRefresh = true, showLoading = false)
+    }
+
+    private fun setTrackers(trackers: List<Tracker>) {
+        adapter?.setTrackers(trackers)
+        emptyView.visibility = if (trackers.isEmpty()) View.VISIBLE else View.GONE
     }
 
     fun requestScrollToTrackerId(trackerId: String?) {
@@ -410,19 +401,8 @@ class TrackersListFragment : Fragment() {
                 }
                 val color = parseHexToColor(tracker.color, itemView.context)
                 trackerChevronIcon.setColorFilter(color)
-                val lastCoord = tracker.last_point
-                val lastUpdateMs = when {
-                    lastCoord != null && lastCoord.size >= 3 -> {
-                        val t = lastCoord[2]
-                        (t as? Number)?.toLong()?.let { n -> if (n < 1e12) n * 1000 else n }
-                    }
-                    else -> null
-                }
-                val lastPosition = if (lastCoord != null && lastCoord.size >= 2) {
-                    val lon = (lastCoord[0] as? Number)?.toDouble()
-                    val lat = (lastCoord[1] as? Number)?.toDouble()
-                    if (lat != null && lon != null) Pair(lat, lon) else null
-                } else null
+                val lastUpdateMs = tracker.lastUpdateMs()
+                val lastPosition = tracker.lastPosition()
                 trackerLastUpdate.text = if (lastUpdateMs != null) {
                     LIST_DATE_FORMAT.format(Date(lastUpdateMs))
                 } else {

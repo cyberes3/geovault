@@ -35,6 +35,108 @@ object TrackerRepository {
     private var currentTrackerCache: Tracker? = null
     private var currentTrackerId: String? = null
 
+    private fun createApi(context: Context, serverUrl: String): TrackerApi {
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        return RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+    }
+
+    private fun errorFromResponseCode(code: Int, message: String? = null): AppError {
+        return when (code) {
+            400 -> AppError.Validation(message)
+            401, 403 -> AppError.Unauthorized
+            404 -> AppError.NotFound
+            in 500..599 -> AppError.Server(code)
+            else -> AppError.Unknown
+        }
+    }
+
+    fun getTrackersResult(
+        context: Context,
+        forceRefresh: Boolean = false,
+        callback: (RepositoryResult<List<Tracker>>) -> Unit
+    ) {
+        if (!forceRefresh && trackersCache != null) {
+            callback(RepositoryResult.Success(trackersCache ?: emptyList()))
+            return
+        }
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(RepositoryResult.Failure(AppError.MissingServerUrl))
+            return
+        }
+        val api = createApi(context, serverUrl)
+        api.getTrackers().enqueue(object : Callback<List<Tracker>> {
+            override fun onResponse(call: Call<List<Tracker>>, response: Response<List<Tracker>>) {
+                if (!response.isSuccessful) {
+                    callback(RepositoryResult.Failure(errorFromResponseCode(response.code())))
+                    return
+                }
+                val list = response.body() ?: emptyList()
+                trackersCache = list
+                callback(RepositoryResult.Success(list))
+            }
+
+            override fun onFailure(call: Call<List<Tracker>>, t: Throwable) {
+                callback(RepositoryResult.Failure(AppError.Network))
+            }
+        })
+    }
+
+    fun getTrackerGeometryResult(
+        context: Context,
+        id: String,
+        callback: (RepositoryResult<Tracker>) -> Unit
+    ) {
+        val cached = geometryCache
+        if (cached != null && cached.first == id) {
+            callback(RepositoryResult.Success(cached.second))
+            return
+        }
+        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (serverUrl.isEmpty()) {
+            callback(RepositoryResult.Failure(AppError.MissingServerUrl))
+            return
+        }
+        val api = createApi(context, serverUrl)
+        api.getTrackerGeometry(id).enqueue(object : Callback<Tracker> {
+            override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
+                if (!response.isSuccessful) {
+                    callback(RepositoryResult.Failure(errorFromResponseCode(response.code())))
+                    return
+                }
+                val tracker = response.body()
+                if (tracker == null) {
+                    callback(RepositoryResult.Failure(AppError.Unknown))
+                    return
+                }
+                callback(RepositoryResult.Success(tracker))
+            }
+
+            override fun onFailure(call: Call<Tracker>, t: Throwable) {
+                callback(RepositoryResult.Failure(AppError.Network))
+            }
+        })
+    }
+
+    fun updateTrackerSettingsResult(
+        context: Context,
+        id: String,
+        request: TrackerSettingsRequest,
+        callback: (RepositoryResult<Tracker>) -> Unit
+    ) {
+        updateTrackerSettings(context, id, request) { tracker, errorMessage ->
+            if (tracker != null) {
+                callback(RepositoryResult.Success(tracker))
+                return@updateTrackerSettings
+            }
+            if (!errorMessage.isNullOrBlank()) {
+                callback(RepositoryResult.Failure(AppError.Validation(errorMessage)))
+            } else {
+                callback(RepositoryResult.Failure(AppError.Unknown))
+            }
+        }
+    }
+
     fun getTrackers(context: Context, forceRefresh: Boolean = false, callback: (List<Tracker>?) -> Unit) {
         if (!forceRefresh && trackersCache != null) {
             callback(trackersCache)
@@ -55,8 +157,7 @@ object TrackerRepository {
         isFetching = true
         listeners.add(callback)
         
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
 
         api.getTrackers().enqueue(object : Callback<List<Tracker>> {
             override fun onResponse(call: Call<List<Tracker>>, response: Response<List<Tracker>>) {
@@ -132,8 +233,7 @@ object TrackerRepository {
             callback(null)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         trackerCall?.cancel()
         val call = api.getTracker(id)
         trackerCall = call
@@ -214,8 +314,7 @@ object TrackerRepository {
             return
         }
         val selectedId = SelectedTrackerPrefs.selectedTrackerId(context)
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         val call = api.getTrackerGeometry(id)
         geometryCall = call
         call.enqueue(object : Callback<Tracker> {
@@ -250,8 +349,7 @@ object TrackerRepository {
             callback(null)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         coordinatesCall?.cancel()
         val call = api.getTrackerCoordinates(id)
         coordinatesCall = call
@@ -290,8 +388,7 @@ object TrackerRepository {
             callback(null)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         val request = TrackerBulkGeometryRequest(
             tracker_ids = trackerIds,
             all_data = allData
@@ -346,8 +443,7 @@ object TrackerRepository {
             callback(null, null)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.postTrackerSettings(id, request)
             .enqueue(object : Callback<Tracker> {
                 override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
@@ -394,8 +490,7 @@ object TrackerRepository {
             callback(false)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.deleteTracker(id).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
                 if (response.isSuccessful) {
@@ -421,8 +516,7 @@ object TrackerRepository {
             callback(false)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.clearTrackerHistory(trackerId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
                 if (response.isSuccessful) {
@@ -448,8 +542,7 @@ object TrackerRepository {
             callback(false)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.checkTracker(TrackerCheckRequest(tracker_id = trackerId, password = null))
             .enqueue(object : Callback<TrackerCheckResponse> {
                 override fun onResponse(
@@ -479,8 +572,7 @@ object TrackerRepository {
             callback(null)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.getAvailableToAdd().enqueue(object : Callback<AvailableToAddResponse> {
             override fun onResponse(call: Call<AvailableToAddResponse>, response: Response<AvailableToAddResponse>) {
                 val body = response.body()
@@ -504,8 +596,7 @@ object TrackerRepository {
             callback(null)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.subscribeTracker(trackerId).enqueue(object : Callback<Tracker> {
             override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
                 if (response.isSuccessful) {
@@ -527,8 +618,7 @@ object TrackerRepository {
             callback(false)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.unsubscribeTracker(trackerId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
                 if (response.isSuccessful) {
@@ -550,8 +640,7 @@ object TrackerRepository {
             callback(false)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.leaveShareWithMe(trackerId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
                 if (response.isSuccessful) {
@@ -573,8 +662,7 @@ object TrackerRepository {
             callback(null)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.getSubscribers(trackerId).enqueue(object : Callback<SubscribersResponse> {
             override fun onResponse(call: Call<SubscribersResponse>, response: Response<SubscribersResponse>) {
                 callback(response.body())
@@ -592,8 +680,7 @@ object TrackerRepository {
             callback(null)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.getMapVisibility().enqueue(object : Callback<MapVisibilityResponse> {
             override fun onResponse(call: Call<MapVisibilityResponse>, response: Response<MapVisibilityResponse>) {
                 val body = response.body()
@@ -617,8 +704,7 @@ object TrackerRepository {
             callback(null)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.patchMapVisibility(request).enqueue(object : Callback<MapVisibilityResponse> {
             override fun onResponse(call: Call<MapVisibilityResponse>, response: Response<MapVisibilityResponse>) {
                 val body = response.body()
@@ -655,8 +741,7 @@ object TrackerRepository {
             callback(null)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.getGroups().enqueue(object : Callback<List<Group>> {
             override fun onResponse(call: Call<List<Group>>, response: Response<List<Group>>) {
                 val list = response.body() ?: emptyList()
@@ -688,8 +773,7 @@ object TrackerRepository {
             callback(null, null)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.createGroup(GroupCreateRequest(name = name)).enqueue(object : Callback<Group> {
             override fun onResponse(call: Call<Group>, response: Response<Group>) {
                 if (response.isSuccessful) {
@@ -720,8 +804,7 @@ object TrackerRepository {
             callback(null)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.getGroup(groupId).enqueue(object : Callback<Group> {
             override fun onResponse(call: Call<Group>, response: Response<Group>) {
                 callback(response.body())
@@ -739,8 +822,7 @@ object TrackerRepository {
             callback(null, null)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.patchGroup(groupId, request).enqueue(object : Callback<Group> {
             override fun onResponse(call: Call<Group>, response: Response<Group>) {
                 if (response.isSuccessful) {
@@ -771,8 +853,7 @@ object TrackerRepository {
             callback(false)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.deleteGroup(groupId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
                 if (response.isSuccessful) groupsCache = groupsCache?.filterNot { it.id == groupId }
@@ -791,8 +872,7 @@ object TrackerRepository {
             callback(null, null)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.addGroupTrack(groupId, GroupAddTrackRequest(track_id = trackId)).enqueue(object : Callback<Group> {
             override fun onResponse(call: Call<Group>, response: Response<Group>) {
                 if (response.isSuccessful) {
@@ -823,8 +903,7 @@ object TrackerRepository {
             callback(false)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.removeGroupTrack(groupId, trackId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
                 if (response.isSuccessful) groupsCache = null
@@ -843,8 +922,7 @@ object TrackerRepository {
             callback(null)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.acceptGroupShare(groupId).enqueue(object : Callback<Group> {
             override fun onResponse(call: Call<Group>, response: Response<Group>) {
                 if (response.isSuccessful) {
@@ -867,8 +945,7 @@ object TrackerRepository {
             callback(false)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.leaveGroup(groupId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
                 if (response.isSuccessful) {
@@ -890,8 +967,7 @@ object TrackerRepository {
             callback(null)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.getUsers().enqueue(object : Callback<UsersResponse> {
             override fun onResponse(call: Call<UsersResponse>, response: Response<UsersResponse>) {
                 callback(response.body())
@@ -916,8 +992,7 @@ object TrackerRepository {
             callback(null)
             return
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        val api = RetrofitClient.getClient(context, baseUrl).create(TrackerApi::class.java)
+        val api = createApi(context, serverUrl)
         api.getTrackerKml(trackerId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
                 callback(if (response.isSuccessful) response.body() else null)

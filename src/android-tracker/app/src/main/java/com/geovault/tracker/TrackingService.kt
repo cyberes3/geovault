@@ -133,6 +133,12 @@ class TrackingService : TrackPointServiceBase() {
     private var currentActiveProfileIndex = -1
     private var lastSpeedMps: Float = 0f
 
+    private fun clearQueuedLocationsAsync() {
+        serviceScope.launch {
+            database.locationDao().deleteAll()
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "onCreate")
@@ -182,9 +188,7 @@ class TrackingService : TrackPointServiceBase() {
         lastTrackedPropsJson = null
         broadcastSessionStats()
 
-        runBlocking(Dispatchers.IO) {
-            database.locationDao().deleteAll()
-        }
+        clearQueuedLocationsAsync()
 
         startForeground(NOTIFICATION_ID, createNotification(0, 0), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
 
@@ -247,9 +251,7 @@ class TrackingService : TrackPointServiceBase() {
         fusedLocationClient.removeLocationUpdates(locationCallback)
         significantMotionBridge?.cancel()
         stopRetryJob()
-        runBlocking(Dispatchers.IO) {
-            database.locationDao().deleteAll()
-        }
+        clearQueuedLocationsAsync()
         broadcastSessionStats()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()

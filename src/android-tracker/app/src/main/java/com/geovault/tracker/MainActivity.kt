@@ -180,6 +180,18 @@ class MainActivity : AppCompatActivity() {
 
         val savedTab = (savedInstanceState?.getInt(KEY_CURRENT_TAB, 0) ?: 0).coerceIn(0, 4)
         viewPager.setCurrentItem(savedTab, false)
+        lastSelectedTabIndex = savedTab
+        tabBackStack.clear()
+        savedInstanceState?.getIntegerArrayList(KEY_TAB_BACK_STACK)?.forEach { tab ->
+            if (tab in 0..4 && tab != savedTab) {
+                tabBackStack.addLast(tab)
+            }
+        }
+        initialTrackForMap = savedInstanceState?.getParcelable(KEY_INITIAL_TRACK_FOR_MAP, Tracker::class.java)
+        initialGroupForMap = savedInstanceState?.getParcelable(KEY_INITIAL_GROUP_FOR_MAP, Group::class.java)
+        initialGroupZoomToTrackerId = savedInstanceState?.getString(KEY_INITIAL_GROUP_ZOOM_TRACKER_ID)
+        groupContextForMap = savedInstanceState?.getParcelable(KEY_GROUP_CONTEXT_FOR_MAP, Group::class.java)
+        groupMapOpenedFromTab = savedInstanceState?.getInt(KEY_GROUP_MAP_OPENED_FROM_TAB, -1) ?: -1
 
         // When launching on the Map tab, pre-fetch selected tracker so the map can zoom to its extent
         if (savedTab == 1) {
@@ -567,6 +579,8 @@ class MainActivity : AppCompatActivity() {
         initialTrackForMap = null
         return t
     }
+
+    fun hasInitialTrackForMap(): Boolean = initialTrackForMap != null
 
     /** Initial group to fit on map when opening from "View group on map"; cleared after use. */
     var initialGroupForMap: Group? = null
@@ -957,11 +971,23 @@ class MainActivity : AppCompatActivity() {
         super.onSaveInstanceState(outState)
         if (!isGuestView) {
             outState.putInt(KEY_CURRENT_TAB, viewPager.currentItem)
+            outState.putIntegerArrayList(KEY_TAB_BACK_STACK, ArrayList(tabBackStack))
+            outState.putParcelable(KEY_INITIAL_TRACK_FOR_MAP, initialTrackForMap)
+            outState.putParcelable(KEY_INITIAL_GROUP_FOR_MAP, initialGroupForMap)
+            outState.putString(KEY_INITIAL_GROUP_ZOOM_TRACKER_ID, initialGroupZoomToTrackerId)
+            outState.putParcelable(KEY_GROUP_CONTEXT_FOR_MAP, groupContextForMap)
+            outState.putInt(KEY_GROUP_MAP_OPENED_FROM_TAB, groupMapOpenedFromTab)
         }
     }
 
     companion object {
         private const val KEY_CURRENT_TAB = "current_tab"
+        private const val KEY_TAB_BACK_STACK = "tab_back_stack"
+        private const val KEY_INITIAL_TRACK_FOR_MAP = "initial_track_for_map"
+        private const val KEY_INITIAL_GROUP_FOR_MAP = "initial_group_for_map"
+        private const val KEY_INITIAL_GROUP_ZOOM_TRACKER_ID = "initial_group_zoom_tracker_id"
+        private const val KEY_GROUP_CONTEXT_FOR_MAP = "group_context_for_map"
+        private const val KEY_GROUP_MAP_OPENED_FROM_TAB = "group_map_opened_from_tab"
         const val EXTRA_SIGNED_IN_EMAIL = "signed_in_email"
         const val EXTRA_OAUTH_ERROR = "oauth_error"
     }

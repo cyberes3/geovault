@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -27,6 +28,11 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], manifest = Config.NONE)
 class TrackerParamsFragmentBusLifecycleTest {
+    @After
+    fun tearDown() {
+        TrackPointBus.resetForTests()
+    }
+
     class BusCollectorFragment : Fragment() {
         var trackerId: String = ""
         var streamCollectionJob: Job? = null

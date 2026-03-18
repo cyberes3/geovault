@@ -107,6 +107,7 @@
     <string name="show_all_trackers">Show all trackers</string>
     <string name="all_trackers">All Trackers</string>
     <string name="show_selected_tracker">Show selected tracker</string>
+    <string name="selected_tracker">Selected tracker %1$s</string>
     <string name="live_active_fit_enable">Enable live active tracker fit</string>
     <string name="live_active_fit_disable">Disable live active tracker fit</string>
     <!-- Extended params: when on, sends full data; when off, sends only position + time to minimize data usage -->
