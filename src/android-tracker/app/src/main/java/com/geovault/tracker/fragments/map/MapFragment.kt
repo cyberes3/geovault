@@ -34,6 +34,7 @@ import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.TrackingService
 import com.geovault.tracker.TrackUpdateHelper
+import com.geovault.tracker.GeoJsonLineString
 import com.geovault.tracker.fragments.TrackersListFragment
 import com.geovault.tracker.pipeline.TrackPointBus
 import com.geovault.tracker.pipeline.TrackPointEvent
@@ -44,6 +45,7 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collect
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdate
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -64,6 +66,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 
 class MapFragment : Fragment() {
+    private val mapFlowViewModel: MapViewModel by viewModels()
     private val mapStateViewModel: MapStateViewModel by viewModels()
 
     private var mapFragment: GeoVaultMapFragment? = null
@@ -187,6 +190,7 @@ class MapFragment : Fragment() {
 
     private val liveStreamCoordinator = MapLiveStreamCoordinator(lifecycleScope)
     private var trackPointCollectionJob: Job? = null
+    private var mapCommandsJob: Job? = null
 
     private fun applyLiveStreamPoint(
         trackId: String,
@@ -505,7 +509,7 @@ class MapFragment : Fragment() {
             }
         }
         resetToTrackerButton.setOnClickListener {
-            MapSingleTrackFetch.cancelGeometry()
+            TrackerRepository.cancelGeometryRequest()
             restoreTrackForSelectedTracker()
         }
 
@@ -601,6 +605,7 @@ class MapFragment : Fragment() {
             true
         }
         liveActiveFitButton.setOnClickListener { onLiveActiveFitButtonClick() }
+        observeMapFlow()
         view.post { if (isAdded) refreshMapPaddingForCurrentMode(force = true) }
     }
 
@@ -636,7 +641,7 @@ class MapFragment : Fragment() {
             startStandaloneLocationUpdates()
         }
 
-        startTrackPointCollection()
+        mapFlowViewModel.startTrackPointStream()
 
         if (mapReady) {
             if (mapViewContext == MapViewContext.GROUP || showAllTrackers) {
@@ -646,15 +651,7 @@ class MapFragment : Fragment() {
                     val group = currentGroupForMap!!
                     val trackIds = group.track_ids?.toSet() ?: emptySet()
                     if (trackIds.isNotEmpty()) {
-                        TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { list ->
-                            if (!isAdded) return@getTrackers
-                            val allTrackers = list ?: emptyList()
-                            val trackers = allTrackers.filter { it.id in trackIds }
-                            if (trackers.isNotEmpty()) {
-                                startLiveTrackStreamingForTrackerSet(trackers.map { it.id }.toSet())
-                            }
-                            updateTrackerLabel()
-                        }
+                        startLiveTrackStreamingForTrackerSet(trackIds)
                         return
                     }
                 }
@@ -675,22 +672,17 @@ class MapFragment : Fragment() {
                 updateZoomToLatestButtonState()
                 updateTrackerLabel()
             } else if (TrackingService.isRunning && activeTrackerId.isNotEmpty()) {
-                // Tracking may continue while app/map is backgrounded; always refresh tail + full
-                // geometry on resume so server/cached history and live bus events converge quickly.
                 if (displayedTrackerId != activeTrackerId) {
                     displayedTrackerId = activeTrackerId
                     mapViewContext = MapViewContext.SINGLE_TRACKER
                 }
-                seedTrackFromCacheOrTail(activeTrackerId, allowCoordinatesNetwork = true)
-                fetchFullGeometryAndApply(activeTrackerId, forceReplace = false)
+                mapFlowViewModel.handleIntent(MapIntent.LoadSingleTracker(trackerId = activeTrackerId, forceReplace = false))
             } else if (trackPoints.isEmpty() && activeTrackerId.isNotEmpty()) {
-                // Rehydrate from cache/history regardless of whether this is selected or directly opened.
                 if (displayedTrackerId == null) {
                     displayedTrackerId = activeTrackerId
                     mapViewContext = MapViewContext.SINGLE_TRACKER
                 }
-                seedTrackFromCacheOrTail(activeTrackerId, allowCoordinatesNetwork = true)
-                fetchFullGeometryAndApply(activeTrackerId, forceReplace = false)
+                mapFlowViewModel.handleIntent(MapIntent.LoadSingleTracker(trackerId = activeTrackerId, forceReplace = false))
             } else {
                 // Re-start streaming when returning to Map (e.g. after closing Params overlay).
                 startLiveTrackStreamingForDisplayedTracker()
@@ -702,6 +694,7 @@ class MapFragment : Fragment() {
         super.onPause()
         view?.keepScreenOn = false
         stopStandaloneLocationUpdates(clearGpsFix = true)
+        mapFlowViewModel.stopTrackPointStream()
         trackPointCollectionJob?.cancel()
         trackPointCollectionJob = null
     }
@@ -710,6 +703,8 @@ class MapFragment : Fragment() {
         styleReloadListener?.let { listener ->
             mapFragment?.mapViewOrNull?.removeOnDidFinishLoadingStyleListener(listener)
         }
+        mapCommandsJob?.cancel()
+        mapCommandsJob = null
         styleReloadListener = null
         mapFragment?.setCallback(null)
         mapFragment = null
@@ -1602,15 +1597,13 @@ class MapFragment : Fragment() {
             setDisplayedTrackerPlaceholder(loadTrackerId, SelectedTrackerPrefs.selectedTrackerName(requireContext()))
         }
         if (isSwitching) {
-            // Give MapLibre's async GL renderer a tiny moment to erase the old tracker's
-            // GeoJSON source from the screen before we jump the camera to the new BBox.
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 if (isAdded) {
-                    loadSingleTrackerHistory(loadTrackerId, initial)
+                    mapFlowViewModel.handleIntent(MapIntent.LoadSingleTracker(loadTrackerId, forceReplace = false))
                 }
             }, 50)
         } else {
-            loadSingleTrackerHistory(loadTrackerId, initial)
+            mapFlowViewModel.handleIntent(MapIntent.LoadSingleTracker(loadTrackerId, forceReplace = false))
         }
     }
 
@@ -1639,58 +1632,15 @@ class MapFragment : Fragment() {
             maplibreMap?.let { LocationComponentHelper.setCameraTracking(it, enabled = false) }
         }
         pendingAutoZoomToStandaloneFix = false
-        MapGroupRefreshHandler.refresh(
-            group = group,
-            zoomToTrackerId = zoomToTrackerId,
-            context = requireContext(),
-            scope = lifecycleScope,
-            callbacks = MapGroupRefreshCallbacks(
-                isAdded = { isAdded },
-                getMap = { maplibreMap },
-                getStyle = { maplibreMap?.style },
-                setPendingGroup = { g, z ->
-                    pendingGroupForMap = g
-                    pendingGroupZoomToTrackerId = z
-                },
-                setLiveActiveFitEnabled = {
-                    liveActiveFitEnabled = it
-                    updateShowMyLocationButtonVisibility()
-                },
-                clearMultiTrackContextState = { clearMultiTrackContextState() },
-                setMapViewContext = { mapViewContext = it },
-                setDisplayedGroupName = { displayedGroupName = it },
-                setCurrentGroupForMap = { currentGroupForMap = it },
-                setActiveCameraIntent = { activeCameraIntent = it },
-                suppressStandaloneAutoZoomForTrackerFocus = { suppressStandaloneAutoZoomForTrackerFocus() },
-                setShowAllTrackers = { showAllTrackers = it },
-                clearMapSelection = { clearMapSelection() },
-                clearAllTrackSources = { clearAllTrackSources() },
-                setAllTrackLayersVisibility = { setAllTrackLayersVisibility(it) },
-                setAnnotationLayersVisibility = { setAnnotationLayersVisibility(it) },
-                clearTrackPointsAndDisplayedTracker = {
-                    trackPoints.clear()
-                    trackTimestamps.clear()
-                    displayedTracker = null
-                    displayedTrackerId = null
-                    displayedTrackerName = null
-                },
-                updateTrackLine = { updateTrackLine() },
-                stopLiveTrackStreaming = { stopLiveTrackStreaming() },
-                updateTrackerLabel = { updateTrackerLabel() },
-                updateZoomToLatestButtonState = { updateZoomToLatestButtonState() },
-                startLiveTrackStreamingForTrackerSet = { startLiveTrackStreamingForTrackerSet(it) },
-                applyAllTrackersToMap = { t, c, m, s, fit, fitId, liveOnly ->
-                    applyAllTrackersToMap(t, c, m, s, fit, fitId, liveOnly)
-                },
-                shouldRefitOnGeometryUpdate = {
-                    zoomToTrackerId.isNullOrBlank() &&
-                        showAllTrackers &&
-                        selectedMapTracker == null
-                },
-                getLiveActiveFitEnabled = { liveActiveFitEnabled },
-                getShowAllTrackers = { showAllTrackers }
-            )
-        )
+        liveActiveFitEnabled = false
+        updateShowMyLocationButtonVisibility()
+        clearMultiTrackContextState()
+        clearMapSelection()
+        clearAllTrackSources()
+        setAllTrackLayersVisibility(true)
+        setAnnotationLayersVisibility(false)
+        currentGroupForMap = group
+        mapFlowViewModel.handleIntent(MapIntent.LoadGroup(group, zoomToTrackerId))
     }
 
     fun showAllTrackersFromSettings() {
@@ -1715,56 +1665,14 @@ class MapFragment : Fragment() {
         clearMultiTrackContextState()
         activeCameraIntent = CameraIntent.BOUNDS_FIT
         preserveCenteredAllTrackersFit = false
-        val map = maplibreMap
-        if (map == null) {
+        if (maplibreMap == null || maplibreMap?.style == null) {
             pendingShowAllTrackers = true
             showAllTrackers = true
             mapViewContext = MapViewContext.SINGLE_TRACKER
             updateTrackerLabel()
             return
         }
-        val style = map.style
-        if (style == null) {
-            // Keep intent; onMapReady/style-ready path will replay all-trackers load.
-            pendingShowAllTrackers = true
-            showAllTrackers = true
-            mapViewContext = MapViewContext.SINGLE_TRACKER
-            updateTrackerLabel()
-            return
-        }
-        val callbacks = MapAllTrackersCallbacks(
-            isAdded = { isAdded },
-            onEmpty = {
-                stopLiveTrackStreaming()
-                showAllTrackers = true
-                clearAllTrackSources()
-                setAllTrackLayersVisibility(true)
-                setAnnotationLayersVisibility(false)
-                updateTrackerLabel()
-                updateZoomToLatestButtonState()
-            },
-            onHasTrackers = { trackers ->
-                showAllTrackers = true
-                startLiveTrackStreamingForTrackerSet(trackers.map { it.id }.toSet())
-                // Fit immediately from last_point while geometry fetch runs; refine again on geometry callback.
-                val shouldInitialFit = selectedMapTracker == null
-                applyAllTrackersToMap(trackers, emptyMap(), map, style, fitBounds = shouldInitialFit)
-            },
-            onHasGeometry = { trackers, coordsById ->
-                lifecycleScope.launch {
-                    if (!isAdded || !showAllTrackers) return@launch
-                    val shouldRefit = selectedMapTracker == null
-                    applyAllTrackersToMap(
-                        trackers,
-                        coordsById,
-                        map,
-                        style,
-                        fitBounds = shouldRefit
-                    )
-                }
-            }
-        )
-        MapAllTrackersFlow.loadAllTrackersAndApply(requireContext(), callbacks)
+        mapFlowViewModel.handleIntent(MapIntent.LoadAllTrackers)
     }
 
     /**
@@ -1773,14 +1681,18 @@ class MapFragment : Fragment() {
      */
     private fun restoreAllTrackersFromCacheIfAvailable(map: MapLibreMap, style: Style): Boolean {
         val state = allTrackersState
-        val result = MapAllTrackersFlow.restoreAllTrackersFromCacheIfAvailable(
-            state?.trackers,
-            state?.normalizedCoordsById,
-            multiTrackCoordsCache
-        ) ?: return false
+        val trackers = state?.trackers ?: return false
+        val cachedCoordsById: Map<String, List<List<Double>>>? = when {
+            !state.normalizedCoordsById.isNullOrEmpty() -> state.normalizedCoordsById
+            multiTrackCoordsCache.isNotEmpty() -> multiTrackCoordsCache.mapValues { it.value.toList() }
+            else -> null
+        }
+        val hasTailData = (cachedCoordsById?.values?.any { it.size >= 2 } == true) ||
+            trackers.any { (it.geometry?.coordinates?.size ?: 0) >= 2 }
+        if (!hasTailData) return false
         applyAllTrackersToMap(
-            trackers = result.first,
-            coordsById = result.second,
+            trackers = trackers,
+            coordsById = cachedCoordsById ?: emptyMap(),
             map = map,
             style = style,
             fitBounds = false
@@ -2359,57 +2271,6 @@ class MapFragment : Fragment() {
         MapPointFeatureHelper.ensureArrowImageInStyle(requireContext(), style, hexColor, chevronOnly)
     }
 
-    private fun applyCoordinatesPreview(
-        coordinates: List<List<Double>>,
-        forceReplace: Boolean
-    ): Boolean {
-        val applied = MapHistoryUtils.applyCoordinatesPreview(
-            coordinates = coordinates,
-            forceReplace = forceReplace,
-            trackPoints = trackPoints,
-            trackTimestamps = trackTimestamps
-        )
-        if (!applied) return false
-        scheduleTrackLineUpdate()
-        setAnnotationLayersVisibility(true)
-        updateZoomToLatestButtonState()
-        return true
-    }
-
-    private fun buildSingleTrackFetchCallbacks(): MapSingleTrackFetchCallbacks {
-        return MapSingleTrackFetchCallbacks(
-            getScope = { lifecycleScope },
-            getSelectedTrackerId = { SelectedTrackerPrefs.selectedTrackerId(requireContext()) },
-            getIsSingleTrackerContext = { !showAllTrackers && mapViewContext != MapViewContext.GROUP },
-            getActiveTrackerId = {
-                resolveActiveSingleTrackerId(SelectedTrackerPrefs.selectedTrackerId(requireContext()))
-            },
-            getTrackPointsEmpty = { trackPoints.isEmpty() },
-            getCoordinatesFetchToken = { coordinatesFetchToken },
-            setCoordinatesFetchToken = { coordinatesFetchToken = it },
-            getGeometryFetchToken = { geometryFetchToken },
-            setGeometryFetchToken = { geometryFetchToken = it },
-            setGeometryLoadingInProgress = { geometryLoadingInProgress = it },
-            updateBottomRightSpinner = { updateBottomRightSpinner() },
-            onSkipped = {
-                updateZoomToLatestButtonState()
-                updateTrackerLabel()
-            },
-            onSetZoomToTrackAfterLoad = { zoomToTrackAfterLoad = it },
-            onSeededFromPreview = { tracker, coords, forceReplace, accuracyMeters ->
-                handleSeededFromPreview(tracker, coords, forceReplace, accuracyMeters)
-            },
-            onSeededFromNetwork = { coords, pointParams ->
-                handleSeededFromNetwork(coords, pointParams)
-            },
-            getIsAdded = { isAdded },
-            getTrackerRequestEpoch = { trackerRequestEpoch },
-            onGeometryLoaded = { tracker, trackerId, forceReplace ->
-                handleSingleTrackGeometryLoaded(tracker, trackerId, forceReplace)
-            }
-        )
-    }
-
     private fun applyDisplayedTrackerMetadata(tracker: Tracker) {
         lastCachedUpdateTimeMs = trackerLastUpdateMs(tracker)
         currentTrackerColor = (tracker.color ?: defaultTrackerColorHex(requireContext())).let {
@@ -2419,47 +2280,6 @@ class MapFragment : Fragment() {
         displayedTrackerId = tracker.id
         displayedTrackerName = tracker.name
         displayedTrackerIsOwner = tracker.isOwner()
-    }
-
-    private fun handleSeededFromPreview(
-        tracker: Tracker?,
-        coords: List<List<Double>>,
-        forceReplace: Boolean,
-        accuracyMeters: Float?
-    ): Boolean {
-        if (tracker != null) {
-            applyDisplayedTrackerMetadata(tracker)
-        }
-        accuracyMeters?.let { lastStreamedAccuracyMeters = it }
-        val applied = applyCoordinatesPreview(coords, forceReplace)
-        if (applied) {
-            maybeZoomToLatestFromSeed(tracker?.last_point)
-            updateTrackerLabel()
-        }
-        return applied
-    }
-
-    private fun handleSeededFromNetwork(
-        coords: List<List<Double>>,
-        pointParams: List<Map<String, Any?>>?
-    ) {
-        val applied = applyCoordinatesPreview(coords, forceReplace = trackPoints.isEmpty())
-        if (applied) {
-            pointParams?.lastOrNull()?.get("acc")
-                ?.let { (it as? Number)?.toFloat() }
-                ?.takeIf { it > 0f }
-                ?.let { lastStreamedAccuracyMeters = it }
-            maybeZoomToLatestFromSeed()
-            updateTrackerLabel()
-        }
-    }
-
-    private fun maybeZoomToLatestFromSeed(fallbackLastPoint: List<Double>? = null) {
-        if (showAllTrackers || mapViewContext == MapViewContext.GROUP) return
-        if (showMyLocationEnabled) return
-        val map = maplibreMap ?: return
-        if (trackPoints.isEmpty()) return
-        zoomToLatestTrackPoint(map, fallbackLastPoint)
     }
 
     private fun handleSingleTrackGeometryLoaded(
@@ -2533,20 +2353,6 @@ class MapFragment : Fragment() {
         startLiveTrackStreamingForDisplayedTracker()
     }
 
-    private fun seedTrackFromCacheOrTail(
-        trackerId: String,
-        initialTracker: Tracker? = null,
-        allowCoordinatesNetwork: Boolean
-    ) {
-        MapSingleTrackFetch.seedFromCacheOrTail(
-            requireContext(),
-            trackerId,
-            initialTracker,
-            allowCoordinatesNetwork,
-            buildSingleTrackFetchCallbacks()
-        )
-    }
-
     private fun primeDisplayedTrackerFromInitial(initial: Tracker) {
         lastStreamedPointTimeMs = null
         applyDisplayedTrackerMetadata(initial)
@@ -2555,18 +2361,6 @@ class MapFragment : Fragment() {
         lastStreamedAccuracyMeters = (initial.point_params?.lastOrNull()?.get("acc") as? Number)
             ?.toFloat()
             ?.takeIf { it > 0f }
-    }
-
-    private fun loadSingleTrackerHistory(
-        trackerIdOverride: String? = null,
-        initialTracker: Tracker? = null
-    ) {
-        MapSingleTrackFetch.loadHistory(
-            context = requireContext(),
-            callbacks = buildSingleTrackFetchCallbacks(),
-            trackerIdOverride = trackerIdOverride,
-            initialTracker = initialTracker
-        )
     }
 
     /**
@@ -2585,7 +2379,7 @@ class MapFragment : Fragment() {
         }
         setDisplayedTrackerPlaceholder(selectedTrackerId, selectedTrackerName)
         updateTrackerLabel()
-        loadSingleTrackerHistory(trackerIdOverride = selectedTrackerId)
+        mapFlowViewModel.handleIntent(MapIntent.LoadSingleTracker(trackerId = selectedTrackerId, forceReplace = true))
     }
 
     private fun fetchHistory() {
@@ -2596,11 +2390,11 @@ class MapFragment : Fragment() {
             updateTrackerLabel()
             return
         }
-        loadSingleTrackerHistory()
+        mapFlowViewModel.handleIntent(MapIntent.LoadSingleTracker(trackerId = displayedTrackerId, forceReplace = false))
     }
 
     private fun fetchFullGeometryAndApply(trackerId: String, forceReplace: Boolean = false) {
-        MapSingleTrackFetch.fetchFullGeometry(requireContext(), trackerId, forceReplace, buildSingleTrackFetchCallbacks())
+        mapFlowViewModel.handleIntent(MapIntent.LoadSingleTracker(trackerId = trackerId, forceReplace = forceReplace))
     }
 
     /** Start live streaming for the currently displayed single tracker. */
@@ -2690,6 +2484,87 @@ class MapFragment : Fragment() {
 
     private fun splitTrackIntoSegments(points: List<LatLng>): List<List<LatLng>> =
         MapTrackGeometryRenderer.splitTrackIntoSegments(points, MapConstants.MAX_JUMP_METERS)
+
+    private fun observeMapFlow() {
+        mapCommandsJob?.cancel()
+        mapCommandsJob = viewLifecycleOwner.lifecycleScope.launch {
+            launch {
+                mapFlowViewModel.uiState.collect { state ->
+                    showAllTrackers = state.showAllTrackers
+                    displayedTrackerId = state.displayedTrackerId
+                    displayedTrackerName = state.displayedTrackerName
+                    displayedGroupName = state.displayedGroupName
+                    mapViewContext = when (state.mode) {
+                        is MapScreenMode.GroupMode -> MapViewContext.GROUP
+                        else -> MapViewContext.SINGLE_TRACKER
+                    }
+                    activeStreamedTrackerIds = state.activeStreamedTrackerIds
+                    if (state.loading) {
+                        mapLoadingOverlay.visibility = View.VISIBLE
+                    } else {
+                        mapLoadingOverlay.visibility = View.GONE
+                    }
+                    updateTrackerLabel()
+                }
+            }
+            launch {
+                mapFlowViewModel.commands.collect { command ->
+                    when (command) {
+                        is MapCommand.RenderSingleTracker -> {
+                            val trackerWithGeometry = if (command.snapshot.tracker.geometry == null && command.snapshot.coordinates.isNotEmpty()) {
+                                command.snapshot.tracker.copy(
+                                    geometry = GeoJsonLineString(
+                                        type = "LineString",
+                                        coordinates = command.snapshot.coordinates
+                                    )
+                                )
+                            } else {
+                                command.snapshot.tracker
+                            }
+                            handleSingleTrackGeometryLoaded(
+                                tracker = trackerWithGeometry,
+                                trackerId = trackerWithGeometry.id,
+                                forceReplace = command.snapshot.forceReplace
+                            )
+                        }
+                        is MapCommand.RenderAllTrackers -> {
+                            val map = maplibreMap
+                            val style = map?.style
+                            if (map != null && style != null) {
+                                applyAllTrackersToMap(
+                                    trackers = command.snapshot.trackers,
+                                    coordsById = command.snapshot.coordsByTrackerId,
+                                    map = map,
+                                    style = style,
+                                    fitBounds = command.snapshot.fitBounds,
+                                    fitToTrackerId = command.snapshot.fitToTrackerId,
+                                    liveActiveOnlyFit = command.snapshot.liveActiveOnlyFit
+                                )
+                            } else {
+                                pendingShowAllTrackers = true
+                            }
+                        }
+                        is MapCommand.ApplyTrackPoint -> {
+                            command.event.accuracyMeters?.let { lastStreamedAccuracyMeters = it }
+                            applyLiveStreamPoint(
+                                trackId = command.event.trackId,
+                                lat = command.event.lat,
+                                lon = command.event.lon,
+                                timestampMs = command.event.timestampMs.takeIf { it > 0L } ?: System.currentTimeMillis()
+                            )
+                        }
+                        is MapCommand.ApplyCameraPolicy -> {
+                            followLockEnabled = command.command.followLockEnabled
+                            updateFollowLockButton()
+                        }
+                        is MapCommand.ShowError -> {
+                            (activity as? MainActivity)?.showSnackbar(command.message)
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     private fun announceSelectionForAccessibility(message: String) {
         val accessibilityManager = context?.getSystemService(AccessibilityManager::class.java) ?: return
