@@ -25,19 +25,16 @@ import com.geovault.common.map.GeoVaultMapFragment
 import com.geovault.common.map.LocationComponentHelper
 import com.geovault.common.map.MapLibreManager
 import com.geovault.tracker.defaultTrackerColorHex
-import com.geovault.tracker.LiveTrackStreamingService
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.Group
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.TrackingService
 import com.geovault.tracker.TrackUpdateHelper
 import com.geovault.tracker.GeoJsonLineString
+import com.geovault.tracker.lastUpdateMs
 import com.geovault.tracker.fragments.TrackersListFragment
-import com.geovault.tracker.pipeline.TrackPointBus
-import com.geovault.tracker.pipeline.TrackPointEvent
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -45,7 +42,6 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.collect
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdate
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -189,7 +185,6 @@ class MapFragment : Fragment() {
     private var standaloneLocationCallback: LocationCallback? = null
 
     private val liveStreamCoordinator = MapLiveStreamCoordinator(lifecycleScope)
-    private var trackPointCollectionJob: Job? = null
     private var mapCommandsJob: Job? = null
 
     private fun applyLiveStreamPoint(
@@ -199,40 +194,6 @@ class MapFragment : Fragment() {
         timestampMs: Long
     ) {
         MapLiveStreamPointHandler.applyLiveStreamPoint(trackId, lat, lon, timestampMs, buildLiveStreamPointCallbacks())
-    }
-
-    private fun currentTrackPointContext(): MapTrackPointContext {
-        return MapTrackPointContext(
-            trackingRunning = TrackingService.isRunning,
-            showAllTrackers = showAllTrackers,
-            mapViewContext = mapViewContext,
-            displayedTrackerId = displayedTrackerId,
-            activeStreamedTrackerIds = activeStreamedTrackerIds
-        )
-    }
-
-    private fun shouldAcceptTrackPoint(event: TrackPointEvent): Boolean {
-        val trackPointState = MapTrackPointReducer.stateFromContext(currentTrackPointContext())
-        return MapTrackPointReducer.shouldAcceptPoint(
-            event = event,
-            state = trackPointState
-        )
-    }
-
-    private fun startTrackPointCollection() {
-        if (trackPointCollectionJob?.isActive == true) return
-        trackPointCollectionJob = lifecycleScope.launch {
-            TrackPointBus.events.collect { event ->
-                if (!shouldAcceptTrackPoint(event)) return@collect
-                event.accuracyMeters?.let { lastStreamedAccuracyMeters = it }
-                applyLiveStreamPoint(
-                    trackId = event.trackId,
-                    lat = event.lat,
-                    lon = event.lon,
-                    timestampMs = event.timestampMs.takeIf { it > 0L } ?: System.currentTimeMillis()
-                )
-            }
-        }
     }
 
     private fun buildLiveStreamPointCallbacks(): MapLiveStreamPointCallbacks {
@@ -509,7 +470,7 @@ class MapFragment : Fragment() {
             }
         }
         resetToTrackerButton.setOnClickListener {
-            TrackerRepository.cancelGeometryRequest()
+            mapFlowViewModel.cancelGeometryRequest()
             restoreTrackForSelectedTracker()
         }
 
@@ -695,8 +656,6 @@ class MapFragment : Fragment() {
         view?.keepScreenOn = false
         stopStandaloneLocationUpdates(clearGpsFix = true)
         mapFlowViewModel.stopTrackPointStream()
-        trackPointCollectionJob?.cancel()
-        trackPointCollectionJob = null
     }
 
     override fun onDestroyView() {
@@ -1134,14 +1093,12 @@ class MapFragment : Fragment() {
 
     /** True when a single tracker is currently active for live updates. */
     private fun isStreaming(): Boolean {
-        if (TrackingService.isRunning) return false
-        if (!LiveTrackStreamingService.isRunning) return false
-        return if (showAllTrackers || mapViewContext == MapViewContext.GROUP) {
-            activeStreamedTrackerIds.isNotEmpty()
-        } else {
-            val id = displayedTrackerId ?: return false
-            id in activeStreamedTrackerIds
-        }
+        return mapFlowViewModel.isStreaming(
+            trackingRunning = TrackingService.isRunning,
+            showAllTrackers = showAllTrackers,
+            mapViewContext = mapViewContext,
+            displayedTrackerId = displayedTrackerId
+        )
     }
 
     private fun updateStreamingUi() {
@@ -1167,14 +1124,7 @@ class MapFragment : Fragment() {
 
     /** Extract last update timestamp (ms) from tracker geometry, last_point, or updated_at; same convention as TrackersListFragment. */
     private fun trackerLastUpdateMs(tracker: Tracker?): Long? {
-        if (tracker == null) return null
-        val coord = tracker.geometry?.coordinates?.lastOrNull() ?: tracker.last_point
-        if (coord != null) {
-            MapCoordinateUtils.timestampFromCoordinateMs(coord)?.let { return it }
-        }
-        // Fallback to list/API updated_at so we never show "Waiting for data" when we have cached data
-        val u = tracker.updated_at ?: return null
-        return MapCoordinateUtils.normalizeTimestampToMs(u)
+        return tracker?.lastUpdateMs()
     }
 
     /** Show bottom-right indicator: red circle when streaming, spinner when loading geometry. */
@@ -2066,7 +2016,6 @@ class MapFragment : Fragment() {
             lastCachedUpdateTimeMs = lastCachedUpdateTimeMs,
             displayedTrackerLastUpdateMs = displayedTracker?.takeIf { it.id == id }?.let { trackerLastUpdateMs(it) },
             lastKnownUpdateMs = lastKnownUpdateTimeMsByTrackerId[id]
-                ?: TrackerRepository.getTrackerFromCache(id)?.let { trackerLastUpdateMs(it) }
         )
     }
 
@@ -2076,15 +2025,13 @@ class MapFragment : Fragment() {
             feature = feature,
             defaultHexColor = defaultHexColor,
             lastKnownById = lastKnownUpdateTimeMsByTrackerId,
-            resolveTrackerIsOwner = { trackerId -> resolveTrackerIsOwner(null, trackerId) }
+            resolveTrackerIsOwner = { _ -> false }
         )
     }
 
-    /** Some payloads may omit is_owner. Resolve strictly from payload/cache without id-based shortcuts. */
-    private fun resolveTrackerIsOwner(tracker: Tracker?, trackerId: String): Boolean {
-        tracker?.is_owner?.let { return it }
-        TrackerRepository.getTrackerFromCache(trackerId)?.is_owner?.let { return it }
-        return false
+    /** Some payloads may omit is_owner; rely only on the payload provided to the map layer. */
+    private fun resolveTrackerIsOwner(tracker: Tracker?): Boolean {
+        return tracker?.isOwner() == true
     }
 
     private fun clearMapSelection() {
@@ -2261,7 +2208,7 @@ class MapFragment : Fragment() {
             feature, tracker, lat, lon, lastUpdateMs,
             requireContext(),
             defaultTrackerColorHex(requireContext()).let { if (it.startsWith("#")) it else "#$it" },
-            ::resolveTrackerIsOwner,
+            { payload, _ -> resolveTrackerIsOwner(payload) },
             ::trackerLastUpdateMs
         )
     }
@@ -2295,7 +2242,7 @@ class MapFragment : Fragment() {
         displayedTrackerIsOwner = tracker?.is_owner ?: if (previousDisplayedTrackerId == trackerId) {
             previousDisplayedTrackerIsOwner
         } else {
-            resolveTrackerIsOwner(tracker, trackerId)
+            resolveTrackerIsOwner(tracker)
         }
         lastCachedUpdateTimeMs = trackerLastUpdateMs(tracker)
         displayedGroupName = null
@@ -2399,37 +2346,24 @@ class MapFragment : Fragment() {
 
     /** Start live streaming for the currently displayed single tracker. */
     private fun startLiveTrackStreamingForDisplayedTracker() {
-        if (TrackingService.isRunning) {
-            stopLiveTrackStreaming()
-            return
-        }
-        MapStreamingServiceHelper.updateStreamingForDisplayedTracker(
-            displayedTrackerId,
-            displayedTrackerName,
-            SelectedTrackerPrefs.selectedTrackerId(requireContext()),
-            mapViewContext,
-            startStreaming = { ids, name -> startLiveTrackStreamingForTrackerSet(ids, name) },
-            stopStreaming = { stopLiveTrackStreaming() }
+        mapFlowViewModel.startLiveTrackStreamingForDisplayedTracker(
+            displayedTrackerId = displayedTrackerId,
+            displayedTrackerName = displayedTrackerName,
+            selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(requireContext()),
+            mapViewContext = mapViewContext
         )
     }
 
     /** Start live streaming for a set of trackers (group/all-trackers context). */
     private fun startLiveTrackStreamingForTrackerSet(trackerIds: Set<String>, trackerName: String? = null) {
-        if (TrackingService.isRunning) {
-            stopLiveTrackStreaming()
-            return
-        }
-        val cleanedIds = MapStreamingServiceHelper.startStreaming(requireContext(), trackerIds, trackerName)
-        if (cleanedIds == null) {
-            stopLiveTrackStreaming()
-            return
-        }
-        activeStreamedTrackerIds = cleanedIds
+        mapFlowViewModel.startLiveTrackStreamingForTrackerSet(
+            trackerIds = trackerIds,
+            trackerName = trackerName
+        )
     }
 
     private fun stopLiveTrackStreaming() {
-        activeStreamedTrackerIds = emptySet()
-        MapStreamingServiceHelper.stopStreaming(requireContext())
+        mapFlowViewModel.stopLiveTrackStreaming()
         // Refresh spinner/label state immediately after clearing active stream ids.
         updateStreamingUi()
     }
