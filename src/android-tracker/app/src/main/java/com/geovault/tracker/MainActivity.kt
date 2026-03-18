@@ -112,14 +112,6 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         }
     }
 
-    private fun normalizeServerUrl(url: String): String {
-        var serverUrl = url.trim().trimStart('/').trimEnd('/')
-        if (serverUrl.isNotEmpty() && !serverUrl.startsWith("http://") && !serverUrl.startsWith("https://")) {
-            serverUrl = "https://$serverUrl"
-        }
-        return serverUrl
-    }
-
     private fun setupGuestView() {
         val rootView = findViewById<View>(R.id.rootLayout)
         val headerLayout = findViewById<View>(R.id.headerLayout)
@@ -141,18 +133,33 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
                 serverUrlEdit.setText(otherUrls.single())
             }
         }
-        findViewById<MaterialButton>(R.id.guestConnectButton).setOnClickListener {
-            val url = normalizeServerUrl(serverUrlEdit.text.toString())
+        val guestConnectButton = findViewById<MaterialButton>(R.id.guestConnectButton)
+        guestConnectButton.setOnClickListener {
+            val url = GeovaultAuthManager.normalizeServerUrl(serverUrlEdit.text.toString())
             if (url.isEmpty()) {
                 showSnackbar(getString(R.string.error_enter_server_url))
                 return@setOnClickListener
             }
-            GeovaultAuthManager.setServerUrl(this, url)
-            val (verifier, challenge) = GeovaultAuthManager.generatePkcePair()
-            val state = java.util.UUID.randomUUID().toString()
-            GeovaultAuthManager.savePkceState(this, verifier, state)
-            val authUrl = GeovaultAuthManager.buildAuthorizeUrl(url, challenge, state)
-            GeovaultAuthManager.launchOAuthInBrowser(this, authUrl)
+            guestConnectButton.isEnabled = false
+            showSnackbar(getString(R.string.connecting_server))
+            GeovaultAuthManager.resolveServerUrlToCanonical(url) { result ->
+                runOnUiThread {
+                    guestConnectButton.isEnabled = true
+                    result.fold(
+                        onSuccess = { resolvedUrl ->
+                            GeovaultAuthManager.setServerUrl(this, resolvedUrl)
+                            val (verifier, challenge) = GeovaultAuthManager.generatePkcePair()
+                            val state = java.util.UUID.randomUUID().toString()
+                            GeovaultAuthManager.savePkceState(this, verifier, state)
+                            val authUrl = GeovaultAuthManager.buildAuthorizeUrl(resolvedUrl, challenge, state)
+                            GeovaultAuthManager.launchOAuthInBrowser(this, authUrl)
+                        },
+                        onFailure = {
+                            showSnackbar(getString(R.string.error_server_unreachable))
+                        }
+                    )
+                }
+            }
         }
     }
 

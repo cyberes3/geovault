@@ -1,7 +1,6 @@
 package com.geovault.tracker.fragments.map
 
 import android.annotation.SuppressLint
-import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
 import android.graphics.Color
 import android.content.*
@@ -2502,9 +2501,9 @@ class MapFragment : Fragment() {
     private fun announceSelectionForAccessibility(message: String) {
         val accessibilityManager = context?.getSystemService(AccessibilityManager::class.java) ?: return
         if (!accessibilityManager.isEnabled) return
-        val event = AccessibilityEvent.obtain(AccessibilityEvent.TYPE_ANNOUNCEMENT)
-        event.text.add(message)
-        accessibilityManager.sendAccessibilityEvent(event)
+        val root = view ?: return
+        root.contentDescription = message
+        root.sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED)
     }
 
     private fun trackingRuntimeSnapshot() = TrackingRuntimeStateStore.state.value

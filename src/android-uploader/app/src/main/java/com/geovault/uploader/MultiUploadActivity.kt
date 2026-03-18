@@ -64,14 +64,6 @@ class MultiUploadActivity : AppCompatActivity() {
         private const val PREF_ADD_SUFFIX = "add_suffix"
     }
 
-    private fun normalizeServerUrl(url: String): String {
-        var serverUrl = url.trim().trimStart('/').trimEnd('/')
-        if (serverUrl.isNotEmpty() && !serverUrl.startsWith("http://") && !serverUrl.startsWith("https://")) {
-            serverUrl = "https://$serverUrl"
-        }
-        return serverUrl
-    }
-
     private fun showSnackbar(message: String) {
         importantMessageSnackbar.showMessage(message)
     }
@@ -271,7 +263,7 @@ class MultiUploadActivity : AppCompatActivity() {
     private fun startUploadQueue() {
         if (isUploading) return
 
-        val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
+        val serverUrl = GeovaultAuthManager.normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
         if (serverUrl.isEmpty() || !GeovaultAuthManager.isLoggedIn(this)) {
             statusText.visibility = View.GONE
             showSnackbar(getString(R.string.config_settings_first))
@@ -386,7 +378,7 @@ class MultiUploadActivity : AppCompatActivity() {
     }
     
     private fun uploadFile(fileItem: FileItem, index: Int) {
-        val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
+        val serverUrl = GeovaultAuthManager.normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
         if (!GeovaultAuthManager.isLoggedIn(this)) {
             adapter.updateFileStatus(index, FileStatus.ERROR, "Not signed in")
             currentUploadIndex++

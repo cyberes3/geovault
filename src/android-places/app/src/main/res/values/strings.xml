@@ -32,6 +32,7 @@
     <string name="config_settings_first">Please configure settings first</string>
     <string name="validating_key">Validating API Key…</string>
     <string name="connecting_server">Connecting to server…</string>
+    <string name="error_server_unreachable">Could not reach server. Check URL and connection.</string>
     <string name="validation_failed">Validation Failed</string>
     <string name="api_key_valid">API Key Valid</string>
     <string name="api_key_valid_msg">✓ API key \'%1$s\' is valid!\n\nShare a file to upload it.</string>

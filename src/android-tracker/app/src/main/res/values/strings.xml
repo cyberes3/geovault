@@ -225,6 +225,7 @@
     <string name="stop_streaming">Stop Streaming</string>
     <string name="connected_as">Connected as %1$s</string>
     <string name="error_enter_server_url">Please enter server URL</string>
+    <string name="error_server_unreachable">Could not reach server. Check URL and connection.</string>
     <string name="track_mode_label">Tracker mode: %1$s</string>
     <string name="unknown">Unknown</string>
     <string name="logged_in_as">Logged in as %1$s</string>

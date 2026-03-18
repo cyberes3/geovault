@@ -29,14 +29,6 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var loggedInUserText: TextView
     private lateinit var settingsHelpText: TextView
 
-    private fun normalizeServerUrl(url: String): String {
-        var serverUrl = url.trim().trimStart('/').trimEnd('/')
-        if (serverUrl.isNotEmpty() && !serverUrl.startsWith("http://") && !serverUrl.startsWith("https://")) {
-            serverUrl = "https://$serverUrl"
-        }
-        return serverUrl
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
@@ -74,17 +66,31 @@ class SettingsActivity : AppCompatActivity() {
         updateConnectDisconnectVisibility()
 
         connectButton.setOnClickListener {
-            val serverUrl = normalizeServerUrl(serverUrlEdit.text.toString())
-            if (serverUrl.isEmpty()) {
+            val url = GeovaultAuthManager.normalizeServerUrl(serverUrlEdit.text.toString())
+            if (url.isEmpty()) {
                 Toast.makeText(this, getString(R.string.settings_required), Toast.LENGTH_LONG).show()
                 return@setOnClickListener
             }
-            GeovaultAuthManager.setServerUrl(this, serverUrl, commit = true)
-            val (verifier, challenge) = GeovaultAuthManager.generatePkcePair()
-            val state = (1..16).map { "abcdef0123456789"[kotlin.random.Random.nextInt(16)] }.joinToString("")
-            GeovaultAuthManager.savePkceState(this, verifier, state)
-            val authorizeUrl = GeovaultAuthManager.buildAuthorizeUrl(serverUrl, challenge, state)
-            GeovaultAuthManager.launchOAuthInBrowser(this, authorizeUrl)
+            connectButton.isEnabled = false
+            Toast.makeText(this, getString(R.string.connecting_server), Toast.LENGTH_SHORT).show()
+            GeovaultAuthManager.resolveServerUrlToCanonical(url) { result ->
+                runOnUiThread {
+                    connectButton.isEnabled = true
+                    result.fold(
+                        onSuccess = { resolvedUrl ->
+                            GeovaultAuthManager.setServerUrl(this, resolvedUrl, commit = true)
+                            val (verifier, challenge) = GeovaultAuthManager.generatePkcePair()
+                            val state = (1..16).map { "abcdef0123456789"[kotlin.random.Random.nextInt(16)] }.joinToString("")
+                            GeovaultAuthManager.savePkceState(this, verifier, state)
+                            val authorizeUrl = GeovaultAuthManager.buildAuthorizeUrl(resolvedUrl, challenge, state)
+                            GeovaultAuthManager.launchOAuthInBrowser(this, authorizeUrl)
+                        },
+                        onFailure = {
+                            Toast.makeText(this, getString(R.string.error_server_unreachable), Toast.LENGTH_LONG).show()
+                        }
+                    )
+                }
+            }
         }
 
         disconnectButton.setOnClickListener {

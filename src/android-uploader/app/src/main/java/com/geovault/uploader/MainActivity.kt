@@ -72,14 +72,6 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_OAUTH_ERROR = "oauth_error"
     }
 
-    private fun normalizeServerUrl(url: String): String {
-        var serverUrl = url.trim().trimStart('/').trimEnd('/')
-        if (serverUrl.isNotEmpty() && !serverUrl.startsWith("http://") && !serverUrl.startsWith("https://")) {
-            serverUrl = "https://$serverUrl"
-        }
-        return serverUrl
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -125,7 +117,7 @@ class MainActivity : AppCompatActivity() {
         }
         
         // Check if we have settings configured and account connected
-        val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
+        val serverUrl = GeovaultAuthManager.normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
         if (serverUrl.isEmpty() || !GeovaultAuthManager.isLoggedIn(this)) {
             openSettings()
             return
@@ -246,7 +238,7 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun uploadFile() {
-        val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
+        val serverUrl = GeovaultAuthManager.normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
         if (serverUrl.isEmpty() || !GeovaultAuthManager.isLoggedIn(this)) {
             openSettings()
             return
@@ -418,7 +410,7 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun validateApiKey() {
-        val serverUrl = normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
+        val serverUrl = GeovaultAuthManager.normalizeServerUrl(GeovaultAuthManager.getServerUrl(this))
         if (serverUrl.isEmpty() || !GeovaultAuthManager.isLoggedIn(this)) {
             validationTitleText.text = getString(R.string.config_required)
             validationStatusText.text = getString(R.string.config_settings_first)

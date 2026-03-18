@@ -48,14 +48,6 @@ class SettingsFragment : Fragment() {
     private lateinit var distanceLabel: TextView
     private lateinit var accuracyLabel: TextView
 
-    private fun normalizeServerUrl(url: String): String {
-        var serverUrl = url.trim().trimStart('/').trimEnd('/')
-        if (serverUrl.isNotEmpty() && !serverUrl.startsWith("http://") && !serverUrl.startsWith("https://")) {
-            serverUrl = "https://$serverUrl"
-        }
-        return serverUrl
-    }
-
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -327,19 +319,31 @@ class SettingsFragment : Fragment() {
     }
 
     private fun onConnectClicked() {
-        val url = normalizeServerUrl(serverUrlEdit.text.toString())
+        val url = GeovaultAuthManager.normalizeServerUrl(serverUrlEdit.text.toString())
         if (url.isEmpty()) {
             navHost()?.showSnackbar(getString(R.string.error_enter_server_url))
             return
         }
-        GeovaultAuthManager.setServerUrl(requireContext(), url)
-        
-        val (verifier, challenge) = GeovaultAuthManager.generatePkcePair()
-        val state = java.util.UUID.randomUUID().toString()
-        GeovaultAuthManager.savePkceState(requireContext(), verifier, state)
-        
-        val authUrl = GeovaultAuthManager.buildAuthorizeUrl(url, challenge, state)
-        GeovaultAuthManager.launchOAuthInBrowser(requireContext(), authUrl)
+        connectButton.isEnabled = false
+        navHost()?.showSnackbar(getString(R.string.connecting_server))
+        GeovaultAuthManager.resolveServerUrlToCanonical(url) { result ->
+            requireActivity().runOnUiThread {
+                connectButton.isEnabled = true
+                result.fold(
+                    onSuccess = { resolvedUrl ->
+                        GeovaultAuthManager.setServerUrl(requireContext(), resolvedUrl)
+                        val (verifier, challenge) = GeovaultAuthManager.generatePkcePair()
+                        val state = java.util.UUID.randomUUID().toString()
+                        GeovaultAuthManager.savePkceState(requireContext(), verifier, state)
+                        val authUrl = GeovaultAuthManager.buildAuthorizeUrl(resolvedUrl, challenge, state)
+                        GeovaultAuthManager.launchOAuthInBrowser(requireContext(), authUrl)
+                    },
+                    onFailure = {
+                        navHost()?.showSnackbar(getString(R.string.error_server_unreachable))
+                    }
+                )
+            }
+        }
     }
 
     private fun onDisconnectClicked() {

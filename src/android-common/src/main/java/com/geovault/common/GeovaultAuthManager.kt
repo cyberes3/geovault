@@ -12,6 +12,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.security.MessageDigest
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import javax.crypto.AEADBadTagException
 
@@ -163,6 +164,65 @@ object GeovaultAuthManager {
     fun setServerUrl(context: Context, url: String, commit: Boolean = false) {
         val editor = plainPrefs(context).edit().putString(PREF_SERVER_URL, url)
         if (commit) editor.commit() else editor.apply()
+    }
+
+    /**
+     * Normalizes a user-entered server URL: trims whitespace and ensures an http/https scheme
+     * (defaults to https if no scheme). Use before [setServerUrl] or [resolveServerUrlToCanonical].
+     */
+    fun normalizeServerUrl(url: String): String {
+        var s = url.trim().trimStart('/').trimEnd('/')
+        if (s.isNotEmpty() && !s.startsWith("http://") && !s.startsWith("https://")) {
+            s = "https://$s"
+        }
+        return s
+    }
+
+    private val resolveExecutor = Executors.newSingleThreadExecutor()
+
+    /**
+     * Resolves a server URL to the canonical base URL after following redirects (e.g. HTTP to HTTPS).
+     * Call before [setServerUrl] when the user may have entered an HTTP URL; then use the resolved
+     * URL for OAuth and API calls so token exchange succeeds.
+     *
+     * - If [url] is already https, invokes [callback] immediately with [Result.success] on the
+     *   calling thread.
+     * - If [url] is http, performs a HEAD request (off the main thread), follows redirects, and
+     *   invokes [callback] with the final base URL (scheme + host + port) or [Result.failure].
+     * Callback may be invoked on a background thread; switch to main thread for UI updates.
+     */
+    fun resolveServerUrlToCanonical(url: String, callback: (Result<String>) -> Unit) {
+        val base = url.trimEnd('/')
+        if (base.startsWith("https://")) {
+            callback(Result.success(base))
+            return
+        }
+        if (!base.startsWith("http://")) {
+            callback(Result.failure(IllegalArgumentException("Server URL must be http or https: $url")))
+            return
+        }
+        resolveExecutor.execute {
+            val client = OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(15, TimeUnit.SECONDS)
+                .followRedirects(true)
+                .build()
+            val request = Request.Builder()
+                .url(base.plus("/"))
+                .head()
+                .build()
+            try {
+                client.newCall(request).execute().use { response ->
+                    val finalUrl = response.request.url
+                    val schemeDefaultPort = if (finalUrl.scheme == "https") 443 else 80
+                    val resolvedBase = "${finalUrl.scheme}://${finalUrl.host}" +
+                        if (finalUrl.port != schemeDefaultPort) ":${finalUrl.port}" else ""
+                    callback(Result.success(resolvedBase))
+                }
+            } catch (e: Exception) {
+                callback(Result.failure(e))
+            }
+        }
     }
 
     /**
