@@ -18,12 +18,12 @@ import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.data.TrackerDetailRepository
-import com.geovault.tracker.data.TrackerRepositoryTrackerDetailRepository
 import com.geovault.tracker.lastPosition
 import com.geovault.tracker.lastUpdateMs
-import com.geovault.tracker.pipeline.TrackPointBusGateway
 import com.geovault.tracker.pipeline.TrackPointEventStream
 import com.geovault.tracker.services.TrackingRuntimeStateStore
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -32,9 +32,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@AndroidEntryPoint
 class TrackerParamsFragment : Fragment() {
-    private val trackPointEvents: TrackPointEventStream = TrackPointBusGateway
-    private val trackerDetailRepository: TrackerDetailRepository = TrackerRepositoryTrackerDetailRepository()
+    @Inject
+    lateinit var trackPointEvents: TrackPointEventStream
+
+    @Inject
+    lateinit var trackerDetailRepository: TrackerDetailRepository
 
     private lateinit var paramsName: TextView
     private lateinit var paramsLastUpdate: TextView

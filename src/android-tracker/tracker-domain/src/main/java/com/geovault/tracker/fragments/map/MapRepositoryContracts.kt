@@ -28,4 +28,3 @@ interface MapVisibilityRepository {
 interface MapStreamingRepository {
     val events: Flow<TrackPointEvent>
 }
-

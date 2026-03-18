@@ -18,5 +18,12 @@ rootProject.name = "android-tracker"
 include ':app'
 include ':android-common'
 include ':android-common-maps'
+include ':tracker-domain'
+include ':tracker-data'
+include ':tracker-pipeline'
+include ':tracker-map-core'
+include ':tracker-map-ui'
+include ':tracker-services'
+include ':tracker-ui'
 project(':android-common').projectDir = file("../android-common")
 project(':android-common-maps').projectDir = file("../android-common-maps")

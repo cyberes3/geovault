@@ -6,13 +6,14 @@ import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerCoordinatesResponse
 import com.geovault.tracker.TrackerRepository
-import com.geovault.tracker.pipeline.TrackPointEvent
 import com.geovault.tracker.pipeline.TrackPointBusGateway
+import com.geovault.tracker.pipeline.TrackPointEvent
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import javax.inject.Inject
 import kotlin.coroutines.resume
 
-class TrackerRepositoryMapTrackRepository : MapTrackRepository {
+class TrackerRepositoryMapTrackRepository @Inject constructor() : MapTrackRepository {
     override suspend fun getTrackers(context: Context, forceRefresh: Boolean): List<Tracker> =
         suspendCancellableCoroutine { continuation ->
             TrackerRepository.getTrackers(context, forceRefresh = forceRefresh) { list ->
@@ -51,7 +52,7 @@ class TrackerRepositoryMapTrackRepository : MapTrackRepository {
     override fun getTrackerFromCache(id: String): Tracker? = TrackerRepository.getTrackerFromCache(id)
 }
 
-class TrackerRepositoryMapGroupRepository : MapGroupRepository {
+class TrackerRepositoryMapGroupRepository @Inject constructor() : MapGroupRepository {
     override suspend fun getGroups(context: Context, forceRefresh: Boolean): List<Group> =
         suspendCancellableCoroutine { continuation ->
             TrackerRepository.getGroups(context, forceRefresh = forceRefresh) { groups ->
@@ -60,7 +61,7 @@ class TrackerRepositoryMapGroupRepository : MapGroupRepository {
         }
 }
 
-class TrackerRepositoryMapVisibilityRepository : MapVisibilityRepository {
+class TrackerRepositoryMapVisibilityRepository @Inject constructor() : MapVisibilityRepository {
     override suspend fun getMapVisibility(context: Context): MapVisibilityResponse? =
         suspendCancellableCoroutine { continuation ->
             TrackerRepository.getMapVisibility(context) { visibility ->
@@ -69,7 +70,6 @@ class TrackerRepositoryMapVisibilityRepository : MapVisibilityRepository {
         }
 }
 
-class TrackPointBusStreamingRepository : MapStreamingRepository {
+class TrackPointBusStreamingRepository @Inject constructor() : MapStreamingRepository {
     override val events: Flow<TrackPointEvent> = TrackPointBusGateway.events
 }
-

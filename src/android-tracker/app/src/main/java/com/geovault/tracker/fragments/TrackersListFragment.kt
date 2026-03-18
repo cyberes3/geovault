@@ -28,11 +28,13 @@ import com.geovault.tracker.lastUpdateMs
 import com.geovault.tracker.navigation.navHost
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.button.MaterialButton
+import dagger.hilt.android.AndroidEntryPoint
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class TrackersListFragment : Fragment() {
     private val viewModel: TrackersListViewModel by viewModels()
 

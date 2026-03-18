@@ -7,6 +7,8 @@ import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,19 +18,20 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-internal class MapViewModel(
+@HiltViewModel
+class MapViewModel @Inject constructor(
     application: Application,
-    private val trackRepository: MapTrackRepository = TrackerRepositoryMapTrackRepository(),
-    private val groupRepository: MapGroupRepository = TrackerRepositoryMapGroupRepository(),
-    private val visibilityRepository: MapVisibilityRepository = TrackerRepositoryMapVisibilityRepository(),
-    private val streamingRepository: MapStreamingRepository = TrackPointBusStreamingRepository(),
-    private val loadSingleTrackerUseCase: LoadSingleTrackerMapUseCase = LoadSingleTrackerMapUseCase(trackRepository),
-    private val loadAllTrackersUseCase: LoadAllTrackersMapUseCase = LoadAllTrackersMapUseCase(trackRepository, groupRepository, visibilityRepository),
-    private val loadGroupMapUseCase: LoadGroupMapUseCase = LoadGroupMapUseCase(trackRepository),
-    private val handleTrackPointUseCase: HandleTrackPointUseCase = HandleTrackPointUseCase(),
-    private val applyCameraPolicyUseCase: ApplyCameraPolicyUseCase = ApplyCameraPolicyUseCase(),
-    private val resolveMapResumeUseCase: ResolveMapResumeUseCase = ResolveMapResumeUseCase()
+    private val trackRepository: MapTrackRepository,
+    private val groupRepository: MapGroupRepository,
+    private val visibilityRepository: MapVisibilityRepository,
+    private val streamingRepository: MapStreamingRepository
 ) : AndroidViewModel(application) {
+    private val loadSingleTrackerUseCase = LoadSingleTrackerMapUseCase(trackRepository)
+    private val loadAllTrackersUseCase = LoadAllTrackersMapUseCase(trackRepository, groupRepository, visibilityRepository)
+    private val loadGroupMapUseCase = LoadGroupMapUseCase(trackRepository)
+    private val handleTrackPointUseCase = HandleTrackPointUseCase()
+    private val applyCameraPolicyUseCase = ApplyCameraPolicyUseCase()
+    private val resolveMapResumeUseCase = ResolveMapResumeUseCase()
 
     private val _uiState = MutableStateFlow(MapUiState())
     val uiState: StateFlow<MapUiState> = _uiState.asStateFlow()
@@ -50,7 +53,7 @@ internal class MapViewModel(
         _uiState.value = transform(_uiState.value)
     }
 
-    fun resolveResumeDecision(input: MapResumeInput): MapResumeDecision {
+    internal fun resolveResumeDecision(input: MapResumeInput): MapResumeDecision {
         return resolveMapResumeUseCase.resolve(input)
     }
 

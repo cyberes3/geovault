@@ -60,7 +60,9 @@ import org.maplibre.geojson.Point
 import android.graphics.PointF
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MapFragment : Fragment() {
     private val mapFlowViewModel: MapViewModel by viewModels()
     private val mapStateViewModel: MapStateViewModel by viewModels()

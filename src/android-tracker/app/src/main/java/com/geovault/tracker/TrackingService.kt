@@ -164,6 +164,15 @@ class TrackingService : TrackPointServiceBase() {
         when (intent?.action) {
             ACTION_START -> startTracking()
             ACTION_STOP -> stopTracking()
+            null -> {
+                val shouldRestart = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+                    .getBoolean(PREF_WAS_TRACKING_BEFORE_EXIT, false)
+                if (shouldRestart) {
+                    startTracking()
+                } else {
+                    stopSelf()
+                }
+            }
         }
         return START_STICKY
     }

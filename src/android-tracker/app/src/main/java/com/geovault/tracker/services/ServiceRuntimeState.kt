@@ -20,9 +20,12 @@ data class TrackingRuntimeSnapshot(
 object TrackingRuntimeStateStore {
     private val _state = MutableStateFlow(TrackingRuntimeSnapshot())
     val state: StateFlow<TrackingRuntimeSnapshot> = _state.asStateFlow()
+    private val lock = Any()
 
     fun update(transform: (TrackingRuntimeSnapshot) -> TrackingRuntimeSnapshot) {
-        _state.value = transform(_state.value)
+        synchronized(lock) {
+            _state.value = transform(_state.value)
+        }
     }
 }
 
@@ -34,8 +37,11 @@ data class LiveStreamRuntimeSnapshot(
 object LiveStreamRuntimeStateStore {
     private val _state = MutableStateFlow(LiveStreamRuntimeSnapshot())
     val state: StateFlow<LiveStreamRuntimeSnapshot> = _state.asStateFlow()
+    private val lock = Any()
 
     fun update(transform: (LiveStreamRuntimeSnapshot) -> LiveStreamRuntimeSnapshot) {
-        _state.value = transform(_state.value)
+        synchronized(lock) {
+            _state.value = transform(_state.value)
+        }
     }
 }

@@ -33,8 +33,10 @@ import com.geovault.tracker.navigation.TrackerNavHost
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.google.android.material.button.MaterialButton
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
 
+@AndroidEntryPoint
 class MainActivity : AppCompatActivity(), TrackerNavHost {
 
     private var isGuestView: Boolean = false
@@ -375,10 +377,9 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     ) {
         val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (trackerId.isEmpty()) return
-        TrackerRepository.checkTracker(this, trackerId) { valid ->
-            runOnUiThread {
-                if (valid) onValid() else onInvalid()
-            }
+        lifecycleScope.launch {
+            val valid = TrackerRepository.checkTrackerSuspend(this@MainActivity, trackerId)
+            if (valid) onValid() else onInvalid()
         }
     }
     

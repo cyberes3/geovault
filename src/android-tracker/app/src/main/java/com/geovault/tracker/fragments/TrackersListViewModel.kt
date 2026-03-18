@@ -6,7 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.data.TrackerListRepository
-import com.geovault.tracker.data.TrackerRepositoryTrackerListRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,8 +20,9 @@ data class TrackersListUiState(
     val errorMessage: String? = null
 )
 
-class TrackersListViewModel(
-    private val trackerListRepository: TrackerListRepository = TrackerRepositoryTrackerListRepository()
+@HiltViewModel
+class TrackersListViewModel @Inject constructor(
+    private val trackerListRepository: TrackerListRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(TrackersListUiState())
     val uiState: StateFlow<TrackersListUiState> = _uiState.asStateFlow()

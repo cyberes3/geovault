@@ -10,7 +10,9 @@ import android.os.Build
 import android.util.Log
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.map.MapLibreInitializer
+import dagger.hilt.android.HiltAndroidApp
 
+@HiltAndroidApp
 class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListener {
 
     companion object {

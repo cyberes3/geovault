@@ -5,9 +5,10 @@ import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
 import kotlinx.coroutines.suspendCancellableCoroutine
+import javax.inject.Inject
 import kotlin.coroutines.resume
 
-class TrackerRepositoryTrackerDetailRepository : TrackerDetailRepository {
+class TrackerRepositoryTrackerDetailRepository @Inject constructor() : TrackerDetailRepository {
     override suspend fun loadTrackerGeometry(
         context: Context,
         trackerId: String

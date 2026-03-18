@@ -4,10 +4,12 @@ import android.content.Context
 import android.util.Log
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
+import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.ResponseBody
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import kotlin.coroutines.resume
 
 /**
  * Single source for tracker list and per-tracker data. Cache invalidation follows this policy:
@@ -1003,4 +1005,70 @@ object TrackerRepository {
             }
         })
     }
+
+    suspend fun getTrackersSuspend(context: Context, forceRefresh: Boolean = false): List<Tracker>? =
+        suspendCancellableCoroutine { continuation ->
+            getTrackers(context, forceRefresh = forceRefresh) { list ->
+                continuation.resume(list)
+            }
+        }
+
+    suspend fun getAvailableToAddSuspend(context: Context, forceRefresh: Boolean = false): AvailableToAddResponse? =
+        suspendCancellableCoroutine { continuation ->
+            getAvailableToAdd(context, forceRefresh = forceRefresh) { response ->
+                continuation.resume(response)
+            }
+        }
+
+    suspend fun getMapVisibilitySuspend(context: Context): MapVisibilityResponse? =
+        suspendCancellableCoroutine { continuation ->
+            getMapVisibility(context) { visibility ->
+                continuation.resume(visibility)
+            }
+        }
+
+    suspend fun getGroupsSuspend(context: Context, forceRefresh: Boolean = false): List<Group>? =
+        suspendCancellableCoroutine { continuation ->
+            getGroups(context, forceRefresh = forceRefresh) { groups ->
+                continuation.resume(groups)
+            }
+        }
+
+    suspend fun getGroupSuspend(context: Context, id: String): Group? =
+        suspendCancellableCoroutine { continuation ->
+            getGroup(context, id) { group ->
+                continuation.resume(group)
+            }
+        }
+
+    suspend fun patchGroupSuspend(context: Context, id: String, request: GroupPatchRequest): Group? =
+        suspendCancellableCoroutine { continuation ->
+            patchGroup(context, id, request) { group, _ ->
+                continuation.resume(group)
+            }
+        }
+
+    suspend fun updateTrackerSettingsSuspend(
+        context: Context,
+        id: String,
+        request: TrackerSettingsRequest
+    ): Tracker? = suspendCancellableCoroutine { continuation ->
+        updateTrackerSettings(context, id, request) { tracker, _ ->
+            continuation.resume(tracker)
+        }
+    }
+
+    suspend fun checkTrackerSuspend(context: Context, trackerId: String): Boolean =
+        suspendCancellableCoroutine { continuation ->
+            checkTracker(context, trackerId) { valid ->
+                continuation.resume(valid)
+            }
+        }
+
+    suspend fun getUsersSuspend(context: Context): UsersResponse? =
+        suspendCancellableCoroutine { continuation ->
+            getUsers(context) { users ->
+                continuation.resume(users)
+            }
+        }
 }

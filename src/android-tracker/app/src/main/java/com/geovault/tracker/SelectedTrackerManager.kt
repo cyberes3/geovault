@@ -8,6 +8,8 @@ import com.geovault.tracker.services.TrackingRuntimeStateStore
 
 object SelectedTrackerManager {
     private const val RESTART_DELAY_MS = 400L
+    private val restartHandler = Handler(Looper.getMainLooper())
+    private var pendingRestart: Runnable? = null
 
     fun setSelectedTracker(
         context: Context,
@@ -39,13 +41,17 @@ object SelectedTrackerManager {
     fun restartTrackingIfRunning(context: Context, delayMs: Long = RESTART_DELAY_MS) {
         if (!TrackingRuntimeStateStore.state.value.isRunning) return
         val appContext = context.applicationContext
+        pendingRestart?.let { restartHandler.removeCallbacks(it) }
         appContext.startService(Intent(appContext, TrackingService::class.java).apply {
             action = TrackingService.ACTION_STOP
         })
-        Handler(Looper.getMainLooper()).postDelayed({
+        val restartRunnable = Runnable {
             appContext.startForegroundService(Intent(appContext, TrackingService::class.java).apply {
                 action = TrackingService.ACTION_START
             })
-        }, delayMs)
+            pendingRestart = null
+        }
+        pendingRestart = restartRunnable
+        restartHandler.postDelayed(restartRunnable, delayMs)
     }
 }

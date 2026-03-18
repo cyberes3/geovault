@@ -272,7 +272,7 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
                 .coerceAtMost(RECONNECT_MAX_DELAY_MS)
             reconnectAttempts++
             delay(delayMs)
-            if (currentTrackerIds.isNotEmpty()) connect()
+            if (currentTrackerIds.isNotEmpty() && isRunning) connect()
         }
     }
 
@@ -281,14 +281,15 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
      * Does NOT update isRunning (the caller is responsible for that).
      */
     private fun disconnectWebSocket() {
-        currentTrackerIds = emptySet()
-        currentTrackerName = null
         connectJob?.cancel()
         connectJob = null
+        reconnectAttempts = 0
         try {
             webSocket?.close(1000, null)
         } catch (_: Exception) { }
         webSocket = null
+        currentTrackerIds = emptySet()
+        currentTrackerName = null
     }
 
     data class TrackPointBroadcast(
