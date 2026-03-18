@@ -19,6 +19,7 @@ import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.pipeline.TrackPointSource
 import com.geovault.tracker.pipeline.TrackPointServiceBase
+import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
 import com.geovault.tracker.sensor.SignificantMotionResumeBridge
 import com.google.android.gms.location.*
@@ -186,6 +187,20 @@ class TrackingService : TrackPointServiceBase() {
         lastTrackedLongitude = null
         lastTrackedTimestampMs = 0L
         lastTrackedPropsJson = null
+        TrackingRuntimeStateStore.update {
+            it.copy(
+                isRunning = true,
+                sessionStartTimeMs = sessionStartTimeMs,
+                pointsSentThisSession = pointsSentThisSession,
+                lastPointSentAtMs = lastPointSentAtMs,
+                sessionTotalDistanceMeters = sessionTotalDistanceMeters,
+                lastAccuracyMeters = lastAccuracyMeters,
+                lastTrackedLatitude = lastTrackedLatitude,
+                lastTrackedLongitude = lastTrackedLongitude,
+                lastTrackedTimestampMs = lastTrackedTimestampMs,
+                lastTrackedPropsJson = lastTrackedPropsJson
+            )
+        }
         broadcastSessionStats()
 
         clearQueuedLocationsAsync()
@@ -246,6 +261,20 @@ class TrackingService : TrackPointServiceBase() {
         lastTrackedLongitude = null
         lastTrackedTimestampMs = 0L
         lastTrackedPropsJson = null
+        TrackingRuntimeStateStore.update {
+            it.copy(
+                isRunning = false,
+                sessionStartTimeMs = sessionStartTimeMs,
+                pointsSentThisSession = pointsSentThisSession,
+                lastPointSentAtMs = lastPointSentAtMs,
+                sessionTotalDistanceMeters = sessionTotalDistanceMeters,
+                lastAccuracyMeters = lastAccuracyMeters,
+                lastTrackedLatitude = lastTrackedLatitude,
+                lastTrackedLongitude = lastTrackedLongitude,
+                lastTrackedTimestampMs = lastTrackedTimestampMs,
+                lastTrackedPropsJson = lastTrackedPropsJson
+            )
+        }
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
             .remove(PREF_WAS_TRACKING_BEFORE_EXIT).commit()
         fusedLocationClient.removeLocationUpdates(locationCallback)

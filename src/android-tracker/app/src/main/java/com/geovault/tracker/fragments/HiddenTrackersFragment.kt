@@ -11,7 +11,7 @@ import androidx.fragment.app.Fragment
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.Group
-import com.geovault.tracker.MainActivity
+import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
@@ -212,7 +212,7 @@ class HiddenTrackersFragment : Fragment() {
                     TrackersListFragment.pendingFullRefresh = true
                     onSuccess?.invoke()
                 } else {
-                    (activity as? MainActivity)?.showSnackbar(
+                    navHost()?.showSnackbar(
                         errorMessage ?: getString(R.string.failed_to_load_tracker)
                     )
                     onFailure?.invoke()
@@ -250,7 +250,7 @@ class HiddenTrackersFragment : Fragment() {
                 if (updated != null) {
                     onSuccess?.invoke()
                 } else {
-                    (activity as? MainActivity)?.showSnackbar(
+                    navHost()?.showSnackbar(
                         errorMessage ?: getString(R.string.failed_to_load_tracker)
                     )
                     onFailure?.invoke()
@@ -280,7 +280,7 @@ class HiddenTrackersFragment : Fragment() {
                 requireActivity().runOnUiThread {
                     if (updated != null) onSuccess?.invoke()
                     else {
-                        (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                         onFailure?.invoke()
                     }
                 }

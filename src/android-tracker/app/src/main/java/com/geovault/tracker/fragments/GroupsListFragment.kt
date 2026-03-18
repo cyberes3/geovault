@@ -15,7 +15,7 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.Group
-import com.geovault.tracker.MainActivity
+import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.TrackerRepository
 
@@ -44,7 +44,7 @@ class GroupsListFragment : Fragment() {
         adapter = GroupsAdapter(
             emptyList(),
             onCardClick = { group -> openGroupActions(group) },
-            onViewOnMapClick = { group -> (activity as? MainActivity)?.openMapForGroup(group, returnToTabOnly = true) },
+            onViewOnMapClick = { group -> navHost()?.openMapForGroup(group, returnToTabOnly = true) },
             onEditClick = { group -> openGroupEditor(group) }
         )
         recyclerView.adapter = adapter
@@ -147,7 +147,7 @@ class GroupsListFragment : Fragment() {
                                     }
                                     openGroupEditor(group)
                                 }
-                                !errorMessage.isNullOrBlank() -> (activity as? MainActivity)?.showSnackbar(errorMessage)
+                                !errorMessage.isNullOrBlank() -> navHost()?.showSnackbar(errorMessage)
                             }
                         }
                     }

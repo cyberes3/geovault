@@ -10,7 +10,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
-import com.geovault.tracker.MainActivity
+import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.MapVisibilityRequest
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
@@ -97,7 +97,7 @@ class EditSharedTrackerFragment : Fragment() {
                         if (!isAdded) return@unsubscribeTracker
                         requireActivity().runOnUiThread {
                             if (success) {
-                                (activity as? MainActivity)?.showSnackbar(getString(R.string.unsubscribed))
+                                navHost()?.showSnackbar(getString(R.string.unsubscribed))
                                 requireActivity().supportFragmentManager.setFragmentResult(
                                     TrackersListFragment.REQUEST_REFRESH_LIST,
                                     Bundle().apply {
@@ -106,7 +106,7 @@ class EditSharedTrackerFragment : Fragment() {
                                 )
                                 parentFragmentManager.popBackStack()
                             } else {
-                                (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                             }
                         }
                     }
@@ -126,7 +126,7 @@ class EditSharedTrackerFragment : Fragment() {
                         if (!isAdded) return@leaveShareWithMe
                         requireActivity().runOnUiThread {
                             if (success) {
-                                (activity as? MainActivity)?.showSnackbar(getString(R.string.removed_from_share))
+                                navHost()?.showSnackbar(getString(R.string.removed_from_share))
                                 requireActivity().supportFragmentManager.setFragmentResult(
                                     TrackersListFragment.REQUEST_REFRESH_LIST,
                                     Bundle().apply {
@@ -135,7 +135,7 @@ class EditSharedTrackerFragment : Fragment() {
                                 )
                                 parentFragmentManager.popBackStack()
                             } else {
-                                (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                             }
                         }
                     }

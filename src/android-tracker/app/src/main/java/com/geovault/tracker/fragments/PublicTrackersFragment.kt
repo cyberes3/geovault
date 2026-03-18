@@ -18,7 +18,7 @@ import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.AvailableToAddGroup
 import com.geovault.tracker.AvailableToAddItem
 import com.geovault.tracker.Group
-import com.geovault.tracker.MainActivity
+import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
@@ -222,7 +222,7 @@ class PublicTrackersFragment : Fragment() {
                         parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
                     } else {
                         setRowState(row, key, RowState.IDLE)
-                        (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                     }
                 }
             }
@@ -239,7 +239,7 @@ class PublicTrackersFragment : Fragment() {
                         parent.removeView(row)
                         parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
                     } else {
-                        (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                     }
                 }
             }
@@ -269,7 +269,7 @@ class PublicTrackersFragment : Fragment() {
             val trackIds = group.track_ids ?: emptyList()
             if (trackIds.isEmpty()) {
                 setRowState(row, key, RowState.IDLE)
-                (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 return@setOnClickListener
             }
             var failed = false
@@ -289,7 +289,7 @@ class PublicTrackersFragment : Fragment() {
                                 parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
                             } else {
                                 setRowState(row, key, RowState.IDLE)
-                                (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                             }
                         }
                     }
@@ -308,7 +308,7 @@ class PublicTrackersFragment : Fragment() {
                         parent.removeView(row)
                         parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
                     } else {
-                        (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                     }
                 }
             }

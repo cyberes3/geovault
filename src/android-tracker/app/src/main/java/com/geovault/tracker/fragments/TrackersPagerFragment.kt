@@ -7,7 +7,7 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
-import com.geovault.tracker.MainActivity
+import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.tabs.TabLayout
@@ -48,7 +48,7 @@ class TrackersPagerFragment : Fragment() {
     private fun setupFab() {
         fab.setOnClickListener {
             if (viewPager.currentItem == 0) {
-                (activity as? MainActivity)?.showNewTrackerFragment()
+                navHost()?.showNewTrackerFragment()
             } else {
                 (childFragmentManager.findFragmentByTag("f1") as? GroupsListFragment)?.showCreateGroupDialog()
             }

@@ -20,7 +20,7 @@ import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.Group
 import com.geovault.tracker.GroupPatchRequest
-import com.geovault.tracker.MainActivity
+import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.common.R as CommonR
 import com.geovault.tracker.Tracker
@@ -136,7 +136,7 @@ class GroupDetailBottomSheet : Fragment() {
                     bindGroup(g)
                 } else {
                     hideLoading()
-                    (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                    navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                     closeEditor()
                 }
             }
@@ -191,7 +191,7 @@ class GroupDetailBottomSheet : Fragment() {
                 val fullUrl = if (url.startsWith("http")) url else "$base$url"
                 val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                 clipboard?.setPrimaryClip(ClipData.newPlainText("World share link", fullUrl))
-                (activity as? MainActivity)?.showSnackbar(getString(R.string.world_link_copied))
+                navHost()?.showSnackbar(getString(R.string.world_link_copied))
             }
         }
         worldShareSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -271,7 +271,7 @@ class GroupDetailBottomSheet : Fragment() {
             requireActivity().runOnUiThread {
                 val users = response?.users ?: emptyList()
                 if (users.isEmpty()) {
-                    (activity as? MainActivity)?.showSnackbar(getString(R.string.no_other_users_found))
+                    navHost()?.showSnackbar(getString(R.string.no_other_users_found))
                     return@runOnUiThread
                 }
                 val normalizedUsers = users.map { it.email.trim().lowercase() }.toSet()
@@ -297,7 +297,7 @@ class GroupDetailBottomSheet : Fragment() {
         val g = group ?: return
         val name = nameEdit.text?.toString()?.trim()
         if (name.isNullOrEmpty()) {
-            (activity as? MainActivity)?.showSnackbar("Name is required")
+            navHost()?.showSnackbar("Name is required")
             return
         }
         val visibility = if (selectedVisibilityIndex in visibilityValues.indices) visibilityValues[selectedVisibilityIndex] else "private"
@@ -320,11 +320,11 @@ class GroupDetailBottomSheet : Fragment() {
                     }
                     !errorMessage.isNullOrBlank() -> {
                         setAllInputsEnabled(true)
-                        (activity as? MainActivity)?.showSnackbar(errorMessage)
+                        navHost()?.showSnackbar(errorMessage)
                     }
                     else -> {
                         setAllInputsEnabled(true)
-                        (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                     }
                 }
             }
@@ -356,7 +356,7 @@ class GroupDetailBottomSheet : Fragment() {
                                     putString(GroupsListFragment.KEY_DELETED_GROUP_ID, g.id)
                                 }
                             )
-                            (activity as? MainActivity)?.showSnackbar(getString(R.string.tracker_deleted))
+                            navHost()?.showSnackbar(getString(R.string.tracker_deleted))
                         }
                     }
                 }

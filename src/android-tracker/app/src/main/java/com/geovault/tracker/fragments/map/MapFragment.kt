@@ -25,7 +25,6 @@ import com.geovault.common.map.GeoVaultMapFragment
 import com.geovault.common.map.LocationComponentHelper
 import com.geovault.common.map.MapLibreManager
 import com.geovault.tracker.defaultTrackerColorHex
-import com.geovault.tracker.MainActivity
 import com.geovault.tracker.Group
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
@@ -35,6 +34,7 @@ import com.geovault.tracker.TrackUpdateHelper
 import com.geovault.tracker.GeoJsonLineString
 import com.geovault.tracker.lastUpdateMs
 import com.geovault.tracker.fragments.TrackersListFragment
+import com.geovault.tracker.navigation.navHost
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -415,7 +415,7 @@ class MapFragment : Fragment() {
                     zoomToLatestTrackPoint(map)
                     zoomToTrackAfterLoad = false
                 }
-                val (deferredGroup, deferredZoom) = (activity as? MainActivity)?.getAndClearInitialGroupAndZoomForMap() ?: Pair(null, null)
+                val (deferredGroup, deferredZoom) = navHost()?.getAndClearInitialGroupAndZoomForMap() ?: Pair(null, null)
                 if (deferredGroup != null) {
                     refreshMapForGroup(deferredGroup, deferredZoom)
                     return
@@ -451,7 +451,7 @@ class MapFragment : Fragment() {
                     updateTrackerLabel()
                     return
                 }
-                if ((activity as? MainActivity)?.hasInitialTrackForMap() == true) {
+                if (navHost()?.hasPendingInitialTrackForMap == true) {
                     refreshTrackForSelectedTracker()
                     return
                 }
@@ -461,7 +461,7 @@ class MapFragment : Fragment() {
 
         updateTrackerLabel()
         trackerLabelCard.setOnClickListener {
-            val main = activity as? MainActivity ?: return@setOnClickListener
+            val main = navHost() ?: return@setOnClickListener
             val group = currentGroupForMap
             if (group != null) {
                 main.openGroupMembersAndScrollTo(group, displayedTrackerId)
@@ -621,7 +621,7 @@ class MapFragment : Fragment() {
             }
             val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
             val activeTrackerId = resolveActiveSingleTrackerId(selectedTrackerId)
-            val pendingInitialTracker = (activity as? MainActivity)?.initialTrackForMap != null
+            val pendingInitialTracker = navHost()?.hasPendingInitialTrackForMap == true
             if (activeTrackerId.isEmpty() && !pendingInitialTracker) {
                 // No selected tracker and no explicit tracker target: clear stale map state.
                 trackPoints.clear()
@@ -844,9 +844,9 @@ class MapFragment : Fragment() {
 
     @SuppressLint("MissingPermission")
     private fun onShowMyLocationClick() {
-        val activity = activity as? MainActivity ?: return
-        if (!activity.hasLocationPermission()) {
-            activity.requestLocationPermission()
+        val navHost = navHost() ?: return
+        if (!navHost.hasLocationPermission()) {
+            navHost.requestLocationPermission()
             return
         }
         // GPS recenter is a user camera action; disable live-fit one-way lock state.
@@ -961,8 +961,8 @@ class MapFragment : Fragment() {
     @SuppressLint("MissingPermission")
     private fun startStandaloneLocationUpdates() {
         if (TrackingService.isRunning) return
-        val activity = activity as? MainActivity ?: return
-        if (!activity.hasLocationPermission()) return
+        val navHost = navHost() ?: return
+        if (!navHost.hasLocationPermission()) return
         if (fusedLocationClient == null) {
             fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireContext())
         }
@@ -1516,7 +1516,7 @@ class MapFragment : Fragment() {
         bumpTrackerRequestEpoch()
         resetSingleTrackerContext(stopStreaming = false)
 
-        val initial = (activity as? MainActivity)?.getAndClearInitialTrackForMap()
+        val initial = navHost()?.getAndClearInitialTrackForMap()
         val loadTrackerId = initial?.id ?: SelectedTrackerPrefs.selectedTrackerId(requireContext())
         mapViewContext = MapViewContext.SINGLE_TRACKER
 
@@ -2131,7 +2131,7 @@ class MapFragment : Fragment() {
 
     private fun onMapTrackerInfoViewParams() {
         selectedMapTracker?.let { sel ->
-            (activity as? MainActivity)?.showTrackerParamsFragment(
+            navHost()?.showTrackerParamsFragment(
                 sel.id,
                 sel.name,
                 lastUpdateMs = sel.lastUpdateMs,
@@ -2188,11 +2188,11 @@ class MapFragment : Fragment() {
         val sel = selectedMapTracker ?: return
         when {
             currentGroupForMap != null ->
-                (activity as? MainActivity)?.openGroupMembersAndScrollTo(currentGroupForMap!!, sel.id)
+                navHost()?.openGroupMembersAndScrollTo(currentGroupForMap!!, sel.id)
             sel.isOwner ->
-                (activity as? MainActivity)?.openTrackersAndScrollTo(sel.id)
+                navHost()?.openTrackersAndScrollTo(sel.id)
             else ->
-                (activity as? MainActivity)?.openSharedAndScrollTo(sel.id)
+                navHost()?.openSharedAndScrollTo(sel.id)
         }
     }
 
@@ -2492,7 +2492,7 @@ class MapFragment : Fragment() {
                             updateFollowLockButton()
                         }
                         is MapCommand.ShowError -> {
-                            (activity as? MainActivity)?.showSnackbar(command.message)
+                            navHost()?.showSnackbar(command.message)
                         }
                     }
                 }

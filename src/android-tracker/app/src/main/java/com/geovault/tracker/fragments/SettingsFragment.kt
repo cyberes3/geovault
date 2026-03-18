@@ -21,7 +21,7 @@ import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.R as CommonR
-import com.geovault.tracker.MainActivity
+import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.TrackerRepository
 import com.google.android.material.button.MaterialButton
@@ -129,8 +129,8 @@ class SettingsFragment : Fragment() {
             saveSetting("auto_tracking_enabled", isChecked)
             updateAutoTrackingUi(isChecked)
         }
-        hiddenTrackersButton.setOnClickListener { (activity as? MainActivity)?.showHiddenTrackersFragment() }
-        viewAllTrackersButton.setOnClickListener { (activity as? MainActivity)?.openMapAllTrackers() }
+        hiddenTrackersButton.setOnClickListener { navHost()?.showHiddenTrackersFragment() }
+        viewAllTrackersButton.setOnClickListener { navHost()?.openMapAllTrackers() }
 
         view.findViewById<View>(R.id.loggingHelpButton).setOnClickListener { showLoggingHelpDialog() }
         
@@ -329,7 +329,7 @@ class SettingsFragment : Fragment() {
     private fun onConnectClicked() {
         val url = normalizeServerUrl(serverUrlEdit.text.toString())
         if (url.isEmpty()) {
-            (requireActivity() as? MainActivity)?.showSnackbar(getString(R.string.error_enter_server_url))
+            navHost()?.showSnackbar(getString(R.string.error_enter_server_url))
             return
         }
         GeovaultAuthManager.setServerUrl(requireContext(), url)

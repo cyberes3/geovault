@@ -6,8 +6,8 @@ import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerCoordinatesResponse
 import com.geovault.tracker.TrackerRepository
-import com.geovault.tracker.pipeline.TrackPointBus
 import com.geovault.tracker.pipeline.TrackPointEvent
+import com.geovault.tracker.pipeline.TrackPointBusGateway
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -70,6 +70,6 @@ class TrackerRepositoryMapVisibilityRepository : MapVisibilityRepository {
 }
 
 class TrackPointBusStreamingRepository : MapStreamingRepository {
-    override val events: Flow<TrackPointEvent> = TrackPointBus.events
+    override val events: Flow<TrackPointEvent> = TrackPointBusGateway.events
 }
 

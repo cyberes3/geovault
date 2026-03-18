@@ -3,6 +3,8 @@ package com.geovault.tracker.pipeline
 import android.app.Service
 
 abstract class TrackPointServiceBase : Service() {
+    protected open val trackPointPublisher: TrackPointEventPublisher = TrackPointBusGateway
+
     protected fun publishTrackPoint(
         source: TrackPointSource,
         trackId: String,
@@ -12,7 +14,7 @@ abstract class TrackPointServiceBase : Service() {
         accuracyMeters: Float?,
         propsJson: String?
     ) {
-        TrackPointBus.publish(
+        trackPointPublisher.publish(
             TrackPointEvent(
                 source = source,
                 trackId = trackId,

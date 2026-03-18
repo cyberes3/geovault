@@ -12,7 +12,6 @@ import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.geovault.common.RetrofitClient
-import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerManager
 import com.geovault.tracker.TrackerApi
@@ -21,6 +20,7 @@ import com.geovault.tracker.updateColorPreview
 import com.geovault.tracker.defaultTrackerColorHex
 import com.geovault.tracker.TrackerCreateRequest
 import com.geovault.tracker.TrackerRepository
+import com.geovault.tracker.navigation.navHost
 import com.google.android.material.button.MaterialButton
 import retrofit2.Call
 import retrofit2.Callback
@@ -82,13 +82,13 @@ class NewTrackerFragment : Fragment() {
             val name = nameEdit.text.toString().trim()
             val color = colorEdit.text.toString().trim().ifEmpty { null }
             if (name.isEmpty()) {
-                (activity as? MainActivity)?.showSnackbar("Name is required")
+                navHost()?.showSnackbar("Name is required")
                 return@setOnClickListener
             }
             setActionButtonsEnabled(false)
             val serverUrl = com.geovault.common.GeovaultAuthManager.getServerUrl(requireContext())
             if (serverUrl.isEmpty()) {
-                (activity as? MainActivity)?.showSnackbar("Not connected")
+                navHost()?.showSnackbar("Not connected")
                 setActionButtonsEnabled(true)
                 return@setOnClickListener
             }
@@ -123,7 +123,7 @@ class NewTrackerFragment : Fragment() {
                                     Toast.makeText(requireContext(), "Tracker created", Toast.LENGTH_SHORT).show()
                                 } else {
                                     val msg = response.errorBody()?.string()?.take(120) ?: "Failed to create tracker"
-                                    (activity as? MainActivity)?.showSnackbar(msg)
+                                    navHost()?.showSnackbar(msg)
                                 }
                             }
                         }
@@ -132,7 +132,7 @@ class NewTrackerFragment : Fragment() {
                         if (isAdded) {
                             requireActivity().runOnUiThread {
                                 setActionButtonsEnabled(true)
-                                (activity as? MainActivity)?.showSnackbar(t.message ?: "Network error")
+                                navHost()?.showSnackbar(t.message ?: "Network error")
                             }
                         }
                     }

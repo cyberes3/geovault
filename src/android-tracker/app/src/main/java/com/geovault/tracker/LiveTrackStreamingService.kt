@@ -14,6 +14,7 @@ import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
 import com.geovault.tracker.pipeline.TrackPointSource
 import com.geovault.tracker.pipeline.TrackPointServiceBase
+import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -77,6 +78,9 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
                 val notification = createNotification(trackerName, trackerIds.size)
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
                 isRunning = true
+                LiveStreamRuntimeStateStore.update {
+                    it.copy(isRunning = true, activeTrackerIds = trackerIds)
+                }
 
                 if (trackerIds.isNotEmpty()) {
                     // Debounce: If already streaming this exact tracker set, don't restart WebSocket.
@@ -96,6 +100,9 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
                 } else {
                     Log.w(TAG, "ACTION_START received with empty tracker target set")
                     isRunning = false
+                    LiveStreamRuntimeStateStore.update {
+                        it.copy(isRunning = false, activeTrackerIds = emptySet())
+                    }
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                 }
@@ -103,6 +110,9 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
             ACTION_STOP -> {
                 disconnectWebSocket()
                 isRunning = false
+                LiveStreamRuntimeStateStore.update {
+                    it.copy(isRunning = false, activeTrackerIds = emptySet())
+                }
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
@@ -121,6 +131,9 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
         connectJob?.cancel()
         disconnectWebSocket()
         isRunning = false
+        LiveStreamRuntimeStateStore.update {
+            it.copy(isRunning = false, activeTrackerIds = emptySet())
+        }
         super.onDestroy()
     }
 
@@ -128,6 +141,9 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
         Log.d(TAG, "Task removed, stopping streaming service")
         disconnectWebSocket()
         isRunning = false
+        LiveStreamRuntimeStateStore.update {
+            it.copy(isRunning = false, activeTrackerIds = emptySet())
+        }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
         super.onTaskRemoved(rootIntent)

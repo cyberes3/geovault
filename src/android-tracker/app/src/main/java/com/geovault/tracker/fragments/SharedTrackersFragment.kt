@@ -20,11 +20,11 @@ import android.util.DisplayMetrics
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.Group
-import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
+import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.parseHexToColor
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
@@ -97,9 +97,9 @@ class SharedTrackersFragment : Fragment() {
             null,
             onTrackerAction = { tracker, action ->
                 when (action) {
-                    TrackerAction.EDIT -> (activity as? MainActivity)?.let { if (tracker.isOwner()) it.showEditTrackerFragment(tracker) else it.showEditSharedTrackerFragment(tracker) }
+                    TrackerAction.EDIT -> navHost()?.let { if (tracker.isOwner()) it.showEditTrackerFragment(tracker) else it.showEditSharedTrackerFragment(tracker) }
                     TrackerAction.VIEW_ON_MAP -> viewOnMap(tracker)
-                    TrackerAction.VIEW_PARAMS -> (activity as? MainActivity)?.showTrackerParamsFragment(
+                    TrackerAction.VIEW_PARAMS -> navHost()?.showTrackerParamsFragment(
                         tracker.id,
                         tracker.name,
                         lastUpdateMs = tracker.last_point?.let { c ->
@@ -119,9 +119,9 @@ class SharedTrackersFragment : Fragment() {
                     .addToBackStack(null)
                     .commit()
             },
-            onGroupViewOnMapClick = { group -> (activity as? MainActivity)?.openMapForGroup(group, returnToTabOnly = true) },
+            onGroupViewOnMapClick = { group -> navHost()?.openMapForGroup(group, returnToTabOnly = true) },
             onGroupEditClick = { group ->
-                (activity as? MainActivity)?.let { act ->
+                navHost()?.let { act ->
                     if (group.is_owner != true) {
                         act.showEditSharedGroupFragment(group)
                     } else {
@@ -328,8 +328,8 @@ class SharedTrackersFragment : Fragment() {
 
     private fun viewOnMap(tracker: Tracker) {
         TrackerRepository.clearSelectedTrackerCaches()
-        (activity as? MainActivity)?.setInitialTrackForMap(tracker)
-        (activity as? MainActivity)?.setCurrentTab(1, forceRefreshMap = true, delayMs = 50)
+        navHost()?.setInitialTrackForMap(tracker)
+        navHost()?.setCurrentTab(1, forceRefreshMap = true, delayMs = 50)
     }
 
     private sealed class SharedListItem(val sortName: String) {

@@ -2,12 +2,15 @@ package com.geovault.tracker.fragments
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.TrackerRepository
+import com.geovault.tracker.data.TrackerListRepository
+import com.geovault.tracker.data.TrackerRepositoryTrackerListRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 data class TrackersListUiState(
     val isLoading: Boolean = false,
@@ -16,7 +19,9 @@ data class TrackersListUiState(
     val errorMessage: String? = null
 )
 
-class TrackersListViewModel : ViewModel() {
+class TrackersListViewModel(
+    private val trackerListRepository: TrackerListRepository = TrackerRepositoryTrackerListRepository()
+) : ViewModel() {
     private val _uiState = MutableStateFlow(TrackersListUiState())
     val uiState: StateFlow<TrackersListUiState> = _uiState.asStateFlow()
 
@@ -32,7 +37,8 @@ class TrackersListViewModel : ViewModel() {
         if (showLoading) {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
         }
-        TrackerRepository.getTrackersResult(context, forceRefresh = forceRefresh) { result ->
+        viewModelScope.launch {
+            val result = trackerListRepository.loadTrackers(context, forceRefresh)
             _uiState.value = when (result) {
                 is RepositoryResult.Success -> {
                     TrackersListUiState(

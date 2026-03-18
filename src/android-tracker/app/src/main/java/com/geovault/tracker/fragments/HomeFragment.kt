@@ -15,7 +15,7 @@ import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import androidx.fragment.app.Fragment
-import com.geovault.tracker.MainActivity
+import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.TrackingService
@@ -103,42 +103,42 @@ class HomeFragment : Fragment() {
         accuracyText = view.findViewById(R.id.accuracyText)
 
         startStopButton.setOnClickListener {
-            (requireActivity() as MainActivity).toggleTracking()
+            navHost()?.toggleTracking()
         }
 
         setupPermissionButtons(view)
         updatePermissionsUi()
         updateTrackingUi()
-        updateServerAccessibilityUi((requireActivity() as MainActivity).isServerAccessible)
+        updateServerAccessibilityUi(navHost()?.isServerAccessible ?: true)
         updateDebugTrackMode()
         updateQueueCount()
     }
     
     private fun setupPermissionButtons(view: View) {
-        val mainActivity = requireActivity() as MainActivity
+        val host = navHost() ?: return
         
         view.findViewById<MaterialButton>(R.id.grantLocationButton).setOnClickListener {
-            mainActivity.requestLocationPermission()
+            host.requestLocationPermission()
         }
         
         view.findViewById<MaterialButton>(R.id.grantBackgroundLocationButton).setOnClickListener {
-            mainActivity.requestBackgroundLocationPermission()
+            host.requestBackgroundLocationPermission()
         }
         
         view.findViewById<MaterialButton>(R.id.grantNotificationButton).setOnClickListener {
-            mainActivity.requestNotificationPermission()
+            host.requestNotificationPermission()
         }
         
         view.findViewById<MaterialButton>(R.id.grantBatteryButton).setOnClickListener {
-            mainActivity.requestBatteryOptimizationExemption()
+            host.requestBatteryOptimizationExemption()
         }
     }
     
     fun updatePermissionsUi() {
         if (!::trackingContentContainer.isInitialized) return
-        val mainActivity = requireActivity() as MainActivity
+        val host = navHost() ?: return
         
-        if (mainActivity.hasAllRequiredPermissions()) {
+        if (host.hasAllRequiredPermissions()) {
             trackingContentContainer.visibility = View.VISIBLE
             permissionsContainer.visibility = View.GONE
         } else {
@@ -146,7 +146,7 @@ class HomeFragment : Fragment() {
             permissionsContainer.visibility = View.VISIBLE
             
             view?.findViewById<MaterialButton>(R.id.grantLocationButton)?.apply {
-                if (mainActivity.hasLocationPermission()) {
+                if (host.hasLocationPermission()) {
                     visibility = View.GONE
                 } else {
                     visibility = View.VISIBLE
@@ -154,7 +154,7 @@ class HomeFragment : Fragment() {
             }
             
             view?.findViewById<MaterialButton>(R.id.grantBackgroundLocationButton)?.apply {
-                if (mainActivity.hasBackgroundLocationPermission()) {
+                if (host.hasBackgroundLocationPermission()) {
                     visibility = View.GONE
                 } else {
                     visibility = View.VISIBLE
@@ -162,7 +162,7 @@ class HomeFragment : Fragment() {
             }
             
             view?.findViewById<MaterialButton>(R.id.grantNotificationButton)?.apply {
-                if (mainActivity.hasNotificationPermission()) {
+                if (host.hasNotificationPermission()) {
                     visibility = View.GONE
                 } else {
                     visibility = View.VISIBLE
@@ -170,7 +170,7 @@ class HomeFragment : Fragment() {
             }
             
             view?.findViewById<MaterialButton>(R.id.grantBatteryButton)?.apply {
-                if (mainActivity.hasBatteryOptimizationExemption()) {
+                if (host.hasBatteryOptimizationExemption()) {
                     visibility = View.GONE
                 } else {
                     visibility = View.VISIBLE
@@ -399,7 +399,7 @@ class HomeFragment : Fragment() {
             queueCountText.text = "—"
             return
         }
-        val mainActivity = activity as? MainActivity ?: return
+        val mainActivity = navHost() ?: return
         mainActivity.updateQueueCountFromFragment(queueCountText)
     }
 

@@ -15,7 +15,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.geovault.tracker.Group
 import com.google.android.material.card.MaterialCardView
-import com.geovault.tracker.MainActivity
+import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
@@ -59,7 +59,7 @@ class GroupActionsFragment : Fragment() {
         }
 
         actionViewOnMap.setOnClickListener {
-            group?.let { (activity as? MainActivity)?.openMapForGroup(it) }
+            group?.let { navHost()?.openMapForGroup(it) }
         }
 
         trackersList.layoutManager = LinearLayoutManager(requireContext())
@@ -99,7 +99,7 @@ class GroupActionsFragment : Fragment() {
                     showRemove = false,
                     highlightedTrackerId = targetTrackerId,
                     onItemClick = { trackerId ->
-                        (activity as? MainActivity)?.openMapForGroup(g, trackerId)
+                        navHost()?.openMapForGroup(g, trackerId)
                     },
                     onShowMenu = { tracker, anchor -> showGroupTrackerMenu(anchor, g, tracker) }
                 )
@@ -130,17 +130,17 @@ class GroupActionsFragment : Fragment() {
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 MENU_VIEW_ON_MAP -> {
-                    (activity as? MainActivity)?.openMapForGroup(group, tracker.id)
+                    navHost()?.openMapForGroup(group, tracker.id)
                     true
                 }
                 MENU_VIEW_PARAMS -> {
                     // Keep group members list on back stack so closing params returns here.
-                    (activity as? MainActivity)?.showTrackerParamsFragment(tracker.id, tracker.name)
+                    navHost()?.showTrackerParamsFragment(tracker.id, tracker.name)
                     true
                 }
                 MENU_VIEW_IN_LIST -> {
                     requireActivity().supportFragmentManager.popBackStack()
-                    (activity as? MainActivity)?.openTrackersAndScrollTo(tracker.id)
+                    navHost()?.openTrackersAndScrollTo(tracker.id)
                     true
                 }
                 else -> false

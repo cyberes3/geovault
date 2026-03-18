@@ -22,16 +22,18 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ImportantMessageSnackbar
 import com.geovault.common.ServerUrlContract
 import com.geovault.tracker.Group
 import com.geovault.tracker.db.AppDatabase
+import com.geovault.tracker.navigation.TrackerNavHost
 import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.*
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), TrackerNavHost {
 
     private var isGuestView: Boolean = false
     
@@ -50,7 +52,7 @@ class MainActivity : AppCompatActivity() {
     private var lastSelectedTabIndex = -1
     /** True when handling back so we don't push the current tab onto tabBackStack. */
     private var isHandlingTabBack = false
-    var isServerAccessible = true
+    override var isServerAccessible = true
         private set
 
     private val locationPermissionLauncher = registerForActivityResult(
@@ -563,7 +565,7 @@ class MainActivity : AppCompatActivity() {
     var initialTrackForMap: Tracker? = null
         private set
 
-    fun setInitialTrackForMap(tracker: Tracker?) {
+    override fun setInitialTrackForMap(tracker: Tracker?) {
         initialTrackForMap = tracker
     }
 
@@ -574,13 +576,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun getAndClearInitialTrackForMap(): Tracker? {
+    override fun getAndClearInitialTrackForMap(): Tracker? {
         val t = initialTrackForMap
         initialTrackForMap = null
         return t
     }
 
-    fun hasInitialTrackForMap(): Boolean = initialTrackForMap != null
+    override val hasPendingInitialTrackForMap: Boolean
+        get() = initialTrackForMap != null
+    fun hasInitialTrackForMap(): Boolean = hasPendingInitialTrackForMap
 
     /** Initial group to fit on map when opening from "View group on map"; cleared after use. */
     var initialGroupForMap: Group? = null
@@ -600,7 +604,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Clears overlays (groups/actions/detail/etc.) and opens the map focused on this group. If [zoomToTrackerId] is set, camera fits that tracker only.
      * When [returnToTabOnly] is true (e.g. opened from group card popup menu), back from map returns to the originating tab without showing the group actions overlay. */
-    fun openMapForGroup(group: Group, zoomToTrackerId: String? = null, returnToTabOnly: Boolean = false) {
+    override fun openMapForGroup(group: Group, zoomToTrackerId: String?, returnToTabOnly: Boolean) {
         groupMapOpenedFromTab = viewPager.currentItem
         setInitialGroupForMap(group, zoomToTrackerId)
         groupContextForMap = if (returnToTabOnly) null else group
@@ -609,7 +613,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun openMapAllTrackers() {
+    override fun openMapAllTrackers() {
         clearOverlayAndThen {
             setCurrentTab(1, forceRefreshMap = false, delayMs = 0)
             viewPager.post {
@@ -620,7 +624,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Returns (group, zoomToTrackerId) and clears both. For use by MapFragment when consuming deferred group handoff in onMapReady. */
-    fun getAndClearInitialGroupAndZoomForMap(): Pair<Group?, String?> {
+    override fun getAndClearInitialGroupAndZoomForMap(): Pair<Group?, String?> {
         return getAndClearInitialGroupAndZoomTo()
     }
 
@@ -633,7 +637,7 @@ class MainActivity : AppCompatActivity() {
         return Pair(g, z)
     }
 
-    fun setCurrentTab(index: Int, forceRefreshMap: Boolean = false, delayMs: Long = 0) {
+    override fun setCurrentTab(index: Int, forceRefreshMap: Boolean, delayMs: Long) {
         if (forceRefreshMap && index == 1) {
             val mapFragment = pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.map.MapFragment
             if (mapFragment != null) {
@@ -658,13 +662,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Switch to the Trackers tab and scroll the list to the given tracker (e.g. when user taps the name chip on the map). */
-    fun openTrackersAndScrollTo(trackerId: String?) {
+    override fun openTrackersAndScrollTo(trackerId: String?) {
         viewPager.setCurrentItem(2, false)
         requestTrackersScrollWhenReady(trackerId)
     }
 
     /** Switch to the Shared tab and scroll the list to the given tracker or group (e.g. from map name chip or "View in list"). */
-    fun openSharedAndScrollTo(trackerId: String?, groupId: String? = null) {
+    override fun openSharedAndScrollTo(trackerId: String?, groupId: String?) {
         viewPager.setCurrentItem(3, false)
         requestSharedScrollWhenReady(trackerId, groupId)
     }
@@ -704,21 +708,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Show group members overlay and scroll/highlight the given tracker (e.g. from map tap "View in list" in group context). */
-    fun openGroupMembersAndScrollTo(group: Group, trackerId: String?) {
+    override fun openGroupMembersAndScrollTo(group: Group, trackerId: String?) {
         supportFragmentManager.beginTransaction()
             .add(R.id.fragment_overlay_container, com.geovault.tracker.fragments.GroupActionsFragment.newInstance(group, trackerId), "group_actions")
             .addToBackStack(null)
             .commit()
     }
 
-    fun showNewTrackerFragment() {
+    override fun showNewTrackerFragment() {
         supportFragmentManager.beginTransaction()
             .add(R.id.fragment_overlay_container, com.geovault.tracker.fragments.NewTrackerFragment(), "new_tracker")
             .addToBackStack("new_tracker")
             .commit()
     }
 
-    fun showEditTrackerFragment(tracker: com.geovault.tracker.Tracker) {
+    override fun showEditTrackerFragment(tracker: com.geovault.tracker.Tracker) {
         if (!tracker.isOwner()) {
             showEditSharedTrackerFragment(tracker)
             return
@@ -734,7 +738,7 @@ class MainActivity : AppCompatActivity() {
             .commit()
     }
 
-    fun showEditSharedTrackerFragment(tracker: com.geovault.tracker.Tracker) {
+    override fun showEditSharedTrackerFragment(tracker: com.geovault.tracker.Tracker) {
         val fragment = com.geovault.tracker.fragments.EditSharedTrackerFragment().apply {
             arguments = android.os.Bundle().apply {
                 putParcelable(com.geovault.tracker.fragments.EditSharedTrackerFragment.ARG_TRACKER, tracker)
@@ -746,7 +750,7 @@ class MainActivity : AppCompatActivity() {
             .commit()
     }
 
-    fun showEditSharedGroupFragment(group: com.geovault.tracker.Group) {
+    override fun showEditSharedGroupFragment(group: com.geovault.tracker.Group) {
         val fragment = com.geovault.tracker.fragments.EditSharedGroupFragment().apply {
             arguments = android.os.Bundle().apply {
                 putParcelable(com.geovault.tracker.fragments.EditSharedGroupFragment.ARG_GROUP, group)
@@ -759,26 +763,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Switch to the Trackers bottom tab and select the Groups sub-tab. */
-    fun showGroupsFragment() {
+    override fun showGroupsFragment() {
         viewPager.setCurrentItem(2, false)
         viewPager.post {
             (pagerAdapter.getFragment(2) as? com.geovault.tracker.fragments.TrackersPagerFragment)?.selectGroupsTab()
         }
     }
 
-    fun showHiddenTrackersFragment() {
+    override fun showHiddenTrackersFragment() {
         supportFragmentManager.beginTransaction()
             .add(R.id.fragment_overlay_container, com.geovault.tracker.fragments.HiddenTrackersFragment(), "hidden_trackers")
             .addToBackStack("hidden_trackers")
             .commit()
     }
 
-    fun showTrackerParamsFragment(
+    override fun showTrackerParamsFragment(
         trackerId: String,
-        trackerName: String? = null,
-        lastUpdateMs: Long? = null,
-        positionLat: Double? = null,
-        positionLon: Double? = null
+        trackerName: String?,
+        lastUpdateMs: Long?,
+        positionLat: Double?,
+        positionLon: Double?
     ) {
         val fragment = com.geovault.tracker.fragments.TrackerParamsFragment().apply {
             arguments = android.os.Bundle().apply {
@@ -796,41 +800,41 @@ class MainActivity : AppCompatActivity() {
     }
     
     /** Show an important dismissable message. Use for errors and blocking issues. */
-    fun showSnackbar(message: String) {
+    override fun showSnackbar(message: String) {
         importantMessageSnackbar?.showMessage(message)
     }
     
-    fun hasLocationPermission(): Boolean {
+    override fun hasLocationPermission(): Boolean {
         return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
     }
     
-    fun hasBackgroundLocationPermission(): Boolean {
+    override fun hasBackgroundLocationPermission(): Boolean {
         return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
     }
     
-    fun hasNotificationPermission(): Boolean {
+    override fun hasNotificationPermission(): Boolean {
         return ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     }
     
-    fun hasBatteryOptimizationExemption(): Boolean {
+    override fun hasBatteryOptimizationExemption(): Boolean {
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         return pm.isIgnoringBatteryOptimizations(packageName)
     }
     
-    fun hasAllRequiredPermissions(): Boolean {
+    override fun hasAllRequiredPermissions(): Boolean {
         return hasLocationPermission() && hasBackgroundLocationPermission() && 
                hasNotificationPermission() && hasBatteryOptimizationExemption()
     }
     
-    fun requestLocationPermission() {
+    override fun requestLocationPermission() {
         locationPermissionLauncher.launch(arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION
         ))
     }
     
-    fun requestBackgroundLocationPermission() {
+    override fun requestBackgroundLocationPermission() {
         if (!hasLocationPermission()) {
             showSnackbar(getString(R.string.location_permission_needed_first))
             return
@@ -838,11 +842,11 @@ class MainActivity : AppCompatActivity() {
         backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
     }
     
-    fun requestNotificationPermission() {
+    override fun requestNotificationPermission() {
         notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
     
-    fun requestBatteryOptimizationExemption() {
+    override fun requestBatteryOptimizationExemption() {
         val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
             data = Uri.parse("package:$packageName")
         }
@@ -868,7 +872,7 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    fun toggleTracking() {
+    override fun toggleTracking() {
         val homeFragment = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
         if (isPreparingToTrack) {
             showStopTrackingConfirmation {
@@ -925,8 +929,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun updateQueueCountFromFragment(textView: TextView) {
-        CoroutineScope(Dispatchers.Main).launch {
+    override fun updateQueueCountFromFragment(textView: TextView) {
+        lifecycleScope.launch {
             val count = withContext(Dispatchers.IO) { database.locationDao().getCount() }
             textView.text = count.toString()
         }

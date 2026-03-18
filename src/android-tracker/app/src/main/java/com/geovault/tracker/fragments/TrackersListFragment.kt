@@ -19,13 +19,13 @@ import android.util.DisplayMetrics
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.parseHexToColor
-import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.lastPosition
 import com.geovault.tracker.lastUpdateMs
+import com.geovault.tracker.navigation.navHost
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.button.MaterialButton
 import java.text.SimpleDateFormat
@@ -79,11 +79,11 @@ class TrackersListFragment : Fragment() {
         })
         adapter = TrackersAdapter(emptyList()) { tracker, action ->
             when (action) {
-                TrackerAction.EDIT -> (activity as? MainActivity)?.let { if (tracker.isOwner()) it.showEditTrackerFragment(tracker) else it.showEditSharedTrackerFragment(tracker) }
+                TrackerAction.EDIT -> navHost()?.let { if (tracker.isOwner()) it.showEditTrackerFragment(tracker) else it.showEditSharedTrackerFragment(tracker) }
                 TrackerAction.VIEW_ON_MAP -> viewOnMap(tracker)
                 TrackerAction.UNSUBSCRIBE -> unsubscribeTracker(tracker)
                 TrackerAction.REMOVE_FROM_SHARE -> removeFromShare(tracker)
-                TrackerAction.VIEW_PARAMS -> (activity as? MainActivity)?.showTrackerParamsFragment(
+                TrackerAction.VIEW_PARAMS -> navHost()?.showTrackerParamsFragment(
                     tracker.id,
                     tracker.name,
                     lastUpdateMs = tracker.lastUpdateMs(),
@@ -268,8 +268,8 @@ class TrackersListFragment : Fragment() {
 
     private fun viewOnMap(tracker: Tracker) {
         TrackerRepository.clearSelectedTrackerCaches()
-        (activity as? MainActivity)?.setInitialTrackForMap(tracker)
-        (activity as? MainActivity)?.setCurrentTab(1, forceRefreshMap = true, delayMs = 50)
+        navHost()?.setInitialTrackForMap(tracker)
+        navHost()?.setCurrentTab(1, forceRefreshMap = true, delayMs = 50)
     }
 
     private fun unsubscribeTracker(tracker: Tracker) {
@@ -278,9 +278,9 @@ class TrackersListFragment : Fragment() {
                 requireActivity().runOnUiThread {
                     if (success) {
                         loadTrackers()
-                        (activity as? MainActivity)?.showSnackbar(getString(R.string.unsubscribed))
+                        navHost()?.showSnackbar(getString(R.string.unsubscribed))
                     } else {
-                        (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                     }
                 }
             }
@@ -293,9 +293,9 @@ class TrackersListFragment : Fragment() {
                 requireActivity().runOnUiThread {
                     if (success) {
                         loadTrackers()
-                        (activity as? MainActivity)?.showSnackbar(getString(R.string.removed_from_share))
+                        navHost()?.showSnackbar(getString(R.string.removed_from_share))
                     } else {
-                        (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                     }
                 }
             }

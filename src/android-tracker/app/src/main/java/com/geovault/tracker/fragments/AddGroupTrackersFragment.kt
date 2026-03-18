@@ -13,7 +13,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.fragment.app.Fragment
 import com.geovault.common.LoadingSpinner
-import com.geovault.tracker.MainActivity
+import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
@@ -177,7 +177,7 @@ class AddGroupTrackersFragment : Fragment() {
                             renderList()
                         } else {
                             applyRowState(RowState.IDLE)
-                            (activity as? MainActivity)?.showSnackbar(
+                            navHost()?.showSnackbar(
                                 errorMessage?.takeIf { it.isNotBlank() }
                                     ?: getString(R.string.failed_to_load_tracker)
                             )

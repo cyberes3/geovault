@@ -20,13 +20,13 @@ import androidx.fragment.app.Fragment
 import com.geovault.tracker.TrackerSettingsRequest
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.tracker.defaultTrackerColorHex
-import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerManager
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.UserItem
+import com.geovault.tracker.navigation.navHost
 import com.geovault.common.LoadingSpinner
 import com.geovault.common.R as CommonR
 import com.geovault.tracker.showHueColorPickerDialog
@@ -111,7 +111,7 @@ class EditTrackerFragment : Fragment() {
             requireContext().contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
             Toast.makeText(requireContext(), getString(R.string.kml_exported), Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            (activity as? MainActivity)?.showSnackbar("Failed to save KML")
+            navHost()?.showSnackbar("Failed to save KML")
         }
     }
 
@@ -283,7 +283,7 @@ class EditTrackerFragment : Fragment() {
                         if (fetched != null) {
                             populateFormFromTracker(fetched)
                         } else {
-                            (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                            navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                         }
                     }
                 }
@@ -294,7 +294,7 @@ class EditTrackerFragment : Fragment() {
             val name = nameEdit.text.toString().trim()
             val color = colorEdit.text.toString().trim().ifEmpty { null }
             if (name.isEmpty()) {
-                (activity as? MainActivity)?.showSnackbar("Name is required")
+                navHost()?.showSnackbar("Name is required")
                 return@setOnClickListener
             }
             val recentDataWindow = if (selectedRecentDataIndex in recentDataValues.indices) recentDataValues[selectedRecentDataIndex] else ""
@@ -351,11 +351,11 @@ class EditTrackerFragment : Fragment() {
                             }
                             !errorMessage.isNullOrBlank() -> {
                                 setAllInputsEnabled(true)
-                                (activity as? MainActivity)?.showSnackbar(errorMessage)
+                                navHost()?.showSnackbar(errorMessage)
                             }
                             else -> {
                                 setAllInputsEnabled(true)
-                                (activity as? MainActivity)?.showSnackbar("Failed to save tracker")
+                                navHost()?.showSnackbar("Failed to save tracker")
                             }
                         }
                     }
@@ -377,7 +377,7 @@ class EditTrackerFragment : Fragment() {
                                     requireActivity().supportFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
                                     Toast.makeText(requireContext(), getString(R.string.history_cleared), Toast.LENGTH_SHORT).show()
                                 } else {
-                                    (activity as? MainActivity)?.showSnackbar("Failed to clear history")
+                                    navHost()?.showSnackbar("Failed to clear history")
                                 }
                                 setAllInputsEnabled(true)
                             }
@@ -412,7 +412,7 @@ class EditTrackerFragment : Fragment() {
                                     Toast.makeText(requireContext(), getString(R.string.tracker_deleted), Toast.LENGTH_SHORT).show()
                                 } else {
                                     setAllInputsEnabled(true)
-                                    (activity as? MainActivity)?.showSnackbar("Failed to delete tracker")
+                                    navHost()?.showSnackbar("Failed to delete tracker")
                                 }
                             }
                         }
@@ -537,7 +537,7 @@ class EditTrackerFragment : Fragment() {
             if (!isAdded) return@fetchTrackerKml
             requireActivity().runOnUiThread {
                 if (body == null) {
-                    (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                    navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                     return@runOnUiThread
                 }
                 try {
@@ -546,7 +546,7 @@ class EditTrackerFragment : Fragment() {
                     pendingKmlExportBytes = bytes
                     createKmlDocumentLauncher.launch("$safeName.kml")
                 } catch (e: Exception) {
-                    (activity as? MainActivity)?.showSnackbar("Failed to save KML")
+                    navHost()?.showSnackbar("Failed to save KML")
                 }
             }
         }
@@ -563,7 +563,7 @@ class EditTrackerFragment : Fragment() {
             requireActivity().runOnUiThread {
                 val users = response?.users ?: emptyList()
                 if (users.isEmpty()) {
-                    (activity as? MainActivity)?.showSnackbar(getString(R.string.no_other_users_found))
+                    navHost()?.showSnackbar(getString(R.string.no_other_users_found))
                     return@runOnUiThread
                 }
                 val normalizedUsers = users.map { it.email.trim().lowercase() }.toSet()

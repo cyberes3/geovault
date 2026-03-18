@@ -20,10 +20,10 @@ import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.AvailableToAddGroup
 import com.geovault.tracker.AvailableToAddItem
 import com.geovault.tracker.Group
-import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
+import com.geovault.tracker.navigation.navHost
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -447,7 +447,7 @@ class DiscoverTrackersFragment : Fragment() {
                             notifySharedTabAdded(emptyList(), listOf(accepted))
                         } else {
                             setRowState(row, key, RowState.IDLE)
-                            (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                            navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                         }
                     }
                 }
@@ -478,7 +478,7 @@ class DiscoverTrackersFragment : Fragment() {
                                 notifySharedTabAdded(addedTrackers, emptyList())
                             } else {
                                 setRowState(row, key, RowState.IDLE)
-                                (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                             }
                         }
                     }
@@ -493,7 +493,7 @@ class DiscoverTrackersFragment : Fragment() {
                     if (success) {
                         removeRowAndMaybeHideSection(parent, row, sectionHeader, sectionList)
                     } else {
-                        (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                     }
                 }
             }
@@ -531,7 +531,7 @@ class DiscoverTrackersFragment : Fragment() {
                         notifySharedTabAdded(listOf(tracker), emptyList())
                     } else {
                         setRowState(row, key, RowState.IDLE)
-                        (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                     }
                 }
             }
@@ -544,7 +544,7 @@ class DiscoverTrackersFragment : Fragment() {
                     if (success) {
                         removeRowAndMaybeHideSection(parent, row, sectionHeader, parent)
                     } else {
-                        (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                     }
                 }
             }

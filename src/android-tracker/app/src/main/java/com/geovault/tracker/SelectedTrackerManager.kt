@@ -37,11 +37,12 @@ object SelectedTrackerManager {
 
     fun restartTrackingIfRunning(context: Context, delayMs: Long = RESTART_DELAY_MS) {
         if (!TrackingService.isRunning) return
-        context.startService(Intent(context, TrackingService::class.java).apply {
+        val appContext = context.applicationContext
+        appContext.startService(Intent(appContext, TrackingService::class.java).apply {
             action = TrackingService.ACTION_STOP
         })
         Handler(Looper.getMainLooper()).postDelayed({
-            context.startForegroundService(Intent(context, TrackingService::class.java).apply {
+            appContext.startForegroundService(Intent(appContext, TrackingService::class.java).apply {
                 action = TrackingService.ACTION_START
             })
         }, delayMs)

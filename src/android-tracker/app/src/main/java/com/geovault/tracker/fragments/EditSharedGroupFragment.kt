@@ -11,7 +11,7 @@ import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.geovault.tracker.Group
-import com.geovault.tracker.MainActivity
+import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.MapVisibilityRequest
 import com.geovault.tracker.R
 import com.geovault.tracker.TrackerRepository
@@ -97,7 +97,7 @@ class EditSharedGroupFragment : Fragment() {
                         if (!isAdded) return@leaveGroup
                         requireActivity().runOnUiThread {
                             if (success) {
-                                (activity as? MainActivity)?.showSnackbar(getString(R.string.removed_from_share))
+                                navHost()?.showSnackbar(getString(R.string.removed_from_share))
                                 parentFragmentManager.setFragmentResult(
                                     GroupsListFragment.REQUEST_GROUPS_REFRESH,
                                     Bundle().apply {
@@ -106,7 +106,7 @@ class EditSharedGroupFragment : Fragment() {
                                 )
                                 parentFragmentManager.popBackStack()
                             } else {
-                                (activity as? MainActivity)?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                             }
                         }
                     }
