@@ -27,8 +27,8 @@ class LoadAllTrackersMapUseCaseTest {
             }
 
             override suspend fun getTracker(context: Context, id: String, forceRefresh: Boolean): Tracker? = null
-            override suspend fun getTrackerGeometry(context: Context, id: String): Tracker? = null
-            override suspend fun getTrackerCoordinates(context: Context, id: String): TrackerCoordinatesResponse? = null
+            override suspend fun getTrackerGeometry(context: Context, id: String, allData: Boolean): Tracker? = null
+            override suspend fun getTrackerCoordinates(context: Context, id: String, allData: Boolean): TrackerCoordinatesResponse? = null
             override suspend fun getTrackersGeometry(context: Context, trackerIds: List<String>, allData: Boolean): List<Tracker> {
                 return trackerIds.map { id ->
                     Tracker(

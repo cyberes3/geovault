@@ -28,16 +28,16 @@ class TrackerRepositoryMapTrackRepository @Inject constructor() : MapTrackReposi
             }
         }
 
-    override suspend fun getTrackerGeometry(context: Context, id: String): Tracker? =
+    override suspend fun getTrackerGeometry(context: Context, id: String, allData: Boolean): Tracker? =
         suspendCancellableCoroutine { continuation ->
-            TrackerRepository.getTrackerGeometry(context, id) { tracker ->
+            TrackerRepository.getTrackerGeometry(context, id, allData) { tracker ->
                 continuation.resume(tracker)
             }
         }
 
-    override suspend fun getTrackerCoordinates(context: Context, id: String): TrackerCoordinatesResponse? =
+    override suspend fun getTrackerCoordinates(context: Context, id: String, allData: Boolean): TrackerCoordinatesResponse? =
         suspendCancellableCoroutine { continuation ->
-            TrackerRepository.getTrackerCoordinates(context, id) { response ->
+            TrackerRepository.getTrackerCoordinates(context, id, allData) { response ->
                 continuation.resume(response)
             }
         }

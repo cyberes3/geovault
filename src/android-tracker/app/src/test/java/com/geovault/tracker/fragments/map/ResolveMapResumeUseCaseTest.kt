@@ -59,10 +59,24 @@ class ResolveMapResumeUseCaseTest {
             baseInput().copy(
                 selectedTrackerId = "tracker-1",
                 displayedTrackerId = "tracker-1",
-                hasTrackPoints = true
+                hasTrackPoints = true,
+                backgroundedDurationMs = 1_000L
             )
         )
         assertTrue(decision is MapResumeDecision.RestartDisplayedTrackerStreaming)
+    }
+
+    @Test
+    fun resolve_backfillsGeometryWhenSingleHasTrackPointsAfterLongBackground() {
+        val decision = useCase.resolve(
+            baseInput().copy(
+                selectedTrackerId = "tracker-1",
+                displayedTrackerId = "tracker-1",
+                hasTrackPoints = true,
+                backgroundedDurationMs = 20_000L
+            )
+        )
+        assertEquals(MapResumeDecision.LoadSingleTracker("tracker-1"), decision)
     }
 
     private fun baseInput() = MapResumeInput(
@@ -75,6 +89,7 @@ class ResolveMapResumeUseCaseTest {
         selectedTrackerId = "tracker-1",
         displayedTrackerId = null,
         hasTrackPoints = false,
-        hasPendingInitialTracker = false
+        hasPendingInitialTracker = false,
+        backgroundedDurationMs = 0L
     )
 }

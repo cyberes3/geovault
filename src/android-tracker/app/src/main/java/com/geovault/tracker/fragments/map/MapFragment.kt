@@ -8,6 +8,7 @@ import android.content.*
 import android.location.Location
 import android.os.Bundle
 import android.os.Looper
+import android.os.SystemClock
 import android.view.Choreographer
 import android.view.LayoutInflater
 import android.view.View
@@ -199,6 +200,7 @@ class MapFragment : Fragment() {
 
     private val liveStreamCoordinator = MapLiveStreamCoordinator(lifecycleScope)
     private var mapCommandsJob: Job? = null
+    private var lastPausedElapsedRealtimeMs: Long? = null
 
     private fun applyLiveStreamPoint(
         trackId: String,
@@ -494,7 +496,15 @@ class MapFragment : Fragment() {
 
         val restoredState = mapStateViewModel.latestSavedState ?: MapSavedState.readFrom(savedInstanceState)
         followLockEnabled = restoredState.followLockEnabled
+        followLockNeedsInitialZoom = restoredState.followLockNeedsInitialZoom
+        lockTarget = if (restoredState.lockTargetLat != null && restoredState.lockTargetLon != null) {
+            LatLng(restoredState.lockTargetLat, restoredState.lockTargetLon)
+        } else {
+            null
+        }
         showMyLocationEnabled = restoredState.showMyLocationEnabled
+        gpsLocationLockActive = restoredState.gpsLocationLockActive
+        liveActiveFitEnabled = restoredState.liveActiveFitEnabled
         showAllTrackers = restoredState.showAllTrackers
         displayedTrackerId = restoredState.displayedTrackerId
         displayedTrackerName = restoredState.displayedTrackerName
@@ -605,6 +615,10 @@ class MapFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        val backgroundedDurationMs = lastPausedElapsedRealtimeMs
+            ?.let { pausedAt -> (SystemClock.elapsedRealtime() - pausedAt).coerceAtLeast(0L) }
+            ?: 0L
+        lastPausedElapsedRealtimeMs = null
         view?.let { root ->
             root.overScrollMode = View.OVER_SCROLL_NEVER
             root.findViewById<View>(R.id.mapContainer)?.overScrollMode = View.OVER_SCROLL_NEVER
@@ -656,7 +670,8 @@ class MapFragment : Fragment() {
                     selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(requireContext()),
                     displayedTrackerId = displayedTrackerId,
                     hasTrackPoints = trackPoints.isNotEmpty(),
-                    hasPendingInitialTracker = navHost()?.hasPendingInitialTrackForMap == true
+                    hasPendingInitialTracker = navHost()?.hasPendingInitialTrackForMap == true,
+                    backgroundedDurationMs = backgroundedDurationMs
                 )
             )
             when (decision) {
@@ -693,17 +708,22 @@ class MapFragment : Fragment() {
                     startLiveTrackStreamingForDisplayedTracker()
                 }
             }
+            reapplyLockStateOnResume()
         }
     }
 
     override fun onPause() {
         super.onPause()
+        lastPausedElapsedRealtimeMs = SystemClock.elapsedRealtime()
         view?.keepScreenOn = false
-        stopStandaloneLocationUpdates(clearGpsFix = true)
-        mapFlowViewModel.stopTrackPointStream()
+        // Background/sleep should not reset lock intent state.
+        stopStandaloneLocationUpdates(clearGpsFix = false)
     }
 
     override fun onDestroyView() {
+        // Stop map event ingestion when the view is actually disposed.
+        // Keeping the stream alive across onPause prevents background gaps.
+        mapFlowViewModel.stopTrackPointStream()
         setGpsAccuracyWarningVisible(false)
         styleReloadListener?.let { listener ->
             mapFragment?.mapViewOrNull?.removeOnDidFinishLoadingStyleListener(listener)
@@ -727,7 +747,12 @@ class MapFragment : Fragment() {
         super.onSaveInstanceState(outState)
         val state = MapSavedState(
             followLockEnabled = followLockEnabled,
+            followLockNeedsInitialZoom = followLockNeedsInitialZoom,
+            lockTargetLat = lockTarget?.latitude,
+            lockTargetLon = lockTarget?.longitude,
             showMyLocationEnabled = showMyLocationEnabled,
+            gpsLocationLockActive = gpsLocationLockActive,
+            liveActiveFitEnabled = liveActiveFitEnabled,
             displayedTrackerId = displayedTrackerId,
             displayedTrackerName = displayedTrackerName,
             displayedGroupName = displayedGroupName,
@@ -736,6 +761,58 @@ class MapFragment : Fragment() {
         )
         mapStateViewModel.latestSavedState = state
         state.writeTo(outState)
+    }
+
+    private fun normalizeLockStateForResume() {
+        if (!followLockEnabled) {
+            followLockNeedsInitialZoom = false
+            lockTarget = null
+        }
+        if (!showMyLocationEnabled) {
+            gpsLocationLockActive = false
+        }
+        if (!isLiveActiveFitAvailable()) {
+            liveActiveFitEnabled = false
+        }
+    }
+
+    private fun reapplyLockStateOnResume() {
+        val map = maplibreMap ?: return
+        normalizeLockStateForResume()
+        val decision = MapLockResumePolicy.decide(
+            LockResumePolicyInput(
+                followLockEnabled = followLockEnabled,
+                hasLockTarget = lockTarget != null,
+                hasTrackPoint = trackPoints.isNotEmpty(),
+                showMyLocationEnabled = showMyLocationEnabled,
+                gpsLocationLockActive = gpsLocationLockActive,
+                liveActiveFitEnabled = liveActiveFitEnabled,
+                liveActiveFitAvailable = isLiveActiveFitAvailable(),
+                trackerOrLiveLockActive = isFollowLockActive() || liveActiveFitEnabled
+            )
+        )
+
+        if (decision.shouldRecenterFollowLock) {
+            val target = trackPoints.lastOrNull() ?: lockTarget
+            if (target != null) {
+                lockTarget = target
+                centerCameraOnTrackLocked(target)
+            }
+        }
+        if (decision.shouldRecenterGpsLock) {
+            LocationComponentHelper.setCameraTracking(map, enabled = true)
+            lastStandaloneLocation?.let { location ->
+                if (isFreshStandaloneFix(location)) {
+                    zoomToStandaloneLocation(location, forceZoomIn = false, animate = false)
+                }
+            }
+        }
+        if (decision.shouldReapplyLiveLock) {
+            applyLiveActiveFitNow()
+        }
+        updateFollowLockButton()
+        updateShowMyLocationButtonVisibility()
+        updateLiveActiveFitButtonUi()
     }
 
     override fun onLowMemory() {

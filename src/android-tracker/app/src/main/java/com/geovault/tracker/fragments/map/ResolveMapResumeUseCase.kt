@@ -10,7 +10,8 @@ internal data class MapResumeInput(
     val selectedTrackerId: String,
     val displayedTrackerId: String?,
     val hasTrackPoints: Boolean,
-    val hasPendingInitialTracker: Boolean
+    val hasPendingInitialTracker: Boolean,
+    val backgroundedDurationMs: Long
 )
 
 internal sealed class MapResumeDecision {
@@ -23,6 +24,12 @@ internal sealed class MapResumeDecision {
 }
 
 internal class ResolveMapResumeUseCase {
+    private companion object {
+        // If the app stayed backgrounded long enough, force a geometry backfill before streaming resumes.
+        // This closes potential websocket gap windows after doze/network disconnect periods.
+        const val BACKFILL_MIN_BACKGROUND_MS = 15_000L
+    }
+
     fun resolve(input: MapResumeInput): MapResumeDecision {
         if (!input.mapReady) return MapResumeDecision.NoOp
 
@@ -49,6 +56,13 @@ internal class ResolveMapResumeUseCase {
             return MapResumeDecision.LoadSingleTracker(activeTrackerId)
         }
         if (!input.hasTrackPoints && activeTrackerId.isNotEmpty()) {
+            return MapResumeDecision.LoadSingleTracker(activeTrackerId)
+        }
+        if (!input.trackingRunning &&
+            input.hasTrackPoints &&
+            activeTrackerId.isNotEmpty() &&
+            input.backgroundedDurationMs >= BACKFILL_MIN_BACKGROUND_MS
+        ) {
             return MapResumeDecision.LoadSingleTracker(activeTrackerId)
         }
         return MapResumeDecision.RestartDisplayedTrackerStreaming

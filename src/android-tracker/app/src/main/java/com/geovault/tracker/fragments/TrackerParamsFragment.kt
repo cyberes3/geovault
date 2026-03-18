@@ -122,12 +122,6 @@ class TrackerParamsFragment : Fragment() {
         }
     }
 
-    override fun onStop() {
-        super.onStop()
-        streamCollectionJob?.cancel()
-        streamCollectionJob = null
-    }
-
     private fun loadTrackerData(refresh: Boolean = false) {
         val id = trackerId ?: return
         val selectedId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
@@ -208,6 +202,8 @@ class TrackerParamsFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        streamCollectionJob?.cancel()
+        streamCollectionJob = null
         super.onDestroyView()
         paramsLoadingSpinner.stop()
         paramsSwipeRefresh.isRefreshing = false

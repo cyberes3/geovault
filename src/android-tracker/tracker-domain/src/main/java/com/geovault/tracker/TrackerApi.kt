@@ -8,6 +8,7 @@ import retrofit2.http.GET
 import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 /** Request body for POST tracker-check: validate tracker ID (password optional). */
 data class TrackerCheckRequest(val tracker_id: String, val password: String? = null)
@@ -26,13 +27,19 @@ interface TrackerApi {
     fun getTracker(@Path("id") id: String): Call<Tracker>
 
     @GET("/api/extensions/live-track/trackers/{id}/geometry/")
-    fun getTrackerGeometry(@Path("id") id: String): Call<Tracker>
+    fun getTrackerGeometry(
+        @Path("id") id: String,
+        @Query("all") allData: Boolean = false
+    ): Call<Tracker>
 
     @POST("/api/extensions/live-track/trackers/geometry/")
     fun getTrackersGeometry(@Body request: TrackerBulkGeometryRequest): Call<List<Tracker>>
 
     @GET("/api/extensions/live-track/trackers/{id}/coordinates/")
-    fun getTrackerCoordinates(@Path("id") id: String): Call<TrackerCoordinatesResponse>
+    fun getTrackerCoordinates(
+        @Path("id") id: String,
+        @Query("all") allData: Boolean = false
+    ): Call<TrackerCoordinatesResponse>
 
     @POST("/api/extensions/live-track/trackers/")
     fun createTracker(@Body request: TrackerCreateRequest): Call<Tracker>
@@ -59,7 +66,10 @@ interface TrackerApi {
     fun getSubscribers(@Path("id") id: String): Call<SubscribersResponse>
 
     @GET("/api/extensions/live-track/trackers/{id}/kml/")
-    fun getTrackerKml(@Path("id") id: String): Call<ResponseBody>
+    fun getTrackerKml(
+        @Path("id") id: String,
+        @Query("all") allData: Boolean = false
+    ): Call<ResponseBody>
 
     @GET("/api/extensions/live-track/map-visibility/")
     fun getMapVisibility(): Call<MapVisibilityResponse>

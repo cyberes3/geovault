@@ -33,6 +33,9 @@ import com.geovault.tracker.navigation.TrackerNavHost
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import com.geovault.tracker.services.TrackingRuntimeStateStore
+import com.geovault.tracker.startup.RepositoryStartupRefreshGateway
+import com.geovault.tracker.startup.StartupRefreshInput
+import com.geovault.tracker.startup.StartupRefreshOrchestrator
 import com.google.android.material.button.MaterialButton
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
@@ -60,6 +63,8 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     private var lastSelectedTabIndex = -1
     /** True when handling back so we don't push the current tab onto tabBackStack. */
     private var isHandlingTabBack = false
+    private val startupRefreshOrchestrator = StartupRefreshOrchestrator(RepositoryStartupRefreshGateway())
+    private var startupRefreshJob: Job? = null
     override var isServerAccessible = true
         private set
 
@@ -168,12 +173,27 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         }
     }
 
+    private fun runStartupRefresh(savedTab: Int) {
+        if (startupRefreshJob?.isActive == true) return
+        val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
+        startupRefreshJob = lifecycleScope.launch {
+            val result = startupRefreshOrchestrator.run(
+                context = this@MainActivity,
+                input = StartupRefreshInput(
+                    selectedTrackerId = selectedTrackerId,
+                    savedTab = savedTab
+                )
+            )
+            setServerAccessibility(result.serverAccessible)
+            result.selectedTrackerForMap?.let { updateInitialTrackForMapIfPending(it) }
+        }
+    }
+
     private fun setupMainContent(savedInstanceState: Bundle?) {
         if (isMainContentSetup) {
             return
         }
         isMainContentSetup = true
-        TrackerApplication.prefetchIfNeeded(this)
         val rootView = findViewById<View>(R.id.rootLayout)
         val headerLayout = findViewById<View>(R.id.headerLayout)
         val mainContentLayout = findViewById<View>(R.id.mainContentLayout)
@@ -220,15 +240,9 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
                 TrackerRepository.getTrackerFromCache(selectedTrackerId)?.let { cachedSelected ->
                     setInitialTrackForMap(cachedSelected)
                 }
-                lifecycleScope.launch {
-                    val list = TrackerRepository.getTrackersSuspend(this@MainActivity, forceRefresh = false)
-                    val selectedTracker = list?.find { it.id == selectedTrackerId }
-                    if (selectedTracker != null) {
-                        updateInitialTrackForMapIfPending(selectedTracker)
-                    }
-                }
             }
         }
+        runStartupRefresh(savedTab)
 
         viewPager.registerOnPageChangeCallback(object : androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
@@ -239,20 +253,8 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
                 }
                 lastSelectedTabIndex = position
                 updateNavTabBackground(position)
-                if (position == 2) {
-                    TrackerRepository.prefetchGroups(this@MainActivity)
-                    lifecycleScope.launch {
-                        TrackerRepository.getTrackersSuspend(this@MainActivity, forceRefresh = false)
-                    }
-                }
             }
         })
-        if (savedTab == 2) TrackerRepository.prefetchGroups(this)
-        lifecycleScope.launch {
-            TrackerRepository.getTrackersSuspend(this@MainActivity, forceRefresh = false)
-        }
-        TrackerRepository.prefetchAvailableToAdd(this)
-        TrackerRepository.prefetchSharedPage(this)
 
         findViewById<View>(R.id.navHome).setOnClickListener { navigateToTabWithOverlayClear(0) }
         findViewById<View>(R.id.navMap).setOnClickListener { openMapTabFromBottomNav() }
@@ -961,13 +963,6 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
                 setupMainContent(null)
             } else {
                 return
-            }
-        }
-        GeovaultAuthManager.fetchUserStatus(this)
-        if (!isGuestView && isMainContentSetup) {
-            lifecycleScope.launch {
-                val list = TrackerRepository.getTrackersSuspend(this@MainActivity, forceRefresh = true)
-                setServerAccessibility(list != null)
             }
         }
         updatePermissionsState()

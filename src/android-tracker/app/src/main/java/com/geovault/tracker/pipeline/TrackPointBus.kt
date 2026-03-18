@@ -9,9 +9,10 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.filter
 
 object TrackPointBus {
-    // Keep replay and buffer large enough for short UI gaps; overflow drops oldest to protect memory.
-    private const val REPLAY_EVENTS = 512
-    private const val EXTRA_BUFFER_EVENTS = 2048
+    // Keep enough replay headroom for longer background periods before the map UI re-attaches.
+    // We still drop oldest on overflow to keep memory bounded.
+    private const val REPLAY_EVENTS = 4096
+    private const val EXTRA_BUFFER_EVENTS = 8192
 
     private val eventsFlow = MutableSharedFlow<TrackPointEvent>(
         replay = REPLAY_EVENTS,

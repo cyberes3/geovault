@@ -20,6 +20,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -100,6 +101,43 @@ class MapViewModelIntegrationTest {
         viewModel.stopTrackPointStream()
     }
 
+    @Test
+    fun stopTrackPointStream_stopsFurtherCommandEmission() = runTest {
+        val stream = MutableSharedFlow<TrackPointEvent>(extraBufferCapacity = 8)
+        val viewModel = createViewModel(stream)
+        val commands = mutableListOf<MapCommand>()
+        val job = launch {
+            viewModel.commands.collect { command ->
+                commands.add(command)
+            }
+        }
+
+        viewModel.updateUiState {
+            it.copy(
+                mode = MapScreenMode.AllTrackers,
+                showAllTrackers = true,
+                activeStreamedTrackerIds = setOf("t1")
+            )
+        }
+        viewModel.startTrackPointStream()
+        advanceUntilIdle()
+        viewModel.stopTrackPointStream()
+
+        stream.emit(
+            TrackPointEvent(
+                source = TrackPointSource.REMOTE_STREAM,
+                trackId = "t1",
+                lon = 10.0,
+                lat = 20.0,
+                timestampMs = 1_000L
+            )
+        )
+        advanceUntilIdle()
+        job.cancel()
+
+        assertEquals(0, commands.count { it is MapCommand.ApplyTrackPoint })
+    }
+
     private fun createViewModel(stream: MutableSharedFlow<TrackPointEvent>): MapViewModel {
         val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<Application>()
         return MapViewModel(
@@ -125,7 +163,7 @@ class MapViewModelIntegrationTest {
             return Tracker(id = id, name = id, color = null)
         }
 
-        override suspend fun getTrackerGeometry(context: Context, id: String): Tracker? {
+        override suspend fun getTrackerGeometry(context: Context, id: String, allData: Boolean): Tracker? {
             return Tracker(
                 id = id,
                 name = id,
@@ -137,7 +175,7 @@ class MapViewModelIntegrationTest {
             )
         }
 
-        override suspend fun getTrackerCoordinates(context: Context, id: String): TrackerCoordinatesResponse? {
+        override suspend fun getTrackerCoordinates(context: Context, id: String, allData: Boolean): TrackerCoordinatesResponse? {
             return TrackerCoordinatesResponse(coordinates = listOf(listOf(1.0, 2.0), listOf(3.0, 4.0)))
         }
 

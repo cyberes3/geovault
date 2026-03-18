@@ -270,7 +270,7 @@ class EditTrackerFragment : Fragment() {
                 )
                 requireActivity().supportFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
                 viewLifecycleOwner.lifecycleScope.launch {
-                    TrackerRepository.getTrackerGeometrySuspend(requireContext(), trackerId)
+                    TrackerRepository.getTrackerGeometrySuspend(requireContext(), trackerId, allData = true)
                 }
             } else {
                 if (SelectedTrackerPrefs.selectedTrackerId(requireContext()) == trackerId) {

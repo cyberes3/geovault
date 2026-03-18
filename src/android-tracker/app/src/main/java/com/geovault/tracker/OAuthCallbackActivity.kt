@@ -56,12 +56,7 @@ class OAuthCallbackActivity : AppCompatActivity() {
                         runOnUiThread {
                             if (isDestroyed) return@runOnUiThread
                             GeovaultAuthManager.saveTokens(this@OAuthCallbackActivity, accessToken, refreshToken, expiresIn)
-                            TrackerApplication.prefetchIfNeeded(applicationContext)
-                            GeovaultAuthManager.fetchUserStatus(this@OAuthCallbackActivity) { email ->
-                                runOnUiThread {
-                                    finish(signedInEmail = email)
-                                }
-                            }
+                            finish(signedInEmail = null)
                         }
                     },
                     onError = { msg ->

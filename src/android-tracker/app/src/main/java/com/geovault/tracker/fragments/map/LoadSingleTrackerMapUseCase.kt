@@ -21,7 +21,7 @@ class LoadSingleTrackerMapUseCase(
         )
         if (resolvedId.isBlank()) return null
 
-        val geometryTracker = trackRepository.getTrackerGeometry(context, resolvedId)
+        val geometryTracker = trackRepository.getTrackerGeometry(context, resolvedId, allData = true)
         if (geometryTracker != null) {
             return MapTrackSnapshot(
                 tracker = geometryTracker,
@@ -30,7 +30,7 @@ class LoadSingleTrackerMapUseCase(
             )
         }
 
-        val coordinatesResponse = trackRepository.getTrackerCoordinates(context, resolvedId)
+        val coordinatesResponse = trackRepository.getTrackerCoordinates(context, resolvedId, allData = true)
         val fallbackTracker = trackRepository.getTracker(context, resolvedId, forceRefresh = false)
             ?: trackRepository.getTrackerFromCache(resolvedId)
             ?: Tracker(id = resolvedId, name = SelectedTrackerPrefs.selectedTrackerName(context), color = null)

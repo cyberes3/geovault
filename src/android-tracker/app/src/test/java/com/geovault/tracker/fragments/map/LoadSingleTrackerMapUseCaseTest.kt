@@ -46,6 +46,7 @@ class LoadSingleTrackerMapUseCaseTest {
         assertNotNull(snapshot)
         assertEquals("t1", snapshot?.tracker?.id)
         assertEquals(2, snapshot?.coordinates?.size)
+        assertEquals(listOf(true), repository.geometryAllDataRequests)
     }
 
     @Test
@@ -74,6 +75,7 @@ class LoadSingleTrackerMapUseCaseTest {
         assertEquals("t2", snapshot?.tracker?.id)
         assertTrue(snapshot?.forceReplace == true)
         assertEquals(2, snapshot?.coordinates?.size)
+        assertEquals(listOf(true), repository.coordinatesAllDataRequests)
     }
 
     private class FakeTrackRepository(
@@ -82,10 +84,18 @@ class LoadSingleTrackerMapUseCaseTest {
         private val coordinatesById: Map<String, TrackerCoordinatesResponse> = emptyMap(),
         private val cacheById: Map<String, Tracker> = emptyMap()
     ) : MapTrackRepository {
+        val geometryAllDataRequests = mutableListOf<Boolean>()
+        val coordinatesAllDataRequests = mutableListOf<Boolean>()
         override suspend fun getTrackers(context: Context, forceRefresh: Boolean): List<Tracker> = emptyList()
         override suspend fun getTracker(context: Context, id: String, forceRefresh: Boolean): Tracker? = trackerById[id]
-        override suspend fun getTrackerGeometry(context: Context, id: String): Tracker? = geometryById[id]
-        override suspend fun getTrackerCoordinates(context: Context, id: String): TrackerCoordinatesResponse? = coordinatesById[id]
+        override suspend fun getTrackerGeometry(context: Context, id: String, allData: Boolean): Tracker? {
+            geometryAllDataRequests += allData
+            return geometryById[id]
+        }
+        override suspend fun getTrackerCoordinates(context: Context, id: String, allData: Boolean): TrackerCoordinatesResponse? {
+            coordinatesAllDataRequests += allData
+            return coordinatesById[id]
+        }
         override suspend fun getTrackersGeometry(context: Context, trackerIds: List<String>, allData: Boolean): List<Tracker> = emptyList()
         override fun getTrackerFromCache(id: String): Tracker? = cacheById[id]
     }

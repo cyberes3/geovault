@@ -11,8 +11,8 @@ import kotlinx.coroutines.flow.Flow
 interface MapTrackRepository {
     suspend fun getTrackers(context: Context, forceRefresh: Boolean = false): List<Tracker>
     suspend fun getTracker(context: Context, id: String, forceRefresh: Boolean = false): Tracker?
-    suspend fun getTrackerGeometry(context: Context, id: String): Tracker?
-    suspend fun getTrackerCoordinates(context: Context, id: String): TrackerCoordinatesResponse?
+    suspend fun getTrackerGeometry(context: Context, id: String, allData: Boolean = false): Tracker?
+    suspend fun getTrackerCoordinates(context: Context, id: String, allData: Boolean = false): TrackerCoordinatesResponse?
     suspend fun getTrackersGeometry(context: Context, trackerIds: List<String>, allData: Boolean = true): List<Tracker>
     fun getTrackerFromCache(id: String): Tracker?
 }

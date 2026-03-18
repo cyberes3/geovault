@@ -113,7 +113,7 @@ class NewTrackerFragment : Fragment() {
                                             trackerName = newTracker.name,
                                             restartTrackingIfRunning = true
                                         )
-                                        TrackerRepository.getTrackerGeometry(requireContext(), newTracker.id) { }
+                                        TrackerRepository.getTrackerGeometry(requireContext(), newTracker.id, callback = { })
                                     }
                                     requireActivity().supportFragmentManager.setFragmentResult(
                                         TrackersListFragment.REQUEST_REFRESH_LIST,

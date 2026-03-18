@@ -13,9 +13,9 @@ class TrackerRepositoryTrackerDetailRepository @Inject constructor() : TrackerDe
         context: Context,
         trackerId: String
     ): RepositoryResult<Tracker> = suspendCancellableCoroutine { continuation ->
-        TrackerRepository.getTrackerGeometryResult(context, trackerId) { result ->
+        TrackerRepository.getTrackerGeometryResult(context, trackerId, allData = true, callback = { result ->
             continuation.resume(result)
-        }
+        })
     }
 
     override suspend fun refreshTrackers(context: Context) {

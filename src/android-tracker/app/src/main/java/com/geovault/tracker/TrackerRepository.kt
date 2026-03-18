@@ -24,6 +24,11 @@ import kotlin.coroutines.resume
  *   selection is unchanged (e.g. user cleared tracker history).
  */
 object TrackerRepository {
+    private data class TrackDataCacheKey(
+        val trackerId: String,
+        val allData: Boolean
+    )
+
     private var trackersCache: List<Tracker>? = null
     private var isFetching = false
     private val listeners = mutableListOf<(List<Tracker>?) -> Unit>()
@@ -87,11 +92,13 @@ object TrackerRepository {
     fun getTrackerGeometryResult(
         context: Context,
         id: String,
+        allData: Boolean = false,
         callback: (RepositoryResult<Tracker>) -> Unit
     ) {
-        val cached = geometryCache
-        if (cached != null && cached.first == id) {
-            callback(RepositoryResult.Success(cached.second))
+        val key = TrackDataCacheKey(id, allData = allData)
+        val cached = geometryCache[key]
+        if (cached != null) {
+            callback(RepositoryResult.Success(cached))
             return
         }
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
@@ -100,7 +107,7 @@ object TrackerRepository {
             return
         }
         val api = createApi(context, serverUrl)
-        api.getTrackerGeometry(id).enqueue(object : Callback<Tracker> {
+        api.getTrackerGeometry(id, allData).enqueue(object : Callback<Tracker> {
             override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
                 if (!response.isSuccessful) {
                     callback(RepositoryResult.Failure(errorFromResponseCode(response.code())))
@@ -111,6 +118,7 @@ object TrackerRepository {
                     callback(RepositoryResult.Failure(AppError.Unknown))
                     return
                 }
+                geometryCache[key] = tracker
                 callback(RepositoryResult.Success(tracker))
             }
 
@@ -267,10 +275,10 @@ object TrackerRepository {
 
     private var geometryCall: Call<Tracker>? = null
     private var coordinatesCall: Call<TrackerCoordinatesResponse>? = null
-    /** Cached full geometry for the selected tracker; used when default track is changed so the map can show full track without a second fetch. */
-    private var geometryCache: Pair<String, Tracker>? = null
-    /** Cached recent coordinates response keyed by tracker id for map warm start. */
-    private var coordinatesCache: Pair<String, TrackerCoordinatesResponse>? = null
+    /** Cached geometry keyed by tracker and all-data mode. */
+    private val geometryCache = mutableMapOf<TrackDataCacheKey, Tracker>()
+    /** Cached coordinates keyed by tracker and all-data mode. */
+    private val coordinatesCache = mutableMapOf<TrackDataCacheKey, TrackerCoordinatesResponse>()
 
     /**
      * Cancels any in-flight full geometry request. Call when the map reset is tapped so the
@@ -283,32 +291,51 @@ object TrackerRepository {
 
     /** Clears only geometry and coordinates caches. Use when geometry is invalidated but selection unchanged (e.g. clear tracker history). */
     fun clearGeometryCache() {
-        geometryCache = null
-        coordinatesCache = null
+        geometryCache.clear()
+        coordinatesCache.clear()
     }
 
     /** Returns cached full geometry for the provided tracker id without making a network request. */
     fun getTrackerGeometryFromCache(id: String): Tracker? {
-        val cached = geometryCache
-        return if (cached != null && cached.first == id) cached.second else null
+        return geometryCache[TrackDataCacheKey(id, allData = true)]
+            ?: geometryCache[TrackDataCacheKey(id, allData = false)]
     }
 
     /** Returns cached recent coordinates for the provided tracker id without making a network request. */
     fun getTrackerCoordinatesFromCache(id: String): TrackerCoordinatesResponse? {
-        val cached = coordinatesCache
-        return if (cached != null && cached.first == id) cached.second else null
+        return coordinatesCache[TrackDataCacheKey(id, allData = true)]
+            ?: coordinatesCache[TrackDataCacheKey(id, allData = false)]
     }
 
     /**
      * Fetches full track geometry and point_params (for map, params table). Use this when geometry is needed.
      * Returns cached geometry when available for the requested tracker (e.g. after changing default track).
      */
-    fun getTrackerGeometry(context: Context, id: String, callback: (Tracker?) -> Unit) {
-        val cached = geometryCache
-        if (cached != null && cached.first == id) {
-            callback(cached.second)
+    fun getTrackerGeometry(
+        context: Context,
+        id: String,
+        allData: Boolean = false,
+        callback: (Tracker?) -> Unit
+    ) {
+        val key = TrackDataCacheKey(id, allData = allData)
+        val cached = geometryCache[key]
+        if (cached != null) {
+            callback(cached)
             return
         }
+        refreshTrackerGeometry(context, id, allData, callback)
+    }
+
+    /**
+     * Force-refreshes geometry from network and updates geometry/coordinates caches.
+     * Use this when startup should proactively refresh selected tracker history.
+     */
+    fun refreshTrackerGeometry(
+        context: Context,
+        id: String,
+        allData: Boolean = false,
+        callback: (Tracker?) -> Unit
+    ) {
         cancelGeometryRequest()
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
         if (serverUrl.isEmpty()) {
@@ -317,17 +344,17 @@ object TrackerRepository {
         }
         val selectedId = SelectedTrackerPrefs.selectedTrackerId(context)
         val api = createApi(context, serverUrl)
-        val call = api.getTrackerGeometry(id)
+        val call = api.getTrackerGeometry(id, allData)
         geometryCall = call
         call.enqueue(object : Callback<Tracker> {
             override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
                 geometryCall = null
                 val tracker = if (response.isSuccessful) response.body() else null
                 if (tracker != null && tracker.id == selectedId) {
-                    geometryCache = tracker.id to tracker
+                    geometryCache[TrackDataCacheKey(tracker.id, allData = allData)] = tracker
                     val coords = tracker.geometry?.coordinates
                     if (!coords.isNullOrEmpty()) {
-                        coordinatesCache = tracker.id to TrackerCoordinatesResponse(
+                        coordinatesCache[TrackDataCacheKey(tracker.id, allData = allData)] = TrackerCoordinatesResponse(
                             coordinates = coords,
                             point_params = tracker.point_params
                         )
@@ -344,8 +371,19 @@ object TrackerRepository {
         })
     }
 
-    /** Fetches latest coordinates (up to server limit, usually 100) without canceling other requests. */
-    fun getTrackerCoordinates(context: Context, id: String, callback: (TrackerCoordinatesResponse?) -> Unit) {
+    /** Fetches tracker coordinates, optionally requesting all available points from backend. */
+    fun getTrackerCoordinates(
+        context: Context,
+        id: String,
+        allData: Boolean = false,
+        callback: (TrackerCoordinatesResponse?) -> Unit
+    ) {
+        val key = TrackDataCacheKey(id, allData = allData)
+        val cached = coordinatesCache[key]
+        if (cached != null) {
+            callback(cached)
+            return
+        }
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
         if (serverUrl.isEmpty()) {
             callback(null)
@@ -353,14 +391,14 @@ object TrackerRepository {
         }
         val api = createApi(context, serverUrl)
         coordinatesCall?.cancel()
-        val call = api.getTrackerCoordinates(id)
+        val call = api.getTrackerCoordinates(id, allData)
         coordinatesCall = call
         call.enqueue(object : Callback<TrackerCoordinatesResponse> {
             override fun onResponse(call: Call<TrackerCoordinatesResponse>, response: Response<TrackerCoordinatesResponse>) {
                 coordinatesCall = null
                 val body = if (response.isSuccessful) response.body() else null
                 if (body != null) {
-                    coordinatesCache = id to body
+                    coordinatesCache[key] = body
                 }
                 callback(body)
             }
@@ -411,8 +449,8 @@ object TrackerRepository {
     fun clearSelectedTrackerCaches() {
         currentTrackerId = null
         currentTrackerCache = null
-        geometryCache = null
-        coordinatesCache = null
+        geometryCache.clear()
+        coordinatesCache.clear()
     }
 
     fun updateTrackerSettings(
@@ -458,7 +496,7 @@ object TrackerRepository {
                                 currentTrackerCache = tracker
                             }
                             trackersCache = null
-                            geometryCache = null
+                            clearGeometryCache()
                         }
                         callback(tracker, null)
                         return
@@ -497,7 +535,8 @@ object TrackerRepository {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
                 if (response.isSuccessful) {
                     trackersCache = trackersCache?.filterNot { it.id == id }
-                    geometryCache = geometryCache?.takeUnless { it.first == id }
+                    geometryCache.entries.removeAll { it.key.trackerId == id }
+                    coordinatesCache.entries.removeAll { it.key.trackerId == id }
                     if (id == currentTrackerId) {
                         currentTrackerId = null
                         currentTrackerCache = null
@@ -988,14 +1027,19 @@ object TrackerRepository {
     }
 
     /** Fetches KML response body for the tracker (for download/share). */
-    fun fetchTrackerKml(context: Context, trackerId: String, callback: (ResponseBody?) -> Unit) {
+    fun fetchTrackerKml(
+        context: Context,
+        trackerId: String,
+        allData: Boolean = true,
+        callback: (ResponseBody?) -> Unit
+    ) {
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
         if (serverUrl.isEmpty()) {
             callback(null)
             return
         }
         val api = createApi(context, serverUrl)
-        api.getTrackerKml(trackerId).enqueue(object : Callback<ResponseBody> {
+        api.getTrackerKml(trackerId, allData).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
                 callback(if (response.isSuccessful) response.body() else null)
             }
@@ -1079,9 +1123,24 @@ object TrackerRepository {
             }
         }
 
-    suspend fun getTrackerGeometrySuspend(context: Context, id: String): Tracker? =
+    suspend fun getTrackerGeometrySuspend(
+        context: Context,
+        id: String,
+        allData: Boolean = false
+    ): Tracker? =
         suspendCancellableCoroutine { continuation ->
-            getTrackerGeometry(context, id) { tracker ->
+            getTrackerGeometry(context, id, allData) { tracker ->
+                continuation.resume(tracker)
+            }
+        }
+
+    suspend fun refreshTrackerGeometrySuspend(
+        context: Context,
+        id: String,
+        allData: Boolean = false
+    ): Tracker? =
+        suspendCancellableCoroutine { continuation ->
+            refreshTrackerGeometry(context, id, allData) { tracker ->
                 continuation.resume(tracker)
             }
         }
@@ -1112,7 +1171,7 @@ object TrackerRepository {
 
     suspend fun fetchTrackerKmlSuspend(context: Context, trackerId: String): ResponseBody? =
         suspendCancellableCoroutine { continuation ->
-            fetchTrackerKml(context, trackerId) { body ->
+            fetchTrackerKml(context, trackerId, allData = true) { body ->
                 continuation.resume(body)
             }
         }

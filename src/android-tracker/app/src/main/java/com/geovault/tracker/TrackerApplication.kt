@@ -20,17 +20,6 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
         private const val TAG = "GeoVaultTracker"
         private const val HOOK_STOP_SERVICES = "tracker_stop_services"
         private const val HOOK_CLEAR_TRACKER_STATE = "tracker_clear_tracker_state"
-
-        /** Call from app start or after login to prefetch trackers and selected tracker in background. */
-        fun prefetchIfNeeded(context: Context) {
-            if (!GeovaultAuthManager.isLoggedIn(context)) return
-            TrackerRepository.getTrackers(context, forceRefresh = true) {
-                val trackerId = SelectedTrackerPrefs.selectedTrackerId(context)
-                if (trackerId.isNotBlank()) {
-                    TrackerRepository.getTracker(context, trackerId) { }
-                }
-            }
-        }
     }
 
     override fun onCreate() {
@@ -66,7 +55,6 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
         }
         GeovaultAuthManager.setAuthFailureListener(this)
         MapLibreInitializer.init(applicationContext)
-        prefetchIfNeeded(applicationContext)
         createNotificationChannels()
     }
 
