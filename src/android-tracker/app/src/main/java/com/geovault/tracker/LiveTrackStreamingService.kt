@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -40,6 +39,8 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
         private const val TAG = "LiveTrackStreaming"
         const val ACTION_START = "com.geovault.tracker.LIVE_TRACK_STREAMING_START"
         const val ACTION_STOP = "com.geovault.tracker.LIVE_TRACK_STREAMING_STOP"
+        const val ACTION_RESHOW_FOREGROUND = "com.geovault.tracker.STREAMING_ACTION_RESHOW_FOREGROUND"
+        const val NOTIFICATION_DISMISSED_ACTION = "com.geovault.tracker.STREAMING_NOTIFICATION_DISMISSED"
         const val EXTRA_TRACKER_ID = "tracker_id"
         const val EXTRA_TRACKER_IDS = "tracker_ids"
         const val EXTRA_TRACKER_NAME = "tracker_name"
@@ -116,6 +117,15 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
+            ACTION_RESHOW_FOREGROUND -> {
+                if (isRunning && currentTrackerIds.isNotEmpty()) {
+                    startForeground(
+                        NOTIFICATION_ID,
+                        createNotification(currentTrackerName, currentTrackerIds.size),
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                    )
+                }
+            }
             else -> {
                 // Service was created by startService() without a valid action
                 // (e.g. spurious stop when not running). Just stop immediately.
@@ -161,6 +171,13 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
         val stopPendingIntent = PendingIntent.getActivity(
             this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+        val dismissIntent = Intent(NOTIFICATION_DISMISSED_ACTION).apply { setPackage(packageName) }
+        val dismissPendingIntent = PendingIntent.getBroadcast(
+            this,
+            2,
+            dismissIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
         val title = getString(R.string.live_track_streaming_title)
         val text = when {
             trackerCount > 1 -> String.format(Locale.US, "%d trackers", trackerCount)
@@ -182,6 +199,7 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
             .setSortKey("\uFFFF")
             .setGroup("geovault_service_group")
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .setDeleteIntent(dismissPendingIntent)
             .build()
     }
 

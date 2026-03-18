@@ -67,6 +67,15 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".ForegroundNotificationReshowReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.geovault.tracker.TRACKING_NOTIFICATION_DISMISSED" />
+                <action android:name="com.geovault.tracker.STREAMING_NOTIFICATION_DISMISSED" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="com.geovault.common.ServerUrlProvider"
             android:authorities="${applicationId}.serverurl"

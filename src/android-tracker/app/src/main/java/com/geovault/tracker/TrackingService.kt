@@ -41,6 +41,8 @@ class TrackingService : TrackPointServiceBase() {
         const val TAG = "TrackingService"
         const val ACTION_START = "com.geovault.tracker.ACTION_START"
         const val ACTION_STOP = "com.geovault.tracker.ACTION_STOP"
+        const val ACTION_RESHOW_FOREGROUND = "com.geovault.tracker.ACTION_RESHOW_FOREGROUND"
+        const val NOTIFICATION_DISMISSED_ACTION = "com.geovault.tracker.TRACKING_NOTIFICATION_DISMISSED"
         const val NOTIFICATION_ID = 101
         const val CHANNEL_ID = "tracker_service"
         /** Group key so both services can collapse together on some devices (e.g. Samsung). */
@@ -180,6 +182,21 @@ class TrackingService : TrackPointServiceBase() {
                     stopSelf()
                     START_NOT_STICKY
                 }
+            }
+            ACTION_RESHOW_FOREGROUND -> {
+                if (isTracking) {
+                    serviceScope.launch {
+                        val count = database.locationDao().getCount()
+                        withContext(Dispatchers.Main) {
+                            startForeground(
+                                NOTIFICATION_ID,
+                                createNotification(pointsSentThisSession, count),
+                                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                            )
+                        }
+                    }
+                }
+                START_STICKY
             }
             else -> {
                 stopSelf()
@@ -555,6 +572,13 @@ class TrackingService : TrackPointServiceBase() {
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         val stopPendingIntent = PendingIntent.getActivity(this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE)
+        val dismissIntent = Intent(NOTIFICATION_DISMISSED_ACTION).apply { setPackage(packageName) }
+        val dismissPendingIntent = PendingIntent.getBroadcast(
+            this,
+            2,
+            dismissIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
 
         val noGoodFix = lastAccuracyMeters == null || lastAccuracyMeters!! > 152.4f
         val status = when {
@@ -580,6 +604,7 @@ class TrackingService : TrackPointServiceBase() {
             .setSortKey("\uFFFF")
             .setGroup(NOTIFICATION_GROUP_KEY)  // Single-line / collapsed on some UIs (e.g. Samsung)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .setDeleteIntent(dismissPendingIntent)
             .build()
     }
 
