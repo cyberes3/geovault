@@ -140,10 +140,12 @@ class MainActivity : AppCompatActivity() {
         val rootView = findViewById<View>(R.id.rootLayout)
         val headerView = findViewById<View>(R.id.headerLayout)
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            headerView.updatePadding(top = insets.top + 20)
-            // Apply bottom padding to avoid navigation bar overlap
-            view.updatePadding(bottom = insets.bottom)
+            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
+            val bottomInset = if (ime.bottom > systemBars.bottom) ime.bottom else systemBars.bottom
+            headerView.updatePadding(top = systemBars.top + 20)
+            // Keep bottom content above nav bar and keyboard.
+            view.updatePadding(bottom = bottomInset)
             WindowInsetsCompat.CONSUMED
         }
 

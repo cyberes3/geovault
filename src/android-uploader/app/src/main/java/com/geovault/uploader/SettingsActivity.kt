@@ -15,11 +15,13 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.widget.NestedScrollView
 import com.geovault.common.AppResetFlow
 import com.google.android.material.button.MaterialButton
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import com.geovault.common.KeyboardScrollHelper
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Request
@@ -34,6 +36,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var saveButton: MaterialButton
     private lateinit var loggedInUserText: TextView
     private lateinit var settingsHelpText: TextView
+    private lateinit var settingsScrollView: NestedScrollView
 
     private val prefs: SharedPreferences by lazy {
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
@@ -54,15 +57,24 @@ class SettingsActivity : AppCompatActivity() {
         saveButton = findViewById(R.id.saveButton)
         loggedInUserText = findViewById(R.id.loggedInUserText)
         settingsHelpText = findViewById(R.id.settingsHelpText)
+        settingsScrollView = findViewById(R.id.settingsScrollView)
 
         val rootView = findViewById<View>(R.id.rootLayout)
         val headerView = findViewById<View>(R.id.headerLayout)
 
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            headerView.updatePadding(top = insets.top + 20)
+            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
+            val bottomInset = if (ime.bottom > systemBars.bottom) ime.bottom else systemBars.bottom
+            headerView.updatePadding(top = systemBars.top + 20)
+            view.updatePadding(bottom = bottomInset)
             WindowInsetsCompat.CONSUMED
         }
+        KeyboardScrollHelper.installNestedScrollFocusAutoScroll(
+            scrollView = settingsScrollView,
+            focusableViews = listOf(serverUrlEdit),
+            centerBias = 0.5f
+        )
 
         val serverUrl = GeovaultAuthManager.getServerUrl(this)
         if (serverUrl.isNotEmpty()) {

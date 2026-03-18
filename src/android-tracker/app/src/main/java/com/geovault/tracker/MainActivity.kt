@@ -116,10 +116,12 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         val rootView = findViewById<View>(R.id.rootLayout)
         val headerLayout = findViewById<View>(R.id.headerLayout)
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            headerLayout.updatePadding(top = insets.top + 20)
-            view.updatePadding(bottom = insets.bottom)
-            view.findViewById<View>(R.id.importantMessageSnackbar)?.updatePadding(bottom = insets.bottom)
+            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
+            val bottomInset = if (ime.bottom > systemBars.bottom) ime.bottom else systemBars.bottom
+            headerLayout.updatePadding(top = systemBars.top + 20)
+            view.updatePadding(bottom = bottomInset)
+            view.findViewById<View>(R.id.importantMessageSnackbar)?.updatePadding(bottom = bottomInset)
             WindowInsetsCompat.CONSUMED
         }
         importantMessageSnackbar = findViewById(R.id.importantMessageSnackbar)
@@ -173,9 +175,11 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         val headerLayout = findViewById<View>(R.id.headerLayout)
         val mainContentLayout = findViewById<View>(R.id.mainContentLayout)
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            headerLayout.updatePadding(top = insets.top + 20)
-            mainContentLayout.updatePadding(bottom = insets.bottom)
+            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
+            val bottomInset = if (ime.bottom > systemBars.bottom) ime.bottom else systemBars.bottom
+            headerLayout.updatePadding(top = systemBars.top + 20)
+            mainContentLayout.updatePadding(bottom = bottomInset)
             WindowInsetsCompat.CONSUMED
         }
         ViewCompat.requestApplyInsets(rootView)

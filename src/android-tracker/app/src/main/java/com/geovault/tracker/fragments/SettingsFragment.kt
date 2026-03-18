@@ -14,13 +14,12 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
+import androidx.core.widget.NestedScrollView
 import androidx.core.content.ContextCompat
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import com.geovault.common.AppResetFlow
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.KeyboardScrollHelper
 import com.geovault.common.R as CommonR
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
@@ -47,6 +46,7 @@ class SettingsFragment : Fragment() {
     private lateinit var viewAllTrackersButton: MaterialButton
     private lateinit var distanceLabel: TextView
     private lateinit var accuracyLabel: TextView
+    private lateinit var settingsScrollView: NestedScrollView
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -58,15 +58,6 @@ class SettingsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
-        val rootView = view.findViewById<View>(R.id.rootLayout)
-        ViewCompat.setOnApplyWindowInsetsListener(rootView) { v, windowInsets ->
-            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
-            val bottomInset = if (ime.bottom > systemBars.bottom) ime.bottom else systemBars.bottom
-            v.updatePadding(bottom = bottomInset)
-            windowInsets
-        }
 
         serverUrlEdit = view.findViewById(R.id.serverUrlEdit)
         connectButton = view.findViewById(R.id.connectButton)
@@ -87,6 +78,7 @@ class SettingsFragment : Fragment() {
         viewAllTrackersButton = view.findViewById(R.id.viewAllTrackersButton)
         distanceLabel = view.findViewById(R.id.distanceLabel)
         accuracyLabel = view.findViewById(R.id.accuracyLabel)
+        settingsScrollView = view.findViewById(R.id.settingsScrollView)
 
         loadSettings()
         applyMotionSensorAvailability()
@@ -125,8 +117,16 @@ class SettingsFragment : Fragment() {
         viewAllTrackersButton.setOnClickListener { navHost()?.openMapAllTrackers() }
 
         view.findViewById<View>(R.id.loggingHelpButton).setOnClickListener { showLoggingHelpDialog() }
-        
+        setupKeyboardAwareScrolling()
         setupProfileSpinner()
+    }
+
+    private fun setupKeyboardAwareScrolling() {
+        KeyboardScrollHelper.installNestedScrollFocusAutoScroll(
+            scrollView = settingsScrollView,
+            focusableViews = listOf(intervalEdit, distanceEdit, accuracyEdit, serverUrlEdit),
+            centerBias = 0.5f
+        )
     }
 
     private fun toDisplay(meters: Float, isImperial: Boolean): Int {

@@ -26,7 +26,8 @@ enum class FileStatus {
 }
 
 class FileQueueAdapter(
-    private val files: MutableList<FileItem>
+    private val files: MutableList<FileItem>,
+    private val onFilenameFocus: ((Int) -> Unit)? = null
 ) : RecyclerView.Adapter<FileQueueAdapter.FileViewHolder>() {
 
     class FileViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -103,6 +104,14 @@ class FileQueueAdapter(
         }
         holder.filenameEdit.addTextChangedListener(watcher)
         holder.filenameEdit.tag = watcher
+        holder.filenameEdit.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) {
+                val focusedPosition = holder.bindingAdapterPosition
+                if (focusedPosition != RecyclerView.NO_POSITION) {
+                    onFilenameFocus?.invoke(focusedPosition)
+                }
+            }
+        }
         
         // Set file size
         holder.fileSizeText.text = formatFileSize(file.size)

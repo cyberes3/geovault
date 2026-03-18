@@ -84,11 +84,14 @@ class MultiUploadActivity : AppCompatActivity() {
         val bottomView = findViewById<View>(R.id.bottomLayout)
         
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
+            val bottomInset = if (ime.bottom > systemBars.bottom) ime.bottom else systemBars.bottom
             // Apply top padding to header
-            headerView.updatePadding(top = insets.top + 20)
+            headerView.updatePadding(top = systemBars.top + 20)
             // Apply bottom padding to bottom action area
-            bottomView.updatePadding(bottom = insets.bottom + 20)
+            bottomView.updatePadding(bottom = bottomInset + 20)
+            importantMessageSnackbar.updatePadding(bottom = bottomInset)
             WindowInsetsCompat.CONSUMED
         }
         uploadProgressBar = findViewById(R.id.uploadProgressBar)
@@ -98,7 +101,14 @@ class MultiUploadActivity : AppCompatActivity() {
         menuButton = findViewById(R.id.menuButton)
         
         // Setup RecyclerView
-        adapter = FileQueueAdapter(files)
+        adapter = FileQueueAdapter(files) { focusedPosition ->
+            val layoutManager = filesRecyclerView.layoutManager as? LinearLayoutManager
+            if (layoutManager != null) {
+                filesRecyclerView.post {
+                    layoutManager.scrollToPositionWithOffset(focusedPosition, 80)
+                }
+            }
+        }
         filesRecyclerView.layoutManager = LinearLayoutManager(this)
         filesRecyclerView.adapter = adapter
         

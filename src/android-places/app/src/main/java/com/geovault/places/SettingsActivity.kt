@@ -13,10 +13,12 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.widget.NestedScrollView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import com.geovault.common.AppResetFlow
+import com.geovault.common.KeyboardScrollHelper
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Request
@@ -29,6 +31,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var disconnectButton: Button
     private lateinit var loggedInUserText: TextView
     private lateinit var settingsHelpText: TextView
+    private lateinit var settingsScrollView: NestedScrollView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,6 +42,7 @@ class SettingsActivity : AppCompatActivity() {
         disconnectButton = findViewById(R.id.disconnectButton)
         loggedInUserText = findViewById(R.id.loggedInUserText)
         settingsHelpText = findViewById(R.id.settingsHelpText)
+        settingsScrollView = findViewById(R.id.settingsScrollView)
 
         val rootView = findViewById<View>(R.id.rootLayout)
         val headerView = findViewById<View>(R.id.headerLayout)
@@ -51,6 +55,11 @@ class SettingsActivity : AppCompatActivity() {
             view.updatePadding(bottom = bottomInset)
             windowInsets
         }
+        KeyboardScrollHelper.installNestedScrollFocusAutoScroll(
+            scrollView = settingsScrollView,
+            focusableViews = listOf(serverUrlEdit),
+            centerBias = 0.5f
+        )
 
         val serverUrl = GeovaultAuthManager.getServerUrl(this)
         if (serverUrl.isNotEmpty()) {
