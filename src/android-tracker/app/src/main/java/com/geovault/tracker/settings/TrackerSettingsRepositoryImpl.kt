@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 @Singleton
 class TrackerSettingsRepositoryImpl @Inject constructor(
-    @ApplicationContext private val appContext: Context
+    @param:ApplicationContext private val appContext: Context
 ) : TrackerSettingsRepository {
 
     companion object {
