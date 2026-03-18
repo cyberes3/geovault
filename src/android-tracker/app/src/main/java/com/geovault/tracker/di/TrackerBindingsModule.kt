@@ -12,6 +12,8 @@ import com.geovault.tracker.fragments.map.TrackPointBusStreamingRepository
 import com.geovault.tracker.fragments.map.TrackerRepositoryMapGroupRepository
 import com.geovault.tracker.fragments.map.TrackerRepositoryMapTrackRepository
 import com.geovault.tracker.fragments.map.TrackerRepositoryMapVisibilityRepository
+import com.geovault.tracker.settings.TrackerSettingsRepository
+import com.geovault.tracker.settings.TrackerSettingsRepositoryImpl
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -44,4 +46,8 @@ abstract class TrackerBindingsModule {
     @Binds
     @Singleton
     abstract fun bindMapStreamingRepository(impl: TrackPointBusStreamingRepository): MapStreamingRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindTrackerSettingsRepository(impl: TrackerSettingsRepositoryImpl): TrackerSettingsRepository
 }

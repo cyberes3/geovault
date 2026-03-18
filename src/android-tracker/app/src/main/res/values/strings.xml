@@ -39,6 +39,7 @@
     <string name="waiting_for_lock">Waiting for lock</string>
     <string name="locking">Locking</string>
     <string name="waiting_for_gps_lock">Waiting for GPS lock</string>
+    <string name="waiting_for_high_accuracy_fix">Waiting for high accuracy fix</string>
     <string name="start_tracking">Start Tracking</string>
     <string name="stop_tracking">Stop Tracking</string>
     <string name="stop_tracking_confirm_title">Stop Tracking?</string>
@@ -104,6 +105,7 @@
     <string name="show_my_location_on_description">Hide my location</string>
     <string name="zoom_in_description">Zoom in</string>
     <string name="zoom_out_description">Zoom out</string>
+    <string name="map_gps_accuracy_warning_description">Waiting for GPS lock or better accuracy</string>
     <string name="show_all_trackers">View all trackers</string>
     <string name="all_trackers">All Trackers</string>
     <string name="show_selected_tracker">Show selected tracker</string>

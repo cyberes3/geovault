@@ -1,6 +1,7 @@
 package com.geovault.tracker.fragments.map
 
 import android.annotation.SuppressLint
+import android.view.animation.AnimationUtils
 import android.view.accessibility.AccessibilityManager
 import android.graphics.Color
 import android.content.*
@@ -26,10 +27,12 @@ import com.geovault.tracker.defaultTrackerColorHex
 import com.geovault.tracker.Group
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
+import com.geovault.tracker.TrackingService
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackUpdateHelper
 import com.geovault.tracker.GeoJsonLineString
 import com.geovault.tracker.lastUpdateMs
+import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.fragments.TrackersListFragment
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.services.TrackingRuntimeStateStore
@@ -59,9 +62,13 @@ import android.graphics.PointF
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MapFragment : Fragment() {
+    @Inject
+    lateinit var settingsRepository: TrackerSettingsRepository
+
     private val mapFlowViewModel: MapViewModel by viewModels()
     private val mapStateViewModel: MapStateViewModel by viewModels()
 
@@ -87,6 +94,7 @@ class MapFragment : Fragment() {
     private lateinit var bottomRightIndicatorContainer: View
     private lateinit var geometryLoadingSpinner: LoadingSpinner
     private lateinit var streamingIndicator: View
+    private lateinit var gpsAccuracyWarningIndicator: ImageView
     private lateinit var lastUpdatedLabel: TextView
     private lateinit var liveActiveFitButton: MaterialCardView
     private lateinit var liveActiveFitButtonIcon: ImageView
@@ -124,6 +132,8 @@ class MapFragment : Fragment() {
     private val lastKnownUpdateTimeMsByTrackerId = mutableMapOf<String, Long>()
     /** Last selected tracker id we refreshed point icons for; skip refresh when only position/timestamp changed. */
     private var lastSelectedTrackerIdForIcons: String? = null
+    /** True while the GPS warning icon is running its flashing animation. */
+    private var gpsWarningAnimationActive = false
 
     private var mapReady = false
     private var followLockEnabled = false
@@ -302,6 +312,7 @@ class MapFragment : Fragment() {
         bottomRightIndicatorContainer = view.findViewById(R.id.bottomRightIndicatorContainer)
         geometryLoadingSpinner = view.findViewById(R.id.geometryLoadingSpinner)
         streamingIndicator = view.findViewById(R.id.streamingIndicator)
+        gpsAccuracyWarningIndicator = view.findViewById(R.id.gpsAccuracyWarningIndicator)
         lastUpdatedLabel = view.findViewById(R.id.lastUpdatedLabel)
         liveActiveFitButton = view.findViewById(R.id.liveActiveFitButton)
         liveActiveFitButtonIcon = view.findViewById(R.id.liveActiveFitButtonIcon)
@@ -693,6 +704,7 @@ class MapFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        setGpsAccuracyWarningVisible(false)
         styleReloadListener?.let { listener ->
             mapFragment?.mapViewOrNull?.removeOnDidFinishLoadingStyleListener(listener)
         }
@@ -1151,27 +1163,65 @@ class MapFragment : Fragment() {
 
     /** Show bottom-right indicator: red circle when streaming, spinner when loading geometry. */
     private fun updateBottomRightSpinner() {
+        val showGpsAccuracyWarning = shouldShowGpsAccuracyWarning()
         val streaming = isStreaming()
         val loading = geometryLoadingInProgress
         val isSelectedDefaultTracker = isSelectedDefaultTrackerMode()
         val showSpinner = loading && streaming && !isSelectedDefaultTracker
         when {
             showSpinner -> {
+                setGpsAccuracyWarningVisible(false)
                 geometryLoadingSpinner.show()
                 streamingIndicator.visibility = View.GONE
                 bottomRightIndicatorContainer.visibility = View.VISIBLE
             }
+            showGpsAccuracyWarning -> {
+                geometryLoadingSpinner.hide()
+                streamingIndicator.visibility = View.GONE
+                setGpsAccuracyWarningVisible(true)
+                bottomRightIndicatorContainer.visibility = View.VISIBLE
+            }
             streaming -> {
+                setGpsAccuracyWarningVisible(false)
                 geometryLoadingSpinner.hide()
                 streamingIndicator.visibility = View.VISIBLE
                 bottomRightIndicatorContainer.visibility = View.VISIBLE
             }
             else -> {
+                setGpsAccuracyWarningVisible(false)
                 geometryLoadingSpinner.hide()
                 streamingIndicator.visibility = View.GONE
                 bottomRightIndicatorContainer.visibility = View.GONE
             }
         }
+    }
+
+    private fun shouldShowGpsAccuracyWarning(): Boolean {
+        val runtime = trackingRuntimeSnapshot()
+        if (!runtime.isRunning) return false
+        val accuracyMeters = runtime.lastAccuracyMeters
+        val thresholdMeters = trackingAccuracyThresholdMeters()
+        return accuracyMeters == null || accuracyMeters > thresholdMeters
+    }
+
+    private fun trackingAccuracyThresholdMeters(): Float {
+        return settingsRepository.getSettings().accuracyFilterMeters
+    }
+
+    private fun setGpsAccuracyWarningVisible(visible: Boolean) {
+        if (visible) {
+            gpsAccuracyWarningIndicator.visibility = View.VISIBLE
+            if (!gpsWarningAnimationActive) {
+                gpsAccuracyWarningIndicator.startAnimation(
+                    AnimationUtils.loadAnimation(requireContext(), R.anim.gps_warning_flash)
+                )
+                gpsWarningAnimationActive = true
+            }
+            return
+        }
+        gpsAccuracyWarningIndicator.visibility = View.GONE
+        gpsAccuracyWarningIndicator.clearAnimation()
+        gpsWarningAnimationActive = false
     }
 
     /**
@@ -2545,6 +2595,13 @@ class MapFragment : Fragment() {
                         is MapCommand.ShowError -> {
                             navHost()?.showSnackbar(command.message)
                         }
+                    }
+                }
+            }
+            launch {
+                TrackingRuntimeStateStore.state.collect {
+                    if (isAdded) {
+                        updateBottomRightSpinner()
                     }
                 }
             }

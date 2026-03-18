@@ -134,11 +134,13 @@ class TrackersListFragment : Fragment() {
                 val deletedTrackerId = bundle?.getString(KEY_DELETED_TRACKER_ID)
                 if (!deletedTrackerId.isNullOrEmpty()) {
                     adapter?.removeTrackerId(deletedTrackerId)
+                    updateEmptyState()
                     return@setFragmentResultListener
                 }
                 val hiddenTrackerId = bundle?.getString(KEY_HIDDEN_TRACKER_ID)
                 if (!hiddenTrackerId.isNullOrEmpty()) {
                     adapter?.removeTrackerId(hiddenTrackerId)
+                    updateEmptyState()
                 }
                 loadTrackers()
             }
@@ -149,6 +151,7 @@ class TrackersListFragment : Fragment() {
             if (updated != null) {
                 if (hiddenInList) {
                     adapter?.removeTrackerId(updated.id)
+                    updateEmptyState()
                 } else {
                     adapter?.updateTracker(updated)
                 }
@@ -171,6 +174,7 @@ class TrackersListFragment : Fragment() {
         pendingHiddenTrackerId?.let { id ->
             pendingHiddenTrackerId = null
             adapter?.removeTrackerId(id)
+            updateEmptyState()
             shouldReload = true
         }
         if (pendingFullRefresh) {
@@ -211,7 +215,11 @@ class TrackersListFragment : Fragment() {
 
     private fun setTrackers(trackers: List<Tracker>) {
         adapter?.setTrackers(trackers)
-        emptyView.visibility = if (trackers.isEmpty()) View.VISIBLE else View.GONE
+        updateEmptyState()
+    }
+
+    private fun updateEmptyState() {
+        emptyView.visibility = if ((adapter?.itemCount ?: 0) == 0) View.VISIBLE else View.GONE
     }
 
     fun requestScrollToTrackerId(trackerId: String?) {

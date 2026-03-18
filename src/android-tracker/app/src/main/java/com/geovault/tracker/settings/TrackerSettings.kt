@@ -1,0 +1,43 @@
+package com.geovault.tracker.settings
+
+data class TrackerSettings(
+    val loggingIntervalSec: Long = DEFAULT_LOGGING_INTERVAL_SEC,
+    val distanceFilterMeters: Float = DEFAULT_DISTANCE_FILTER_METERS,
+    val accuracyFilterMeters: Float = DEFAULT_ACCURACY_FILTER_METERS,
+    val sendExtendedData: Boolean = true,
+    val significantDataOnly: Boolean = true,
+    val resetTrackingIfKilled: Boolean = true,
+    val autoTrackingMode: Boolean = false,
+    val trackingProfile: TrackerTrackingProfile = TrackerTrackingProfile.BIKING,
+    val startOnBoot: Boolean = false,
+    val startTrackingOnLaunch: Boolean = false
+) {
+    companion object {
+        const val DEFAULT_LOGGING_INTERVAL_SEC: Long = 15L
+        const val MIN_LOGGING_INTERVAL_SEC: Long = 1L
+        const val MAX_LOGGING_INTERVAL_SEC: Long = 3600L
+
+        const val DEFAULT_DISTANCE_FILTER_METERS: Float = 10f
+        const val MIN_DISTANCE_FILTER_METERS: Float = 1f
+        const val MAX_DISTANCE_FILTER_METERS: Float = 10_000f
+
+        const val DEFAULT_ACCURACY_FILTER_METERS: Float = 50f
+        const val MIN_ACCURACY_FILTER_METERS: Float = 1f
+        const val MAX_ACCURACY_FILTER_METERS: Float = 10_000f
+
+        @JvmStatic
+        fun clampLoggingIntervalSec(value: Long): Long {
+            return value.coerceIn(MIN_LOGGING_INTERVAL_SEC, MAX_LOGGING_INTERVAL_SEC)
+        }
+
+        @JvmStatic
+        fun clampDistanceFilterMeters(value: Float): Float {
+            return value.coerceIn(MIN_DISTANCE_FILTER_METERS, MAX_DISTANCE_FILTER_METERS)
+        }
+
+        @JvmStatic
+        fun clampAccuracyFilterMeters(value: Float): Float {
+            return value.coerceIn(MIN_ACCURACY_FILTER_METERS, MAX_ACCURACY_FILTER_METERS)
+        }
+    }
+}

@@ -400,6 +400,14 @@
             android:layout_height="12dp"
             android:background="@drawable/gv_common_bg_red_circle"
             android:visibility="gone" />
+        <ImageView
+            android:id="@+id/gpsAccuracyWarningIndicator"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:src="@drawable/ic_satellite_warning"
+            android:contentDescription="@string/map_gps_accuracy_warning_description"
+            app:tint="@color/error_red"
+            android:visibility="gone" />
     </FrameLayout>
 
 </FrameLayout>

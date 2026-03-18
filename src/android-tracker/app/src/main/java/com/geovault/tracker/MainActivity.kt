@@ -30,14 +30,18 @@ import com.geovault.common.ServerUrlContract
 import com.geovault.tracker.Group
 import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.navigation.TrackerNavHost
+import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.google.android.material.button.MaterialButton
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity(), TrackerNavHost {
+    @Inject
+    lateinit var settingsRepository: TrackerSettingsRepository
 
     private var isGuestView: Boolean = false
     
@@ -101,8 +105,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     private fun handleIntentAction(intent: Intent?) {
         val action = intent?.action ?: return
         if (action == TrackingService.ACTION_STOP) {
-            getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
-                .remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).commit()
+            settingsRepository.clearWasTrackingBeforeExit()
             startService(Intent(this, TrackingService::class.java).apply { this.action = action })
         } else if (action == LiveTrackStreamingService.ACTION_STOP) {
             startService(Intent(this, LiveTrackStreamingService::class.java).apply { this.action = action })
@@ -316,33 +319,32 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         }
 
         // Restart-if-killed and start-on-launch
-        val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val restartIfKilled = prefs.getBoolean("restart_tracking_if_killed", true)
-        val wasTrackingBeforeExit = prefs.getBoolean(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT, false)
+        val settings = settingsRepository.getSettings()
+        val restartIfKilled = settings.resetTrackingIfKilled
+        val wasTrackingBeforeExit = settingsRepository.wasTrackingBeforeExit()
         if (!restartIfKilled || TrackingRuntimeStateStore.state.value.isRunning) {
             if (wasTrackingBeforeExit) {
-                prefs.edit().remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).commit()
+                settingsRepository.clearWasTrackingBeforeExit()
             }
         } else if (wasTrackingBeforeExit) {
             tryResumeTrackingAfterKill()
             return
         }
-        if (!TrackingRuntimeStateStore.state.value.isRunning && prefs.getBoolean("start_tracking_on_launch", false)) {
+        if (!TrackingRuntimeStateStore.state.value.isRunning && settings.startTrackingOnLaunch) {
             tryStartTrackingOnLaunch()
         }
     }
 
     private fun tryResumeTrackingAfterKill() {
-        val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (trackerId.isEmpty()) {
-            prefs.edit().remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).commit()
+            settingsRepository.clearWasTrackingBeforeExit()
             return
         }
         tryStartTrackingSilently(
             onInvalid = {
                 SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(this, clearTrackersListCache = true)
-                prefs.edit().remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).commit()
+                settingsRepository.clearWasTrackingBeforeExit()
                 lifecycleScope.launch {
                     val list = TrackerRepository.getTrackersSuspend(this@MainActivity, forceRefresh = true)
                     setServerAccessibility(list != null)
@@ -902,8 +904,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         val intent = Intent(this, TrackingService::class.java)
         if (TrackingRuntimeStateStore.state.value.isRunning) {
             showStopTrackingConfirmation {
-                getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
-                    .remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).commit()
+                settingsRepository.clearWasTrackingBeforeExit()
                 intent.action = TrackingService.ACTION_STOP
                 startService(intent)
                 Handler(Looper.getMainLooper()).postDelayed({
@@ -912,7 +913,6 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             }
             return
         }
-        val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (trackerId.isEmpty()) {
             showSnackbar(getString(R.string.no_tracker_selected_go_to_settings))

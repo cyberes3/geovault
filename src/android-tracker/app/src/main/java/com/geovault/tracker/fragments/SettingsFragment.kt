@@ -17,15 +17,23 @@ import androidx.appcompat.widget.SwitchCompat
 import androidx.core.widget.NestedScrollView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
 import com.geovault.common.AppResetFlow
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.KeyboardScrollHelper
 import com.geovault.common.R as CommonR
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
+import com.geovault.tracker.settings.TrackerSettings
+import com.geovault.tracker.settings.TrackerTrackingProfile
 import com.google.android.material.button.MaterialButton
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class SettingsFragment : Fragment() {
+    private val viewModel: SettingsViewModel by viewModels()
 
     private lateinit var serverUrlEdit: EditText
     private lateinit var connectButton: MaterialButton
@@ -47,6 +55,7 @@ class SettingsFragment : Fragment() {
     private lateinit var distanceLabel: TextView
     private lateinit var accuracyLabel: TextView
     private lateinit var settingsScrollView: NestedScrollView
+    private var isBindingSettings = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -80,45 +89,18 @@ class SettingsFragment : Fragment() {
         accuracyLabel = view.findViewById(R.id.accuracyLabel)
         settingsScrollView = view.findViewById(R.id.settingsScrollView)
 
-        loadSettings()
+        setupProfileSpinner()
+        setupSettingsListeners()
         applyMotionSensorAvailability()
+        bindSettingsState()
         updateUi()
 
         connectButton.setOnClickListener { onConnectClicked() }
         disconnectButton.setOnClickListener { onDisconnectClicked() }
-
-        extendedParamsSwitch.setOnCheckedChangeListener { _, isChecked ->
-            saveSetting("extended_params", isChecked)
-        }
-
-        significantMotionSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (significantMotionSwitch.isEnabled) {
-                saveSetting("significant_motion_only", isChecked)
-            }
-        }
-
-        startOnBootSwitch.setOnCheckedChangeListener { _, isChecked ->
-            saveSetting("start_on_boot", isChecked)
-        }
-
-        restartTrackingIfKilledSwitch.setOnCheckedChangeListener { _, isChecked ->
-            saveSetting("restart_tracking_if_killed", isChecked)
-        }
-
-        startTrackingOnLaunchSwitch.setOnCheckedChangeListener { _, isChecked ->
-            saveSetting("start_tracking_on_launch", isChecked)
-        }
-
-        autoTrackingSwitch.setOnCheckedChangeListener { _, isChecked ->
-            saveSetting("auto_tracking_enabled", isChecked)
-            updateAutoTrackingUi(isChecked)
-        }
         hiddenTrackersButton.setOnClickListener { navHost()?.showHiddenTrackersFragment() }
         viewAllTrackersButton.setOnClickListener { navHost()?.openMapAllTrackers() }
-
         view.findViewById<View>(R.id.loggingHelpButton).setOnClickListener { showLoggingHelpDialog() }
         setupKeyboardAwareScrolling()
-        setupProfileSpinner()
     }
 
     private fun setupKeyboardAwareScrolling() {
@@ -166,6 +148,7 @@ class SettingsFragment : Fragment() {
         profileSpinner.setAdapter(adapter)
 
         profileSpinner.setOnItemClickListener { _, _, position, _ ->
+            if (isBindingSettings) return@setOnItemClickListener
             selectedProfileIndex = position
             if (position < 3) {
                 val profile = profiles[position]
@@ -174,17 +157,11 @@ class SettingsFragment : Fragment() {
                 distanceEdit.setText(profile.third.first)
                 accuracyEdit.setText(profile.third.second)
                 isUpdatingFromSpinner = false
-                saveSetting("tracking_profile", position.toString())
+                viewModel.setTrackingProfile(TrackerTrackingProfile.fromIndex(position))
             } else if (position == 3) {
-                saveSetting("tracking_profile", "3")
+                viewModel.setTrackingProfile(TrackerTrackingProfile.CUSTOM)
             }
         }
-
-        // Load saved profile
-        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val savedProfile = prefs.getString("tracking_profile", "1")?.toIntOrNull() ?: 1
-        selectedProfileIndex = savedProfile
-        profileSpinner.setText(labels[savedProfile], false)
     }
 
     private fun updateAutoTrackingUi(enabled: Boolean) {
@@ -204,6 +181,7 @@ class SettingsFragment : Fragment() {
         if (selectedProfileIndex != 3) {
             selectedProfileIndex = 3
             profileSpinner.setText(getString(R.string.profile_custom), false)
+            viewModel.setTrackingProfile(TrackerTrackingProfile.CUSTOM)
         }
     }
 
@@ -222,7 +200,7 @@ class SettingsFragment : Fragment() {
         if (!motionSensorAvailable) {
             significantMotionSwitch.isChecked = false
             significantMotionSwitch.isEnabled = false
-            saveSetting("significant_motion_only", false)
+            viewModel.setSignificantDataOnly(false)
             significantMotionRow.setOnClickListener {
                 Toast.makeText(requireContext(), getString(R.string.motion_sensor_unavailable_toast), Toast.LENGTH_SHORT).show()
             }
@@ -232,8 +210,16 @@ class SettingsFragment : Fragment() {
         }
     }
 
-    private fun loadSettings() {
-        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+    private fun bindSettingsState() {
+        loadServerUrlField()
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.uiState.collect { uiState ->
+                applySettingsToUi(uiState.settings)
+            }
+        }
+    }
+
+    private fun loadServerUrlField() {
         val serverUrl = GeovaultAuthManager.getServerUrl(requireContext())
         if (serverUrl.isNotEmpty()) {
             serverUrlEdit.setText(serverUrl)
@@ -243,31 +229,76 @@ class SettingsFragment : Fragment() {
                 serverUrlEdit.setText(otherUrls.single())
             }
         }
-        
+    }
+
+    private fun applySettingsToUi(settings: TrackerSettings) {
+        isBindingSettings = true
         val isImperial = com.geovault.common.UnitUtils.usesImperialUnitsDefault(requireContext())
         updateUnitLabels(isImperial)
-        
-        val interval = prefs.getString("logging_interval", "15") ?: "15"
-        val distance = prefs.getString("logging_distance", "10")?.toFloatOrNull() ?: 10f
-        val accuracy = prefs.getString("logging_accuracy", "50")?.toFloatOrNull() ?: 50f
-        
-        intervalEdit.setText(interval)
-        distanceEdit.setText(toDisplay(distance, isImperial).toString())
-        accuracyEdit.setText(toDisplay(accuracy, isImperial).toString())
-        
-        autoTrackingSwitch.isChecked = prefs.getBoolean("auto_tracking_enabled", false)
+
+        intervalEdit.setText(settings.loggingIntervalSec.toString())
+        distanceEdit.setText(toDisplay(settings.distanceFilterMeters, isImperial).toString())
+        accuracyEdit.setText(toDisplay(settings.accuracyFilterMeters, isImperial).toString())
+
+        autoTrackingSwitch.isChecked = settings.autoTrackingMode
         updateAutoTrackingUi(autoTrackingSwitch.isChecked)
-        
-        extendedParamsSwitch.isChecked = prefs.getBoolean("extended_params", true)
-        significantMotionSwitch.isChecked = prefs.getBoolean("significant_motion_only", true)
-        startOnBootSwitch.isChecked = prefs.getBoolean("start_on_boot", false)
-        restartTrackingIfKilledSwitch.isChecked = prefs.getBoolean("restart_tracking_if_killed", true)
-        startTrackingOnLaunchSwitch.isChecked = prefs.getBoolean("start_tracking_on_launch", false)
+
+        extendedParamsSwitch.isChecked = settings.sendExtendedData
+        significantMotionSwitch.isChecked = settings.significantDataOnly
+        startOnBootSwitch.isChecked = settings.startOnBoot
+        restartTrackingIfKilledSwitch.isChecked = settings.resetTrackingIfKilled
+        startTrackingOnLaunchSwitch.isChecked = settings.startTrackingOnLaunch
+
+        selectedProfileIndex = settings.trackingProfile.index
+        val labels = listOf(
+            getString(R.string.profile_walking),
+            getString(R.string.profile_biking),
+            getString(R.string.profile_driving),
+            getString(R.string.profile_custom)
+        )
+        profileSpinner.setText(labels[selectedProfileIndex], false)
+        isBindingSettings = false
+    }
+
+    private fun setupSettingsListeners() {
+        extendedParamsSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isBindingSettings) return@setOnCheckedChangeListener
+            viewModel.setSendExtendedData(isChecked)
+        }
+
+        significantMotionSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isBindingSettings) return@setOnCheckedChangeListener
+            if (significantMotionSwitch.isEnabled) {
+                viewModel.setSignificantDataOnly(isChecked)
+            }
+        }
+
+        startOnBootSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isBindingSettings) return@setOnCheckedChangeListener
+            viewModel.setStartOnBoot(isChecked)
+        }
+
+        restartTrackingIfKilledSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isBindingSettings) return@setOnCheckedChangeListener
+            viewModel.setResetTrackingIfKilled(isChecked)
+        }
+
+        startTrackingOnLaunchSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isBindingSettings) return@setOnCheckedChangeListener
+            viewModel.setStartTrackingOnLaunch(isChecked)
+        }
+
+        autoTrackingSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isBindingSettings) return@setOnCheckedChangeListener
+            viewModel.setAutoTrackingMode(isChecked)
+            updateAutoTrackingUi(isChecked)
+        }
 
         intervalEdit.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) {
-                val value = s?.toString() ?: "15"
-                saveSetting("logging_interval", value)
+                if (isBindingSettings) return
+                val value = s?.toString()?.toLongOrNull() ?: 15L
+                viewModel.setLoggingIntervalSec(value)
                 updateProfileToCustom()
             }
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -276,10 +307,11 @@ class SettingsFragment : Fragment() {
 
         distanceEdit.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) {
+                if (isBindingSettings) return
                 val isImperial = com.geovault.common.UnitUtils.usesImperialUnitsDefault(requireContext())
                 val displayValue = s?.toString()?.toFloatOrNull() ?: (if (isImperial) 33f else 10f)
                 val metersValue = fromDisplay(displayValue, isImperial)
-                saveSetting("logging_distance", metersValue.toString())
+                viewModel.setDistanceFilterMeters(metersValue)
                 updateProfileToCustom()
             }
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -288,23 +320,16 @@ class SettingsFragment : Fragment() {
 
         accuracyEdit.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) {
+                if (isBindingSettings) return
                 val isImperial = com.geovault.common.UnitUtils.usesImperialUnitsDefault(requireContext())
                 val displayValue = s?.toString()?.toFloatOrNull() ?: (if (isImperial) 164f else 50f)
                 val metersValue = fromDisplay(displayValue, isImperial)
-                saveSetting("logging_accuracy", metersValue.toString())
+                viewModel.setAccuracyFilterMeters(metersValue)
                 updateProfileToCustom()
             }
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
-    }
-
-    private fun saveSetting(key: String, value: String) {
-        requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit().putString(key, value).apply()
-    }
-
-    private fun saveSetting(key: String, value: Boolean) {
-        requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit().putBoolean(key, value).apply()
     }
 
     private fun updateUi() {

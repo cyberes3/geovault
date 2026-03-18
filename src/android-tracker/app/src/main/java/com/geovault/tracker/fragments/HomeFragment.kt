@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import androidx.preference.PreferenceManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -19,10 +18,16 @@ import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.TrackingService
+import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.google.android.material.button.MaterialButton
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class HomeFragment : Fragment() {
+    @Inject
+    lateinit var settingsRepository: TrackerSettingsRepository
 
     private lateinit var trackingStatusText: TextView
     private lateinit var trackingTrackNameText: TextView
@@ -242,13 +247,13 @@ class HomeFragment : Fragment() {
 
     private fun updateDebugTrackMode() {
         if (!::debugTrackModeText.isInitialized) return
-        val prefs = requireContext().getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val autoEnabled = prefs.getBoolean(TrackingService.PREF_AUTO_TRACKING, false)
+        val settings = settingsRepository.getSettings()
+        val autoEnabled = settings.autoTrackingMode
         if (!autoEnabled) {
             debugTrackModeText.visibility = View.GONE
             return
         }
-        val profileIndex = prefs.getString(TrackingService.PREF_TRACKING_PROFILE, "1")?.toIntOrNull() ?: 1
+        val profileIndex = settings.trackingProfile.index
         val modeResId = when (profileIndex) {
             0 -> R.string.profile_walking
             1 -> R.string.profile_biking
@@ -277,11 +282,11 @@ class HomeFragment : Fragment() {
         val runtime = trackingSnapshot()
         val running = runtime.isRunning
         val acc = runtime.lastAccuracyMeters
-        val noGoodFix = acc == null || acc > 152.4f
+        val noGoodFix = acc == null || acc > trackingAccuracyThresholdMeters()
         val isLocking = running && noGoodFix
 
         trackingStatusText.text = getString(when {
-            isLocking -> R.string.waiting_for_gps_lock
+            isLocking -> R.string.waiting_for_high_accuracy_fix
             running -> R.string.tracking_active
             else -> R.string.not_tracking
         })
@@ -341,25 +346,21 @@ class HomeFragment : Fragment() {
         val useImperial = usesImperialUnits(requireContext())
         distanceText.text = formatDistance(runtime.sessionTotalDistanceMeters, useImperial)
         val acc = runtime.lastAccuracyMeters
-        val isNoLock = acc != null && acc > 152.4f
+        val isNoLock = acc == null || acc > trackingAccuracyThresholdMeters()
         
         if (isNoLock) {
             accuracyText.text = "—"
             accuracyText.setTextColor(ContextCompat.getColor(requireContext(), R.color.error_red))
             isAccuracyRed = true
         } else {
-            accuracyText.text = if (acc != null) formatAccuracy(acc, useImperial) else "—"
-            val accuracyFilter = PreferenceManager.getDefaultSharedPreferences(requireContext())
-                .getString(TrackingService.PREF_ACCURACY, "50")?.toFloatOrNull() ?: 50f
+            val safeAccuracy = acc ?: 0f
+            accuracyText.text = formatAccuracy(safeAccuracy, useImperial)
+            val accuracyFilter = settingsRepository.getSettings().accuracyFilterMeters
             
             // Hysteresis: turn red if > filter, stay red until < filter * 0.85
-            if (acc != null) {
-                if (acc > accuracyFilter) {
-                    isAccuracyRed = true
-                } else if (acc < accuracyFilter * 0.85f) {
-                    isAccuracyRed = false
-                }
-            } else {
+            if (safeAccuracy > accuracyFilter) {
+                isAccuracyRed = true
+            } else if (safeAccuracy < accuracyFilter * 0.85f) {
                 isAccuracyRed = false
             }
 
@@ -407,6 +408,10 @@ class HomeFragment : Fragment() {
     }
 
     private fun trackingSnapshot() = TrackingRuntimeStateStore.state.value
+
+    private fun trackingAccuracyThresholdMeters(): Float {
+        return settingsRepository.getSettings().accuracyFilterMeters
+    }
 
     private fun formatDurationMs(ms: Long): String {
         val totalSec = (ms / 1000).toInt().coerceAtLeast(0)

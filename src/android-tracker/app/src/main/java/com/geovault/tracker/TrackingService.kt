@@ -22,7 +22,12 @@ import com.geovault.tracker.pipeline.TrackPointServiceBase
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
 import com.geovault.tracker.sensor.SignificantMotionResumeBridge
+import com.geovault.tracker.settings.TrackerSettings
+import com.geovault.tracker.settings.TrackerSettingsRepository
+import com.geovault.tracker.settings.TrackerTrackingProfile
+import com.geovault.tracker.settings.TrackingSettingsReapplyPolicy
 import com.google.android.gms.location.*
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
@@ -34,7 +39,9 @@ import java.util.zip.GZIPOutputStream
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
 import kotlin.random.Random
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class TrackingService : TrackPointServiceBase() {
 
     companion object {
@@ -82,16 +89,6 @@ class TrackingService : TrackPointServiceBase() {
         @Volatile
         var lastTrackedPropsJson: String? = null
 
-        // Settings keys
-        const val PREF_INTERVAL = "logging_interval"
-        const val PREF_DISTANCE = "logging_distance"
-        const val PREF_ACCURACY = "logging_accuracy"
-        const val PREF_EXTENDED_PARAMS = "extended_params"
-        const val PREF_SIGNIFICANT_MOTION = "significant_motion_only"
-        const val PREF_AUTO_TRACKING = "auto_tracking_enabled"
-        const val PREF_TRACKING_PROFILE = "tracking_profile"
-        const val PREF_WAS_TRACKING_BEFORE_EXIT = "was_tracking_before_exit"
-
         /** Interval between retry attempts when the queue has failed-to-send items. */
         const val RETRY_INTERVAL_MS = 60_000L
 
@@ -100,6 +97,14 @@ class TrackingService : TrackPointServiceBase() {
 
         /** Max batches to send in one push call to avoid holding the lock too long. */
         private const val MAX_BATCHES_PER_PUSH = 10
+
+        @JvmStatic
+        fun shouldRestartTrackingAfterProcessDeath(
+            wasTrackingBeforeExit: Boolean,
+            restartTrackingIfKilled: Boolean
+        ): Boolean {
+            return wasTrackingBeforeExit && restartTrackingIfKilled
+        }
 
     }
 
@@ -135,6 +140,11 @@ class TrackingService : TrackPointServiceBase() {
     
     private var currentActiveProfileIndex = -1
     private var lastSpeedMps: Float = 0f
+    private var currentSettings: TrackerSettings = TrackerSettings()
+    private var settingsObserveJob: Job? = null
+
+    @Inject
+    lateinit var settingsRepository: TrackerSettingsRepository
 
     private fun clearQueuedLocationsAsync() {
         serviceScope.launch {
@@ -147,6 +157,15 @@ class TrackingService : TrackPointServiceBase() {
         Log.d(TAG, "onCreate")
         database = AppDatabase.getDatabase(this)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        currentSettings = settingsRepository.getSettings()
+        settingsObserveJob?.cancel()
+        settingsObserveJob = serviceScope.launch {
+            settingsRepository.observeSettings().collect { newSettings ->
+                val previousSettings = currentSettings
+                currentSettings = newSettings
+                onSettingsChanged(previousSettings, newSettings)
+            }
+        }
         val significantMotionTrigger = SensorManagerSignificantMotionTrigger(applicationContext)
         significantMotionBridge = SignificantMotionResumeBridge(significantMotionTrigger) {
             Log.d(TAG, "Significant motion detected, resuming GPS")
@@ -173,8 +192,12 @@ class TrackingService : TrackPointServiceBase() {
                 START_NOT_STICKY
             }
             null -> {
-                val shouldRestart = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-                    .getBoolean(PREF_WAS_TRACKING_BEFORE_EXIT, false)
+                val wasTrackingBeforeExit = settingsRepository.wasTrackingBeforeExit()
+                val restartIfKilled = currentSettings.resetTrackingIfKilled
+                val shouldRestart = shouldRestartTrackingAfterProcessDeath(
+                    wasTrackingBeforeExit = wasTrackingBeforeExit,
+                    restartTrackingIfKilled = restartIfKilled
+                )
                 if (shouldRestart) {
                     startTracking()
                     START_STICKY
@@ -211,8 +234,7 @@ class TrackingService : TrackPointServiceBase() {
         isTracking = true
         isRunning = true
         Log.d(TAG, "Starting tracking")
-        getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
-            .putBoolean(PREF_WAS_TRACKING_BEFORE_EXIT, true).apply()
+        settingsRepository.setWasTrackingBeforeExit(true)
 
         sessionStartTimeMs = System.currentTimeMillis()
         pointsSentThisSession = 0
@@ -231,40 +253,13 @@ class TrackingService : TrackPointServiceBase() {
 
         startForeground(NOTIFICATION_ID, createNotification(0, 0), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
 
-        val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val isAuto = prefs.getBoolean(PREF_AUTO_TRACKING, false)
-        
-        currentActiveProfileIndex = if (isAuto) {
-            prefs.getString(PREF_TRACKING_PROFILE, "1")?.toIntOrNull() ?: 1
-        } else {
-            -1 // Manual mode
-        }
-
-        val intervalSec: Long
-        val distanceFilter: Float
-        
-        if (isAuto) {
-            val params = TrackingLocationPolicy.getProfileParams(currentActiveProfileIndex)
-            intervalSec = params.first
-            distanceFilter = params.second
-        } else {
-            intervalSec = prefs.getString(PREF_INTERVAL, "15")?.toLongOrNull() ?: 15L
-            distanceFilter = prefs.getString(PREF_DISTANCE, "10")?.toFloatOrNull() ?: 10f
-        }
-        
-        val (intervalMs, minUpdateMs) = TrackingLocationPolicy.locationRequestIntervalFromSec(intervalSec)
-
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
-            .setMinUpdateDistanceMeters(distanceFilter)
-            .setMinUpdateIntervalMillis(minUpdateMs)
-            .build()
-
         isGpsPaused = false
         isWaitingForGpsLock = false
         consecutiveStationaryPoints = 0
         consecutiveBadAccuracyPoints = 0
         lastLocation = null
-        fusedLocationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
+        currentActiveProfileIndex = if (currentSettings.autoTrackingMode) currentSettings.trackingProfile.index else -1
+        applyCurrentLocationRequest("start_tracking")
         
         // Push any existing queued locations immediately when tracking starts
         serviceScope.launch {
@@ -286,8 +281,7 @@ class TrackingService : TrackPointServiceBase() {
         lastTrackedTimestampMs = 0L
         lastTrackedPropsJson = null
         syncRuntimeStateStore()
-        getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
-            .remove(PREF_WAS_TRACKING_BEFORE_EXIT).commit()
+        settingsRepository.clearWasTrackingBeforeExit()
         fusedLocationClient.removeLocationUpdates(locationCallback)
         significantMotionBridge?.cancel()
         stopRetryJob()
@@ -302,8 +296,7 @@ class TrackingService : TrackPointServiceBase() {
         lastAccuracyMeters = if (location.hasAccuracy()) location.accuracy else null
         syncRuntimeStateStore()
 
-        val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-        val accuracyFilter = prefs.getString(PREF_ACCURACY, "50")?.toFloatOrNull() ?: 50f
+        val accuracyFilter = currentSettings.accuracyFilterMeters
 
         if (!TrackingLocationPolicy.acceptByAccuracy(location, accuracyFilter)) {
             Log.d(TAG, "Location discarded (accuracy ${location.accuracy} > $accuracyFilter)")
@@ -329,8 +322,8 @@ class TrackingService : TrackPointServiceBase() {
         val smoothedLocation = TrackingLocationPolicy.smooth(lastLocation, location)
         
         Log.d(TAG, "Location received: ${smoothedLocation.latitude}, ${smoothedLocation.longitude}")
-        val sigMotionOnly = prefs.getBoolean(PREF_SIGNIFICANT_MOTION, true)
-        val distanceFilter = prefs.getString(PREF_DISTANCE, "10")?.toFloatOrNull() ?: 10f
+        val sigMotionOnly = currentSettings.significantDataOnly
+        val distanceFilter = currentSettings.distanceFilterMeters
 
         // Speed-Aware Stationary: Trust hardware speed attributes to avoid false pauses
         val (newConsecutive, shouldPause) = TrackingLocationPolicy.stationaryUpdate(
@@ -348,7 +341,7 @@ class TrackingService : TrackPointServiceBase() {
         syncRuntimeStateStore()
         
         // Auto-profile switching logic
-        if (prefs.getBoolean(PREF_AUTO_TRACKING, false)) {
+        if (currentSettings.autoTrackingMode) {
             val speed = if (location.hasSpeed()) location.speed else {
                 // Fallback to calculated speed if hardware speed is missing
                 val dist = lastLocation?.distanceTo(location) ?: 0f
@@ -363,8 +356,8 @@ class TrackingService : TrackPointServiceBase() {
             if (recommended != currentActiveProfileIndex) {
                 Log.d(TAG, "Auto-switching profile from $currentActiveProfileIndex to $recommended (speed: ${lastSpeedMps}m/s)")
                 currentActiveProfileIndex = recommended
-                prefs.edit().putString(PREF_TRACKING_PROFILE, recommended.toString()).apply()
-                updateLocationRequest(recommended)
+                settingsRepository.setTrackingProfile(TrackerTrackingProfile.fromIndex(recommended))
+                reapplyLocationRequestIfActive("auto_profile_switch")
             }
         }
 
@@ -387,7 +380,6 @@ class TrackingService : TrackPointServiceBase() {
         }
         
         try {
-            val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
             val trackerIdStr = SelectedTrackerPrefs.selectedTrackerId(this)
             if (trackerIdStr.isEmpty()) {
                 Log.e(TAG, "No tracker selected, cannot push locations")
@@ -412,7 +404,7 @@ class TrackingService : TrackPointServiceBase() {
             val ingressUrl = "${baseUrl}api/extensions/live-track/app-ingress/"
 
             var batchesSent = 0
-            val useExtendedParams = prefs.getBoolean(PREF_EXTENDED_PARAMS, true)
+            val useExtendedParams = currentSettings.sendExtendedData
             
             // Fetch these once per push to avoid high-cost IPC calls in loop
             val (batteryLevel, isCharging) = if (useExtendedParams) getBatteryStatus() else Pair(0, false)
@@ -519,8 +511,7 @@ class TrackingService : TrackPointServiceBase() {
     }
 
     private fun buildLocalPointPropsJson(location: Location, distanceMeters: Float): String? {
-        val useExtendedParams = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-            .getBoolean(PREF_EXTENDED_PARAMS, true)
+        val useExtendedParams = currentSettings.sendExtendedData
         if (!useExtendedParams) return null
         return try {
             val props = JSONObject()
@@ -613,6 +604,7 @@ class TrackingService : TrackPointServiceBase() {
     }
 
     override fun onDestroy() {
+        settingsObserveJob?.cancel()
         super.onDestroy()
         significantMotionBridge?.cancel()
         stopRetryJob()
@@ -672,19 +664,9 @@ class TrackingService : TrackPointServiceBase() {
             isWaitingForGpsLock = false
             consecutiveStationaryPoints = 0
             watchdogJob?.cancel()
-            
-            val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
-            val intervalSec = prefs.getString(PREF_INTERVAL, "15")?.toLongOrNull() ?: 15L
-            val distanceFilter = prefs.getString(PREF_DISTANCE, "10")?.toFloatOrNull() ?: 10f
-            val (intervalMs, minUpdateMs) = TrackingLocationPolicy.locationRequestIntervalFromSec(intervalSec)
-
-            val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
-                .setMinUpdateDistanceMeters(distanceFilter)
-                .setMinUpdateIntervalMillis(minUpdateMs)
-                .build()
 
             try {
-                fusedLocationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
+                applyCurrentLocationRequest("resume_gps")
             } catch (e: SecurityException) {
                 Log.e(TAG, "Permission lost during resume", e)
             }
@@ -719,21 +701,55 @@ class TrackingService : TrackPointServiceBase() {
         }
     }
 
-    @SuppressLint("MissingPermission")
-    private fun updateLocationRequest(profileIndex: Int) {
+    private fun onSettingsChanged(previous: TrackerSettings, current: TrackerSettings) {
         if (!isTracking) return
-        
-        val params = TrackingLocationPolicy.getProfileParams(profileIndex)
-        val intervalSec = params.first
-        val distanceFilter = params.second
-        val (intervalMs, minUpdateMs) = TrackingLocationPolicy.locationRequestIntervalFromSec(intervalSec)
+        val needsReapply = TrackingSettingsReapplyPolicy.shouldReapplyLocationRequest(previous, current)
+        if (needsReapply) {
+            reapplyLocationRequestIfActive("settings_changed")
+        }
+    }
 
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
+    private fun resolveCurrentIntervalAndDistance(): Pair<Long, Float> {
+        val isAuto = currentSettings.autoTrackingMode
+        if (isAuto) {
+            // In auto mode, always honor the latest profile from settings so
+            // live updates (UI or service-driven) are applied immediately.
+            currentActiveProfileIndex = currentSettings.trackingProfile.index
+            val params = TrackingLocationPolicy.getProfileParams(currentActiveProfileIndex)
+            return params.first to params.second
+        }
+
+        currentActiveProfileIndex = -1
+        return currentSettings.loggingIntervalSec to currentSettings.distanceFilterMeters
+    }
+
+    private fun buildLocationRequest(intervalSec: Long, distanceFilter: Float): LocationRequest {
+        val (intervalMs, minUpdateMs) = TrackingLocationPolicy.locationRequestIntervalFromSec(intervalSec)
+        return LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
             .setMinUpdateDistanceMeters(distanceFilter)
             .setMinUpdateIntervalMillis(minUpdateMs)
             .build()
-            
-        fusedLocationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
-        Log.d(TAG, "Updated LocationRequest: interval=${intervalSec}s, distance=${distanceFilter}m")
     }
+
+    @SuppressLint("MissingPermission")
+    private fun applyCurrentLocationRequest(reason: String) {
+        if (!isTracking) return
+        val (intervalSec, distanceFilter) = resolveCurrentIntervalAndDistance()
+        val request = buildLocationRequest(intervalSec, distanceFilter)
+        fusedLocationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
+        Log.d(
+            TAG,
+            "Applied LocationRequest ($reason): interval=${intervalSec}s, distance=${distanceFilter}m, profile=$currentActiveProfileIndex, auto=${currentSettings.autoTrackingMode}"
+        )
+    }
+
+    private fun reapplyLocationRequestIfActive(reason: String) {
+        if (!isTracking || isGpsPaused) return
+        try {
+            applyCurrentLocationRequest(reason)
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Permission lost while reapplying location request", e)
+        }
+    }
+
 }
