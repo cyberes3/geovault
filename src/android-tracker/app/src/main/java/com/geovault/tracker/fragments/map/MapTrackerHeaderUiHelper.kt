@@ -58,12 +58,9 @@ internal object MapTrackerHeaderUiHelper {
         clearCachedStreamingState: () -> Unit,
         updateBottomRightSpinner: () -> Unit
     ) {
-        if (state.visible && state.labelText != null) {
-            lastUpdatedLabel.visibility = View.VISIBLE
-            lastUpdatedLabel.text = state.labelText
-        } else {
+        lastUpdatedLabel.visibility = View.GONE
+        if (!state.visible) {
             clearCachedStreamingState()
-            lastUpdatedLabel.visibility = View.GONE
         }
         updateBottomRightSpinner()
     }

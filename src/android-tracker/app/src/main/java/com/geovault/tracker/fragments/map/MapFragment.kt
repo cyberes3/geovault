@@ -11,7 +11,6 @@ import android.view.Choreographer
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.util.Log
 import android.widget.ImageView
 import android.widget.TextView
 import com.geovault.common.LoadingSpinner
@@ -163,6 +162,8 @@ class MapFragment : Fragment() {
     private var lockTarget: LatLng? = null
     /** Active tracker ids currently requested from live streaming service. */
     private var activeStreamedTrackerIds: Set<String> = emptySet()
+    /** While non-null, single-tracker UI state from ViewModel is ignored unless it matches this tracker id. */
+    private var pendingDisplayedTrackerIdOverride: String? = null
     /** In-memory history cache for multi-tracker map contexts (group/all-trackers). */
     private val multiTrackCoordsCache = mutableMapOf<String, MutableList<List<Double>>>()
     /** Single source of truth for all-trackers render/fit snapshot. */
@@ -447,16 +448,16 @@ class MapFragment : Fragment() {
                     }
                     return
                 }
+                if (navHost()?.hasPendingInitialTrackForMap == true) {
+                    refreshTrackForSelectedTracker()
+                    return
+                }
                 // Basemap switch should keep currently rendered single-tracker tail visible.
                 // If we already have points, avoid kicking the full history refetch path.
                 if (trackPoints.isNotEmpty() && !displayedTrackerId.isNullOrEmpty()) {
                     startLiveTrackStreamingForDisplayedTracker()
                     updateZoomToLatestButtonState()
                     updateTrackerLabel()
-                    return
-                }
-                if (navHost()?.hasPendingInitialTrackForMap == true) {
-                    refreshTrackForSelectedTracker()
                     return
                 }
                 fetchHistory()
@@ -519,10 +520,6 @@ class MapFragment : Fragment() {
                     return@setFragmentResultListener
                 }
                 MapListRefreshAction.REFRESH_SELECTED_TRACKER -> {
-                    Log.d(
-                        TAG,
-                        "Refresh selected tracker after list update: selected=$selectedTrackerId displayed=$displayedTrackerId"
-                    )
                     refreshTrackForSelectedTracker()
                 }
                 MapListRefreshAction.NO_OP -> Unit
@@ -626,6 +623,13 @@ class MapFragment : Fragment() {
         }
 
         mapFlowViewModel.startTrackPointStream()
+
+        // Highest priority: if another screen requested a specific tracker for map,
+        // consume it immediately instead of reusing previously displayed state.
+        if (mapReady && navHost()?.hasPendingInitialTrackForMap == true) {
+            refreshTrackForSelectedTracker()
+            return
+        }
 
         if (mapReady) {
             val decision = mapFlowViewModel.resolveResumeDecision(
@@ -1539,6 +1543,7 @@ class MapFragment : Fragment() {
         val initial = navHost()?.getAndClearInitialTrackForMap()
         val loadTrackerId = initial?.id ?: SelectedTrackerPrefs.selectedTrackerId(requireContext())
         mapViewContext = MapViewContext.SINGLE_TRACKER
+        pendingDisplayedTrackerIdOverride = loadTrackerId.takeIf { it.isNotEmpty() }
 
         val isSwitching = displayedTrackerId != null && displayedTrackerId != loadTrackerId
 
@@ -1565,6 +1570,17 @@ class MapFragment : Fragment() {
             primeDisplayedTrackerFromInitial(initial)
         } else {
             setDisplayedTrackerPlaceholder(loadTrackerId, SelectedTrackerPrefs.selectedTrackerName(requireContext()))
+        }
+        // Keep fragment-local state and ViewModel state aligned immediately so uiState collection
+        // does not overwrite the freshly requested tracker with stale displayedTrackerId.
+        mapFlowViewModel.updateUiState {
+            it.copy(
+                displayedTrackerId = displayedTrackerId,
+                displayedTrackerName = displayedTrackerName,
+                displayedGroupName = null,
+                showAllTrackers = false,
+                mode = MapScreenMode.Single
+            )
         }
         if (isSwitching) {
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
@@ -2267,6 +2283,9 @@ class MapFragment : Fragment() {
         lastCachedUpdateTimeMs = trackerLastUpdateMs(tracker)
         displayedGroupName = null
         mapViewContext = MapViewContext.SINGLE_TRACKER
+        if (pendingDisplayedTrackerIdOverride == trackerId) {
+            pendingDisplayedTrackerIdOverride = null
+        }
         if (tracker != null) {
             val resolvedColor = (tracker.color ?: defaultTrackerColorHex(requireContext())).let { if (it.startsWith("#")) it else "#$it" }
             currentTrackerColor = resolvedColor
@@ -2444,13 +2463,27 @@ class MapFragment : Fragment() {
         mapCommandsJob = viewLifecycleOwner.lifecycleScope.launch {
             launch {
                 mapFlowViewModel.uiState.collect { state ->
-                    showAllTrackers = state.showAllTrackers
-                    displayedTrackerId = state.displayedTrackerId
-                    displayedTrackerName = state.displayedTrackerName
-                    displayedGroupName = state.displayedGroupName
-                    mapViewContext = when (state.mode) {
+                    val nextMapViewContext = when (state.mode) {
                         is MapScreenMode.GroupMode -> MapViewContext.GROUP
                         else -> MapViewContext.SINGLE_TRACKER
+                    }
+                    val pendingOverride = pendingDisplayedTrackerIdOverride
+                    val shouldDeferTrackerContextUpdate = pendingOverride != null &&
+                        (
+                            nextMapViewContext != MapViewContext.SINGLE_TRACKER ||
+                                state.displayedTrackerId != pendingOverride
+                            )
+
+                    if (shouldDeferTrackerContextUpdate) {
+                    } else {
+                        if (pendingOverride != null && state.displayedTrackerId == pendingOverride) {
+                            pendingDisplayedTrackerIdOverride = null
+                        }
+                        showAllTrackers = state.showAllTrackers
+                        displayedTrackerId = state.displayedTrackerId
+                        displayedTrackerName = state.displayedTrackerName
+                        displayedGroupName = state.displayedGroupName
+                        mapViewContext = nextMapViewContext
                     }
                     activeStreamedTrackerIds = state.activeStreamedTrackerIds
                     if (state.loading) {
