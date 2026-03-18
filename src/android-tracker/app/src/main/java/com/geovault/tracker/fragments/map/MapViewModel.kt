@@ -1,6 +1,7 @@
 package com.geovault.tracker.fragments.map
 
 import android.app.Application
+import android.util.Log
 import com.geovault.tracker.Group
 import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
@@ -26,6 +27,10 @@ class MapViewModel @Inject constructor(
     private val visibilityRepository: MapVisibilityRepository,
     private val streamingRepository: MapStreamingRepository
 ) : AndroidViewModel(application) {
+    private companion object {
+        const val TAG = "MapViewModel"
+    }
+
     private val loadSingleTrackerUseCase = LoadSingleTrackerMapUseCase(trackRepository)
     private val loadAllTrackersUseCase = LoadAllTrackersMapUseCase(trackRepository, groupRepository, visibilityRepository)
     private val loadGroupMapUseCase = LoadGroupMapUseCase(trackRepository)
@@ -75,6 +80,12 @@ class MapViewModel @Inject constructor(
                 )
                 if (accepted) {
                     _commands.tryEmit(MapCommand.ApplyTrackPoint(event))
+                } else if (event.source == com.geovault.tracker.pipeline.TrackPointSource.LOCAL_GPS) {
+                    Log.d(
+                        TAG,
+                        "Dropped local GPS point trackId=${event.trackId} displayed=${state.displayedTrackerId} " +
+                            "mode=${state.mode} trackingRunning=${TrackingRuntimeStateStore.state.value.isRunning}"
+                    )
                 }
             }
         }

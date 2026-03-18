@@ -140,6 +140,11 @@ class GeoVaultMapFragment : Fragment(), OnMapReadyCallback, MapView.OnDidFailLoa
             applyOverScrollNever(it)
             it.onResume()
         }
+        _maplibreMap?.let { map ->
+            if (mapManager.sourcesFetched && !mapManager.isCurrentSourceApplied(map)) {
+                mapManager.applySelectedSource(map)
+            }
+        }
     }
 
     override fun onPause() {

@@ -7,7 +7,22 @@ import com.geovault.common.GeovaultAuthManager
 class MapSourceManager(private val context: Context) {
     private val prefs = context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
     private var availableSources: List<TileSource> = listOf(
-        TileSource(SOURCE_OSM, "OpenStreetMap", "xyz", client_config = TileClientConfig(url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"))
+        defaultOsmSource(),
+        defaultOsmDarkSource()
+    )
+
+    private fun defaultOsmSource(): TileSource = TileSource(
+        SOURCE_OSM,
+        "OpenStreetMap",
+        "xyz",
+        client_config = TileClientConfig(url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png")
+    )
+
+    private fun defaultOsmDarkSource(): TileSource = TileSource(
+        SOURCE_OSM_DARK,
+        "OpenStreetMap Dark",
+        "xyz",
+        client_config = TileClientConfig(url = "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png")
     )
 
     fun setSources(sources: List<TileSource>) {
@@ -16,12 +31,12 @@ class MapSourceManager(private val context: Context) {
         val baseSources = mutableListOf<TileSource>()
 
         if (filtered.none { it.id == SOURCE_OSM }) {
-            baseSources.add(TileSource(SOURCE_OSM, "OpenStreetMap", "xyz", client_config = TileClientConfig(url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png")))
+            baseSources.add(defaultOsmSource())
         } else {
             baseSources.add(filtered.find { it.id == SOURCE_OSM }!!)
         }
 
-        filtered.find { it.id == SOURCE_OSM_DARK }?.let { baseSources.add(it) }
+        baseSources.add(filtered.find { it.id == SOURCE_OSM_DARK } ?: defaultOsmDarkSource())
         filtered.find { it.id == SOURCE_MAPTILER_STREETS }?.let { baseSources.add(it) }
 
         filtered.find { it.id == SOURCE_MAPTILER_HYBRID }?.let { baseSources.add(it) }
@@ -32,7 +47,8 @@ class MapSourceManager(private val context: Context) {
     /** Force OSM-only sources (e.g. guest mode with no server). Uses default OSM tile URL. */
     fun setOsmOnly() {
         availableSources = listOf(
-            TileSource(SOURCE_OSM, "OpenStreetMap", "xyz", client_config = TileClientConfig(url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"))
+            defaultOsmSource(),
+            defaultOsmDarkSource()
         )
     }
 

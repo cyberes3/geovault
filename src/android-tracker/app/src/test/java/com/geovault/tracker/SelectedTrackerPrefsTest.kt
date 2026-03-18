@@ -2,6 +2,7 @@ package com.geovault.tracker
 
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -15,8 +16,9 @@ class SelectedTrackerPrefsTest {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         SelectedTrackerPrefs.clearSelectedTracker(context)
 
-        SelectedTrackerPrefs.setSelectedTracker(context, " tracker-id ", " Tracker Name ")
+        val persisted = SelectedTrackerPrefs.setSelectedTracker(context, " tracker-id ", " Tracker Name ")
 
+        assertTrue(persisted)
         assertEquals("tracker-id", SelectedTrackerPrefs.selectedTrackerId(context))
         assertEquals("Tracker Name", SelectedTrackerPrefs.selectedTrackerName(context))
     }

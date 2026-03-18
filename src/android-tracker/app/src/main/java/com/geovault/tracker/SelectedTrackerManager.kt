@@ -4,9 +4,11 @@ import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 
 object SelectedTrackerManager {
+    private const val TAG = "SelectedTrackerManager"
     private const val RESTART_DELAY_MS = 400L
     private val restartHandler = Handler(Looper.getMainLooper())
     private var pendingRestart: Runnable? = null
@@ -17,7 +19,10 @@ object SelectedTrackerManager {
         trackerName: String?,
         restartTrackingIfRunning: Boolean = true
     ) {
-        SelectedTrackerPrefs.setSelectedTracker(context, trackerId, trackerName)
+        val persisted = SelectedTrackerPrefs.setSelectedTracker(context, trackerId, trackerName)
+        if (!persisted) {
+            Log.w(TAG, "Failed to persist selected tracker id=$trackerId before tracking restart")
+        }
         if (restartTrackingIfRunning) {
             restartTrackingIfRunning(context)
         }

@@ -17,11 +17,11 @@ object SelectedTrackerPrefs {
             .getString(KEY_SELECTED_TRACKER_NAME, "")?.trim().orEmpty()
     }
 
-    fun setSelectedTracker(context: Context, trackerId: String, trackerName: String?) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+    fun setSelectedTracker(context: Context, trackerId: String, trackerName: String?): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
             .putString(KEY_SELECTED_TRACKER_ID, trackerId.trim())
             .putString(KEY_SELECTED_TRACKER_NAME, trackerName?.trim().orEmpty())
-            .apply()
+            .commit()
     }
 
     fun clearSelectedTracker(context: Context) {

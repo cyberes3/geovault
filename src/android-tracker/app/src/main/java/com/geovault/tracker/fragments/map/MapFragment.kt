@@ -75,6 +75,7 @@ class MapFragment : Fragment() {
     private var currentTrackerColor: String? = null
 
     private lateinit var mapLoadingOverlay: View
+    private lateinit var mapLoadingSpinner: LoadingSpinner
     private lateinit var trackerLabelCard: View
     private lateinit var trackerLabelIcon: ImageView
     private lateinit var trackerNameLabel: TextView
@@ -286,6 +287,7 @@ class MapFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         mapLoadingOverlay = view.findViewById(R.id.mapLoadingOverlay)
+        mapLoadingSpinner = view.findViewById(R.id.mapLoadingSpinner)
         trackerLabelCard = view.findViewById(R.id.trackerLabelCard)
         trackerLabelIcon = view.findViewById(R.id.trackerLabelIcon)
         trackerNameLabel = view.findViewById(R.id.trackerNameLabel)
@@ -406,6 +408,7 @@ class MapFragment : Fragment() {
                 }
                 mapReady = true
                 mapLoadingOverlay.visibility = View.GONE
+                mapLoadingSpinner.stop()
                 refreshMapPaddingForCurrentMode(force = true)
                 updateTrackLine()
                 if (showMyLocationEnabled && pendingAutoZoomToStandaloneFix) {
@@ -502,8 +505,27 @@ class MapFragment : Fragment() {
                 }
                 return@setFragmentResultListener
             }
-            if (showAllTrackers && mapViewContext != MapViewContext.GROUP) {
-                loadAllTrackersAndApply()
+            val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
+            when (
+                MapListRefreshPolicy.resolve(
+                    showAllTrackers = showAllTrackers,
+                    mapViewContext = mapViewContext,
+                    selectedTrackerId = selectedTrackerId,
+                    displayedTrackerId = displayedTrackerId
+                )
+            ) {
+                MapListRefreshAction.LOAD_ALL -> {
+                    loadAllTrackersAndApply()
+                    return@setFragmentResultListener
+                }
+                MapListRefreshAction.REFRESH_SELECTED_TRACKER -> {
+                    Log.d(
+                        TAG,
+                        "Refresh selected tracker after list update: selected=$selectedTrackerId displayed=$displayedTrackerId"
+                    )
+                    refreshTrackForSelectedTracker()
+                }
+                MapListRefreshAction.NO_OP -> Unit
             }
         }
 
@@ -2433,8 +2455,10 @@ class MapFragment : Fragment() {
                     activeStreamedTrackerIds = state.activeStreamedTrackerIds
                     if (state.loading) {
                         mapLoadingOverlay.visibility = View.VISIBLE
+                        mapLoadingSpinner.start()
                     } else {
                         mapLoadingOverlay.visibility = View.GONE
+                        mapLoadingSpinner.stop()
                     }
                     updateTrackerLabel()
                 }

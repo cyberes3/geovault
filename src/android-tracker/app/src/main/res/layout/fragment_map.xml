@@ -16,14 +16,15 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:visibility="gone"
-        android:background="@color/gv_common_overlay_black_90"
+        android:background="@color/map_loading_overlay_background"
         android:clickable="true"
         android:focusable="true">
-        <ProgressBar
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+        <com.geovault.common.LoadingSpinner
+            android:id="@+id/mapLoadingSpinner"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
             android:layout_gravity="center"
-            android:indeterminateTint="@color/content_on_primary" />
+            app:spinnerSize="36dp" />
     </FrameLayout>
 
     <com.google.android.material.card.MaterialCardView
