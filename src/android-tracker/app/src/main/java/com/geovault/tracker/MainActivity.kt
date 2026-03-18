@@ -30,6 +30,8 @@ import com.geovault.common.ServerUrlContract
 import com.geovault.tracker.Group
 import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.navigation.TrackerNavHost
+import com.geovault.tracker.services.LiveStreamRuntimeStateStore
+import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.*
 
@@ -231,57 +233,11 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         TrackerRepository.prefetchAvailableToAdd(this)
         TrackerRepository.prefetchSharedPage(this)
 
-        findViewById<View>(R.id.navHome).setOnClickListener {
-            clearOverlayAndThen { viewPager.setCurrentItem(0, false) }
-        }
-        findViewById<View>(R.id.navMap).setOnClickListener {
-            clearOverlayAndThen {
-            val mapFragment = pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.map.MapFragment
-            val isStreaming = mapFragment?.isShowingStreamedTrack() ?: false
-
-            // Predict what tracker to load on the map and pass metadata instantly
-            val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
-
-            if (viewPager.currentItem != 1 && selectedTrackerId.isNotEmpty() && initialTrackForMap == null && !isStreaming) {
-                TrackerRepository.getTrackerFromCache(selectedTrackerId)?.let { cachedSelected ->
-                    setInitialTrackForMap(cachedSelected)
-                }
-                setCurrentTab(1, forceRefreshMap = true, delayMs = 0)
-                TrackerRepository.getTrackers(this, forceRefresh = false) { list ->
-                    val selectedTracker = list?.find { it.id == selectedTrackerId }
-                    if (selectedTracker != null) {
-                        updateInitialTrackForMapIfPending(selectedTracker)
-                    }
-                }
-            } else {
-                if (viewPager.currentItem != 1) { // If not already on map
-                    // If we have an initial track set (from "View on map"), force refresh.
-                    // Otherwise, just switch and let MapFragment.onResume handle its own state.
-                    val forceRefresh = initialTrackForMap != null
-                    setCurrentTab(1, forceRefreshMap = forceRefresh, delayMs = 0)
-                } else {
-                    viewPager.setCurrentItem(1, false)
-                }
-            }
-            }
-        }
-        findViewById<View>(R.id.navTrackers).setOnClickListener {
-            clearOverlayAndThen {
-                if (viewPager.currentItem == 2) {
-                    viewPager.post {
-                        (pagerAdapter.getFragment(2) as? com.geovault.tracker.fragments.TrackersPagerFragment)?.selectTrackersTab()
-                    }
-                } else {
-                    viewPager.setCurrentItem(2, false)
-                }
-            }
-        }
-        findViewById<View>(R.id.navShared).setOnClickListener {
-            clearOverlayAndThen { viewPager.setCurrentItem(3, false) }
-        }
-        findViewById<View>(R.id.navSettings).setOnClickListener {
-            clearOverlayAndThen { viewPager.setCurrentItem(4, false) }
-        }
+        findViewById<View>(R.id.navHome).setOnClickListener { navigateToTabWithOverlayClear(0) }
+        findViewById<View>(R.id.navMap).setOnClickListener { openMapTabFromBottomNav() }
+        findViewById<View>(R.id.navTrackers).setOnClickListener { openTrackersTabFromBottomNav() }
+        findViewById<View>(R.id.navShared).setOnClickListener { navigateToTabWithOverlayClear(3) }
+        findViewById<View>(R.id.navSettings).setOnClickListener { navigateToTabWithOverlayClear(4) }
 
         updateNavTabBackground(savedTab)
         supportFragmentManager.addOnBackStackChangedListener { updateBottomNavForOverlay() }
@@ -345,7 +301,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val restartIfKilled = prefs.getBoolean("restart_tracking_if_killed", true)
         val wasTrackingBeforeExit = prefs.getBoolean(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT, false)
-        if (!restartIfKilled || TrackingService.isRunning) {
+        if (!restartIfKilled || TrackingRuntimeStateStore.state.value.isRunning) {
             if (wasTrackingBeforeExit) {
                 prefs.edit().remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).commit()
             }
@@ -353,7 +309,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             tryResumeTrackingAfterKill()
             return
         }
-        if (!TrackingService.isRunning && prefs.getBoolean("start_tracking_on_launch", false)) {
+        if (!TrackingRuntimeStateStore.state.value.isRunning && prefs.getBoolean("start_tracking_on_launch", false)) {
             tryStartTrackingOnLaunch()
         }
     }
@@ -432,6 +388,48 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             supportFragmentManager.popBackStackImmediate()
         }
         action()
+    }
+
+    private fun navigateToTabWithOverlayClear(tabIndex: Int) {
+        clearOverlayAndThen { viewPager.setCurrentItem(tabIndex, false) }
+    }
+
+    private fun openTrackersTabFromBottomNav() {
+        clearOverlayAndThen {
+            if (viewPager.currentItem == 2) {
+                viewPager.post {
+                    (pagerAdapter.getFragment(2) as? com.geovault.tracker.fragments.TrackersPagerFragment)?.selectTrackersTab()
+                }
+            } else {
+                viewPager.setCurrentItem(2, false)
+            }
+        }
+    }
+
+    private fun openMapTabFromBottomNav() {
+        clearOverlayAndThen {
+            val mapFragment = pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.map.MapFragment
+            val isStreaming = mapFragment?.isShowingStreamedTrack() ?: false
+            val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
+
+            if (viewPager.currentItem != 1 && selectedTrackerId.isNotEmpty() && initialTrackForMap == null && !isStreaming) {
+                TrackerRepository.getTrackerFromCache(selectedTrackerId)?.let { cachedSelected ->
+                    setInitialTrackForMap(cachedSelected)
+                }
+                setCurrentTab(1, forceRefreshMap = true, delayMs = 0)
+                TrackerRepository.getTrackers(this, forceRefresh = false) { list ->
+                    val selectedTracker = list?.find { it.id == selectedTrackerId }
+                    if (selectedTracker != null) {
+                        updateInitialTrackForMapIfPending(selectedTracker)
+                    }
+                }
+            } else if (viewPager.currentItem != 1) {
+                val forceRefresh = initialTrackForMap != null
+                setCurrentTab(1, forceRefreshMap = forceRefresh, delayMs = 0)
+            } else {
+                viewPager.setCurrentItem(1, false)
+            }
+        }
     }
 
     private fun updateBottomNavForOverlay() {
@@ -882,7 +880,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             return
         }
         val intent = Intent(this, TrackingService::class.java)
-        if (TrackingService.isRunning) {
+        if (TrackingRuntimeStateStore.state.value.isRunning) {
             showStopTrackingConfirmation {
                 getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
                     .remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).commit()
@@ -963,7 +961,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     }
 
     override fun onDestroy() {
-        if (isFinishing && !isChangingConfigurations && LiveTrackStreamingService.isRunning) {
+        if (isFinishing && !isChangingConfigurations && LiveStreamRuntimeStateStore.state.value.isRunning) {
             startService(Intent(this, LiveTrackStreamingService::class.java).apply {
                 action = LiveTrackStreamingService.ACTION_STOP
             })

@@ -2,9 +2,9 @@ package com.geovault.tracker.fragments.map
 
 import android.app.Application
 import com.geovault.tracker.Group
-import com.geovault.tracker.LiveTrackStreamingService
 import com.geovault.tracker.TrackerRepository
-import com.geovault.tracker.TrackingService
+import com.geovault.tracker.services.LiveStreamRuntimeStateStore
+import com.geovault.tracker.services.TrackingRuntimeStateStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
@@ -26,7 +26,8 @@ internal class MapViewModel(
     private val loadAllTrackersUseCase: LoadAllTrackersMapUseCase = LoadAllTrackersMapUseCase(trackRepository, groupRepository, visibilityRepository),
     private val loadGroupMapUseCase: LoadGroupMapUseCase = LoadGroupMapUseCase(trackRepository),
     private val handleTrackPointUseCase: HandleTrackPointUseCase = HandleTrackPointUseCase(),
-    private val applyCameraPolicyUseCase: ApplyCameraPolicyUseCase = ApplyCameraPolicyUseCase()
+    private val applyCameraPolicyUseCase: ApplyCameraPolicyUseCase = ApplyCameraPolicyUseCase(),
+    private val resolveMapResumeUseCase: ResolveMapResumeUseCase = ResolveMapResumeUseCase()
 ) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(MapUiState())
@@ -49,6 +50,10 @@ internal class MapViewModel(
         _uiState.value = transform(_uiState.value)
     }
 
+    fun resolveResumeDecision(input: MapResumeInput): MapResumeDecision {
+        return resolveMapResumeUseCase.resolve(input)
+    }
+
     fun startTrackPointStream() {
         if (streamJob?.isActive == true) return
         streamJob = viewModelScope.launch {
@@ -56,7 +61,7 @@ internal class MapViewModel(
                 val state = _uiState.value
                 val accepted = handleTrackPointUseCase.shouldAccept(
                     event = event,
-                    trackingRunning = TrackingService.isRunning,
+                    trackingRunning = TrackingRuntimeStateStore.state.value.isRunning,
                     showAllTrackers = state.showAllTrackers,
                     mapViewContext = when (state.mode) {
                         is MapScreenMode.GroupMode -> MapViewContext.GROUP
@@ -87,7 +92,7 @@ internal class MapViewModel(
     }
 
     fun startLiveTrackStreamingForTrackerSet(trackerIds: Set<String>, trackerName: String? = null) {
-        if (TrackingService.isRunning) {
+        if (TrackingRuntimeStateStore.state.value.isRunning) {
             stopLiveTrackStreaming()
             return
         }
@@ -105,7 +110,7 @@ internal class MapViewModel(
         selectedTrackerId: String?,
         mapViewContext: MapViewContext
     ) {
-        if (TrackingService.isRunning) {
+        if (TrackingRuntimeStateStore.state.value.isRunning) {
             stopLiveTrackStreaming()
             return
         }
@@ -126,7 +131,7 @@ internal class MapViewModel(
         displayedTrackerId: String?
     ): Boolean {
         if (trackingRunning) return false
-        if (!LiveTrackStreamingService.isRunning) return false
+        if (!LiveStreamRuntimeStateStore.state.value.isRunning) return false
         val activeIds = _uiState.value.activeStreamedTrackerIds
         return if (showAllTrackers || mapViewContext == MapViewContext.GROUP) {
             activeIds.isNotEmpty()

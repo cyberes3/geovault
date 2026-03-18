@@ -29,12 +29,12 @@ import com.geovault.tracker.Group
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.TrackingService
 import com.geovault.tracker.TrackUpdateHelper
 import com.geovault.tracker.GeoJsonLineString
 import com.geovault.tracker.lastUpdateMs
 import com.geovault.tracker.fragments.TrackersListFragment
 import com.geovault.tracker.navigation.navHost
+import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -580,7 +580,7 @@ class MapFragment : Fragment() {
         updateTrackerLabel()
         refreshMapPaddingForCurrentMode(force = true)
 
-        if (TrackingService.isRunning) {
+        if (trackingRuntimeSnapshot().isRunning) {
             // Local tracking owns live updates; do not run websocket streaming in tracking mode.
             stopLiveTrackStreaming()
             if (showMyLocationEnabled) {
@@ -605,48 +605,53 @@ class MapFragment : Fragment() {
         mapFlowViewModel.startTrackPointStream()
 
         if (mapReady) {
-            if (mapViewContext == MapViewContext.GROUP || showAllTrackers) {
-                if (activeStreamedTrackerIds.isNotEmpty()) {
-                    startLiveTrackStreamingForTrackerSet(activeStreamedTrackerIds)
-                } else if (mapViewContext == MapViewContext.GROUP && currentGroupForMap != null) {
-                    val group = currentGroupForMap!!
-                    val trackIds = group.track_ids?.toSet() ?: emptySet()
-                    if (trackIds.isNotEmpty()) {
-                        startLiveTrackStreamingForTrackerSet(trackIds)
-                        return
+            val decision = mapFlowViewModel.resolveResumeDecision(
+                MapResumeInput(
+                    trackingRunning = trackingRuntimeSnapshot().isRunning,
+                    mapReady = mapReady,
+                    showAllTrackers = showAllTrackers,
+                    mapViewContext = mapViewContext,
+                    activeStreamedTrackerIds = activeStreamedTrackerIds,
+                    currentGroupTrackIds = currentGroupForMap?.track_ids?.toSet() ?: emptySet(),
+                    selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(requireContext()),
+                    displayedTrackerId = displayedTrackerId,
+                    hasTrackPoints = trackPoints.isNotEmpty(),
+                    hasPendingInitialTracker = navHost()?.hasPendingInitialTrackForMap == true
+                )
+            )
+            when (decision) {
+                MapResumeDecision.NoOp -> Unit
+                MapResumeDecision.MultiContextNoStreaming -> updateTrackerLabel()
+                is MapResumeDecision.StartMultiContextStreaming -> {
+                    startLiveTrackStreamingForTrackerSet(decision.trackerIds)
+                    updateTrackerLabel()
+                }
+                MapResumeDecision.ClearSingleTrackerState -> {
+                    trackPoints.clear()
+                    displayedTracker = null
+                    displayedTrackerId = null
+                    displayedTrackerName = null
+                    stopLiveTrackStreaming()
+                    updateTrackLine()
+                    updateZoomToLatestButtonState()
+                    updateTrackerLabel()
+                }
+                is MapResumeDecision.LoadSingleTracker -> {
+                    if (displayedTrackerId != decision.trackerId || mapViewContext != MapViewContext.SINGLE_TRACKER) {
+                        displayedTrackerId = decision.trackerId
+                        mapViewContext = MapViewContext.SINGLE_TRACKER
                     }
+                    mapFlowViewModel.handleIntent(
+                        MapIntent.LoadSingleTracker(
+                            trackerId = decision.trackerId,
+                            forceReplace = false
+                        )
+                    )
                 }
-                updateTrackerLabel()
-                return
-            }
-            val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
-            val activeTrackerId = resolveActiveSingleTrackerId(selectedTrackerId)
-            val pendingInitialTracker = navHost()?.hasPendingInitialTrackForMap == true
-            if (activeTrackerId.isEmpty() && !pendingInitialTracker) {
-                // No selected tracker and no explicit tracker target: clear stale map state.
-                trackPoints.clear()
-                displayedTracker = null
-                displayedTrackerId = null
-                displayedTrackerName = null
-                stopLiveTrackStreaming()
-                updateTrackLine()
-                updateZoomToLatestButtonState()
-                updateTrackerLabel()
-            } else if (TrackingService.isRunning && activeTrackerId.isNotEmpty()) {
-                if (displayedTrackerId != activeTrackerId) {
-                    displayedTrackerId = activeTrackerId
-                    mapViewContext = MapViewContext.SINGLE_TRACKER
+                MapResumeDecision.RestartDisplayedTrackerStreaming -> {
+                    // Re-start streaming when returning to Map (e.g. after closing Params overlay).
+                    startLiveTrackStreamingForDisplayedTracker()
                 }
-                mapFlowViewModel.handleIntent(MapIntent.LoadSingleTracker(trackerId = activeTrackerId, forceReplace = false))
-            } else if (trackPoints.isEmpty() && activeTrackerId.isNotEmpty()) {
-                if (displayedTrackerId == null) {
-                    displayedTrackerId = activeTrackerId
-                    mapViewContext = MapViewContext.SINGLE_TRACKER
-                }
-                mapFlowViewModel.handleIntent(MapIntent.LoadSingleTracker(trackerId = activeTrackerId, forceReplace = false))
-            } else {
-                // Re-start streaming when returning to Map (e.g. after closing Params overlay).
-                startLiveTrackStreamingForDisplayedTracker()
             }
         }
     }
@@ -698,14 +703,6 @@ class MapFragment : Fragment() {
     }
 
     private fun isFollowLockActive(): Boolean = followLockEnabled && lockTarget != null
-
-    private fun resolveActiveSingleTrackerId(selectedTrackerId: String): String {
-        return MapDataLoader.resolveActiveSingleTrackerId(
-            trackingRunning = TrackingService.isRunning,
-            displayedTrackerId = displayedTrackerId,
-            selectedTrackerId = selectedTrackerId
-        )
-    }
 
     private fun isSelectedDefaultTrackerMode(): Boolean {
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
@@ -760,7 +757,7 @@ class MapFragment : Fragment() {
         val trackerOrLiveLockActive = isFollowLockActive() || liveActiveFitEnabled
         val effectiveGpsLockActive = gpsLocationLockActive && !trackerOrLiveLockActive
         maplibreMap?.let { map ->
-            val shouldTrackGpsCamera = !TrackingService.isRunning &&
+            val shouldTrackGpsCamera = !trackingRuntimeSnapshot().isRunning &&
                 showMyLocationEnabled &&
                 effectiveGpsLockActive &&
                 !isSelectedDefaultTracker
@@ -770,7 +767,7 @@ class MapFragment : Fragment() {
             LocationComponentHelper.setCameraTracking(map, enabled = shouldTrackGpsCamera)
         }
         val state = MapStandaloneLocationController.myLocationButtonState(
-            trackingRunning = TrackingService.isRunning,
+            trackingRunning = trackingRuntimeSnapshot().isRunning,
             showMyLocationEnabled = showMyLocationEnabled,
             waitingForFix = waitingForStandaloneFix,
             gpsLockActive = effectiveGpsLockActive,
@@ -960,7 +957,7 @@ class MapFragment : Fragment() {
     /** Start location updates when not tracking: provides hasLiveGpsFix for button visibility and, when showMyLocationEnabled, updates map. */
     @SuppressLint("MissingPermission")
     private fun startStandaloneLocationUpdates() {
-        if (TrackingService.isRunning) return
+        if (trackingRuntimeSnapshot().isRunning) return
         val navHost = navHost() ?: return
         if (!navHost.hasLocationPermission()) return
         if (fusedLocationClient == null) {
@@ -1044,7 +1041,7 @@ class MapFragment : Fragment() {
     }
 
     private fun updateTrackerLabel() {
-        val trackingRunning = TrackingService.isRunning
+        val trackingRunning = trackingRuntimeSnapshot().isRunning
         val selectedTrackerName = SelectedTrackerPrefs.selectedTrackerName(requireContext())
         if (!isLiveActiveFitAvailable() && liveActiveFitEnabled) {
             liveActiveFitEnabled = false
@@ -1094,7 +1091,7 @@ class MapFragment : Fragment() {
     /** True when a single tracker is currently active for live updates. */
     private fun isStreaming(): Boolean {
         return mapFlowViewModel.isStreaming(
-            trackingRunning = TrackingService.isRunning,
+            trackingRunning = trackingRuntimeSnapshot().isRunning,
             showAllTrackers = showAllTrackers,
             mapViewContext = mapViewContext,
             displayedTrackerId = displayedTrackerId
@@ -1802,7 +1799,7 @@ class MapFragment : Fragment() {
     }
 
     private fun updateLiveActiveFitButtonUi() {
-        val trackingRunning = TrackingService.isRunning
+        val trackingRunning = trackingRuntimeSnapshot().isRunning
         val visible = !trackingRunning &&
             isLiveActiveFitAvailable() &&
             !isSelectedDefaultTrackerMode()
@@ -2400,7 +2397,7 @@ class MapFragment : Fragment() {
             currentTrackerColor = currentTrackerColor,
             showMyLocationEnabled = showMyLocationEnabled,
             lastStreamedAccuracyMeters = lastStreamedAccuracyMeters,
-            trackingServiceAccuracyMeters = TrackingService.lastAccuracyMeters,
+            trackingServiceAccuracyMeters = trackingRuntimeSnapshot().lastAccuracyMeters,
             trackPositionSourceId = MapConstants.TRACK_POSITION_SOURCE_ID,
             trackPositionAccuracySourceId = MapConstants.TRACK_POSITION_ACCURACY_SOURCE_ID,
             ensureArrowImage = { mapStyle, hexColor ->
@@ -2507,6 +2504,8 @@ class MapFragment : Fragment() {
         event.text.add(message)
         accessibilityManager.sendAccessibilityEvent(event)
     }
+
+    private fun trackingRuntimeSnapshot() = TrackingRuntimeStateStore.state.value
 
     companion object {
         private const val TAG = "MapFragment"

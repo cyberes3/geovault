@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import com.geovault.tracker.services.TrackingRuntimeStateStore
 
 object SelectedTrackerManager {
     private const val RESTART_DELAY_MS = 400L
@@ -36,7 +37,7 @@ object SelectedTrackerManager {
     }
 
     fun restartTrackingIfRunning(context: Context, delayMs: Long = RESTART_DELAY_MS) {
-        if (!TrackingService.isRunning) return
+        if (!TrackingRuntimeStateStore.state.value.isRunning) return
         val appContext = context.applicationContext
         appContext.startService(Intent(appContext, TrackingService::class.java).apply {
             action = TrackingService.ACTION_STOP

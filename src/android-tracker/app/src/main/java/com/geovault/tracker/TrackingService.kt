@@ -187,20 +187,7 @@ class TrackingService : TrackPointServiceBase() {
         lastTrackedLongitude = null
         lastTrackedTimestampMs = 0L
         lastTrackedPropsJson = null
-        TrackingRuntimeStateStore.update {
-            it.copy(
-                isRunning = true,
-                sessionStartTimeMs = sessionStartTimeMs,
-                pointsSentThisSession = pointsSentThisSession,
-                lastPointSentAtMs = lastPointSentAtMs,
-                sessionTotalDistanceMeters = sessionTotalDistanceMeters,
-                lastAccuracyMeters = lastAccuracyMeters,
-                lastTrackedLatitude = lastTrackedLatitude,
-                lastTrackedLongitude = lastTrackedLongitude,
-                lastTrackedTimestampMs = lastTrackedTimestampMs,
-                lastTrackedPropsJson = lastTrackedPropsJson
-            )
-        }
+        syncRuntimeStateStore()
         broadcastSessionStats()
 
         clearQueuedLocationsAsync()
@@ -261,20 +248,7 @@ class TrackingService : TrackPointServiceBase() {
         lastTrackedLongitude = null
         lastTrackedTimestampMs = 0L
         lastTrackedPropsJson = null
-        TrackingRuntimeStateStore.update {
-            it.copy(
-                isRunning = false,
-                sessionStartTimeMs = sessionStartTimeMs,
-                pointsSentThisSession = pointsSentThisSession,
-                lastPointSentAtMs = lastPointSentAtMs,
-                sessionTotalDistanceMeters = sessionTotalDistanceMeters,
-                lastAccuracyMeters = lastAccuracyMeters,
-                lastTrackedLatitude = lastTrackedLatitude,
-                lastTrackedLongitude = lastTrackedLongitude,
-                lastTrackedTimestampMs = lastTrackedTimestampMs,
-                lastTrackedPropsJson = lastTrackedPropsJson
-            )
-        }
+        syncRuntimeStateStore()
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
             .remove(PREF_WAS_TRACKING_BEFORE_EXIT).commit()
         fusedLocationClient.removeLocationUpdates(locationCallback)
@@ -289,6 +263,7 @@ class TrackingService : TrackPointServiceBase() {
     private fun onLocationReceived(location: Location) {
         // Always update last accuracy from the most recent fix so the UI shows current GPS fix quality
         lastAccuracyMeters = if (location.hasAccuracy()) location.accuracy else null
+        syncRuntimeStateStore()
 
         val prefs = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val accuracyFilter = prefs.getString(PREF_ACCURACY, "50")?.toFloatOrNull() ?: 50f
@@ -333,6 +308,7 @@ class TrackingService : TrackPointServiceBase() {
         
         totalDistanceMeters += lastLocation?.distanceTo(smoothedLocation) ?: 0f
         sessionTotalDistanceMeters = totalDistanceMeters
+        syncRuntimeStateStore()
         
         // Auto-profile switching logic
         if (prefs.getBoolean(PREF_AUTO_TRACKING, false)) {
@@ -436,6 +412,7 @@ class TrackingService : TrackPointServiceBase() {
                         Log.d(TAG, "Successfully pushed ${batch.size} locations")
                         pointsSentThisSession += batch.size
                         lastPointSentAtMs = System.currentTimeMillis()
+                        syncRuntimeStateStore()
                         broadcastSessionStats()
                         database.locationDao().delete(batch)
                         batchesSent++
@@ -484,6 +461,7 @@ class TrackingService : TrackPointServiceBase() {
         lastTrackedLongitude = location.longitude
         lastTrackedTimestampMs = location.time
         lastTrackedPropsJson = propsJson
+        syncRuntimeStateStore()
         val point = LiveTrackStreamingService.TrackPointBroadcast(
             trackId = trackerId,
             lon = location.longitude,
@@ -527,6 +505,23 @@ class TrackingService : TrackPointServiceBase() {
             props.toString()
         } catch (_: Exception) {
             null
+        }
+    }
+
+    private fun syncRuntimeStateStore() {
+        TrackingRuntimeStateStore.update {
+            it.copy(
+                isRunning = isRunning,
+                sessionStartTimeMs = sessionStartTimeMs,
+                pointsSentThisSession = pointsSentThisSession,
+                lastPointSentAtMs = lastPointSentAtMs,
+                sessionTotalDistanceMeters = sessionTotalDistanceMeters,
+                lastAccuracyMeters = lastAccuracyMeters,
+                lastTrackedLatitude = lastTrackedLatitude,
+                lastTrackedLongitude = lastTrackedLongitude,
+                lastTrackedTimestampMs = lastTrackedTimestampMs,
+                lastTrackedPropsJson = lastTrackedPropsJson
+            )
         }
     }
 

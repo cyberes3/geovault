@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import com.geovault.tracker.LiveTrackStreamingService
+import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 
 internal object MapStreamingServiceHelper {
     /**
@@ -26,7 +27,7 @@ internal object MapStreamingServiceHelper {
     }
 
     fun stopStreaming(context: Context) {
-        if (!LiveTrackStreamingService.isRunning) return
+        if (!LiveStreamRuntimeStateStore.state.value.isRunning) return
         val intent = Intent(context, LiveTrackStreamingService::class.java).apply {
             action = LiveTrackStreamingService.ACTION_STOP
         }

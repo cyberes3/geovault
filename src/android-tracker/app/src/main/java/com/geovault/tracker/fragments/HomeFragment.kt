@@ -19,6 +19,7 @@ import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.TrackingService
+import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.google.android.material.button.MaterialButton
 
 class HomeFragment : Fragment() {
@@ -47,7 +48,7 @@ class HomeFragment : Fragment() {
 
     private val sessionStatsTicker = object : Runnable {
         override fun run() {
-            if (!TrackingService.isRunning) return
+            if (!trackingSnapshot().isRunning) return
             updateSessionStats()
             updateQueueCount()
             sessionStatsHandler.postDelayed(this, sessionStatsTickerIntervalMs)
@@ -201,7 +202,7 @@ class HomeFragment : Fragment() {
         updateDebugTrackMode()
         updateQueueCount()
         
-        if (TrackingService.isRunning) {
+        if (trackingSnapshot().isRunning) {
             sessionStatsHandler.removeCallbacks(sessionStatsTicker)
             sessionStatsHandler.post(sessionStatsTicker)
         }
@@ -273,8 +274,9 @@ class HomeFragment : Fragment() {
 
     fun updateTrackingUi() {
         if (!::trackingStatusText.isInitialized) return
-        val running = TrackingService.isRunning
-        val acc = TrackingService.lastAccuracyMeters
+        val runtime = trackingSnapshot()
+        val running = runtime.isRunning
+        val acc = runtime.lastAccuracyMeters
         val noGoodFix = acc == null || acc > 152.4f
         val isLocking = running && noGoodFix
 
@@ -318,7 +320,8 @@ class HomeFragment : Fragment() {
 
     private fun updateSessionStats() {
         sessionStatsContainer.visibility = View.VISIBLE
-        val running = TrackingService.isRunning
+        val runtime = trackingSnapshot()
+        val running = runtime.isRunning
         if (!running) {
             trackingDurationText.text = "—"
             lastPointSentText.text = "—"
@@ -329,15 +332,15 @@ class HomeFragment : Fragment() {
             accuracyText.setTextColor(ContextCompat.getColor(requireContext(), R.color.text_primary))
             return
         }
-        val startMs = TrackingService.sessionStartTimeMs
+        val startMs = runtime.sessionStartTimeMs
         val durationStr = if (startMs > 0) formatDurationMs(System.currentTimeMillis() - startMs) else "00:00:00"
         trackingDurationText.text = durationStr
-        val lastAgo = formatTimeAgo(TrackingService.lastPointSentAtMs)
+        val lastAgo = formatTimeAgo(runtime.lastPointSentAtMs)
         lastPointSentText.text = if (lastAgo == "now") lastAgo else "-$lastAgo"
-        pointsSentSessionText.text = TrackingService.pointsSentThisSession.toString()
+        pointsSentSessionText.text = runtime.pointsSentThisSession.toString()
         val useImperial = usesImperialUnits(requireContext())
-        distanceText.text = formatDistance(TrackingService.sessionTotalDistanceMeters, useImperial)
-        val acc = TrackingService.lastAccuracyMeters
+        distanceText.text = formatDistance(runtime.sessionTotalDistanceMeters, useImperial)
+        val acc = runtime.lastAccuracyMeters
         val isNoLock = acc != null && acc > 152.4f
         
         if (isNoLock) {
@@ -395,13 +398,15 @@ class HomeFragment : Fragment() {
     }
 
     private fun updateQueueCount() {
-        if (!TrackingService.isRunning) {
+        if (!trackingSnapshot().isRunning) {
             queueCountText.text = "—"
             return
         }
         val mainActivity = navHost() ?: return
         mainActivity.updateQueueCountFromFragment(queueCountText)
     }
+
+    private fun trackingSnapshot() = TrackingRuntimeStateStore.state.value
 
     private fun formatDurationMs(ms: Long): String {
         val totalSec = (ms / 1000).toInt().coerceAtLeast(0)

@@ -17,10 +17,13 @@ import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
-import com.geovault.tracker.TrackingService
+import com.geovault.tracker.data.TrackerDetailRepository
+import com.geovault.tracker.data.TrackerRepositoryTrackerDetailRepository
 import com.geovault.tracker.lastPosition
 import com.geovault.tracker.lastUpdateMs
-import com.geovault.tracker.pipeline.TrackPointBus
+import com.geovault.tracker.pipeline.TrackPointBusGateway
+import com.geovault.tracker.pipeline.TrackPointEventStream
+import com.geovault.tracker.services.TrackingRuntimeStateStore
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -30,6 +33,8 @@ import java.util.Date
 import java.util.Locale
 
 class TrackerParamsFragment : Fragment() {
+    private val trackPointEvents: TrackPointEventStream = TrackPointBusGateway
+    private val trackerDetailRepository: TrackerDetailRepository = TrackerRepositoryTrackerDetailRepository()
 
     private lateinit var paramsName: TextView
     private lateinit var paramsLastUpdate: TextView
@@ -99,7 +104,7 @@ class TrackerParamsFragment : Fragment() {
         super.onStart()
         if (streamCollectionJob?.isActive == true) return
         streamCollectionJob = viewLifecycleOwner.lifecycleScope.launch {
-            TrackPointBus.events.collect { event ->
+            trackPointEvents.events.collect { event ->
                 if (event.trackId != trackerId) return@collect
                 if (!isAdded) return@collect
                 updateFromStreamPoint(
@@ -121,7 +126,8 @@ class TrackerParamsFragment : Fragment() {
     private fun loadTrackerData(refresh: Boolean = false) {
         val id = trackerId ?: return
         val selectedId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
-        val isLocalTrackingMode = TrackingService.isRunning &&
+        val runtime = TrackingRuntimeStateStore.state.value
+        val isLocalTrackingMode = runtime.isRunning &&
             selectedId.isNotEmpty() &&
             id == selectedId
 
@@ -155,8 +161,9 @@ class TrackerParamsFragment : Fragment() {
             return
         }
 
-        // Important: only the single-tracker call drives the params UI. Use geometry endpoint for full track + params.
-        TrackerRepository.getTrackerGeometryResult(requireContext(), id) { result ->
+        viewLifecycleOwner.lifecycleScope.launch {
+            // Important: only the single-tracker call drives the params UI. Use geometry endpoint for full track + params.
+            val result = trackerDetailRepository.loadTrackerGeometry(requireContext(), id)
             if (isAdded) {
                 requireActivity().runOnUiThread {
                     paramsLoadingSpinner.stop(hide = false)
@@ -167,33 +174,31 @@ class TrackerParamsFragment : Fragment() {
                     }
                 }
             }
-        }
-        
-        // Fire-and-forget: refresh trackers list in background so list is up to date when user goes back. Must not block.
-        viewLifecycleOwner.lifecycleScope.launch {
+
+            // Fire-and-forget: refresh trackers list in background so list is up to date when user goes back.
             val ctx = context ?: return@launch
-            TrackerRepository.getTrackers(ctx, forceRefresh = true) { _ ->
-                if (!isAdded || activity == null) return@getTrackers
-                requireActivity().runOnUiThread {
-                    if (!isAdded || activity == null) return@runOnUiThread
-                    requireActivity().supportFragmentManager.setFragmentResult(
-                        TrackersListFragment.REQUEST_UPDATE_LIST_FROM_CACHE,
-                        Bundle()
-                    )
-                }
+            trackerDetailRepository.refreshTrackers(ctx)
+            if (!isAdded || activity == null) return@launch
+            requireActivity().runOnUiThread {
+                if (!isAdded || activity == null) return@runOnUiThread
+                requireActivity().supportFragmentManager.setFragmentResult(
+                    TrackersListFragment.REQUEST_UPDATE_LIST_FROM_CACHE,
+                    Bundle()
+                )
             }
         }
     }
 
     private fun applyLatestLocalTrackingPoint() {
-        val lat = TrackingService.lastTrackedLatitude
-        val lon = TrackingService.lastTrackedLongitude
-        val tsMs = TrackingService.lastTrackedTimestampMs
+        val runtime = TrackingRuntimeStateStore.state.value
+        val lat = runtime.lastTrackedLatitude
+        val lon = runtime.lastTrackedLongitude
+        val tsMs = runtime.lastTrackedTimestampMs
         updateFromStreamPoint(
             lat = lat ?: Double.NaN,
             lon = lon ?: Double.NaN,
             timestampMs = tsMs,
-            propsJson = TrackingService.lastTrackedPropsJson
+            propsJson = runtime.lastTrackedPropsJson
         )
     }
 
@@ -205,7 +210,7 @@ class TrackerParamsFragment : Fragment() {
 
     /**
      * Update displayed params from a streamed point (same track as this fragment).
-     * Called when we receive TrackPointBus events for our trackerId so the params modal stays in sync.
+     * Called when we receive track point events for our trackerId so the params modal stays in sync.
      */
     private fun updateFromStreamPoint(lat: Double, lon: Double, timestampMs: Long, propsJson: String?) {
         if (!isAdded) return
