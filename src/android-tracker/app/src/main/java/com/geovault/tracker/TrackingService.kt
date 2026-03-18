@@ -161,20 +161,31 @@ class TrackingService : TrackPointServiceBase() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_START -> startTracking()
-            ACTION_STOP -> stopTracking()
+        return when (intent?.action) {
+            ACTION_START -> {
+                startTracking()
+                START_STICKY
+            }
+            ACTION_STOP -> {
+                stopTracking()
+                START_NOT_STICKY
+            }
             null -> {
                 val shouldRestart = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
                     .getBoolean(PREF_WAS_TRACKING_BEFORE_EXIT, false)
                 if (shouldRestart) {
                     startTracking()
+                    START_STICKY
                 } else {
                     stopSelf()
+                    START_NOT_STICKY
                 }
             }
+            else -> {
+                stopSelf()
+                START_NOT_STICKY
+            }
         }
-        return START_STICKY
     }
 
     @SuppressLint("MissingPermission")

@@ -24,6 +24,7 @@ object SelectedTrackerManager {
     }
 
     fun clearSelectedTracker(context: Context) {
+        cancelPendingRestart()
         SelectedTrackerPrefs.clearSelectedTracker(context)
     }
 
@@ -39,9 +40,12 @@ object SelectedTrackerManager {
     }
 
     fun restartTrackingIfRunning(context: Context, delayMs: Long = RESTART_DELAY_MS) {
-        if (!TrackingRuntimeStateStore.state.value.isRunning) return
+        if (!TrackingRuntimeStateStore.state.value.isRunning) {
+            cancelPendingRestart()
+            return
+        }
         val appContext = context.applicationContext
-        pendingRestart?.let { restartHandler.removeCallbacks(it) }
+        cancelPendingRestart()
         appContext.startService(Intent(appContext, TrackingService::class.java).apply {
             action = TrackingService.ACTION_STOP
         })
@@ -53,5 +57,10 @@ object SelectedTrackerManager {
         }
         pendingRestart = restartRunnable
         restartHandler.postDelayed(restartRunnable, delayMs)
+    }
+
+    private fun cancelPendingRestart() {
+        pendingRestart?.let { restartHandler.removeCallbacks(it) }
+        pendingRestart = null
     }
 }

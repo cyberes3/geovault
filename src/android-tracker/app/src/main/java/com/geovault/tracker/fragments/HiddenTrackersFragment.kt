@@ -8,6 +8,7 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.Group
@@ -18,7 +19,10 @@ import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.TrackerSettingsRequest
 import com.geovault.tracker.GroupPatchRequest
 import com.google.android.material.button.MaterialButton
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class HiddenTrackersFragment : Fragment() {
 
     private lateinit var swipeRefresh: SwipeRefreshLayout
@@ -67,55 +71,30 @@ class HiddenTrackersFragment : Fragment() {
     private fun loadAll() {
         loadingOverlay.visibility = View.VISIBLE
         loadingSpinner.start()
-        var trackersDone = false
-        var groupsDone = false
-        fun maybeFinish() {
-            if (!trackersDone || !groupsDone) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val trackerList = TrackerRepository.getTrackersSuspend(requireContext(), forceRefresh = true) ?: emptyList()
+            val visibility = TrackerRepository.getMapVisibilitySuspend(requireContext())
+            val hiddenGroupIds = (visibility?.hidden_group_ids ?: emptyList()).toSet()
+            val groupsList = TrackerRepository.getGroupsSuspend(requireContext(), forceRefresh = true) ?: emptyList()
+
+            val hiddenTrackers = trackerList
+                .filter { it.isOwner() && isHiddenInList(it) }
+                .map { HiddenItem.Tracker(id = it.id, name = it.name) }
+
+            val listHidden = groupsList
+                .filter { it.is_owner == true && it.hidden_in_list == true }
+                .map { HiddenItem.Group(id = it.id, name = it.name, source = "list") }
+            val listHiddenIds = listHidden.map { it.id }.toSet()
+            val mapHidden = groupsList
+                .filter { it.id in hiddenGroupIds && it.id !in listHiddenIds }
+                .map { HiddenItem.Group(id = it.id, name = it.name, source = "map") }
+            val hiddenGroups = listHidden + mapHidden
+
+            val items = (hiddenTrackers as List<HiddenItem>) + hiddenGroups
+            bindList(items.sortedBy { it.name.lowercase() })
             loadingOverlay.visibility = View.GONE
             loadingSpinner.stop(hide = false)
             swipeRefresh.isRefreshing = false
-        }
-        var hiddenTrackers: List<HiddenItem.Tracker> = emptyList()
-        var hiddenGroups: List<HiddenItem.Group> = emptyList()
-        fun bindCombined() {
-            val items = (hiddenTrackers as List<HiddenItem>) + hiddenGroups
-                .sortedBy { it.name.lowercase() }
-            bindList(items)
-        }
-        fun checkBind() {
-            if (trackersDone && groupsDone) bindCombined()
-        }
-        TrackerRepository.getTrackers(requireContext(), forceRefresh = true) { list ->
-            if (!isAdded) return@getTrackers
-            hiddenTrackers = (list ?: emptyList())
-                .filter { it.isOwner() && isHiddenInList(it) }
-                .map { HiddenItem.Tracker(id = it.id, name = it.name) }
-            requireActivity().runOnUiThread {
-                trackersDone = true
-                checkBind()
-                maybeFinish()
-            }
-        }
-        TrackerRepository.getMapVisibility(requireContext()) { visibility ->
-            if (!isAdded) return@getMapVisibility
-            val hiddenGroupIds = (visibility?.hidden_group_ids ?: emptyList()).toSet()
-            TrackerRepository.getGroups(requireContext(), forceRefresh = true) { list ->
-                if (!isAdded) return@getGroups
-                val groupsList = list ?: emptyList()
-                val listHidden = groupsList
-                    .filter { it.is_owner == true && it.hidden_in_list == true }
-                    .map { HiddenItem.Group(id = it.id, name = it.name, source = "list") }
-                val listHiddenIds = listHidden.map { it.id }.toSet()
-                val mapHidden = groupsList
-                    .filter { it.id in hiddenGroupIds && it.id !in listHiddenIds }
-                    .map { HiddenItem.Group(id = it.id, name = it.name, source = "map") }
-                hiddenGroups = listHidden + mapHidden
-                requireActivity().runOnUiThread {
-                    groupsDone = true
-                    checkBind()
-                    maybeFinish()
-                }
-            }
         }
     }
 
@@ -201,41 +180,33 @@ class HiddenTrackersFragment : Fragment() {
         onSuccess: (() -> Unit)? = null,
         onFailure: (() -> Unit)? = null
     ) {
-        TrackerRepository.updateTrackerSettings(
-            requireContext(),
-            trackerId,
-            TrackerSettingsRequest(hidden_in_list = false)
-        ) { updated, errorMessage ->
-            if (!isAdded) return@updateTrackerSettings
-            requireActivity().runOnUiThread {
-                if (updated != null) {
-                    TrackersListFragment.pendingFullRefresh = true
-                    onSuccess?.invoke()
-                } else {
-                    navHost()?.showSnackbar(
-                        errorMessage ?: getString(R.string.failed_to_load_tracker)
-                    )
-                    onFailure?.invoke()
-                }
+        viewLifecycleOwner.lifecycleScope.launch {
+            val result = TrackerRepository.updateTrackerSettingsResultSuspend(
+                requireContext(),
+                trackerId,
+                TrackerSettingsRequest(hidden_in_list = false)
+            )
+            if (result is com.geovault.tracker.RepositoryResult.Success) {
+                TrackersListFragment.pendingFullRefresh = true
+                onSuccess?.invoke()
+            } else {
+                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                onFailure?.invoke()
             }
         }
     }
 
     private fun unhideAllTrackers(trackerIds: List<String>, onComplete: () -> Unit, index: Int = 0) {
-        if (index >= trackerIds.size) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            for (id in trackerIds.drop(index)) {
+                TrackerRepository.updateTrackerSettingsResultSuspend(
+                    requireContext(),
+                    id,
+                    TrackerSettingsRequest(hidden_in_list = false)
+                )
+            }
             TrackersListFragment.pendingFullRefresh = true
             onComplete()
-            return
-        }
-        TrackerRepository.updateTrackerSettings(
-            requireContext(),
-            trackerIds[index],
-            TrackerSettingsRequest(hidden_in_list = false)
-        ) { _, _ ->
-            if (!isAdded) return@updateTrackerSettings
-            requireActivity().runOnUiThread {
-                unhideAllTrackers(trackerIds, onComplete, index + 1)
-            }
         }
     }
 
@@ -244,17 +215,17 @@ class HiddenTrackersFragment : Fragment() {
         onSuccess: (() -> Unit)? = null,
         onFailure: (() -> Unit)? = null
     ) {
-        TrackerRepository.patchGroup(requireContext(), groupId, GroupPatchRequest(hidden_in_list = false)) { updated, errorMessage ->
-            if (!isAdded) return@patchGroup
-            requireActivity().runOnUiThread {
-                if (updated != null) {
-                    onSuccess?.invoke()
-                } else {
-                    navHost()?.showSnackbar(
-                        errorMessage ?: getString(R.string.failed_to_load_tracker)
-                    )
-                    onFailure?.invoke()
-                }
+        viewLifecycleOwner.lifecycleScope.launch {
+            val (updated, _) = TrackerRepository.patchGroupResultSuspend(
+                requireContext(),
+                groupId,
+                GroupPatchRequest(hidden_in_list = false)
+            )
+            if (updated != null) {
+                onSuccess?.invoke()
+            } else {
+                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                onFailure?.invoke()
             }
         }
     }
@@ -264,58 +235,45 @@ class HiddenTrackersFragment : Fragment() {
         onSuccess: (() -> Unit)? = null,
         onFailure: (() -> Unit)? = null
     ) {
-        TrackerRepository.getMapVisibility(requireContext()) { visibility ->
-            if (!isAdded) return@getMapVisibility
+        viewLifecycleOwner.lifecycleScope.launch {
+            val visibility = TrackerRepository.getMapVisibilitySuspend(requireContext())
             val current = (visibility?.hidden_group_ids ?: emptyList()).toMutableList()
             val newList = current.filter { it != groupId }
             if (newList.size == current.size) {
-                requireActivity().runOnUiThread { onSuccess?.invoke() }
-                return@getMapVisibility
+                onSuccess?.invoke()
+                return@launch
             }
-            TrackerRepository.patchMapVisibility(
+            val updated = TrackerRepository.patchMapVisibilitySuspend(
                 requireContext(),
                 com.geovault.tracker.MapVisibilityRequest(hidden_group_ids = newList)
-            ) { updated ->
-                if (!isAdded) return@patchMapVisibility
-                requireActivity().runOnUiThread {
-                    if (updated != null) onSuccess?.invoke()
-                    else {
-                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                        onFailure?.invoke()
-                    }
-                }
+            )
+            if (updated != null) onSuccess?.invoke()
+            else {
+                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                onFailure?.invoke()
             }
         }
     }
 
     private fun unhideAllGroups(groups: List<HiddenItem.Group>, onComplete: () -> Unit, index: Int = 0) {
-        if (index >= groups.size) {
-            onComplete()
-            return
-        }
-        val item = groups[index]
-        val doNext = {
-            requireActivity().runOnUiThread {
-                unhideAllGroups(groups, onComplete, index + 1)
-            }
-        }
-        if (item.source == "list") {
-            TrackerRepository.patchGroup(requireContext(), item.id, GroupPatchRequest(hidden_in_list = false)) { _, _ ->
-                if (!isAdded) return@patchGroup
-                doNext()
-            }
-        } else {
-            TrackerRepository.getMapVisibility(requireContext()) { visibility ->
-                if (!isAdded) return@getMapVisibility
-                val current = (visibility?.hidden_group_ids ?: emptyList()).filter { it != item.id }
-                TrackerRepository.patchMapVisibility(
-                    requireContext(),
-                    com.geovault.tracker.MapVisibilityRequest(hidden_group_ids = current)
-                ) { _ ->
-                    if (!isAdded) return@patchMapVisibility
-                    doNext()
+        viewLifecycleOwner.lifecycleScope.launch {
+            for (item in groups.drop(index)) {
+                if (item.source == "list") {
+                    TrackerRepository.patchGroupResultSuspend(
+                        requireContext(),
+                        item.id,
+                        GroupPatchRequest(hidden_in_list = false)
+                    )
+                } else {
+                    val visibility = TrackerRepository.getMapVisibilitySuspend(requireContext())
+                    val current = (visibility?.hidden_group_ids ?: emptyList()).filter { it != item.id }
+                    TrackerRepository.patchMapVisibilitySuspend(
+                        requireContext(),
+                        com.geovault.tracker.MapVisibilityRequest(hidden_group_ids = current)
+                    )
                 }
             }
+            onComplete()
         }
     }
 }

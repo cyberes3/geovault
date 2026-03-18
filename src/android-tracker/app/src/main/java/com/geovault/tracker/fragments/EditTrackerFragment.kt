@@ -17,6 +17,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import com.geovault.tracker.TrackerSettingsRequest
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.tracker.defaultTrackerColorHex
@@ -32,9 +33,12 @@ import com.geovault.common.R as CommonR
 import com.geovault.tracker.showHueColorPickerDialog
 import com.geovault.tracker.updateColorPreview
 import com.google.android.material.button.MaterialButton
+import dagger.hilt.android.AndroidEntryPoint
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.widget.NestedScrollView
+import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class EditTrackerFragment : Fragment() {
 
     private lateinit var nameEdit: EditText
@@ -264,7 +268,9 @@ class EditTrackerFragment : Fragment() {
                     restartTrackingIfRunning = true
                 )
                 requireActivity().supportFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
-                TrackerRepository.getTrackerGeometry(requireContext(), trackerId) { }
+                viewLifecycleOwner.lifecycleScope.launch {
+                    TrackerRepository.getTrackerGeometrySuspend(requireContext(), trackerId)
+                }
             } else {
                 if (SelectedTrackerPrefs.selectedTrackerId(requireContext()) == trackerId) {
                     SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
@@ -276,16 +282,13 @@ class EditTrackerFragment : Fragment() {
             populateFormFromTracker(tracker)
             showLoadingState(false)
         } else {
-            TrackerRepository.getTracker(requireContext(), trackerId, forceRefresh = false) { fetched ->
-                if (isAdded) {
-                    requireActivity().runOnUiThread {
-                        showLoadingState(false)
-                        if (fetched != null) {
-                            populateFormFromTracker(fetched)
-                        } else {
-                            navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                        }
-                    }
+            viewLifecycleOwner.lifecycleScope.launch {
+                val fetched = TrackerRepository.getTrackerSuspend(requireContext(), trackerId, forceRefresh = false)
+                showLoadingState(false)
+                if (fetched != null) {
+                    populateFormFromTracker(fetched)
+                } else {
+                    navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 }
             }
         }
@@ -313,51 +316,45 @@ class EditTrackerFragment : Fragment() {
                 hidden_in_list = hiddenInList
             )
             setAllInputsEnabled(false)
-            TrackerRepository.updateTrackerSettings(requireContext(), trackerId, request) { updated, errorMessage ->
-                if (isAdded) {
-                    requireActivity().runOnUiThread {
-                        when {
-                            updated != null -> {
-                                currentFetchedTracker = updated
-                                if (hiddenInList) {
-                                    if (trackerId == SelectedTrackerPrefs.selectedTrackerId(requireContext())) {
-                                        SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
-                                    }
-                                    TrackersListFragment.pendingHiddenTrackerId = trackerId
-                                    requireActivity().supportFragmentManager.setFragmentResult(
-                                        TrackersListFragment.REQUEST_REFRESH_LIST,
-                                        android.os.Bundle().apply {
-                                            putString(TrackersListFragment.KEY_HIDDEN_TRACKER_ID, trackerId)
-                                            putBoolean(TrackersListFragment.KEY_SKIP_SHARED_LIST_REFRESH, true)
-                                        }
-                                    )
-                                } else {
-                                    TrackersListFragment.pendingFullRefresh = true
-                                    requireActivity().supportFragmentManager.setFragmentResult(
-                                        TrackersListFragment.REQUEST_REFRESH_LIST,
-                                        android.os.Bundle().apply {
-                                            putBoolean(TrackersListFragment.KEY_SKIP_SHARED_LIST_REFRESH, true)
-                                        }
-                                    )
+            viewLifecycleOwner.lifecycleScope.launch {
+                val result = TrackerRepository.updateTrackerSettingsResultSuspend(requireContext(), trackerId, request)
+                when (result) {
+                    is com.geovault.tracker.RepositoryResult.Success -> {
+                        val updated = result.data
+                        currentFetchedTracker = updated
+                        if (hiddenInList) {
+                            if (trackerId == SelectedTrackerPrefs.selectedTrackerId(requireContext())) {
+                                SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
+                            }
+                            TrackersListFragment.pendingHiddenTrackerId = trackerId
+                            requireActivity().supportFragmentManager.setFragmentResult(
+                                TrackersListFragment.REQUEST_REFRESH_LIST,
+                                android.os.Bundle().apply {
+                                    putString(TrackersListFragment.KEY_HIDDEN_TRACKER_ID, trackerId)
+                                    putBoolean(TrackersListFragment.KEY_SKIP_SHARED_LIST_REFRESH, true)
                                 }
-                                requireActivity().supportFragmentManager.setFragmentResult(
-                                    TrackersListFragment.REQUEST_UPDATE_TRACKER,
-                                    android.os.Bundle().apply {
-                                        putParcelable("tracker", updated)
-                                        putBoolean(TrackersListFragment.KEY_UPDATED_TRACKER_HIDDEN, hiddenInList)
-                                    }
-                                )
-                                requireActivity().supportFragmentManager.popBackStack()
-                            }
-                            !errorMessage.isNullOrBlank() -> {
-                                setAllInputsEnabled(true)
-                                navHost()?.showSnackbar(errorMessage)
-                            }
-                            else -> {
-                                setAllInputsEnabled(true)
-                                navHost()?.showSnackbar("Failed to save tracker")
-                            }
+                            )
+                        } else {
+                            TrackersListFragment.pendingFullRefresh = true
+                            requireActivity().supportFragmentManager.setFragmentResult(
+                                TrackersListFragment.REQUEST_REFRESH_LIST,
+                                android.os.Bundle().apply {
+                                    putBoolean(TrackersListFragment.KEY_SKIP_SHARED_LIST_REFRESH, true)
+                                }
+                            )
                         }
+                        requireActivity().supportFragmentManager.setFragmentResult(
+                            TrackersListFragment.REQUEST_UPDATE_TRACKER,
+                            android.os.Bundle().apply {
+                                putParcelable("tracker", updated)
+                                putBoolean(TrackersListFragment.KEY_UPDATED_TRACKER_HIDDEN, hiddenInList)
+                            }
+                        )
+                        requireActivity().supportFragmentManager.popBackStack()
+                    }
+                    is com.geovault.tracker.RepositoryResult.Failure -> {
+                        setAllInputsEnabled(true)
+                        navHost()?.showSnackbar("Failed to save tracker")
                     }
                 }
             }
@@ -369,19 +366,16 @@ class EditTrackerFragment : Fragment() {
                 .setMessage(getString(R.string.clear_history_confirm_message))
                 .setPositiveButton(getString(R.string.clear_history_tracker)) { _, _ ->
                     setAllInputsEnabled(false)
-                    TrackerRepository.clearTrackerHistory(requireContext(), trackerId) { success ->
-                        if (isAdded) {
-                            requireActivity().runOnUiThread {
-                                if (success) {
-                                    historyClearedThisSession = true
-                                    requireActivity().supportFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
-                                    Toast.makeText(requireContext(), getString(R.string.history_cleared), Toast.LENGTH_SHORT).show()
-                                } else {
-                                    navHost()?.showSnackbar("Failed to clear history")
-                                }
-                                setAllInputsEnabled(true)
-                            }
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        val success = TrackerRepository.clearTrackerHistorySuspend(requireContext(), trackerId)
+                        if (success) {
+                            historyClearedThisSession = true
+                            requireActivity().supportFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, android.os.Bundle())
+                            Toast.makeText(requireContext(), getString(R.string.history_cleared), Toast.LENGTH_SHORT).show()
+                        } else {
+                            navHost()?.showSnackbar("Failed to clear history")
                         }
+                        setAllInputsEnabled(true)
                     }
                 }
                 .setNegativeButton(getString(R.string.cancel_button), null)
@@ -395,26 +389,23 @@ class EditTrackerFragment : Fragment() {
                 .setPositiveButton(getString(R.string.delete_tracker)) { _, _ ->
                     val selectedId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
                     setAllInputsEnabled(false)
-                    TrackerRepository.deleteTracker(requireContext(), trackerId) { success ->
-                        if (isAdded) {
-                            requireActivity().runOnUiThread {
-                                if (success) {
-                                    if (trackerId == selectedId) {
-                                        SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
-                                    }
-                                    requireActivity().supportFragmentManager.setFragmentResult(
-                                        TrackersListFragment.REQUEST_REFRESH_LIST,
-                                        android.os.Bundle().apply {
-                                            putString(TrackersListFragment.KEY_DELETED_TRACKER_ID, trackerId)
-                                        }
-                                    )
-                                    requireActivity().supportFragmentManager.popBackStack()
-                                    Toast.makeText(requireContext(), getString(R.string.tracker_deleted), Toast.LENGTH_SHORT).show()
-                                } else {
-                                    setAllInputsEnabled(true)
-                                    navHost()?.showSnackbar("Failed to delete tracker")
-                                }
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        val success = TrackerRepository.deleteTrackerSuspend(requireContext(), trackerId)
+                        if (success) {
+                            if (trackerId == selectedId) {
+                                SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
                             }
+                            requireActivity().supportFragmentManager.setFragmentResult(
+                                TrackersListFragment.REQUEST_REFRESH_LIST,
+                                android.os.Bundle().apply {
+                                    putString(TrackersListFragment.KEY_DELETED_TRACKER_ID, trackerId)
+                                }
+                            )
+                            requireActivity().supportFragmentManager.popBackStack()
+                            Toast.makeText(requireContext(), getString(R.string.tracker_deleted), Toast.LENGTH_SHORT).show()
+                        } else {
+                            setAllInputsEnabled(true)
+                            navHost()?.showSnackbar("Failed to delete tracker")
                         }
                     }
                 }
@@ -533,21 +524,19 @@ class EditTrackerFragment : Fragment() {
     }
 
     private fun exportKml(trackerId: String) {
-        TrackerRepository.fetchTrackerKml(requireContext(), trackerId) { body ->
-            if (!isAdded) return@fetchTrackerKml
-            requireActivity().runOnUiThread {
-                if (body == null) {
-                    navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                    return@runOnUiThread
-                }
-                try {
-                    val bytes = body.bytes()
-                    val safeName = (currentFetchedTracker?.name?.map { c -> if (c.isLetterOrDigit() || c in " -_") c else "" }?.joinToString("")?.take(40) ?: "track").ifEmpty { "track" }
-                    pendingKmlExportBytes = bytes
-                    createKmlDocumentLauncher.launch("$safeName.kml")
-                } catch (e: Exception) {
-                    navHost()?.showSnackbar("Failed to save KML")
-                }
+        viewLifecycleOwner.lifecycleScope.launch {
+            val body = TrackerRepository.fetchTrackerKmlSuspend(requireContext(), trackerId)
+            if (body == null) {
+                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                return@launch
+            }
+            try {
+                val bytes = body.bytes()
+                val safeName = (currentFetchedTracker?.name?.map { c -> if (c.isLetterOrDigit() || c in " -_") c else "" }?.joinToString("")?.take(40) ?: "track").ifEmpty { "track" }
+                pendingKmlExportBytes = bytes
+                createKmlDocumentLauncher.launch("$safeName.kml")
+            } catch (e: Exception) {
+                navHost()?.showSnackbar("Failed to save KML")
             }
         }
     }
@@ -558,29 +547,27 @@ class EditTrackerFragment : Fragment() {
     }
 
     private fun showAddRecipientDialog() {
-        TrackerRepository.getUsers(requireContext()) { response ->
-            if (!isAdded) return@getUsers
-            requireActivity().runOnUiThread {
-                val users = response?.users ?: emptyList()
-                if (users.isEmpty()) {
-                    navHost()?.showSnackbar(getString(R.string.no_other_users_found))
-                    return@runOnUiThread
-                }
-                val normalizedUsers = users.map { it.email.trim().lowercase() }.toSet()
-                val pinnedExisting = sharedWithEmails
-                    .map { it.trim() }
-                    .filter { it.isNotBlank() && it.lowercase() !in normalizedUsers }
-                SharedUserPickerDialog.show(
-                    fragment = this,
-                    title = getString(R.string.add_recipient),
-                    users = users,
-                    selectedEmails = sharedWithEmails.toSet()
-                ) { picked ->
-                    sharedWithEmails.clear()
-                    sharedWithEmails.addAll(pinnedExisting)
-                    sharedWithEmails.addAll(picked.sorted())
-                    updateSharedWithCountText()
-                }
+        viewLifecycleOwner.lifecycleScope.launch {
+            val response = TrackerRepository.getUsersSuspend(requireContext())
+            val users = response?.users ?: emptyList()
+            if (users.isEmpty()) {
+                navHost()?.showSnackbar(getString(R.string.no_other_users_found))
+                return@launch
+            }
+            val normalizedUsers = users.map { it.email.trim().lowercase() }.toSet()
+            val pinnedExisting = sharedWithEmails
+                .map { it.trim() }
+                .filter { it.isNotBlank() && it.lowercase() !in normalizedUsers }
+            SharedUserPickerDialog.show(
+                fragment = this@EditTrackerFragment,
+                title = getString(R.string.add_recipient),
+                users = users,
+                selectedEmails = sharedWithEmails.toSet()
+            ) { picked ->
+                sharedWithEmails.clear()
+                sharedWithEmails.addAll(pinnedExisting)
+                sharedWithEmails.addAll(picked.sorted())
+                updateSharedWithCountText()
             }
         }
     }

@@ -206,7 +206,8 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
                 TrackerRepository.getTrackerFromCache(selectedTrackerId)?.let { cachedSelected ->
                     setInitialTrackForMap(cachedSelected)
                 }
-                TrackerRepository.getTrackers(this, forceRefresh = false) { list ->
+                lifecycleScope.launch {
+                    val list = TrackerRepository.getTrackersSuspend(this@MainActivity, forceRefresh = false)
                     val selectedTracker = list?.find { it.id == selectedTrackerId }
                     if (selectedTracker != null) {
                         updateInitialTrackForMapIfPending(selectedTracker)
@@ -226,12 +227,16 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
                 updateNavTabBackground(position)
                 if (position == 2) {
                     TrackerRepository.prefetchGroups(this@MainActivity)
-                    TrackerRepository.getTrackers(this@MainActivity, forceRefresh = false) { }
+                    lifecycleScope.launch {
+                        TrackerRepository.getTrackersSuspend(this@MainActivity, forceRefresh = false)
+                    }
                 }
             }
         })
         if (savedTab == 2) TrackerRepository.prefetchGroups(this)
-        TrackerRepository.getTrackers(this, forceRefresh = false) { }
+        lifecycleScope.launch {
+            TrackerRepository.getTrackersSuspend(this@MainActivity, forceRefresh = false)
+        }
         TrackerRepository.prefetchAvailableToAdd(this)
         TrackerRepository.prefetchSharedPage(this)
 
@@ -327,8 +332,9 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             onInvalid = {
                 SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(this, clearTrackersListCache = true)
                 prefs.edit().remove(TrackingService.PREF_WAS_TRACKING_BEFORE_EXIT).commit()
-                TrackerRepository.getTrackers(this, forceRefresh = true) { list ->
-                    runOnUiThread { setServerAccessibility(list != null) }
+                lifecycleScope.launch {
+                    val list = TrackerRepository.getTrackersSuspend(this@MainActivity, forceRefresh = true)
+                    setServerAccessibility(list != null)
                 }
                 showSnackbar(getString(R.string.tracker_validation_failed_go_to_settings))
                 val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
@@ -352,8 +358,9 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         tryStartTrackingSilently(
             onInvalid = {
                 SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(this, clearTrackersListCache = true)
-                TrackerRepository.getTrackers(this, forceRefresh = true) { list ->
-                    runOnUiThread { setServerAccessibility(list != null) }
+                lifecycleScope.launch {
+                    val list = TrackerRepository.getTrackersSuspend(this@MainActivity, forceRefresh = true)
+                    setServerAccessibility(list != null)
                 }
                 showSnackbar(getString(R.string.tracker_validation_failed_go_to_settings))
                 val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
@@ -418,7 +425,8 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
                     setInitialTrackForMap(cachedSelected)
                 }
                 setCurrentTab(1, forceRefreshMap = true, delayMs = 0)
-                TrackerRepository.getTrackers(this, forceRefresh = false) { list ->
+                lifecycleScope.launch {
+                    val list = TrackerRepository.getTrackersSuspend(this@MainActivity, forceRefresh = false)
                     val selectedTracker = list?.find { it.id == selectedTrackerId }
                     if (selectedTracker != null) {
                         updateInitialTrackForMapIfPending(selectedTracker)
@@ -901,30 +909,28 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         }
         isPreparingToTrack = true
         homeFragment?.showPreparingState()
-        TrackerRepository.checkTracker(this, trackerId) { valid ->
-            runOnUiThread {
-                if (!isPreparingToTrack) return@runOnUiThread
-                isPreparingToTrack = false
-                if (!valid) {
-                    SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(
-                        this@MainActivity,
-                        clearTrackersListCache = true
-                    )
-                    TrackerRepository.getTrackers(this@MainActivity, forceRefresh = true) { list ->
-                        runOnUiThread { setServerAccessibility(list != null) }
-                    }
-                    showSnackbar(getString(R.string.tracker_validation_failed_go_to_settings))
-                    val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
-                    hf?.updateTrackingUi()
-                    return@runOnUiThread
-                }
-                intent.action = TrackingService.ACTION_START
-                startForegroundService(intent)
-                Handler(Looper.getMainLooper()).postDelayed({
-                    val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
-                    hf?.updateTrackingUi()
-                }, 300)
+        lifecycleScope.launch {
+            val valid = TrackerRepository.checkTrackerSuspend(this@MainActivity, trackerId)
+            if (!isPreparingToTrack) return@launch
+            isPreparingToTrack = false
+            if (!valid) {
+                SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(
+                    this@MainActivity,
+                    clearTrackersListCache = true
+                )
+                val list = TrackerRepository.getTrackersSuspend(this@MainActivity, forceRefresh = true)
+                setServerAccessibility(list != null)
+                showSnackbar(getString(R.string.tracker_validation_failed_go_to_settings))
+                val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
+                hf?.updateTrackingUi()
+                return@launch
             }
+            intent.action = TrackingService.ACTION_START
+            startForegroundService(intent)
+            Handler(Looper.getMainLooper()).postDelayed({
+                val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
+                hf?.updateTrackingUi()
+            }, 300)
         }
     }
 
@@ -948,10 +954,9 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         }
         GeovaultAuthManager.fetchUserStatus(this)
         if (!isGuestView && isMainContentSetup) {
-            TrackerRepository.getTrackers(this, forceRefresh = true) { list ->
-                runOnUiThread {
-                    setServerAccessibility(list != null)
-                }
+            lifecycleScope.launch {
+                val list = TrackerRepository.getTrackersSuspend(this@MainActivity, forceRefresh = true)
+                setServerAccessibility(list != null)
             }
         }
         updatePermissionsState()

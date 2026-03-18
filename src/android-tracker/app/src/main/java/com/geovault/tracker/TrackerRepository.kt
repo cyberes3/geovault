@@ -1071,4 +1071,103 @@ object TrackerRepository {
                 continuation.resume(users)
             }
         }
+
+    suspend fun getTrackerSuspend(context: Context, id: String, forceRefresh: Boolean = false): Tracker? =
+        suspendCancellableCoroutine { continuation ->
+            getTracker(context, id, forceRefresh = forceRefresh) { tracker ->
+                continuation.resume(tracker)
+            }
+        }
+
+    suspend fun getTrackerGeometrySuspend(context: Context, id: String): Tracker? =
+        suspendCancellableCoroutine { continuation ->
+            getTrackerGeometry(context, id) { tracker ->
+                continuation.resume(tracker)
+            }
+        }
+
+    suspend fun updateTrackerSettingsResultSuspend(
+        context: Context,
+        id: String,
+        request: TrackerSettingsRequest
+    ): RepositoryResult<Tracker> = suspendCancellableCoroutine { continuation ->
+        updateTrackerSettingsResult(context, id, request) { result ->
+            continuation.resume(result)
+        }
+    }
+
+    suspend fun clearTrackerHistorySuspend(context: Context, id: String): Boolean =
+        suspendCancellableCoroutine { continuation ->
+            clearTrackerHistory(context, id) { success ->
+                continuation.resume(success)
+            }
+        }
+
+    suspend fun deleteTrackerSuspend(context: Context, id: String): Boolean =
+        suspendCancellableCoroutine { continuation ->
+            deleteTracker(context, id) { success ->
+                continuation.resume(success)
+            }
+        }
+
+    suspend fun fetchTrackerKmlSuspend(context: Context, trackerId: String): ResponseBody? =
+        suspendCancellableCoroutine { continuation ->
+            fetchTrackerKml(context, trackerId) { body ->
+                continuation.resume(body)
+            }
+        }
+
+    suspend fun acceptGroupShareSuspend(context: Context, groupId: String): Group? =
+        suspendCancellableCoroutine { continuation ->
+            acceptGroupShare(context, groupId) { accepted ->
+                continuation.resume(accepted)
+            }
+        }
+
+    suspend fun subscribeTrackerSuspend(context: Context, trackerId: String): Tracker? =
+        suspendCancellableCoroutine { continuation ->
+            subscribeTracker(context, trackerId) { tracker ->
+                continuation.resume(tracker)
+            }
+        }
+
+    suspend fun unsubscribeTrackerSuspend(context: Context, trackerId: String): Boolean =
+        suspendCancellableCoroutine { continuation ->
+            unsubscribeTracker(context, trackerId) { success ->
+                continuation.resume(success)
+            }
+        }
+
+    suspend fun leaveGroupSuspend(context: Context, groupId: String): Boolean =
+        suspendCancellableCoroutine { continuation ->
+            leaveGroup(context, groupId) { success ->
+                continuation.resume(success)
+            }
+        }
+
+    suspend fun patchGroupResultSuspend(
+        context: Context,
+        id: String,
+        request: GroupPatchRequest
+    ): Pair<Group?, String?> = suspendCancellableCoroutine { continuation ->
+        patchGroup(context, id, request) { group, error ->
+            continuation.resume(Pair(group, error))
+        }
+    }
+
+    suspend fun patchMapVisibilitySuspend(
+        context: Context,
+        request: MapVisibilityRequest
+    ): MapVisibilityResponse? = suspendCancellableCoroutine { continuation ->
+        patchMapVisibility(context, request) { response ->
+            continuation.resume(response)
+        }
+    }
+
+    suspend fun deleteGroupSuspend(context: Context, id: String): Boolean =
+        suspendCancellableCoroutine { continuation ->
+            deleteGroup(context, id) { success ->
+                continuation.resume(success)
+            }
+        }
 }

@@ -14,6 +14,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.geovault.common.LoadingSpinner
@@ -27,7 +28,10 @@ import com.geovault.tracker.navigation.navHost
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class DiscoverTrackersFragment : Fragment() {
 
     private enum class RowState { IDLE, ADDING, ADDED_CHECK, ADDED_DELETE }
@@ -114,104 +118,94 @@ class DiscoverTrackersFragment : Fragment() {
     }
 
     private fun loadAvailable(forceRefresh: Boolean = false, fromSwipeRefresh: Boolean = false) {
-        TrackerRepository.getAvailableToAdd(requireContext(), forceRefresh = forceRefresh) { response ->
-            if (!isAdded) return@getAvailableToAdd
+        viewLifecycleOwner.lifecycleScope.launch {
+            val response = TrackerRepository.getAvailableToAddSuspend(requireContext(), forceRefresh = forceRefresh)
+            if (!isAdded) return@launch
             if (response == null) {
-                requireActivity().runOnUiThread {
-                    swipeRefresh.isRefreshing = false
-                    spinner.stop(hide = true)
-                    loadingView.visibility = View.GONE
-                    emptyView.visibility = View.VISIBLE
-                    tabLayout.visibility = View.GONE
-                    swipeRefresh.visibility = View.GONE
-                }
-                return@getAvailableToAdd
+                swipeRefresh.isRefreshing = false
+                spinner.stop(hide = true)
+                loadingView.visibility = View.GONE
+                emptyView.visibility = View.VISIBLE
+                tabLayout.visibility = View.GONE
+                swipeRefresh.visibility = View.GONE
+                return@launch
             }
 
-            TrackerRepository.getMapVisibility(requireContext()) { mapVisibility ->
-                if (!isAdded) return@getMapVisibility
-                val hiddenTrackIds = mapVisibility?.hidden_track_ids?.toSet() ?: emptySet()
-                val hiddenGroupIds = mapVisibility?.hidden_group_ids?.toSet() ?: emptySet()
+            val mapVisibility = TrackerRepository.getMapVisibilitySuspend(requireContext())
+            val hiddenTrackIds = mapVisibility?.hidden_track_ids?.toSet() ?: emptySet()
+            val hiddenGroupIds = mapVisibility?.hidden_group_ids?.toSet() ?: emptySet()
+            val groups = TrackerRepository.getGroupsSuspend(requireContext(), forceRefresh = forceRefresh)
+            val trackers = TrackerRepository.getTrackersSuspend(requireContext(), forceRefresh = forceRefresh)
 
-                TrackerRepository.getGroups(requireContext(), forceRefresh = forceRefresh) { groups ->
-                    if (!isAdded) return@getGroups
+            swipeRefresh.isRefreshing = false
+            if (!fromSwipeRefresh) {
+                spinner.stop(hide = true)
+                loadingView.visibility = View.GONE
+            }
 
-                    TrackerRepository.getTrackers(requireContext(), forceRefresh = forceRefresh) { trackers ->
-                        if (!isAdded) return@getTrackers
-                        requireActivity().runOnUiThread {
-                            swipeRefresh.isRefreshing = false
-                            if (!fromSwipeRefresh) {
-                                spinner.stop(hide = true)
-                                loadingView.visibility = View.GONE
-                            }
-
-                            val onMyMapGroups = (groups ?: emptyList())
-                                .filter { it.is_owner != true && it.visibility == "shared" && it.is_accepted == true }
-                                .filter { it.id !in hiddenGroupIds }
-                            val trackerIdsInOnMapGroups = onMyMapGroups
-                                .flatMap { it.track_ids ?: emptyList() }
-                                .toSet()
-                            val onMyMapTrackers = (trackers ?: emptyList())
-                                .filter { it.isOwner().not() && it.visibility == "shared" }
-                                .filter { it.id !in hiddenTrackIds && it.id !in trackerIdsInOnMapGroups }
-                                .map {
-                                    AvailableToAddItem(
-                                        id = it.id,
-                                        name = it.name,
-                                        color = it.color,
-                                        owner_email = it.owner_email
-                                    )
-                                }
-                            val onMyMapGroupsForUi = onMyMapGroups.map {
-                                AvailableToAddGroup(
-                                    id = it.id,
-                                    name = it.name,
-                                    owner_email = it.owner_email,
-                                    track_ids = it.track_ids ?: emptyList()
-                                )
-                            }
-
-                            val incomingTrackers = response.shared_with_me
-                            val incomingSharedGroups = response.shared_with_me_groups
-                            onMyMapTrackersData = onMyMapTrackers
-                            onMyMapGroupsData = onMyMapGroupsForUi
-                            incomingTrackersData = incomingTrackers
-                            incomingSharedGroupsData = incomingSharedGroups
-                            incomingPublicGroupsData = emptyList()
-                            pruneTransientState()
-                            val onMyMapHasContent = onMyMapTrackersData.isNotEmpty() || onMyMapGroupsData.isNotEmpty()
-                            val incomingHasContent =
-                                incomingTrackersData.isNotEmpty() || incomingSharedGroupsData.isNotEmpty() || incomingPublicGroupsData.isNotEmpty()
-
-                            if (!onMyMapHasContent && !incomingHasContent) {
-                                emptyView.visibility = View.VISIBLE
-                                tabLayout.visibility = View.GONE
-                                swipeRefresh.visibility = View.GONE
-                                return@runOnUiThread
-                            }
-
-                            emptyView.visibility = View.GONE
-                            tabLayout.visibility = View.VISIBLE
-                            swipeRefresh.visibility = View.VISIBLE
-                            val currentTab = viewPager.currentItem.coerceIn(0, 1)
-                            val tabToSelect = when {
-                                !onMyMapHasContent && incomingHasContent -> 1
-                                onMyMapHasContent && !incomingHasContent -> 0
-                                else -> currentTab
-                            }
-                            viewPager.setCurrentItem(tabToSelect, false)
-
-                            viewPager.post {
-                                if (!isAdded) return@post
-                                val onMyMapPage = pagerAdapter?.getPageView(0)
-                                val incomingPage = pagerAdapter?.getPageView(1)
-                                if (onMyMapPage == null || incomingPage == null) return@post
-                                bindSearchInputs(onMyMapPage, incomingPage)
-                                renderTabContent(onMyMapPage, incomingPage)
-                            }
-                        }
-                    }
+            val onMyMapGroups = (groups ?: emptyList())
+                .filter { it.is_owner != true && it.visibility == "shared" && it.is_accepted == true }
+                .filter { it.id !in hiddenGroupIds }
+            val trackerIdsInOnMapGroups = onMyMapGroups
+                .flatMap { it.track_ids ?: emptyList() }
+                .toSet()
+            val onMyMapTrackers = (trackers ?: emptyList())
+                .filter { it.isOwner().not() && it.visibility == "shared" }
+                .filter { it.id !in hiddenTrackIds && it.id !in trackerIdsInOnMapGroups }
+                .map {
+                    AvailableToAddItem(
+                        id = it.id,
+                        name = it.name,
+                        color = it.color,
+                        owner_email = it.owner_email
+                    )
                 }
+            val onMyMapGroupsForUi = onMyMapGroups.map {
+                AvailableToAddGroup(
+                    id = it.id,
+                    name = it.name,
+                    owner_email = it.owner_email,
+                    track_ids = it.track_ids ?: emptyList()
+                )
+            }
+
+            val incomingTrackers = response.shared_with_me
+            val incomingSharedGroups = response.shared_with_me_groups
+            onMyMapTrackersData = onMyMapTrackers
+            onMyMapGroupsData = onMyMapGroupsForUi
+            incomingTrackersData = incomingTrackers
+            incomingSharedGroupsData = incomingSharedGroups
+            incomingPublicGroupsData = emptyList()
+            pruneTransientState()
+            val onMyMapHasContent = onMyMapTrackersData.isNotEmpty() || onMyMapGroupsData.isNotEmpty()
+            val incomingHasContent =
+                incomingTrackersData.isNotEmpty() || incomingSharedGroupsData.isNotEmpty() || incomingPublicGroupsData.isNotEmpty()
+
+            if (!onMyMapHasContent && !incomingHasContent) {
+                emptyView.visibility = View.VISIBLE
+                tabLayout.visibility = View.GONE
+                swipeRefresh.visibility = View.GONE
+                return@launch
+            }
+
+            emptyView.visibility = View.GONE
+            tabLayout.visibility = View.VISIBLE
+            swipeRefresh.visibility = View.VISIBLE
+            val currentTab = viewPager.currentItem.coerceIn(0, 1)
+            val tabToSelect = when {
+                !onMyMapHasContent && incomingHasContent -> 1
+                onMyMapHasContent && !incomingHasContent -> 0
+                else -> currentTab
+            }
+            viewPager.setCurrentItem(tabToSelect, false)
+
+            viewPager.post {
+                if (!isAdded) return@post
+                val onMyMapPage = pagerAdapter?.getPageView(0)
+                val incomingPage = pagerAdapter?.getPageView(1)
+                if (onMyMapPage == null || incomingPage == null) return@post
+                bindSearchInputs(onMyMapPage, incomingPage)
+                renderTabContent(onMyMapPage, incomingPage)
             }
         }
     }
@@ -436,19 +430,17 @@ class DiscoverTrackersFragment : Fragment() {
             if (rowStates[key] != RowState.IDLE) return@setOnClickListener
             setRowState(row, key, RowState.ADDING)
             if (acceptAsGroup) {
-                TrackerRepository.acceptGroupShare(requireContext(), group.id) { accepted ->
-                    if (!isAdded) return@acceptGroupShare
-                    requireActivity().runOnUiThread {
-                        if (accepted != null) {
-                            moveIncomingGroupToOnMyMap(group, accepted.track_ids ?: emptyList())
-                            setRowState(row, key, RowState.ADDED_CHECK)
-                            transitionToDeleteAfterCheck(row, key)
-                            rerenderTabs()
-                            notifySharedTabAdded(emptyList(), listOf(accepted))
-                        } else {
-                            setRowState(row, key, RowState.IDLE)
-                            navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                        }
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val accepted = TrackerRepository.acceptGroupShareSuspend(requireContext(), group.id)
+                    if (accepted != null) {
+                        moveIncomingGroupToOnMyMap(group, accepted.track_ids ?: emptyList())
+                        setRowState(row, key, RowState.ADDED_CHECK)
+                        transitionToDeleteAfterCheck(row, key)
+                        rerenderTabs()
+                        notifySharedTabAdded(emptyList(), listOf(accepted))
+                    } else {
+                        setRowState(row, key, RowState.IDLE)
+                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                     }
                 }
                 return@setOnClickListener
@@ -463,38 +455,34 @@ class DiscoverTrackersFragment : Fragment() {
             var failed = false
             var done = 0
             val addedTrackers = mutableListOf<Tracker>()
-            for (trackId in trackIds) {
-                TrackerRepository.subscribeTracker(requireContext(), trackId) { tracker ->
-                    if (!isAdded) return@subscribeTracker
-                    requireActivity().runOnUiThread {
-                        done++
-                        if (tracker == null) failed = true else addedTrackers.add(tracker)
-                        if (done == trackIds.size) {
-                            if (!failed) {
-                                moveIncomingGroupToOnMyMap(group, trackIds, fromShared = false)
-                                setRowState(row, key, RowState.ADDED_CHECK)
-                                transitionToDeleteAfterCheck(row, key)
-                                rerenderTabs()
-                                notifySharedTabAdded(addedTrackers, emptyList())
-                            } else {
-                                setRowState(row, key, RowState.IDLE)
-                                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                            }
-                        }
+            viewLifecycleOwner.lifecycleScope.launch {
+                for (trackId in trackIds) {
+                    val tracker = TrackerRepository.subscribeTrackerSuspend(requireContext(), trackId)
+                    done++
+                    if (tracker == null) failed = true else addedTrackers.add(tracker)
+                }
+                if (done == trackIds.size) {
+                    if (!failed) {
+                        moveIncomingGroupToOnMyMap(group, trackIds, fromShared = false)
+                        setRowState(row, key, RowState.ADDED_CHECK)
+                        transitionToDeleteAfterCheck(row, key)
+                        rerenderTabs()
+                        notifySharedTabAdded(addedTrackers, emptyList())
+                    } else {
+                        setRowState(row, key, RowState.IDLE)
+                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                     }
                 }
             }
         }
         deleteBtn.setOnClickListener {
             if (rowStates[key] != RowState.ADDED_DELETE) return@setOnClickListener
-            TrackerRepository.leaveGroup(requireContext(), group.id) { success ->
-                if (!isAdded) return@leaveGroup
-                requireActivity().runOnUiThread {
-                    if (success) {
-                        removeRowAndMaybeHideSection(parent, row, sectionHeader, sectionList)
-                    } else {
-                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                    }
+            viewLifecycleOwner.lifecycleScope.launch {
+                val success = TrackerRepository.leaveGroupSuspend(requireContext(), group.id)
+                if (success) {
+                    removeRowAndMaybeHideSection(parent, row, sectionHeader, sectionList)
+                } else {
+                    navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 }
             }
         }
@@ -520,32 +508,28 @@ class DiscoverTrackersFragment : Fragment() {
         addBtn.setOnClickListener {
             if (rowStates[key] != RowState.IDLE) return@setOnClickListener
             setRowState(row, key, RowState.ADDING)
-            TrackerRepository.subscribeTracker(requireContext(), item.id) { tracker ->
-                if (!isAdded) return@subscribeTracker
-                requireActivity().runOnUiThread {
-                    if (tracker != null) {
-                        moveIncomingTrackerToOnMyMap(item)
-                        setRowState(row, key, RowState.ADDED_CHECK)
-                        transitionToDeleteAfterCheck(row, key)
-                        rerenderTabs()
-                        notifySharedTabAdded(listOf(tracker), emptyList())
-                    } else {
-                        setRowState(row, key, RowState.IDLE)
-                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                    }
+            viewLifecycleOwner.lifecycleScope.launch {
+                val tracker = TrackerRepository.subscribeTrackerSuspend(requireContext(), item.id)
+                if (tracker != null) {
+                    moveIncomingTrackerToOnMyMap(item)
+                    setRowState(row, key, RowState.ADDED_CHECK)
+                    transitionToDeleteAfterCheck(row, key)
+                    rerenderTabs()
+                    notifySharedTabAdded(listOf(tracker), emptyList())
+                } else {
+                    setRowState(row, key, RowState.IDLE)
+                    navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 }
             }
         }
         deleteBtn.setOnClickListener {
             if (rowStates[key] != RowState.ADDED_DELETE) return@setOnClickListener
-            TrackerRepository.unsubscribeTracker(requireContext(), item.id) { success ->
-                if (!isAdded) return@unsubscribeTracker
-                requireActivity().runOnUiThread {
-                    if (success) {
-                        removeRowAndMaybeHideSection(parent, row, sectionHeader, parent)
-                    } else {
-                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                    }
+            viewLifecycleOwner.lifecycleScope.launch {
+                val success = TrackerRepository.unsubscribeTrackerSuspend(requireContext(), item.id)
+                if (success) {
+                    removeRowAndMaybeHideSection(parent, row, sectionHeader, parent)
+                } else {
+                    navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 }
             }
         }
