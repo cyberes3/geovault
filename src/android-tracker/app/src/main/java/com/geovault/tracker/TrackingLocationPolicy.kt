@@ -7,6 +7,10 @@ import android.location.Location
  * Extracted so it can be unit tested without Service/Context.
  */
 object TrackingLocationPolicy {
+    const val AUTO_START_PROFILE_INDEX = 0
+
+    @JvmStatic
+    fun getAutoStartProfileIndex(): Int = AUTO_START_PROFILE_INDEX
 
     /**
      * Returns true if the location passes the accuracy filter (should be queued).

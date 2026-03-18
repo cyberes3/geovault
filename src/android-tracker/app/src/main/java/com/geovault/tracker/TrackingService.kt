@@ -258,7 +258,11 @@ class TrackingService : TrackPointServiceBase() {
         consecutiveStationaryPoints = 0
         consecutiveBadAccuracyPoints = 0
         lastLocation = null
-        currentActiveProfileIndex = if (currentSettings.autoTrackingMode) currentSettings.trackingProfile.index else -1
+        currentActiveProfileIndex = if (currentSettings.autoTrackingMode) {
+            TrackingLocationPolicy.getAutoStartProfileIndex()
+        } else {
+            -1
+        }
         applyCurrentLocationRequest("start_tracking")
         
         // Push any existing queued locations immediately when tracking starts
@@ -663,6 +667,7 @@ class TrackingService : TrackPointServiceBase() {
             isGpsPaused = false
             isWaitingForGpsLock = false
             consecutiveStationaryPoints = 0
+            lastSpeedMps = 0f
             watchdogJob?.cancel()
 
             try {

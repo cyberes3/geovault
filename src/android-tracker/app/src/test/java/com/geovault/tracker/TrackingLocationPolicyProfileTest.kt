@@ -29,4 +29,23 @@ class TrackingLocationPolicyProfileTest {
         assertEquals(1, TrackingLocationPolicy.getRecommendedProfile(5.9f, 2))
         assertEquals(2, TrackingLocationPolicy.getRecommendedProfile(6.1f, 2))
     }
+
+    @Test
+    fun getRecommendedProfile_atExactBoundaries_staysInCurrentProfile() {
+        assertEquals(0, TrackingLocationPolicy.getRecommendedProfile(2.0f, 0))
+        assertEquals(1, TrackingLocationPolicy.getRecommendedProfile(8.0f, 1))
+        assertEquals(1, TrackingLocationPolicy.getRecommendedProfile(1.5f, 1))
+        assertEquals(2, TrackingLocationPolicy.getRecommendedProfile(6.0f, 2))
+    }
+
+    @Test
+    fun getRecommendedProfile_unknownCurrentProfile_defaultsToBiking() {
+        assertEquals(1, TrackingLocationPolicy.getRecommendedProfile(0.5f, -1))
+        assertEquals(1, TrackingLocationPolicy.getRecommendedProfile(20f, 99))
+    }
+
+    @Test
+    fun autoStartProfileIndex_isWalking() {
+        assertEquals(0, TrackingLocationPolicy.getAutoStartProfileIndex())
+    }
 }
