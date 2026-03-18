@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import com.geovault.common.AppResetFlow
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Request
@@ -100,9 +101,11 @@ class SettingsActivity : AppCompatActivity() {
                 .setPositiveButton(getString(R.string.disconnect)) { _, _ ->
                     GeovaultAuthManager.revokeToken(this, GeovaultAuthManager.getAccessToken(this))
                     GeovaultAuthManager.revokeToken(this, GeovaultAuthManager.getRefreshToken(this))
-                    GeovaultAuthManager.clearTokens(this)
-                    updateConnectDisconnectVisibility()
-                    Toast.makeText(this, getString(R.string.disconnect), Toast.LENGTH_SHORT).show()
+                    AppResetFlow.execute(
+                        context = this,
+                        reason = AppResetFlow.Reason.MANUAL_SIGN_OUT,
+                        mainActivityClass = MainActivity::class.java
+                    )
                 }
                 .setNegativeButton(getString(R.string.cancel_button), null)
                 .show()

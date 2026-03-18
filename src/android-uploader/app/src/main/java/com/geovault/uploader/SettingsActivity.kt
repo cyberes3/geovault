@@ -15,6 +15,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.geovault.common.AppResetFlow
 import com.google.android.material.button.MaterialButton
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -113,9 +114,11 @@ class SettingsActivity : AppCompatActivity() {
                 .setPositiveButton(getString(R.string.disconnect)) { _, _ ->
                     GeovaultAuthManager.revokeToken(this, GeovaultAuthManager.getAccessToken(this))
                     GeovaultAuthManager.revokeToken(this, GeovaultAuthManager.getRefreshToken(this))
-                    GeovaultAuthManager.clearTokens(this)
-                    updateConnectDisconnectVisibility()
-                    Toast.makeText(this, getString(R.string.disconnect), Toast.LENGTH_SHORT).show()
+                    AppResetFlow.execute(
+                        context = this,
+                        reason = AppResetFlow.Reason.MANUAL_SIGN_OUT,
+                        mainActivityClass = MainActivity::class.java
+                    )
                 }
                 .setNegativeButton(getString(R.string.cancel_button), null)
                 .show()

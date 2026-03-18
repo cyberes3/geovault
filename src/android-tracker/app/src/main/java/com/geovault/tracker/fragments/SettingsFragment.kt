@@ -19,11 +19,11 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
+import com.geovault.common.AppResetFlow
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.R as CommonR
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
-import com.geovault.tracker.TrackerRepository
 import com.google.android.material.button.MaterialButton
 
 class SettingsFragment : Fragment() {
@@ -353,11 +353,11 @@ class SettingsFragment : Fragment() {
             .setPositiveButton(getString(R.string.disconnect)) { _, _ ->
                 GeovaultAuthManager.revokeToken(requireContext(), GeovaultAuthManager.getAccessToken(requireContext()))
                 GeovaultAuthManager.revokeToken(requireContext(), GeovaultAuthManager.getRefreshToken(requireContext()))
-                GeovaultAuthManager.clearTokens(requireContext())
-                TrackerRepository.clearListCaches()
-                TrackerRepository.clearSelectedTrackerCaches()
-                updateUi()
-                Toast.makeText(requireContext(), getString(R.string.disconnect), Toast.LENGTH_SHORT).show()
+                AppResetFlow.execute(
+                    context = requireContext(),
+                    reason = AppResetFlow.Reason.MANUAL_SIGN_OUT,
+                    mainActivityClass = com.geovault.tracker.MainActivity::class.java
+                )
             }
             .setNegativeButton(getString(R.string.cancel_button), null)
             .show()

@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import com.geovault.common.AppResetFlow
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.map.MapLibreInitializer
 import dagger.hilt.android.HiltAndroidApp
@@ -17,6 +18,8 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
 
     companion object {
         private const val TAG = "GeoVaultTracker"
+        private const val HOOK_STOP_SERVICES = "tracker_stop_services"
+        private const val HOOK_CLEAR_TRACKER_STATE = "tracker_clear_tracker_state"
 
         /** Call from app start or after login to prefetch trackers and selected tracker in background. */
         fun prefetchIfNeeded(context: Context) {
@@ -38,6 +41,29 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
             redirectUri,
             GeovaultAuthManager.OAUTH_CLIENT_ID_TRACKER
         )
+        AppResetFlow.registerHook(
+            key = HOOK_STOP_SERVICES,
+            phase = AppResetFlow.Phase.AFTER_TOKEN_CLEAR
+        ) { hookContext ->
+            hookContext.startService(
+                Intent(hookContext, TrackingService::class.java).apply {
+                    action = TrackingService.ACTION_STOP
+                }
+            )
+            hookContext.startService(
+                Intent(hookContext, LiveTrackStreamingService::class.java).apply {
+                    action = LiveTrackStreamingService.ACTION_STOP
+                }
+            )
+        }
+        AppResetFlow.registerHook(
+            key = HOOK_CLEAR_TRACKER_STATE,
+            phase = AppResetFlow.Phase.AFTER_TOKEN_CLEAR
+        ) { hookContext ->
+            TrackerRepository.clearListCaches()
+            TrackerRepository.clearSelectedTrackerCaches()
+            SelectedTrackerPrefs.clearSelectedTracker(hookContext)
+        }
         GeovaultAuthManager.setAuthFailureListener(this)
         MapLibreInitializer.init(applicationContext)
         prefetchIfNeeded(applicationContext)
@@ -46,23 +72,11 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
 
     override fun onAuthFailure(context: Context) {
         Log.w(TAG, "Unrecoverable auth failure detected. Resetting app.")
-        
-        // 1. Clear tokens
-        GeovaultAuthManager.clearTokens(context)
-        
-        // 2. Stop services
-        context.startService(Intent(context, TrackingService::class.java).apply { action = TrackingService.ACTION_STOP })
-        context.startService(Intent(context, LiveTrackStreamingService::class.java).apply { action = LiveTrackStreamingService.ACTION_STOP })
-        
-        // 3. Clear repository caches (list + selected-tracker)
-        TrackerRepository.clearListCaches()
-        TrackerRepository.clearSelectedTrackerCaches()
-        
-        // 4. Return to login/guest screen
-        val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        }
-        context.startActivity(intent)
+        AppResetFlow.execute(
+            context = context,
+            reason = AppResetFlow.Reason.AUTH_FAILURE,
+            mainActivityClass = MainActivity::class.java
+        )
     }
 
     private fun createNotificationChannels() {

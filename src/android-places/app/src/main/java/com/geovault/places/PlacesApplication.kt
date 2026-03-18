@@ -4,9 +4,9 @@ import android.app.Application
 import android.content.Context
 import android.util.Log
 import android.content.ContentValues
-import android.content.Intent
 import android.os.Environment
 import android.provider.MediaStore
+import com.geovault.common.AppResetFlow
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.map.MapLibreInitializer
 import java.text.SimpleDateFormat
@@ -20,10 +20,28 @@ class PlacesApplication : Application(), GeovaultAuthManager.AuthFailureListener
 
     companion object {
         private const val TAG = "GeoVaultMap"
+        private const val HOOK_EMERGENCY_EXPORT = "places_emergency_export"
+        private const val HOOK_CLEAR_PLACES_STATE = "places_clear_state"
     }
     override fun onCreate() {
         super.onCreate()
         GeovaultAuthManager.init(this, "com.geovault.places://oauth/callback", GeovaultAuthManager.OAUTH_CLIENT_ID_PLACES)
+        AppResetFlow.registerHook(
+            key = HOOK_EMERGENCY_EXPORT,
+            phase = AppResetFlow.Phase.BEFORE_EMERGENCY_EXPORT,
+            reasons = setOf(AppResetFlow.Reason.AUTH_FAILURE)
+        ) { hookContext ->
+            performEmergencyExport(hookContext)
+        }
+        AppResetFlow.registerHook(
+            key = HOOK_CLEAR_PLACES_STATE,
+            phase = AppResetFlow.Phase.AFTER_TOKEN_CLEAR
+        ) { hookContext ->
+            placesCache.clear()
+            hookContext.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
+                .remove("pending_navigation_ids")
+                .apply()
+        }
         GeovaultAuthManager.setAuthFailureListener(this)
         MapLibreInitializer.init(applicationContext)
         GeovaultAuthManager.fetchUserStatus(this)
@@ -31,28 +49,14 @@ class PlacesApplication : Application(), GeovaultAuthManager.AuthFailureListener
 
     override fun onAuthFailure(context: Context) {
         Log.w(TAG, "Unrecoverable auth failure detected. Resetting app.")
-        
-        // 1. Emergency Export of unsynced data
-        performEmergencyExport(context)
-
-        // 2. Clear tokens
-        GeovaultAuthManager.clearTokens(context)
-        
-        // 3. Clear cache
-        placesCache.clear()
-        
-        // 4. Clear app-specific prefs (matches AppResetHelper logic)
-        context.getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE).edit()
-            .remove("pending_navigation_ids")
-            .apply()
-
-        // 5. Return to login screen
-        val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            // Signal to MainActivity that an export might have been saved
-            putExtra(MainActivity.EXTRA_SHOW_EXPORT_SAVED_MESSAGE, true)
-        }
-        context.startActivity(intent)
+        AppResetFlow.execute(
+            context = context,
+            reason = AppResetFlow.Reason.AUTH_FAILURE,
+            mainActivityClass = MainActivity::class.java,
+            configureRelaunchIntent = { intent ->
+                intent.putExtra(MainActivity.EXTRA_SHOW_EXPORT_SAVED_MESSAGE, true)
+            }
+        )
     }
 
     private fun performEmergencyExport(context: Context) {
