@@ -1,5 +1,6 @@
 package com.geovault.tracker.fragments.map
 
+import com.geovault.common.NaturalSort
 import kotlin.math.abs
 
 internal data class ProjectedTrackerPoint(
@@ -77,7 +78,7 @@ internal object BestEffortViewportSelector {
                 val candidate = BestEffortViewportSelection(
                     centerX = cx,
                     centerY = cy,
-                    includedTrackerIds = included.map { it.trackerId }.sorted(),
+                    includedTrackerIds = included.map { it.trackerId }.sortedWith(NaturalSort.naturalOrder()),
                     includedPoints = included,
                     extentArea = extentArea,
                     centeringImbalance = centering.first,
@@ -311,7 +312,7 @@ internal object BestEffortViewportSelector {
         return BestEffortViewportSelection(
             centerX = normalizedX,
             centerY = clampedY,
-            includedTrackerIds = included.map { it.trackerId }.sorted(),
+            includedTrackerIds = included.map { it.trackerId }.sortedWith(NaturalSort.naturalOrder()),
             includedPoints = included,
             extentArea = extentArea,
             centeringImbalance = centering.first,

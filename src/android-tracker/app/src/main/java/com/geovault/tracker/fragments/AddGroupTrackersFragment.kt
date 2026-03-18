@@ -13,6 +13,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.fragment.app.Fragment
 import com.geovault.common.LoadingSpinner
+import com.geovault.common.NaturalSort
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
@@ -73,7 +74,7 @@ class AddGroupTrackersFragment : Fragment() {
                 .filter { tracker -> canShowInAddList(tracker) }
                 .map { AddableTrack(it) }
                 .distinctBy { it.id }
-                .sortedBy { it.name.lowercase() }
+                .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
             loadingView.visibility = View.GONE
             spinner.stop(hide = true)
             renderList()
@@ -95,7 +96,7 @@ class AddGroupTrackersFragment : Fragment() {
                     AddableTrack(tracker)
                 }
                 .distinctBy { it.id }
-                .sortedBy { it.name.lowercase() }
+                .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
             requireActivity().runOnUiThread {
                 allItems = addable
                 spinner.stop(hide = true)

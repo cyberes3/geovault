@@ -19,6 +19,7 @@ import androidx.recyclerview.widget.RecyclerView
 import android.util.DisplayMetrics
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
+import com.geovault.common.NaturalSort
 import com.geovault.tracker.Group
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
@@ -201,7 +202,7 @@ class SharedTrackersFragment : Fragment() {
         val existingGroupIds = current.filterIsInstance<SharedListItem.GroupItem>().map { it.group.id }.toSet()
         for (t in trackers) if (t.id !in existingTrackerIds) current.add(SharedListItem.TrackerItem(t))
         for (g in groups) if (g.id !in existingGroupIds) current.add(SharedListItem.GroupItem(g))
-        val sorted = current.sortedBy { it.sortName.lowercase(Locale.getDefault()) }
+        val sorted = current.sortedWith(NaturalSort.naturalOrderBy { it.sortName.lowercase(Locale.getDefault()) })
         adapter?.setItems(sorted, adapter?.getHiddenTrackIds() ?: emptySet())
         emptyView.visibility = View.GONE
         loadTrackers(showOverlay = false)
@@ -239,7 +240,7 @@ class SharedTrackersFragment : Fragment() {
                             .filter { it.id !in hiddenTrackIds && it.id !in trackIdsInSharedGroups }
                         val combined = (sharedGroups.map { SharedListItem.GroupItem(it) } +
                             sharedTrackers.map { SharedListItem.TrackerItem(it) })
-                            .sortedBy { it.sortName.lowercase(Locale.getDefault()) }
+                            .sortedWith(NaturalSort.naturalOrderBy { it.sortName.lowercase(Locale.getDefault()) })
                         adapter?.setItems(combined, hiddenTrackIds)
                         emptyView.visibility = if (combined.isEmpty()) View.VISIBLE else View.GONE
                         loadingOverlay.visibility = View.GONE
@@ -380,7 +381,7 @@ class SharedTrackersFragment : Fragment() {
             } else {
                 currentItems.removeAt(index)
             }
-            val sorted = currentItems.sortedBy { it.sortName.lowercase(Locale.getDefault()) }
+            val sorted = currentItems.sortedWith(NaturalSort.naturalOrderBy { it.sortName.lowercase(Locale.getDefault()) })
             setItems(sorted, hiddenTrackIds)
         }
 

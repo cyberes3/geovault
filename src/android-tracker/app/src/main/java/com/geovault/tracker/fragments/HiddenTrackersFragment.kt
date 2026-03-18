@@ -11,6 +11,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
+import com.geovault.common.NaturalSort
 import com.geovault.tracker.Group
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
@@ -91,7 +92,7 @@ class HiddenTrackersFragment : Fragment() {
             val hiddenGroups = listHidden + mapHidden
 
             val items = (hiddenTrackers as List<HiddenItem>) + hiddenGroups
-            bindList(items.sortedBy { it.name.lowercase() })
+            bindList(items.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() }))
             loadingOverlay.visibility = View.GONE
             loadingSpinner.stop(hide = false)
             swipeRefresh.isRefreshing = false

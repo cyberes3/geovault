@@ -2,6 +2,7 @@ package com.geovault.uploader
 
 import android.content.Context
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.NaturalSort
 import com.geovault.common.ImportantMessageSnackbar
 import com.geovault.common.RetrofitClient
 import android.content.Intent
@@ -31,6 +32,7 @@ import okhttp3.Response
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class MultiUploadActivity : AppCompatActivity() {
@@ -123,6 +125,10 @@ class MultiUploadActivity : AppCompatActivity() {
         handleIntent(intent)
     }
     
+    private fun sortFilesNaturally() {
+        files.sortWith(NaturalSort.naturalOrderBy { it.filename.lowercase(Locale.getDefault()) })
+    }
+
     private fun openSettings() {
         val intent = Intent(this, SettingsActivity::class.java)
         settingsLauncher.launch(intent)
@@ -156,7 +162,7 @@ class MultiUploadActivity : AppCompatActivity() {
                         files.add(invalidFile)
                     }
                 }
-                
+                sortFilesNaturally()
                 updateFileCount()
                 adapter.notifyDataSetChanged()
             }
@@ -180,7 +186,7 @@ class MultiUploadActivity : AppCompatActivity() {
                         )
                         files.add(invalidFile)
                     }
-                    
+                    sortFilesNaturally()
                     updateFileCount()
                     adapter.notifyDataSetChanged()
                 }

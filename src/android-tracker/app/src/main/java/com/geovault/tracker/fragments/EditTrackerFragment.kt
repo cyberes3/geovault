@@ -29,6 +29,7 @@ import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.UserItem
 import com.geovault.tracker.navigation.navHost
 import com.geovault.common.LoadingSpinner
+import com.geovault.common.NaturalSort
 import com.geovault.common.R as CommonR
 import com.geovault.tracker.showHueColorPickerDialog
 import com.geovault.tracker.updateColorPreview
@@ -566,7 +567,7 @@ class EditTrackerFragment : Fragment() {
             ) { picked ->
                 sharedWithEmails.clear()
                 sharedWithEmails.addAll(pinnedExisting)
-                sharedWithEmails.addAll(picked.sorted())
+                sharedWithEmails.addAll(picked.sortedWith(NaturalSort.naturalOrder()))
                 updateSharedWithCountText()
             }
         }

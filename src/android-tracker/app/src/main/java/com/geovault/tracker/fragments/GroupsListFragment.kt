@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
+import com.geovault.common.NaturalSort
 import com.geovault.tracker.Group
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
@@ -68,7 +69,7 @@ class GroupsListFragment : Fragment() {
         val cached = TrackerRepository.getGroupsCache()
         if (cached != null) {
             val myGroups = cached.filter { g -> g.is_owner == true && g.hidden_in_list != true }
-            applyGroups(myGroups.sortedBy { it.name.lowercase() })
+            applyGroups(myGroups.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() }))
         } else {
             loadingOverlay.visibility = View.VISIBLE
             loadingSpinner.start()
@@ -114,7 +115,7 @@ class GroupsListFragment : Fragment() {
             if (!isAdded) return@getGroups
             val raw = list ?: emptyList()
             val myGroups = raw.filter { g -> g.is_owner == true && g.hidden_in_list != true }
-            val sorted = myGroups.sortedBy { it.name.lowercase() }
+            val sorted = myGroups.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
             requireActivity().runOnUiThread {
                 applyGroups(sorted)
             }
@@ -140,7 +141,7 @@ class GroupsListFragment : Fragment() {
                                 group != null -> {
                                     val cache = TrackerRepository.getGroupsCache()
                                     if (cache != null) {
-                                        val myGroups = cache.filter { shouldShowInMyGroups(it) }.sortedBy { it.name.lowercase() }
+                                        val myGroups = cache.filter { shouldShowInMyGroups(it) }.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
                                         applyGroups(myGroups)
                                     } else {
                                         loadGroups(forceRefresh = true)
@@ -191,7 +192,7 @@ class GroupsListFragment : Fragment() {
             } else {
                 mutable.add(updated)
             }
-            groups = mutable.sortedBy { it.name.lowercase() }
+            groups = mutable.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
             notifyDataSetChanged()
         }
 

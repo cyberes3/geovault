@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.geovault.common.NaturalSort
 import com.geovault.tracker.R
 import com.google.android.material.card.MaterialCardView
 
@@ -37,7 +38,7 @@ object MultiSelectPickerDialog {
     ) {
         val context = fragment.requireContext()
         val selectedIds = initialSelectedIds.toMutableSet()
-        val sortedItems = items.distinctBy { it.first }.sortedBy { it.second.lowercase() }
+        val sortedItems = items.distinctBy { it.first }.sortedWith(NaturalSort.naturalOrderBy { it.second.lowercase() })
 
         val view = LayoutInflater.from(context).inflate(R.layout.dialog_shared_user_picker, null, false)
         val searchInput = view.findViewById<EditText>(R.id.sharedUserPickerSearch)

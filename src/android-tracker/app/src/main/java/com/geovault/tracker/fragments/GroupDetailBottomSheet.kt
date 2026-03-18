@@ -19,6 +19,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.LoadingSpinner
+import com.geovault.common.NaturalSort
 import com.geovault.tracker.Group
 import com.geovault.tracker.GroupPatchRequest
 import com.geovault.tracker.navigation.navHost
@@ -287,7 +288,7 @@ class GroupDetailBottomSheet : Fragment() {
             ) { picked ->
                 sharedWithEmailsForSave.clear()
                 sharedWithEmailsForSave.addAll(pinnedExisting)
-                sharedWithEmailsForSave.addAll(picked.sorted())
+                sharedWithEmailsForSave.addAll(picked.sortedWith(NaturalSort.naturalOrder()))
                 updateSharedWithCountText()
             }
         }

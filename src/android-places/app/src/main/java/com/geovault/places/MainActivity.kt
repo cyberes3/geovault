@@ -34,6 +34,8 @@ import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import com.geovault.common.ClipboardCopyHelper
+import com.geovault.common.NaturalSort
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -375,11 +377,18 @@ class MainActivity : AppCompatActivity() {
         fabMap.isEnabled = true
     }
 
-    private fun refreshListFromCache() {
-        if (!::recyclerView.isInitialized) return
+    private fun placeSortKey(feature: Feature): String =
+        (feature.properties.name ?: "Unnamed Place").lowercase(Locale.getDefault())
+
+    private data class PlacesListSections(
+        val savedPlaces: List<Feature>,
+        val offlinePlaceFeatures: List<Feature>,
+        val offlineFeatures: List<OfflineFeature>
+    )
+
+    private fun buildPlacesListSections(): PlacesListSections {
         val cached = cache.getCachedFeatures()
         val offline = cache.getOfflineFeatures()
-        Log.d(TAG, "refreshListFromCache: cached=${cached.size}, offline=${offline.size}")
         val q = searchQuery
         val (filteredCached, filteredOffline) = if (q.isNotBlank()) {
             fun matches(feature: Feature): Boolean {
@@ -391,13 +400,30 @@ class MainActivity : AppCompatActivity() {
         } else {
             cached to offline
         }
-        Log.d(TAG, "refreshListFromCache: searchQuery='$q', filteredCached=${filteredCached.size}")
-        adapter.updateData(
-            filteredCached,
-            filteredOffline.map { it.feature },
-            filteredOffline
+        val sortedOffline = filteredOffline.sortedWith(NaturalSort.naturalOrderBy { placeSortKey(it.feature) })
+        val offlineEditIds = sortedOffline.mapNotNull { it.feature.properties.database_id }.toSet()
+        val savedPlaces = filteredCached
+            .filter { it.properties.database_id !in offlineEditIds }
+            .sortedWith(NaturalSort.naturalOrderBy { placeSortKey(it) })
+        return PlacesListSections(
+            savedPlaces,
+            sortedOffline.map { it.feature },
+            sortedOffline
         )
-        if (filteredCached.isEmpty() && filteredOffline.isEmpty()) {
+    }
+
+    private fun refreshListFromCache() {
+        if (!::recyclerView.isInitialized) return
+        val sections = buildPlacesListSections()
+        Log.d(TAG, "refreshListFromCache: saved=${sections.savedPlaces.size}, offline=${sections.offlineFeatures.size}")
+        val q = searchQuery
+        Log.d(TAG, "refreshListFromCache: searchQuery='$q'")
+        adapter.updateData(
+            sections.savedPlaces,
+            sections.offlinePlaceFeatures,
+            sections.offlineFeatures
+        )
+        if (sections.savedPlaces.isEmpty() && sections.offlineFeatures.isEmpty()) {
             emptyState.visibility = View.VISIBLE
             recyclerView.visibility = View.GONE
         } else {
@@ -409,21 +435,9 @@ class MainActivity : AppCompatActivity() {
 
     /** Returns adapter display position for the item with given database_id, or -1. Matches adapter order: header, offline items, header, saved (cached minus offline ids). */
     private fun displayIndexForId(id: Int): Int {
-        val cached = cache.getCachedFeatures()
-        val offline = cache.getOfflineFeatures()
-        val q = searchQuery
-        val (filteredCached, filteredOffline) = if (q.isNotBlank()) {
-            fun matches(feature: Feature): Boolean {
-                val name = feature.properties.name ?: ""
-                val desc = feature.properties.description ?: ""
-                return name.contains(q, ignoreCase = true) || desc.contains(q, ignoreCase = true)
-            }
-            cached.filter(::matches) to offline.filter { matches(it.feature) }
-        } else {
-            cached to offline
-        }
-        val offlineIds = filteredOffline.map { it.feature.properties.database_id }.toSet()
-        val saved = filteredCached.filter { it.properties.database_id !in offlineIds }
+        val sections = buildPlacesListSections()
+        val filteredOffline = sections.offlineFeatures
+        val saved = sections.savedPlaces
         val offlineIndex = filteredOffline.indexOfFirst { it.feature.properties.database_id == id }
         if (offlineIndex >= 0) return 1 + offlineIndex
         val savedIndex = saved.indexOfFirst { it.properties.database_id == id }

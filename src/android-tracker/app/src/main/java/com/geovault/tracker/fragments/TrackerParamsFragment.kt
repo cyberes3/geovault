@@ -12,6 +12,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
+import com.geovault.common.NaturalSort
 import com.geovault.tracker.R
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.SelectedTrackerPrefs
@@ -225,7 +226,7 @@ class TrackerParamsFragment : Fragment() {
         if (propsMap.isNotEmpty()) {
             paramsGrid.visibility = View.VISIBLE
             paramsWaitingCard.visibility = View.GONE
-            val entries = propsMap.entries.sortedBy { it.key }.map { TrackerParamEntry(it.key, it.value) }
+            val entries = propsMap.entries.sortedWith(NaturalSort.naturalOrderBy { it.key }).map { TrackerParamEntry(it.key, it.value) }
             paramsGrid.layoutManager = GridLayoutManager(requireContext(), 2)
             paramsGrid.adapter = TrackerParamsAdapter(requireContext(), entries)
         } else {
@@ -274,7 +275,7 @@ class TrackerParamsFragment : Fragment() {
         if (hasStoredParams) {
             paramsGrid.visibility = View.VISIBLE
             paramsWaitingCard.visibility = View.GONE
-            val entries = latestPointParams.entries.sortedBy { it.key }.map { TrackerParamEntry(it.key, it.value) }
+            val entries = latestPointParams.entries.sortedWith(NaturalSort.naturalOrderBy { it.key }).map { TrackerParamEntry(it.key, it.value) }
             paramsGrid.layoutManager = GridLayoutManager(requireContext(), 2)
             paramsGrid.adapter = TrackerParamsAdapter(requireContext(), entries)
         } else if (lastTimestampMs != null || lastPosition != null) {

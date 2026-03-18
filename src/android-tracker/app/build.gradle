@@ -1,3 +1,5 @@
+// kapt must be after KSP so Hilt sees the correct processor graph (quiets
+// "options were not recognized by any processor" for dagger.fastInit / kapt.kotlin.generated).
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
