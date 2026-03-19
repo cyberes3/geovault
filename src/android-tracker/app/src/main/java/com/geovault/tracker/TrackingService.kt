@@ -39,7 +39,6 @@ import com.geovault.tracker.sensor.SignificantMotionResumeBridge
 import com.geovault.tracker.settings.TrackerSettings
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.settings.TrackerTrackingProfile
-import com.geovault.tracker.settings.TrackingSettingsReapplyPolicy
 import com.google.android.gms.location.*
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
@@ -214,7 +213,6 @@ class TrackingService : TrackPointServiceBase() {
     private var currentActiveProfileIndex = -1
     private var lastSpeedMps: Float = 0f
     private var currentSettings: TrackerSettings = TrackerSettings()
-    private var settingsObserveJob: Job? = null
 
     @Inject
     lateinit var settingsRepository: TrackerSettingsRepository
@@ -225,14 +223,6 @@ class TrackingService : TrackPointServiceBase() {
         database = AppDatabase.getDatabase(this)
         unifiedLocationClient = UnifiedLocationClient(this)
         currentSettings = settingsRepository.getSettings()
-        settingsObserveJob?.cancel()
-        settingsObserveJob = serviceScope.launch {
-            settingsRepository.observeSettings().collect { newSettings ->
-                val previousSettings = currentSettings
-                currentSettings = newSettings
-                onSettingsChanged(previousSettings, newSettings)
-            }
-        }
         val significantMotionTrigger = SensorManagerSignificantMotionTrigger(applicationContext)
         significantMotionBridge = SignificantMotionResumeBridge(significantMotionTrigger) {
             Log.d(TAG, "Significant motion detected, resuming GPS")
@@ -289,6 +279,7 @@ class TrackingService : TrackPointServiceBase() {
 
     private fun startTracking() {
         if (isTracking) return
+        currentSettings = settingsRepository.getSettings()
         transitionControlState(TrackingControlEvent.StartRequested)
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (!hasValidSelectedTrackerId(selectedTrackerId)) {
@@ -333,7 +324,7 @@ class TrackingService : TrackPointServiceBase() {
         consecutiveBadAccuracyPoints = 0
         lastLocation = null
         currentActiveProfileIndex = if (currentSettings.autoTrackingMode) {
-            TrackingLocationPolicy.getAutoStartProfileIndex()
+            currentSettings.trackingProfile.index
         } else {
             -1
         }
@@ -830,7 +821,6 @@ class TrackingService : TrackPointServiceBase() {
     }
 
     override fun onDestroy() {
-        settingsObserveJob?.cancel()
         super.onDestroy()
         significantMotionBridge?.cancel()
         stopPreflightMonitor()
@@ -989,20 +979,10 @@ class TrackingService : TrackPointServiceBase() {
         }
     }
 
-    private fun onSettingsChanged(previous: TrackerSettings, current: TrackerSettings) {
-        if (!isTracking) return
-        val needsReapply = TrackingSettingsReapplyPolicy.shouldReapplyLocationRequest(previous, current)
-        if (needsReapply) {
-            reapplyLocationRequestIfActive("settings_changed")
-        }
-    }
-
     private fun resolveCurrentIntervalAndDistance(): Pair<Long, Float> {
         val isAuto = currentSettings.autoTrackingMode
         if (isAuto) {
-            // In auto mode, always honor the latest profile from settings so
-            // live updates (UI or service-driven) are applied immediately.
-            currentActiveProfileIndex = currentSettings.trackingProfile.index
+            // currentActiveProfileIndex is set when tracking starts and updated by in-run auto profile switching.
             val params = TrackingLocationPolicy.getProfileParams(currentActiveProfileIndex)
             return params.first to params.second
         }

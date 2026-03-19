@@ -5,7 +5,7 @@ import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 
 class LoadGroupMapUseCase(
-    private val trackRepository: MapTrackRepository
+    private val trackRepository: RuntimeMapTrackRepository
 ) {
     suspend fun execute(
         group: Group,
@@ -25,14 +25,11 @@ class LoadGroupMapUseCase(
             is RepositoryResult.Failure -> emptyList()
         }
             .filter { it.id in groupTrackIds }
-        val fullTrackers = when (
-            val geometryResult = trackRepository.getTrackersGeometry(trackers.map(Tracker::id), allData = true)
+        val coordsByTrackerId = when (
+            val coordinatesResult = trackRepository.getTrackersCoordinates(trackers.map(Tracker::id), allData = true)
         ) {
-            is RepositoryResult.Success -> geometryResult.data
-            is RepositoryResult.Failure -> emptyList()
-        }
-        val coordsByTrackerId = fullTrackers.associate { tracker ->
-            tracker.id to (tracker.geometry?.coordinates ?: emptyList())
+            is RepositoryResult.Success -> coordinatesResult.data.mapValues { it.value.coordinates }
+            is RepositoryResult.Failure -> emptyMap()
         }
         return MapAllTrackersSnapshot(
             trackers = trackers,

@@ -4,7 +4,7 @@ import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 
 class LoadAllTrackersMapUseCase(
-    private val trackRepository: MapTrackRepository,
+    private val trackRepository: RuntimeMapTrackRepository,
     private val groupRepository: MapGroupRepository,
     private val visibilityRepository: MapVisibilityRepository
 ) {
@@ -35,14 +35,11 @@ class LoadAllTrackersMapUseCase(
             return MapAllTrackersSnapshot(trackers = emptyList(), coordsByTrackerId = emptyMap(), fitBounds = false)
         }
 
-        val fullTrackers = when (
-            val geometryResult = trackRepository.getTrackersGeometry(trackers.map(Tracker::id), allData = true)
+        val coordsByTrackerId = when (
+            val coordinatesResult = trackRepository.getTrackersCoordinates(trackers.map(Tracker::id), allData = true)
         ) {
-            is RepositoryResult.Success -> geometryResult.data
-            is RepositoryResult.Failure -> emptyList()
-        }
-        val coordsByTrackerId = fullTrackers.associate { tracker ->
-            tracker.id to (tracker.geometry?.coordinates ?: emptyList())
+            is RepositoryResult.Success -> coordinatesResult.data.mapValues { it.value.coordinates }
+            is RepositoryResult.Failure -> emptyMap()
         }
 
         return MapAllTrackersSnapshot(

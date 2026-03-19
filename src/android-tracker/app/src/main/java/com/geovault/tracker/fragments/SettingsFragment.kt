@@ -15,6 +15,7 @@ import android.widget.Toast
 import android.view.inputmethod.EditorInfo
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
+import androidx.core.widget.doAfterTextChanged
 import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -309,6 +310,69 @@ class SettingsFragment : Fragment() {
         configureNumericInputCommit(intervalEdit) { commitIntervalInput() }
         configureNumericInputCommit(distanceEdit) { commitDistanceInput() }
         configureNumericInputCommit(accuracyEdit) { commitAccuracyInput() }
+        setupProfileCustomWatchers()
+    }
+
+    private fun setupProfileCustomWatchers() {
+        intervalEdit.doAfterTextChanged {
+            markCustomIfManualIntervalChanged()
+        }
+        distanceEdit.doAfterTextChanged {
+            markCustomIfManualDistanceChanged()
+        }
+        accuracyEdit.doAfterTextChanged {
+            markCustomIfManualAccuracyChanged()
+        }
+    }
+
+    private fun shouldIgnoreManualProfileWatcher(): Boolean {
+        return isBindingSettings || isUpdatingFromSpinner
+    }
+
+    private fun markCustomIfManualIntervalChanged() {
+        if (shouldIgnoreManualProfileWatcher()) return
+        val raw = intervalEdit.text?.toString()?.trim().orEmpty()
+        val parsed = raw.toLongOrNull() ?: run {
+            updateProfileToCustom()
+            return
+        }
+        val clamped = TrackerSettings.clampLoggingIntervalSec(parsed)
+        val previous = viewModel.uiState.value.settings.loggingIntervalSec
+        if (clamped != previous) {
+            updateProfileToCustom()
+        }
+    }
+
+    private fun markCustomIfManualDistanceChanged() {
+        if (shouldIgnoreManualProfileWatcher()) return
+        val raw = distanceEdit.text?.toString()?.trim().orEmpty()
+        val parsed = raw.toFloatOrNull() ?: run {
+            updateProfileToCustom()
+            return
+        }
+        val isImperial = com.geovault.common.UnitUtils.usesImperialUnitsDefault(requireContext())
+        val converted = fromDisplay(parsed, isImperial)
+        val clamped = TrackerSettings.clampDistanceFilterMeters(converted)
+        val previous = viewModel.uiState.value.settings.distanceFilterMeters
+        if ((clamped - previous).let { kotlin.math.abs(it) } > 0.0001f) {
+            updateProfileToCustom()
+        }
+    }
+
+    private fun markCustomIfManualAccuracyChanged() {
+        if (shouldIgnoreManualProfileWatcher()) return
+        val raw = accuracyEdit.text?.toString()?.trim().orEmpty()
+        val parsed = raw.toFloatOrNull() ?: run {
+            updateProfileToCustom()
+            return
+        }
+        val isImperial = com.geovault.common.UnitUtils.usesImperialUnitsDefault(requireContext())
+        val converted = fromDisplay(parsed, isImperial)
+        val clamped = TrackerSettings.clampAccuracyFilterMeters(converted)
+        val previous = viewModel.uiState.value.settings.accuracyFilterMeters
+        if ((clamped - previous).let { kotlin.math.abs(it) } > 0.0001f) {
+            updateProfileToCustom()
+        }
     }
 
     private fun configureNumericInputCommit(editText: EditText, onCommit: () -> Unit) {
@@ -337,8 +401,12 @@ class SettingsFragment : Fragment() {
             )
             return
         }
+        val clamped = TrackerSettings.clampLoggingIntervalSec(parsed)
+        val previous = viewModel.uiState.value.settings.loggingIntervalSec
         viewModel.setLoggingIntervalSec(parsed)
-        updateProfileToCustom()
+        if (clamped != previous) {
+            updateProfileToCustom()
+        }
     }
 
     private fun commitDistanceInput() {
@@ -350,8 +418,13 @@ class SettingsFragment : Fragment() {
             updateNumericEditFromState(distanceEdit, fallback)
             return
         }
-        viewModel.setDistanceFilterMeters(fromDisplay(parsed, isImperial))
-        updateProfileToCustom()
+        val converted = fromDisplay(parsed, isImperial)
+        val clamped = TrackerSettings.clampDistanceFilterMeters(converted)
+        val previous = viewModel.uiState.value.settings.distanceFilterMeters
+        viewModel.setDistanceFilterMeters(converted)
+        if ((clamped - previous).let { kotlin.math.abs(it) } > 0.0001f) {
+            updateProfileToCustom()
+        }
     }
 
     private fun commitAccuracyInput() {
@@ -363,8 +436,13 @@ class SettingsFragment : Fragment() {
             updateNumericEditFromState(accuracyEdit, fallback)
             return
         }
-        viewModel.setAccuracyFilterMeters(fromDisplay(parsed, isImperial))
-        updateProfileToCustom()
+        val converted = fromDisplay(parsed, isImperial)
+        val clamped = TrackerSettings.clampAccuracyFilterMeters(converted)
+        val previous = viewModel.uiState.value.settings.accuracyFilterMeters
+        viewModel.setAccuracyFilterMeters(converted)
+        if ((clamped - previous).let { kotlin.math.abs(it) } > 0.0001f) {
+            updateProfileToCustom()
+        }
     }
 
     private fun applyDefaultsForInvalidInputs() {

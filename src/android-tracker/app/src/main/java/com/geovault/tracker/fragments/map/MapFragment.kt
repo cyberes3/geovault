@@ -116,7 +116,7 @@ class MapFragment : Fragment() {
     /** Group-only mode: fit to trackers with recent live updates. */
     private var liveActiveFitEnabled = false
 
-    /** True while fetchFullGeometryAndApply is in progress; used so bottom-right spinner stays visible if streaming starts. */
+    /** True while single-tracker history fetch is in progress; keeps bottom-right spinner visible if streaming starts. */
     private var geometryLoadingInProgress = false
     /** In-flight geometry request token used to coalesce duplicate lifecycle fetches. */
     private var geometryFetchToken: InFlightRequestToken = InFlightRequestToken()
@@ -803,7 +803,7 @@ class MapFragment : Fragment() {
                     updateZoomToLatestButtonState()
                     updateTrackerLabel()
                 }
-                is MapResumeDecision.LoadSingleTracker -> {
+                is MapResumeDecision.LoadSingleTrackerRuntime -> {
                     if (displayedTrackerId != decision.trackerId || mapViewContext != MapViewContext.SINGLE_TRACKER) {
                         displayedTrackerId = decision.trackerId
                         mapViewContext = MapViewContext.SINGLE_TRACKER
@@ -811,15 +811,32 @@ class MapFragment : Fragment() {
                     Log.d(
                         TAG,
                         "onResume LoadSingleTracker trackerId=${decision.trackerId} " +
-                            "coordinatesOnly=${decision.coordinatesOnly} " +
+                            "mode=RUNTIME " +
                             "forceReplace=false prePoints=${trackPoints.size} " +
                             "range=${trackTimestampRangeSummary()}"
                     )
                     mapFlowViewModel.handleIntent(
-                        MapIntent.LoadSingleTracker(
+                        MapIntent.LoadSingleTrackerRuntime(
                             trackerId = decision.trackerId,
-                            forceReplace = false,
-                            coordinatesOnly = decision.coordinatesOnly
+                            forceReplace = false
+                        )
+                    )
+                }
+                is MapResumeDecision.LoadSingleTrackerBootstrap -> {
+                    if (displayedTrackerId != decision.trackerId || mapViewContext != MapViewContext.SINGLE_TRACKER) {
+                        displayedTrackerId = decision.trackerId
+                        mapViewContext = MapViewContext.SINGLE_TRACKER
+                    }
+                    Log.d(
+                        TAG,
+                        "onResume LoadSingleTracker trackerId=${decision.trackerId} " +
+                            "mode=BOOTSTRAP forceReplace=false prePoints=${trackPoints.size} " +
+                            "range=${trackTimestampRangeSummary()}"
+                    )
+                    mapFlowViewModel.handleIntent(
+                        MapIntent.LoadSingleTrackerBootstrap(
+                            trackerId = decision.trackerId,
+                            forceReplace = false
                         )
                     )
                 }
@@ -1823,6 +1840,8 @@ class MapFragment : Fragment() {
     fun consumePendingInitialTrackForMap(): Boolean {
         val initial = navHost()?.getAndClearInitialTrackForMap() ?: return false
         val loadTrackerId = initial.id.takeIf { it.isNotEmpty() } ?: return false
+        val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
+        val loadBootstrapHistory = loadTrackerId == selectedTrackerId
         bumpTrackerRequestEpoch()
         resetSingleTrackerContext(stopStreaming = false)
         mapViewContext = MapViewContext.SINGLE_TRACKER
@@ -1855,11 +1874,27 @@ class MapFragment : Fragment() {
         if (isSwitching) {
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 if (isAdded) {
-                    mapFlowViewModel.handleIntent(MapIntent.LoadSingleTracker(loadTrackerId, forceReplace = false))
+                    if (loadBootstrapHistory) {
+                        mapFlowViewModel.handleIntent(
+                            MapIntent.LoadSingleTrackerBootstrap(loadTrackerId, forceReplace = false)
+                        )
+                    } else {
+                        mapFlowViewModel.handleIntent(
+                            MapIntent.LoadSingleTrackerRuntime(loadTrackerId, forceReplace = false)
+                        )
+                    }
                 }
             }, 50)
         } else {
-            mapFlowViewModel.handleIntent(MapIntent.LoadSingleTracker(loadTrackerId, forceReplace = false))
+            if (loadBootstrapHistory) {
+                mapFlowViewModel.handleIntent(
+                    MapIntent.LoadSingleTrackerBootstrap(loadTrackerId, forceReplace = false)
+                )
+            } else {
+                mapFlowViewModel.handleIntent(
+                    MapIntent.LoadSingleTrackerRuntime(loadTrackerId, forceReplace = false)
+                )
+            }
         }
         return true
     }
@@ -2506,7 +2541,7 @@ class MapFragment : Fragment() {
         updateFollowLockButton()
         updateTrackerLabel()
         startLiveTrackStreamingForDisplayedTracker()
-        fetchFullGeometryAndApply(sel.id)
+        fetchSingleTrackerHistoryAndApply(sel.id)
     }
 
     private fun onMapTrackerInfoViewInList() {
@@ -2684,7 +2719,7 @@ class MapFragment : Fragment() {
         }
         setDisplayedTrackerPlaceholder(selectedTrackerId, selectedTrackerName)
         updateTrackerLabel()
-        mapFlowViewModel.handleIntent(MapIntent.LoadSingleTracker(trackerId = selectedTrackerId, forceReplace = true))
+        mapFlowViewModel.handleIntent(MapIntent.LoadSingleTrackerRuntime(trackerId = selectedTrackerId, forceReplace = true))
     }
 
     private fun fetchHistory() {
@@ -2699,17 +2734,27 @@ class MapFragment : Fragment() {
             updateTrackerLabel()
             return
         }
-        mapFlowViewModel.handleIntent(
-            MapIntent.LoadSingleTracker(
+        val intent = if (isStreaming()) {
+            MapIntent.LoadSingleTrackerBootstrap(
                 trackerId = displayedTrackerId,
-                forceReplace = false,
-                coordinatesOnly = isStreaming()
+                forceReplace = false
             )
-        )
+        } else {
+            MapIntent.LoadSingleTrackerRuntime(
+                trackerId = displayedTrackerId,
+                forceReplace = false
+            )
+        }
+        mapFlowViewModel.handleIntent(intent)
     }
 
-    private fun fetchFullGeometryAndApply(trackerId: String, forceReplace: Boolean = false) {
-        mapFlowViewModel.handleIntent(MapIntent.LoadSingleTracker(trackerId = trackerId, forceReplace = forceReplace))
+    private fun fetchSingleTrackerHistoryAndApply(trackerId: String, forceReplace: Boolean = false) {
+        mapFlowViewModel.handleIntent(
+            MapIntent.LoadSingleTrackerRuntime(
+                trackerId = trackerId,
+                forceReplace = forceReplace
+            )
+        )
     }
 
     /** Start live streaming for the currently displayed single tracker. */

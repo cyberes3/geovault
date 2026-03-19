@@ -11,7 +11,9 @@ import com.geovault.tracker.data.TrackerRepositoryTrackerDetailRepository
 import com.geovault.tracker.data.TrackerRepositoryTrackerListRepository
 import com.geovault.tracker.fragments.map.MapGroupRepository
 import com.geovault.tracker.fragments.map.MapStreamingRepository
+import com.geovault.tracker.fragments.map.BootstrapMapTrackRepository
 import com.geovault.tracker.fragments.map.MapTrackRepository
+import com.geovault.tracker.fragments.map.RuntimeMapTrackRepository
 import com.geovault.tracker.fragments.map.MapVisibilityRepository
 import com.geovault.tracker.fragments.map.TrackPointBusStreamingRepository
 import com.geovault.tracker.fragments.map.TrackerRepositoryMapGroupRepository
@@ -53,6 +55,18 @@ abstract class TrackerBindingsModule {
     @Binds
     @Singleton
     abstract fun bindMapTrackRepository(impl: TrackerRepositoryMapTrackRepository): MapTrackRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindRuntimeMapTrackRepository(
+        impl: TrackerRepositoryMapTrackRepository
+    ): RuntimeMapTrackRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindBootstrapMapTrackRepository(
+        impl: TrackerRepositoryMapTrackRepository
+    ): BootstrapMapTrackRepository
 
     @Binds
     @Singleton

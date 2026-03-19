@@ -57,17 +57,19 @@ class TrackerRepositoryMapTrackRepository @Inject constructor(
             }
         }
 
-    override suspend fun getTrackersGeometry(trackerIds: List<String>, allData: Boolean): RepositoryResult<List<Tracker>> =
-        suspendCancellableCoroutine { continuation ->
-            TrackerRepository.getTrackersGeometry(appContext, trackerIds, allData = allData) { trackers ->
-                val result = if (trackers != null) {
-                    RepositoryResult.Success(trackers)
-                } else {
-                    RepositoryResult.Failure(AppError.Network)
-                }
-                continuation.resume(result)
+    override suspend fun getTrackersCoordinates(
+        trackerIds: List<String>,
+        allData: Boolean
+    ): RepositoryResult<Map<String, TrackerCoordinatesResponse>> {
+        val result = linkedMapOf<String, TrackerCoordinatesResponse>()
+        for (trackerId in trackerIds) {
+            when (val coordsResult = getTrackerCoordinates(trackerId, allData = allData)) {
+                is RepositoryResult.Success -> result[trackerId] = coordsResult.data
+                is RepositoryResult.Failure -> return RepositoryResult.Failure(coordsResult.error)
             }
         }
+        return RepositoryResult.Success(result)
+    }
 
     override fun getTrackerFromCache(id: String): Tracker? = TrackerRepository.getTrackerFromCache(id)
 }

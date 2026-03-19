@@ -137,18 +137,13 @@ class SharedTrackersFragment : Fragment() {
         recyclerView.adapter = adapter
 
         parentFragmentManager.setFragmentResultListener(TrackersListFragment.REQUEST_REFRESH_LIST, viewLifecycleOwner) { _, bundle ->
-            // Tracker save emits this for owner-tracker list refresh. Shared list should avoid
-            // forcing a groups+trackers refetch in that case and rely on local updates.
-            val skipSharedRefresh = bundle.getBoolean(TrackersListFragment.KEY_SKIP_SHARED_LIST_REFRESH, false)
             val removedTrackerId = bundle.getString(KEY_REMOVED_SHARED_TRACKER_ID)
             if (!removedTrackerId.isNullOrEmpty()) {
                 adapter?.removeTrackerById(removedTrackerId)
                 emptyView.visibility = if ((adapter?.itemCount ?: 0) == 0) View.VISIBLE else View.GONE
                 return@setFragmentResultListener
             }
-            if (!skipSharedRefresh) {
-                loadTrackers()
-            }
+            loadTrackers()
         }
         parentFragmentManager.setFragmentResultListener(GroupsListFragment.REQUEST_GROUPS_REFRESH, viewLifecycleOwner) { _, bundle ->
             val removedGroupId = bundle.getString(KEY_REMOVED_SHARED_GROUP_ID)
@@ -158,11 +153,6 @@ class SharedTrackersFragment : Fragment() {
                 return@setFragmentResultListener
             }
             loadTrackers()
-        }
-        parentFragmentManager.setFragmentResultListener(TrackersListFragment.REQUEST_UPDATE_TRACKER, viewLifecycleOwner) { _, bundle ->
-            val updated = bundle.getParcelable<Tracker>("tracker", Tracker::class.java) ?: return@setFragmentResultListener
-            val hiddenInList = bundle.getBoolean(TrackersListFragment.KEY_UPDATED_TRACKER_HIDDEN, false)
-            adapter?.updateTrackerItem(updated, hiddenInList)
         }
         parentFragmentManager.setFragmentResultListener(REQUEST_ADD_SHARED_ITEMS, viewLifecycleOwner) { _, bundle ->
             addSharedItemsFromBundle(bundle)

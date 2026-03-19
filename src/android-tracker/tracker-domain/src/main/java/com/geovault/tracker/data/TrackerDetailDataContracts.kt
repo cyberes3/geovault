@@ -5,6 +5,10 @@ import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 
 interface TrackerDetailRepository {
-    suspend fun loadTrackerGeometry(context: Context, trackerId: String): RepositoryResult<Tracker>
+    suspend fun loadTrackerMetadata(
+        context: Context,
+        trackerId: String,
+        forceRefresh: Boolean = false
+    ): RepositoryResult<Tracker>
     suspend fun refreshTrackers(context: Context)
 }

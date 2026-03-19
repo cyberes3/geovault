@@ -152,9 +152,9 @@ class TrackerParamsFragment : Fragment() {
             paramsLoadingSpinner.start()
         }
 
-        // Selected track: fill from local cache (geometryCache from map, etc.) when available.
+        // Selected track: reuse local tracker cache when available.
         if (selectedId.isNotEmpty() && id == selectedId) {
-            // Don't clear cache so getTrackerGeometry can return cached geometry/params if available.
+            // Keep selected tracker cache intact for metadata/last-point continuity.
         } else {
             TrackerRepository.clearSelectedTrackerCaches()
         }
@@ -172,8 +172,12 @@ class TrackerParamsFragment : Fragment() {
         }
 
         viewLifecycleOwner.lifecycleScope.launch {
-            // Important: only the single-tracker call drives the params UI. Use geometry endpoint for full track + params.
-            val result = trackerDetailRepository.loadTrackerGeometry(requireContext(), id)
+            // Params/details modal should fetch tracker metadata only, not full geometry.
+            val result = trackerDetailRepository.loadTrackerMetadata(
+                context = requireContext(),
+                trackerId = id,
+                forceRefresh = refresh
+            )
             if (isAdded) {
                 requireActivity().runOnUiThread {
                     paramsLoadingSpinner.stop(hide = false)
@@ -188,14 +192,6 @@ class TrackerParamsFragment : Fragment() {
             // Fire-and-forget: refresh trackers list in background so list is up to date when user goes back.
             val ctx = context ?: return@launch
             trackerDetailRepository.refreshTrackers(ctx)
-            if (!isAdded || activity == null) return@launch
-            requireActivity().runOnUiThread {
-                if (!isAdded || activity == null) return@runOnUiThread
-                requireActivity().supportFragmentManager.setFragmentResult(
-                    TrackersListFragment.REQUEST_UPDATE_LIST_FROM_CACHE,
-                    Bundle()
-                )
-            }
         }
     }
 

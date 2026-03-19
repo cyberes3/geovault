@@ -1,7 +1,6 @@
 package com.geovault.tracker.fragments.map
 
 import com.geovault.tracker.AppError
-import com.geovault.tracker.GeoJsonLineString
 import com.geovault.tracker.Group
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
@@ -79,18 +78,17 @@ class LoadGroupMapUseCaseTest {
         override suspend fun getTrackerCoordinates(id: String, allData: Boolean): RepositoryResult<TrackerCoordinatesResponse> =
             RepositoryResult.Failure(AppError.NotFound)
 
-        override suspend fun getTrackersGeometry(trackerIds: List<String>, allData: Boolean): RepositoryResult<List<Tracker>> {
-            return RepositoryResult.Success(trackerIds.map { id ->
-                Tracker(
-                    id = id,
-                    name = id,
-                    color = null,
-                    geometry = GeoJsonLineString(
-                        type = "LineString",
+        override suspend fun getTrackersCoordinates(
+            trackerIds: List<String>,
+            allData: Boolean
+        ): RepositoryResult<Map<String, TrackerCoordinatesResponse>> {
+            return RepositoryResult.Success(
+                trackerIds.associateWith { id ->
+                    TrackerCoordinatesResponse(
                         coordinates = geometryById[id] ?: emptyList()
                     )
-                )
-            })
+                }
+            )
         }
 
         override fun getTrackerFromCache(id: String): Tracker? = null

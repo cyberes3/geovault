@@ -24,7 +24,8 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class MapViewModel @Inject constructor(
     application: Application,
-    private val trackRepository: MapTrackRepository,
+    private val runtimeTrackRepository: RuntimeMapTrackRepository,
+    private val bootstrapTrackRepository: BootstrapMapTrackRepository,
     private val groupRepository: MapGroupRepository,
     private val visibilityRepository: MapVisibilityRepository,
     private val streamingRepository: MapStreamingRepository
@@ -33,9 +34,9 @@ class MapViewModel @Inject constructor(
         const val TAG = "MapViewModel"
     }
 
-    private val loadSingleTrackerUseCase = LoadSingleTrackerMapUseCase(trackRepository)
-    private val loadAllTrackersUseCase = LoadAllTrackersMapUseCase(trackRepository, groupRepository, visibilityRepository)
-    private val loadGroupMapUseCase = LoadGroupMapUseCase(trackRepository)
+    private val loadSingleTrackerUseCase = LoadSingleTrackerMapUseCase(runtimeTrackRepository, bootstrapTrackRepository)
+    private val loadAllTrackersUseCase = LoadAllTrackersMapUseCase(runtimeTrackRepository, groupRepository, visibilityRepository)
+    private val loadGroupMapUseCase = LoadGroupMapUseCase(runtimeTrackRepository)
     private val handleTrackPointUseCase = HandleTrackPointUseCase()
     private val applyCameraPolicyUseCase = ApplyCameraPolicyUseCase()
     private val resolveMapResumeUseCase = ResolveMapResumeUseCase()
@@ -66,10 +67,15 @@ class MapViewModel @Inject constructor(
 
     fun handleIntent(intent: MapIntent) {
         when (intent) {
-            is MapIntent.LoadSingleTracker -> loadSingle(
+            is MapIntent.LoadSingleTrackerRuntime -> loadSingle(
                 trackerId = intent.trackerId,
                 forceReplace = intent.forceReplace,
-                coordinatesOnly = intent.coordinatesOnly
+                mode = SingleTrackerLoadMode.RUNTIME
+            )
+            is MapIntent.LoadSingleTrackerBootstrap -> loadSingle(
+                trackerId = intent.trackerId,
+                forceReplace = intent.forceReplace,
+                mode = SingleTrackerLoadMode.BOOTSTRAP
             )
             is MapIntent.LoadAllTrackers -> loadAllTrackers()
             is MapIntent.LoadGroup -> loadGroup(intent.group, intent.zoomToTrackerId)
@@ -177,7 +183,11 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    private fun loadSingle(trackerId: String?, forceReplace: Boolean, coordinatesOnly: Boolean) {
+    private fun loadSingle(
+        trackerId: String?,
+        forceReplace: Boolean,
+        mode: SingleTrackerLoadMode
+    ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(loading = true, mode = MapScreenMode.Single)
             val snapshot = loadSingleTrackerUseCase.execute(
@@ -185,7 +195,7 @@ class MapViewModel @Inject constructor(
                 trackerId = trackerId,
                 displayedTrackerId = _uiState.value.displayedTrackerId,
                 forceReplace = forceReplace,
-                coordinatesOnly = coordinatesOnly
+                mode = mode
             )
             if (snapshot == null) {
                 _uiState.value = _uiState.value.copy(loading = false)

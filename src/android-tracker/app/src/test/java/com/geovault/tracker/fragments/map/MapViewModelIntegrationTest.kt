@@ -180,11 +180,37 @@ class MapViewModelIntegrationTest {
         job.cancel()
     }
 
+    @Test
+    fun singleTracker_runtimeDoesNotCallGeometry_bootstrapDoes() = runTest {
+        val stream = MutableSharedFlow<TrackPointEvent>(extraBufferCapacity = 8)
+        val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<Application>()
+        val countingRepo = CountingTrackRepository()
+        val viewModel = MapViewModel(
+            application = app,
+            runtimeTrackRepository = countingRepo,
+            bootstrapTrackRepository = countingRepo,
+            groupRepository = FakeGroupRepository(),
+            visibilityRepository = FakeVisibilityRepository(),
+            streamingRepository = object : MapStreamingRepository {
+                override val events: Flow<TrackPointEvent> = stream
+            }
+        )
+
+        viewModel.handleIntent(MapIntent.LoadSingleTrackerRuntime(trackerId = "t1"))
+        advanceUntilIdle()
+        assertEquals(0, countingRepo.getTrackerGeometryCalls)
+
+        viewModel.handleIntent(MapIntent.LoadSingleTrackerBootstrap(trackerId = "t1"))
+        advanceUntilIdle()
+        assertTrue(countingRepo.getTrackerGeometryCalls > 0)
+    }
+
     private fun createViewModel(stream: MutableSharedFlow<TrackPointEvent>): MapViewModel {
         val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<Application>()
         return MapViewModel(
             application = app,
-            trackRepository = FakeTrackRepository(),
+            runtimeTrackRepository = FakeTrackRepository(),
+            bootstrapTrackRepository = FakeTrackRepository(),
             groupRepository = FakeGroupRepository(),
             visibilityRepository = FakeVisibilityRepository(),
             streamingRepository = object : MapStreamingRepository {
@@ -225,22 +251,65 @@ class MapViewModelIntegrationTest {
             )
         }
 
-        override suspend fun getTrackersGeometry(
+        override suspend fun getTrackersCoordinates(
             trackerIds: List<String>,
             allData: Boolean
-        ): RepositoryResult<List<Tracker>> {
-            return RepositoryResult.Success(trackerIds.map { id ->
+        ): RepositoryResult<Map<String, TrackerCoordinatesResponse>> {
+            return RepositoryResult.Success(
+                trackerIds.associateWith {
+                    TrackerCoordinatesResponse(
+                        coordinates = listOf(listOf(10.0, 20.0), listOf(11.0, 21.0))
+                    )
+                }
+            )
+        }
+
+        override fun getTrackerFromCache(id: String): Tracker? = null
+    }
+
+    private class CountingTrackRepository : MapTrackRepository {
+        var getTrackerGeometryCalls: Int = 0
+
+        override suspend fun getTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> =
+            RepositoryResult.Success(emptyList())
+
+        override suspend fun getTracker(id: String, forceRefresh: Boolean): RepositoryResult<Tracker> =
+            RepositoryResult.Success(Tracker(id = id, name = id, color = null))
+
+        override suspend fun getTrackerGeometry(id: String, allData: Boolean): RepositoryResult<Tracker> {
+            getTrackerGeometryCalls += 1
+            return RepositoryResult.Success(
                 Tracker(
                     id = id,
                     name = id,
                     color = null,
                     geometry = GeoJsonLineString(
                         type = "LineString",
-                        coordinates = listOf(listOf(10.0, 20.0), listOf(11.0, 21.0))
+                        coordinates = listOf(listOf(1.0, 2.0), listOf(3.0, 4.0))
                     )
                 )
-            })
+            )
         }
+
+        override suspend fun getTrackerCoordinates(
+            id: String,
+            allData: Boolean
+        ): RepositoryResult<TrackerCoordinatesResponse> = RepositoryResult.Success(
+            TrackerCoordinatesResponse(
+                coordinates = listOf(listOf(1.0, 2.0), listOf(3.0, 4.0))
+            )
+        )
+
+        override suspend fun getTrackersCoordinates(
+            trackerIds: List<String>,
+            allData: Boolean
+        ): RepositoryResult<Map<String, TrackerCoordinatesResponse>> = RepositoryResult.Success(
+            trackerIds.associateWith {
+                TrackerCoordinatesResponse(
+                    coordinates = listOf(listOf(1.0, 2.0), listOf(3.0, 4.0))
+                )
+            }
+        )
 
         override fun getTrackerFromCache(id: String): Tracker? = null
     }

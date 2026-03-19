@@ -55,10 +55,14 @@ data class MapUiState(
 )
 
 sealed class MapIntent {
-    data class LoadSingleTracker(
+    data class LoadSingleTrackerRuntime(
         val trackerId: String?,
-        val forceReplace: Boolean = false,
-        val coordinatesOnly: Boolean = false
+        val forceReplace: Boolean = false
+    ) : MapIntent()
+
+    data class LoadSingleTrackerBootstrap(
+        val trackerId: String?,
+        val forceReplace: Boolean = false
     ) : MapIntent()
 
     data object LoadAllTrackers : MapIntent()

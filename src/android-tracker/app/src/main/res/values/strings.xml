@@ -122,6 +122,7 @@
     <string name="logging_help_message">Logging interval – seconds between points. Suggested: 30 for walking, 15 for biking, 10 for driving. Use 0 for maximum frequency (more battery use).\n\nDistance filter – minimum distance between points. Suggested: 10m/30ft for walking, 30m/100ft for biking, 100m/330ft for driving. Use 0 to log as often as the interval allows.\n\nOnly log if significant motion – when on, the app logs only after your device detects significant activity (e.g. walking, biking, driving). The device uses its built-in motion sensor; no points are recorded while you stay still, which saves battery. On some devices this option may be disabled if the sensor is not available.\n\nBiking mode is good for driving if you aren\'t needing super high accuracy and is a little more battery efficient.</string>
 
     <!-- Tracking profiles -->
+    <string name="tracking_settings_apply_after_restart">Changes to tracking and logging settings apply the next time you start tracking.</string>
     <string name="auto_tracking_label">Auto Tracking Mode</string>
     <string name="tracking_profile_label">Tracking Profile</string>
     <string name="profile_walking">Walking</string>

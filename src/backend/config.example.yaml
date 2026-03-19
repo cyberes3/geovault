@@ -252,7 +252,7 @@ extensions:
     # Location tracking server for devices to publish live location tracks to.
     enabled: true
     # Maximum number of points to keep per track. Oldest points are removed when exceeded.
-    max_points: 1000
+    max_points: 2000
     # Domain used for the Hauk-compatible API (e.g. hauk.geovault.example.com).
     # Configure your reverse proxy to route this host to the live_track extension root so the app sees /api/create.php etc.
     # Instructions are in the installation docs.

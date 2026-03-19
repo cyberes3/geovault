@@ -211,8 +211,16 @@
                 android:background="@drawable/edit_text_background"
                 android:textSize="16sp"
                 android:textColor="@color/text_primary"
-                android:layout_marginBottom="24dp"
                 android:minHeight="56dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/tracking_settings_apply_after_restart"
+                android:textSize="13sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="24dp" />
 
             <!-- HR between logging/filter and connection details -->
             <View

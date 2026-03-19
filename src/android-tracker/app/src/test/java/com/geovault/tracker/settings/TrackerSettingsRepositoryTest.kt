@@ -73,4 +73,39 @@ class TrackerSettingsRepositoryTest {
         assertEquals(TrackerSettings.MIN_DISTANCE_FILTER_METERS, settings.distanceFilterMeters, 0.0001f)
         assertEquals(TrackerSettings.MAX_ACCURACY_FILTER_METERS, settings.accuracyFilterMeters, 0.0001f)
     }
+
+    @Test
+    fun setTrackingProfile_presetUpdatesNumericSettings() {
+        val repository = TrackerSettingsRepositoryImpl(context)
+
+        repository.setTrackingProfile(TrackerTrackingProfile.WALKING)
+        var settings = repository.getSettings()
+        assertEquals(TrackerTrackingProfile.WALKING, settings.trackingProfile)
+        assertEquals(30L, settings.loggingIntervalSec)
+        assertEquals(10f, settings.distanceFilterMeters, 0.0001f)
+        assertEquals(50f, settings.accuracyFilterMeters, 0.0001f)
+
+        repository.setTrackingProfile(TrackerTrackingProfile.DRIVING)
+        settings = repository.getSettings()
+        assertEquals(TrackerTrackingProfile.DRIVING, settings.trackingProfile)
+        assertEquals(10L, settings.loggingIntervalSec)
+        assertEquals(100f, settings.distanceFilterMeters, 0.0001f)
+        assertEquals(200f, settings.accuracyFilterMeters, 0.0001f)
+    }
+
+    @Test
+    fun setTrackingProfile_customPreservesNumericSettings() {
+        val repository = TrackerSettingsRepositoryImpl(context)
+        repository.setLoggingIntervalSec(22L)
+        repository.setDistanceFilterMeters(33f)
+        repository.setAccuracyFilterMeters(44f)
+
+        repository.setTrackingProfile(TrackerTrackingProfile.CUSTOM)
+        val settings = repository.getSettings()
+
+        assertEquals(TrackerTrackingProfile.CUSTOM, settings.trackingProfile)
+        assertEquals(22L, settings.loggingIntervalSec)
+        assertEquals(33f, settings.distanceFilterMeters, 0.0001f)
+        assertEquals(44f, settings.accuracyFilterMeters, 0.0001f)
+    }
 }

@@ -19,10 +19,8 @@ internal sealed class MapResumeDecision {
     data object MultiContextNoStreaming : MapResumeDecision()
     data class StartMultiContextStreaming(val trackerIds: Set<String>) : MapResumeDecision()
     data object ClearSingleTrackerState : MapResumeDecision()
-    data class LoadSingleTracker(
-        val trackerId: String,
-        val coordinatesOnly: Boolean = false
-    ) : MapResumeDecision()
+    data class LoadSingleTrackerRuntime(val trackerId: String) : MapResumeDecision()
+    data class LoadSingleTrackerBootstrap(val trackerId: String) : MapResumeDecision()
     data object RestartDisplayedTrackerStreaming : MapResumeDecision()
 }
 
@@ -49,7 +47,10 @@ internal class ResolveMapResumeUseCase {
                 // Keep live in-memory track state when user returns to map during active tracking.
                 return MapResumeDecision.NoOp
             }
-            // Tracking runtime should never reload historical geometry.
+            if (activeTrackerId.isNotEmpty()) {
+                // Tracking runtime may need a lightweight runtime reload after process/view recreation.
+                return MapResumeDecision.LoadSingleTrackerRuntime(activeTrackerId)
+            }
             return MapResumeDecision.NoOp
         }
 
@@ -72,22 +73,25 @@ internal class ResolveMapResumeUseCase {
         if (activeTrackerId.isEmpty() && !input.hasPendingInitialTracker) {
             return MapResumeDecision.ClearSingleTrackerState
         }
-        val coordinatesOnly = activeTrackerId.isNotEmpty() && activeTrackerId in input.activeStreamedTrackerIds
         if (!input.hasTrackPoints && activeTrackerId.isNotEmpty()) {
-            return MapResumeDecision.LoadSingleTracker(
-                trackerId = activeTrackerId,
-                coordinatesOnly = coordinatesOnly
-            )
+            val isStreamBootstrap = activeTrackerId in input.activeStreamedTrackerIds
+            return if (isStreamBootstrap) {
+                MapResumeDecision.LoadSingleTrackerBootstrap(activeTrackerId)
+            } else {
+                MapResumeDecision.LoadSingleTrackerRuntime(activeTrackerId)
+            }
         }
         if (!input.trackingRunning &&
             input.hasTrackPoints &&
             activeTrackerId.isNotEmpty() &&
             input.backgroundedDurationMs >= BACKFILL_MIN_BACKGROUND_MS
         ) {
-            return MapResumeDecision.LoadSingleTracker(
-                trackerId = activeTrackerId,
-                coordinatesOnly = coordinatesOnly
-            )
+            val isStreamBootstrap = activeTrackerId in input.activeStreamedTrackerIds
+            return if (isStreamBootstrap) {
+                MapResumeDecision.LoadSingleTrackerBootstrap(activeTrackerId)
+            } else {
+                MapResumeDecision.LoadSingleTrackerRuntime(activeTrackerId)
+            }
         }
         return MapResumeDecision.RestartDisplayedTrackerStreaming
     }

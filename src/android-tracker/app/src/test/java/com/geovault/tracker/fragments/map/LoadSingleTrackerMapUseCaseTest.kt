@@ -19,7 +19,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [28], manifest = Config.NONE)
 class LoadSingleTrackerMapUseCaseTest {
     @Test
-    fun execute_returnsGeometryWhenAvailable() {
+    fun execute_bootstrap_returnsGeometryWhenAvailable() {
         val repository = FakeTrackRepository(
             geometryById = mapOf(
                 "t1" to Tracker(
@@ -33,7 +33,10 @@ class LoadSingleTrackerMapUseCaseTest {
                 )
             )
         )
-        val useCase = LoadSingleTrackerMapUseCase(repository)
+        val useCase = LoadSingleTrackerMapUseCase(
+            runtimeRepository = repository,
+            bootstrapRepository = repository
+        )
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<Context>()
 
         val snapshot = runBlocking {
@@ -41,7 +44,8 @@ class LoadSingleTrackerMapUseCaseTest {
                 context = context,
                 trackerId = "t1",
                 displayedTrackerId = null,
-                forceReplace = false
+                forceReplace = false,
+                mode = SingleTrackerLoadMode.BOOTSTRAP
             )
         }
 
@@ -53,7 +57,7 @@ class LoadSingleTrackerMapUseCaseTest {
     }
 
     @Test
-    fun execute_fallsBackToCoordinatesWhenGeometryMissing() {
+    fun execute_bootstrap_fallsBackToCoordinatesWhenGeometryMissing() {
         val repository = FakeTrackRepository(
             trackerById = mapOf("t2" to Tracker(id = "t2", name = "Tracker 2", color = null)),
             coordinatesById = mapOf(
@@ -62,7 +66,10 @@ class LoadSingleTrackerMapUseCaseTest {
                 )
             )
         )
-        val useCase = LoadSingleTrackerMapUseCase(repository)
+        val useCase = LoadSingleTrackerMapUseCase(
+            runtimeRepository = repository,
+            bootstrapRepository = repository
+        )
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<Context>()
 
         val snapshot = runBlocking {
@@ -70,7 +77,8 @@ class LoadSingleTrackerMapUseCaseTest {
                 context = context,
                 trackerId = "t2",
                 displayedTrackerId = null,
-                forceReplace = true
+                forceReplace = true,
+                mode = SingleTrackerLoadMode.BOOTSTRAP
             )
         }
 
@@ -82,7 +90,7 @@ class LoadSingleTrackerMapUseCaseTest {
     }
 
     @Test
-    fun execute_prefersRicherCoordinatePayloadWhenGeometryIsShort() {
+    fun execute_bootstrap_prefersRicherCoordinatePayloadWhenGeometryIsShort() {
         val repository = FakeTrackRepository(
             geometryById = mapOf(
                 "t3" to Tracker(
@@ -105,7 +113,10 @@ class LoadSingleTrackerMapUseCaseTest {
                 )
             )
         )
-        val useCase = LoadSingleTrackerMapUseCase(repository)
+        val useCase = LoadSingleTrackerMapUseCase(
+            runtimeRepository = repository,
+            bootstrapRepository = repository
+        )
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<Context>()
 
         val snapshot = runBlocking {
@@ -113,7 +124,8 @@ class LoadSingleTrackerMapUseCaseTest {
                 context = context,
                 trackerId = "t3",
                 displayedTrackerId = null,
-                forceReplace = false
+                forceReplace = false,
+                mode = SingleTrackerLoadMode.BOOTSTRAP
             )
         }
 
@@ -125,7 +137,7 @@ class LoadSingleTrackerMapUseCaseTest {
     }
 
     @Test
-    fun execute_dropsSinglePointHistoryBaseline() {
+    fun execute_bootstrap_dropsSinglePointHistoryBaseline() {
         val repository = FakeTrackRepository(
             geometryById = mapOf(
                 "t4" to Tracker(
@@ -139,7 +151,10 @@ class LoadSingleTrackerMapUseCaseTest {
                 )
             )
         )
-        val useCase = LoadSingleTrackerMapUseCase(repository)
+        val useCase = LoadSingleTrackerMapUseCase(
+            runtimeRepository = repository,
+            bootstrapRepository = repository
+        )
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<Context>()
 
         val snapshot = runBlocking {
@@ -147,7 +162,8 @@ class LoadSingleTrackerMapUseCaseTest {
                 context = context,
                 trackerId = "t4",
                 displayedTrackerId = null,
-                forceReplace = false
+                forceReplace = false,
+                mode = SingleTrackerLoadMode.BOOTSTRAP
             )
         }
 
@@ -157,7 +173,7 @@ class LoadSingleTrackerMapUseCaseTest {
     }
 
     @Test
-    fun execute_coordinatesOnly_skipsGeometryEndpoint() {
+    fun execute_runtime_skipsGeometryEndpoint() {
         val repository = FakeTrackRepository(
             geometryById = mapOf(
                 "t5" to Tracker(
@@ -180,7 +196,10 @@ class LoadSingleTrackerMapUseCaseTest {
                 )
             )
         )
-        val useCase = LoadSingleTrackerMapUseCase(repository)
+        val useCase = LoadSingleTrackerMapUseCase(
+            runtimeRepository = repository,
+            bootstrapRepository = repository
+        )
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<Context>()
 
         val snapshot = runBlocking {
@@ -189,7 +208,7 @@ class LoadSingleTrackerMapUseCaseTest {
                 trackerId = "t5",
                 displayedTrackerId = null,
                 forceReplace = false,
-                coordinatesOnly = true
+                mode = SingleTrackerLoadMode.RUNTIME
             )
         }
 
@@ -225,10 +244,10 @@ class LoadSingleTrackerMapUseCaseTest {
             return coordinatesById[id]?.let { RepositoryResult.Success(it) } ?: RepositoryResult.Failure(AppError.NotFound)
         }
 
-        override suspend fun getTrackersGeometry(
+        override suspend fun getTrackersCoordinates(
             trackerIds: List<String>,
             allData: Boolean
-        ): RepositoryResult<List<Tracker>> = RepositoryResult.Success(emptyList())
+        ): RepositoryResult<Map<String, TrackerCoordinatesResponse>> = RepositoryResult.Success(emptyMap())
 
         override fun getTrackerFromCache(id: String): Tracker? = cacheById[id]
     }

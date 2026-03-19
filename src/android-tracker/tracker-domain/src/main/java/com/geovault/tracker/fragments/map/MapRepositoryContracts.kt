@@ -8,14 +8,23 @@ import com.geovault.tracker.TrackerCoordinatesResponse
 import com.geovault.tracker.pipeline.TrackPointEvent
 import kotlinx.coroutines.flow.Flow
 
-interface MapTrackRepository {
+interface RuntimeMapTrackRepository {
     suspend fun getTrackers(forceRefresh: Boolean = false): RepositoryResult<List<Tracker>>
     suspend fun getTracker(id: String, forceRefresh: Boolean = false): RepositoryResult<Tracker>
-    suspend fun getTrackerGeometry(id: String, allData: Boolean = false): RepositoryResult<Tracker>
     suspend fun getTrackerCoordinates(id: String, allData: Boolean = false): RepositoryResult<TrackerCoordinatesResponse>
-    suspend fun getTrackersGeometry(trackerIds: List<String>, allData: Boolean = true): RepositoryResult<List<Tracker>>
+    suspend fun getTrackersCoordinates(
+        trackerIds: List<String>,
+        allData: Boolean = true
+    ): RepositoryResult<Map<String, TrackerCoordinatesResponse>>
     fun getTrackerFromCache(id: String): Tracker?
 }
+
+interface BootstrapMapTrackRepository : RuntimeMapTrackRepository {
+    suspend fun getTrackerGeometry(id: String, allData: Boolean = false): RepositoryResult<Tracker>
+}
+
+// Transitional aggregate contract kept for compatibility with existing tests/fakes.
+interface MapTrackRepository : BootstrapMapTrackRepository
 
 interface MapGroupRepository {
     suspend fun getGroups(forceRefresh: Boolean = false): RepositoryResult<List<Group>>

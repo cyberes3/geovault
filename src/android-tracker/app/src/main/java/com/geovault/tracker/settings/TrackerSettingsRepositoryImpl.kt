@@ -79,7 +79,32 @@ class TrackerSettingsRepositoryImpl @Inject constructor(
     }
 
     override fun setTrackingProfile(profile: TrackerTrackingProfile) {
-        prefs.edit().putString(KEY_TRACKING_PROFILE, profile.index.toString()).apply()
+        val editor = prefs.edit()
+            .putString(KEY_TRACKING_PROFILE, profile.index.toString())
+        when (profile) {
+            TrackerTrackingProfile.WALKING -> {
+                editor
+                    .putString(KEY_LOGGING_INTERVAL, "30")
+                    .putString(KEY_LOGGING_DISTANCE, "10")
+                    .putString(KEY_LOGGING_ACCURACY, "50")
+            }
+            TrackerTrackingProfile.BIKING -> {
+                editor
+                    .putString(KEY_LOGGING_INTERVAL, "15")
+                    .putString(KEY_LOGGING_DISTANCE, "30")
+                    .putString(KEY_LOGGING_ACCURACY, "100")
+            }
+            TrackerTrackingProfile.DRIVING -> {
+                editor
+                    .putString(KEY_LOGGING_INTERVAL, "10")
+                    .putString(KEY_LOGGING_DISTANCE, "100")
+                    .putString(KEY_LOGGING_ACCURACY, "200")
+            }
+            TrackerTrackingProfile.CUSTOM -> {
+                // Preserve custom numeric values when switching to Custom.
+            }
+        }
+        editor.apply()
     }
 
     override fun setLoggingIntervalSec(value: Long) {

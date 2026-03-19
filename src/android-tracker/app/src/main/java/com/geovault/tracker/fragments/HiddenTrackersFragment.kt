@@ -188,7 +188,10 @@ class HiddenTrackersFragment : Fragment() {
                 TrackerSettingsRequest(hidden_in_list = false)
             )
             if (result is com.geovault.tracker.RepositoryResult.Success) {
-                TrackersListFragment.pendingFullRefresh = true
+                requireActivity().supportFragmentManager.setFragmentResult(
+                    TrackersListFragment.REQUEST_REFRESH_LIST,
+                    Bundle()
+                )
                 onSuccess?.invoke()
             } else {
                 navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
@@ -206,7 +209,10 @@ class HiddenTrackersFragment : Fragment() {
                     TrackerSettingsRequest(hidden_in_list = false)
                 )
             }
-            TrackersListFragment.pendingFullRefresh = true
+            requireActivity().supportFragmentManager.setFragmentResult(
+                TrackersListFragment.REQUEST_REFRESH_LIST,
+                Bundle()
+            )
             onComplete()
         }
     }

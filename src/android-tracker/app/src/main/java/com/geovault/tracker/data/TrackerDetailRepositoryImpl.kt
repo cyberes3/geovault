@@ -9,13 +9,19 @@ import javax.inject.Inject
 import kotlin.coroutines.resume
 
 class TrackerRepositoryTrackerDetailRepository @Inject constructor() : TrackerDetailRepository {
-    override suspend fun loadTrackerGeometry(
+    override suspend fun loadTrackerMetadata(
         context: Context,
-        trackerId: String
+        trackerId: String,
+        forceRefresh: Boolean
     ): RepositoryResult<Tracker> = suspendCancellableCoroutine { continuation ->
-        TrackerRepository.getTrackerGeometryResult(context, trackerId, allData = true, callback = { result ->
+        TrackerRepository.getTracker(context, trackerId, forceRefresh = forceRefresh) { tracker ->
+            val result = if (tracker != null) {
+                RepositoryResult.Success(tracker)
+            } else {
+                RepositoryResult.Failure(com.geovault.tracker.AppError.NotFound)
+            }
             continuation.resume(result)
-        })
+        }
     }
 
     override suspend fun refreshTrackers(context: Context) {

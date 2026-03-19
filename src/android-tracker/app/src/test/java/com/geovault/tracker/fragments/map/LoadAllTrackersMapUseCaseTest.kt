@@ -37,18 +37,17 @@ class LoadAllTrackersMapUseCaseTest {
             override suspend fun getTrackerCoordinates(id: String, allData: Boolean): RepositoryResult<TrackerCoordinatesResponse> =
                 RepositoryResult.Failure(com.geovault.tracker.AppError.NotFound)
 
-            override suspend fun getTrackersGeometry(trackerIds: List<String>, allData: Boolean): RepositoryResult<List<Tracker>> {
-                return RepositoryResult.Success(trackerIds.map { id ->
-                    Tracker(
-                        id = id,
-                        name = id,
-                        color = null,
-                        geometry = com.geovault.tracker.GeoJsonLineString(
-                            type = "LineString",
+            override suspend fun getTrackersCoordinates(
+                trackerIds: List<String>,
+                allData: Boolean
+            ): RepositoryResult<Map<String, TrackerCoordinatesResponse>> {
+                return RepositoryResult.Success(
+                    trackerIds.associateWith {
+                        TrackerCoordinatesResponse(
                             coordinates = listOf(listOf(10.0, 20.0), listOf(11.0, 21.0))
                         )
-                    )
-                })
+                    }
+                )
             }
 
             override fun getTrackerFromCache(id: String): Tracker? = null
