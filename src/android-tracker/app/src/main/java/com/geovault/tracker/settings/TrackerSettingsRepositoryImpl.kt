@@ -164,7 +164,7 @@ class TrackerSettingsRepositoryImpl @Inject constructor(
             sendExtendedData = prefs.getBoolean(KEY_EXTENDED_PARAMS, true),
             significantDataOnly = prefs.getBoolean(KEY_SIGNIFICANT_MOTION_ONLY, true),
             resetTrackingIfKilled = prefs.getBoolean(KEY_RESTART_TRACKING_IF_KILLED, true),
-            autoTrackingMode = prefs.getBoolean(KEY_AUTO_TRACKING_ENABLED, false),
+            autoTrackingMode = prefs.getBoolean(KEY_AUTO_TRACKING_ENABLED, true),
             trackingProfile = TrackerTrackingProfile.fromIndex(profileIndex),
             startOnBoot = prefs.getBoolean(KEY_START_ON_BOOT, false),
             startTrackingOnLaunch = prefs.getBoolean(KEY_START_TRACKING_ON_LAUNCH, false)

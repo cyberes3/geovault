@@ -7,7 +7,7 @@ data class TrackerSettings(
     val sendExtendedData: Boolean = true,
     val significantDataOnly: Boolean = true,
     val resetTrackingIfKilled: Boolean = true,
-    val autoTrackingMode: Boolean = false,
+    val autoTrackingMode: Boolean = true,
     val trackingProfile: TrackerTrackingProfile = TrackerTrackingProfile.BIKING,
     val startOnBoot: Boolean = false,
     val startTrackingOnLaunch: Boolean = false
