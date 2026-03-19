@@ -57,6 +57,10 @@ object TrackerRepository {
         }
     }
 
+    private fun boolResult(success: Boolean): RepositoryResult<Unit> {
+        return if (success) RepositoryResult.Success(Unit) else RepositoryResult.Failure(AppError.Unknown)
+    }
+
     fun getTrackersResult(
         context: Context,
         forceRefresh: Boolean = false,
@@ -511,7 +515,8 @@ object TrackerRepository {
                             } else {
                                 json.optString("error", body.take(200))
                             }
-                        } catch (_: Exception) {
+                        } catch (e: Exception) {
+                            Log.w("TrackerRepository", "Could not parse tracker settings error response", e)
                             body.take(200)
                         }
                     }
@@ -826,7 +831,8 @@ object TrackerRepository {
                     try {
                         val json = org.json.JSONObject(body)
                         json.optString("detail", json.optString("name", body.take(200)))
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        Log.w("TrackerRepository", "Could not parse create group error response", e)
                         body.take(200)
                     }
                 }
@@ -875,7 +881,8 @@ object TrackerRepository {
                     try {
                         val json = org.json.JSONObject(body)
                         json.optString("detail", json.optString("name", body.take(200)))
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        Log.w("TrackerRepository", "Could not parse patch group error response", e)
                         body.take(200)
                     }
                 }
@@ -925,7 +932,8 @@ object TrackerRepository {
                     try {
                         val json = org.json.JSONObject(body)
                         json.optString("detail", json.optString("error", body.take(200)))
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        Log.w("TrackerRepository", "Could not parse add group track error response", e)
                         body.take(200)
                     }
                 }
@@ -1162,12 +1170,18 @@ object TrackerRepository {
             }
         }
 
+    suspend fun clearTrackerHistoryResultSuspend(context: Context, id: String): RepositoryResult<Unit> =
+        boolResult(clearTrackerHistorySuspend(context, id))
+
     suspend fun deleteTrackerSuspend(context: Context, id: String): Boolean =
         suspendCancellableCoroutine { continuation ->
             deleteTracker(context, id) { success ->
                 continuation.resume(success)
             }
         }
+
+    suspend fun deleteTrackerResultSuspend(context: Context, id: String): RepositoryResult<Unit> =
+        boolResult(deleteTrackerSuspend(context, id))
 
     suspend fun fetchTrackerKmlSuspend(context: Context, trackerId: String): ResponseBody? =
         suspendCancellableCoroutine { continuation ->
@@ -1197,12 +1211,20 @@ object TrackerRepository {
             }
         }
 
+    suspend fun unsubscribeTrackerResultSuspend(
+        context: Context,
+        trackerId: String
+    ): RepositoryResult<Unit> = boolResult(unsubscribeTrackerSuspend(context, trackerId))
+
     suspend fun leaveGroupSuspend(context: Context, groupId: String): Boolean =
         suspendCancellableCoroutine { continuation ->
             leaveGroup(context, groupId) { success ->
                 continuation.resume(success)
             }
         }
+
+    suspend fun leaveGroupResultSuspend(context: Context, groupId: String): RepositoryResult<Unit> =
+        boolResult(leaveGroupSuspend(context, groupId))
 
     suspend fun patchGroupResultSuspend(
         context: Context,
@@ -1229,4 +1251,7 @@ object TrackerRepository {
                 continuation.resume(success)
             }
         }
+
+    suspend fun deleteGroupResultSuspend(context: Context, id: String): RepositoryResult<Unit> =
+        boolResult(deleteGroupSuspend(context, id))
 }

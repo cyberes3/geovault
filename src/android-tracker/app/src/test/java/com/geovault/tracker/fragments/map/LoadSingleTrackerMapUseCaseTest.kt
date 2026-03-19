@@ -1,7 +1,9 @@
 package com.geovault.tracker.fragments.map
 
 import android.content.Context
+import com.geovault.tracker.AppError
 import com.geovault.tracker.GeoJsonLineString
+import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerCoordinatesResponse
 import kotlinx.coroutines.runBlocking
@@ -86,17 +88,28 @@ class LoadSingleTrackerMapUseCaseTest {
     ) : MapTrackRepository {
         val geometryAllDataRequests = mutableListOf<Boolean>()
         val coordinatesAllDataRequests = mutableListOf<Boolean>()
-        override suspend fun getTrackers(context: Context, forceRefresh: Boolean): List<Tracker> = emptyList()
-        override suspend fun getTracker(context: Context, id: String, forceRefresh: Boolean): Tracker? = trackerById[id]
-        override suspend fun getTrackerGeometry(context: Context, id: String, allData: Boolean): Tracker? {
+        override suspend fun getTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> =
+            RepositoryResult.Success(emptyList())
+
+        override suspend fun getTracker(id: String, forceRefresh: Boolean): RepositoryResult<Tracker> {
+            return trackerById[id]?.let { RepositoryResult.Success(it) } ?: RepositoryResult.Failure(AppError.NotFound)
+        }
+
+        override suspend fun getTrackerGeometry(id: String, allData: Boolean): RepositoryResult<Tracker> {
             geometryAllDataRequests += allData
-            return geometryById[id]
+            return geometryById[id]?.let { RepositoryResult.Success(it) } ?: RepositoryResult.Failure(AppError.NotFound)
         }
-        override suspend fun getTrackerCoordinates(context: Context, id: String, allData: Boolean): TrackerCoordinatesResponse? {
+
+        override suspend fun getTrackerCoordinates(id: String, allData: Boolean): RepositoryResult<TrackerCoordinatesResponse> {
             coordinatesAllDataRequests += allData
-            return coordinatesById[id]
+            return coordinatesById[id]?.let { RepositoryResult.Success(it) } ?: RepositoryResult.Failure(AppError.NotFound)
         }
-        override suspend fun getTrackersGeometry(context: Context, trackerIds: List<String>, allData: Boolean): List<Tracker> = emptyList()
+
+        override suspend fun getTrackersGeometry(
+            trackerIds: List<String>,
+            allData: Boolean
+        ): RepositoryResult<List<Tracker>> = RepositoryResult.Success(emptyList())
+
         override fun getTrackerFromCache(id: String): Tracker? = cacheById[id]
     }
 }

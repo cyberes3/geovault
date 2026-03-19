@@ -127,7 +127,7 @@ class SharedTrackersFragment : Fragment() {
                         act.showEditSharedGroupFragment(group)
                     } else {
                         requireActivity().supportFragmentManager.beginTransaction()
-                            .add(R.id.fragment_overlay_container, GroupDetailBottomSheet.newInstance(group), "group_detail")
+                            .add(R.id.fragment_overlay_container, GroupDetailFragment.newInstance(group), "group_detail")
                             .addToBackStack("group_detail")
                             .commit()
                     }

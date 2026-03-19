@@ -9,6 +9,13 @@ plugins {
 }
 
 apply plugin: 'dagger.hilt.android.plugin'
+def roomSchemaDir = "$projectDir/schemas"
+
+ksp {
+    arg("room.schemaLocation", roomSchemaDir)
+    arg("room.incremental", "true")
+    arg("room.generateKotlin", "true")
+}
 
 
 // Helper function to get git commit hash (non-blocking)
@@ -180,4 +187,5 @@ dependencies {
     testImplementation 'org.robolectric:robolectric:4.11.1'
     testImplementation 'androidx.test:core:1.5.0'
     testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
+    testImplementation "androidx.room:room-testing:$room_version"
 }

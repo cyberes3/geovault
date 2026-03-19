@@ -15,7 +15,6 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.widget.NestedScrollView
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
@@ -27,6 +26,7 @@ import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.settings.TrackerSettings
 import com.geovault.tracker.settings.TrackerTrackingProfile
+import com.geovault.tracker.ui.applyDialogButtonColors
 import com.google.android.material.button.MaterialButton
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -386,12 +386,7 @@ class SettingsFragment : Fragment() {
             }
             .setNegativeButton(getString(R.string.cancel_button), null)
             .show()
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(
-            ContextCompat.getColor(requireContext(), R.color.error_red)
-        )
-        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(
-            ContextCompat.getColor(requireContext(), com.geovault.common.R.color.gv_common_dialog_negative_button)
-        )
+        dialog.applyDialogButtonColors(requireContext(), destructiveAction = true)
     }
 
     override fun onResume() {

@@ -12,10 +12,8 @@ import android.widget.AutoCompleteTextView
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.geovault.tracker.RepositoryResult
@@ -29,6 +27,7 @@ import com.geovault.tracker.Tracker
 import com.geovault.tracker.UserItem
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.navigation.navHost
+import com.geovault.tracker.ui.applyDialogButtonColors
 import com.geovault.common.LoadingSpinner
 import com.geovault.common.NaturalSort
 import com.geovault.common.R as CommonR
@@ -118,9 +117,9 @@ class EditTrackerFragment : Fragment() {
         if (bytes == null || !isAdded) return@registerForActivityResult
         try {
             requireContext().contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
-            Toast.makeText(requireContext(), getString(R.string.kml_exported), Toast.LENGTH_SHORT).show()
+            navHost()?.showSnackbar(getString(R.string.kml_exported))
         } catch (e: Exception) {
-            navHost()?.showSnackbar("Failed to save KML")
+            navHost()?.showSnackbar(getString(R.string.failed_to_save_kml))
         }
     }
 
@@ -233,7 +232,7 @@ class EditTrackerFragment : Fragment() {
                 val fullUrl = if (url.startsWith("http")) url else "$base$url"
                 val cm = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                 cm?.setPrimaryClip(ClipData.newPlainText("World share link", fullUrl))
-                Toast.makeText(requireContext(), getString(R.string.world_link_copied), Toast.LENGTH_SHORT).show()
+                navHost()?.showSnackbar(getString(R.string.world_link_copied))
             }
         }
 
@@ -308,7 +307,7 @@ class EditTrackerFragment : Fragment() {
             val name = nameEdit.text.toString().trim()
             val color = colorEdit.text.toString().trim().ifEmpty { null }
             if (name.isEmpty()) {
-                navHost()?.showSnackbar("Name is required")
+                navHost()?.showSnackbar(getString(R.string.name_required))
                 return@setOnClickListener
             }
             val recentDataWindow = if (selectedRecentDataIndex in recentDataValues.indices) recentDataValues[selectedRecentDataIndex] else ""
@@ -340,7 +339,7 @@ class EditTrackerFragment : Fragment() {
                     }
                     is RepositoryResult.Failure -> {
                         setAllInputsEnabled(true)
-                        navHost()?.showSnackbar("Failed to save tracker")
+                        navHost()?.showSnackbar(getString(R.string.failed_to_save_tracker))
                     }
                 }
             }
@@ -356,10 +355,10 @@ class EditTrackerFragment : Fragment() {
                         when (trackerManagementRepository.clearTrackerHistory(trackerId)) {
                             is RepositoryResult.Success -> {
                                 historyClearedThisSession = true
-                                Toast.makeText(requireContext(), getString(R.string.history_cleared), Toast.LENGTH_SHORT).show()
+                                navHost()?.showSnackbar(getString(R.string.history_cleared))
                             }
                             is RepositoryResult.Failure -> {
-                                navHost()?.showSnackbar("Failed to clear history")
+                                navHost()?.showSnackbar(getString(R.string.failed_to_clear_history))
                             }
                         }
                         setAllInputsEnabled(true)
@@ -383,23 +382,18 @@ class EditTrackerFragment : Fragment() {
                                     SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
                                 }
                                 requireActivity().supportFragmentManager.popBackStack()
-                                Toast.makeText(requireContext(), getString(R.string.tracker_deleted), Toast.LENGTH_SHORT).show()
+                                navHost()?.showSnackbar(getString(R.string.tracker_deleted))
                             }
                             is RepositoryResult.Failure -> {
                                 setAllInputsEnabled(true)
-                                navHost()?.showSnackbar("Failed to delete tracker")
+                                navHost()?.showSnackbar(getString(R.string.failed_to_delete_tracker))
                             }
                         }
                     }
                 }
                 .setNegativeButton(getString(R.string.cancel_button), null)
                 .show()
-            confirmDialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(
-                ContextCompat.getColor(requireContext(), R.color.error_red)
-            )
-            confirmDialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(
-                ContextCompat.getColor(requireContext(), com.geovault.common.R.color.gv_common_dialog_negative_button)
-            )
+            confirmDialog.applyDialogButtonColors(requireContext(), destructiveAction = true)
         }
     }
 
@@ -515,7 +509,7 @@ class EditTrackerFragment : Fragment() {
                         pendingKmlExportBytes = result.data
                         createKmlDocumentLauncher.launch("$safeName.kml")
                     } catch (e: Exception) {
-                        navHost()?.showSnackbar("Failed to save KML")
+                        navHost()?.showSnackbar(getString(R.string.failed_to_save_kml))
                     }
                 }
                 is RepositoryResult.Failure -> navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
@@ -571,9 +565,7 @@ class EditTrackerFragment : Fragment() {
             .setPositiveButton(getString(R.string.discard)) { _, _ -> popBackStack() }
             .setNegativeButton(getString(R.string.cancel_button), null)
             .show()
-        discardDialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(
-            ContextCompat.getColor(requireContext(), R.color.error_red)
-        )
+        discardDialog.applyDialogButtonColors(requireContext(), destructiveAction = true)
     }
 
     private fun showLoadingState(loading: Boolean) {

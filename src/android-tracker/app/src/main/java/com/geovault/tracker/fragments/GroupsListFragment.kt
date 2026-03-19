@@ -99,7 +99,9 @@ class GroupsListFragment : Fragment() {
         val input = android.widget.EditText(requireContext()).apply {
             hint = getString(R.string.new_group_name_hint)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
-            setPadding(48, 32, 48, 32)
+            val horizontalPadding = resources.getDimensionPixelSize(R.dimen.dialog_input_padding_horizontal)
+            val verticalPadding = resources.getDimensionPixelSize(R.dimen.dialog_input_padding_vertical)
+            setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
         }
         androidx.appcompat.app.AlertDialog.Builder(requireContext())
             .setTitle(getString(R.string.create_group))
@@ -123,7 +125,7 @@ class GroupsListFragment : Fragment() {
 
     private fun openGroupEditor(group: Group) {
         requireActivity().supportFragmentManager.beginTransaction()
-            .add(R.id.fragment_overlay_container, GroupDetailBottomSheet.newInstance(group), "group_detail")
+            .add(R.id.fragment_overlay_container, GroupDetailFragment.newInstance(group), "group_detail")
             .addToBackStack("group_detail")
             .commit()
     }

@@ -584,7 +584,8 @@ class TrackingService : TrackPointServiceBase() {
             props.put("batt", batteryLevel)
             props.put("ischarging", isCharging)
             props.toString()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to build extended tracking point payload", e)
             null
         }
     }

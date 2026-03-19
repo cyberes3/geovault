@@ -1,71 +1,105 @@
 package com.geovault.tracker.fragments.map
 
 import android.content.Context
+import com.geovault.tracker.AppError
 import com.geovault.tracker.Group
 import com.geovault.tracker.MapVisibilityResponse
+import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerCoordinatesResponse
 import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.pipeline.TrackPointBusGateway
 import com.geovault.tracker.pipeline.TrackPointEvent
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import javax.inject.Inject
 import kotlin.coroutines.resume
 
-class TrackerRepositoryMapTrackRepository @Inject constructor() : MapTrackRepository {
-    override suspend fun getTrackers(context: Context, forceRefresh: Boolean): List<Tracker> =
+class TrackerRepositoryMapTrackRepository @Inject constructor(
+    @ApplicationContext private val appContext: Context
+) : MapTrackRepository {
+    override suspend fun getTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> =
         suspendCancellableCoroutine { continuation ->
-            TrackerRepository.getTrackers(context, forceRefresh = forceRefresh) { list ->
-                continuation.resume(list ?: emptyList())
+            TrackerRepository.getTrackersResult(appContext, forceRefresh = forceRefresh) { result ->
+                continuation.resume(result)
             }
         }
 
-    override suspend fun getTracker(context: Context, id: String, forceRefresh: Boolean): Tracker? =
+    override suspend fun getTracker(id: String, forceRefresh: Boolean): RepositoryResult<Tracker> =
         suspendCancellableCoroutine { continuation ->
-            TrackerRepository.getTracker(context, id, forceRefresh = forceRefresh) { tracker ->
-                continuation.resume(tracker)
+            TrackerRepository.getTracker(appContext, id, forceRefresh = forceRefresh) { tracker ->
+                val result = if (tracker != null) {
+                    RepositoryResult.Success(tracker)
+                } else {
+                    RepositoryResult.Failure(AppError.NotFound)
+                }
+                continuation.resume(result)
             }
         }
 
-    override suspend fun getTrackerGeometry(context: Context, id: String, allData: Boolean): Tracker? =
+    override suspend fun getTrackerGeometry(id: String, allData: Boolean): RepositoryResult<Tracker> =
         suspendCancellableCoroutine { continuation ->
-            TrackerRepository.getTrackerGeometry(context, id, allData) { tracker ->
-                continuation.resume(tracker)
+            TrackerRepository.getTrackerGeometryResult(appContext, id, allData = allData) { result ->
+                continuation.resume(result)
             }
         }
 
-    override suspend fun getTrackerCoordinates(context: Context, id: String, allData: Boolean): TrackerCoordinatesResponse? =
+    override suspend fun getTrackerCoordinates(id: String, allData: Boolean): RepositoryResult<TrackerCoordinatesResponse> =
         suspendCancellableCoroutine { continuation ->
-            TrackerRepository.getTrackerCoordinates(context, id, allData) { response ->
-                continuation.resume(response)
+            TrackerRepository.getTrackerCoordinates(appContext, id, allData) { response ->
+                val result = if (response != null) {
+                    RepositoryResult.Success(response)
+                } else {
+                    RepositoryResult.Failure(AppError.Network)
+                }
+                continuation.resume(result)
             }
         }
 
-    override suspend fun getTrackersGeometry(context: Context, trackerIds: List<String>, allData: Boolean): List<Tracker> =
+    override suspend fun getTrackersGeometry(trackerIds: List<String>, allData: Boolean): RepositoryResult<List<Tracker>> =
         suspendCancellableCoroutine { continuation ->
-            TrackerRepository.getTrackersGeometry(context, trackerIds, allData = allData) { trackers ->
-                continuation.resume(trackers ?: emptyList())
+            TrackerRepository.getTrackersGeometry(appContext, trackerIds, allData = allData) { trackers ->
+                val result = if (trackers != null) {
+                    RepositoryResult.Success(trackers)
+                } else {
+                    RepositoryResult.Failure(AppError.Network)
+                }
+                continuation.resume(result)
             }
         }
 
     override fun getTrackerFromCache(id: String): Tracker? = TrackerRepository.getTrackerFromCache(id)
 }
 
-class TrackerRepositoryMapGroupRepository @Inject constructor() : MapGroupRepository {
-    override suspend fun getGroups(context: Context, forceRefresh: Boolean): List<Group> =
+class TrackerRepositoryMapGroupRepository @Inject constructor(
+    @ApplicationContext private val appContext: Context
+) : MapGroupRepository {
+    override suspend fun getGroups(forceRefresh: Boolean): RepositoryResult<List<Group>> =
         suspendCancellableCoroutine { continuation ->
-            TrackerRepository.getGroups(context, forceRefresh = forceRefresh) { groups ->
-                continuation.resume(groups ?: emptyList())
+            TrackerRepository.getGroups(appContext, forceRefresh = forceRefresh) { groups ->
+                val result = if (groups != null) {
+                    RepositoryResult.Success(groups)
+                } else {
+                    RepositoryResult.Failure(AppError.Network)
+                }
+                continuation.resume(result)
             }
         }
 }
 
-class TrackerRepositoryMapVisibilityRepository @Inject constructor() : MapVisibilityRepository {
-    override suspend fun getMapVisibility(context: Context): MapVisibilityResponse? =
+class TrackerRepositoryMapVisibilityRepository @Inject constructor(
+    @ApplicationContext private val appContext: Context
+) : MapVisibilityRepository {
+    override suspend fun getMapVisibility(): RepositoryResult<MapVisibilityResponse> =
         suspendCancellableCoroutine { continuation ->
-            TrackerRepository.getMapVisibility(context) { visibility ->
-                continuation.resume(visibility)
+            TrackerRepository.getMapVisibility(appContext) { visibility ->
+                val result = if (visibility != null) {
+                    RepositoryResult.Success(visibility)
+                } else {
+                    RepositoryResult.Failure(AppError.Network)
+                }
+                continuation.resume(result)
             }
         }
 }

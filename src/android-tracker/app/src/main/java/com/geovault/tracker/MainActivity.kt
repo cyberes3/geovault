@@ -36,6 +36,7 @@ import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.startup.RepositoryStartupRefreshGateway
 import com.geovault.tracker.startup.StartupRefreshInput
 import com.geovault.tracker.startup.StartupRefreshOrchestrator
+import com.geovault.tracker.ui.applyDialogButtonColors
 import com.google.android.material.button.MaterialButton
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
@@ -912,12 +913,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             .setPositiveButton(getString(R.string.stop_tracking)) { _, _ -> onConfirm() }
             .setNegativeButton(getString(R.string.cancel_button), null)
             .show()
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(
-            ContextCompat.getColor(this, com.geovault.common.R.color.gv_common_dialog_positive_button)
-        )
-        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(
-            ContextCompat.getColor(this, com.geovault.common.R.color.gv_common_dialog_negative_button)
-        )
+        dialog.applyDialogButtonColors(this)
     }
 
     override fun toggleTracking() {

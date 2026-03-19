@@ -1,6 +1,7 @@
 package com.geovault.tracker.fragments.map
 
 import android.content.Context
+import android.util.Log
 import com.geovault.common.map.MapMarkerUtils
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
@@ -9,6 +10,7 @@ import org.maplibre.android.maps.Style
 import org.maplibre.geojson.Feature
 
 internal object MapPointFeatureHelper {
+    private const val TAG = "MapPointFeatureHelper"
 
     /**
      * Adds tracker id/name/coords/lastUpdate/owner/hexColor to a point feature for tap resolution.
@@ -64,7 +66,9 @@ internal object MapPointFeatureHelper {
         bitmap?.let {
             try {
                 style.addImage(imageId, it)
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to add map marker image to style id=$imageId", e)
+            }
         }
     }
 }

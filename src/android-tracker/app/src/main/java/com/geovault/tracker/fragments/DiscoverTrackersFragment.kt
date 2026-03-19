@@ -21,6 +21,7 @@ import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.AvailableToAddGroup
 import com.geovault.tracker.AvailableToAddItem
 import com.geovault.tracker.Group
+import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
@@ -478,8 +479,8 @@ class DiscoverTrackersFragment : Fragment() {
         deleteBtn.setOnClickListener {
             if (rowStates[key] != RowState.ADDED_DELETE) return@setOnClickListener
             viewLifecycleOwner.lifecycleScope.launch {
-                val success = TrackerRepository.leaveGroupSuspend(requireContext(), group.id)
-                if (success) {
+                val result = TrackerRepository.leaveGroupResultSuspend(requireContext(), group.id)
+                if (result is RepositoryResult.Success) {
                     removeRowAndMaybeHideSection(parent, row, sectionHeader, sectionList)
                 } else {
                     navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
@@ -525,8 +526,8 @@ class DiscoverTrackersFragment : Fragment() {
         deleteBtn.setOnClickListener {
             if (rowStates[key] != RowState.ADDED_DELETE) return@setOnClickListener
             viewLifecycleOwner.lifecycleScope.launch {
-                val success = TrackerRepository.unsubscribeTrackerSuspend(requireContext(), item.id)
-                if (success) {
+                val result = TrackerRepository.unsubscribeTrackerResultSuspend(requireContext(), item.id)
+                if (result is RepositoryResult.Success) {
                     removeRowAndMaybeHideSection(parent, row, sectionHeader, parent)
                 } else {
                     navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))

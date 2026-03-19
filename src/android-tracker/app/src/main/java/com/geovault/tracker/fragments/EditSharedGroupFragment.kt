@@ -8,7 +8,6 @@ import android.widget.ImageButton
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -17,6 +16,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.geovault.tracker.Group
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
+import com.geovault.tracker.ui.applyDialogButtonColors
 import com.google.android.material.button.MaterialButton
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -100,8 +100,7 @@ class EditSharedGroupFragment : Fragment() {
                 }
                 .setNegativeButton(getString(R.string.cancel_button), null)
                 .show()
-            d.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(ContextCompat.getColor(requireContext(), R.color.error_red))
-            d.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(ContextCompat.getColor(requireContext(), R.color.primary_blue))
+            d.applyDialogButtonColors(requireContext(), destructiveAction = true)
         }
     }
 }

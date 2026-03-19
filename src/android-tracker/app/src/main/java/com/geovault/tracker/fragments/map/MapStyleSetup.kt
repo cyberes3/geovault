@@ -2,6 +2,7 @@ package com.geovault.tracker.fragments.map
 
 import android.content.Context
 import android.graphics.Color
+import androidx.core.graphics.ColorUtils
 import androidx.core.content.ContextCompat
 import com.geovault.common.map.LocationComponentHelper
 import com.geovault.common.map.MapMarkerUtils
@@ -38,6 +39,8 @@ internal data class MapStyleIds(
 )
 
 internal object MapStyleSetup {
+    private const val TRACK_ACCURACY_ALPHA = 64
+
     fun configure(
         context: Context,
         map: MapLibreMap,
@@ -114,12 +117,7 @@ internal object MapStyleSetup {
             )
         }
         val trackerBaseColor = parseHexToColor(null, context)
-        val accuracyFillColor = Color.argb(
-            64,
-            Color.red(trackerBaseColor),
-            Color.green(trackerBaseColor),
-            Color.blue(trackerBaseColor)
-        )
+        val accuracyFillColor = ColorUtils.setAlphaComponent(trackerBaseColor, TRACK_ACCURACY_ALPHA)
         val accuracyLayer = FillLayer(ids.trackPositionAccuracyLayerId, ids.trackPositionAccuracySourceId).apply {
             setProperties(
                 PropertyFactory.fillColor(accuracyFillColor)

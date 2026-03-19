@@ -5,10 +5,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
-import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -20,6 +18,7 @@ import com.geovault.tracker.showHueColorPickerDialog
 import com.geovault.tracker.updateColorPreview
 import com.geovault.tracker.defaultTrackerColorHex
 import com.geovault.tracker.navigation.navHost
+import com.geovault.tracker.ui.applyDialogButtonColors
 import com.google.android.material.button.MaterialButton
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -94,7 +93,7 @@ class NewTrackerFragment : Fragment() {
                             )
                         }
                         requireActivity().supportFragmentManager.popBackStack()
-                        Toast.makeText(requireContext(), "Tracker created", Toast.LENGTH_SHORT).show()
+                        navHost()?.showSnackbar(getString(R.string.tracker_created))
                         viewModel.consumeCreatedTracker()
                     }
                 }
@@ -105,7 +104,7 @@ class NewTrackerFragment : Fragment() {
             val name = nameEdit.text.toString().trim()
             val color = colorEdit.text.toString().trim().ifEmpty { null }
             if (name.isEmpty()) {
-                navHost()?.showSnackbar("Name is required")
+                navHost()?.showSnackbar(getString(R.string.name_required))
                 return@setOnClickListener
             }
             viewModel.createTracker(name = name, color = color)
@@ -140,9 +139,7 @@ class NewTrackerFragment : Fragment() {
             .setPositiveButton(getString(R.string.discard)) { _, _ -> popBackStack() }
             .setNegativeButton(getString(R.string.cancel_button), null)
             .show()
-        discardDialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(
-            ContextCompat.getColor(requireContext(), R.color.error_red)
-        )
+        discardDialog.applyDialogButtonColors(requireContext(), destructiveAction = true)
     }
 
     private fun setActionButtonsEnabled(enabled: Boolean) {

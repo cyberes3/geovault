@@ -60,7 +60,7 @@ class GroupActionsFragment : Fragment() {
         actionEdit.visibility = if (g.is_owner == true) View.VISIBLE else View.GONE
         actionEdit.setOnClickListener {
             requireActivity().supportFragmentManager.beginTransaction()
-                .add(R.id.fragment_overlay_container, GroupDetailBottomSheet.newInstance(g), "group_detail")
+                .add(R.id.fragment_overlay_container, GroupDetailFragment.newInstance(g), "group_detail")
                 .addToBackStack("group_detail")
                 .commit()
         }

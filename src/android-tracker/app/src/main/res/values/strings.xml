@@ -197,6 +197,12 @@
     <string name="clear_history_confirm_message">Clear all track history except the latest point? This cannot be undone.</string>
     <string name="history_cleared">History cleared</string>
     <string name="tracker_deleted">Tracker deleted</string>
+    <string name="tracker_created">Tracker created</string>
+    <string name="name_required">Name is required</string>
+    <string name="failed_to_save_kml">Failed to save KML</string>
+    <string name="failed_to_save_tracker">Failed to save tracker</string>
+    <string name="failed_to_clear_history">Failed to clear history</string>
+    <string name="failed_to_delete_tracker">Failed to delete tracker</string>
     <string name="pick_color">Pick color</string>
     <string name="show_recent_data">Show recent data</string>
     <string name="recent_data_all">All</string>
@@ -337,5 +343,7 @@
     <string name="secret_copied">Secret copied to clipboard</string>
     <string name="kml_exported">KML saved</string>
     <string name="owner_tools">Owner Tools</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
 </resources>
 

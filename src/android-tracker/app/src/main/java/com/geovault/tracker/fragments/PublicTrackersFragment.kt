@@ -14,15 +14,18 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.AvailableToAddGroup
 import com.geovault.tracker.AvailableToAddItem
 import com.geovault.tracker.Group
+import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerRepository
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import kotlinx.coroutines.launch
 
 class PublicTrackersFragment : Fragment() {
 
@@ -85,30 +88,30 @@ class PublicTrackersFragment : Fragment() {
     }
 
     private fun loadPublic(forceRefresh: Boolean, fromSwipeRefresh: Boolean) {
-        TrackerRepository.getAvailableToAdd(requireContext(), forceRefresh = forceRefresh) { response ->
-            if (!isAdded) return@getAvailableToAdd
+        viewLifecycleOwner.lifecycleScope.launch {
+            val response = TrackerRepository.getAvailableToAddSuspend(
+                requireContext(),
+                forceRefresh = forceRefresh
+            )
+            if (!isAdded) return@launch
+            swipeRefresh.isRefreshing = false
             if (response == null) {
-                requireActivity().runOnUiThread {
-                    swipeRefresh.isRefreshing = false
-                    spinner.stop(hide = true)
-                    loadingView.visibility = View.GONE
-                    emptyView.visibility = View.VISIBLE
-                }
-                return@getAvailableToAdd
+                spinner.stop(hide = true)
+                loadingView.visibility = View.GONE
+                emptyView.visibility = View.VISIBLE
+                listContainer.visibility = View.GONE
+                return@launch
             }
-            requireActivity().runOnUiThread {
-                swipeRefresh.isRefreshing = false
-                if (!fromSwipeRefresh) {
-                    spinner.stop(hide = true)
-                    loadingView.visibility = View.GONE
-                }
-                publicTrackersData = response.public ?: emptyList()
-                publicGroupsData = response.public_groups ?: emptyList()
-                val hasContent = publicTrackersData.isNotEmpty() || publicGroupsData.isNotEmpty()
-                emptyView.visibility = if (hasContent) View.GONE else View.VISIBLE
-                listContainer.visibility = if (hasContent) View.VISIBLE else View.GONE
-                renderList()
+            if (!fromSwipeRefresh) {
+                spinner.stop(hide = true)
+                loadingView.visibility = View.GONE
             }
+            publicTrackersData = response.public ?: emptyList()
+            publicGroupsData = response.public_groups ?: emptyList()
+            val hasContent = publicTrackersData.isNotEmpty() || publicGroupsData.isNotEmpty()
+            emptyView.visibility = if (hasContent) View.GONE else View.VISIBLE
+            listContainer.visibility = if (hasContent) View.VISIBLE else View.GONE
+            renderList()
         }
     }
 
@@ -212,35 +215,33 @@ class PublicTrackersFragment : Fragment() {
         addBtn.setOnClickListener {
             if (rowStates[key] != RowState.IDLE) return@setOnClickListener
             setRowState(row, key, RowState.ADDING)
-            TrackerRepository.subscribeTracker(requireContext(), item.id) { tracker ->
-                if (!isAdded) return@subscribeTracker
-                requireActivity().runOnUiThread {
-                    if (tracker != null) {
-                        setRowState(row, key, RowState.ADDED_CHECK)
-                        transitionToDeleteAfterCheck(row, key)
-                        notifySharedTabAdded(listOf(tracker), emptyList())
-                        parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
-                    } else {
-                        setRowState(row, key, RowState.IDLE)
-                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                    }
+            viewLifecycleOwner.lifecycleScope.launch {
+                val tracker = TrackerRepository.subscribeTrackerSuspend(requireContext(), item.id)
+                if (!isAdded) return@launch
+                if (tracker != null) {
+                    setRowState(row, key, RowState.ADDED_CHECK)
+                    transitionToDeleteAfterCheck(row, key)
+                    notifySharedTabAdded(listOf(tracker), emptyList())
+                    parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
+                } else {
+                    setRowState(row, key, RowState.IDLE)
+                    navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 }
             }
         }
         deleteBtn.setOnClickListener {
             if (rowStates[key] != RowState.ADDED_DELETE) return@setOnClickListener
-            TrackerRepository.unsubscribeTracker(requireContext(), item.id) { success ->
-                if (!isAdded) return@unsubscribeTracker
-                requireActivity().runOnUiThread {
-                    if (success) {
-                        publicTrackersData = publicTrackersData.filter { it.id != item.id }
-                        rowStates.remove(key)
-                        transitionRunnables.remove(key)?.let { handler.removeCallbacks(it) }
-                        parent.removeView(row)
-                        parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
-                    } else {
-                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                    }
+            viewLifecycleOwner.lifecycleScope.launch {
+                val result = TrackerRepository.unsubscribeTrackerResultSuspend(requireContext(), item.id)
+                if (!isAdded) return@launch
+                if (result is RepositoryResult.Success) {
+                    publicTrackersData = publicTrackersData.filter { it.id != item.id }
+                    rowStates.remove(key)
+                    transitionRunnables.remove(key)?.let { handler.removeCallbacks(it) }
+                    parent.removeView(row)
+                    parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
+                } else {
+                    navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 }
             }
         }
@@ -272,44 +273,42 @@ class PublicTrackersFragment : Fragment() {
                 navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 return@setOnClickListener
             }
-            var failed = false
-            var done = 0
-            val addedTrackers = mutableListOf<Tracker>()
-            for (trackId in trackIds) {
-                TrackerRepository.subscribeTracker(requireContext(), trackId) { tracker ->
-                    if (!isAdded) return@subscribeTracker
-                    requireActivity().runOnUiThread {
-                        done++
-                        if (tracker == null) failed = true else addedTrackers.add(tracker)
-                        if (done == trackIds.size) {
-                            if (!failed) {
-                                setRowState(row, key, RowState.ADDED_CHECK)
-                                transitionToDeleteAfterCheck(row, key)
-                                notifySharedTabAdded(addedTrackers, emptyList())
-                                parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
-                            } else {
-                                setRowState(row, key, RowState.IDLE)
-                                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                            }
-                        }
+            viewLifecycleOwner.lifecycleScope.launch {
+                val addedTrackers = mutableListOf<Tracker>()
+                var failed = false
+                for (trackId in trackIds) {
+                    val tracker = TrackerRepository.subscribeTrackerSuspend(requireContext(), trackId)
+                    if (tracker == null) {
+                        failed = true
+                    } else {
+                        addedTrackers.add(tracker)
                     }
+                }
+                if (!isAdded) return@launch
+                if (!failed) {
+                    setRowState(row, key, RowState.ADDED_CHECK)
+                    transitionToDeleteAfterCheck(row, key)
+                    notifySharedTabAdded(addedTrackers, emptyList())
+                    parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
+                } else {
+                    setRowState(row, key, RowState.IDLE)
+                    navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 }
             }
         }
         deleteBtn.setOnClickListener {
             if (rowStates[key] != RowState.ADDED_DELETE) return@setOnClickListener
-            TrackerRepository.leaveGroup(requireContext(), group.id) { success ->
-                if (!isAdded) return@leaveGroup
-                requireActivity().runOnUiThread {
-                    if (success) {
-                        publicGroupsData = publicGroupsData.filter { it.id != group.id }
-                        rowStates.remove(key)
-                        transitionRunnables.remove(key)?.let { handler.removeCallbacks(it) }
-                        parent.removeView(row)
-                        parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
-                    } else {
-                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                    }
+            viewLifecycleOwner.lifecycleScope.launch {
+                val result = TrackerRepository.leaveGroupResultSuspend(requireContext(), group.id)
+                if (!isAdded) return@launch
+                if (result is RepositoryResult.Success) {
+                    publicGroupsData = publicGroupsData.filter { it.id != group.id }
+                    rowStates.remove(key)
+                    transitionRunnables.remove(key)?.let { handler.removeCallbacks(it) }
+                    parent.removeView(row)
+                    parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
+                } else {
+                    navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 }
             }
         }

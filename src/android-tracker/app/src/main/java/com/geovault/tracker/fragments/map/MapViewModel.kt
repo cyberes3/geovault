@@ -206,7 +206,7 @@ class MapViewModel @Inject constructor(
                 displayedGroupName = null,
                 mode = MapScreenMode.AllTrackers
             )
-            val snapshot = loadAllTrackersUseCase.execute(getApplication())
+            val snapshot = loadAllTrackersUseCase.execute()
             _uiState.value = _uiState.value.copy(loading = false)
             _commands.tryEmit(MapCommand.RenderAllTrackers(snapshot))
             emitCameraPolicy(applyCameraPolicyUseCase.forMode(MapScreenMode.AllTrackers, null, enableFollowLock = false))
@@ -221,7 +221,7 @@ class MapViewModel @Inject constructor(
                 displayedGroupName = group.name,
                 mode = MapScreenMode.GroupMode(group)
             )
-            val snapshot = loadGroupMapUseCase.execute(getApplication(), group, zoomToTrackerId)
+            val snapshot = loadGroupMapUseCase.execute(group, zoomToTrackerId)
             _uiState.value = _uiState.value.copy(loading = false)
             _commands.tryEmit(MapCommand.RenderAllTrackers(snapshot))
             emitCameraPolicy(applyCameraPolicyUseCase.forMode(MapScreenMode.GroupMode(group), null, enableFollowLock = false))

@@ -1,8 +1,9 @@
 package com.geovault.tracker.fragments.map
 
-import android.content.Context
+import com.geovault.tracker.AppError
 import com.geovault.tracker.GeoJsonLineString
 import com.geovault.tracker.Group
+import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerCoordinatesResponse
 import kotlinx.coroutines.runBlocking
@@ -21,11 +22,9 @@ class LoadGroupMapUseCaseTest {
     fun execute_returnsEmptySnapshotWhenGroupHasNoTrackers() {
         val repository = FakeTrackRepository()
         val useCase = LoadGroupMapUseCase(repository)
-        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<Context>()
 
         val snapshot = runBlocking {
             useCase.execute(
-                context = context,
                 group = Group(id = "g1", name = "Group 1", track_ids = emptyList()),
                 zoomToTrackerId = null
             )
@@ -50,11 +49,9 @@ class LoadGroupMapUseCaseTest {
             )
         )
         val useCase = LoadGroupMapUseCase(repository)
-        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<Context>()
 
         val snapshot = runBlocking {
             useCase.execute(
-                context = context,
                 group = Group(id = "g2", name = "Group 2", track_ids = listOf("a", "c")),
                 zoomToTrackerId = "c"
             )
@@ -70,12 +67,20 @@ class LoadGroupMapUseCaseTest {
         private val trackers: List<Tracker> = emptyList(),
         private val geometryById: Map<String, List<List<Double>>> = emptyMap()
     ) : MapTrackRepository {
-        override suspend fun getTrackers(context: Context, forceRefresh: Boolean): List<Tracker> = trackers
-        override suspend fun getTracker(context: Context, id: String, forceRefresh: Boolean): Tracker? = null
-        override suspend fun getTrackerGeometry(context: Context, id: String, allData: Boolean): Tracker? = null
-        override suspend fun getTrackerCoordinates(context: Context, id: String, allData: Boolean): TrackerCoordinatesResponse? = null
-        override suspend fun getTrackersGeometry(context: Context, trackerIds: List<String>, allData: Boolean): List<Tracker> {
-            return trackerIds.map { id ->
+        override suspend fun getTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> =
+            RepositoryResult.Success(trackers)
+
+        override suspend fun getTracker(id: String, forceRefresh: Boolean): RepositoryResult<Tracker> =
+            RepositoryResult.Failure(AppError.NotFound)
+
+        override suspend fun getTrackerGeometry(id: String, allData: Boolean): RepositoryResult<Tracker> =
+            RepositoryResult.Failure(AppError.NotFound)
+
+        override suspend fun getTrackerCoordinates(id: String, allData: Boolean): RepositoryResult<TrackerCoordinatesResponse> =
+            RepositoryResult.Failure(AppError.NotFound)
+
+        override suspend fun getTrackersGeometry(trackerIds: List<String>, allData: Boolean): RepositoryResult<List<Tracker>> {
+            return RepositoryResult.Success(trackerIds.map { id ->
                 Tracker(
                     id = id,
                     name = id,
@@ -85,7 +90,7 @@ class LoadGroupMapUseCaseTest {
                         coordinates = geometryById[id] ?: emptyList()
                     )
                 )
-            }
+            })
         }
 
         override fun getTrackerFromCache(id: String): Tracker? = null

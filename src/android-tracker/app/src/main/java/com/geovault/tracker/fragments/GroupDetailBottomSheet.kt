@@ -36,7 +36,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
-class GroupDetailBottomSheet : Fragment() {
+class GroupDetailFragment : Fragment() {
     @Inject
     lateinit var groupManagementRepository: GroupManagementRepository
 
@@ -264,7 +264,7 @@ class GroupDetailBottomSheet : Fragment() {
                 .map { it.trim() }
                 .filter { it.isNotBlank() && it.lowercase() !in normalizedUsers }
             SharedUserPickerDialog.show(
-                fragment = this@GroupDetailBottomSheet,
+                fragment = this@GroupDetailFragment,
                 title = getString(R.string.shared_with_recipients_label),
                 users = users,
                 selectedEmails = sharedWithEmailsForSave.toSet()
@@ -281,7 +281,7 @@ class GroupDetailBottomSheet : Fragment() {
         val g = group ?: return
         val name = nameEdit.text?.toString()?.trim()
         if (name.isNullOrEmpty()) {
-            navHost()?.showSnackbar("Name is required")
+            navHost()?.showSnackbar(getString(R.string.name_required))
             return
         }
         val visibility = if (selectedVisibilityIndex in visibilityValues.indices) visibilityValues[selectedVisibilityIndex] else "private"
@@ -358,8 +358,8 @@ class GroupDetailBottomSheet : Fragment() {
         private const val ARG_GROUP_ID = "group_id"
         private const val ARG_GROUP = "group"
 
-        fun newInstance(group: Group): GroupDetailBottomSheet {
-            return GroupDetailBottomSheet().apply {
+        fun newInstance(group: Group): GroupDetailFragment {
+            return GroupDetailFragment().apply {
                 arguments = Bundle().apply {
                     putString(ARG_GROUP_ID, group.id)
                     putParcelable(ARG_GROUP, group)

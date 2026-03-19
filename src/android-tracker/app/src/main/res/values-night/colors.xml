@@ -12,7 +12,7 @@
     <color name="error_stroke">@color/gv_common_error_stroke</color>
     <color name="snackbar_background">@color/gv_common_snackbar_background</color>
     <color name="list_background">@color/gv_common_surface</color>
-    <color name="map_loading_overlay_background">#000000</color>
+    <color name="map_loading_overlay_background">@color/gv_common_surface</color>
     <color name="search_bar_container_background">@color/gv_common_surface</color>
     <color name="search_divider">@color/gv_common_primary_blue</color>
 

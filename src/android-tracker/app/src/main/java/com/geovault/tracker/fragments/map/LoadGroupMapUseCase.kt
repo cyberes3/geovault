@@ -1,14 +1,13 @@
 package com.geovault.tracker.fragments.map
 
-import android.content.Context
 import com.geovault.tracker.Group
+import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 
 class LoadGroupMapUseCase(
     private val trackRepository: MapTrackRepository
 ) {
     suspend fun execute(
-        context: Context,
         group: Group,
         zoomToTrackerId: String? = null
     ): MapAllTrackersSnapshot {
@@ -21,9 +20,17 @@ class LoadGroupMapUseCase(
             )
         }
 
-        val trackers = trackRepository.getTrackers(context, forceRefresh = false)
+        val trackers = when (val trackersResult = trackRepository.getTrackers(forceRefresh = false)) {
+            is RepositoryResult.Success -> trackersResult.data
+            is RepositoryResult.Failure -> emptyList()
+        }
             .filter { it.id in groupTrackIds }
-        val fullTrackers = trackRepository.getTrackersGeometry(context, trackers.map(Tracker::id), allData = true)
+        val fullTrackers = when (
+            val geometryResult = trackRepository.getTrackersGeometry(trackers.map(Tracker::id), allData = true)
+        ) {
+            is RepositoryResult.Success -> geometryResult.data
+            is RepositoryResult.Failure -> emptyList()
+        }
         val coordsByTrackerId = fullTrackers.associate { tracker ->
             tracker.id to (tracker.geometry?.coordinates ?: emptyList())
         }

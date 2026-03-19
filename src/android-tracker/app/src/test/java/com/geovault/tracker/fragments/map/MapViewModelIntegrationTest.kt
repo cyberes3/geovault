@@ -1,10 +1,11 @@
 package com.geovault.tracker.fragments.map
 
 import android.app.Application
-import android.content.Context
+import com.geovault.tracker.AppError
 import com.geovault.tracker.GeoJsonLineString
 import com.geovault.tracker.Group
 import com.geovault.tracker.MapVisibilityResponse
+import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerCoordinatesResponse
 import com.geovault.tracker.pipeline.TrackPointEvent
@@ -193,19 +194,21 @@ class MapViewModelIntegrationTest {
     }
 
     private class FakeTrackRepository : MapTrackRepository {
-        override suspend fun getTrackers(context: Context, forceRefresh: Boolean): List<Tracker> {
-            return listOf(
+        override suspend fun getTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> {
+            return RepositoryResult.Success(
+                listOf(
                 Tracker(id = "t1", name = "T1", color = null),
                 Tracker(id = "t2", name = "T2", color = null)
             )
+            )
         }
 
-        override suspend fun getTracker(context: Context, id: String, forceRefresh: Boolean): Tracker? {
-            return Tracker(id = id, name = id, color = null)
+        override suspend fun getTracker(id: String, forceRefresh: Boolean): RepositoryResult<Tracker> {
+            return RepositoryResult.Success(Tracker(id = id, name = id, color = null))
         }
 
-        override suspend fun getTrackerGeometry(context: Context, id: String, allData: Boolean): Tracker? {
-            return Tracker(
+        override suspend fun getTrackerGeometry(id: String, allData: Boolean): RepositoryResult<Tracker> {
+            return RepositoryResult.Success(Tracker(
                 id = id,
                 name = id,
                 color = null,
@@ -213,15 +216,20 @@ class MapViewModelIntegrationTest {
                     type = "LineString",
                     coordinates = listOf(listOf(1.0, 2.0), listOf(3.0, 4.0))
                 )
+            ))
+        }
+
+        override suspend fun getTrackerCoordinates(id: String, allData: Boolean): RepositoryResult<TrackerCoordinatesResponse> {
+            return RepositoryResult.Success(
+                TrackerCoordinatesResponse(coordinates = listOf(listOf(1.0, 2.0), listOf(3.0, 4.0)))
             )
         }
 
-        override suspend fun getTrackerCoordinates(context: Context, id: String, allData: Boolean): TrackerCoordinatesResponse? {
-            return TrackerCoordinatesResponse(coordinates = listOf(listOf(1.0, 2.0), listOf(3.0, 4.0)))
-        }
-
-        override suspend fun getTrackersGeometry(context: Context, trackerIds: List<String>, allData: Boolean): List<Tracker> {
-            return trackerIds.map { id ->
+        override suspend fun getTrackersGeometry(
+            trackerIds: List<String>,
+            allData: Boolean
+        ): RepositoryResult<List<Tracker>> {
+            return RepositoryResult.Success(trackerIds.map { id ->
                 Tracker(
                     id = id,
                     name = id,
@@ -231,20 +239,20 @@ class MapViewModelIntegrationTest {
                         coordinates = listOf(listOf(10.0, 20.0), listOf(11.0, 21.0))
                     )
                 )
-            }
+            })
         }
 
         override fun getTrackerFromCache(id: String): Tracker? = null
     }
 
     private class FakeGroupRepository : MapGroupRepository {
-        override suspend fun getGroups(context: Context, forceRefresh: Boolean): List<Group> = emptyList()
+        override suspend fun getGroups(forceRefresh: Boolean): RepositoryResult<List<Group>> =
+            RepositoryResult.Success(emptyList())
     }
 
     private class FakeVisibilityRepository : MapVisibilityRepository {
-        override suspend fun getMapVisibility(context: Context): MapVisibilityResponse {
-            return MapVisibilityResponse(hidden_track_ids = emptyList(), hidden_group_ids = emptyList())
-        }
+        override suspend fun getMapVisibility(): RepositoryResult<MapVisibilityResponse> =
+            RepositoryResult.Success(MapVisibilityResponse(hidden_track_ids = emptyList(), hidden_group_ids = emptyList()))
     }
 }
 

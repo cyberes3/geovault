@@ -1,6 +1,7 @@
 package com.geovault.tracker.fragments.map
 
 import android.content.Context
+import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 
@@ -21,7 +22,10 @@ class LoadSingleTrackerMapUseCase(
         )
         if (resolvedId.isBlank()) return null
 
-        val geometryTracker = trackRepository.getTrackerGeometry(context, resolvedId, allData = true)
+        val geometryTracker = when (val result = trackRepository.getTrackerGeometry(resolvedId, allData = true)) {
+            is RepositoryResult.Success -> result.data
+            is RepositoryResult.Failure -> null
+        }
         if (geometryTracker != null) {
             return MapTrackSnapshot(
                 tracker = geometryTracker,
@@ -30,8 +34,16 @@ class LoadSingleTrackerMapUseCase(
             )
         }
 
-        val coordinatesResponse = trackRepository.getTrackerCoordinates(context, resolvedId, allData = true)
-        val fallbackTracker = trackRepository.getTracker(context, resolvedId, forceRefresh = false)
+        val coordinatesResponse = when (
+            val result = trackRepository.getTrackerCoordinates(resolvedId, allData = true)
+        ) {
+            is RepositoryResult.Success -> result.data
+            is RepositoryResult.Failure -> null
+        }
+        val fallbackTracker = when (val result = trackRepository.getTracker(resolvedId, forceRefresh = false)) {
+            is RepositoryResult.Success -> result.data
+            is RepositoryResult.Failure -> null
+        }
             ?: trackRepository.getTrackerFromCache(resolvedId)
             ?: Tracker(id = resolvedId, name = SelectedTrackerPrefs.selectedTrackerName(context), color = null)
         return MapTrackSnapshot(

@@ -2,6 +2,7 @@ package com.geovault.tracker.fragments
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.geovault.tracker.AppError
 import com.geovault.tracker.Group
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
@@ -51,7 +52,7 @@ class GroupTrackersViewModel @Inject constructor(
                         errorMessage = when {
                             groupResult is RepositoryResult.Failure -> groupResult.error.toString()
                             trackersResult is RepositoryResult.Failure -> trackersResult.error.toString()
-                            else -> "Failed to load group trackers"
+                            else -> AppError.Unknown.toString()
                         }
                     )
                 }

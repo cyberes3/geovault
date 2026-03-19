@@ -66,7 +66,7 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
 
     }
 
-    private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
+    private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
     private var webSocket: WebSocket? = null
     private var currentTrackerIds: Set<String> = emptySet()
     private var currentTrackerName: String? = null
@@ -376,7 +376,9 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
         connectJob = null
         try {
             webSocket?.close(1000, null)
-        } catch (_: Exception) { }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to close streaming websocket cleanly", e)
+        }
         webSocket = null
         currentTrackerIds = emptySet()
         currentTrackerName = null

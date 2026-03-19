@@ -2076,11 +2076,7 @@ class MapFragment : Fragment() {
         liveActiveFitButton.isEnabled = enabled
         liveActiveFitButton.alpha = 1f
         val primaryBlue = ContextCompat.getColor(requireContext(), R.color.primary_blue)
-        val disabledBlue = Color.rgb(
-            (Color.red(primaryBlue) * 0.6f + 255f * 0.4f).toInt(),
-            (Color.green(primaryBlue) * 0.6f + 255f * 0.4f).toInt(),
-            (Color.blue(primaryBlue) * 0.6f + 255f * 0.4f).toInt()
-        )
+        val disabledBlue = ContextCompat.getColor(requireContext(), R.color.blue_300)
         liveActiveFitButton.setCardBackgroundColor(
             if (enabled) primaryBlue
             else disabledBlue

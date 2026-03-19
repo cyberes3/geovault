@@ -112,8 +112,8 @@ private fun formatParamDisplay(context: Context, key: String, value: Any?): Stri
         }
 
         "ischarging" -> return when (value) {
-            true, "true", "1" -> "Yes"
-            else -> "No"
+            true, "true", "1" -> context.getString(R.string.yes)
+            else -> context.getString(R.string.no)
         }
 
         "dist" -> {

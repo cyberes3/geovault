@@ -1,6 +1,7 @@
 package com.geovault.tracker.data
 
 import android.content.Context
+import android.util.Log
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
 import com.geovault.tracker.AppError
@@ -32,6 +33,10 @@ class ApiTrackerManagementRepository @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val stateStore: TrackerManagementStateStore
 ) : TrackerManagementRepository, GroupManagementRepository {
+    private companion object {
+        const val TAG = "ApiTrackerMgmtRepo"
+    }
+
     private val cacheMutex = Mutex()
     private var trackersCache: List<Tracker>? = null
     private var groupsCache: List<Group>? = null
@@ -270,7 +275,8 @@ class ApiTrackerManagementRepository @Inject constructor(
                 } else {
                     RepositoryResult.Failure(mapError(response.code(), response.errorBody()?.string()))
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.e(TAG, "API call failed with transport exception", e)
                 RepositoryResult.Failure(AppError.Network)
             }
         }
@@ -288,7 +294,8 @@ class ApiTrackerManagementRepository @Inject constructor(
                 } else {
                     RepositoryResult.Failure(mapError(response.code(), response.errorBody()?.string()))
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.e(TAG, "API no-body call failed with transport exception", e)
                 RepositoryResult.Failure(AppError.Network)
             }
         }
@@ -320,7 +327,8 @@ class ApiTrackerManagementRepository @Inject constructor(
         return try {
             val json = JSONObject(errorBody)
             json.optString("detail", json.optString("error", json.optString("name", errorBody.take(200))))
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not parse validation error body", e)
             errorBody.take(200)
         }
     }
