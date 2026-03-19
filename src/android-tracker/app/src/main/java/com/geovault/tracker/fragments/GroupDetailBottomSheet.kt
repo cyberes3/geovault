@@ -22,17 +22,29 @@ import com.geovault.common.LoadingSpinner
 import com.geovault.common.NaturalSort
 import com.geovault.tracker.Group
 import com.geovault.tracker.GroupPatchRequest
+import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.common.R as CommonR
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.TrackerRepository
+import com.geovault.tracker.data.GroupManagementRepository
+import com.geovault.tracker.data.GroupTrackerEligibilityUseCase
+import com.geovault.tracker.data.TrackerManagementRepository
 import com.google.android.material.button.MaterialButton
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class GroupDetailBottomSheet : Fragment() {
+    @Inject
+    lateinit var groupManagementRepository: GroupManagementRepository
+
+    @Inject
+    lateinit var trackerManagementRepository: TrackerManagementRepository
+
+    @Inject
+    lateinit var groupTrackerEligibilityUseCase: GroupTrackerEligibilityUseCase
     private lateinit var nameEdit: EditText
     private lateinit var tracksRow: View
     private lateinit var tracksCountText: TextView
@@ -101,47 +113,21 @@ class GroupDetailBottomSheet : Fragment() {
 
         val groupId = arguments?.getString(ARG_GROUP_ID) ?: return
         group = initialGroup
-        parentFragmentManager.setFragmentResultListener(
-            AddGroupTrackersFragment.REQUEST_GROUP_TRACK_ADDED,
-            viewLifecycleOwner
-        ) { _, bundle ->
-            val updatedGroupId = bundle.getString(AddGroupTrackersFragment.KEY_GROUP_ID) ?: return@setFragmentResultListener
-            if (updatedGroupId != groupId) return@setFragmentResultListener
-            val updatedGroup = bundle.getParcelable<Group>(AddGroupTrackersFragment.KEY_GROUP, Group::class.java)
-            if (updatedGroup != null) {
-                group = updatedGroup
-                bindGroup(updatedGroup)
-            } else {
-                loadGroup(updatedGroupId)
-            }
-        }
-        parentFragmentManager.setFragmentResultListener(
-            GroupTrackersListFragment.REQUEST_GROUP_TRACK_REMOVED,
-            viewLifecycleOwner
-        ) { _, bundle ->
-            val removedGroupId = bundle.getString(GroupTrackersListFragment.KEY_GROUP_ID) ?: return@setFragmentResultListener
-            if (removedGroupId != groupId) return@setFragmentResultListener
-            val updatedGroup = bundle.getParcelable<Group>(AddGroupTrackersFragment.KEY_GROUP, Group::class.java)
-            if (updatedGroup != null) {
-                group = updatedGroup
-                bindGroup(updatedGroup)
-            } else {
-                loadGroup(removedGroupId)
-            }
-        }
         loadGroup(groupId)
     }
 
     private fun loadGroup(groupId: String) {
         viewLifecycleOwner.lifecycleScope.launch {
-            val g = TrackerRepository.getGroupSuspend(requireContext(), groupId)
-            group = g
-            if (g != null) {
-                bindGroup(g)
-            } else {
-                hideLoading()
-                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                closeEditor()
+            when (val result = groupManagementRepository.loadGroup(groupId)) {
+                is RepositoryResult.Success -> {
+                    group = result.data
+                    bindGroup(result.data)
+                }
+                is RepositoryResult.Failure -> {
+                    hideLoading()
+                    navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                    closeEditor()
+                }
             }
         }
     }
@@ -205,18 +191,14 @@ class GroupDetailBottomSheet : Fragment() {
                 copyWorldLinkButton.text = ""
                 copyWorldLinkSpinner.show()
                 viewLifecycleOwner.lifecycleScope.launch {
-                    val (updated, _) = TrackerRepository.patchGroupResultSuspend(
-                        requireContext(),
-                        g.id,
-                        GroupPatchRequest(world_share_enabled = true)
-                    )
+                    val result = groupManagementRepository.patchGroup(g.id, GroupPatchRequest(world_share_enabled = true))
                     worldShareSwitch.isEnabled = true
                     copyWorldLinkButton.isEnabled = true
                     copyWorldLinkButton.text = getString(R.string.copy_world_share_link)
                     copyWorldLinkSpinner.hide()
-                    if (updated != null) {
-                        group = updated
-                        copyWorldLinkButton.visibility = if (updated.world_share_url != null) View.VISIBLE else View.GONE
+                    if (result is RepositoryResult.Success) {
+                        group = result.data
+                        copyWorldLinkButton.visibility = if (result.data.world_share_url != null) View.VISIBLE else View.GONE
                     }
                 }
             } else {
@@ -237,18 +219,17 @@ class GroupDetailBottomSheet : Fragment() {
     private fun preloadAddableTrackers(g: Group) {
         val alreadyInGroup = (g.track_ids ?: emptyList()).toSet()
         viewLifecycleOwner.lifecycleScope.launch {
-            val list = TrackerRepository.getTrackersSuspend(requireContext(), forceRefresh = false)
-            val addable = (list ?: emptyList())
-                .filter { tracker ->
-                    tracker.id !in alreadyInGroup &&
-                        if (tracker.isOwner()) {
-                            ((tracker.settings?.get("hidden_in_list") as? Boolean) != true)
-                        } else {
-                            ((tracker.settings?.get("allow_group_reshare") as? Boolean) == true) &&
-                                tracker.visibility == "public"
-                        }
+            when (val result = trackerManagementRepository.loadTrackers(forceRefresh = false)) {
+                is RepositoryResult.Success -> {
+                    preloadedAddableTrackers = groupTrackerEligibilityUseCase
+                        .addableTrackers(result.data, g)
+                        .filter { it.canAdd && it.tracker.id !in alreadyInGroup }
+                        .map { it.tracker }
                 }
-            preloadedAddableTrackers = addable
+                is RepositoryResult.Failure -> {
+                    preloadedAddableTrackers = emptyList()
+                }
+            }
         }
     }
 
@@ -270,8 +251,10 @@ class GroupDetailBottomSheet : Fragment() {
 
     private fun showAddSharedWithDialog() {
         viewLifecycleOwner.lifecycleScope.launch {
-            val response = TrackerRepository.getUsersSuspend(requireContext())
-            val users = response?.users ?: emptyList()
+            val users = when (val result = trackerManagementRepository.loadUsers()) {
+                is RepositoryResult.Success -> result.data.users
+                is RepositoryResult.Failure -> emptyList()
+            }
             if (users.isEmpty()) {
                 navHost()?.showSnackbar(getString(R.string.no_other_users_found))
                 return@launch
@@ -311,18 +294,12 @@ class GroupDetailBottomSheet : Fragment() {
         )
         setAllInputsEnabled(false)
         viewLifecycleOwner.lifecycleScope.launch {
-            val (updated, errorMessage) = TrackerRepository.patchGroupResultSuspend(requireContext(), g.id, request)
-            when {
-                updated != null -> {
-                    group = updated
-                    parentFragmentManager.setFragmentResult(GroupsListFragment.REQUEST_GROUPS_REFRESH, Bundle())
+            when (val result = groupManagementRepository.patchGroup(g.id, request)) {
+                is RepositoryResult.Success -> {
+                    group = result.data
                     closeEditor()
                 }
-                !errorMessage.isNullOrBlank() -> {
-                    setAllInputsEnabled(true)
-                    navHost()?.showSnackbar(errorMessage)
-                }
-                else -> {
+                is RepositoryResult.Failure -> {
                     setAllInputsEnabled(true)
                     navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 }
@@ -346,16 +323,16 @@ class GroupDetailBottomSheet : Fragment() {
             .setMessage(getString(R.string.group_delete_confirm_message))
             .setPositiveButton(getString(R.string.delete_group)) { _, _ ->
                 viewLifecycleOwner.lifecycleScope.launch {
-                    val success = TrackerRepository.deleteGroupSuspend(requireContext(), g.id)
-                    if (isAdded && success) {
-                        closeEditor()
-                        parentFragmentManager.setFragmentResult(
-                            GroupsListFragment.REQUEST_GROUPS_REFRESH,
-                            Bundle().apply {
-                                putString(GroupsListFragment.KEY_DELETED_GROUP_ID, g.id)
-                            }
-                        )
-                        navHost()?.showSnackbar(getString(R.string.tracker_deleted))
+                    when (groupManagementRepository.deleteGroup(g.id)) {
+                        is RepositoryResult.Success -> {
+                            if (!isAdded) return@launch
+                            closeEditor()
+                            navHost()?.showSnackbar(getString(R.string.tracker_deleted))
+                        }
+                        is RepositoryResult.Failure -> {
+                            if (!isAdded) return@launch
+                            navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                        }
                     }
                 }
             }

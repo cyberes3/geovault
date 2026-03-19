@@ -10,14 +10,20 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.geovault.tracker.Group
 import com.geovault.tracker.navigation.navHost
-import com.geovault.tracker.MapVisibilityRequest
 import com.geovault.tracker.R
-import com.geovault.tracker.TrackerRepository
 import com.google.android.material.button.MaterialButton
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class EditSharedGroupFragment : Fragment() {
+    private val viewModel: EditSharedGroupViewModel by viewModels()
 
     companion object {
         const val ARG_GROUP = "group"
@@ -53,39 +59,36 @@ class EditSharedGroupFragment : Fragment() {
         group = initialGroup
         renderGroup(initialGroup)
         bindActions()
+        viewModel.load()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect { state ->
+                    val hiddenGroupIds = state.mapVisibility?.hidden_group_ids ?: emptyList()
+                    suppressHideSwitchCallback = true
+                    hideInListSwitch.isChecked = hiddenGroupIds.contains(initialGroup.id)
+                    suppressHideSwitchCallback = false
+                    state.errorMessage?.takeIf { it.isNotBlank() }?.let { navHost()?.showSnackbar(it) }
+                    if (state.didLeave) {
+                        parentFragmentManager.popBackStack()
+                    }
+                }
+            }
+        }
     }
 
     private fun renderGroup(g: Group) {
         groupName.text = g.name
         groupOwner.text = g.owner_email?.takeIf { it.isNotBlank() } ?: ""
 
-        TrackerRepository.getMapVisibility(requireContext()) { visibility ->
-            if (!isAdded) return@getMapVisibility
-            requireActivity().runOnUiThread {
-                suppressHideSwitchCallback = true
-                hideInListSwitch.isChecked = visibility?.hidden_group_ids?.contains(g.id) == true
-                suppressHideSwitchCallback = false
-            }
-        }
+        // visibility binding is handled through ViewModel state collection
     }
 
     private fun bindActions() {
         val g = group ?: return
         hideInListSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (suppressHideSwitchCallback) return@setOnCheckedChangeListener
-            TrackerRepository.getMapVisibility(requireContext()) { visibility ->
-                if (!isAdded) return@getMapVisibility
-                val current = (visibility?.hidden_group_ids ?: emptyList()).toMutableList()
-                val updated = if (isChecked) {
-                    if (current.contains(g.id)) current else current + g.id
-                } else {
-                    current.filter { it != g.id }
-                }
-                TrackerRepository.patchMapVisibility(
-                    requireContext(),
-                    MapVisibilityRequest(hidden_group_ids = updated)
-                ) { _ -> }
-            }
+            viewModel.setHidden(g.id, isChecked)
         }
 
         leaveButton.setOnClickListener {
@@ -93,23 +96,7 @@ class EditSharedGroupFragment : Fragment() {
                 .setTitle(getString(R.string.group_leave_confirm_title))
                 .setMessage(getString(R.string.group_leave_confirm_message))
                 .setPositiveButton(getString(R.string.leave_group)) { _, _ ->
-                    TrackerRepository.leaveGroup(requireContext(), g.id) { success ->
-                        if (!isAdded) return@leaveGroup
-                        requireActivity().runOnUiThread {
-                            if (success) {
-                                navHost()?.showSnackbar(getString(R.string.removed_from_share))
-                                parentFragmentManager.setFragmentResult(
-                                    GroupsListFragment.REQUEST_GROUPS_REFRESH,
-                                    Bundle().apply {
-                                        putString(SharedTrackersFragment.KEY_REMOVED_SHARED_GROUP_ID, g.id)
-                                    }
-                                )
-                                parentFragmentManager.popBackStack()
-                            } else {
-                                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                            }
-                        }
-                    }
+                    viewModel.leaveGroup(g.id)
                 }
                 .setNegativeButton(getString(R.string.cancel_button), null)
                 .show()

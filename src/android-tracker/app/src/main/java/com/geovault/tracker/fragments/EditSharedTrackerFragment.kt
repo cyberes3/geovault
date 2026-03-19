@@ -10,14 +10,20 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.geovault.tracker.navigation.navHost
-import com.geovault.tracker.MapVisibilityRequest
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.TrackerRepository
 import com.google.android.material.button.MaterialButton
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class EditSharedTrackerFragment : Fragment() {
+    private val viewModel: EditSharedTrackerViewModel by viewModels()
 
     companion object {
         const val ARG_TRACKER = "tracker"
@@ -55,6 +61,22 @@ class EditSharedTrackerFragment : Fragment() {
         currentTracker = initialTracker
         renderTracker(initialTracker)
         bindActions(initialTracker.id)
+        viewModel.load()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect { state ->
+                    val hiddenIds = state.mapVisibility?.hidden_track_ids ?: emptyList()
+                    suppressHideSwitchCallback = true
+                    hideOnMapSwitch.isChecked = hiddenIds.contains(initialTracker.id)
+                    suppressHideSwitchCallback = false
+                    state.errorMessage?.takeIf { it.isNotBlank() }?.let { navHost()?.showSnackbar(it) }
+                    if (state.didLeave) {
+                        parentFragmentManager.popBackStack()
+                    }
+                }
+            }
+        }
     }
 
     private fun renderTracker(tracker: Tracker) {
@@ -63,29 +85,13 @@ class EditSharedTrackerFragment : Fragment() {
 
         removeFromShareButton.visibility = if ((tracker.visibility ?: "") == "shared") View.VISIBLE else View.GONE
 
-        TrackerRepository.getMapVisibility(requireContext()) { visibility ->
-            if (!isAdded) return@getMapVisibility
-            requireActivity().runOnUiThread {
-                suppressHideSwitchCallback = true
-                hideOnMapSwitch.isChecked = visibility?.hidden_track_ids?.contains(tracker.id) == true
-                suppressHideSwitchCallback = false
-            }
-        }
+        // visibility binding is handled through ViewModel state collection
     }
 
     private fun bindActions(trackerId: String) {
         hideOnMapSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (suppressHideSwitchCallback) return@setOnCheckedChangeListener
-            TrackerRepository.getMapVisibility(requireContext()) { visibility ->
-                if (!isAdded) return@getMapVisibility
-                val current = (visibility?.hidden_track_ids ?: emptyList()).toMutableList()
-                val updated = if (isChecked) {
-                    if (current.contains(trackerId)) current else current + trackerId
-                } else {
-                    current.filter { it != trackerId }
-                }
-                TrackerRepository.patchMapVisibility(requireContext(), MapVisibilityRequest(hidden_track_ids = updated)) { _ -> }
-            }
+            viewModel.setHidden(trackerId, isChecked)
         }
 
         unsubscribeButton.setOnClickListener {
@@ -93,23 +99,7 @@ class EditSharedTrackerFragment : Fragment() {
                 .setTitle(getString(R.string.unsubscribe_confirm_title))
                 .setMessage(getString(R.string.unsubscribe_confirm_message))
                 .setPositiveButton(getString(R.string.unsubscribe)) { _, _ ->
-                    TrackerRepository.unsubscribeTracker(requireContext(), trackerId) { success ->
-                        if (!isAdded) return@unsubscribeTracker
-                        requireActivity().runOnUiThread {
-                            if (success) {
-                                navHost()?.showSnackbar(getString(R.string.unsubscribed))
-                                requireActivity().supportFragmentManager.setFragmentResult(
-                                    TrackersListFragment.REQUEST_REFRESH_LIST,
-                                    Bundle().apply {
-                                        putString(SharedTrackersFragment.KEY_REMOVED_SHARED_TRACKER_ID, trackerId)
-                                    }
-                                )
-                                parentFragmentManager.popBackStack()
-                            } else {
-                                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                            }
-                        }
-                    }
+                    viewModel.unsubscribe(trackerId)
                 }
                 .setNegativeButton(getString(R.string.cancel_button), null)
                 .show()
@@ -122,23 +112,7 @@ class EditSharedTrackerFragment : Fragment() {
                 .setTitle(getString(R.string.remove_from_share_confirm_title))
                 .setMessage(getString(R.string.remove_from_share_confirm_message))
                 .setPositiveButton(getString(R.string.remove_from_share)) { _, _ ->
-                    TrackerRepository.leaveShareWithMe(requireContext(), trackerId) { success ->
-                        if (!isAdded) return@leaveShareWithMe
-                        requireActivity().runOnUiThread {
-                            if (success) {
-                                navHost()?.showSnackbar(getString(R.string.removed_from_share))
-                                requireActivity().supportFragmentManager.setFragmentResult(
-                                    TrackersListFragment.REQUEST_REFRESH_LIST,
-                                    Bundle().apply {
-                                        putString(SharedTrackersFragment.KEY_REMOVED_SHARED_TRACKER_ID, trackerId)
-                                    }
-                                )
-                                parentFragmentManager.popBackStack()
-                            } else {
-                                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                            }
-                        }
-                    }
+                    viewModel.leaveShared(trackerId)
                 }
                 .setNegativeButton(getString(R.string.cancel_button), null)
                 .show()

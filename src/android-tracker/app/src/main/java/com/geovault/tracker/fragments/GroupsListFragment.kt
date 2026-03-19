@@ -10,6 +10,10 @@ import android.widget.ImageButton
 import android.widget.TextView
 import androidx.appcompat.widget.PopupMenu
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -18,9 +22,19 @@ import com.geovault.common.NaturalSort
 import com.geovault.tracker.Group
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
-import com.geovault.tracker.TrackerRepository
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class GroupsListFragment : Fragment() {
+    private val viewModel: GroupsListViewModel by viewModels()
+
+    companion object {
+        const val REQUEST_GROUPS_REFRESH = "groups_refresh"
+        const val REQUEST_GROUP_UPDATED = "groups_update_group"
+        const val KEY_UPDATED_GROUP = "updated_group"
+        const val KEY_DELETED_GROUP_ID = "deleted_group_id"
+    }
 
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var recyclerView: RecyclerView
@@ -50,76 +64,35 @@ class GroupsListFragment : Fragment() {
         )
         recyclerView.adapter = adapter
 
-        swipeRefresh.setOnRefreshListener { loadGroups(forceRefresh = true) }
+        swipeRefresh.setOnRefreshListener { viewModel.load(forceRefresh = true) }
 
-        requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_GROUPS_REFRESH, viewLifecycleOwner) { _, bundle ->
-            val deletedGroupId = bundle?.getString(KEY_DELETED_GROUP_ID)
-            if (!deletedGroupId.isNullOrEmpty()) {
-                adapter?.removeGroupById(deletedGroupId)
-                emptyView.visibility = if ((adapter?.itemCount ?: 0) == 0) View.VISIBLE else View.GONE
-                return@setFragmentResultListener
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect { state ->
+                    if (state.isLoading) {
+                        loadingOverlay.visibility = View.VISIBLE
+                        loadingSpinner.start()
+                    } else {
+                        loadingOverlay.visibility = View.GONE
+                        loadingSpinner.stop(hide = false)
+                        swipeRefresh.isRefreshing = false
+                    }
+                    applyGroups(state.groups)
+                    state.createdGroup?.let {
+                        openGroupEditor(it)
+                        viewModel.consumeCreatedGroup()
+                    }
+                    state.errorMessage?.takeIf { it.isNotBlank() }?.let { navHost()?.showSnackbar(it) }
+                }
             }
-            loadGroups(forceRefresh = true)
-        }
-        requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_GROUP_UPDATED, viewLifecycleOwner) { _, bundle ->
-            val updated = bundle.getParcelable<Group>(KEY_UPDATED_GROUP, Group::class.java) ?: return@setFragmentResultListener
-            applySingleGroupUpdate(updated)
         }
 
-        val cached = TrackerRepository.getGroupsCache()
-        if (cached != null) {
-            val myGroups = cached.filter { g -> g.is_owner == true && g.hidden_in_list != true }
-            applyGroups(myGroups.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() }))
-        } else {
-            loadingOverlay.visibility = View.VISIBLE
-            loadingSpinner.start()
-            loadGroups(forceRefresh = false)
-        }
-    }
-
-    companion object {
-        const val REQUEST_GROUPS_REFRESH = "groups_refresh"
-        const val REQUEST_GROUP_UPDATED = "groups_update_group"
-        const val KEY_UPDATED_GROUP = "updated_group"
-        const val KEY_DELETED_GROUP_ID = "deleted_group_id"
-    }
-
-    private fun shouldShowInMyGroups(group: Group): Boolean {
-        return group.is_owner == true && group.hidden_in_list != true
-    }
-
-    private fun applySingleGroupUpdate(updated: Group) {
-        val shouldShow = shouldShowInMyGroups(updated)
-        if (shouldShow) {
-            adapter?.upsertGroup(updated)
-        } else {
-            adapter?.removeGroupById(updated.id)
-        }
-        emptyView.visibility = if ((adapter?.itemCount ?: 0) == 0) View.VISIBLE else View.GONE
+        viewModel.load(forceRefresh = false)
     }
 
     private fun applyGroups(groups: List<Group>) {
-        loadingOverlay.visibility = View.GONE
-        loadingSpinner.stop(hide = false)
-        swipeRefresh.isRefreshing = false
         adapter?.setGroups(groups)
         emptyView.visibility = if (groups.isEmpty()) View.VISIBLE else View.GONE
-    }
-
-    private fun loadGroups(forceRefresh: Boolean = false) {
-        if (forceRefresh) {
-            loadingOverlay.visibility = View.VISIBLE
-            loadingSpinner.start()
-        }
-        TrackerRepository.getGroups(requireContext(), forceRefresh = forceRefresh) { list ->
-            if (!isAdded) return@getGroups
-            val raw = list ?: emptyList()
-            val myGroups = raw.filter { g -> g.is_owner == true && g.hidden_in_list != true }
-            val sorted = myGroups.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
-            requireActivity().runOnUiThread {
-                applyGroups(sorted)
-            }
-        }
     }
 
     fun showCreateGroupDialog() {
@@ -134,24 +107,7 @@ class GroupsListFragment : Fragment() {
             .setPositiveButton(getString(R.string.create)) { _, _ ->
                 val name = input.text?.toString()?.trim()
                 if (!name.isNullOrEmpty()) {
-                    TrackerRepository.createGroup(requireContext(), name) { group, errorMessage ->
-                        if (!isAdded) return@createGroup
-                        requireActivity().runOnUiThread {
-                            when {
-                                group != null -> {
-                                    val cache = TrackerRepository.getGroupsCache()
-                                    if (cache != null) {
-                                        val myGroups = cache.filter { shouldShowInMyGroups(it) }.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
-                                        applyGroups(myGroups)
-                                    } else {
-                                        loadGroups(forceRefresh = true)
-                                    }
-                                    openGroupEditor(group)
-                                }
-                                !errorMessage.isNullOrBlank() -> navHost()?.showSnackbar(errorMessage)
-                            }
-                        }
-                    }
+                    viewModel.createGroup(name)
                 }
             }
             .setNegativeButton(getString(R.string.cancel_button), null)

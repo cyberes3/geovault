@@ -10,7 +10,11 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.widget.PopupMenu
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.geovault.tracker.Group
@@ -18,11 +22,14 @@ import com.google.android.material.card.MaterialCardView
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.parseHexToColor
 import com.google.android.material.button.MaterialButton
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class GroupActionsFragment : Fragment() {
+    private val viewModel: GroupActionsViewModel by viewModels()
 
     private var group: Group? = null
     private var scrollToTrackerId: String? = null
@@ -63,22 +70,27 @@ class GroupActionsFragment : Fragment() {
         }
 
         trackersList.layoutManager = LinearLayoutManager(requireContext())
-        loadTrackersList(g, trackersList, emptyView)
-
-        requireActivity().supportFragmentManager.setFragmentResultListener(
-            GroupsListFragment.REQUEST_GROUP_UPDATED,
-            viewLifecycleOwner
-        ) { _, bundle ->
-            val updated = bundle.getParcelable<Group>(GroupsListFragment.KEY_UPDATED_GROUP, Group::class.java)
-                ?: return@setFragmentResultListener
-            if (updated.id != group?.id) return@setFragmentResultListener
-            group = updated
-            title.text = updated.name
-            loadTrackersList(updated, trackersList, emptyView)
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect { state ->
+                    state.group?.let { updated ->
+                        group = updated
+                        title.text = updated.name
+                        loadTrackersList(updated, state.trackers, trackersList, emptyView)
+                    }
+                    state.errorMessage?.takeIf { it.isNotBlank() }?.let { navHost()?.showSnackbar(it) }
+                }
+            }
         }
+        viewModel.load(g.id)
     }
 
-    private fun loadTrackersList(g: Group, trackersList: RecyclerView, emptyView: TextView) {
+    private fun loadTrackersList(
+        g: Group,
+        allTrackers: List<Tracker>,
+        trackersList: RecyclerView,
+        emptyView: TextView
+    ) {
         val trackIds = g.track_ids ?: emptyList()
         val targetTrackerId = scrollToTrackerId
         if (trackIds.isEmpty()) {
@@ -86,33 +98,27 @@ class GroupActionsFragment : Fragment() {
             emptyView.visibility = View.VISIBLE
             return
         }
-        TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { list ->
-            if (!isAdded) return@getTrackers
-            val all = list ?: emptyList()
-            val idToTracker = all.associateBy { it.id }
-            val ordered = trackIds.mapNotNull { idToTracker[it] }
-            requireActivity().runOnUiThread {
-                trackersList.visibility = View.VISIBLE
-                emptyView.visibility = View.GONE
-                trackersList.adapter = GroupTrackerCardAdapter(
-                    ordered,
-                    showRemove = false,
-                    highlightedTrackerId = targetTrackerId,
-                    onItemClick = { trackerId ->
-                        navHost()?.openMapForGroup(g, trackerId)
-                    },
-                    onShowMenu = { tracker, anchor -> showGroupTrackerMenu(anchor, g, tracker) }
-                )
-                if (targetTrackerId != null) {
-                    val index = ordered.indexOfFirst { it.id == targetTrackerId }
-                    if (index >= 0) {
-                        trackersList.post {
-                            (trackersList.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(
-                                index,
-                                trackersList.height / 3
-                            )
-                        }
-                    }
+        val idToTracker = allTrackers.associateBy { it.id }
+        val ordered = trackIds.mapNotNull { idToTracker[it] }
+        trackersList.visibility = View.VISIBLE
+        emptyView.visibility = View.GONE
+        trackersList.adapter = GroupTrackerCardAdapter(
+            ordered,
+            showRemove = false,
+            highlightedTrackerId = targetTrackerId,
+            onItemClick = { trackerId ->
+                navHost()?.openMapForGroup(g, trackerId)
+            },
+            onShowMenu = { tracker, anchor -> showGroupTrackerMenu(anchor, g, tracker) }
+        )
+        if (targetTrackerId != null) {
+            val index = ordered.indexOfFirst { it.id == targetTrackerId }
+            if (index >= 0) {
+                trackersList.post {
+                    (trackersList.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(
+                        index,
+                        trackersList.height / 3
+                    )
                 }
             }
         }

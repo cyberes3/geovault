@@ -141,6 +141,12 @@ data class GroupPatchRequest(
 
 data class GroupAddTrackRequest(val track_id: String)
 
+data class TrackerAddToGroupCandidate(
+    val tracker: Tracker,
+    val canAdd: Boolean,
+    val reason: String? = null
+)
+
 /** GET /api/users/ — list users for share recipient picker. */
 data class UsersResponse(val users: List<UserItem> = emptyList())
 

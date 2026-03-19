@@ -1,10 +1,10 @@
 package com.geovault.tracker.fragments
 
-import android.content.Context
 import com.geovault.tracker.AppError
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.data.TrackerListRepository
+import com.geovault.tracker.data.TrackerManagementStateStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -42,7 +42,7 @@ class TrackersListViewModelTest {
     fun load_success_updatesUiState() = runTest {
         val viewModel = TrackersListViewModel(
             trackerListRepository = object : TrackerListRepository {
-                override suspend fun loadTrackers(context: Context, forceRefresh: Boolean): RepositoryResult<List<Tracker>> {
+                override suspend fun loadTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> {
                     return RepositoryResult.Success(
                         listOf(
                             Tracker(id = "1", name = "One", color = null),
@@ -50,11 +50,11 @@ class TrackersListViewModelTest {
                         )
                     )
                 }
-            }
+            },
+            stateStore = TrackerManagementStateStore()
         )
-        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<Context>()
 
-        viewModel.load(context, forceRefresh = true, showLoading = true)
+        viewModel.load(forceRefresh = true, showLoading = true)
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
@@ -67,14 +67,14 @@ class TrackersListViewModelTest {
     fun load_failure_setsErrorAndStopsLoading() = runTest {
         val viewModel = TrackersListViewModel(
             trackerListRepository = object : TrackerListRepository {
-                override suspend fun loadTrackers(context: Context, forceRefresh: Boolean): RepositoryResult<List<Tracker>> {
+                override suspend fun loadTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> {
                     return RepositoryResult.Failure(AppError.Network)
                 }
-            }
+            },
+            stateStore = TrackerManagementStateStore()
         )
-        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<Context>()
 
-        viewModel.load(context, forceRefresh = false, showLoading = true)
+        viewModel.load(forceRefresh = false, showLoading = true)
         advanceUntilIdle()
 
         val state = viewModel.uiState.value

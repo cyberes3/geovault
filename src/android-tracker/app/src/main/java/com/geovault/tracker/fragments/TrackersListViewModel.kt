@@ -1,11 +1,12 @@
 package com.geovault.tracker.fragments
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.data.TrackerListRepository
+import com.geovault.tracker.data.TrackerManagementEvent
+import com.geovault.tracker.data.TrackerManagementStateStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,10 +23,38 @@ data class TrackersListUiState(
 
 @HiltViewModel
 class TrackersListViewModel @Inject constructor(
-    private val trackerListRepository: TrackerListRepository
+    private val trackerListRepository: TrackerListRepository,
+    private val stateStore: TrackerManagementStateStore
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(TrackersListUiState())
     val uiState: StateFlow<TrackersListUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            stateStore.events.collect { event ->
+                when (event) {
+                    is TrackerManagementEvent.TrackersRefreshed -> setCached(event.trackers)
+                    is TrackerManagementEvent.TrackerUpserted -> {
+                        _uiState.value = _uiState.value.copy(
+                            trackers = _uiState.value.trackers
+                                .filterNot { it.id == event.tracker.id }
+                                .plus(event.tracker)
+                                .sortedBy { it.name.lowercase() },
+                            isEmpty = false
+                        )
+                    }
+                    is TrackerManagementEvent.TrackerDeleted -> {
+                        val updated = _uiState.value.trackers.filterNot { it.id == event.trackerId }
+                        _uiState.value = _uiState.value.copy(
+                            trackers = updated,
+                            isEmpty = updated.isEmpty()
+                        )
+                    }
+                    else -> Unit
+                }
+            }
+        }
+    }
 
     fun setCached(trackers: List<Tracker>) {
         _uiState.value = TrackersListUiState(
@@ -35,12 +64,12 @@ class TrackersListViewModel @Inject constructor(
         )
     }
 
-    fun load(context: Context, forceRefresh: Boolean = false, showLoading: Boolean = true) {
+    fun load(forceRefresh: Boolean = false, showLoading: Boolean = true) {
         if (showLoading) {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
         }
         viewModelScope.launch {
-            val result = trackerListRepository.loadTrackers(context, forceRefresh)
+            val result = trackerListRepository.loadTrackers(forceRefresh = forceRefresh)
             _uiState.value = when (result) {
                 is RepositoryResult.Success -> {
                     TrackersListUiState(

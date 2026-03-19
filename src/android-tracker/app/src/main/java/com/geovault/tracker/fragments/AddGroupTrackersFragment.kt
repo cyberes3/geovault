@@ -12,14 +12,21 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.geovault.common.LoadingSpinner
 import com.geovault.common.NaturalSort
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.TrackerRepository
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class AddGroupTrackersFragment : Fragment() {
+    private val viewModel: AddGroupTrackersViewModel by viewModels()
     private enum class RowState { IDLE, ADDING }
     private data class AddableTrack(val tracker: Tracker) {
         val id: String get() = tracker.id
@@ -67,43 +74,27 @@ class AddGroupTrackersFragment : Fragment() {
             }
         })
 
-        val preloaded = arguments?.getParcelableArrayList(ARG_PRELOADED_TRACKERS, Tracker::class.java)
-        if (!preloaded.isNullOrEmpty()) {
-            allItems = preloaded
-                .filter { it.id !in existingTrackIds }
-                .filter { tracker -> canShowInAddList(tracker) }
-                .map { AddableTrack(it) }
-                .distinctBy { it.id }
-                .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
-            loadingView.visibility = View.GONE
-            spinner.stop(hide = true)
-            renderList()
-        } else {
-            loadCandidates()
-        }
-    }
-
-    private fun loadCandidates() {
-        loadingView.visibility = View.VISIBLE
-        spinner.start()
-        TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { list ->
-            if (!isAdded) return@getTrackers
-            val addable = (list ?: emptyList())
-                .filter { tracker ->
-                    tracker.id !in existingTrackIds && canShowInAddList(tracker)
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect { state ->
+                    if (state.isLoading) {
+                        loadingView.visibility = View.VISIBLE
+                        spinner.start()
+                    } else {
+                        loadingView.visibility = View.GONE
+                        spinner.stop(hide = true)
+                    }
+                    allItems = state.candidates
+                        .filter { it.id !in existingTrackIds }
+                        .map { AddableTrack(it) }
+                        .distinctBy { it.id }
+                        .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
+                    renderList()
+                    state.errorMessage?.takeIf { it.isNotBlank() }?.let { navHost()?.showSnackbar(it) }
                 }
-                .map { tracker ->
-                    AddableTrack(tracker)
-                }
-                .distinctBy { it.id }
-                .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
-            requireActivity().runOnUiThread {
-                allItems = addable
-                spinner.stop(hide = true)
-                loadingView.visibility = View.GONE
-                renderList()
             }
         }
+        viewModel.load(requireGroupId())
     }
 
     private fun renderList() {
@@ -149,58 +140,19 @@ class AddGroupTrackersFragment : Fragment() {
             addBtn.setOnClickListener {
                 if (rowStates[item.id] == RowState.ADDING || item.id in existingTrackIds) return@setOnClickListener
                 applyRowState(RowState.ADDING)
-                TrackerRepository.addGroupTrack(requireContext(), requireGroupId(), item.id) callback@{ updated, errorMessage ->
-                    if (!isAdded) return@callback
-                    requireActivity().runOnUiThread {
-                        if (updated != null) {
-                            existingTrackIds.add(item.id)
-                            rowStates.remove(item.id)
-                            parentFragmentManager.setFragmentResult(
-                                REQUEST_GROUP_TRACK_ADDED,
-                                Bundle().apply {
-                                    putString(KEY_GROUP_ID, requireGroupId())
-                                    putString(KEY_TRACK_ID, item.id)
-                                    putParcelable(KEY_TRACKER, item.tracker)
-                                    putParcelable(KEY_GROUP, updated)
-                                }
-                            )
-                            parentFragmentManager.setFragmentResult(
-                                REQUEST_GROUP_TRACK_ADDED_LIST,
-                                Bundle().apply {
-                                    putString(KEY_GROUP_ID, requireGroupId())
-                                    putParcelable(KEY_GROUP, updated)
-                                }
-                            )
-                            parentFragmentManager.setFragmentResult(
-                                GroupsListFragment.REQUEST_GROUP_UPDATED,
-                                Bundle().apply { putParcelable(GroupsListFragment.KEY_UPDATED_GROUP, updated) }
-                            )
-                            renderList()
-                        } else {
-                            applyRowState(RowState.IDLE)
-                            navHost()?.showSnackbar(
-                                errorMessage?.takeIf { it.isNotBlank() }
-                                    ?: getString(R.string.failed_to_load_tracker)
-                            )
-                        }
+                viewModel.addTracker(requireGroupId(), item.id) { success ->
+                    if (!isAdded) return@addTracker
+                    if (success) {
+                        existingTrackIds.add(item.id)
+                        rowStates.remove(item.id)
+                        renderList()
+                    } else {
+                        applyRowState(RowState.IDLE)
                     }
                 }
             }
             listContainer.addView(row)
         }
-    }
-
-    /**
-     * Keep Add Trackers list aligned with backend group_add_track eligibility to avoid 403s.
-     * For non-owner tracks we only show public + allow_group_reshare candidates.
-     */
-    private fun canShowInAddList(tracker: Tracker): Boolean {
-        if (tracker.isOwner()) {
-            return (tracker.settings?.get("hidden_in_list") as? Boolean) != true
-        }
-        val allowReshare = (tracker.settings?.get("allow_group_reshare") as? Boolean) == true
-        val isPublic = tracker.visibility == "public"
-        return allowReshare && isPublic
     }
 
     private fun requireGroupId(): String {

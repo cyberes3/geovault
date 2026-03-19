@@ -21,8 +21,9 @@ import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.parseHexToColor
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
+import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.TrackerRepository
+import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.lastPosition
 import com.geovault.tracker.lastUpdateMs
 import com.geovault.tracker.navigation.navHost
@@ -32,11 +33,14 @@ import dagger.hilt.android.AndroidEntryPoint
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import javax.inject.Inject
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class TrackersListFragment : Fragment() {
     private val viewModel: TrackersListViewModel by viewModels()
+    @Inject
+    lateinit var trackerManagementRepository: TrackerManagementRepository
 
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var recyclerView: RecyclerView
@@ -111,79 +115,9 @@ class TrackersListFragment : Fragment() {
             }
         }
 
-        val cached = TrackerRepository.getTrackersCache()
-        if (cached != null) {
-            viewModel.setCached(cached)
-            loadingOverlay.visibility = View.GONE
-            loadingSpinner.stop(hide = false)
-            applyScrollAndHighlightIfPending()
-        } else {
-            loadingOverlay.visibility = View.VISIBLE
-            loadingSpinner.start()
-        }
-        viewModel.load(requireContext(), forceRefresh = false, showLoading = false)
-
-        requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_REFRESH_LIST, viewLifecycleOwner) { _, bundle ->
-            val newTracker = bundle?.getParcelable(KEY_NEW_TRACKER, Tracker::class.java)
-            if (newTracker != null) {
-                val cache = TrackerRepository.getTrackersCache()
-                if (cache != null) {
-                    setTrackers(visibleOwnerTrackers(cache))
-                }
-            } else {
-                val deletedTrackerId = bundle?.getString(KEY_DELETED_TRACKER_ID)
-                if (!deletedTrackerId.isNullOrEmpty()) {
-                    adapter?.removeTrackerId(deletedTrackerId)
-                    updateEmptyState()
-                    return@setFragmentResultListener
-                }
-                val hiddenTrackerId = bundle?.getString(KEY_HIDDEN_TRACKER_ID)
-                if (!hiddenTrackerId.isNullOrEmpty()) {
-                    adapter?.removeTrackerId(hiddenTrackerId)
-                    updateEmptyState()
-                }
-                loadTrackers()
-            }
-        }
-        requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_UPDATE_TRACKER, viewLifecycleOwner) { _, bundle ->
-            val updated = bundle.getParcelable<Tracker>("tracker", Tracker::class.java)
-            val hiddenInList = bundle.getBoolean(KEY_UPDATED_TRACKER_HIDDEN, false)
-            if (updated != null) {
-                if (hiddenInList) {
-                    adapter?.removeTrackerId(updated.id)
-                    updateEmptyState()
-                } else {
-                    adapter?.updateTracker(updated)
-                }
-            }
-        }
-        requireActivity().supportFragmentManager.setFragmentResultListener(REQUEST_UPDATE_LIST_FROM_CACHE, viewLifecycleOwner) { _, _ ->
-            TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { list ->
-                if (isAdded) {
-                    requireActivity().runOnUiThread {
-                        viewModel.setCached(list ?: emptyList())
-                    }
-                }
-            }
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        var shouldReload = false
-        pendingHiddenTrackerId?.let { id ->
-            pendingHiddenTrackerId = null
-            adapter?.removeTrackerId(id)
-            updateEmptyState()
-            shouldReload = true
-        }
-        if (pendingFullRefresh) {
-            pendingFullRefresh = false
-            shouldReload = true
-        }
-        if (shouldReload) {
-            loadTrackersInBackground()
-        }
+        loadingOverlay.visibility = View.VISIBLE
+        loadingSpinner.start()
+        viewModel.load(forceRefresh = false, showLoading = false)
     }
 
     override fun onPause() {
@@ -206,11 +140,11 @@ class TrackersListFragment : Fragment() {
 
     private fun loadTrackers() {
         clearHighlight()
-        viewModel.load(requireContext(), forceRefresh = true, showLoading = true)
+        viewModel.load(forceRefresh = true, showLoading = true)
     }
 
     private fun loadTrackersInBackground() {
-        viewModel.load(requireContext(), forceRefresh = true, showLoading = false)
+        viewModel.load(forceRefresh = true, showLoading = false)
     }
 
     private fun setTrackers(trackers: List<Tracker>) {
@@ -277,36 +211,33 @@ class TrackersListFragment : Fragment() {
     }
 
     private fun viewOnMap(tracker: Tracker) {
-        TrackerRepository.clearSelectedTrackerCaches()
         navHost()?.setInitialTrackForMap(tracker)
         navHost()?.setCurrentTab(1, forceRefreshMap = true, delayMs = 50)
     }
 
     private fun unsubscribeTracker(tracker: Tracker) {
-        TrackerRepository.unsubscribeTracker(requireContext(), tracker.id) { success ->
-            if (isAdded) {
-                requireActivity().runOnUiThread {
-                    if (success) {
-                        loadTrackers()
-                        navHost()?.showSnackbar(getString(R.string.unsubscribed))
-                    } else {
-                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                    }
+        viewLifecycleOwner.lifecycleScope.launch {
+            when (trackerManagementRepository.unsubscribeTracker(tracker.id)) {
+                is RepositoryResult.Success -> {
+                    loadTrackersInBackground()
+                    navHost()?.showSnackbar(getString(R.string.unsubscribed))
+                }
+                is RepositoryResult.Failure -> {
+                    navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 }
             }
         }
     }
 
     private fun removeFromShare(tracker: Tracker) {
-        TrackerRepository.leaveShareWithMe(requireContext(), tracker.id) { success ->
-            if (isAdded) {
-                requireActivity().runOnUiThread {
-                    if (success) {
-                        loadTrackers()
-                        navHost()?.showSnackbar(getString(R.string.removed_from_share))
-                    } else {
-                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                    }
+        viewLifecycleOwner.lifecycleScope.launch {
+            when (trackerManagementRepository.leaveShareWithMe(tracker.id)) {
+                is RepositoryResult.Success -> {
+                    loadTrackersInBackground()
+                    navHost()?.showSnackbar(getString(R.string.removed_from_share))
+                }
+                is RepositoryResult.Failure -> {
+                    navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 }
             }
         }

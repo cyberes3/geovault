@@ -1,6 +1,5 @@
 package com.geovault.tracker.fragments
 
-import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -11,22 +10,23 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
-import com.geovault.common.RetrofitClient
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerManager
-import com.geovault.tracker.TrackerApi
 import com.geovault.tracker.showHueColorPickerDialog
 import com.geovault.tracker.updateColorPreview
 import com.geovault.tracker.defaultTrackerColorHex
-import com.geovault.tracker.TrackerCreateRequest
-import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.navigation.navHost
 import com.google.android.material.button.MaterialButton
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class NewTrackerFragment : Fragment() {
+    private val viewModel: NewTrackerViewModel by viewModels()
 
     private lateinit var nameEdit: EditText
     private lateinit var colorEdit: EditText
@@ -78,6 +78,29 @@ class NewTrackerFragment : Fragment() {
 
         cancelButton.setOnClickListener { tryClose() }
 
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect { state ->
+                    setActionButtonsEnabled(!state.isSaving)
+                    state.errorMessage?.takeIf { it.isNotBlank() }?.let { navHost()?.showSnackbar(it) }
+                    val created = state.createdTracker
+                    if (created != null) {
+                        if (selectedTrackSwitch.isChecked) {
+                            SelectedTrackerManager.setSelectedTracker(
+                                context = requireContext(),
+                                trackerId = created.id,
+                                trackerName = created.name,
+                                restartTrackingIfRunning = true
+                            )
+                        }
+                        requireActivity().supportFragmentManager.popBackStack()
+                        Toast.makeText(requireContext(), "Tracker created", Toast.LENGTH_SHORT).show()
+                        viewModel.consumeCreatedTracker()
+                    }
+                }
+            }
+        }
+
         createButton.setOnClickListener {
             val name = nameEdit.text.toString().trim()
             val color = colorEdit.text.toString().trim().ifEmpty { null }
@@ -85,58 +108,7 @@ class NewTrackerFragment : Fragment() {
                 navHost()?.showSnackbar("Name is required")
                 return@setOnClickListener
             }
-            setActionButtonsEnabled(false)
-            val serverUrl = com.geovault.common.GeovaultAuthManager.getServerUrl(requireContext())
-            if (serverUrl.isEmpty()) {
-                navHost()?.showSnackbar("Not connected")
-                setActionButtonsEnabled(true)
-                return@setOnClickListener
-            }
-            val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-            val api = RetrofitClient.getClient(requireContext(), baseUrl).create(TrackerApi::class.java)
-            api.createTracker(TrackerCreateRequest(name = name, color = color))
-                .enqueue(object : Callback<com.geovault.tracker.Tracker> {
-                    override fun onResponse(
-                        call: Call<com.geovault.tracker.Tracker>,
-                        response: Response<com.geovault.tracker.Tracker>
-                    ) {
-                        if (isAdded) {
-                            requireActivity().runOnUiThread {
-                                setActionButtonsEnabled(true)
-                                if (response.isSuccessful && response.body() != null) {
-                                    val newTracker = response.body()!!
-                                    TrackerRepository.insertTrackerInCache(newTracker)
-                                    if (selectedTrackSwitch.isChecked) {
-                                        SelectedTrackerManager.setSelectedTracker(
-                                            context = requireContext(),
-                                            trackerId = newTracker.id,
-                                            trackerName = newTracker.name,
-                                            restartTrackingIfRunning = true
-                                        )
-                                        TrackerRepository.getTrackerGeometry(requireContext(), newTracker.id, callback = { })
-                                    }
-                                    requireActivity().supportFragmentManager.setFragmentResult(
-                                        TrackersListFragment.REQUEST_REFRESH_LIST,
-                                        android.os.Bundle().apply { putParcelable(TrackersListFragment.KEY_NEW_TRACKER, newTracker) }
-                                    )
-                                    requireActivity().supportFragmentManager.popBackStack()
-                                    Toast.makeText(requireContext(), "Tracker created", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    val msg = response.errorBody()?.string()?.take(120) ?: "Failed to create tracker"
-                                    navHost()?.showSnackbar(msg)
-                                }
-                            }
-                        }
-                    }
-                    override fun onFailure(call: Call<com.geovault.tracker.Tracker>, t: Throwable) {
-                        if (isAdded) {
-                            requireActivity().runOnUiThread {
-                                setActionButtonsEnabled(true)
-                                navHost()?.showSnackbar(t.message ?: "Network error")
-                            }
-                        }
-                    }
-                })
+            viewModel.createTracker(name = name, color = color)
         }
     }
 
