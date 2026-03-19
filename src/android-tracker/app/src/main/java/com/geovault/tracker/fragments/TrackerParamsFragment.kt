@@ -22,6 +22,7 @@ import com.geovault.tracker.data.TrackerDetailRepository
 import com.geovault.tracker.lastPosition
 import com.geovault.tracker.lastUpdateMs
 import com.geovault.tracker.pipeline.TrackPointEventStream
+import com.geovault.tracker.pipeline.TrackPointSourceResolver
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -54,6 +55,7 @@ class TrackerParamsFragment : Fragment() {
     private lateinit var paramsSwipeRefresh: SwipeRefreshLayout
     private var trackerId: String? = null
     private var streamCollectionJob: Job? = null
+    private var lastAppliedTimestampMs: Long = 0L
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -110,7 +112,16 @@ class TrackerParamsFragment : Fragment() {
         if (streamCollectionJob?.isActive == true) return
         streamCollectionJob = viewLifecycleOwner.lifecycleScope.launch {
             trackPointEvents.events.collect { event ->
-                if (event.trackId != trackerId) return@collect
+                val id = trackerId ?: return@collect
+                val selectedId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
+                val trackingRunning = TrackingRuntimeStateStore.state.value.isRunning
+                if (!TrackPointSourceResolver.shouldAcceptForParams(
+                        event = event,
+                        trackerId = id,
+                        trackingRunning = trackingRunning,
+                        selectedTrackerId = selectedId
+                    )
+                ) return@collect
                 if (!isAdded) return@collect
                 updateFromStreamPoint(
                     lat = event.lat,
@@ -215,6 +226,12 @@ class TrackerParamsFragment : Fragment() {
      */
     private fun updateFromStreamPoint(lat: Double, lon: Double, timestampMs: Long, propsJson: String?) {
         if (!isAdded) return
+        if (timestampMs > 0L && timestampMs < lastAppliedTimestampMs) {
+            return
+        }
+        if (timestampMs > 0L) {
+            lastAppliedTimestampMs = timestampMs
+        }
         paramsLastUpdate.text = if (timestampMs > 0) formatTimeLocal(timestampMs) else getString(R.string.no_points_yet)
         paramsPositionCard.visibility = View.VISIBLE
         paramsPosition.text = if (!lat.isNaN() && !lon.isNaN()) formatLatLon(lat, lon) else "-"
@@ -259,6 +276,9 @@ class TrackerParamsFragment : Fragment() {
             formatTimeLocal(lastTimestampMs)
         } else {
             getString(R.string.no_points_yet)
+        }
+        if (lastTimestampMs != null && lastTimestampMs > 0L) {
+            lastAppliedTimestampMs = maxOf(lastAppliedTimestampMs, lastTimestampMs)
         }
 
         paramsPosition.text = if (lastPosition != null) {

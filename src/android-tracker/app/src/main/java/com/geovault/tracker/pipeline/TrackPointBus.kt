@@ -31,12 +31,13 @@ object TrackPointBus {
     val remoteStreamEvents: Flow<TrackPointEvent> = events.filter { it.source == TrackPointSource.REMOTE_STREAM }
 
     fun publish(event: TrackPointEvent) {
-        if (eventsFlow.tryEmit(event)) {
+        val sanitizedEvent = UnifiedTrackPointIngress.sanitize(event) ?: return
+        if (eventsFlow.tryEmit(sanitizedEvent)) {
             return
         }
         deferredEmitCount.incrementAndGet()
         emitScope.launch {
-            eventsFlow.emit(event)
+            eventsFlow.emit(sanitizedEvent)
         }
     }
 
@@ -52,9 +53,14 @@ object TrackPointBus {
     fun resetForTests() {
         eventsFlow.resetReplayCache()
         deferredEmitCount.set(0L)
+        UnifiedTrackPointIngress.resetForTests()
     }
 
     fun deferredEmitEventsCount(): Long {
         return deferredEmitCount.get()
+    }
+
+    fun ingressStats(): IngressStats {
+        return UnifiedTrackPointIngress.stats()
     }
 }

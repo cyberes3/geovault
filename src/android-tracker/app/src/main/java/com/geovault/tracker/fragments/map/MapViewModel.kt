@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 @HiltViewModel
@@ -45,6 +46,17 @@ class MapViewModel @Inject constructor(
     val commands: SharedFlow<MapCommand> = _commands.asSharedFlow()
 
     private var streamJob: Job? = null
+    private var streamRuntimeJob: Job? = null
+
+    init {
+        streamRuntimeJob = viewModelScope.launch {
+            LiveStreamRuntimeStateStore.state.collectLatest { snapshot ->
+                _uiState.value = _uiState.value.copy(
+                    activeStreamedTrackerIds = snapshot.activeTrackerIds
+                )
+            }
+        }
+    }
 
     private fun emitCameraPolicy(command: MapCameraCommand) {
         _uiState.value = _uiState.value.copy(lockMode = command.lockMode)
@@ -81,7 +93,7 @@ class MapViewModel @Inject constructor(
                         else -> MapViewContext.SINGLE_TRACKER
                     },
                     displayedTrackerId = state.displayedTrackerId,
-                    activeStreamedTrackerIds = state.activeStreamedTrackerIds
+                    activeStreamedTrackerIds = LiveStreamRuntimeStateStore.state.value.activeTrackerIds
                 )
                 if (accepted) {
                     _commands.tryEmit(MapCommand.ApplyTrackPoint(event))
@@ -106,7 +118,6 @@ class MapViewModel @Inject constructor(
     }
 
     fun stopLiveTrackStreaming() {
-        _uiState.value = _uiState.value.copy(activeStreamedTrackerIds = emptySet())
         MapStreamingServiceHelper.stopStreaming(getApplication())
     }
 
@@ -120,7 +131,6 @@ class MapViewModel @Inject constructor(
             stopLiveTrackStreaming()
             return
         }
-        _uiState.value = _uiState.value.copy(activeStreamedTrackerIds = cleanedIds)
     }
 
     internal fun startLiveTrackStreamingForDisplayedTracker(
@@ -151,7 +161,7 @@ class MapViewModel @Inject constructor(
     ): Boolean {
         if (trackingRunning) return false
         if (!LiveStreamRuntimeStateStore.state.value.isRunning) return false
-        val activeIds = _uiState.value.activeStreamedTrackerIds
+        val activeIds = LiveStreamRuntimeStateStore.state.value.activeTrackerIds
         return if (showAllTrackers || mapViewContext == MapViewContext.GROUP) {
             activeIds.isNotEmpty()
         } else {

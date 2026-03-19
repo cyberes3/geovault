@@ -35,6 +35,8 @@ object TrackingRuntimeStateStore {
 
 data class LiveStreamRuntimeSnapshot(
     val isRunning: Boolean = false,
+    val lifecycleState: TrackingLifecycleState = TrackingLifecycleState.STOPPED,
+    val failureReason: String? = null,
     val activeTrackerIds: Set<String> = emptySet()
 )
 

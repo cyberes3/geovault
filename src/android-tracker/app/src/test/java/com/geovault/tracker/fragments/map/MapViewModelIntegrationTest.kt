@@ -9,6 +9,8 @@ import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerCoordinatesResponse
 import com.geovault.tracker.pipeline.TrackPointEvent
 import com.geovault.tracker.pipeline.TrackPointSource
+import com.geovault.tracker.services.LiveStreamRuntimeStateStore
+import com.geovault.tracker.services.TrackingRuntimeStateStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -37,11 +39,19 @@ class MapViewModelIntegrationTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
+        LiveStreamRuntimeStateStore.update {
+            it.copy(isRunning = false, activeTrackerIds = emptySet())
+        }
+        TrackingRuntimeStateStore.update {
+            it.copy(isRunning = false)
+        }
     }
 
     @After
     fun tearDown() {
         Dispatchers.resetMain()
+        TrackingRuntimeStateStore.update { it.copy(isRunning = false) }
+        LiveStreamRuntimeStateStore.update { it.copy(isRunning = false, activeTrackerIds = emptySet()) }
     }
 
     @Test
@@ -75,13 +85,10 @@ class MapViewModelIntegrationTest {
             }
         }
 
-        viewModel.updateUiState {
-            it.copy(
-                mode = MapScreenMode.AllTrackers,
-                showAllTrackers = true,
-                activeStreamedTrackerIds = setOf("t1")
-            )
+        LiveStreamRuntimeStateStore.update {
+            it.copy(isRunning = true, activeTrackerIds = setOf("t1"))
         }
+        viewModel.updateUiState { it.copy(mode = MapScreenMode.AllTrackers, showAllTrackers = true) }
         viewModel.startTrackPointStream()
         advanceUntilIdle()
 
@@ -112,13 +119,10 @@ class MapViewModelIntegrationTest {
             }
         }
 
-        viewModel.updateUiState {
-            it.copy(
-                mode = MapScreenMode.AllTrackers,
-                showAllTrackers = true,
-                activeStreamedTrackerIds = setOf("t1")
-            )
+        LiveStreamRuntimeStateStore.update {
+            it.copy(isRunning = true, activeTrackerIds = setOf("t1"))
         }
+        viewModel.updateUiState { it.copy(mode = MapScreenMode.AllTrackers, showAllTrackers = true) }
         viewModel.startTrackPointStream()
         advanceUntilIdle()
         viewModel.stopTrackPointStream()
@@ -136,6 +140,43 @@ class MapViewModelIntegrationTest {
         job.cancel()
 
         assertEquals(0, commands.count { it is MapCommand.ApplyTrackPoint })
+    }
+
+    @Test
+    fun streamEvent_trackingRunning_acceptsLocalGpsOnly() = runTest {
+        val stream = MutableSharedFlow<TrackPointEvent>(extraBufferCapacity = 8)
+        val viewModel = createViewModel(stream)
+        val commands = mutableListOf<MapCommand>()
+        val job = launch {
+            viewModel.commands.collect { commands.add(it) }
+        }
+
+        LiveStreamRuntimeStateStore.update {
+            it.copy(isRunning = true, activeTrackerIds = setOf("t1"))
+        }
+        TrackingRuntimeStateStore.update { it.copy(isRunning = true) }
+        viewModel.updateUiState {
+            it.copy(
+                mode = MapScreenMode.Single,
+                showAllTrackers = false,
+                displayedTrackerId = "t1"
+            )
+        }
+        viewModel.startTrackPointStream()
+        advanceUntilIdle()
+
+        stream.emit(
+            TrackPointEvent(
+                source = TrackPointSource.REMOTE_STREAM,
+                trackId = "t1",
+                lon = 10.0,
+                lat = 20.0,
+                timestampMs = 1_000L
+            )
+        )
+        advanceUntilIdle()
+        assertEquals(0, commands.count { it is MapCommand.ApplyTrackPoint })
+        job.cancel()
     }
 
     private fun createViewModel(stream: MutableSharedFlow<TrackPointEvent>): MapViewModel {

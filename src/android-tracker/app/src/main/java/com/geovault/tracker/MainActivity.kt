@@ -68,6 +68,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     override var isServerAccessible = true
         private set
     private var trackingErrorReceiverRegistered = false
+    private var streamingErrorReceiverRegistered = false
     private val trackingErrorReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != TrackingService.ACTION_TRACKING_ERROR) return
@@ -77,6 +78,14 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             }
             val homeFragment = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
             homeFragment?.updateTrackingUi()
+        }
+    }
+    private val streamingErrorReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val message = extractStreamingErrorMessage(intent)
+            if (!message.isNullOrBlank()) {
+                showSnackbar(message)
+            }
         }
     }
 
@@ -994,6 +1003,15 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             )
             trackingErrorReceiverRegistered = true
         }
+        if (!streamingErrorReceiverRegistered) {
+            ContextCompat.registerReceiver(
+                this,
+                streamingErrorReceiver,
+                IntentFilter(LiveTrackStreamingService.ACTION_STREAMING_ERROR),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+            streamingErrorReceiverRegistered = true
+        }
         updatePermissionsState()
         if (TrackingRuntimeStateStore.state.value.isRunning && !hasLocationPermission()) {
             settingsRepository.clearWasTrackingBeforeExit()
@@ -1008,6 +1026,10 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         if (trackingErrorReceiverRegistered) {
             unregisterReceiver(trackingErrorReceiver)
             trackingErrorReceiverRegistered = false
+        }
+        if (streamingErrorReceiverRegistered) {
+            unregisterReceiver(streamingErrorReceiver)
+            streamingErrorReceiverRegistered = false
         }
         super.onStop()
     }
@@ -1048,6 +1070,12 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         private const val KEY_GROUP_MAP_OPENED_FROM_TAB = "group_map_opened_from_tab"
         const val EXTRA_SIGNED_IN_EMAIL = "signed_in_email"
         const val EXTRA_OAUTH_ERROR = "oauth_error"
+
+        internal fun extractStreamingErrorMessage(intent: Intent?): String? {
+            if (intent?.action != LiveTrackStreamingService.ACTION_STREAMING_ERROR) return null
+            return intent.getStringExtra(LiveTrackStreamingService.EXTRA_STREAMING_ERROR_MESSAGE)
+                ?.takeIf { it.isNotBlank() }
+        }
     }
 
     private fun ensureTrackingStartReadiness(): Boolean {

@@ -544,7 +544,7 @@ class TrackingService : TrackPointServiceBase() {
         lastTrackedTimestampMs = location.time
         lastTrackedPropsJson = propsJson
         syncRuntimeStateStore()
-        val point = LiveTrackStreamingService.TrackPointBroadcast(
+        val point = StreamingTrackPoint(
             trackId = trackerId,
             lon = location.longitude,
             lat = location.latitude,

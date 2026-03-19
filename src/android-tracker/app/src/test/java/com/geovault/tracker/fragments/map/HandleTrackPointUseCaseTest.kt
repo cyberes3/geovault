@@ -52,5 +52,45 @@ class HandleTrackPointUseCaseTest {
 
         assertFalse(accepted)
     }
+
+    @Test
+    fun shouldAccept_trackingRunning_acceptsLocalGpsForDisplayedTracker() {
+        val useCase = HandleTrackPointUseCase()
+        val accepted = useCase.shouldAccept(
+            event = TrackPointEvent(
+                source = TrackPointSource.LOCAL_GPS,
+                trackId = "t1",
+                lon = 1.0,
+                lat = 2.0,
+                timestampMs = 1000L
+            ),
+            trackingRunning = true,
+            showAllTrackers = false,
+            mapViewContext = MapViewContext.SINGLE_TRACKER,
+            displayedTrackerId = "t1",
+            activeStreamedTrackerIds = emptySet()
+        )
+        assertTrue(accepted)
+    }
+
+    @Test
+    fun shouldAccept_trackingRunning_rejectsRemoteStream() {
+        val useCase = HandleTrackPointUseCase()
+        val accepted = useCase.shouldAccept(
+            event = TrackPointEvent(
+                source = TrackPointSource.REMOTE_STREAM,
+                trackId = "t1",
+                lon = 1.0,
+                lat = 2.0,
+                timestampMs = 1000L
+            ),
+            trackingRunning = true,
+            showAllTrackers = false,
+            mapViewContext = MapViewContext.SINGLE_TRACKER,
+            displayedTrackerId = "t1",
+            activeStreamedTrackerIds = setOf("t1")
+        )
+        assertFalse(accepted)
+    }
 }
 
