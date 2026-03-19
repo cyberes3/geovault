@@ -27,6 +27,24 @@ class MapZoomOrchestratorTest {
     }
 
     @Test
+    fun zoomButtonsPaddingMode_groupMemberFocusUsesCenteredPadding() {
+        val mode = MapZoomOrchestrator.zoomButtonsPaddingMode(
+            activeCameraIntent = CameraIntent.GROUP_MEMBER_FOCUS,
+            isFollowLockActive = false
+        )
+        assertEquals(CameraPaddingMode.CENTERED, mode)
+    }
+
+    @Test
+    fun zoomButtonsPaddingMode_singleTrackerFocusUsesCenteredPadding() {
+        val mode = MapZoomOrchestrator.zoomButtonsPaddingMode(
+            activeCameraIntent = CameraIntent.SINGLE_TRACKER_FOCUS,
+            isFollowLockActive = false
+        )
+        assertEquals(CameraPaddingMode.CENTERED, mode)
+    }
+
+    @Test
     fun boundsPaddingEdgesFromInsets_addsExtraPaddingPerEdge() {
         val edges = MapZoomOrchestrator.boundsPaddingEdgesFromInsets(
             insets = doubleArrayOf(10.0, 20.0, 30.0, 40.0),

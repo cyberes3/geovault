@@ -17,13 +17,11 @@ class MapSavedStateTest {
     fun writeAndRead_preservesExtendedLockFields() {
         val bundle = Bundle()
         val state = MapSavedState(
-            followLockEnabled = true,
-            followLockNeedsInitialZoom = true,
+            lockMode = MapLockMode.TRACKER_FOLLOW,
             lockTargetLat = 12.34,
             lockTargetLon = 56.78,
+            lockNeedsInitialZoom = true,
             showMyLocationEnabled = true,
-            gpsLocationLockActive = true,
-            liveActiveFitEnabled = true,
             displayedTrackerId = "t1",
             displayedTrackerName = "Tracker 1",
             displayedGroupName = "Group A",
@@ -34,13 +32,11 @@ class MapSavedStateTest {
         state.writeTo(bundle)
         val restored = MapSavedState.readFrom(bundle)
 
-        assertTrue(restored.followLockEnabled)
-        assertTrue(restored.followLockNeedsInitialZoom)
+        assertEquals(MapLockMode.TRACKER_FOLLOW, restored.lockMode)
+        assertTrue(restored.lockNeedsInitialZoom)
         assertEquals(12.34, restored.lockTargetLat ?: 0.0, 0.000001)
         assertEquals(56.78, restored.lockTargetLon ?: 0.0, 0.000001)
         assertTrue(restored.showMyLocationEnabled)
-        assertTrue(restored.gpsLocationLockActive)
-        assertTrue(restored.liveActiveFitEnabled)
         assertEquals("t1", restored.displayedTrackerId)
         assertEquals("Tracker 1", restored.displayedTrackerName)
         assertEquals("Group A", restored.displayedGroupName)
@@ -51,17 +47,15 @@ class MapSavedStateTest {
     @Test
     fun readFrom_missingOptionalLockTarget_returnsNullTarget() {
         val bundle = Bundle().apply {
-            putBoolean("follow_lock", true)
-            putBoolean("follow_lock_initial_zoom", false)
+            putString("map_lock_mode", MapLockMode.TRACKER_FOLLOW.name)
+            putBoolean("map_lock_initial_zoom", false)
             putBoolean("show_my_location", false)
-            putBoolean("gps_location_lock_active", false)
-            putBoolean("live_active_fit_enabled", false)
         }
 
         val restored = MapSavedState.readFrom(bundle)
 
-        assertTrue(restored.followLockEnabled)
-        assertFalse(restored.followLockNeedsInitialZoom)
+        assertEquals(MapLockMode.TRACKER_FOLLOW, restored.lockMode)
+        assertFalse(restored.lockNeedsInitialZoom)
         assertNull(restored.lockTargetLat)
         assertNull(restored.lockTargetLon)
     }

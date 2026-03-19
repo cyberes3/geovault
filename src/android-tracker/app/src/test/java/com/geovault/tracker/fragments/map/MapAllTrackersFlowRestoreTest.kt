@@ -16,7 +16,8 @@ class MapAllTrackersFlowRestoreTest {
             enableFollowLock = true
         )
 
-        assertEquals(true, command.followLockEnabled)
+        assertEquals(MapLockMode.TRACKER_FOLLOW, command.lockMode)
+        assertEquals(true, command.lockNeedsInitialZoom)
         assertEquals(false, command.fitBounds)
         assertNull(command.targetTrackerId)
     }
@@ -30,7 +31,8 @@ class MapAllTrackersFlowRestoreTest {
             enableFollowLock = true
         )
 
-        assertFalse(command.followLockEnabled)
+        assertFalse(command.lockMode == MapLockMode.TRACKER_FOLLOW)
+        assertEquals(MapLockMode.NONE, command.lockMode)
         assertEquals(true, command.fitBounds)
     }
 }

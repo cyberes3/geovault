@@ -100,4 +100,60 @@ class MapLockResumePolicyTest {
 
         assertFalse(decision.shouldReapplyLiveLock)
     }
+
+    @Test
+    fun decide_reappliesFollowLock_whenEnabledAndTrackPointPresentWithoutTarget() {
+        val decision = MapLockResumePolicy.decide(
+            LockResumePolicyInput(
+                followLockEnabled = true,
+                hasLockTarget = false,
+                hasTrackPoint = true,
+                showMyLocationEnabled = false,
+                gpsLocationLockActive = false,
+                liveActiveFitEnabled = false,
+                liveActiveFitAvailable = false,
+                trackerOrLiveLockActive = true
+            )
+        )
+
+        assertTrue(decision.shouldRecenterFollowLock)
+        assertFalse(decision.shouldRecenterGpsLock)
+        assertFalse(decision.shouldReapplyLiveLock)
+    }
+
+    @Test
+    fun decide_doesNotRecenterFollowLock_whenEnabledButNoTargetAndNoTrackPoint() {
+        val decision = MapLockResumePolicy.decide(
+            LockResumePolicyInput(
+                followLockEnabled = true,
+                hasLockTarget = false,
+                hasTrackPoint = false,
+                showMyLocationEnabled = false,
+                gpsLocationLockActive = false,
+                liveActiveFitEnabled = false,
+                liveActiveFitAvailable = false,
+                trackerOrLiveLockActive = false
+            )
+        )
+
+        assertFalse(decision.shouldRecenterFollowLock)
+    }
+
+    @Test
+    fun decide_doesNotRecenterGps_whenMyLocationDisabled() {
+        val decision = MapLockResumePolicy.decide(
+            LockResumePolicyInput(
+                followLockEnabled = false,
+                hasLockTarget = false,
+                hasTrackPoint = false,
+                showMyLocationEnabled = false,
+                gpsLocationLockActive = true,
+                liveActiveFitEnabled = false,
+                liveActiveFitAvailable = false,
+                trackerOrLiveLockActive = false
+            )
+        )
+
+        assertFalse(decision.shouldRecenterGpsLock)
+    }
 }

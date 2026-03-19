@@ -35,7 +35,10 @@ data class MapAllTrackersSnapshot(
 )
 
 data class MapCameraCommand(
-    val followLockEnabled: Boolean,
+    val lockMode: MapLockMode,
+    val lockTargetLat: Double? = null,
+    val lockTargetLon: Double? = null,
+    val lockNeedsInitialZoom: Boolean = false,
     val targetTrackerId: String? = null,
     val fitBounds: Boolean = false
 )
@@ -47,7 +50,7 @@ data class MapUiState(
     val displayedTrackerName: String? = null,
     val displayedGroupName: String? = null,
     val showAllTrackers: Boolean = false,
-    val followLockEnabled: Boolean = false,
+    val lockMode: MapLockMode = MapLockMode.NONE,
     val activeStreamedTrackerIds: Set<String> = emptySet()
 )
 

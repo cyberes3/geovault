@@ -18,7 +18,7 @@ class MapDataFlowToRendererTest {
         val displayedTrackerId: String? = null,
         val isAdded: Boolean = true,
         val showMyLocationEnabled: Boolean = false,
-        val followLockActive: Boolean = false,
+        val lockMode: MapLockMode = MapLockMode.NONE,
         val liveActiveFitEnabled: Boolean = false,
         val trackers: List<Tracker>? = null,
         val selectedTracker: SelectedMapTracker? = null,
@@ -52,7 +52,7 @@ class MapDataFlowToRendererTest {
             onUpdateSelectedMapTracker = { _, _, _, _ -> harness.updatedSelectedMapTrackerCount++ },
             onRecenterFollowLock = { _ -> harness.recenterFollowLockCount++ },
             getShowMyLocationEnabled = { harness.showMyLocationEnabled },
-            getIsFollowLockActive = { harness.followLockActive },
+            getLockMode = { harness.lockMode },
             scheduleDebouncedMultiTrackRender = { harness.debouncedMultiRenderCount++ },
             updateMapSelectionUi = { harness.mapSelectionUiUpdateCount++ },
             getDisplayedTrackerId = { harness.displayedTrackerId },
@@ -111,7 +111,11 @@ class MapDataFlowToRendererTest {
 
     @Test
     fun remoteSingleTrackerEvent_flowsToRendererCallbacks() {
-        val harness = RendererHarness(displayedTrackerId = "tracker-1", liveActiveFitEnabled = true)
+        val harness = RendererHarness(
+            displayedTrackerId = "tracker-1",
+            liveActiveFitEnabled = true,
+            lockMode = MapLockMode.TRACKER_FOLLOW
+        )
         val context = MapTrackPointContext(
             trackingRunning = false,
             showAllTrackers = false,
@@ -134,8 +138,36 @@ class MapDataFlowToRendererTest {
         assertEquals(1, harness.zoomButtonUpdateCount)
         assertEquals(1, harness.streamingUiUpdateCount)
         assertEquals(1, harness.debouncedSingleLiveFitCount)
+        assertEquals(1, harness.recenterFollowLockCount)
         assertEquals(1_700_000_000_123L, harness.lastStreamedPointTimeMs)
         assertEquals(1_700_000_000_123L, harness.lastKnownUpdateTimeByTrackId["tracker-1"])
+    }
+
+    @Test
+    fun remoteSingleTrackerEvent_doesNotRecenterWhenMyLocationEnabled() {
+        val harness = RendererHarness(
+            displayedTrackerId = "tracker-1",
+            showMyLocationEnabled = true,
+            lockMode = MapLockMode.TRACKER_FOLLOW
+        )
+        val context = MapTrackPointContext(
+            trackingRunning = false,
+            showAllTrackers = false,
+            mapViewContext = MapViewContext.SINGLE_TRACKER,
+            displayedTrackerId = "tracker-1",
+            activeStreamedTrackerIds = emptySet()
+        )
+        val event = TrackPointEvent(
+            source = TrackPointSource.REMOTE_STREAM,
+            trackId = "tracker-1",
+            lon = 10.0,
+            lat = 20.0,
+            timestampMs = 1_700_000_000_500L
+        )
+
+        runPipeline(context, event, harness)
+
+        assertEquals(0, harness.recenterFollowLockCount)
     }
 
     @Test
@@ -239,5 +271,52 @@ class MapDataFlowToRendererTest {
         assertEquals(0, harness.debouncedMultiRenderCount)
         assertNull(harness.lastKnownUpdateTimeByTrackId["tracker-2"])
         assertTrue(harness.multiTrackCoordsCache.isEmpty())
+    }
+
+    @Test
+    fun remoteMultiTrackerEvent_recentersSelectedTrackerWhenFollowLockMode() {
+        val tracker = Tracker(
+            id = "tracker-2",
+            name = "Tracker 2",
+            color = "#00FF00",
+            geometry = GeoJsonLineString("LineString", emptyList())
+        )
+        val harness = RendererHarness(
+            showAllTrackers = true,
+            mapViewContext = MapViewContext.SINGLE_TRACKER,
+            activeStreamedTrackerIds = setOf("tracker-2"),
+            trackers = listOf(tracker),
+            selectedTracker = SelectedMapTracker(
+                id = "tracker-2",
+                name = "Tracker 2",
+                lat = 20.0,
+                lon = 10.0,
+                lastUpdateMs = null,
+                isOwner = true,
+                hexColor = "#00FF00"
+            ),
+            lockMode = MapLockMode.TRACKER_FOLLOW,
+            baseCoordsByTrackId = mutableMapOf(
+                "tracker-2" to mutableListOf(listOf(10.0, 20.0, 1_700_000_000_000.0))
+            )
+        )
+        val context = MapTrackPointContext(
+            trackingRunning = false,
+            showAllTrackers = true,
+            mapViewContext = MapViewContext.SINGLE_TRACKER,
+            displayedTrackerId = null,
+            activeStreamedTrackerIds = setOf("tracker-2")
+        )
+        val event = TrackPointEvent(
+            source = TrackPointSource.REMOTE_STREAM,
+            trackId = "tracker-2",
+            lon = 11.0,
+            lat = 21.0,
+            timestampMs = 1_700_000_000_700L
+        )
+
+        runPipeline(context, event, harness)
+
+        assertEquals(1, harness.recenterFollowLockCount)
     }
 }

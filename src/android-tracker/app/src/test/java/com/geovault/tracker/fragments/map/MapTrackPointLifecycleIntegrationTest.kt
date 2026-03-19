@@ -47,7 +47,7 @@ class MapTrackPointLifecycleIntegrationTest {
             onUpdateSelectedMapTracker = { _, _, _, _ -> },
             onRecenterFollowLock = { },
             getShowMyLocationEnabled = { false },
-            getIsFollowLockActive = { false },
+            getLockMode = { MapLockMode.NONE },
             scheduleDebouncedMultiTrackRender = { h.debouncedMultiRenderCount++ },
             updateMapSelectionUi = { },
             getDisplayedTrackerId = { h.displayedTrackerId },

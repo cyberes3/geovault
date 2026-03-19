@@ -46,6 +46,11 @@ class MapViewModel @Inject constructor(
 
     private var streamJob: Job? = null
 
+    private fun emitCameraPolicy(command: MapCameraCommand) {
+        _uiState.value = _uiState.value.copy(lockMode = command.lockMode)
+        _commands.tryEmit(MapCommand.ApplyCameraPolicy(command))
+    }
+
     fun handleIntent(intent: MapIntent) {
         when (intent) {
             is MapIntent.LoadSingleTracker -> loadSingle(intent.trackerId, intent.forceReplace)
@@ -179,11 +184,7 @@ class MapViewModel @Inject constructor(
                 mode = MapScreenMode.Single
             )
             _commands.tryEmit(MapCommand.RenderSingleTracker(snapshot))
-            _commands.tryEmit(
-                MapCommand.ApplyCameraPolicy(
-                    applyCameraPolicyUseCase.forMode(MapScreenMode.Single, null, enableFollowLock = true)
-                )
-            )
+            emitCameraPolicy(applyCameraPolicyUseCase.forMode(MapScreenMode.Single, null, enableFollowLock = true))
         }
     }
 
@@ -198,11 +199,7 @@ class MapViewModel @Inject constructor(
             val snapshot = loadAllTrackersUseCase.execute(getApplication())
             _uiState.value = _uiState.value.copy(loading = false)
             _commands.tryEmit(MapCommand.RenderAllTrackers(snapshot))
-            _commands.tryEmit(
-                MapCommand.ApplyCameraPolicy(
-                    applyCameraPolicyUseCase.forMode(MapScreenMode.AllTrackers, null, enableFollowLock = false)
-                )
-            )
+            emitCameraPolicy(applyCameraPolicyUseCase.forMode(MapScreenMode.AllTrackers, null, enableFollowLock = false))
         }
     }
 
@@ -217,11 +214,7 @@ class MapViewModel @Inject constructor(
             val snapshot = loadGroupMapUseCase.execute(getApplication(), group, zoomToTrackerId)
             _uiState.value = _uiState.value.copy(loading = false)
             _commands.tryEmit(MapCommand.RenderAllTrackers(snapshot))
-            _commands.tryEmit(
-                MapCommand.ApplyCameraPolicy(
-                    applyCameraPolicyUseCase.forMode(MapScreenMode.GroupMode(group), null, enableFollowLock = false)
-                )
-            )
+            emitCameraPolicy(applyCameraPolicyUseCase.forMode(MapScreenMode.GroupMode(group), null, enableFollowLock = false))
         }
     }
 }

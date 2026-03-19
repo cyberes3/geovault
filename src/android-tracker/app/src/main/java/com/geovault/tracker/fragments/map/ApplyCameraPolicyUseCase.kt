@@ -8,19 +8,20 @@ class ApplyCameraPolicyUseCase {
     ): MapCameraCommand {
         return when (mode) {
             is MapScreenMode.Single -> MapCameraCommand(
-                followLockEnabled = enableFollowLock,
+                lockMode = if (enableFollowLock) MapLockMode.TRACKER_FOLLOW else MapLockMode.NONE,
+                lockNeedsInitialZoom = enableFollowLock,
                 targetTrackerId = currentSelection?.trackerId,
                 fitBounds = false
             )
 
             is MapScreenMode.GroupMode -> MapCameraCommand(
-                followLockEnabled = false,
+                lockMode = MapLockMode.NONE,
                 targetTrackerId = currentSelection?.trackerId,
                 fitBounds = true
             )
 
             MapScreenMode.AllTrackers -> MapCameraCommand(
-                followLockEnabled = false,
+                lockMode = MapLockMode.NONE,
                 targetTrackerId = null,
                 fitBounds = true
             )

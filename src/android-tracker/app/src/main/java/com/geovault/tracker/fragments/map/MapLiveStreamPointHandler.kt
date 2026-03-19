@@ -15,7 +15,7 @@ internal class MapLiveStreamPointCallbacks(
     val onUpdateSelectedMapTracker: (String, Double, Double, Long) -> Unit,
     val onRecenterFollowLock: (LatLng) -> Unit,
     val getShowMyLocationEnabled: () -> Boolean,
-    val getIsFollowLockActive: () -> Boolean,
+    val getLockMode: () -> MapLockMode,
     val scheduleDebouncedMultiTrackRender: () -> Unit,
     val updateMapSelectionUi: () -> Unit,
     val getDisplayedTrackerId: () -> String?,
@@ -57,7 +57,7 @@ internal object MapLiveStreamPointHandler {
             val selection = callbacks.getSelectedMapTracker()
             if (selection?.id == trackId) {
                 callbacks.onUpdateSelectedMapTracker(trackId, lat, lon, normalizedTimestampMs)
-                if (!callbacks.getShowMyLocationEnabled() && callbacks.getIsFollowLockActive()) {
+                if (!callbacks.getShowMyLocationEnabled() && callbacks.getLockMode() == MapLockMode.TRACKER_FOLLOW) {
                     callbacks.onRecenterFollowLock(LatLng(lat, lon))
                 }
             }
@@ -80,7 +80,7 @@ internal object MapLiveStreamPointHandler {
         callbacks.addTrackPoint(LatLng(lat, lon), normalizedTimestampMs)
         callbacks.scheduleTrackLineUpdate()
         callbacks.updateZoomToLatestButtonState()
-        if (!callbacks.getShowMyLocationEnabled() && callbacks.getIsFollowLockActive()) {
+        if (!callbacks.getShowMyLocationEnabled() && callbacks.getLockMode() == MapLockMode.TRACKER_FOLLOW) {
             callbacks.onRecenterFollowLock(LatLng(lat, lon))
         }
         if (callbacks.getLiveActiveFitEnabled()) callbacks.scheduleDebouncedSingleLiveFit()
