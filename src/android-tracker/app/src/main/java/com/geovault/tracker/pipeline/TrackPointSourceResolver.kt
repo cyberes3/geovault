@@ -1,8 +1,19 @@
 package com.geovault.tracker.pipeline
 
+import com.geovault.tracker.fragments.map.MapModeStateInput
+import com.geovault.tracker.fragments.map.MapModeStateMachine
+import com.geovault.tracker.fragments.map.MapViewContext
+
 object TrackPointSourceResolver {
     fun mapDataSourceMode(trackingRunning: Boolean): MapDataSourceMode {
-        return if (trackingRunning) {
+        val state = MapModeStateMachine.derive(
+            MapModeStateInput(
+                trackingRunning = trackingRunning,
+                showAllTrackers = false,
+                mapViewContext = MapViewContext.SINGLE_TRACKER
+            )
+        )
+        return if (MapModeStateMachine.sourcePolicy(state).acceptLocalGps) {
             MapDataSourceMode.LOCAL_GPS_ONLY
         } else {
             MapDataSourceMode.REMOTE_STREAM_ONLY
@@ -16,11 +27,14 @@ object TrackPointSourceResolver {
         selectedTrackerId: String
     ): Boolean {
         if (event.trackId != trackerId) return false
-        val mode = mapDataSourceMode(trackingRunning && trackerId == selectedTrackerId)
-        return when (mode) {
-            MapDataSourceMode.LOCAL_GPS_ONLY -> event.source == TrackPointSource.LOCAL_GPS
-            MapDataSourceMode.REMOTE_STREAM_ONLY -> event.source == TrackPointSource.REMOTE_STREAM
-        }
+        val state = MapModeStateMachine.derive(
+            MapModeStateInput(
+                trackingRunning = trackingRunning && trackerId == selectedTrackerId,
+                showAllTrackers = false,
+                mapViewContext = MapViewContext.SINGLE_TRACKER
+            )
+        )
+        return MapModeStateMachine.acceptsSource(state, event.source)
     }
 }
 

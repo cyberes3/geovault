@@ -33,6 +33,10 @@ User = get_user_model()
 logger = get_tagged_logger()
 
 
+def _point_identity_key(lon: float, lat: float, timestamp_ms: int) -> tuple[float, float, int]:
+    return (float(lon), float(lat), int(timestamp_ms))
+
+
 def append_point_to_track(track, lat: float, lon: float, timestamp_ms: int, extra: dict | None = None) -> int | None:
     """
     Append one point to a track (geometry + point_params), broadcast update. Used by ingress and Hauk post.
@@ -46,7 +50,23 @@ def append_point_to_track(track, lat: float, lon: float, timestamp_ms: int, extr
         coords = list(geom.get("coordinates") or [])
         point_params = list(track_locked.point_params or [])
 
+        existing_keys = set()
+        for c in coords:
+            if len(c) < 3:
+                continue
+            existing_keys.add(_point_identity_key(c[0], c[1], c[2]))
+
         new_point = [lon, lat, timestamp_ms]
+        new_key = _point_identity_key(lon, lat, timestamp_ms)
+        if new_key in existing_keys:
+            return next(
+                (
+                    i
+                    for i, c in enumerate(coords)
+                    if len(c) >= 3 and _point_identity_key(c[0], c[1], c[2]) == new_key
+                ),
+                None,
+            )
         ts_list = [c[2] for c in coords]
         idx = bisect.bisect_right(ts_list, timestamp_ms)
         coords.insert(idx, new_point)
@@ -319,7 +339,17 @@ def app_ingress(request):
         point_params = list(track_locked.point_params or [])
 
         ts_list = [c[2] for c in coords]
+        seen_keys = set()
+        for c in coords:
+            if len(c) < 3:
+                continue
+            seen_keys.add(_point_identity_key(c[0], c[1], c[2]))
+        last_inserted_point = None
+        last_inserted_extra = None
         for point_data in points:
+            new_key = _point_identity_key(point_data["lon"], point_data["lat"], point_data["timestamp"])
+            if new_key in seen_keys:
+                continue
             new_point = [point_data["lon"], point_data["lat"], point_data["timestamp"]]
             extra = {k: v for k, v in point_data.items() if k not in ("lat", "lon", "timestamp")}
 
@@ -327,6 +357,9 @@ def app_ingress(request):
             coords.insert(idx, new_point)
             point_params.insert(idx, extra)
             ts_list.insert(idx, point_data["timestamp"])
+            seen_keys.add(new_key)
+            last_inserted_point = new_point
+            last_inserted_extra = extra
 
         if len(coords) > max_points:
             n_removed = len(coords) - max_points
@@ -338,15 +371,19 @@ def app_ingress(request):
         track_locked.updated_at = timezone.now()
         track_locked.save(update_fields=["geometry", "point_params", "updated_at"])
 
-        last_point_data = points[-1]
-        last_new_point = [last_point_data["lon"], last_point_data["lat"], last_point_data["timestamp"]]
-        last_extra = {k: v for k, v in last_point_data.items() if k not in ("lat", "lon", "timestamp")}
-        try:
-            broadcast_idx = coords.index(last_new_point)
-        except ValueError:
+        if last_inserted_point is None:
             broadcast_idx = None
+            last_new_point = None
+            last_extra = None
+        else:
+            last_new_point = last_inserted_point
+            last_extra = last_inserted_extra or {}
+            try:
+                broadcast_idx = coords.index(last_new_point)
+            except ValueError:
+                broadcast_idx = None
 
-    if broadcast_idx is not None:
+    if broadcast_idx is not None and last_new_point is not None and last_extra is not None:
         if not queue_broadcast_track_updated(track, last_new_point, last_extra, index=broadcast_idx):
             broadcast_track_updated(track, last_new_point, last_extra, index=broadcast_idx)
 

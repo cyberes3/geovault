@@ -1,11 +1,10 @@
 package com.geovault.tracker.fragments.map
 
 import com.geovault.tracker.TrackUpdateHelper
+import com.geovault.tracker.pipeline.CanonicalTimeNormalizer
 import kotlin.math.abs
 
 internal object MapCoordinateUtils {
-    private const val MAX_SECONDS_TIMESTAMP = 999_999_999_999L
-
     fun normalizeRawCoordinates(rawCoords: List<List<Double>>): MutableList<List<Double>> {
         val normalized = mutableListOf<List<Double>>()
         for (coord in rawCoords) {
@@ -13,14 +12,14 @@ internal object MapCoordinateUtils {
             val lon = (coord[0] as? Number)?.toDouble() ?: continue
             val lat = (coord[1] as? Number)?.toDouble() ?: continue
             val tsRaw = (coord.getOrNull(2) as? Number)?.toDouble() ?: 0.0
-            val tsMs = if (tsRaw in 1.0..MAX_SECONDS_TIMESTAMP.toDouble()) tsRaw * 1000.0 else tsRaw
+            val tsMs = CanonicalTimeNormalizer.normalizeTimestampMs(tsRaw.toLong(), System.currentTimeMillis()).toDouble()
             normalized.add(listOf(lon, lat, tsMs))
         }
         return normalized.takeLast(TrackUpdateHelper.MAX_POINTS).toMutableList()
     }
 
     fun normalizeTimestampToMs(timestamp: Long): Long {
-        return if (timestamp in 1L..MAX_SECONDS_TIMESTAMP) timestamp * 1000L else timestamp
+        return CanonicalTimeNormalizer.normalizeTimestampMs(timestamp, System.currentTimeMillis())
     }
 
     fun timestampFromCoordinateMs(coord: List<*>, fallbackMs: Long? = null): Long? {

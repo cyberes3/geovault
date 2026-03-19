@@ -12,7 +12,9 @@ abstract class TrackPointServiceBase : Service() {
         lat: Double,
         timestampMs: Long,
         accuracyMeters: Float?,
-        propsJson: String?
+        propsJson: String?,
+        quality: TrackPointQuality = TrackPointQuality.HIGH_CONFIDENCE,
+        orderingKey: Long = 0L
     ) {
         trackPointPublisher.publish(
             TrackPointEvent(
@@ -22,7 +24,9 @@ abstract class TrackPointServiceBase : Service() {
                 lat = lat,
                 timestampMs = timestampMs,
                 accuracyMeters = accuracyMeters,
-                propsJson = propsJson
+                propsJson = propsJson,
+                quality = quality,
+                orderingKey = orderingKey
             )
         )
     }

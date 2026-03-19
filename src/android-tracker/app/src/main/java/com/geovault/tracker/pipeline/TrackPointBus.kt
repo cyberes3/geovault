@@ -31,7 +31,7 @@ object TrackPointBus {
     val remoteStreamEvents: Flow<TrackPointEvent> = events.filter { it.source == TrackPointSource.REMOTE_STREAM }
 
     fun publish(event: TrackPointEvent) {
-        val sanitizedEvent = UnifiedTrackPointIngress.sanitize(event) ?: return
+        val sanitizedEvent = if (event.orderingKey > 0L) event else UnifiedTrackPointIngress.sanitize(event) ?: return
         if (eventsFlow.tryEmit(sanitizedEvent)) {
             return
         }

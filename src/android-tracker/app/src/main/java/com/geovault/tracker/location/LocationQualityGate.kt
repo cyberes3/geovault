@@ -1,7 +1,11 @@
 package com.geovault.tracker.location
 
 import android.location.Location
-import kotlin.math.abs
+import com.geovault.tracker.pipeline.TrackPointEvent
+import com.geovault.tracker.pipeline.TrackPointPolicyConfig
+import com.geovault.tracker.pipeline.TrackPointPolicyEngine
+import com.geovault.tracker.pipeline.TrackPointRejectReason
+import com.geovault.tracker.pipeline.TrackPointSource
 
 enum class LocationRejectionReason {
     STALE,
@@ -40,46 +44,57 @@ object LocationQualityGate {
         nowMs: Long,
         config: LocationQualityConfig
     ): LocationQualityResult {
-        if (newLocation.latitude !in -90.0..90.0 || newLocation.longitude !in -180.0..180.0) {
-            return LocationQualityResult(false, newLocation, LocationRejectionReason.INVALID_COORDINATES)
+        val previousEvent = lastAcceptedLocation?.let {
+            TrackPointEvent(
+                source = TrackPointSource.LOCAL_GPS,
+                trackId = "local",
+                lon = it.longitude,
+                lat = it.latitude,
+                timestampMs = it.time,
+                accuracyMeters = if (it.hasAccuracy()) it.accuracy else null
+            )
         }
-        if (isOutOfOrder(lastAcceptedLocation, newLocation)) {
-            return LocationQualityResult(false, newLocation, LocationRejectionReason.OUT_OF_ORDER)
+        val currentEvent = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = "local",
+            lon = newLocation.longitude,
+            lat = newLocation.latitude,
+            timestampMs = newLocation.time,
+            accuracyMeters = if (newLocation.hasAccuracy()) newLocation.accuracy else null
+        )
+        val decision = TrackPointPolicyEngine.evaluate(
+            event = currentEvent,
+            previous = previousEvent,
+            nowMs = nowMs,
+            config = TrackPointPolicyConfig(
+                maxAccuracyMeters = config.maxAccuracyMeters,
+                degradedAccuracyMultiplier = 1f,
+                maxFutureSkewMs = 5 * 60 * 1000L,
+                maxJumpSpeedMps = config.maxJumpSpeedMps,
+                freshnessTtlMs = config.freshnessTtlMs,
+                normalizeSecondsTimestamps = false
+            )
+        )
+        if (!decision.accepted) {
+            return LocationQualityResult(
+                accepted = false,
+                location = newLocation,
+                rejectionReason = when (decision.rejectReason) {
+                    TrackPointRejectReason.INVALID_COORDINATES -> LocationRejectionReason.INVALID_COORDINATES
+                    TrackPointRejectReason.OUT_OF_ORDER -> LocationRejectionReason.OUT_OF_ORDER
+                    TrackPointRejectReason.DUPLICATE -> LocationRejectionReason.DUPLICATE
+                    TrackPointRejectReason.BAD_ACCURACY -> LocationRejectionReason.BAD_ACCURACY
+                    TrackPointRejectReason.STALE -> LocationRejectionReason.STALE
+                    TrackPointRejectReason.JUMP -> LocationRejectionReason.JUMP
+                    TrackPointRejectReason.TOO_FAR_FUTURE, null -> LocationRejectionReason.OUT_OF_ORDER
+                }
+            )
         }
-        if (isDuplicate(lastAcceptedLocation, newLocation)) {
-            return LocationQualityResult(false, newLocation, LocationRejectionReason.DUPLICATE)
+        val normalized = Location(newLocation).apply {
+            time = decision.canonicalEvent?.timestampMs ?: newLocation.time
         }
-        if (!isFresh(newLocation, nowMs, config.freshnessTtlMs)) {
-            return LocationQualityResult(false, newLocation, LocationRejectionReason.STALE)
-        }
-        if (newLocation.hasAccuracy() && newLocation.accuracy > config.maxAccuracyMeters) {
-            return LocationQualityResult(false, newLocation, LocationRejectionReason.BAD_ACCURACY)
-        }
-        if (isJump(lastAcceptedLocation, newLocation, config.maxJumpSpeedMps)) {
-            return LocationQualityResult(false, newLocation, LocationRejectionReason.JUMP)
-        }
-        val smoothed = smooth(lastAcceptedLocation, newLocation, config.smoothingAlpha)
+        val smoothed = smooth(lastAcceptedLocation, normalized, config.smoothingAlpha)
         return LocationQualityResult(true, smoothed)
-    }
-
-    private fun isJump(lastLocation: Location?, newLocation: Location, maxJumpSpeedMps: Double): Boolean {
-        if (lastLocation == null) return false
-        val timeDiffSec = (newLocation.time - lastLocation.time) / 1000.0
-        if (timeDiffSec <= 0.0) return false
-        val speed = lastLocation.distanceTo(newLocation) / timeDiffSec
-        return speed > maxJumpSpeedMps
-    }
-
-    private fun isOutOfOrder(lastLocation: Location?, newLocation: Location): Boolean {
-        val previousTs = lastLocation?.time ?: return false
-        return newLocation.time in 1 until previousTs
-    }
-
-    private fun isDuplicate(lastLocation: Location?, newLocation: Location): Boolean {
-        val previous = lastLocation ?: return false
-        return previous.time == newLocation.time &&
-            previous.latitude == newLocation.latitude &&
-            previous.longitude == newLocation.longitude
     }
 
     private fun smooth(lastLocation: Location?, newLocation: Location, alpha: Float): Location {

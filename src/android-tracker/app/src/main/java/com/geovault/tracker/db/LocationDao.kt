@@ -19,11 +19,20 @@ interface LocationDao {
     @Query("SELECT * FROM queued_locations ORDER BY time ASC LIMIT :limit")
     fun getOldest(limit: Int): List<QueuedLocation>
 
+    @Query("SELECT * FROM queued_locations WHERE time < :sessionBoundaryMs ORDER BY time ASC LIMIT :limit")
+    fun getOldestBacklog(sessionBoundaryMs: Long, limit: Int): List<QueuedLocation>
+
+    @Query("SELECT * FROM queued_locations WHERE time >= :sessionBoundaryMs ORDER BY time ASC LIMIT :limit")
+    fun getOldestCurrentSession(sessionBoundaryMs: Long, limit: Int): List<QueuedLocation>
+
     @Delete
     fun delete(locations: List<QueuedLocation>)
 
     @Query("SELECT COUNT(*) FROM queued_locations")
     fun getCount(): Int
+
+    @Query("SELECT COUNT(*) FROM queued_locations WHERE time < :sessionBoundaryMs")
+    fun getBacklogCount(sessionBoundaryMs: Long): Int
 
     @Query("DELETE FROM queued_locations WHERE time < :cutoffTimeMs")
     fun deleteOlderThan(cutoffTimeMs: Long): Int

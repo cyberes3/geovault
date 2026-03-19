@@ -669,3 +669,62 @@ class TestLiveTrackAppIngress(TestCase):
         self.assertEqual(len(coords), 1)
         self.assertEqual(coords[0][1], 37.0)
         self.assertEqual(coords[0][0], -122.0)
+
+    def test_app_ingress_dedups_identical_points_within_payload(self):
+        """Incoming payload duplicates with identical lon/lat/timestamp are inserted once."""
+        duplicate_ts = 1705312800000
+        payload = encode_gvlt_payload(
+            self.tracker_uuid,
+            [
+                {"lat": 37.0, "lon": -122.0, "timestamp": duplicate_ts},
+                {"lat": 37.0, "lon": -122.0, "timestamp": duplicate_ts},
+                {"lat": 37.1, "lon": -121.9, "timestamp": duplicate_ts + 1000},
+            ],
+        )
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                response = self._ingress_post(payload)
+
+        self.assertEqual(response.status_code, 200)
+        track = LiveTrack.objects.get(id=self.track_id)
+        coords = (track.geometry or {}).get("coordinates", [])
+        params = track.point_params or []
+        self.assertEqual(len(coords), 2)
+        self.assertEqual(len(params), 2)
+        self.assertEqual(coords[0], [-122.0, 37.0, duplicate_ts])
+        self.assertAlmostEqual(coords[1][0], -121.9, places=4)
+        self.assertAlmostEqual(coords[1][1], 37.1, places=4)
+        self.assertEqual(coords[1][2], duplicate_ts + 1000)
+
+    def test_app_ingress_dedups_against_existing_geometry(self):
+        """Incoming point identical to existing geometry point is skipped."""
+        ts = 1705312800000
+        first_payload = encode_gvlt_payload(
+            self.tracker_uuid,
+            [{"lat": 37.0, "lon": -122.0, "timestamp": ts}],
+        )
+        second_payload = encode_gvlt_payload(
+            self.tracker_uuid,
+            [
+                {"lat": 37.0, "lon": -122.0, "timestamp": ts},
+                {"lat": 37.2, "lon": -121.8, "timestamp": ts + 2000},
+            ],
+        )
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                response1 = self._ingress_post(first_payload)
+                response2 = self._ingress_post(second_payload)
+
+        self.assertEqual(response1.status_code, 200)
+        self.assertEqual(response2.status_code, 200)
+        track = LiveTrack.objects.get(id=self.track_id)
+        coords = (track.geometry or {}).get("coordinates", [])
+        params = track.point_params or []
+        self.assertEqual(len(coords), 2)
+        self.assertEqual(len(params), 2)
+        self.assertEqual(coords[0], [-122.0, 37.0, ts])
+        self.assertAlmostEqual(coords[1][0], -121.8, places=4)
+        self.assertAlmostEqual(coords[1][1], 37.2, places=4)
+        self.assertEqual(coords[1][2], ts + 2000)

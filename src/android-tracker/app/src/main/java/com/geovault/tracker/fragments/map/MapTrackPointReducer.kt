@@ -1,9 +1,6 @@
 package com.geovault.tracker.fragments.map
 
 import com.geovault.tracker.pipeline.TrackPointEvent
-import com.geovault.tracker.pipeline.MapDataSourceMode
-import com.geovault.tracker.pipeline.TrackPointSourceResolver
-import com.geovault.tracker.pipeline.TrackPointSource
 
 internal sealed class MapTrackPointMode {
     data class Single(val displayedTrackerId: String?) : MapTrackPointMode()
@@ -12,7 +9,7 @@ internal sealed class MapTrackPointMode {
 
 internal data class MapTrackPointState(
     val mode: MapTrackPointMode,
-    val dataSourceMode: MapDataSourceMode
+    val modeState: MapModeState
 )
 
 internal data class MapTrackPointContext(
@@ -30,20 +27,21 @@ internal object MapTrackPointReducer {
         } else {
             MapTrackPointMode.Single(context.displayedTrackerId)
         }
-        val dataSourceMode = TrackPointSourceResolver.mapDataSourceMode(context.trackingRunning)
+        val modeState = MapModeStateMachine.derive(
+            MapModeStateInput(
+                trackingRunning = context.trackingRunning,
+                showAllTrackers = context.showAllTrackers,
+                mapViewContext = context.mapViewContext
+            )
+        )
         return MapTrackPointState(
             mode = mode,
-            dataSourceMode = dataSourceMode
+            modeState = modeState
         )
     }
 
     fun shouldAcceptPoint(event: TrackPointEvent, state: MapTrackPointState): Boolean {
-        if (state.dataSourceMode == MapDataSourceMode.LOCAL_GPS_ONLY &&
-            event.source != TrackPointSource.LOCAL_GPS
-        ) return false
-        if (state.dataSourceMode == MapDataSourceMode.REMOTE_STREAM_ONLY &&
-            event.source != TrackPointSource.REMOTE_STREAM
-        ) return false
+        if (!MapModeStateMachine.acceptsSource(state.modeState, event.source)) return false
 
         return when (val mode = state.mode) {
             is MapTrackPointMode.Multi -> event.trackId in mode.activeTrackerIds
