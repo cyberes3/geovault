@@ -67,6 +67,18 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     private var startupRefreshJob: Job? = null
     override var isServerAccessible = true
         private set
+    private var trackingErrorReceiverRegistered = false
+    private val trackingErrorReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != TrackingService.ACTION_TRACKING_ERROR) return
+            val message = intent.getStringExtra(TrackingService.EXTRA_TRACKING_ERROR_MESSAGE)
+            if (!message.isNullOrBlank()) {
+                showSnackbar(message)
+            }
+            val homeFragment = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
+            homeFragment?.updateTrackingUi()
+        }
+    }
 
     private val locationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -338,6 +350,10 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     }
 
     private fun tryResumeTrackingAfterKill() {
+        if (!ensureTrackingStartReadiness()) {
+            settingsRepository.clearWasTrackingBeforeExit()
+            return
+        }
         val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (trackerId.isEmpty()) {
             settingsRepository.clearWasTrackingBeforeExit()
@@ -368,6 +384,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     }
 
     private fun tryStartTrackingOnLaunch() {
+        if (!ensureTrackingStartReadiness()) return
         val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (trackerId.isEmpty()) return
         tryStartTrackingSilently(
@@ -920,6 +937,9 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             showSnackbar(getString(R.string.no_tracker_selected_go_to_settings))
             return
         }
+        if (!ensureTrackingStartReadiness()) {
+            return
+        }
         isPreparingToTrack = true
         homeFragment?.showPreparingState()
         lifecycleScope.launch {
@@ -965,7 +985,31 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
                 return
             }
         }
+        if (!trackingErrorReceiverRegistered) {
+            ContextCompat.registerReceiver(
+                this,
+                trackingErrorReceiver,
+                IntentFilter(TrackingService.ACTION_TRACKING_ERROR),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+            trackingErrorReceiverRegistered = true
+        }
         updatePermissionsState()
+        if (TrackingRuntimeStateStore.state.value.isRunning && !hasLocationPermission()) {
+            settingsRepository.clearWasTrackingBeforeExit()
+            startService(Intent(this, TrackingService::class.java).apply {
+                action = TrackingService.ACTION_STOP
+            })
+            showSnackbar(getString(R.string.location_permission_revoked))
+        }
+    }
+
+    override fun onStop() {
+        if (trackingErrorReceiverRegistered) {
+            unregisterReceiver(trackingErrorReceiver)
+            trackingErrorReceiverRegistered = false
+        }
+        super.onStop()
     }
 
     override fun onResume() {
@@ -1004,5 +1048,28 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         private const val KEY_GROUP_MAP_OPENED_FROM_TAB = "group_map_opened_from_tab"
         const val EXTRA_SIGNED_IN_EMAIL = "signed_in_email"
         const val EXTRA_OAUTH_ERROR = "oauth_error"
+    }
+
+    private fun ensureTrackingStartReadiness(): Boolean {
+        if (!hasLocationPermission()) {
+            showSnackbar(getString(R.string.location_permission_needed_first))
+            requestLocationPermission()
+            return false
+        }
+        if (!hasBackgroundLocationPermission()) {
+            showSnackbar(getString(R.string.background_location_permission_required))
+            requestBackgroundLocationPermission()
+            return false
+        }
+        if (!hasNotificationPermission()) {
+            showSnackbar(getString(R.string.notification_permission_required))
+            requestNotificationPermission()
+            return false
+        }
+        if (!hasBatteryOptimizationExemption()) {
+            showSnackbar(getString(R.string.battery_optimization_exemption_required))
+            return false
+        }
+        return true
     }
 }

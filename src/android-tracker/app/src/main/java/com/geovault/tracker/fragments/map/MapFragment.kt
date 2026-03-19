@@ -32,16 +32,15 @@ import com.geovault.tracker.TrackingService
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackUpdateHelper
 import com.geovault.tracker.GeoJsonLineString
+import com.geovault.tracker.location.LocationQualityGate
+import com.geovault.tracker.location.UnifiedLocationClient
+import com.geovault.tracker.location.UnifiedLocationSessionRequest
 import com.geovault.tracker.lastUpdateMs
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.fragments.TrackersListFragment
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.services.TrackingRuntimeStateStore
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult
-import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.*
 import org.maplibre.android.camera.CameraPosition
@@ -196,12 +195,24 @@ class MapFragment : Fragment() {
     private var pendingAutoZoomToStandaloneFix = false
     /** When true, suppress GPS auto-recenter until user explicitly requests it via My Location button. */
     private var suppressStandaloneAutoZoom = false
-    private var fusedLocationClient: FusedLocationProviderClient? = null
-    private var standaloneLocationCallback: LocationCallback? = null
+    private var standaloneLocationClient: UnifiedLocationClient? = null
+    private var standaloneLocationSessionRunning = false
 
     private val liveStreamCoordinator = MapLiveStreamCoordinator(lifecycleScope)
     private var mapCommandsJob: Job? = null
     private var lastPausedElapsedRealtimeMs: Long? = null
+
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
+        standaloneLocationClient = UnifiedLocationClient(context)
+    }
+
+    override fun onDetach() {
+        standaloneLocationClient?.stopSession()
+        standaloneLocationClient = null
+        standaloneLocationSessionRunning = false
+        super.onDetach()
+    }
 
     private fun applyLiveStreamPoint(
         trackId: String,
@@ -1024,8 +1035,11 @@ class MapFragment : Fragment() {
     }
 
     private fun isFreshStandaloneFix(location: Location): Boolean {
-        val now = System.currentTimeMillis()
-        return location.time > 0L && (now - location.time) <= MapConstants.STANDALONE_FIX_FRESHNESS_MS
+        return LocationQualityGate.isFresh(
+            location = location,
+            nowMs = System.currentTimeMillis(),
+            freshnessTtlMs = MapConstants.STANDALONE_FIX_FRESHNESS_MS
+        )
     }
 
     @SuppressLint("MissingPermission")
@@ -1033,6 +1047,11 @@ class MapFragment : Fragment() {
         val navHost = navHost() ?: return
         if (!navHost.hasLocationPermission()) {
             navHost.requestLocationPermission()
+            return
+        }
+        val client = standaloneLocationClient
+        if (client != null && !client.isGpsProviderEnabled()) {
+            navHost.showSnackbar(getString(R.string.gps_provider_required))
             return
         }
         // GPS recenter is a user camera action; disable live-fit one-way lock state.
@@ -1146,16 +1165,17 @@ class MapFragment : Fragment() {
     }
 
     /** Start location updates when not tracking: provides hasLiveGpsFix for button visibility and, when showMyLocationEnabled, updates map. */
-    @SuppressLint("MissingPermission")
     private fun startStandaloneLocationUpdates() {
         if (trackingRuntimeSnapshot().isRunning) return
         val navHost = navHost() ?: return
+        val client = standaloneLocationClient ?: return
         if (!navHost.hasLocationPermission()) return
-        if (fusedLocationClient == null) {
-            fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireContext())
+        if (!client.isGpsProviderEnabled()) {
+            navHost.showSnackbar(getString(R.string.gps_provider_required))
+            stopStandaloneLocationUpdates(clearGpsFix = true)
+            return
         }
-        val client = fusedLocationClient ?: return
-        if (standaloneLocationCallback != null) return
+        if (standaloneLocationSessionRunning) return
         val myLocationModeActive = resolveMyLocationPolicy().myLocationModeActive
         val intervalMs = if (myLocationModeActive) 3000L else 10_000L
         val request = LocationRequest.Builder(
@@ -1167,10 +1187,10 @@ class MapFragment : Fragment() {
                 setMinUpdateDistanceMeters(5f)
             }
         }.build()
-        standaloneLocationCallback = object : LocationCallback() {
-            override fun onLocationResult(result: LocationResult) {
-                val location = result.lastLocation ?: return
-                if (!isAdded) return
+        val started = client.startSession(
+            sessionRequest = UnifiedLocationSessionRequest(request),
+            onLocation = { location ->
+                if (!isAdded) return@startSession
                 hasLiveGpsFix = true
                 lastStandaloneLocation = location
                 if (resolveMyLocationPolicy().shouldEnablePuck) {
@@ -1184,34 +1204,44 @@ class MapFragment : Fragment() {
                     scheduleDebouncedSingleLiveFit()
                 }
                 updateShowMyLocationButtonVisibility()
+            },
+            onError = { error ->
+                if (isAdded) {
+                    navHost.showSnackbar(error.message ?: getString(R.string.unable_to_start_location_updates))
+                }
             }
+        )
+        if (!started) {
+            navHost.showSnackbar(getString(R.string.unable_to_start_location_updates))
+            return
         }
-        client.requestLocationUpdates(request, standaloneLocationCallback!!, Looper.getMainLooper())
-        client.lastLocation.addOnSuccessListener { location ->
-            if (location != null && isAdded) {
-                lastStandaloneLocation = location
-                if (resolveMyLocationPolicy().shouldEnablePuck) {
-                    if (isFreshStandaloneFix(location)) {
-                        waitingForStandaloneFix = false
-                        maplibreMap?.let { map ->
-                            LocationComponentHelper.forceLocation(map, location)
+        standaloneLocationSessionRunning = true
+        client.getLastLocation(
+            onSuccess = { location ->
+                if (location != null && isAdded) {
+                    lastStandaloneLocation = location
+                    if (resolveMyLocationPolicy().shouldEnablePuck) {
+                        if (isFreshStandaloneFix(location)) {
+                            waitingForStandaloneFix = false
+                            maplibreMap?.let { map ->
+                                LocationComponentHelper.forceLocation(map, location)
+                            }
+                            consumePendingStandaloneAutoZoom(location, animate = true)
                         }
-                        consumePendingStandaloneAutoZoom(location, animate = true)
                     }
+                    if (liveActiveFitEnabled) {
+                        scheduleDebouncedSingleLiveFit()
+                    }
+                    updateShowMyLocationButtonVisibility()
                 }
-                if (liveActiveFitEnabled) {
-                    scheduleDebouncedSingleLiveFit()
-                }
-                updateShowMyLocationButtonVisibility()
-            }
-        }
+            },
+            onFailure = {}
+        )
     }
 
     private fun stopStandaloneLocationUpdates(clearGpsFix: Boolean = true) {
-        standaloneLocationCallback?.let { callback ->
-            fusedLocationClient?.removeLocationUpdates(callback)
-            standaloneLocationCallback = null
-        }
+        standaloneLocationClient?.stopSession()
+        standaloneLocationSessionRunning = false
         if (clearGpsFix) {
             hasLiveGpsFix = false
             reduceLock(MapLockEvent.DisableGpsFollow)

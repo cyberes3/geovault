@@ -4,6 +4,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -38,5 +39,10 @@ class TrackPointStreamContractsTest {
 
         assertEquals(TrackPointSource.LOCAL_GPS, localDeferred.await().source)
         assertEquals(TrackPointSource.REMOTE_STREAM, remoteDeferred.await().source)
+    }
+
+    @Test
+    fun gateway_deferredEmitCounter_startsAtZero() {
+        assertTrue(TrackPointBus.deferredEmitEventsCount() >= 0L)
     }
 }

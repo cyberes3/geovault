@@ -1,6 +1,5 @@
 package com.geovault.tracker
 
-import android.annotation.SuppressLint
 import android.app.*
 import android.content.Context
 import android.content.Intent
@@ -8,7 +7,6 @@ import android.content.IntentFilter
 import android.location.Location
 import android.os.Build
 import android.os.IBinder
-import android.os.Looper
 import android.content.pm.ServiceInfo
 import android.os.BatteryManager
 import android.util.Log
@@ -17,6 +15,13 @@ import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
 import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.db.QueuedLocation
+import com.geovault.tracker.location.LocationQualityConfig
+import com.geovault.tracker.location.LocationQualityGate
+import com.geovault.tracker.location.LocationRejectionReason
+import com.geovault.tracker.location.NetworkStatusMonitor
+import com.geovault.tracker.location.TrackingPermissionGate
+import com.geovault.tracker.location.UnifiedLocationClient
+import com.geovault.tracker.location.UnifiedLocationSessionRequest
 import com.geovault.tracker.pipeline.TrackPointSource
 import com.geovault.tracker.pipeline.TrackPointServiceBase
 import com.geovault.tracker.services.TrackingRuntimeStateStore
@@ -49,6 +54,8 @@ class TrackingService : TrackPointServiceBase() {
         const val ACTION_START = "com.geovault.tracker.ACTION_START"
         const val ACTION_STOP = "com.geovault.tracker.ACTION_STOP"
         const val ACTION_RESHOW_FOREGROUND = "com.geovault.tracker.ACTION_RESHOW_FOREGROUND"
+        const val ACTION_TRACKING_ERROR = "com.geovault.tracker.ACTION_TRACKING_ERROR"
+        const val EXTRA_TRACKING_ERROR_MESSAGE = "extra_tracking_error_message"
         const val NOTIFICATION_DISMISSED_ACTION = "com.geovault.tracker.TRACKING_NOTIFICATION_DISMISSED"
         const val NOTIFICATION_ID = 101
         const val CHANNEL_ID = "tracker_service"
@@ -97,6 +104,8 @@ class TrackingService : TrackPointServiceBase() {
 
         /** Max batches to send in one push call to avoid holding the lock too long. */
         private const val MAX_BATCHES_PER_PUSH = 10
+        private const val MAX_QUEUE_SIZE = 5000
+        private const val MAX_QUEUE_AGE_MS = 7L * 24L * 60L * 60L * 1000L
 
         @JvmStatic
         fun shouldRestartTrackingAfterProcessDeath(
@@ -109,8 +118,7 @@ class TrackingService : TrackPointServiceBase() {
     }
 
     private var isTracking = false
-    private lateinit var fusedLocationClient: FusedLocationProviderClient
-    private lateinit var locationCallback: LocationCallback
+    private lateinit var unifiedLocationClient: UnifiedLocationClient
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
     private lateinit var database: AppDatabase
     private var httpClient: OkHttpClient? = null
@@ -156,7 +164,7 @@ class TrackingService : TrackPointServiceBase() {
         super.onCreate()
         Log.d(TAG, "onCreate")
         database = AppDatabase.getDatabase(this)
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        unifiedLocationClient = UnifiedLocationClient(this)
         currentSettings = settingsRepository.getSettings()
         settingsObserveJob?.cancel()
         settingsObserveJob = serviceScope.launch {
@@ -170,14 +178,6 @@ class TrackingService : TrackPointServiceBase() {
         significantMotionBridge = SignificantMotionResumeBridge(significantMotionTrigger) {
             Log.d(TAG, "Significant motion detected, resuming GPS")
             resumeGps()
-        }
-
-        locationCallback = object : LocationCallback() {
-            override fun onLocationResult(locationResult: LocationResult) {
-                for (location in locationResult.locations) {
-                    onLocationReceived(location)
-                }
-            }
         }
     }
 
@@ -228,9 +228,18 @@ class TrackingService : TrackPointServiceBase() {
         }
     }
 
-    @SuppressLint("MissingPermission")
     private fun startTracking() {
         if (isTracking) return
+        if (!TrackingPermissionGate.hasRequiredPermissionsForTracking(this)) {
+            broadcastTrackingError(getString(R.string.location_permissions_required))
+            stopSelf()
+            return
+        }
+        if (!unifiedLocationClient.isGpsProviderEnabled()) {
+            broadcastTrackingError(getString(R.string.gps_provider_required))
+            stopSelf()
+            return
+        }
         isTracking = true
         isRunning = true
         Log.d(TAG, "Starting tracking")
@@ -263,7 +272,10 @@ class TrackingService : TrackPointServiceBase() {
         } else {
             -1
         }
-        applyCurrentLocationRequest("start_tracking")
+        if (!applyCurrentLocationRequest("start_tracking")) {
+            failActiveTracking(getString(R.string.unable_to_start_location_updates))
+            return
+        }
         
         // Push any existing queued locations immediately when tracking starts
         serviceScope.launch {
@@ -286,7 +298,7 @@ class TrackingService : TrackPointServiceBase() {
         lastTrackedPropsJson = null
         syncRuntimeStateStore()
         settingsRepository.clearWasTrackingBeforeExit()
-        fusedLocationClient.removeLocationUpdates(locationCallback)
+        unifiedLocationClient.stopSession()
         significantMotionBridge?.cancel()
         stopRetryJob()
         clearQueuedLocationsAsync()
@@ -300,30 +312,34 @@ class TrackingService : TrackPointServiceBase() {
         lastAccuracyMeters = if (location.hasAccuracy()) location.accuracy else null
         syncRuntimeStateStore()
 
-        val accuracyFilter = currentSettings.accuracyFilterMeters
-
-        if (!TrackingLocationPolicy.acceptByAccuracy(location, accuracyFilter)) {
-            Log.d(TAG, "Location discarded (accuracy ${location.accuracy} > $accuracyFilter)")
-            consecutiveBadAccuracyPoints++
-            if (consecutiveBadAccuracyPoints >= 3) {
-                isWaitingForGpsLock = true
-                updateNotificationCount()
+        val quality = LocationQualityGate.evaluate(
+            lastAcceptedLocation = lastLocation,
+            newLocation = location,
+            nowMs = System.currentTimeMillis(),
+            config = LocationQualityConfig(
+                maxAccuracyMeters = currentSettings.accuracyFilterMeters,
+                maxJumpSpeedMps = 100.0,
+                freshnessTtlMs = 120_000L,
+                smoothingAlpha = 0.5f
+            )
+        )
+        if (!quality.accepted) {
+            if (quality.rejectionReason == LocationRejectionReason.BAD_ACCURACY ||
+                quality.rejectionReason == LocationRejectionReason.STALE
+            ) {
+                consecutiveBadAccuracyPoints++
+                if (consecutiveBadAccuracyPoints >= 3) {
+                    isWaitingForGpsLock = true
+                    updateNotificationCount()
+                }
             }
             broadcastSessionStats()
             return
         }
 
-        // Jump Filtering: Discard points implying speeds > 100 m/s (~220 mph)
-        if (TrackingLocationPolicy.isJump(lastLocation, location)) {
-            Log.d(TAG, "Location discarded (Jump detected)")
-            return
-        }
-
         consecutiveBadAccuracyPoints = 0
         isWaitingForGpsLock = false
-        
-        // EWMA Smoothing to stabilize coordinates
-        val smoothedLocation = TrackingLocationPolicy.smooth(lastLocation, location)
+        val smoothedLocation = quality.location
         
         Log.d(TAG, "Location received: ${smoothedLocation.latitude}, ${smoothedLocation.longitude}")
         val sigMotionOnly = currentSettings.significantDataOnly
@@ -384,6 +400,11 @@ class TrackingService : TrackPointServiceBase() {
         }
         
         try {
+            trimQueuedLocationsRetention()
+            if (!NetworkStatusMonitor.hasUsableNetwork(this)) {
+                updateNotificationCount()
+                return
+            }
             val trackerIdStr = SelectedTrackerPrefs.selectedTrackerId(this)
             if (trackerIdStr.isEmpty()) {
                 Log.e(TAG, "No tracker selected, cannot push locations")
@@ -460,14 +481,7 @@ class TrackingService : TrackPointServiceBase() {
             }
 
             updateNotificationCount()
-            
-            // Clean up old ones if queue is getting too big (e.g., max 1000)
-            // This ensures the device doesn't run out of space if the server is permanently down
-            val count = database.locationDao().getCount()
-            if (count > 1000) {
-                val oldest = database.locationDao().getOldest(count - 1000)
-                database.locationDao().delete(oldest)
-            }
+            trimQueuedLocationsRetention()
         } finally {
             pushMutex.unlock()
         }
@@ -638,7 +652,7 @@ class TrackingService : TrackPointServiceBase() {
     private fun pauseGps() {
         if (!isGpsPaused && isTracking) {
             isGpsPaused = true
-            fusedLocationClient.removeLocationUpdates(locationCallback)
+            unifiedLocationClient.stopSession()
             significantMotionBridge?.request()
             sigMotionSensorStartTime = System.currentTimeMillis()
             startSensorWatchdog()
@@ -670,10 +684,9 @@ class TrackingService : TrackPointServiceBase() {
             lastSpeedMps = 0f
             watchdogJob?.cancel()
 
-            try {
-                applyCurrentLocationRequest("resume_gps")
-            } catch (e: SecurityException) {
-                Log.e(TAG, "Permission lost during resume", e)
+            if (!applyCurrentLocationRequest("resume_gps")) {
+                failActiveTracking(getString(R.string.location_permission_revoked))
+                return
             }
             updateNotificationCount()
         }
@@ -736,25 +749,58 @@ class TrackingService : TrackPointServiceBase() {
             .build()
     }
 
-    @SuppressLint("MissingPermission")
-    private fun applyCurrentLocationRequest(reason: String) {
-        if (!isTracking) return
+    private fun applyCurrentLocationRequest(reason: String): Boolean {
+        if (!isTracking) return false
+        if (!unifiedLocationClient.hasLocationPermission()) {
+            return false
+        }
         val (intervalSec, distanceFilter) = resolveCurrentIntervalAndDistance()
         val request = buildLocationRequest(intervalSec, distanceFilter)
-        fusedLocationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
+        val started = unifiedLocationClient.startSession(
+            sessionRequest = UnifiedLocationSessionRequest(request),
+            onLocation = ::onLocationReceived,
+            onError = { error ->
+                Log.e(TAG, "Failed to apply location request ($reason)", error)
+            }
+        )
+        if (!started) return false
         Log.d(
             TAG,
             "Applied LocationRequest ($reason): interval=${intervalSec}s, distance=${distanceFilter}m, profile=$currentActiveProfileIndex, auto=${currentSettings.autoTrackingMode}"
         )
+        return true
     }
 
     private fun reapplyLocationRequestIfActive(reason: String) {
         if (!isTracking || isGpsPaused) return
-        try {
-            applyCurrentLocationRequest(reason)
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Permission lost while reapplying location request", e)
+        val applied = applyCurrentLocationRequest(reason)
+        if (!applied) {
+            failActiveTracking(getString(R.string.location_permission_revoked))
         }
+    }
+
+    private fun trimQueuedLocationsRetention() {
+        val cutoff = System.currentTimeMillis() - MAX_QUEUE_AGE_MS
+        database.locationDao().deleteOlderThan(cutoff)
+        val count = database.locationDao().getCount()
+        if (count > MAX_QUEUE_SIZE) {
+            database.locationDao().deleteOldestCount(count - MAX_QUEUE_SIZE)
+        }
+    }
+
+    private fun broadcastTrackingError(message: String) {
+        sendBroadcast(
+            Intent(ACTION_TRACKING_ERROR).apply {
+                setPackage(packageName)
+                putExtra(EXTRA_TRACKING_ERROR_MESSAGE, message)
+            }
+        )
+    }
+
+    private fun failActiveTracking(message: String) {
+        Log.w(TAG, "Failing active tracking: $message")
+        broadcastTrackingError(message)
+        stopTracking()
     }
 
 }

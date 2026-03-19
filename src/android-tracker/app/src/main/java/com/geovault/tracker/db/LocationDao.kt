@@ -24,6 +24,12 @@ interface LocationDao {
 
     @Query("SELECT COUNT(*) FROM queued_locations")
     fun getCount(): Int
+
+    @Query("DELETE FROM queued_locations WHERE time < :cutoffTimeMs")
+    fun deleteOlderThan(cutoffTimeMs: Long): Int
+
+    @Query("DELETE FROM queued_locations WHERE id IN (SELECT id FROM queued_locations ORDER BY time ASC LIMIT :count)")
+    fun deleteOldestCount(count: Int): Int
     
     @Query("DELETE FROM queued_locations")
     fun deleteAll()
