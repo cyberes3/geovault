@@ -2,8 +2,10 @@ package com.geovault.tracker.startup
 
 import android.content.Context
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.TrackerRepository
+import com.geovault.tracker.data.TrackerManagementRepository
+import javax.inject.Inject
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -26,7 +28,9 @@ interface StartupRefreshGateway {
     suspend fun refreshSelectedTrackerGeometry(context: Context, trackerId: String, allData: Boolean): Tracker?
 }
 
-class RepositoryStartupRefreshGateway : StartupRefreshGateway {
+class RepositoryStartupRefreshGateway @Inject constructor(
+    private val trackerManagementRepository: TrackerManagementRepository
+) : StartupRefreshGateway {
     override suspend fun fetchUserStatus(context: Context): String? =
         suspendCancellableCoroutine { continuation ->
             GeovaultAuthManager.fetchUserStatus(context) { email ->
@@ -35,16 +39,25 @@ class RepositoryStartupRefreshGateway : StartupRefreshGateway {
         }
 
     override suspend fun fetchTrackers(context: Context, forceRefresh: Boolean): List<Tracker>? =
-        TrackerRepository.getTrackersSuspend(context, forceRefresh = forceRefresh)
+        when (val result = trackerManagementRepository.loadTrackers(forceRefresh = forceRefresh)) {
+            is RepositoryResult.Success -> result.data
+            is RepositoryResult.Failure -> null
+        }
 
     override suspend fun fetchSelectedTracker(context: Context, trackerId: String): Tracker? =
-        TrackerRepository.getTrackerSuspend(context, trackerId, forceRefresh = false)
+        when (val result = trackerManagementRepository.loadTracker(trackerId)) {
+            is RepositoryResult.Success -> result.data
+            is RepositoryResult.Failure -> null
+        }
 
     override suspend fun refreshSelectedTrackerGeometry(
         context: Context,
         trackerId: String,
         allData: Boolean
-    ): Tracker? = TrackerRepository.refreshTrackerGeometrySuspend(context, trackerId, allData = allData)
+    ): Tracker? = when (val result = trackerManagementRepository.loadTrackerGeometry(trackerId, allData = allData)) {
+        is RepositoryResult.Success -> result.data
+        is RepositoryResult.Failure -> null
+    }
 }
 
 class StartupRefreshOrchestrator(

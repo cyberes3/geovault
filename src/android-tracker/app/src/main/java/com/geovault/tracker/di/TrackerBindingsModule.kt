@@ -21,6 +21,8 @@ import com.geovault.tracker.fragments.map.TrackerRepositoryMapTrackRepository
 import com.geovault.tracker.fragments.map.TrackerRepositoryMapVisibilityRepository
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.settings.TrackerSettingsRepositoryImpl
+import com.geovault.tracker.startup.RepositoryStartupRefreshGateway
+import com.geovault.tracker.startup.StartupRefreshGateway
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -83,4 +85,8 @@ abstract class TrackerBindingsModule {
     @Binds
     @Singleton
     abstract fun bindTrackerSettingsRepository(impl: TrackerSettingsRepositoryImpl): TrackerSettingsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindStartupRefreshGateway(impl: RepositoryStartupRefreshGateway): StartupRefreshGateway
 }

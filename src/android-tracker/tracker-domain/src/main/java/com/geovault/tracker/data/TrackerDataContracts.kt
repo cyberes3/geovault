@@ -20,6 +20,7 @@ interface TrackerManagementRepository {
     suspend fun loadTrackers(forceRefresh: Boolean = false): RepositoryResult<List<Tracker>>
     suspend fun loadAvailableToAdd(forceRefresh: Boolean = false): RepositoryResult<AvailableToAddResponse>
     suspend fun loadTracker(trackerId: String): RepositoryResult<Tracker>
+    suspend fun loadTrackerGeometry(trackerId: String, allData: Boolean = false): RepositoryResult<Tracker>
     suspend fun createTracker(request: TrackerCreateRequest): RepositoryResult<Tracker>
     suspend fun updateTrackerSettings(
         trackerId: String,
@@ -31,6 +32,7 @@ interface TrackerManagementRepository {
     suspend fun unsubscribeTracker(trackerId: String): RepositoryResult<Unit>
     suspend fun subscribeTracker(trackerId: String): RepositoryResult<Tracker>
     suspend fun checkTracker(request: TrackerCheckRequest): RepositoryResult<Boolean>
+    fun getTrackerFromCache(trackerId: String): Tracker?
     fun clearSelectedTrackerCaches()
     suspend fun fetchTrackerKml(trackerId: String): RepositoryResult<ByteArray>
     suspend fun loadUsers(): RepositoryResult<UsersResponse>

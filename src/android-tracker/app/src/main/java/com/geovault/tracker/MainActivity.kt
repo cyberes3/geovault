@@ -34,8 +34,8 @@ import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import com.geovault.tracker.services.TrackingRuntimeStateStore
-import com.geovault.tracker.startup.RepositoryStartupRefreshGateway
 import com.geovault.tracker.startup.StartupRefreshInput
+import com.geovault.tracker.startup.StartupRefreshGateway
 import com.geovault.tracker.startup.StartupRefreshOrchestrator
 import com.geovault.tracker.ui.applyDialogButtonColors
 import com.google.android.material.button.MaterialButton
@@ -50,6 +50,9 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
 
     @Inject
     lateinit var trackerManagementRepository: TrackerManagementRepository
+
+    @Inject
+    lateinit var startupRefreshGateway: StartupRefreshGateway
 
     private var isGuestView: Boolean = false
     
@@ -68,7 +71,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     private var lastSelectedTabIndex = -1
     /** True when handling back so we don't push the current tab onto tabBackStack. */
     private var isHandlingTabBack = false
-    private val startupRefreshOrchestrator = StartupRefreshOrchestrator(RepositoryStartupRefreshGateway())
+    private val startupRefreshOrchestrator by lazy { StartupRefreshOrchestrator(startupRefreshGateway) }
     private var startupRefreshJob: Job? = null
     override var isServerAccessible = true
         private set
@@ -263,7 +266,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         if (savedInstanceState == null && savedTab == 1) {
             val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
             if (selectedTrackerId.isNotEmpty()) {
-                TrackerRepository.getTrackerFromCache(selectedTrackerId)?.let { cachedSelected ->
+                trackerManagementRepository.getTrackerFromCache(selectedTrackerId)?.let { cachedSelected ->
                     setInitialTrackForMap(cachedSelected)
                 }
             }

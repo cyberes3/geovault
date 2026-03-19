@@ -67,6 +67,10 @@ class ApiTrackerManagementRepository @Inject constructor(
         return executeApiCall { api -> api.getTracker(trackerId).execute() }
     }
 
+    override suspend fun loadTrackerGeometry(trackerId: String, allData: Boolean): RepositoryResult<Tracker> {
+        return executeApiCall { api -> api.getTrackerGeometry(trackerId, allData = allData).execute() }
+    }
+
     override suspend fun createTracker(request: TrackerCreateRequest): RepositoryResult<Tracker> {
         val result = executeApiCall { api -> api.createTracker(request).execute() }
         if (result is RepositoryResult.Success) {
@@ -157,6 +161,10 @@ class ApiTrackerManagementRepository @Inject constructor(
 
     override fun clearSelectedTrackerCaches() {
         TrackerRepository.clearSelectedTrackerCaches()
+    }
+
+    override fun getTrackerFromCache(trackerId: String): Tracker? {
+        return trackersCache?.firstOrNull { it.id == trackerId }
     }
 
     override suspend fun fetchTrackerKml(trackerId: String): RepositoryResult<ByteArray> {
