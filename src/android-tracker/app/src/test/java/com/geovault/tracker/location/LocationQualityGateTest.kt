@@ -100,4 +100,40 @@ class LocationQualityGateTest {
         assertEquals(12.5, result.location.latitude, 0.001)
         assertEquals(12.5, result.location.longitude, 0.001)
     }
+
+    @Test
+    fun evaluate_rejectsOutOfOrderTimestamp() {
+        val previous = location(10.0, 10.0, time = 200_000L, accuracy = 5f)
+        val outOfOrder = location(10.001, 10.001, time = 199_000L, accuracy = 5f)
+        val result = LocationQualityGate.evaluate(
+            lastAcceptedLocation = previous,
+            newLocation = outOfOrder,
+            nowMs = 200_100L,
+            config = LocationQualityConfig(
+                maxAccuracyMeters = 50f,
+                maxJumpSpeedMps = 1000.0,
+                freshnessTtlMs = 60_000L
+            )
+        )
+        assertFalse(result.accepted)
+        assertEquals(LocationRejectionReason.OUT_OF_ORDER, result.rejectionReason)
+    }
+
+    @Test
+    fun evaluate_rejectsDuplicateFix() {
+        val previous = location(10.0, 10.0, time = 200_000L, accuracy = 5f)
+        val duplicate = location(10.0, 10.0, time = 200_000L, accuracy = 5f)
+        val result = LocationQualityGate.evaluate(
+            lastAcceptedLocation = previous,
+            newLocation = duplicate,
+            nowMs = 200_100L,
+            config = LocationQualityConfig(
+                maxAccuracyMeters = 50f,
+                maxJumpSpeedMps = 1000.0,
+                freshnessTtlMs = 60_000L
+            )
+        )
+        assertFalse(result.accepted)
+        assertEquals(LocationRejectionReason.DUPLICATE, result.rejectionReason)
+    }
 }

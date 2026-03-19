@@ -7,6 +7,8 @@ enum class LocationRejectionReason {
     STALE,
     BAD_ACCURACY,
     INVALID_COORDINATES,
+    OUT_OF_ORDER,
+    DUPLICATE,
     JUMP
 }
 
@@ -41,6 +43,12 @@ object LocationQualityGate {
         if (newLocation.latitude !in -90.0..90.0 || newLocation.longitude !in -180.0..180.0) {
             return LocationQualityResult(false, newLocation, LocationRejectionReason.INVALID_COORDINATES)
         }
+        if (isOutOfOrder(lastAcceptedLocation, newLocation)) {
+            return LocationQualityResult(false, newLocation, LocationRejectionReason.OUT_OF_ORDER)
+        }
+        if (isDuplicate(lastAcceptedLocation, newLocation)) {
+            return LocationQualityResult(false, newLocation, LocationRejectionReason.DUPLICATE)
+        }
         if (!isFresh(newLocation, nowMs, config.freshnessTtlMs)) {
             return LocationQualityResult(false, newLocation, LocationRejectionReason.STALE)
         }
@@ -60,6 +68,18 @@ object LocationQualityGate {
         if (timeDiffSec <= 0.0) return false
         val speed = lastLocation.distanceTo(newLocation) / timeDiffSec
         return speed > maxJumpSpeedMps
+    }
+
+    private fun isOutOfOrder(lastLocation: Location?, newLocation: Location): Boolean {
+        val previousTs = lastLocation?.time ?: return false
+        return newLocation.time in 1 until previousTs
+    }
+
+    private fun isDuplicate(lastLocation: Location?, newLocation: Location): Boolean {
+        val previous = lastLocation ?: return false
+        return previous.time == newLocation.time &&
+            previous.latitude == newLocation.latitude &&
+            previous.longitude == newLocation.longitude
     }
 
     private fun smooth(lastLocation: Location?, newLocation: Location, alpha: Float): Location {

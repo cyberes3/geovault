@@ -20,6 +20,12 @@ import com.geovault.tracker.location.LocationQualityGate
 import com.geovault.tracker.location.LocationRejectionReason
 import com.geovault.tracker.location.NetworkStatusMonitor
 import com.geovault.tracker.location.TrackingPermissionGate
+import com.geovault.tracker.location.TrackingControlEvent
+import com.geovault.tracker.location.TrackingControlPlane
+import com.geovault.tracker.location.TrackingControlState
+import com.geovault.tracker.location.TrackingLifecycleState
+import com.geovault.tracker.location.TrackingSyncPolicy
+import com.geovault.tracker.location.SyncFailureClass
 import com.geovault.tracker.location.UnifiedLocationClient
 import com.geovault.tracker.location.UnifiedLocationSessionRequest
 import com.geovault.tracker.pipeline.TrackPointSource
@@ -42,7 +48,6 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPOutputStream
 import java.util.concurrent.TimeUnit
-import kotlin.math.max
 import kotlin.random.Random
 import javax.inject.Inject
 
@@ -115,6 +120,17 @@ class TrackingService : TrackPointServiceBase() {
             return wasTrackingBeforeExit && restartTrackingIfKilled
         }
 
+        @JvmStatic
+        fun hasValidSelectedTrackerId(selectedTrackerId: String): Boolean {
+            if (selectedTrackerId.isBlank()) return false
+            return try {
+                java.util.UUID.fromString(selectedTrackerId)
+                true
+            } catch (_: IllegalArgumentException) {
+                false
+            }
+        }
+
     }
 
     private var isTracking = false
@@ -144,7 +160,11 @@ class TrackingService : TrackPointServiceBase() {
     private var sigMotionSensorStartTime = 0L
     private var watchdogJob: Job? = null
     private var retryJob: Job? = null
+    private var preflightJob: Job? = null
     private val pushMutex = kotlinx.coroutines.sync.Mutex()
+    private var controlState: TrackingControlState = TrackingControlState()
+    private var consecutivePushFailures = 0
+    private var lastSyncFailureClass = SyncFailureClass.NONE
     
     private var currentActiveProfileIndex = -1
     private var lastSpeedMps: Float = 0f
@@ -153,12 +173,6 @@ class TrackingService : TrackPointServiceBase() {
 
     @Inject
     lateinit var settingsRepository: TrackerSettingsRepository
-
-    private fun clearQueuedLocationsAsync() {
-        serviceScope.launch {
-            database.locationDao().deleteAll()
-        }
-    }
 
     override fun onCreate() {
         super.onCreate()
@@ -230,18 +244,23 @@ class TrackingService : TrackPointServiceBase() {
 
     private fun startTracking() {
         if (isTracking) return
+        transitionControlState(TrackingControlEvent.StartRequested)
+        val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
+        if (!hasValidSelectedTrackerId(selectedTrackerId)) {
+            failStartup(getString(R.string.no_tracker_selected_go_to_settings))
+            return
+        }
         if (!TrackingPermissionGate.hasRequiredPermissionsForTracking(this)) {
-            broadcastTrackingError(getString(R.string.location_permissions_required))
-            stopSelf()
+            failStartup(getString(R.string.location_permissions_required))
             return
         }
         if (!unifiedLocationClient.isGpsProviderEnabled()) {
-            broadcastTrackingError(getString(R.string.gps_provider_required))
-            stopSelf()
+            failStartup(getString(R.string.gps_provider_required))
             return
         }
         isTracking = true
         isRunning = true
+        transitionControlState(TrackingControlEvent.StartSucceeded)
         Log.d(TAG, "Starting tracking")
         settingsRepository.setWasTrackingBeforeExit(true)
 
@@ -255,10 +274,10 @@ class TrackingService : TrackPointServiceBase() {
         lastTrackedLongitude = null
         lastTrackedTimestampMs = 0L
         lastTrackedPropsJson = null
+        consecutivePushFailures = 0
+        lastSyncFailureClass = SyncFailureClass.NONE
         syncRuntimeStateStore()
         broadcastSessionStats()
-
-        clearQueuedLocationsAsync()
 
         startForeground(NOTIFICATION_ID, createNotification(0, 0), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
 
@@ -279,15 +298,17 @@ class TrackingService : TrackPointServiceBase() {
         
         // Push any existing queued locations immediately when tracking starts
         serviceScope.launch {
-            pushLocations()
+            lastSyncFailureClass = pushLocations()
         }
         
         // Start periodic retry job to push failed locations every minute
         startRetryJob()
+        startPreflightMonitor()
     }
 
     private fun stopTracking() {
         if (!isTracking) return
+        transitionControlState(TrackingControlEvent.StopRequested)
         Log.d(TAG, "Stopping tracking")
         isTracking = false
         isRunning = false
@@ -300,14 +321,19 @@ class TrackingService : TrackPointServiceBase() {
         settingsRepository.clearWasTrackingBeforeExit()
         unifiedLocationClient.stopSession()
         significantMotionBridge?.cancel()
+        stopPreflightMonitor()
         stopRetryJob()
-        clearQueuedLocationsAsync()
         broadcastSessionStats()
         stopForeground(STOP_FOREGROUND_REMOVE)
+        transitionControlState(TrackingControlEvent.StopCompleted)
         stopSelf()
     }
 
     private fun onLocationReceived(location: Location) {
+        if (!unifiedLocationClient.isGpsProviderEnabled()) {
+            failActiveTracking(getString(R.string.gps_provider_required))
+            return
+        }
         // Always update last accuracy from the most recent fix so the UI shows current GPS fix quality
         lastAccuracyMeters = if (location.hasAccuracy()) location.accuracy else null
         syncRuntimeStateStore()
@@ -388,41 +414,46 @@ class TrackingService : TrackPointServiceBase() {
         serviceScope.launch {
             val queued = QueuedLocation.fromLocation(smoothedLocation, totalDistanceMeters)
             database.locationDao().insert(queued)
-            pushLocations()
+            val failureClass = pushLocations()
+            if (failureClass == SyncFailureClass.NONE) {
+                consecutivePushFailures = 0
+            }
         }
     }
 
-    private suspend fun pushLocations() {
+    private suspend fun pushLocations(): SyncFailureClass {
         // Prevent concurrent pushes
         if (!pushMutex.tryLock()) {
             Log.d(TAG, "Push already in progress, skipping")
-            return
+            return SyncFailureClass.TRANSIENT
         }
         
         try {
             trimQueuedLocationsRetention()
             if (!NetworkStatusMonitor.hasUsableNetwork(this)) {
                 updateNotificationCount()
-                return
+                return SyncFailureClass.TRANSIENT
             }
             val trackerIdStr = SelectedTrackerPrefs.selectedTrackerId(this)
             if (trackerIdStr.isEmpty()) {
                 Log.e(TAG, "No tracker selected, cannot push locations")
+                broadcastTrackingError(getString(R.string.no_tracker_selected_go_to_settings))
                 updateNotificationCount()
-                return
+                return SyncFailureClass.PERMANENT
             }
             val trackerId = try {
                 java.util.UUID.fromString(trackerIdStr)
             } catch (e: IllegalArgumentException) {
                 Log.e(TAG, "Invalid selected tracker id, cannot push locations", e)
+                broadcastTrackingError(getString(R.string.tracker_validation_failed_go_to_settings))
                 updateNotificationCount()
-                return
+                return SyncFailureClass.PERMANENT
             }
 
             val serverUrl = GeovaultAuthManager.getServerUrl(this)
             if (serverUrl.isEmpty()) {
                 updateNotificationCount()
-                return
+                return SyncFailureClass.PERMANENT
             }
 
             val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
@@ -472,6 +503,9 @@ class TrackingService : TrackPointServiceBase() {
                         batchesSent++
                     } else {
                         Log.e(TAG, "Failed to push locations: ${response.code} ${response.message}")
+                        if (response.code in 400..499) {
+                            return SyncFailureClass.PERMANENT
+                        }
                         break
                     }
                 } catch (e: Exception) {
@@ -482,6 +516,7 @@ class TrackingService : TrackPointServiceBase() {
 
             updateNotificationCount()
             trimQueuedLocationsRetention()
+            return if (batchesSent > 0) SyncFailureClass.NONE else SyncFailureClass.TRANSIENT
         } finally {
             pushMutex.unlock()
         }
@@ -558,6 +593,9 @@ class TrackingService : TrackPointServiceBase() {
         TrackingRuntimeStateStore.update {
             it.copy(
                 isRunning = isRunning,
+                lifecycleState = controlState.lifecycleState,
+                failureReason = controlState.failureReason,
+                gpsProviderEnabled = unifiedLocationClient.isGpsProviderEnabled(),
                 sessionStartTimeMs = sessionStartTimeMs,
                 pointsSentThisSession = pointsSentThisSession,
                 lastPointSentAtMs = lastPointSentAtMs,
@@ -625,6 +663,7 @@ class TrackingService : TrackPointServiceBase() {
         settingsObserveJob?.cancel()
         super.onDestroy()
         significantMotionBridge?.cancel()
+        stopPreflightMonitor()
         stopRetryJob()
         serviceScope.cancel()
     }
@@ -633,12 +672,22 @@ class TrackingService : TrackPointServiceBase() {
         retryJob?.cancel()
         retryJob = serviceScope.launch {
             while (isActive && isTracking) {
+                val baseDelay = TrackingSyncPolicy.nextRetryDelayMs(
+                    consecutiveFailures = consecutivePushFailures,
+                    failureClass = lastSyncFailureClass
+                )
                 val jitter = Random.nextLong(-RETRY_JITTER_MS, RETRY_JITTER_MS + 1)
-                delay(RETRY_INTERVAL_MS + jitter)
+                delay((baseDelay + jitter).coerceAtLeast(5_000L))
                 val count = database.locationDao().getCount()
                 if (count > 0) {
                     Log.d(TAG, "Retry job: attempting to push $count queued locations")
-                    pushLocations()
+                    val outcome = pushLocations()
+                    lastSyncFailureClass = outcome
+                    if (outcome == SyncFailureClass.NONE) {
+                        consecutivePushFailures = 0
+                    } else {
+                        consecutivePushFailures++
+                    }
                 }
             }
         }
@@ -647,6 +696,32 @@ class TrackingService : TrackPointServiceBase() {
     private fun stopRetryJob() {
         retryJob?.cancel()
         retryJob = null
+    }
+
+    private fun startPreflightMonitor() {
+        preflightJob?.cancel()
+        preflightJob = serviceScope.launch {
+            while (isActive && isTracking) {
+                delay(20_000L)
+                if (!TrackingPermissionGate.hasRequiredPermissionsForTracking(this@TrackingService)) {
+                    withContext(Dispatchers.Main) {
+                        failActiveTracking(getString(R.string.location_permission_revoked))
+                    }
+                    return@launch
+                }
+                if (!unifiedLocationClient.isGpsProviderEnabled()) {
+                    withContext(Dispatchers.Main) {
+                        failActiveTracking(getString(R.string.gps_provider_required))
+                    }
+                    return@launch
+                }
+            }
+        }
+    }
+
+    private fun stopPreflightMonitor() {
+        preflightJob?.cancel()
+        preflightJob = null
     }
 
     private fun pauseGps() {
@@ -799,8 +874,23 @@ class TrackingService : TrackPointServiceBase() {
 
     private fun failActiveTracking(message: String) {
         Log.w(TAG, "Failing active tracking: $message")
+        transitionControlState(TrackingControlEvent.FatalFailure, message)
         broadcastTrackingError(message)
         stopTracking()
+    }
+
+    private fun failStartup(message: String) {
+        Log.w(TAG, "Tracking start failed: $message")
+        settingsRepository.clearWasTrackingBeforeExit()
+        transitionControlState(TrackingControlEvent.StartFailed, message)
+        syncRuntimeStateStore()
+        broadcastTrackingError(message)
+        stopSelf()
+    }
+
+    private fun transitionControlState(event: TrackingControlEvent, failureReason: String? = null) {
+        controlState = TrackingControlPlane.transition(controlState, event, failureReason)
+        syncRuntimeStateStore()
     }
 
 }

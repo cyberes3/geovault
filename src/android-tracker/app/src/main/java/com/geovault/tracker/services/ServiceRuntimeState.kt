@@ -1,11 +1,15 @@
 package com.geovault.tracker.services
 
+import com.geovault.tracker.location.TrackingLifecycleState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 data class TrackingRuntimeSnapshot(
     val isRunning: Boolean = false,
+    val lifecycleState: TrackingLifecycleState = TrackingLifecycleState.STOPPED,
+    val failureReason: String? = null,
+    val gpsProviderEnabled: Boolean = true,
     val sessionStartTimeMs: Long = 0L,
     val pointsSentThisSession: Int = 0,
     val lastPointSentAtMs: Long = 0L,
