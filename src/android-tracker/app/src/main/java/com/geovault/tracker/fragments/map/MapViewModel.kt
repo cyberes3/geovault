@@ -3,6 +3,7 @@ package com.geovault.tracker.fragments.map
 import android.app.Application
 import android.util.Log
 import com.geovault.tracker.Group
+import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import com.geovault.tracker.services.TrackingRuntimeStateStore
@@ -65,7 +66,11 @@ class MapViewModel @Inject constructor(
 
     fun handleIntent(intent: MapIntent) {
         when (intent) {
-            is MapIntent.LoadSingleTracker -> loadSingle(intent.trackerId, intent.forceReplace)
+            is MapIntent.LoadSingleTracker -> loadSingle(
+                trackerId = intent.trackerId,
+                forceReplace = intent.forceReplace,
+                coordinatesOnly = intent.coordinatesOnly
+            )
             is MapIntent.LoadAllTrackers -> loadAllTrackers()
             is MapIntent.LoadGroup -> loadGroup(intent.group, intent.zoomToTrackerId)
         }
@@ -84,6 +89,8 @@ class MapViewModel @Inject constructor(
         streamJob = viewModelScope.launch {
             streamingRepository.events.collect { event ->
                 val state = _uiState.value
+                val effectiveDisplayedTrackerId = state.displayedTrackerId
+                    ?: SelectedTrackerPrefs.selectedTrackerId(getApplication())
                 val accepted = handleTrackPointUseCase.shouldAccept(
                     event = event,
                     trackingRunning = TrackingRuntimeStateStore.state.value.isRunning,
@@ -92,7 +99,7 @@ class MapViewModel @Inject constructor(
                         is MapScreenMode.GroupMode -> MapViewContext.GROUP
                         else -> MapViewContext.SINGLE_TRACKER
                     },
-                    displayedTrackerId = state.displayedTrackerId,
+                    displayedTrackerId = effectiveDisplayedTrackerId,
                     activeStreamedTrackerIds = LiveStreamRuntimeStateStore.state.value.activeTrackerIds
                 )
                 if (accepted) {
@@ -170,14 +177,15 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    private fun loadSingle(trackerId: String?, forceReplace: Boolean) {
+    private fun loadSingle(trackerId: String?, forceReplace: Boolean, coordinatesOnly: Boolean) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(loading = true, mode = MapScreenMode.Single)
             val snapshot = loadSingleTrackerUseCase.execute(
                 context = getApplication(),
                 trackerId = trackerId,
                 displayedTrackerId = _uiState.value.displayedTrackerId,
-                forceReplace = forceReplace
+                forceReplace = forceReplace,
+                coordinatesOnly = coordinatesOnly
             )
             if (snapshot == null) {
                 _uiState.value = _uiState.value.copy(loading = false)

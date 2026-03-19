@@ -38,7 +38,7 @@ class ResolveMapResumeUseCaseTest {
                 displayedTrackerId = null
             )
         )
-        assertEquals(MapResumeDecision.LoadSingleTracker("tracker-1"), decision)
+        assertTrue(decision is MapResumeDecision.NoOp)
     }
 
     @Test
@@ -77,6 +77,22 @@ class ResolveMapResumeUseCaseTest {
             )
         )
         assertEquals(MapResumeDecision.LoadSingleTracker("tracker-1"), decision)
+    }
+
+    @Test
+    fun resolve_loadsCoordinatesOnlyWhenStreamingNeedsBootstrap() {
+        val decision = useCase.resolve(
+            baseInput().copy(
+                selectedTrackerId = "tracker-1",
+                displayedTrackerId = "tracker-1",
+                hasTrackPoints = false,
+                activeStreamedTrackerIds = setOf("tracker-1")
+            )
+        )
+        assertEquals(
+            MapResumeDecision.LoadSingleTracker(trackerId = "tracker-1", coordinatesOnly = true),
+            decision
+        )
     }
 
     private fun baseInput() = MapResumeInput(

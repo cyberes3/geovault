@@ -7,6 +7,7 @@ internal data class MapSavedState(
     val lockTargetLat: Double? = null,
     val lockTargetLon: Double? = null,
     val lockNeedsInitialZoom: Boolean = false,
+    val cameraZoom: Double? = null,
     val showMyLocationEnabled: Boolean = false,
     val displayedTrackerId: String? = null,
     val displayedTrackerName: String? = null,
@@ -19,6 +20,7 @@ internal data class MapSavedState(
         outState.putBoolean(KEY_LOCK_INITIAL_ZOOM, lockNeedsInitialZoom)
         if (lockTargetLat != null) outState.putDouble(KEY_LOCK_TARGET_LAT, lockTargetLat)
         if (lockTargetLon != null) outState.putDouble(KEY_LOCK_TARGET_LON, lockTargetLon)
+        if (cameraZoom != null) outState.putDouble(KEY_CAMERA_ZOOM, cameraZoom)
         outState.putBoolean(KEY_SHOW_MY_LOCATION, showMyLocationEnabled)
         outState.putString(KEY_DISPLAYED_TRACKER_ID, displayedTrackerId)
         outState.putString(KEY_DISPLAYED_TRACKER_NAME, displayedTrackerName)
@@ -32,6 +34,7 @@ internal data class MapSavedState(
         private const val KEY_LOCK_INITIAL_ZOOM = "map_lock_initial_zoom"
         private const val KEY_LOCK_TARGET_LAT = "lock_target_lat"
         private const val KEY_LOCK_TARGET_LON = "lock_target_lon"
+        private const val KEY_CAMERA_ZOOM = "camera_zoom"
         private const val KEY_SHOW_MY_LOCATION = "show_my_location"
         private const val KEY_DISPLAYED_TRACKER_ID = "displayed_tracker_id"
         private const val KEY_DISPLAYED_TRACKER_NAME = "displayed_tracker_name"
@@ -57,11 +60,17 @@ internal data class MapSavedState(
             } else {
                 null
             }
+            val cameraZoom = if (bundle.containsKey(KEY_CAMERA_ZOOM)) {
+                bundle.getDouble(KEY_CAMERA_ZOOM)
+            } else {
+                null
+            }
             return MapSavedState(
                 lockMode = lockMode,
                 lockTargetLat = lockTargetLat,
                 lockTargetLon = lockTargetLon,
                 lockNeedsInitialZoom = bundle.getBoolean(KEY_LOCK_INITIAL_ZOOM, false),
+                cameraZoom = cameraZoom,
                 showMyLocationEnabled = bundle.getBoolean(KEY_SHOW_MY_LOCATION, false),
                 displayedTrackerId = bundle.getString(KEY_DISPLAYED_TRACKER_ID),
                 displayedTrackerName = bundle.getString(KEY_DISPLAYED_TRACKER_NAME),

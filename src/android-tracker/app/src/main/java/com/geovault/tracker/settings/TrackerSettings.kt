@@ -18,7 +18,8 @@ data class TrackerSettings(
         const val MAX_LOGGING_INTERVAL_SEC: Long = 3600L
 
         const val DEFAULT_DISTANCE_FILTER_METERS: Float = 10f
-        const val MIN_DISTANCE_FILTER_METERS: Float = 1f
+        // Support a true "1 ft" minimum in imperial UI (0.3048 meters).
+        const val MIN_DISTANCE_FILTER_METERS: Float = 0.3048f
         const val MAX_DISTANCE_FILTER_METERS: Float = 10_000f
 
         const val DEFAULT_ACCURACY_FILTER_METERS: Float = 50f

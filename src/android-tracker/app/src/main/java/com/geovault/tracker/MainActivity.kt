@@ -136,7 +136,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             startService(Intent(this, TrackingService::class.java).apply { this.action = action })
         } else if (action == LiveTrackStreamingService.ACTION_STOP) {
             startService(Intent(this, LiveTrackStreamingService::class.java).apply { this.action = action })
-            if (isMainContentSetup) {
+            if (isMainContentSetup && !TrackingRuntimeStateStore.state.value.isRunning) {
                 (pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.map.MapFragment)?.restoreTrackForSelectedTracker()
             }
         }
@@ -255,8 +255,8 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         groupContextForMap = savedInstanceState?.getParcelable(KEY_GROUP_CONTEXT_FOR_MAP, Group::class.java)
         groupMapOpenedFromTab = savedInstanceState?.getInt(KEY_GROUP_MAP_OPENED_FROM_TAB, -1) ?: -1
 
-        // When launching on the Map tab, pre-fetch selected tracker so the map can zoom to its extent
-        if (savedTab == 1) {
+        // Only seed initial map handoff on cold launch. Restores should not create implicit pending refreshes.
+        if (savedInstanceState == null && savedTab == 1) {
             val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
             if (selectedTrackerId.isNotEmpty()) {
                 TrackerRepository.getTrackerFromCache(selectedTrackerId)?.let { cachedSelected ->
@@ -458,23 +458,8 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
 
     private fun openMapTabFromBottomNav() {
         clearOverlayAndThen {
-            val mapFragment = pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.map.MapFragment
-            val isStreaming = mapFragment?.isShowingStreamedTrack() ?: false
-            val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
-
-            if (viewPager.currentItem != 1 && selectedTrackerId.isNotEmpty() && initialTrackForMap == null && !isStreaming) {
-                TrackerRepository.getTrackerFromCache(selectedTrackerId)?.let { cachedSelected ->
-                    setInitialTrackForMap(cachedSelected)
-                }
-                setCurrentTab(1, forceRefreshMap = true, delayMs = 0)
-                lifecycleScope.launch {
-                    val list = TrackerRepository.getTrackersSuspend(this@MainActivity, forceRefresh = false)
-                    val selectedTracker = list?.find { it.id == selectedTrackerId }
-                    if (selectedTracker != null) {
-                        updateInitialTrackForMapIfPending(selectedTracker)
-                    }
-                }
-            } else if (viewPager.currentItem != 1) {
+            if (viewPager.currentItem != 1) {
+                // Normal map-tab navigation should preserve current in-memory map state.
                 val forceRefresh = initialTrackForMap != null
                 setCurrentTab(1, forceRefreshMap = forceRefresh, delayMs = 0)
             } else {
@@ -688,13 +673,17 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
 
     override fun setCurrentTab(index: Int, forceRefreshMap: Boolean, delayMs: Long) {
         if (forceRefreshMap && index == 1) {
+            val trackingRunning = TrackingRuntimeStateStore.state.value.isRunning
             val mapFragment = pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.map.MapFragment
             if (mapFragment != null) {
                 val (group, zoomToTrackerId) = getAndClearInitialGroupAndZoomTo()
                 if (group != null) {
                     mapFragment.refreshMapForGroup(group, zoomToTrackerId)
+                } else if (trackingRunning) {
+                    // Keep active tracking map state intact when switching tabs.
+                    initialTrackForMap = null
                 } else {
-                    mapFragment.refreshTrackForSelectedTracker()
+                    mapFragment.consumePendingInitialTrackForMap()
                 }
             }
             // If fragment is not yet created, leave initialGroupForMap/initialGroupZoomToTrackerId

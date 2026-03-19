@@ -22,11 +22,6 @@ internal data class MapTrackPointContext(
 
 internal object MapTrackPointReducer {
     fun stateFromContext(context: MapTrackPointContext): MapTrackPointState {
-        val mode = if (MapLiveStreamHandler.isMultiContext(context.showAllTrackers, context.mapViewContext)) {
-            MapTrackPointMode.Multi(context.activeStreamedTrackerIds)
-        } else {
-            MapTrackPointMode.Single(context.displayedTrackerId)
-        }
         val modeState = MapModeStateMachine.derive(
             MapModeStateInput(
                 trackingRunning = context.trackingRunning,
@@ -34,6 +29,14 @@ internal object MapTrackPointReducer {
                 mapViewContext = context.mapViewContext
             )
         )
+        val mode = if (modeState == MapModeState.TRACKING_SINGLE) {
+            // During active tracking, local GPS must not be gated by multi-context streamed tracker IDs.
+            MapTrackPointMode.Single(context.displayedTrackerId)
+        } else if (MapLiveStreamHandler.isMultiContext(context.showAllTrackers, context.mapViewContext)) {
+            MapTrackPointMode.Multi(context.activeStreamedTrackerIds)
+        } else {
+            MapTrackPointMode.Single(context.displayedTrackerId)
+        }
         return MapTrackPointState(
             mode = mode,
             modeState = modeState

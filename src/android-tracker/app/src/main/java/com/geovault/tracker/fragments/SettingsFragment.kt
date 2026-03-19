@@ -12,6 +12,7 @@ import android.widget.AutoCompleteTextView
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import android.view.inputmethod.EditorInfo
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.widget.NestedScrollView
@@ -30,6 +31,7 @@ import com.geovault.tracker.ui.applyDialogButtonColors
 import com.google.android.material.button.MaterialButton
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @AndroidEntryPoint
 class SettingsFragment : Fragment() {
@@ -112,7 +114,10 @@ class SettingsFragment : Fragment() {
     }
 
     private fun toDisplay(meters: Float, isImperial: Boolean): Int {
-        return if (isImperial) (meters * 3.28084f).toInt() else meters.toInt()
+        val converted = if (isImperial) meters * 3.28084f else meters
+        if (converted <= 0f) return 0
+        // Preserve user intent for small positive values in integer-only inputs.
+        return converted.roundToInt().coerceAtLeast(1)
     }
 
     private fun fromDisplay(displayVal: Float, isImperial: Boolean): Float {
@@ -236,9 +241,9 @@ class SettingsFragment : Fragment() {
         val isImperial = com.geovault.common.UnitUtils.usesImperialUnitsDefault(requireContext())
         updateUnitLabels(isImperial)
 
-        intervalEdit.setText(settings.loggingIntervalSec.toString())
-        distanceEdit.setText(toDisplay(settings.distanceFilterMeters, isImperial).toString())
-        accuracyEdit.setText(toDisplay(settings.accuracyFilterMeters, isImperial).toString())
+        updateNumericEditFromState(intervalEdit, settings.loggingIntervalSec.toString())
+        updateNumericEditFromState(distanceEdit, toDisplay(settings.distanceFilterMeters, isImperial).toString())
+        updateNumericEditFromState(accuracyEdit, toDisplay(settings.accuracyFilterMeters, isImperial).toString())
 
         autoTrackingSwitch.isChecked = settings.autoTrackingMode
         updateAutoTrackingUi(autoTrackingSwitch.isChecked)
@@ -258,6 +263,13 @@ class SettingsFragment : Fragment() {
         )
         profileSpinner.setText(labels[selectedProfileIndex], false)
         isBindingSettings = false
+    }
+
+    private fun updateNumericEditFromState(editText: EditText, value: String) {
+        // Avoid stomping active typing, which causes caret jumps.
+        if (editText.hasFocus()) return
+        if (editText.text?.toString() == value) return
+        editText.setText(value)
     }
 
     private fun setupSettingsListeners() {
@@ -294,42 +306,97 @@ class SettingsFragment : Fragment() {
             updateAutoTrackingUi(isChecked)
         }
 
-        intervalEdit.addTextChangedListener(object : android.text.TextWatcher {
-            override fun afterTextChanged(s: android.text.Editable?) {
-                if (isBindingSettings) return
-                val value = s?.toString()?.toLongOrNull() ?: 15L
-                viewModel.setLoggingIntervalSec(value)
-                updateProfileToCustom()
-            }
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-        })
+        configureNumericInputCommit(intervalEdit) { commitIntervalInput() }
+        configureNumericInputCommit(distanceEdit) { commitDistanceInput() }
+        configureNumericInputCommit(accuracyEdit) { commitAccuracyInput() }
+    }
 
-        distanceEdit.addTextChangedListener(object : android.text.TextWatcher {
-            override fun afterTextChanged(s: android.text.Editable?) {
-                if (isBindingSettings) return
-                val isImperial = com.geovault.common.UnitUtils.usesImperialUnitsDefault(requireContext())
-                val displayValue = s?.toString()?.toFloatOrNull() ?: (if (isImperial) 33f else 10f)
-                val metersValue = fromDisplay(displayValue, isImperial)
-                viewModel.setDistanceFilterMeters(metersValue)
-                updateProfileToCustom()
+    private fun configureNumericInputCommit(editText: EditText, onCommit: () -> Unit) {
+        editText.setOnFocusChangeListener { _, hasFocus ->
+            if (isBindingSettings) return@setOnFocusChangeListener
+            if (!hasFocus) onCommit()
+        }
+        editText.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                onCommit()
+                editText.clearFocus()
+                true
+            } else {
+                false
             }
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-        })
+        }
+    }
 
-        accuracyEdit.addTextChangedListener(object : android.text.TextWatcher {
-            override fun afterTextChanged(s: android.text.Editable?) {
-                if (isBindingSettings) return
-                val isImperial = com.geovault.common.UnitUtils.usesImperialUnitsDefault(requireContext())
-                val displayValue = s?.toString()?.toFloatOrNull() ?: (if (isImperial) 164f else 50f)
-                val metersValue = fromDisplay(displayValue, isImperial)
-                viewModel.setAccuracyFilterMeters(metersValue)
-                updateProfileToCustom()
-            }
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-        })
+    private fun commitIntervalInput() {
+        val raw = intervalEdit.text?.toString()?.trim().orEmpty()
+        val parsed = raw.toLongOrNull()
+        if (parsed == null) {
+            updateNumericEditFromState(
+                intervalEdit,
+                viewModel.uiState.value.settings.loggingIntervalSec.toString()
+            )
+            return
+        }
+        viewModel.setLoggingIntervalSec(parsed)
+        updateProfileToCustom()
+    }
+
+    private fun commitDistanceInput() {
+        val raw = distanceEdit.text?.toString()?.trim().orEmpty()
+        val parsed = raw.toFloatOrNull()
+        val isImperial = com.geovault.common.UnitUtils.usesImperialUnitsDefault(requireContext())
+        if (parsed == null) {
+            val fallback = toDisplay(viewModel.uiState.value.settings.distanceFilterMeters, isImperial).toString()
+            updateNumericEditFromState(distanceEdit, fallback)
+            return
+        }
+        viewModel.setDistanceFilterMeters(fromDisplay(parsed, isImperial))
+        updateProfileToCustom()
+    }
+
+    private fun commitAccuracyInput() {
+        val raw = accuracyEdit.text?.toString()?.trim().orEmpty()
+        val parsed = raw.toFloatOrNull()
+        val isImperial = com.geovault.common.UnitUtils.usesImperialUnitsDefault(requireContext())
+        if (parsed == null) {
+            val fallback = toDisplay(viewModel.uiState.value.settings.accuracyFilterMeters, isImperial).toString()
+            updateNumericEditFromState(accuracyEdit, fallback)
+            return
+        }
+        viewModel.setAccuracyFilterMeters(fromDisplay(parsed, isImperial))
+        updateProfileToCustom()
+    }
+
+    private fun applyDefaultsForInvalidInputs() {
+        if (isBindingSettings) return
+        val isImperial = com.geovault.common.UnitUtils.usesImperialUnitsDefault(requireContext())
+
+        val intervalParsed = intervalEdit.text?.toString()?.trim()?.toLongOrNull()
+        if (intervalParsed == null) {
+            val defaultInterval = TrackerSettings.DEFAULT_LOGGING_INTERVAL_SEC
+            viewModel.setLoggingIntervalSec(defaultInterval)
+            updateNumericEditFromState(intervalEdit, defaultInterval.toString())
+        } else {
+            viewModel.setLoggingIntervalSec(intervalParsed)
+        }
+
+        val distanceParsed = distanceEdit.text?.toString()?.trim()?.toFloatOrNull()
+        if (distanceParsed == null) {
+            val defaultMeters = TrackerSettings.DEFAULT_DISTANCE_FILTER_METERS
+            viewModel.setDistanceFilterMeters(defaultMeters)
+            updateNumericEditFromState(distanceEdit, toDisplay(defaultMeters, isImperial).toString())
+        } else {
+            viewModel.setDistanceFilterMeters(fromDisplay(distanceParsed, isImperial))
+        }
+
+        val accuracyParsed = accuracyEdit.text?.toString()?.trim()?.toFloatOrNull()
+        if (accuracyParsed == null) {
+            val defaultMeters = TrackerSettings.DEFAULT_ACCURACY_FILTER_METERS
+            viewModel.setAccuracyFilterMeters(defaultMeters)
+            updateNumericEditFromState(accuracyEdit, toDisplay(defaultMeters, isImperial).toString())
+        } else {
+            viewModel.setAccuracyFilterMeters(fromDisplay(accuracyParsed, isImperial))
+        }
     }
 
     private fun updateUi() {
@@ -391,6 +458,12 @@ class SettingsFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+    }
+
+    override fun onPause() {
+        // When settings view loses focus, normalize invalid logging inputs to defaults.
+        applyDefaultsForInvalidInputs()
+        super.onPause()
     }
 
     override fun onDestroyView() {

@@ -21,6 +21,7 @@ class MapSavedStateTest {
             lockTargetLat = 12.34,
             lockTargetLon = 56.78,
             lockNeedsInitialZoom = true,
+            cameraZoom = 15.5,
             showMyLocationEnabled = true,
             displayedTrackerId = "t1",
             displayedTrackerName = "Tracker 1",
@@ -36,6 +37,7 @@ class MapSavedStateTest {
         assertTrue(restored.lockNeedsInitialZoom)
         assertEquals(12.34, restored.lockTargetLat ?: 0.0, 0.000001)
         assertEquals(56.78, restored.lockTargetLon ?: 0.0, 0.000001)
+        assertEquals(15.5, restored.cameraZoom ?: 0.0, 0.000001)
         assertTrue(restored.showMyLocationEnabled)
         assertEquals("t1", restored.displayedTrackerId)
         assertEquals("Tracker 1", restored.displayedTrackerName)
@@ -58,5 +60,6 @@ class MapSavedStateTest {
         assertFalse(restored.lockNeedsInitialZoom)
         assertNull(restored.lockTargetLat)
         assertNull(restored.lockTargetLon)
+        assertNull(restored.cameraZoom)
     }
 }

@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.os.BatteryManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.location.LocationCompat
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
 import com.geovault.tracker.db.AppDatabase
@@ -42,6 +43,9 @@ import com.geovault.tracker.settings.TrackingSettingsReapplyPolicy
 import com.google.android.gms.location.*
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -49,12 +53,41 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPOutputStream
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class TrackingService : TrackPointServiceBase() {
+    internal class QueueInFlightClaimSet {
+        private val mutex = Mutex()
+        private val claimedIds = mutableSetOf<Long>()
+
+        suspend fun claim(candidates: List<QueuedLocation>, limit: Int): List<QueuedLocation> {
+            if (limit <= 0 || candidates.isEmpty()) return emptyList()
+            return mutex.withLock {
+                val batch = ArrayList<QueuedLocation>(limit)
+                for (item in candidates) {
+                    if (item.id in claimedIds) continue
+                    claimedIds.add(item.id)
+                    batch.add(item)
+                    if (batch.size >= limit) break
+                }
+                batch
+            }
+        }
+
+        suspend fun release(batch: List<QueuedLocation>) {
+            if (batch.isEmpty()) return
+            mutex.withLock {
+                for (item in batch) {
+                    claimedIds.remove(item.id)
+                }
+            }
+        }
+    }
+
     private enum class QueueUploadScope {
         BACKLOG_ONLY,
         LIVE_ONLY,
@@ -169,7 +202,10 @@ class TrackingService : TrackPointServiceBase() {
     private var retryJob: Job? = null
     private var backlogUploaderJob: Job? = null
     private var preflightJob: Job? = null
-    private val pushMutex = kotlinx.coroutines.sync.Mutex()
+    private val pushDispatcher = Executors.newFixedThreadPool(2).asCoroutineDispatcher()
+    private val livePushSemaphore = Semaphore(2)
+    private val backlogPushSemaphore = Semaphore(1)
+    private val inFlightClaims = QueueInFlightClaimSet()
     private var sessionBoundaryForBacklogMs: Long = 0L
     private var controlState: TrackingControlState = TrackingControlState()
     private var consecutivePushFailures = 0
@@ -356,21 +392,54 @@ class TrackingService : TrackPointServiceBase() {
 
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (selectedTrackerId.isEmpty()) return
+        val nowMs = System.currentTimeMillis()
+        val normalizedTimestampMs = CanonicalTimeNormalizer.normalizeTimestampMs(location.time, nowMs)
+        val timestampSkewMs = kotlin.math.abs(normalizedTimestampMs - nowMs)
+        val isMockLocation = LocationCompat.isMock(location)
+        val isBadlySkewedMockTimestamp = isMockLocation && timestampSkewMs > 5 * 60 * 1000L
+        if (isBadlySkewedMockTimestamp) {
+            Log.w(
+                TAG,
+                "Mock timestamp skew detected skewMs=$timestampSkewMs rawTs=${location.time} " +
+                    "normalizedTs=$normalizedTimestampMs nowMs=$nowMs provider=${location.provider}"
+            )
+        }
+        val timestampForPolicyMs = if (isBadlySkewedMockTimestamp) {
+            // Mock providers often replay historical timestamps; canonicalize to wall-clock now
+            // so policy gating validates position quality instead of transport timestamp quality.
+            nowMs
+        } else {
+            normalizedTimestampMs
+        }
+        val maxJumpSpeedMps = if (isMockLocation) {
+            // Mock route generators can emit coarse jumps between fixes.
+            // Keep other quality gates active, but effectively disable jump-speed rejection.
+            10_000.0
+        } else {
+            100.0
+        }
         val decision = TrackPointPipeline.processLocalGps(
             event = TrackPointEvent(
                 source = TrackPointSource.LOCAL_GPS,
                 trackId = selectedTrackerId,
                 lon = location.longitude,
                 lat = location.latitude,
-                timestampMs = location.time,
+                timestampMs = timestampForPolicyMs,
                 accuracyMeters = if (location.hasAccuracy()) location.accuracy else null
             ),
             maxAccuracyMeters = currentSettings.accuracyFilterMeters,
-            maxJumpSpeedMps = 100.0,
+            maxJumpSpeedMps = maxJumpSpeedMps,
             freshnessTtlMs = 120_000L,
-            nowMs = System.currentTimeMillis()
+            nowMs = nowMs
         )
         if (!decision.accepted || decision.canonicalEvent == null) {
+            Log.d(
+                TAG,
+                "Dropped location reason=${decision.rejectReason} provider=${location.provider} " +
+                    "isMock=$isMockLocation rawTs=${location.time} normalizedTs=$normalizedTimestampMs " +
+                    "policyTs=$timestampForPolicyMs nowMs=$nowMs skewMs=$timestampSkewMs " +
+                    "acc=${if (location.hasAccuracy()) location.accuracy else null}"
+            )
             if (decision.rejectReason == TrackPointRejectReason.BAD_ACCURACY ||
                 decision.rejectReason == TrackPointRejectReason.STALE
             ) {
@@ -454,24 +523,51 @@ class TrackingService : TrackPointServiceBase() {
         scope: QueueUploadScope = QueueUploadScope.ALL,
         sessionBoundaryMs: Long = sessionBoundaryForBacklogMs
     ): SyncFailureClass {
-        // Prevent concurrent pushes
-        if (!pushMutex.tryLock()) {
-            Log.d(TAG, "Push already in progress, skipping")
-            return SyncFailureClass.TRANSIENT
-        }
-        
-        try {
-            trimQueuedLocationsRetention()
-            if (!NetworkStatusMonitor.hasUsableNetwork(this)) {
-                updateNotificationCount()
-                return SyncFailureClass.TRANSIENT
+        return withContext(pushDispatcher) {
+            var liveAcquired = false
+            var backlogAcquired = false
+            val lockAcquired = when (scope) {
+                QueueUploadScope.LIVE_ONLY -> {
+                    liveAcquired = livePushSemaphore.tryAcquire()
+                    liveAcquired
+                }
+                QueueUploadScope.BACKLOG_ONLY -> {
+                    backlogAcquired = backlogPushSemaphore.tryAcquire()
+                    backlogAcquired
+                }
+                QueueUploadScope.ALL -> {
+                    liveAcquired = livePushSemaphore.tryAcquire()
+                    if (!liveAcquired) {
+                        false
+                    } else {
+                        backlogAcquired = backlogPushSemaphore.tryAcquire()
+                        if (!backlogAcquired) {
+                            livePushSemaphore.release()
+                            liveAcquired = false
+                            false
+                        } else {
+                            true
+                        }
+                    }
+                }
             }
-            val trackerIdStr = SelectedTrackerPrefs.selectedTrackerId(this)
+            if (!lockAcquired) {
+                Log.d(TAG, "Push already in progress for scope=$scope, skipping")
+                return@withContext SyncFailureClass.TRANSIENT
+            }
+
+            try {
+            trimQueuedLocationsRetention()
+            if (!NetworkStatusMonitor.hasUsableNetwork(this@TrackingService)) {
+                updateNotificationCount()
+                return@withContext SyncFailureClass.TRANSIENT
+            }
+            val trackerIdStr = SelectedTrackerPrefs.selectedTrackerId(this@TrackingService)
             if (trackerIdStr.isEmpty()) {
                 Log.e(TAG, "No tracker selected, cannot push locations")
                 broadcastTrackingError(getString(R.string.no_tracker_selected_go_to_settings))
                 updateNotificationCount()
-                return SyncFailureClass.PERMANENT
+                return@withContext SyncFailureClass.PERMANENT
             }
             val trackerId = try {
                 java.util.UUID.fromString(trackerIdStr)
@@ -479,13 +575,13 @@ class TrackingService : TrackPointServiceBase() {
                 Log.e(TAG, "Invalid selected tracker id, cannot push locations", e)
                 broadcastTrackingError(getString(R.string.tracker_validation_failed_go_to_settings))
                 updateNotificationCount()
-                return SyncFailureClass.PERMANENT
+                return@withContext SyncFailureClass.PERMANENT
             }
 
-            val serverUrl = GeovaultAuthManager.getServerUrl(this)
+            val serverUrl = GeovaultAuthManager.getServerUrl(this@TrackingService)
             if (serverUrl.isEmpty()) {
                 updateNotificationCount()
-                return SyncFailureClass.PERMANENT
+                return@withContext SyncFailureClass.PERMANENT
             }
 
             val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
@@ -500,11 +596,11 @@ class TrackingService : TrackPointServiceBase() {
             val sessionStart = sessionStartTimeMs
 
             while (batchesSent < MAX_BATCHES_PER_PUSH) {
-                val batch = when (scope) {
-                    QueueUploadScope.BACKLOG_ONLY -> database.locationDao().getOldestBacklog(sessionBoundaryMs, 50)
-                    QueueUploadScope.LIVE_ONLY -> database.locationDao().getOldestCurrentSession(sessionBoundaryMs, 50)
-                    QueueUploadScope.ALL -> database.locationDao().getOldest(50)
-                }
+                val batch = claimNextBatch(
+                    scope = scope,
+                    sessionBoundaryMs = sessionBoundaryMs,
+                    limit = 50
+                )
                 if (batch.isEmpty()) break
                 val payload = if (useExtendedParams) {
                     BinaryPayloadBuilder.buildPayload(
@@ -548,15 +644,18 @@ class TrackingService : TrackPointServiceBase() {
                         syncRuntimeStateStore()
                         broadcastSessionStats()
                         database.locationDao().delete(batch)
+                        releaseClaimedBatch(batch)
                         batchesSent++
                     } else {
+                        releaseClaimedBatch(batch)
                         Log.e(TAG, "Failed to push locations: ${response.code} ${response.message}")
                         if (response.code in 400..499) {
-                            return SyncFailureClass.PERMANENT
+                            return@withContext SyncFailureClass.PERMANENT
                         }
                         break
                     }
                 } catch (e: Exception) {
+                    releaseClaimedBatch(batch)
                     Log.e(TAG, "Exception pushing locations", e)
                     break
                 }
@@ -564,10 +663,30 @@ class TrackingService : TrackPointServiceBase() {
 
             updateNotificationCount()
             trimQueuedLocationsRetention()
-            return if (batchesSent > 0) SyncFailureClass.NONE else SyncFailureClass.TRANSIENT
-        } finally {
-            pushMutex.unlock()
+            return@withContext if (batchesSent > 0) SyncFailureClass.NONE else SyncFailureClass.TRANSIENT
+            } finally {
+                if (backlogAcquired) backlogPushSemaphore.release()
+                if (liveAcquired) livePushSemaphore.release()
+            }
         }
+    }
+
+    private suspend fun claimNextBatch(
+        scope: QueueUploadScope,
+        sessionBoundaryMs: Long,
+        limit: Int
+    ): List<QueuedLocation> {
+        val candidates = when (scope) {
+            QueueUploadScope.BACKLOG_ONLY -> database.locationDao().getOldestBacklog(sessionBoundaryMs, limit * 3)
+            QueueUploadScope.LIVE_ONLY -> database.locationDao().getOldestCurrentSession(sessionBoundaryMs, limit * 3)
+            QueueUploadScope.ALL -> database.locationDao().getOldest(limit * 3)
+        }
+        if (candidates.isEmpty()) return emptyList()
+        return inFlightClaims.claim(candidates, limit)
+    }
+
+    private suspend fun releaseClaimedBatch(batch: List<QueuedLocation>) {
+        inFlightClaims.release(batch)
     }
 
     private fun broadcastSessionStats() {
@@ -717,6 +836,7 @@ class TrackingService : TrackPointServiceBase() {
         stopPreflightMonitor()
         stopRetryJob()
         serviceScope.cancel()
+        pushDispatcher.close()
     }
     
     private fun startRetryJob() {
@@ -752,13 +872,18 @@ class TrackingService : TrackPointServiceBase() {
         backlogUploaderJob = serviceScope.launch {
             while (isActive && isTracking) {
                 val backlogCount = database.locationDao().getBacklogCount(sessionBoundaryMs)
-                if (backlogCount <= 0) break
-                Log.d(TAG, "Backlog uploader: attempting to push $backlogCount queued backlog points")
-                pushLocations(
-                    scope = QueueUploadScope.BACKLOG_ONLY,
-                    sessionBoundaryMs = sessionBoundaryMs
-                )
-                delay(15_000L)
+                if (backlogCount > 0) {
+                    Log.d(TAG, "Backlog uploader: attempting to push $backlogCount queued backlog points")
+                    pushLocations(
+                        scope = QueueUploadScope.BACKLOG_ONLY,
+                        sessionBoundaryMs = sessionBoundaryMs
+                    )
+                    delay(15_000L)
+                } else {
+                    // Keep background uploader alive for the full tracking session.
+                    // Late-arriving points can still fall into backlog lane (e.g. stale fix timestamps).
+                    delay(30_000L)
+                }
             }
         }
     }

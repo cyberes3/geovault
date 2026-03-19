@@ -9,6 +9,7 @@ import android.location.Location
 import android.os.Bundle
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import android.view.Choreographer
 import android.view.LayoutInflater
 import android.view.View
@@ -201,6 +202,7 @@ class MapFragment : Fragment() {
     private val liveStreamCoordinator = MapLiveStreamCoordinator(lifecycleScope)
     private var mapCommandsJob: Job? = null
     private var lastPausedElapsedRealtimeMs: Long? = null
+    private var pendingResumeCameraZoom: Double? = null
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -220,6 +222,12 @@ class MapFragment : Fragment() {
         lon: Double,
         timestampMs: Long
     ) {
+        Log.d(
+            TAG,
+            "applyLiveStreamPoint input trackId=$trackId ts=$timestampMs mode=$mapViewContext " +
+                "showAll=$showAllTrackers displayed=$displayedTrackerId points=${trackPoints.size} " +
+                "range=${trackTimestampRangeSummary()}"
+        )
         MapLiveStreamPointHandler.applyLiveStreamPoint(trackId, lat, lon, timestampMs, buildLiveStreamPointCallbacks())
     }
 
@@ -330,7 +338,16 @@ class MapFragment : Fragment() {
             getIsAdded = { isAdded },
             setLastStreamedPointTimeMs = { lastStreamedPointTimeMs = it },
             updateStreamingUi = { updateStreamingUi() },
-            addTrackPoint = { latLng, ts -> TrackUpdateHelper.updateTrack(trackPoints, trackTimestamps, latLng, ts) },
+            addTrackPoint = { latLng, ts ->
+                val beforeSize = trackPoints.size
+                TrackUpdateHelper.updateTrack(trackPoints, trackTimestamps, latLng, ts)
+                Log.d(
+                    TAG,
+                    "singleTrack addPoint trackId=$displayedTrackerId ts=$ts lat=${latLng.latitude} " +
+                        "lon=${latLng.longitude} size=$beforeSize->${trackPoints.size} " +
+                        "range=${trackTimestampRangeSummary()}"
+                )
+            },
             scheduleTrackLineUpdate = { scheduleTrackLineUpdate() },
             updateZoomToLatestButtonState = { updateZoomToLatestButtonState() },
             scheduleDebouncedSingleLiveFit = { scheduleDebouncedSingleLiveFit() },
@@ -553,7 +570,7 @@ class MapFragment : Fragment() {
                     return
                 }
                 if (navHost()?.hasPendingInitialTrackForMap == true) {
-                    refreshTrackForSelectedTracker()
+                    consumePendingInitialTrackForMap()
                     return
                 }
                 // Basemap switch should keep currently rendered single-tracker tail visible.
@@ -599,6 +616,7 @@ class MapFragment : Fragment() {
         displayedTrackerName = restoredState.displayedTrackerName
         displayedGroupName = restoredState.displayedGroupName
         mapViewContext = restoredState.mapViewContext
+        pendingResumeCameraZoom = restoredState.cameraZoom
         updateFollowLockButton()
         updateZoomToLatestButtonState()
         updateShowMyLocationButtonVisibility()
@@ -607,14 +625,14 @@ class MapFragment : Fragment() {
             val hiddenId = bundle?.getString(TrackersListFragment.KEY_HIDDEN_TRACKER_ID)
             if (hiddenId != null) {
                 if (hiddenId == displayedTrackerId) {
-                    refreshTrackForSelectedTracker()
+                    restoreTrackForSelectedTracker()
                 }
                 return@setFragmentResultListener
             }
             val deletedId = bundle?.getString(TrackersListFragment.KEY_DELETED_TRACKER_ID)
             if (deletedId != null) {
                 if (deletedId == displayedTrackerId) {
-                    refreshTrackForSelectedTracker()
+                    restoreTrackForSelectedTracker()
                 }
                 return@setFragmentResultListener
             }
@@ -632,7 +650,7 @@ class MapFragment : Fragment() {
                     return@setFragmentResultListener
                 }
                 MapListRefreshAction.REFRESH_SELECTED_TRACKER -> {
-                    refreshTrackForSelectedTracker()
+                    restoreTrackForSelectedTracker()
                 }
                 MapListRefreshAction.NO_OP -> Unit
             }
@@ -647,9 +665,11 @@ class MapFragment : Fragment() {
         }
 
         zoomToLatestButton.setOnClickListener {
-            // Lock button is one-way: when already locked, tapping does nothing.
-            // Unlocking is handled only by map interaction (pan/zoom gestures).
-            if (isFollowLockActive()) return@setOnClickListener
+            // Unlocking is handled by manual map interaction; tapping while locked recenters and resets follow zoom.
+            if (isFollowLockActive()) {
+                resetFollowLockZoom()
+                return@setOnClickListener
+            }
 
             val target = lockTarget ?: trackPoints.lastOrNull()
             if (target != null) {
@@ -739,7 +759,7 @@ class MapFragment : Fragment() {
         // Highest priority: if another screen requested a specific tracker for map,
         // consume it immediately instead of reusing previously displayed state.
         if (mapReady && navHost()?.hasPendingInitialTrackForMap == true) {
-            refreshTrackForSelectedTracker()
+            consumePendingInitialTrackForMap()
         }
 
         if (mapReady) {
@@ -757,6 +777,14 @@ class MapFragment : Fragment() {
                     hasPendingInitialTracker = navHost()?.hasPendingInitialTrackForMap == true,
                     backgroundedDurationMs = backgroundedDurationMs
                 )
+            )
+            Log.d(
+                TAG,
+                "onResume decision=$decision tracking=${trackingRuntimeSnapshot().isRunning} " +
+                    "showAll=$showAllTrackers context=$mapViewContext displayed=$displayedTrackerId " +
+                    "selected=${SelectedTrackerPrefs.selectedTrackerId(requireContext())} " +
+                    "points=${trackPoints.size} range=${trackTimestampRangeSummary()} " +
+                    "bgMs=$backgroundedDurationMs"
             )
             when (decision) {
                 MapResumeDecision.NoOp -> Unit
@@ -780,10 +808,18 @@ class MapFragment : Fragment() {
                         displayedTrackerId = decision.trackerId
                         mapViewContext = MapViewContext.SINGLE_TRACKER
                     }
+                    Log.d(
+                        TAG,
+                        "onResume LoadSingleTracker trackerId=${decision.trackerId} " +
+                            "coordinatesOnly=${decision.coordinatesOnly} " +
+                            "forceReplace=false prePoints=${trackPoints.size} " +
+                            "range=${trackTimestampRangeSummary()}"
+                    )
                     mapFlowViewModel.handleIntent(
                         MapIntent.LoadSingleTracker(
                             trackerId = decision.trackerId,
-                            forceReplace = false
+                            forceReplace = false,
+                            coordinatesOnly = decision.coordinatesOnly
                         )
                     )
                 }
@@ -799,6 +835,7 @@ class MapFragment : Fragment() {
     override fun onPause() {
         super.onPause()
         lastPausedElapsedRealtimeMs = SystemClock.elapsedRealtime()
+        pendingResumeCameraZoom = maplibreMap?.cameraPosition?.zoom ?: pendingResumeCameraZoom
         view?.keepScreenOn = false
         // Background/sleep should not reset lock intent state.
         stopStandaloneLocationUpdates(clearGpsFix = false)
@@ -836,6 +873,7 @@ class MapFragment : Fragment() {
             lockTargetLat = persistedLock.targetLat,
             lockTargetLon = persistedLock.targetLon,
             lockNeedsInitialZoom = persistedLock.needsInitialZoom,
+            cameraZoom = maplibreMap?.cameraPosition?.zoom ?: pendingResumeCameraZoom,
             showMyLocationEnabled = showMyLocationEnabled,
             displayedTrackerId = displayedTrackerId,
             displayedTrackerName = displayedTrackerName,
@@ -860,6 +898,7 @@ class MapFragment : Fragment() {
 
     private fun reapplyLockStateOnResume() {
         val map = maplibreMap ?: return
+        val resumeCameraZoom = pendingResumeCameraZoom
         normalizeLockStateForResume()
         val decision = MapLockResumeResolver.resolve(
             MapLockResumeInput(
@@ -873,7 +912,24 @@ class MapFragment : Fragment() {
 
         if (decision.followTarget != null) {
             reduceLock(MapLockEvent.RecenterTrackerFollow(decision.followTarget))
-            centerCameraOnTrackLocked(decision.followTarget)
+            if (resumeCameraZoom != null) {
+                // Preserve user-selected zoom when returning to map with follow lock still enabled.
+                reduceLock(MapLockEvent.CompleteTrackerInitialZoom(reachedTargetZoom = true))
+                applyUnifiedCameraMove(
+                    map = map,
+                    update = CameraUpdateFactory.newCameraPosition(
+                        CameraPosition.Builder()
+                            .target(decision.followTarget)
+                            .zoom(resumeCameraZoom)
+                            .build()
+                    ),
+                    paddingMode = CameraPaddingMode.CENTERED,
+                    intent = CameraIntent.FOLLOW_LOCK,
+                    animate = false
+                )
+            } else {
+                centerCameraOnTrackLocked(decision.followTarget)
+            }
         }
         if (decision.shouldTrackGpsCamera) {
             LocationComponentHelper.setCameraTracking(map, enabled = true)
@@ -889,6 +945,7 @@ class MapFragment : Fragment() {
         updateFollowLockButton()
         updateShowMyLocationButtonVisibility()
         updateLiveActiveFitButtonUi()
+        pendingResumeCameraZoom = null
     }
 
     override fun onLowMemory() {
@@ -1759,18 +1816,17 @@ class MapFragment : Fragment() {
     }
 
     /**
-     * Clear the map track and refetch only the currently selected tracker.
-     * Call this when switching to the map from "View on map" so only that tracker is shown.
-     * If the list provided an initial track (latest 100 points), shows it immediately then loads full geometry in background.
+     * Consume one-shot initial tracker handoff (from tracker/shared list "View on map").
+     * This path intentionally does not fall back to currently selected tracker to avoid
+     * destructive refreshes on normal map tab switches.
      */
-    fun refreshTrackForSelectedTracker() {
+    fun consumePendingInitialTrackForMap(): Boolean {
+        val initial = navHost()?.getAndClearInitialTrackForMap() ?: return false
+        val loadTrackerId = initial.id.takeIf { it.isNotEmpty() } ?: return false
         bumpTrackerRequestEpoch()
         resetSingleTrackerContext(stopStreaming = false)
-
-        val initial = navHost()?.getAndClearInitialTrackForMap()
-        val loadTrackerId = initial?.id ?: SelectedTrackerPrefs.selectedTrackerId(requireContext())
         mapViewContext = MapViewContext.SINGLE_TRACKER
-        pendingDisplayedTrackerIdOverride = loadTrackerId.takeIf { it.isNotEmpty() }
+        pendingDisplayedTrackerIdOverride = loadTrackerId
 
         val isSwitching = displayedTrackerId != null && displayedTrackerId != loadTrackerId
 
@@ -1784,20 +1840,7 @@ class MapFragment : Fragment() {
         clearSingleTrackerDataAndRender()
         zoomToTrackAfterLoad = true
 
-        if (loadTrackerId.isEmpty()) {
-            displayedTracker = null
-            displayedTrackerId = null
-            displayedTrackerName = null
-            stopLiveTrackStreaming()
-            updateZoomToLatestButtonState()
-            updateTrackerLabel()
-            return
-        }
-        if (initial != null) {
-            primeDisplayedTrackerFromInitial(initial)
-        } else {
-            setDisplayedTrackerPlaceholder(loadTrackerId, SelectedTrackerPrefs.selectedTrackerName(requireContext()))
-        }
+        primeDisplayedTrackerFromInitial(initial)
         // Keep fragment-local state and ViewModel state aligned immediately so uiState collection
         // does not overwrite the freshly requested tracker with stale displayedTrackerId.
         mapFlowViewModel.updateUiState {
@@ -1818,6 +1861,7 @@ class MapFragment : Fragment() {
         } else {
             mapFlowViewModel.handleIntent(MapIntent.LoadSingleTracker(loadTrackerId, forceReplace = false))
         }
+        return true
     }
 
     private fun setAnnotationLayersVisibility(visible: Boolean) {
@@ -2402,7 +2446,10 @@ class MapFragment : Fragment() {
     }
 
     private fun onMapTrackerInfoZoomLock() {
-        if (isFollowLockActive()) return
+        if (isFollowLockActive()) {
+            resetFollowLockZoom()
+            return
+        }
         val sel = selectedMapTracker ?: return
         val target = LatLng(sel.lat, sel.lon)
         disableLiveActiveFitForFollowLock()
@@ -2410,6 +2457,27 @@ class MapFragment : Fragment() {
         updateFollowLockButton()
         updateMapSelectionUi()
         centerCameraOnTrackLocked(target, forceZoomIn = true)
+    }
+
+    private fun resetFollowLockZoom() {
+        val map = maplibreMap ?: return
+        val target = lockTarget ?: trackPoints.lastOrNull() ?: return
+        reduceLock(MapLockEvent.RecenterTrackerFollow(target))
+        reduceLock(MapLockEvent.CompleteTrackerInitialZoom(reachedTargetZoom = true))
+        applyUnifiedCameraMove(
+            map = map,
+            update = CameraUpdateFactory.newCameraPosition(
+                CameraPosition.Builder()
+                    .target(target)
+                    .zoom(MapConstants.FOLLOW_LOCK_TARGET_ZOOM)
+                    .build()
+            ),
+            paddingMode = CameraPaddingMode.CENTERED,
+            intent = CameraIntent.FOLLOW_LOCK,
+            animate = true
+        )
+        updateFollowLockButton()
+        if (selectedMapTracker != null) updateMapSelectionUi()
     }
 
     /** Switch map to single-tracker mode (name on top-left chip) for the selected tracker. */
@@ -2517,17 +2585,43 @@ class MapFragment : Fragment() {
         val coords = tracker?.geometry?.coordinates
         if (coords != null) {
             val normalizedCoords = MapCoordinateUtils.normalizeRawCoordinates(coords)
+            val hasRenderableHistory = normalizedCoords.size >= 2
+            val trackingActive = trackingRuntimeSnapshot().isRunning
             val isExternalStreaming = MapDataLoader.isExternalStreaming(
                 forceReplace = forceReplace,
                 hasTrackPoints = trackPoints.isNotEmpty(),
                 displayedTrackerId = displayedTrackerId
             )
-            if (isExternalStreaming || forceReplace || trackPoints.isEmpty()) {
+            val shouldApplyGeometry = hasRenderableHistory && (
+                forceReplace ||
+                    trackPoints.isEmpty() ||
+                    (isExternalStreaming && !trackingActive)
+                )
+            Log.d(
+                TAG,
+                "handleSingleTrackGeometryLoaded trackerId=$trackerId forceReplace=$forceReplace " +
+                    "trackingActive=$trackingActive externalStreaming=$isExternalStreaming " +
+                    "hasRenderableHistory=$hasRenderableHistory shouldApply=$shouldApplyGeometry " +
+                    "geomPoints=${normalizedCoords.size} " +
+                    "prePoints=${trackPoints.size} preRange=${trackTimestampRangeSummary()}"
+            )
+            if (shouldApplyGeometry) {
                 MapHistoryUtils.applyGeometryToTrack(
                     normalizedCoords = normalizedCoords,
                     mergeExternalStreaming = isExternalStreaming,
                     trackPoints = trackPoints,
                     trackTimestamps = trackTimestamps
+                )
+                Log.d(
+                    TAG,
+                    "geometryApplied trackerId=$trackerId points=${trackPoints.size} " +
+                        "range=${trackTimestampRangeSummary()}"
+                )
+            } else {
+                Log.d(
+                    TAG,
+                    "geometrySkipped trackerId=$trackerId preservedLivePoints=${trackPoints.size} " +
+                        "range=${trackTimestampRangeSummary()}"
                 )
             }
             scheduleTrackLineUpdate()
@@ -2574,6 +2668,10 @@ class MapFragment : Fragment() {
      * Refetch and redraw the selected tracker's track without moving the camera.
      */
     fun restoreTrackForSelectedTracker() {
+        if (trackingRuntimeSnapshot().isRunning) {
+            // Active tracking owns the in-memory route; avoid snapshot reloads that can clobber live points.
+            return
+        }
         bumpTrackerRequestEpoch()
         resetSingleTrackerContext(stopStreaming = true)
         clearSingleTrackerDataAndRender()
@@ -2592,12 +2690,22 @@ class MapFragment : Fragment() {
     private fun fetchHistory() {
         reduceLock(MapLockEvent.DisableLiveFit)
         updateShowMyLocationButtonVisibility()
+        if (trackingRuntimeSnapshot().isRunning) {
+            // Local tracking must not trigger server history reloads.
+            return
+        }
         if (mapViewContext == MapViewContext.GROUP) {
             updateZoomToLatestButtonState()
             updateTrackerLabel()
             return
         }
-        mapFlowViewModel.handleIntent(MapIntent.LoadSingleTracker(trackerId = displayedTrackerId, forceReplace = false))
+        mapFlowViewModel.handleIntent(
+            MapIntent.LoadSingleTracker(
+                trackerId = displayedTrackerId,
+                forceReplace = false,
+                coordinatesOnly = isStreaming()
+            )
+        )
     }
 
     private fun fetchFullGeometryAndApply(trackerId: String, forceReplace: Boolean = false) {
@@ -2719,7 +2827,15 @@ class MapFragment : Fragment() {
                 mapFlowViewModel.commands.collect { command ->
                     when (command) {
                         is MapCommand.RenderSingleTracker -> {
-                            val trackerWithGeometry = if (command.snapshot.tracker.geometry == null && command.snapshot.coordinates.isNotEmpty()) {
+                            Log.d(
+                                TAG,
+                                "cmd RenderSingleTracker trackerId=${command.snapshot.tracker.id} " +
+                                    "coords=${command.snapshot.coordinates.size} " +
+                                    "forceReplace=${command.snapshot.forceReplace} " +
+                                    "prePoints=${trackPoints.size} range=${trackTimestampRangeSummary()}"
+                            )
+                            val trackerWithGeometry = if (command.snapshot.coordinates.isNotEmpty()) {
+                                // Always render from snapshot coordinates so stale tracker.geometry cannot truncate history.
                                 command.snapshot.tracker.copy(
                                     geometry = GeoJsonLineString(
                                         type = "LineString",
@@ -2753,6 +2869,13 @@ class MapFragment : Fragment() {
                             }
                         }
                         is MapCommand.ApplyTrackPoint -> {
+                            Log.d(
+                                TAG,
+                                "cmd ApplyTrackPoint trackId=${command.event.trackId} src=${command.event.source} " +
+                                    "ts=${command.event.timestampMs} acc=${command.event.accuracyMeters} " +
+                                    "prePoints=${trackPoints.size} range=${trackTimestampRangeSummary()} " +
+                                    "displayed=$displayedTrackerId context=$mapViewContext showAll=$showAllTrackers"
+                            )
                             command.event.accuracyMeters?.let { lastStreamedAccuracyMeters = it }
                             applyLiveStreamPoint(
                                 trackId = command.event.trackId,
@@ -2791,6 +2914,12 @@ class MapFragment : Fragment() {
     }
 
     private fun trackingRuntimeSnapshot() = TrackingRuntimeStateStore.state.value
+
+    private fun trackTimestampRangeSummary(): String {
+        val first = trackTimestamps.firstOrNull() ?: return "empty"
+        val last = trackTimestamps.lastOrNull() ?: first
+        return "$first..$last"
+    }
 
     companion object {
         private const val TAG = "MapFragment"

@@ -49,6 +49,7 @@ class LoadSingleTrackerMapUseCaseTest {
         assertEquals("t1", snapshot?.tracker?.id)
         assertEquals(2, snapshot?.coordinates?.size)
         assertEquals(listOf(true), repository.geometryAllDataRequests)
+        assertEquals(listOf(true), repository.coordinatesAllDataRequests)
     }
 
     @Test
@@ -77,6 +78,125 @@ class LoadSingleTrackerMapUseCaseTest {
         assertEquals("t2", snapshot?.tracker?.id)
         assertTrue(snapshot?.forceReplace == true)
         assertEquals(2, snapshot?.coordinates?.size)
+        assertEquals(listOf(true), repository.coordinatesAllDataRequests)
+    }
+
+    @Test
+    fun execute_prefersRicherCoordinatePayloadWhenGeometryIsShort() {
+        val repository = FakeTrackRepository(
+            geometryById = mapOf(
+                "t3" to Tracker(
+                    id = "t3",
+                    name = "Tracker 3",
+                    color = null,
+                    geometry = GeoJsonLineString(
+                        type = "LineString",
+                        coordinates = listOf(listOf(10.0, 20.0, 1_773_891_400_000.0))
+                    )
+                )
+            ),
+            coordinatesById = mapOf(
+                "t3" to TrackerCoordinatesResponse(
+                    coordinates = listOf(
+                        listOf(10.0, 20.0, 1_773_891_400_000.0),
+                        listOf(11.0, 21.0, 1_773_891_401_000.0),
+                        listOf(12.0, 22.0, 1_773_891_402_000.0)
+                    )
+                )
+            )
+        )
+        val useCase = LoadSingleTrackerMapUseCase(repository)
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<Context>()
+
+        val snapshot = runBlocking {
+            useCase.execute(
+                context = context,
+                trackerId = "t3",
+                displayedTrackerId = null,
+                forceReplace = false
+            )
+        }
+
+        assertNotNull(snapshot)
+        assertEquals("t3", snapshot?.tracker?.id)
+        assertEquals(3, snapshot?.coordinates?.size)
+        assertEquals(listOf(true), repository.geometryAllDataRequests)
+        assertEquals(listOf(true), repository.coordinatesAllDataRequests)
+    }
+
+    @Test
+    fun execute_dropsSinglePointHistoryBaseline() {
+        val repository = FakeTrackRepository(
+            geometryById = mapOf(
+                "t4" to Tracker(
+                    id = "t4",
+                    name = "Tracker 4",
+                    color = null,
+                    geometry = GeoJsonLineString(
+                        type = "LineString",
+                        coordinates = listOf(listOf(10.0, 20.0, 1_773_891_400_000.0))
+                    )
+                )
+            )
+        )
+        val useCase = LoadSingleTrackerMapUseCase(repository)
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<Context>()
+
+        val snapshot = runBlocking {
+            useCase.execute(
+                context = context,
+                trackerId = "t4",
+                displayedTrackerId = null,
+                forceReplace = false
+            )
+        }
+
+        assertNotNull(snapshot)
+        assertEquals("t4", snapshot?.tracker?.id)
+        assertEquals(0, snapshot?.coordinates?.size)
+    }
+
+    @Test
+    fun execute_coordinatesOnly_skipsGeometryEndpoint() {
+        val repository = FakeTrackRepository(
+            geometryById = mapOf(
+                "t5" to Tracker(
+                    id = "t5",
+                    name = "Tracker 5",
+                    color = null,
+                    geometry = GeoJsonLineString(
+                        type = "LineString",
+                        coordinates = listOf(listOf(1.0, 2.0), listOf(3.0, 4.0))
+                    )
+                )
+            ),
+            trackerById = mapOf("t5" to Tracker(id = "t5", name = "Tracker 5", color = null)),
+            coordinatesById = mapOf(
+                "t5" to TrackerCoordinatesResponse(
+                    coordinates = listOf(
+                        listOf(10.0, 20.0, 1_773_891_400_000.0),
+                        listOf(11.0, 21.0, 1_773_891_401_000.0)
+                    )
+                )
+            )
+        )
+        val useCase = LoadSingleTrackerMapUseCase(repository)
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<Context>()
+
+        val snapshot = runBlocking {
+            useCase.execute(
+                context = context,
+                trackerId = "t5",
+                displayedTrackerId = null,
+                forceReplace = false,
+                coordinatesOnly = true
+            )
+        }
+
+        assertNotNull(snapshot)
+        assertEquals("t5", snapshot?.tracker?.id)
+        assertEquals(2, snapshot?.coordinates?.size)
+        assertEquals(emptyList<Boolean>(), repository.geometryAllDataRequests)
         assertEquals(listOf(true), repository.coordinatesAllDataRequests)
     }
 
