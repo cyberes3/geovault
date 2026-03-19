@@ -23,7 +23,6 @@ from pydantic import ValidationError as PydanticValidationError
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response
 from api.utils.responses import handle_404
-from website.config_loader import get_config_loader
 
 from .helpers import broadcast_track_updated, parse_ingress_body, parse_time_to_ms, queue_broadcast_track_updated
 from .models import LiveTrack
@@ -42,7 +41,6 @@ def append_point_to_track(track, lat: float, lon: float, timestamp_ms: int, extr
     Append one point to a track (geometry + point_params), broadcast update. Used by ingress and Hauk post.
     Returns the index of the inserted point for broadcasting, or None if not found.
     """
-    max_points = get_config_loader().get_int("extensions.live_track.max_points", 1000)
     extra = extra or {}
     with transaction.atomic():
         track_locked = LiveTrack.objects.select_for_update().get(pk=track.id)
@@ -71,11 +69,6 @@ def append_point_to_track(track, lat: float, lon: float, timestamp_ms: int, extr
         idx = bisect.bisect_right(ts_list, timestamp_ms)
         coords.insert(idx, new_point)
         point_params.insert(idx, dict(extra))
-
-        if len(coords) > max_points:
-            n_removed = len(coords) - max_points
-            coords = coords[n_removed:]
-            point_params = point_params[n_removed:]
 
         track_locked.geometry = {"type": "LineString", "coordinates": coords}
         track_locked.point_params = point_params
@@ -330,8 +323,6 @@ def app_ingress(request):
     if not points:
         return JsonResponse({"ok": True}, status=200)
 
-    max_points = get_config_loader().get_int("extensions.live_track.max_points", 1000)
-
     with transaction.atomic():
         track_locked = LiveTrack.objects.select_for_update().get(pk=track.id)
         geom = track_locked.geometry or {"type": "LineString", "coordinates": []}
@@ -360,11 +351,6 @@ def app_ingress(request):
             seen_keys.add(new_key)
             last_inserted_point = new_point
             last_inserted_extra = extra
-
-        if len(coords) > max_points:
-            n_removed = len(coords) - max_points
-            coords = coords[n_removed:]
-            point_params = point_params[n_removed:]
 
         track_locked.geometry = {"type": "LineString", "coordinates": coords}
         track_locked.point_params = point_params

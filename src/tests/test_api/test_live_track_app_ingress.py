@@ -24,8 +24,8 @@ def _patch_live_track_enabled():
         return default
 
     def mock_get_int(key, default=0):
-        if key == "extensions.live_track.max_points":
-            return 1000
+        if key == "extensions.live_track.geometry_max_response_bytes":
+            return 1048576
         return default
 
     mock_config = MagicMock()
@@ -349,8 +349,8 @@ class TestLiveTrackAppIngress(TestCase):
         self.assertEqual(coords[0][1], 37.0)
         self.assertEqual(coords[0][0], -122.0)
 
-    def test_app_ingress_max_points_trimmed(self):
-        """App-ingress trims to max_points (config); oldest points removed."""
+    def test_app_ingress_keeps_all_points(self):
+        """App-ingress retains all received points; point-count trimming is not applied."""
         payload = encode_gvlt_payload(
             self.tracker_uuid,
             [
@@ -361,19 +361,17 @@ class TestLiveTrackAppIngress(TestCase):
             ],
         )
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.get_config_loader") as mock_cfg:
-                mock_cfg.return_value.get_int.return_value = 2
-                with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                    mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
-                    response = self._ingress_post(payload)
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                response = self._ingress_post(payload)
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
         coords = (track.geometry or {}).get("coordinates", [])
         params = track.point_params or []
-        self.assertEqual(len(coords), 2)
-        self.assertEqual(len(params), 2)
-        self.assertEqual(coords[0][2], 1705312920000)
-        self.assertEqual(coords[1][2], 1705312980000)
+        self.assertEqual(len(coords), 4)
+        self.assertEqual(len(params), 4)
+        self.assertEqual(coords[0][2], 1705312800000)
+        self.assertEqual(coords[-1][2], 1705312980000)
 
     # ---- Encoding format & structure ----
 

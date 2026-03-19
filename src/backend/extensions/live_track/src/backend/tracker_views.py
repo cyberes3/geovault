@@ -8,6 +8,7 @@ import secrets
 import uuid
 from xml.etree import ElementTree as ET
 
+from django.core.serializers.json import DjangoJSONEncoder
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -69,6 +70,153 @@ def _get_json_body(request):
         return data, None
     except json.JSONDecodeError:
         return None, error_response("Invalid JSON", 400)
+
+
+def _json_size_bytes(payload: dict) -> int:
+    encoded = json.dumps(
+        payload,
+        cls=DjangoJSONEncoder,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("utf-8")
+    return len(encoded)
+
+
+def _fit_tail_count_to_max_bytes(
+    base_payload: dict,
+    coords: list,
+    point_params: list,
+    max_bytes: int,
+    params_align_with_coords: bool,
+) -> int:
+    """Return largest tail length that fits within max_bytes using O(n) prep + O(log n) checks."""
+    n_coords = len(coords)
+    if max_bytes <= 0 or n_coords == 0:
+        return n_coords
+
+    # Compact base payload with empty arrays and null bbox.
+    empty_payload = dict(base_payload)
+    empty_payload["geometry"] = {"type": "LineString", "coordinates": []}
+    if params_align_with_coords:
+        empty_payload["point_params"] = []
+    empty_payload["bbox"] = None
+    base_size = _json_size_bytes(empty_payload)
+
+    coord_sizes = [
+        len(json.dumps(c, separators=(",", ":"), ensure_ascii=True))
+        for c in coords
+    ]
+    suffix_coord_sum = [0] * (n_coords + 1)
+    for i in range(n_coords - 1, -1, -1):
+        suffix_coord_sum[i] = suffix_coord_sum[i + 1] + coord_sizes[i]
+
+    suffix_param_sum = None
+    if params_align_with_coords:
+        param_sizes = [
+            len(json.dumps(p, separators=(",", ":"), ensure_ascii=True))
+            for p in point_params
+        ]
+        suffix_param_sum = [0] * (n_coords + 1)
+        for i in range(n_coords - 1, -1, -1):
+            suffix_param_sum[i] = suffix_param_sum[i + 1] + param_sizes[i]
+
+    suffix_min_lon = [0.0] * n_coords
+    suffix_max_lon = [0.0] * n_coords
+    suffix_min_lat = [0.0] * n_coords
+    suffix_max_lat = [0.0] * n_coords
+    for i in range(n_coords - 1, -1, -1):
+        lon = coords[i][0]
+        lat = coords[i][1]
+        if i == n_coords - 1:
+            suffix_min_lon[i] = lon
+            suffix_max_lon[i] = lon
+            suffix_min_lat[i] = lat
+            suffix_max_lat[i] = lat
+            continue
+        suffix_min_lon[i] = min(lon, suffix_min_lon[i + 1])
+        suffix_max_lon[i] = max(lon, suffix_max_lon[i + 1])
+        suffix_min_lat[i] = min(lat, suffix_min_lat[i + 1])
+        suffix_max_lat[i] = max(lat, suffix_max_lat[i + 1])
+
+    def total_size_for_k(k: int) -> int:
+        if k <= 0:
+            return base_size
+        start = n_coords - k
+        # [] already counted in base payload as 2 bytes.
+        coords_array_size = 2 + suffix_coord_sum[start] + (k - 1)
+        total = base_size + (coords_array_size - 2)
+
+        if params_align_with_coords and suffix_param_sum is not None:
+            params_array_size = 2 + suffix_param_sum[start] + (k - 1)
+            total += (params_array_size - 2)
+
+        bbox = [
+            round(suffix_min_lon[start], 5),
+            round(suffix_min_lat[start], 5),
+            round(suffix_max_lon[start], 5),
+            round(suffix_max_lat[start], 5),
+        ]
+        bbox_size = len(json.dumps(bbox, separators=(",", ":"), ensure_ascii=True))
+        # null (4 bytes) already counted in base payload
+        total += (bbox_size - 4)
+        return total
+
+    lo = 0
+    hi = n_coords
+    best = 0
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if total_size_for_k(mid) <= max_bytes:
+            best = mid
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return best
+
+
+def _normalize_coords_for_response(coords: list) -> list:
+    rounded_coords = []
+    for c in coords:
+        if len(c) >= 2:
+            pt = [round(c[0], 5), round(c[1], 5)]
+            if len(c) >= 3 and isinstance(c[2], (int, float)):
+                pt.append(int(round(c[2])))
+            elif len(c) >= 3:
+                pt.append(c[2])
+            if len(c) > 3:
+                pt.extend(c[3:])
+            rounded_coords.append(pt)
+        else:
+            rounded_coords.append(c)
+    return rounded_coords
+
+
+def _normalize_point_params_for_response(point_params: list) -> list:
+    normalized = []
+    for p in point_params:
+        entry = dict(p) if isinstance(p, dict) else {}
+        if "acc" in entry and isinstance(entry["acc"], (int, float)):
+            entry["acc"] = round(float(entry["acc"]), 1)
+        if "alt" in entry and isinstance(entry["alt"], (int, float)):
+            entry["alt"] = int(round(float(entry["alt"])))
+        for k, v in list(entry.items()):
+            if "timestamp" in k.lower() and isinstance(v, (int, float)):
+                if v > 1e11:
+                    entry[k] = int(round(v / 1000.0))
+                else:
+                    entry[k] = int(round(v))
+        normalized.append(entry)
+    return normalized
+
+
+def _bbox_from_normalized_coords(coords: list) -> list | None:
+    if not coords:
+        return None
+    lons = [c[0] for c in coords if isinstance(c, list) and len(c) >= 2]
+    lats = [c[1] for c in coords if isinstance(c, list) and len(c) >= 2]
+    if not lons or not lats:
+        return None
+    return [round(min(lons), 5), round(min(lats), 5), round(max(lons), 5), round(max(lats), 5)]
 
 
 def _accepted_group_track_ids_for_user(user):
@@ -376,7 +524,94 @@ def tracker_get_geometry(request, tracker_id):
     track = _get_track_for_user_or_404(request.user, tracker_id)
     is_owner = track.user_id == request.user.id
     all_data = request.GET.get("all", "").lower() == "true"
-    return JsonResponse(track_to_response(track, include_secret=False, is_owner=is_owner, all_data=all_data))
+    if all_data:
+        response_payload = track_to_response(
+            track,
+            include_secret=False,
+            is_owner=is_owner,
+            all_data=True,
+        )
+    else:
+        geom = track.geometry or {"type": "LineString", "coordinates": []}
+        coords = list(geom.get("coordinates") or [])
+        point_params = list(track.point_params or [])
+
+        window_key = (track.settings or {}).get("recent_data_window")
+        if window_key:
+            coords, point_params = _filter_coords_by_recent_window(coords, point_params, window_key)
+
+        if not is_owner:
+            if not getattr(track, "share_params_with_recipients", False):
+                point_params = []
+            else:
+                point_params = [dict(p) if isinstance(p, dict) else {} for p in point_params]
+                _strip_ser_from_params(point_params)
+
+        response_payload = {
+            "id": str(track.id),
+            "name": track.name,
+            "color": _color_from_settings(track),
+            "settings": track.settings or {},
+            "visibility": getattr(track, "visibility", "private"),
+            "share_params_with_recipients": getattr(track, "share_params_with_recipients", False),
+            "is_owner": is_owner,
+            "created_at": int(track.created_at.timestamp()) if track.created_at else None,
+            "updated_at": int(track.updated_at.timestamp()) if track.updated_at else None,
+        }
+        if not is_owner:
+            owner_email = (
+                (getattr(track.user, "email", "") or "")
+                if getattr(track, "user_id", None)
+                else ""
+            )
+            response_payload["owner_email"] = owner_email.strip()
+        if is_owner and getattr(track, "hauk_password", None):
+            response_payload["hauk_password"] = track.hauk_password
+            emails = list(
+                LiveTrackShare.objects.filter(track=track).values_list("shared_with__email", flat=True)
+            )
+            response_payload["shared_with_emails"] = [e for e in emails if e]
+
+        max_bytes = get_config_loader().get_int(
+            "extensions.live_track.geometry_max_response_bytes",
+            1048576,
+        )
+        params_align_with_coords = len(point_params) == len(coords)
+        take_last = _fit_tail_count_to_max_bytes(
+            response_payload,
+            coords,
+            point_params,
+            max_bytes,
+            params_align_with_coords,
+        )
+        selected_coords = coords[-take_last:] if take_last > 0 else []
+        if params_align_with_coords:
+            selected_params = point_params[-take_last:] if take_last > 0 else []
+        else:
+            selected_params = point_params
+
+        normalized_coords = _normalize_coords_for_response(selected_coords)
+        normalized_params = _normalize_point_params_for_response(selected_params)
+        response_payload["geometry"] = {"type": "LineString", "coordinates": normalized_coords}
+        response_payload["point_params"] = normalized_params
+        response_payload["bbox"] = _bbox_from_normalized_coords(normalized_coords)
+
+        # Final exact guard against edge cases in estimation.
+        while (
+            normalized_coords
+            and _json_size_bytes(response_payload) > max_bytes
+        ):
+            normalized_coords.pop(0)
+            if params_align_with_coords and normalized_params:
+                normalized_params.pop(0)
+            response_payload["geometry"]["coordinates"] = normalized_coords
+            response_payload["point_params"] = normalized_params
+            response_payload["bbox"] = _bbox_from_normalized_coords(normalized_coords)
+
+    return JsonResponse(
+        response_payload,
+        json_dumps_params={"separators": (",", ":"), "ensure_ascii": True},
+    )
 
 
 @api_or_login_required_401()

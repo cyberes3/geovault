@@ -33,8 +33,8 @@ def _patch_live_track_enabled():
         return default
 
     def mock_get_int(key, default=0):
-        if key == "extensions.live_track.max_points":
-            return 1000
+        if key == "extensions.live_track.geometry_max_response_bytes":
+            return 1048576
         return default
 
     mock_config = MagicMock()
@@ -1268,6 +1268,100 @@ class TestLiveTrackAPI(TestCase):
         coords = data["geometry"].get("coordinates", [])
         self.assertEqual(len(coords), 2, "?all=true should return both points")
         self.assertEqual(len(data.get("point_params", [])), 2)
+
+    def test_geometry_respects_response_size_limit_without_all_true(self):
+        """GET geometry (without all=true) trims payload to configured byte limit."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Limited Geometry"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        coords = [[-122.0 + i * 0.001, 37.0 + i * 0.001, 1705312800000 + i] for i in range(20)]
+        params = [{"desc": "x" * 120, "acc": 5.0} for _ in range(20)]
+        track.geometry = {"type": "LineString", "coordinates": coords}
+        track.point_params = params
+        track.save(update_fields=["geometry", "point_params", "updated_at"])
+
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.tracker_views.get_config_loader") as mock_cfg:
+                mock_cfg.return_value.get_int.return_value = 1200
+                response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/geometry/")
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(len(response.content), 1200)
+        data = response.json()
+        returned_coords = data["geometry"].get("coordinates", [])
+        returned_params = data.get("point_params", [])
+        self.assertLess(len(returned_coords), len(coords))
+        self.assertEqual(len(returned_coords), len(returned_params))
+        if returned_coords:
+            self.assertEqual(returned_coords[-1][2], coords[-1][2], "Newest point should be retained")
+
+    def test_geometry_all_true_bypasses_response_size_limit(self):
+        """GET geometry?all=true returns full history regardless of configured byte limit."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Unlimited Geometry"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        coords = [[-122.0 + i * 0.001, 37.0 + i * 0.001, 1705312800000 + i] for i in range(20)]
+        params = [{"desc": "x" * 120, "acc": 5.0} for _ in range(20)]
+        track.geometry = {"type": "LineString", "coordinates": coords}
+        track.point_params = params
+        track.save(update_fields=["geometry", "point_params", "updated_at"])
+
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.tracker_views.get_config_loader") as mock_cfg:
+                mock_cfg.return_value.get_int.return_value = 1200
+                response = self.client.get(
+                    f"/api/extensions/live-track/trackers/{track_id}/geometry/",
+                    {"all": "true"},
+                )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        returned_coords = data["geometry"].get("coordinates", [])
+        returned_params = data.get("point_params", [])
+        self.assertEqual(len(returned_coords), len(coords))
+        self.assertEqual(len(returned_params), len(params))
+
+    def test_geometry_size_fit_performance_100k_points(self):
+        """GET geometry with 100k points is reduced to 1MB within a practical threshold."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Perf 100k"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        base_ts = 1705312800000
+        coords = [[-122.0 + i * 0.00001, 37.0 + i * 0.00001, base_ts + i] for i in range(100000)]
+        params = [{"desc": "x" * 120, "acc": 5.0, "spd_kph": 3.1} for _ in range(100000)]
+        track.geometry = {"type": "LineString", "coordinates": coords}
+        track.point_params = params
+        track.save(update_fields=["geometry", "point_params", "updated_at"])
+
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.tracker_views.get_config_loader") as mock_cfg:
+                mock_cfg.return_value.get_int.return_value = 1048576
+                started = time.perf_counter()
+                response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/geometry/")
+                elapsed = time.perf_counter() - started
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(elapsed, 5.0, f"Geometry size fit took too long: {elapsed:.3f}s")
+        self.assertLessEqual(len(response.content), 1048576)
+        data = response.json()
+        returned_coords = data["geometry"].get("coordinates", [])
+        returned_params = data.get("point_params", [])
+        self.assertLess(len(returned_coords), len(coords))
+        self.assertEqual(len(returned_coords), len(returned_params))
+        if returned_coords:
+            self.assertEqual(returned_coords[-1][2], coords[-1][2], "Newest point should be retained")
 
     def test_get_track_404_other_user(self):
         """GET trackers/<id>/ for another user's track returns 404."""
@@ -2513,33 +2607,30 @@ class TestLiveTrackIngress(TestCase):
         self.assertEqual(len(coords), 5)
         self.assertEqual([c[2] for c in coords], [100000, 200000, 300000, 400000, 500000])
 
-    def test_ingress_trim_after_insert_at_start(self):
-        """With max_points=2, send A(200), B(300), C(100) -> order [C,A,B]; trim drops oldest C -> [A, B] remain."""
+    def test_ingress_insert_at_start_keeps_full_history(self):
+        """Out-of-order insertion at start keeps all points with no trimming."""
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.get_config_loader") as mock_cfg:
-                mock_cfg.return_value.get_int.return_value = 2
-                with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                    mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
-                    self._ingress_post(
-                        data={"lat": 37.0, "lon": -122.0, "timestamp": 200},
-                        auth_header=self.auth_header,
-                    )
-                    self._ingress_post(
-                        data={"lat": 38.0, "lon": -121.0, "timestamp": 300},
-                        auth_header=self.auth_header,
-                    )
-                    response = self._ingress_post(
-                        data={"lat": 36.0, "lon": -123.0, "timestamp": 100},
-                        auth_header=self.auth_header,
-                    )
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                self._ingress_post(
+                    data={"lat": 37.0, "lon": -122.0, "timestamp": 200},
+                    auth_header=self.auth_header,
+                )
+                self._ingress_post(
+                    data={"lat": 38.0, "lon": -121.0, "timestamp": 300},
+                    auth_header=self.auth_header,
+                )
+                response = self._ingress_post(
+                    data={"lat": 36.0, "lon": -123.0, "timestamp": 100},
+                    auth_header=self.auth_header,
+                )
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
         coords = (track.geometry or {}).get("coordinates", [])
         params = track.point_params or []
-        self.assertEqual(len(coords), 2)
-        self.assertEqual(len(params), 2)
-        self.assertEqual(coords[0][2], 200000)
-        self.assertEqual(coords[1][2], 300000)
+        self.assertEqual(len(coords), 3)
+        self.assertEqual(len(params), 3)
+        self.assertEqual([c[2] for c in coords], [100000, 200000, 300000])
 
     def test_ingress_unknown_key_silently_dropped(self):
         """POST with body key not in allowed list is accepted; unknown key is dropped."""
@@ -2590,27 +2681,25 @@ class TestLiveTrackIngress(TestCase):
         self.assertEqual(response1.status_code, 200)
         self.assertEqual(response2.status_code, 429)
 
-    def test_ingress_max_points_trimmed(self):
-        """Ingress trims to max_points (config); oldest points removed."""
+    def test_ingress_keeps_all_points(self):
+        """Ingress retains all received points; point-count trimming is not applied."""
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.get_config_loader") as mock_cfg:
-                mock_cfg.return_value.get_int.return_value = 2
-                with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                    mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
-                    for i in range(4):
-                        self._ingress_post(
-                            data={
-                                "lat": 37.0 + i * 0.01,
-                                "lon": -122.0,
-                                "timestamp": 1705312800 + i * 60,
-                            },
-                            auth_header=self.auth_header,
-                        )
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                for i in range(4):
+                    self._ingress_post(
+                        data={
+                            "lat": 37.0 + i * 0.01,
+                            "lon": -122.0,
+                            "timestamp": 1705312800 + i * 60,
+                        },
+                        auth_header=self.auth_header,
+                    )
         track = LiveTrack.objects.get(id=self.track_id)
         coords = (track.geometry or {}).get("coordinates", [])
         params = track.point_params or []
-        self.assertEqual(len(coords), 2)
-        self.assertEqual(len(params), 2)
+        self.assertEqual(len(coords), 4)
+        self.assertEqual(len(params), 4)
 
     def test_ingress_timestamp_stored_as_unix_ms(self):
         """timestamp (epoch sec) yields coordinate third value as Unix ms."""

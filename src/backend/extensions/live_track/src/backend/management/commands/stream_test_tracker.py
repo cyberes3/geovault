@@ -17,8 +17,6 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from website.config_loader import get_config_loader
-
 from ...helpers import DEFAULT_TRACK_COLOR, broadcast_track_updated
 
 EARTH_RADIUS_METERS = 6371000
@@ -96,12 +94,6 @@ class Command(BaseCommand):
             help="Movement style profile (default: run).",
         )
         parser.add_argument(
-            "--max-points",
-            type=int,
-            default=None,
-            help="Override max stored points (default uses extensions.live_track.max_points).",
-        )
-        parser.add_argument(
             "--seed",
             type=int,
             default=None,
@@ -168,9 +160,6 @@ class Command(BaseCommand):
         provider = "gps"
         charging = False
 
-        configured_max_points = get_config_loader().get_int("extensions.live_track.max_points", 1000)
-        max_points = options["max_points"] if options["max_points"] is not None else configured_max_points
-        max_points = max(1, int(max_points))
         interval = max(0.1, float(options["interval"]))
         once = options.get("once", False)
 
@@ -197,9 +186,7 @@ class Command(BaseCommand):
             lat, lon = pick_starting_point(rng)
             self.stdout.write(f"Starting at ({lat:.5f}, {lon:.5f})")
 
-        self.stdout.write(
-            f"Streaming style={style}, interval={interval:.1f}s, max_points={max_points}"
-        )
+        self.stdout.write(f"Streaming style={style}, interval={interval:.1f}s")
 
         count = 0
         try:
@@ -244,11 +231,6 @@ class Command(BaseCommand):
                     idx = bisect.bisect_right(ts_list, timestamp_ms)
                     coords.insert(idx, new_point)
                     point_params.insert(idx, extra)
-                    if len(coords) > max_points:
-                        n_removed = len(coords) - max_points
-                        coords = coords[n_removed:]
-                        point_params = point_params[n_removed:]
-                        idx = max(0, idx - n_removed)
                     track_locked.geometry = {"type": "LineString", "coordinates": coords}
                     track_locked.point_params = point_params
                     track_locked.updated_at = timezone.now()
