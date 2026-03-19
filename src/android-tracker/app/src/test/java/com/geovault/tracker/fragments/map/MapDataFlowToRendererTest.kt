@@ -57,6 +57,7 @@ class MapDataFlowToRendererTest {
             updateMapSelectionUi = { harness.mapSelectionUiUpdateCount++ },
             getDisplayedTrackerId = { harness.displayedTrackerId },
             getIsAdded = { harness.isAdded },
+            getLastStreamedPointTimeMs = { harness.lastStreamedPointTimeMs },
             setLastStreamedPointTimeMs = { harness.lastStreamedPointTimeMs = it },
             updateStreamingUi = { harness.streamingUiUpdateCount++ },
             addTrackPoint = { latLng, ts -> harness.appendedTrackPoints.add(latLng to ts) },
@@ -168,6 +169,37 @@ class MapDataFlowToRendererTest {
         runPipeline(context, event, harness)
 
         assertEquals(0, harness.recenterFollowLockCount)
+    }
+
+    @Test
+    fun staleRemoteSingleTrackerTimestamp_isDroppedBeforeRendererUpdate() {
+        val harness = RendererHarness(
+            displayedTrackerId = "tracker-1",
+            lastStreamedPointTimeMs = 1_700_000_000_500L
+        )
+        val context = MapTrackPointContext(
+            trackingRunning = false,
+            showAllTrackers = false,
+            mapViewContext = MapViewContext.SINGLE_TRACKER,
+            displayedTrackerId = "tracker-1",
+            activeStreamedTrackerIds = emptySet()
+        )
+        val staleEvent = TrackPointEvent(
+            source = TrackPointSource.REMOTE_STREAM,
+            trackId = "tracker-1",
+            lon = 9.0,
+            lat = 19.0,
+            timestampMs = 1_700_000_000_400L
+        )
+
+        runPipeline(context, staleEvent, harness)
+
+        assertTrue(harness.appendedTrackPoints.isEmpty())
+        assertEquals(0, harness.trackLineUpdateCount)
+        assertEquals(0, harness.zoomButtonUpdateCount)
+        assertEquals(0, harness.streamingUiUpdateCount)
+        assertEquals(1_700_000_000_500L, harness.lastStreamedPointTimeMs)
+        assertNull(harness.lastKnownUpdateTimeByTrackId["tracker-1"])
     }
 
     @Test

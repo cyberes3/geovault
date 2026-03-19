@@ -20,6 +20,7 @@ internal class MapLiveStreamPointCallbacks(
     val updateMapSelectionUi: () -> Unit,
     val getDisplayedTrackerId: () -> String?,
     val getIsAdded: () -> Boolean,
+    val getLastStreamedPointTimeMs: () -> Long?,
     val setLastStreamedPointTimeMs: (Long?) -> Unit,
     val updateStreamingUi: () -> Unit,
     val addTrackPoint: (LatLng, Long) -> Unit,
@@ -69,6 +70,8 @@ internal object MapLiveStreamPointHandler {
         }
 
         if (!MapLiveStreamHandler.shouldHandleSingleTrackPoint(trackId, callbacks.getDisplayedTrackerId())) return
+        val lastStreamedPointTimeMs = callbacks.getLastStreamedPointTimeMs()
+        if (lastStreamedPointTimeMs != null && normalizedTimestampMs < lastStreamedPointTimeMs) return
         callbacks.setLastStreamedPointTimeMs(normalizedTimestampMs)
         callbacks.setLastKnownUpdateTimeMsByTrackerId(trackId, normalizedTimestampMs)
         val selection = callbacks.getSelectedMapTracker()

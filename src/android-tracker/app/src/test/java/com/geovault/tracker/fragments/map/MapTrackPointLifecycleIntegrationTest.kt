@@ -15,11 +15,17 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import org.junit.Before
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.maplibre.android.geometry.LatLng
 
 class MapTrackPointLifecycleIntegrationTest {
+    @Before
+    fun resetBus() {
+        TrackPointBus.resetForTests()
+    }
+
     private data class Harness(
         val displayedTrackerId: String?,
         val showAllTrackers: Boolean = false,
@@ -29,6 +35,7 @@ class MapTrackPointLifecycleIntegrationTest {
         val appendedTrackPoints: MutableList<LatLng> = mutableListOf(),
         val appendedTrackTimestamps: MutableList<Long> = mutableListOf(),
         val multiTrackCoordsCache: MutableMap<String, MutableList<List<Double>>> = mutableMapOf(),
+        var lastStreamedPointTimeMs: Long? = null,
         var debouncedMultiRenderCount: Int = 0
     )
 
@@ -52,7 +59,8 @@ class MapTrackPointLifecycleIntegrationTest {
             updateMapSelectionUi = { },
             getDisplayedTrackerId = { h.displayedTrackerId },
             getIsAdded = { true },
-            setLastStreamedPointTimeMs = { },
+            getLastStreamedPointTimeMs = { h.lastStreamedPointTimeMs },
+            setLastStreamedPointTimeMs = { h.lastStreamedPointTimeMs = it },
             updateStreamingUi = { },
             addTrackPoint = { latLng, ts ->
                 TrackUpdateHelper.updateTrack(h.appendedTrackPoints, h.appendedTrackTimestamps, latLng, ts)
@@ -112,7 +120,8 @@ class MapTrackPointLifecycleIntegrationTest {
                     trackId = trackerId,
                     lon = 10.0,
                     lat = 20.0,
-                    timestampMs = initialTs
+                    timestampMs = initialTs,
+                    orderingKey = 1L
                 )
             )
             var job = startCollector(scope, context, harness)
@@ -126,7 +135,8 @@ class MapTrackPointLifecycleIntegrationTest {
                     trackId = trackerId,
                     lon = 11.0,
                     lat = 21.0,
-                    timestampMs = missedWhilePausedTs
+                    timestampMs = missedWhilePausedTs,
+                    orderingKey = 1L
                 )
             )
 
@@ -174,7 +184,8 @@ class MapTrackPointLifecycleIntegrationTest {
                     trackId = inactiveTrackerId,
                     lon = 30.0,
                     lat = 40.0,
-                    timestampMs = System.currentTimeMillis()
+                    timestampMs = System.currentTimeMillis(),
+                    orderingKey = 1L
                 )
             )
             val activeTs = System.currentTimeMillis() + 1000L
@@ -184,7 +195,8 @@ class MapTrackPointLifecycleIntegrationTest {
                     trackId = activeTrackerId,
                     lon = 31.0,
                     lat = 41.0,
-                    timestampMs = activeTs
+                    timestampMs = activeTs,
+                    orderingKey = 1L
                 )
             )
 

@@ -343,6 +343,7 @@ class MapFragment : Fragment() {
             updateMapSelectionUi = { updateMapSelectionUi() },
             getDisplayedTrackerId = { displayedTrackerId },
             getIsAdded = { isAdded },
+            getLastStreamedPointTimeMs = { lastStreamedPointTimeMs },
             setLastStreamedPointTimeMs = { lastStreamedPointTimeMs = it },
             updateStreamingUi = { updateStreamingUi() },
             addTrackPoint = { latLng, ts ->

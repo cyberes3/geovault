@@ -74,4 +74,47 @@ class TrackPointPipelineTest {
         assertNotNull(decision.canonicalEvent)
         assertEquals(TrackPointQuality.DEGRADED, decision.canonicalEvent?.quality)
     }
+
+    @Test
+    fun process_rejectsOlderPointAcrossSourcesForSameTrack() {
+        val nowMs = 1_800_000_000_000L
+        val newerLocal = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = "shared-track",
+            lon = -104.8,
+            lat = 38.9,
+            timestampMs = nowMs - 10_000L
+        )
+        val olderRemote = TrackPointEvent(
+            source = TrackPointSource.REMOTE_STREAM,
+            trackId = "shared-track",
+            lon = -104.7,
+            lat = 38.8,
+            timestampMs = nowMs - 20_000L
+        )
+
+        val accepted = TrackPointPipeline.process(newerLocal, nowMs = nowMs)
+        val rejected = TrackPointPipeline.process(olderRemote, nowMs = nowMs)
+
+        assertTrue(accepted.accepted)
+        assertFalse(rejected.accepted)
+        assertEquals(TrackPointRejectReason.OUT_OF_ORDER, rejected.rejectReason)
+    }
+
+    @Test
+    fun process_rejectsRemotePointOutsideFreshnessWindow() {
+        val nowMs = 1_800_000_000_000L
+        val staleRemote = TrackPointEvent(
+            source = TrackPointSource.REMOTE_STREAM,
+            trackId = "remote-stale",
+            lon = -104.8,
+            lat = 38.9,
+            timestampMs = nowMs - (31L * 60L * 1000L)
+        )
+
+        val decision = TrackPointPipeline.process(staleRemote, nowMs = nowMs)
+
+        assertFalse(decision.accepted)
+        assertEquals(TrackPointRejectReason.STALE, decision.rejectReason)
+    }
 }
