@@ -774,12 +774,10 @@ class TrackingService : TrackPointServiceBase() {
         val pendingIntent = Intent(this, MainActivity::class.java).let { notificationIntent ->
             PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
         }
-        // Launch MainActivity with ACTION_STOP so the activity handles stop and updates UI (works when app was in background)
-        val stopIntent = Intent(this, MainActivity::class.java).apply {
+        val stopIntent = Intent(this, TrackingService::class.java).apply {
             action = ACTION_STOP
-            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        val stopPendingIntent = PendingIntent.getActivity(this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE)
+        val stopPendingIntent = PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE)
         val dismissIntent = Intent(NOTIFICATION_DISMISSED_ACTION).apply { setPackage(packageName) }
         val dismissPendingIntent = PendingIntent.getBroadcast(
             this,
