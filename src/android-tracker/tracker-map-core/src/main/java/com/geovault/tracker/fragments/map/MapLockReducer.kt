@@ -128,7 +128,9 @@ object MapLockResumeResolver {
             MapLockState.LiveFit -> {
                 if (!input.liveActiveFitAvailable) {
                     MapLockResumeDecision(
-                        lockState = MapLockState.None,
+                        // Keep lock intent sticky across lifecycle/data timing gaps.
+                        // The camera fit is deferred until live-fit becomes available again.
+                        lockState = MapLockState.LiveFit,
                         followTarget = null,
                         shouldTrackGpsCamera = false,
                         shouldApplyLiveFit = false

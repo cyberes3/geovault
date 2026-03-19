@@ -203,6 +203,7 @@ class MapFragment : Fragment() {
     private var mapCommandsJob: Job? = null
     private var lastPausedElapsedRealtimeMs: Long? = null
     private var pendingResumeCameraZoom: Double? = null
+    private var pendingLockReapplyAfterMapReady: Boolean = false
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -551,12 +552,18 @@ class MapFragment : Fragment() {
                     }
                 }
                 val (deferredGroup, deferredZoom) = navHost()?.getAndClearInitialGroupAndZoomForMap() ?: Pair(null, null)
+                val pendingGroup = pendingGroupForMap
+                val pendingZoom = pendingGroupZoomToTrackerId
+                val hasPendingInitialTrack = navHost()?.hasPendingInitialTrackForMap == true
+                val hasPendingExplicitMapIntent =
+                    deferredGroup != null || pendingGroup != null || pendingShowAllTrackers || hasPendingInitialTrack
+                if (!hasPendingExplicitMapIntent) {
+                    maybeReapplyLockStateAfterMapReady(reapplyWithoutPendingRequest = true)
+                }
                 if (deferredGroup != null) {
                     refreshMapForGroup(deferredGroup, deferredZoom)
                     return
                 }
-                val pendingGroup = pendingGroupForMap
-                val pendingZoom = pendingGroupZoomToTrackerId
                 if (pendingGroup != null) {
                     refreshMapForGroup(pendingGroup, pendingZoom)
                     pendingGroupForMap = null
@@ -578,11 +585,10 @@ class MapFragment : Fragment() {
                     }
                     return
                 }
-                if (navHost()?.hasPendingInitialTrackForMap == true) {
+                if (hasPendingInitialTrack) {
                     consumePendingInitialTrackForMap()
                     return
                 }
-                reapplySingleTrackerCameraStateOnMapReady()
                 // Basemap switch should keep currently rendered single-tracker tail visible.
                 // If we already have points, avoid kicking the full history refetch path.
                 if (trackPoints.isNotEmpty() && !displayedTrackerId.isNullOrEmpty()) {
@@ -855,7 +861,10 @@ class MapFragment : Fragment() {
                     startLiveTrackStreamingForDisplayedTracker()
                 }
             }
+            pendingLockReapplyAfterMapReady = false
             reapplyLockStateOnResume()
+        } else {
+            pendingLockReapplyAfterMapReady = true
         }
     }
 
@@ -920,9 +929,21 @@ class MapFragment : Fragment() {
             MapLockState.None -> MapLockState.None
             is MapLockState.TrackerFollow -> mapLockState
             MapLockState.GpsFollow -> if (showMyLocationEnabled) MapLockState.GpsFollow else MapLockState.None
-            MapLockState.LiveFit -> if (isLiveActiveFitAvailable()) MapLockState.LiveFit else MapLockState.None
+            // Keep live-fit lock intent sticky; camera fit is deferred until data becomes available.
+            MapLockState.LiveFit -> MapLockState.LiveFit
         }
         setMapLockState(normalized)
+    }
+
+    private fun maybeReapplyLockStateAfterMapReady(reapplyWithoutPendingRequest: Boolean = false) {
+        if (!mapReady) {
+            pendingLockReapplyAfterMapReady = true
+            return
+        }
+        if (pendingLockReapplyAfterMapReady || reapplyWithoutPendingRequest) {
+            pendingLockReapplyAfterMapReady = false
+            reapplyLockStateOnResume()
+        }
     }
 
     private fun reapplyLockStateOnResume() {
@@ -975,7 +996,9 @@ class MapFragment : Fragment() {
         updateFollowLockButton()
         updateShowMyLocationButtonVisibility()
         updateLiveActiveFitButtonUi()
-        pendingResumeCameraZoom = null
+        if (decision.lockState !is MapLockState.TrackerFollow || followTarget != null) {
+            pendingResumeCameraZoom = null
+        }
     }
 
     override fun onLowMemory() {
@@ -1713,15 +1736,6 @@ class MapFragment : Fragment() {
         )
     }
 
-    private fun reapplySingleTrackerCameraStateOnMapReady() {
-        if (showAllTrackers || mapViewContext != MapViewContext.SINGLE_TRACKER) return
-        if (showMyLocationEnabled) return
-        val followState = mapLockState as? MapLockState.TrackerFollow ?: return
-        val target = resolveSingleTrackerCameraTarget() ?: followState.target
-        reduceLock(MapLockEvent.RecenterTrackerFollow(target))
-        centerCameraOnTrackLocked(target, forceZoomIn = followState.needsInitialZoom)
-    }
-
     private fun moveCameraForAllTrackersWithMinZoom(
         map: MapLibreMap,
         bounds: LatLngBounds,
@@ -2179,18 +2193,13 @@ class MapFragment : Fragment() {
     private fun updateLiveActiveFitButtonUi() {
         val trackingRunning = trackingRuntimeSnapshot().isRunning
         val visible = !trackingRunning &&
-            isLiveActiveFitAvailable() &&
+            isLiveActiveFitToggleEnabled() &&
             !isSelectedDefaultTrackerMode()
-        val enabled = isLiveActiveFitToggleEnabled()
         liveActiveFitButton.visibility = if (visible) View.VISIBLE else View.GONE
-        liveActiveFitButton.isEnabled = enabled
+        liveActiveFitButton.isEnabled = true
         liveActiveFitButton.alpha = 1f
         val primaryBlue = ContextCompat.getColor(requireContext(), R.color.primary_blue)
-        val disabledBlue = ContextCompat.getColor(requireContext(), R.color.blue_300)
-        liveActiveFitButton.setCardBackgroundColor(
-            if (enabled) primaryBlue
-            else disabledBlue
-        )
+        liveActiveFitButton.setCardBackgroundColor(primaryBlue)
         liveActiveFitButtonIcon.setImageResource(
             if (liveActiveFitEnabled) R.drawable.ic_live_active_fit_on else R.drawable.ic_live_active_fit_off
         )
@@ -2310,8 +2319,6 @@ class MapFragment : Fragment() {
     private fun isLiveActiveFitToggleEnabled(): Boolean {
         return MapLiveActiveFitController.isLiveActiveFitToggleEnabled(
             available = isLiveActiveFitAvailable(),
-            showAllTrackers = showAllTrackers,
-            mapViewContext = mapViewContext,
             showMyLocationEnabled = showMyLocationEnabled
         )
     }
@@ -2712,8 +2719,19 @@ class MapFragment : Fragment() {
             }
             if (!showAllTrackers && singleTrackerTarget != null && !showMyLocationEnabled) {
                 disableLiveActiveFitForFollowLock()
-                reduceLock(MapLockEvent.EnableTrackerFollow(target = singleTrackerTarget, needsInitialZoom = true))
-                centerCameraOnTrackLocked(singleTrackerTarget, forceZoomIn = true)
+                val existingFollow = mapLockState as? MapLockState.TrackerFollow
+                val needsInitialZoom = existingFollow?.needsInitialZoom ?: true
+                if (existingFollow != null) {
+                    reduceLock(MapLockEvent.RecenterTrackerFollow(singleTrackerTarget))
+                } else {
+                    reduceLock(
+                        MapLockEvent.EnableTrackerFollow(
+                            target = singleTrackerTarget,
+                            needsInitialZoom = needsInitialZoom
+                        )
+                    )
+                }
+                centerCameraOnTrackLocked(singleTrackerTarget, forceZoomIn = needsInitialZoom)
                 updateFollowLockButton()
             }
         }

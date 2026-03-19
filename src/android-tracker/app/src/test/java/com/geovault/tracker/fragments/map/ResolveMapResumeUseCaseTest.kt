@@ -42,6 +42,32 @@ class ResolveMapResumeUseCaseTest {
     }
 
     @Test
+    fun resolve_noOpWhenTrackingRunningAndDisplayedHasPoints() {
+        val decision = useCase.resolve(
+            baseInput().copy(
+                trackingRunning = true,
+                selectedTrackerId = "tracker-1",
+                displayedTrackerId = "tracker-1",
+                hasTrackPoints = true
+            )
+        )
+        assertTrue(decision is MapResumeDecision.NoOp)
+    }
+
+    @Test
+    fun resolve_noOpWhenTrackingRunningWithoutTrackerButPendingInitial() {
+        val decision = useCase.resolve(
+            baseInput().copy(
+                trackingRunning = true,
+                selectedTrackerId = "",
+                displayedTrackerId = null,
+                hasPendingInitialTracker = true
+            )
+        )
+        assertTrue(decision is MapResumeDecision.NoOp)
+    }
+
+    @Test
     fun resolve_clearsSingleStateWhenNoTrackerAndNoPendingInitial() {
         val decision = useCase.resolve(
             baseInput().copy(
@@ -51,6 +77,32 @@ class ResolveMapResumeUseCaseTest {
             )
         )
         assertTrue(decision is MapResumeDecision.ClearSingleTrackerState)
+    }
+
+    @Test
+    fun resolve_groupStartsStreamingFromGroupIdsWhenNoActiveStreams() {
+        val decision = useCase.resolve(
+            baseInput().copy(
+                mapViewContext = MapViewContext.GROUP,
+                currentGroupTrackIds = setOf("g1", "g2"),
+                activeStreamedTrackerIds = emptySet()
+            )
+        )
+        assertEquals(
+            MapResumeDecision.StartMultiContextStreaming(setOf("g1", "g2")),
+            decision
+        )
+    }
+
+    @Test
+    fun resolve_allTrackersWithNoStreams_returnsMultiContextNoStreaming() {
+        val decision = useCase.resolve(
+            baseInput().copy(
+                showAllTrackers = true,
+                activeStreamedTrackerIds = emptySet()
+            )
+        )
+        assertTrue(decision is MapResumeDecision.MultiContextNoStreaming)
     }
 
     @Test
@@ -67,6 +119,19 @@ class ResolveMapResumeUseCaseTest {
     }
 
     @Test
+    fun resolve_backfillBoundaryAt15Seconds_loadsRuntime() {
+        val decision = useCase.resolve(
+            baseInput().copy(
+                selectedTrackerId = "tracker-1",
+                displayedTrackerId = "tracker-1",
+                hasTrackPoints = true,
+                backgroundedDurationMs = 15_000L
+            )
+        )
+        assertEquals(MapResumeDecision.LoadSingleTrackerRuntime("tracker-1"), decision)
+    }
+
+    @Test
     fun resolve_backfillsGeometryWhenSingleHasTrackPointsAfterLongBackground() {
         val decision = useCase.resolve(
             baseInput().copy(
@@ -77,6 +142,22 @@ class ResolveMapResumeUseCaseTest {
             )
         )
         assertEquals(MapResumeDecision.LoadSingleTrackerRuntime("tracker-1"), decision)
+    }
+
+    @Test
+    fun resolve_loadsRuntimeWhenNoPointsAndNotInActiveStreamSet() {
+        val decision = useCase.resolve(
+            baseInput().copy(
+                selectedTrackerId = "tracker-1",
+                displayedTrackerId = "tracker-1",
+                hasTrackPoints = false,
+                activeStreamedTrackerIds = setOf("other-tracker")
+            )
+        )
+        assertEquals(
+            MapResumeDecision.LoadSingleTrackerRuntime(trackerId = "tracker-1"),
+            decision
+        )
     }
 
     @Test

@@ -31,14 +31,10 @@ internal object MapLiveActiveFitController {
 
     fun isLiveActiveFitToggleEnabled(
         available: Boolean,
-        showAllTrackers: Boolean,
-        mapViewContext: MapViewContext,
         showMyLocationEnabled: Boolean
     ): Boolean {
         if (!available) return false
         // Live-active fit should only be user-toggleable while My Location mode is enabled.
-        val contextRequiresGps = showAllTrackers || mapViewContext == MapViewContext.GROUP ||
-            mapViewContext == MapViewContext.SINGLE_TRACKER
-        return showMyLocationEnabled && contextRequiresGps
+        return showMyLocationEnabled
     }
 }
