@@ -1,10 +1,12 @@
 package com.geovault.tracker.data
 
 import com.geovault.tracker.Group
+import com.geovault.tracker.AvailableToAddResponse
 import com.geovault.tracker.MapVisibilityRequest
 import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.TrackerAddToGroupCandidate
+import com.geovault.tracker.TrackerCheckRequest
 import com.geovault.tracker.TrackerCreateRequest
 import com.geovault.tracker.TrackerSettingsRequest
 import com.geovault.tracker.Tracker
@@ -16,6 +18,7 @@ interface TrackerListRepository {
 
 interface TrackerManagementRepository {
     suspend fun loadTrackers(forceRefresh: Boolean = false): RepositoryResult<List<Tracker>>
+    suspend fun loadAvailableToAdd(forceRefresh: Boolean = false): RepositoryResult<AvailableToAddResponse>
     suspend fun loadTracker(trackerId: String): RepositoryResult<Tracker>
     suspend fun createTracker(request: TrackerCreateRequest): RepositoryResult<Tracker>
     suspend fun updateTrackerSettings(
@@ -26,6 +29,9 @@ interface TrackerManagementRepository {
     suspend fun clearTrackerHistory(trackerId: String): RepositoryResult<Unit>
     suspend fun leaveShareWithMe(trackerId: String): RepositoryResult<Unit>
     suspend fun unsubscribeTracker(trackerId: String): RepositoryResult<Unit>
+    suspend fun subscribeTracker(trackerId: String): RepositoryResult<Tracker>
+    suspend fun checkTracker(request: TrackerCheckRequest): RepositoryResult<Boolean>
+    fun clearSelectedTrackerCaches()
     suspend fun fetchTrackerKml(trackerId: String): RepositoryResult<ByteArray>
     suspend fun loadUsers(): RepositoryResult<UsersResponse>
     suspend fun loadMapVisibility(forceRefresh: Boolean = false): RepositoryResult<MapVisibilityResponse>

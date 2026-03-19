@@ -32,6 +32,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.TimeUnit
 
 /**
@@ -71,7 +72,7 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
     private var currentTrackerIds: Set<String> = emptySet()
     private var currentTrackerName: String? = null
     private var connectJob: Job? = null
-    private var connectionSessionId: Long = 0L
+    private val connectionSessionId = AtomicLong(0L)
     private var lifecycle = StreamingLifecycleState()
 
     override fun onCreate() {
@@ -124,11 +125,11 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
                     disconnectWebSocket()
                     currentTrackerIds = trackerIds
                     currentTrackerName = trackerName
-                    connectionSessionId++
+                    val sessionId = connectionSessionId.incrementAndGet()
                     persistStreamingSession(currentTrackerIds, currentTrackerName)
                     
                     connectJob?.cancel()
-                    connectJob = serviceScope.launch { connect(connectionSessionId) }
+                    connectJob = serviceScope.launch { connect(sessionId) }
                 } else {
                     Log.w(TAG, "ACTION_START received with empty tracker target set")
                     persistStreamingSession(emptySet(), null)
@@ -143,7 +144,7 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
             }
             ACTION_STOP -> {
                 disconnectWebSocket()
-                connectionSessionId++
+                connectionSessionId.incrementAndGet()
                 persistStreamingSession(emptySet(), null)
                 applyLifecycleEvent(
                     event = StreamingLifecycleEvent.StopRequested,
@@ -185,7 +186,7 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         Log.d(TAG, "Task removed, stopping streaming service")
         disconnectWebSocket()
-        connectionSessionId++
+        connectionSessionId.incrementAndGet()
         persistStreamingSession(emptySet(), null)
         applyLifecycleEvent(
             event = StreamingLifecycleEvent.StopRequested,
@@ -311,7 +312,12 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
             .pingInterval(WS_PING_INTERVAL_SEC, TimeUnit.SECONDS)
             .build()
         try {
-            webSocket = wsClient.newWebSocket(request, listener)
+            val socket = wsClient.newWebSocket(request, listener)
+            if (sessionId != connectionSessionId.get() || currentTrackerIds.isEmpty()) {
+                socket.close(1000, "stale_session")
+                return
+            }
+            webSocket = socket
             applyLifecycleEvent(
                 event = StreamingLifecycleEvent.Connected,
                 activeTrackerIds = currentTrackerIds
@@ -357,7 +363,7 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
                 failureClass = failureClass
             )
             delay(delayMs)
-            if (sessionId == connectionSessionId && currentTrackerIds.isNotEmpty()) {
+            if (sessionId == connectionSessionId.get() && currentTrackerIds.isNotEmpty()) {
                 applyLifecycleEvent(
                     event = StreamingLifecycleEvent.RetryRequested,
                     activeTrackerIds = currentTrackerIds

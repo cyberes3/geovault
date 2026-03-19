@@ -13,14 +13,18 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
 import com.geovault.common.NaturalSort
 import com.geovault.tracker.Group
+import com.geovault.tracker.MapVisibilityRequest
+import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.TrackerSettingsRequest
 import com.geovault.tracker.GroupPatchRequest
+import com.geovault.tracker.data.GroupManagementRepository
+import com.geovault.tracker.data.TrackerManagementRepository
 import com.google.android.material.button.MaterialButton
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
@@ -32,6 +36,12 @@ class HiddenTrackersFragment : Fragment() {
     private lateinit var listContainer: LinearLayout
     private lateinit var emptyText: TextView
     private lateinit var showAllButton: MaterialButton
+
+    @Inject
+    lateinit var trackerManagementRepository: TrackerManagementRepository
+
+    @Inject
+    lateinit var groupManagementRepository: GroupManagementRepository
 
     private sealed class HiddenItem {
         abstract val name: String
@@ -73,10 +83,19 @@ class HiddenTrackersFragment : Fragment() {
         loadingOverlay.visibility = View.VISIBLE
         loadingSpinner.start()
         viewLifecycleOwner.lifecycleScope.launch {
-            val trackerList = TrackerRepository.getTrackersSuspend(requireContext(), forceRefresh = true) ?: emptyList()
-            val visibility = TrackerRepository.getMapVisibilitySuspend(requireContext())
+            val trackerList = when (val result = trackerManagementRepository.loadTrackers(forceRefresh = true)) {
+                is RepositoryResult.Success -> result.data
+                is RepositoryResult.Failure -> emptyList()
+            }
+            val visibility = when (val result = trackerManagementRepository.loadMapVisibility(forceRefresh = true)) {
+                is RepositoryResult.Success -> result.data
+                is RepositoryResult.Failure -> null
+            }
             val hiddenGroupIds = (visibility?.hidden_group_ids ?: emptyList()).toSet()
-            val groupsList = TrackerRepository.getGroupsSuspend(requireContext(), forceRefresh = true) ?: emptyList()
+            val groupsList = when (val result = groupManagementRepository.loadGroups(forceRefresh = true)) {
+                is RepositoryResult.Success -> result.data
+                is RepositoryResult.Failure -> emptyList()
+            }
 
             val hiddenTrackers = trackerList
                 .filter { it.isOwner() && isHiddenInList(it) }
@@ -182,12 +201,11 @@ class HiddenTrackersFragment : Fragment() {
         onFailure: (() -> Unit)? = null
     ) {
         viewLifecycleOwner.lifecycleScope.launch {
-            val result = TrackerRepository.updateTrackerSettingsResultSuspend(
-                requireContext(),
+            val result = trackerManagementRepository.updateTrackerSettings(
                 trackerId,
                 TrackerSettingsRequest(hidden_in_list = false)
             )
-            if (result is com.geovault.tracker.RepositoryResult.Success) {
+            if (result is RepositoryResult.Success) {
                 requireActivity().supportFragmentManager.setFragmentResult(
                     TrackersListFragment.REQUEST_REFRESH_LIST,
                     Bundle()
@@ -203,8 +221,7 @@ class HiddenTrackersFragment : Fragment() {
     private fun unhideAllTrackers(trackerIds: List<String>, onComplete: () -> Unit, index: Int = 0) {
         viewLifecycleOwner.lifecycleScope.launch {
             for (id in trackerIds.drop(index)) {
-                TrackerRepository.updateTrackerSettingsResultSuspend(
-                    requireContext(),
+                trackerManagementRepository.updateTrackerSettings(
                     id,
                     TrackerSettingsRequest(hidden_in_list = false)
                 )
@@ -223,12 +240,8 @@ class HiddenTrackersFragment : Fragment() {
         onFailure: (() -> Unit)? = null
     ) {
         viewLifecycleOwner.lifecycleScope.launch {
-            val (updated, _) = TrackerRepository.patchGroupResultSuspend(
-                requireContext(),
-                groupId,
-                GroupPatchRequest(hidden_in_list = false)
-            )
-            if (updated != null) {
+            val result = groupManagementRepository.patchGroup(groupId, GroupPatchRequest(hidden_in_list = false))
+            if (result is RepositoryResult.Success) {
                 onSuccess?.invoke()
             } else {
                 navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
@@ -243,19 +256,20 @@ class HiddenTrackersFragment : Fragment() {
         onFailure: (() -> Unit)? = null
     ) {
         viewLifecycleOwner.lifecycleScope.launch {
-            val visibility = TrackerRepository.getMapVisibilitySuspend(requireContext())
+            val visibility = when (val result = trackerManagementRepository.loadMapVisibility(forceRefresh = true)) {
+                is RepositoryResult.Success -> result.data
+                is RepositoryResult.Failure -> null
+            }
             val current = (visibility?.hidden_group_ids ?: emptyList()).toMutableList()
             val newList = current.filter { it != groupId }
             if (newList.size == current.size) {
                 onSuccess?.invoke()
                 return@launch
             }
-            val updated = TrackerRepository.patchMapVisibilitySuspend(
-                requireContext(),
-                com.geovault.tracker.MapVisibilityRequest(hidden_group_ids = newList)
+            val result = trackerManagementRepository.patchMapVisibility(
+                MapVisibilityRequest(hidden_group_ids = newList)
             )
-            if (updated != null) onSuccess?.invoke()
-            else {
+            if (result is RepositoryResult.Success) onSuccess?.invoke() else {
                 navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 onFailure?.invoke()
             }
@@ -264,21 +278,24 @@ class HiddenTrackersFragment : Fragment() {
 
     private fun unhideAllGroups(groups: List<HiddenItem.Group>, onComplete: () -> Unit, index: Int = 0) {
         viewLifecycleOwner.lifecycleScope.launch {
+            var currentHiddenGroupIds: List<String>? = null
             for (item in groups.drop(index)) {
                 if (item.source == "list") {
-                    TrackerRepository.patchGroupResultSuspend(
-                        requireContext(),
-                        item.id,
-                        GroupPatchRequest(hidden_in_list = false)
-                    )
+                    groupManagementRepository.patchGroup(item.id, GroupPatchRequest(hidden_in_list = false))
                 } else {
-                    val visibility = TrackerRepository.getMapVisibilitySuspend(requireContext())
-                    val current = (visibility?.hidden_group_ids ?: emptyList()).filter { it != item.id }
-                    TrackerRepository.patchMapVisibilitySuspend(
-                        requireContext(),
-                        com.geovault.tracker.MapVisibilityRequest(hidden_group_ids = current)
-                    )
+                    if (currentHiddenGroupIds == null) {
+                        currentHiddenGroupIds = when (val result = trackerManagementRepository.loadMapVisibility(forceRefresh = true)) {
+                            is RepositoryResult.Success -> result.data.hidden_group_ids
+                            is RepositoryResult.Failure -> emptyList()
+                        }
+                    }
+                    currentHiddenGroupIds = currentHiddenGroupIds.orEmpty().filter { it != item.id }
                 }
+            }
+            currentHiddenGroupIds?.let { remainingHidden ->
+                trackerManagementRepository.patchMapVisibility(
+                    MapVisibilityRequest(hidden_group_ids = remainingHidden)
+                )
             }
             onComplete()
         }

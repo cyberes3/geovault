@@ -17,7 +17,7 @@ import javax.inject.Inject
 import kotlin.coroutines.resume
 
 class TrackerRepositoryMapTrackRepository @Inject constructor(
-    @ApplicationContext private val appContext: Context
+    @param:ApplicationContext private val appContext: Context
 ) : MapTrackRepository {
     override suspend fun getTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> =
         suspendCancellableCoroutine { continuation ->
@@ -72,10 +72,14 @@ class TrackerRepositoryMapTrackRepository @Inject constructor(
     }
 
     override fun getTrackerFromCache(id: String): Tracker? = TrackerRepository.getTrackerFromCache(id)
+
+    override fun cancelGeometryRequest() {
+        TrackerRepository.cancelGeometryRequest()
+    }
 }
 
 class TrackerRepositoryMapGroupRepository @Inject constructor(
-    @ApplicationContext private val appContext: Context
+    @param:ApplicationContext private val appContext: Context
 ) : MapGroupRepository {
     override suspend fun getGroups(forceRefresh: Boolean): RepositoryResult<List<Group>> =
         suspendCancellableCoroutine { continuation ->
@@ -91,7 +95,7 @@ class TrackerRepositoryMapGroupRepository @Inject constructor(
 }
 
 class TrackerRepositoryMapVisibilityRepository @Inject constructor(
-    @ApplicationContext private val appContext: Context
+    @param:ApplicationContext private val appContext: Context
 ) : MapVisibilityRepository {
     override suspend fun getMapVisibility(): RepositoryResult<MapVisibilityResponse> =
         suspendCancellableCoroutine { continuation ->

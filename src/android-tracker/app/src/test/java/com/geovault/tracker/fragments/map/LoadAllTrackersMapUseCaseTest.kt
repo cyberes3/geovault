@@ -66,10 +66,12 @@ class LoadAllTrackersMapUseCaseTest {
         }
 
         val useCase = LoadAllTrackersMapUseCase(trackRepo, groupRepo, visibilityRepo)
-        val snapshot = kotlinx.coroutines.runBlocking { useCase.execute() }
+        val result = kotlinx.coroutines.runBlocking { useCase.execute() }
+        val snapshot = result.snapshot
 
         assertEquals(listOf("t3"), snapshot.trackers.map { it.id })
         assertTrue(snapshot.coordsByTrackerId["t3"]?.isNotEmpty() == true)
+        assertTrue(!result.hadFailures)
     }
 }
 

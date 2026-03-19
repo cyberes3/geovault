@@ -30,6 +30,7 @@ import com.geovault.common.ServerUrlContract
 import com.geovault.tracker.Group
 import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.navigation.TrackerNavHost
+import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import com.geovault.tracker.services.TrackingRuntimeStateStore
@@ -46,6 +47,9 @@ import javax.inject.Inject
 class MainActivity : AppCompatActivity(), TrackerNavHost {
     @Inject
     lateinit var settingsRepository: TrackerSettingsRepository
+
+    @Inject
+    lateinit var trackerManagementRepository: TrackerManagementRepository
 
     private var isGuestView: Boolean = false
     
@@ -374,8 +378,8 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
                 SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(this, clearTrackersListCache = true)
                 settingsRepository.clearWasTrackingBeforeExit()
                 lifecycleScope.launch {
-                    val list = TrackerRepository.getTrackersSuspend(this@MainActivity, forceRefresh = true)
-                    setServerAccessibility(list != null)
+                    val trackersResult = trackerManagementRepository.loadTrackers(forceRefresh = true)
+                    setServerAccessibility(trackersResult is RepositoryResult.Success)
                 }
                 showSnackbar(getString(R.string.tracker_validation_failed_go_to_settings))
                 val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
@@ -401,8 +405,8 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             onInvalid = {
                 SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(this, clearTrackersListCache = true)
                 lifecycleScope.launch {
-                    val list = TrackerRepository.getTrackersSuspend(this@MainActivity, forceRefresh = true)
-                    setServerAccessibility(list != null)
+                    val trackersResult = trackerManagementRepository.loadTrackers(forceRefresh = true)
+                    setServerAccessibility(trackersResult is RepositoryResult.Success)
                 }
                 showSnackbar(getString(R.string.tracker_validation_failed_go_to_settings))
                 val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
@@ -427,7 +431,12 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (trackerId.isEmpty()) return
         lifecycleScope.launch {
-            val valid = TrackerRepository.checkTrackerSuspend(this@MainActivity, trackerId)
+            val valid = when (
+                val result = trackerManagementRepository.checkTracker(TrackerCheckRequest(tracker_id = trackerId))
+            ) {
+                is RepositoryResult.Success -> result.data
+                is RepositoryResult.Failure -> false
+            }
             if (valid) onValid() else onInvalid()
         }
     }
@@ -937,7 +946,12 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         isPreparingToTrack = true
         homeFragment?.showPreparingState()
         lifecycleScope.launch {
-            val valid = TrackerRepository.checkTrackerSuspend(this@MainActivity, trackerId)
+            val valid = when (
+                val result = trackerManagementRepository.checkTracker(TrackerCheckRequest(tracker_id = trackerId))
+            ) {
+                is RepositoryResult.Success -> result.data
+                is RepositoryResult.Failure -> false
+            }
             if (!isPreparingToTrack) return@launch
             isPreparingToTrack = false
             if (!valid) {
@@ -945,8 +959,8 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
                     this@MainActivity,
                     clearTrackersListCache = true
                 )
-                val list = TrackerRepository.getTrackersSuspend(this@MainActivity, forceRefresh = true)
-                setServerAccessibility(list != null)
+                val trackersResult = trackerManagementRepository.loadTrackers(forceRefresh = true)
+                setServerAccessibility(trackersResult is RepositoryResult.Success)
                 showSnackbar(getString(R.string.tracker_validation_failed_go_to_settings))
                 val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
                 hf?.updateTrackingUi()

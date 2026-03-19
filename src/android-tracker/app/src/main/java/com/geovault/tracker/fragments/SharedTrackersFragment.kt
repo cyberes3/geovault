@@ -1,6 +1,5 @@
 package com.geovault.tracker.fragments
 
-import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.Menu
@@ -13,6 +12,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.LinearSmoothScroller
 import androidx.recyclerview.widget.RecyclerView
@@ -22,18 +22,24 @@ import com.geovault.common.LoadingSpinner
 import com.geovault.common.NaturalSort
 import com.geovault.tracker.Group
 import com.geovault.tracker.R
+import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.TrackerRepository
+import com.geovault.tracker.data.GroupManagementRepository
+import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.parseHexToColor
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@AndroidEntryPoint
 class SharedTrackersFragment : Fragment() {
 
     companion object {
@@ -54,6 +60,12 @@ class SharedTrackersFragment : Fragment() {
     private var pendingScrollToTrackerId: String? = null
     private var pendingScrollToGroupId: String? = null
     private var preloadStarted: Boolean = false
+
+    @Inject
+    lateinit var trackerManagementRepository: TrackerManagementRepository
+
+    @Inject
+    lateinit var groupManagementRepository: GroupManagementRepository
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_shared_trackers, container, false)
@@ -176,10 +188,12 @@ class SharedTrackersFragment : Fragment() {
     private fun preloadAddShareViewsData() {
         if (!isAdded || preloadStarted) return
         preloadStarted = true
-        TrackerRepository.getAvailableToAdd(requireContext(), forceRefresh = false) { }
-        TrackerRepository.getMapVisibility(requireContext()) { }
-        TrackerRepository.getGroups(requireContext(), forceRefresh = false) { }
-        TrackerRepository.getTrackers(requireContext(), forceRefresh = false) { }
+        viewLifecycleOwner.lifecycleScope.launch {
+            trackerManagementRepository.loadAvailableToAdd(forceRefresh = false)
+            trackerManagementRepository.loadMapVisibility(forceRefresh = false)
+            groupManagementRepository.loadGroups(forceRefresh = false)
+            trackerManagementRepository.loadTrackers(forceRefresh = false)
+        }
     }
 
     /** Merges trackers/groups from Add Trackers into the current list (optimistic), then refetches in background. */
@@ -209,37 +223,43 @@ class SharedTrackersFragment : Fragment() {
             loadingOverlay.visibility = View.GONE
             swipeRefresh.isRefreshing = false
         }
-        TrackerRepository.getMapVisibility(requireContext()) { visibility ->
-            if (!isAdded) return@getMapVisibility
+        viewLifecycleOwner.lifecycleScope.launch {
+            val visibility = when (val result = trackerManagementRepository.loadMapVisibility(forceRefresh = true)) {
+                is RepositoryResult.Success -> result.data
+                is RepositoryResult.Failure -> null
+            }
+            if (!isAdded) return@launch
             val hiddenTrackIds = (visibility?.hidden_track_ids ?: emptyList()).toSet()
             val hiddenGroupIds = (visibility?.hidden_group_ids ?: emptyList()).toSet()
-            TrackerRepository.getGroups(requireContext(), forceRefresh = true) { groups ->
-                if (!isAdded) return@getGroups
-                TrackerRepository.getTrackers(requireContext(), forceRefresh = true) { list ->
-                    if (!isAdded) return@getTrackers
-                    requireActivity().runOnUiThread {
-                        // Only show shared groups the user has accepted (via Discover -> Add / accept-share).
-                        val sharedGroups = (groups ?: emptyList())
-                            .filter { it.is_owner != true && it.visibility == "shared" && it.id !in hiddenGroupIds }
-                            .filter { it.is_accepted == true }
-                        val trackIdsInSharedGroups = sharedGroups
-                            .flatMap { it.track_ids ?: emptyList() }
-                            .toSet()
-                        val sharedTrackers = (list ?: emptyList())
-                            .filter { !it.isOwner() && (it.visibility == "shared" || it.visibility == "public") }
-                            .filter { it.id !in hiddenTrackIds && it.id !in trackIdsInSharedGroups }
-                        val combined = (sharedGroups.map { SharedListItem.GroupItem(it) } +
-                            sharedTrackers.map { SharedListItem.TrackerItem(it) })
-                            .sortedWith(NaturalSort.naturalOrderBy { it.sortName.lowercase(Locale.getDefault()) })
-                        adapter?.setItems(combined, hiddenTrackIds)
-                        emptyView.visibility = if (combined.isEmpty()) View.VISIBLE else View.GONE
-                        loadingOverlay.visibility = View.GONE
-                        loadingSpinner.stop(hide = false)
-                        swipeRefresh.isRefreshing = false
-                        applyScrollAndHighlightIfPending()
-                    }
-                }
+            val groups = when (val result = groupManagementRepository.loadGroups(forceRefresh = true)) {
+                is RepositoryResult.Success -> result.data
+                is RepositoryResult.Failure -> emptyList()
             }
+            val list = when (val result = trackerManagementRepository.loadTrackers(forceRefresh = true)) {
+                is RepositoryResult.Success -> result.data
+                is RepositoryResult.Failure -> emptyList()
+            }
+            if (!isAdded) return@launch
+
+            // Only show shared groups the user has accepted (via Discover -> Add / accept-share).
+            val sharedGroups = groups
+                .filter { it.is_owner != true && it.visibility == "shared" && it.id !in hiddenGroupIds }
+                .filter { it.is_accepted == true }
+            val trackIdsInSharedGroups = sharedGroups
+                .flatMap { it.track_ids ?: emptyList() }
+                .toSet()
+            val sharedTrackers = list
+                .filter { !it.isOwner() && (it.visibility == "shared" || it.visibility == "public") }
+                .filter { it.id !in hiddenTrackIds && it.id !in trackIdsInSharedGroups }
+            val combined = (sharedGroups.map { SharedListItem.GroupItem(it) } +
+                sharedTrackers.map { SharedListItem.TrackerItem(it) })
+                .sortedWith(NaturalSort.naturalOrderBy { it.sortName.lowercase(Locale.getDefault()) })
+            adapter?.setItems(combined, hiddenTrackIds)
+            emptyView.visibility = if (combined.isEmpty()) View.VISIBLE else View.GONE
+            loadingOverlay.visibility = View.GONE
+            loadingSpinner.stop(hide = false)
+            swipeRefresh.isRefreshing = false
+            applyScrollAndHighlightIfPending()
         }
     }
 
@@ -318,7 +338,7 @@ class SharedTrackersFragment : Fragment() {
     }
 
     private fun viewOnMap(tracker: Tracker) {
-        TrackerRepository.clearSelectedTrackerCaches()
+        trackerManagementRepository.clearSelectedTrackerCaches()
         navHost()?.setInitialTrackForMap(tracker)
         navHost()?.setCurrentTab(1, forceRefreshMap = true, delayMs = 50)
     }

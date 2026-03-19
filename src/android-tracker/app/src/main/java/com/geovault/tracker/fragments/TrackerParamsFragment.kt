@@ -17,7 +17,6 @@ import com.geovault.tracker.R
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.data.TrackerDetailRepository
 import com.geovault.tracker.lastPosition
 import com.geovault.tracker.lastUpdateMs
@@ -156,7 +155,7 @@ class TrackerParamsFragment : Fragment() {
         if (selectedId.isNotEmpty() && id == selectedId) {
             // Keep selected tracker cache intact for metadata/last-point continuity.
         } else {
-            TrackerRepository.clearSelectedTrackerCaches()
+            trackerDetailRepository.clearSelectedTrackerCaches()
         }
 
         if (isLocalTrackingMode) {
@@ -174,7 +173,6 @@ class TrackerParamsFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             // Params/details modal should fetch tracker metadata only, not full geometry.
             val result = trackerDetailRepository.loadTrackerMetadata(
-                context = requireContext(),
                 trackerId = id,
                 forceRefresh = refresh
             )
@@ -190,8 +188,7 @@ class TrackerParamsFragment : Fragment() {
             }
 
             // Fire-and-forget: refresh trackers list in background so list is up to date when user goes back.
-            val ctx = context ?: return@launch
-            trackerDetailRepository.refreshTrackers(ctx)
+            trackerDetailRepository.refreshTrackers()
         }
     }
 

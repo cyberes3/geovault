@@ -17,6 +17,7 @@ interface RuntimeMapTrackRepository {
         allData: Boolean = true
     ): RepositoryResult<Map<String, TrackerCoordinatesResponse>>
     fun getTrackerFromCache(id: String): Tracker?
+    fun cancelGeometryRequest() {}
 }
 
 interface BootstrapMapTrackRepository : RuntimeMapTrackRepository {

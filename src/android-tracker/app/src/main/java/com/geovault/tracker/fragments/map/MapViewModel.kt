@@ -4,7 +4,6 @@ import android.app.Application
 import android.util.Log
 import com.geovault.tracker.Group
 import com.geovault.tracker.SelectedTrackerPrefs
-import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import androidx.lifecycle.AndroidViewModel
@@ -32,6 +31,8 @@ class MapViewModel @Inject constructor(
 ) : AndroidViewModel(application) {
     private companion object {
         const val TAG = "MapViewModel"
+        const val LOAD_TRACKERS_ERROR = "Failed To Load Trackers"
+        const val LOAD_GROUP_ERROR = "Failed To Load Group Tracks"
     }
 
     private val loadSingleTrackerUseCase = LoadSingleTrackerMapUseCase(runtimeTrackRepository, bootstrapTrackRepository)
@@ -127,7 +128,7 @@ class MapViewModel @Inject constructor(
     }
 
     fun cancelGeometryRequest() {
-        TrackerRepository.cancelGeometryRequest()
+        runtimeTrackRepository.cancelGeometryRequest()
     }
 
     fun stopLiveTrackStreaming() {
@@ -224,9 +225,12 @@ class MapViewModel @Inject constructor(
                 displayedGroupName = null,
                 mode = MapScreenMode.AllTrackers
             )
-            val snapshot = loadAllTrackersUseCase.execute()
+            val result = loadAllTrackersUseCase.execute()
             _uiState.value = _uiState.value.copy(loading = false)
-            _commands.tryEmit(MapCommand.RenderAllTrackers(snapshot))
+            _commands.tryEmit(MapCommand.RenderAllTrackers(result.snapshot))
+            if (result.hadFailures) {
+                _commands.tryEmit(MapCommand.ShowError(LOAD_TRACKERS_ERROR))
+            }
             emitCameraPolicy(applyCameraPolicyUseCase.forMode(MapScreenMode.AllTrackers, null, enableFollowLock = false))
         }
     }
@@ -239,9 +243,12 @@ class MapViewModel @Inject constructor(
                 displayedGroupName = group.name,
                 mode = MapScreenMode.GroupMode(group)
             )
-            val snapshot = loadGroupMapUseCase.execute(group, zoomToTrackerId)
+            val result = loadGroupMapUseCase.execute(group, zoomToTrackerId)
             _uiState.value = _uiState.value.copy(loading = false)
-            _commands.tryEmit(MapCommand.RenderAllTrackers(snapshot))
+            _commands.tryEmit(MapCommand.RenderAllTrackers(result.snapshot))
+            if (result.hadFailures) {
+                _commands.tryEmit(MapCommand.ShowError(LOAD_GROUP_ERROR))
+            }
             emitCameraPolicy(applyCameraPolicyUseCase.forMode(MapScreenMode.GroupMode(group), null, enableFollowLock = false))
         }
     }

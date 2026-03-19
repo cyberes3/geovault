@@ -5,6 +5,7 @@ import android.util.Log
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
 import com.geovault.tracker.AppError
+import com.geovault.tracker.AvailableToAddResponse
 import com.geovault.tracker.Group
 import com.geovault.tracker.GroupAddTrackRequest
 import com.geovault.tracker.GroupCreateRequest
@@ -14,8 +15,10 @@ import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerApi
+import com.geovault.tracker.TrackerCheckRequest
 import com.geovault.tracker.TrackerCreateRequest
 import com.geovault.tracker.TrackerSettingsRequest
+import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.UsersResponse
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -30,7 +33,7 @@ import retrofit2.Response
 
 @Singleton
 class ApiTrackerManagementRepository @Inject constructor(
-    @ApplicationContext private val appContext: Context,
+    @param:ApplicationContext private val appContext: Context,
     private val stateStore: TrackerManagementStateStore
 ) : TrackerManagementRepository, GroupManagementRepository {
     private companion object {
@@ -54,6 +57,10 @@ class ApiTrackerManagementRepository @Inject constructor(
             }
             result
         }
+    }
+
+    override suspend fun loadAvailableToAdd(forceRefresh: Boolean): RepositoryResult<AvailableToAddResponse> {
+        return executeApiCall { api -> api.getAvailableToAdd().execute() }
     }
 
     override suspend fun loadTracker(trackerId: String): RepositoryResult<Tracker> {
@@ -122,6 +129,34 @@ class ApiTrackerManagementRepository @Inject constructor(
             stateStore.deleteTracker(trackerId)
         }
         return result
+    }
+
+    override suspend fun subscribeTracker(trackerId: String): RepositoryResult<Tracker> {
+        val result = executeApiCall { api -> api.subscribeTracker(trackerId).execute() }
+        if (result is RepositoryResult.Success) {
+            cacheMutex.withLock {
+                trackersCache = trackersCache
+                    ?.filterNot { it.id == trackerId }
+                    .orEmpty()
+                    .plus(result.data)
+                    .distinctBy { it.id }
+                    .sortedBy { it.name.lowercase() }
+            }
+            stateStore.publishTracker(result.data)
+        }
+        return result
+    }
+
+    override suspend fun checkTracker(request: TrackerCheckRequest): RepositoryResult<Boolean> {
+        val result = executeApiCall { api -> api.checkTracker(request).execute() }
+        return when (result) {
+            is RepositoryResult.Success -> RepositoryResult.Success(result.data.valid)
+            is RepositoryResult.Failure -> result
+        }
+    }
+
+    override fun clearSelectedTrackerCaches() {
+        TrackerRepository.clearSelectedTrackerCaches()
     }
 
     override suspend fun fetchTrackerKml(trackerId: String): RepositoryResult<ByteArray> {

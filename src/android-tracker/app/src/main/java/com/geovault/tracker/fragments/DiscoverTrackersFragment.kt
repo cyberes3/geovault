@@ -24,12 +24,14 @@ import com.geovault.tracker.Group
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.TrackerRepository
+import com.geovault.tracker.data.GroupManagementRepository
+import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.navigation.navHost
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
@@ -61,6 +63,12 @@ class DiscoverTrackersFragment : Fragment() {
     private var incomingQuery: String = ""
     private var onMyMapSearchInput: EditText? = null
     private var incomingSearchInput: EditText? = null
+
+    @Inject
+    lateinit var trackerManagementRepository: TrackerManagementRepository
+
+    @Inject
+    lateinit var groupManagementRepository: GroupManagementRepository
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_discover_trackers, container, false)
@@ -120,7 +128,10 @@ class DiscoverTrackersFragment : Fragment() {
 
     private fun loadAvailable(forceRefresh: Boolean = false, fromSwipeRefresh: Boolean = false) {
         viewLifecycleOwner.lifecycleScope.launch {
-            val response = TrackerRepository.getAvailableToAddSuspend(requireContext(), forceRefresh = forceRefresh)
+            val response = when (val result = trackerManagementRepository.loadAvailableToAdd(forceRefresh = forceRefresh)) {
+                is RepositoryResult.Success -> result.data
+                is RepositoryResult.Failure -> null
+            }
             if (!isAdded) return@launch
             if (response == null) {
                 swipeRefresh.isRefreshing = false
@@ -132,11 +143,20 @@ class DiscoverTrackersFragment : Fragment() {
                 return@launch
             }
 
-            val mapVisibility = TrackerRepository.getMapVisibilitySuspend(requireContext())
+            val mapVisibility = when (val result = trackerManagementRepository.loadMapVisibility(forceRefresh = true)) {
+                is RepositoryResult.Success -> result.data
+                is RepositoryResult.Failure -> null
+            }
             val hiddenTrackIds = mapVisibility?.hidden_track_ids?.toSet() ?: emptySet()
             val hiddenGroupIds = mapVisibility?.hidden_group_ids?.toSet() ?: emptySet()
-            val groups = TrackerRepository.getGroupsSuspend(requireContext(), forceRefresh = forceRefresh)
-            val trackers = TrackerRepository.getTrackersSuspend(requireContext(), forceRefresh = forceRefresh)
+            val groups = when (val result = groupManagementRepository.loadGroups(forceRefresh = forceRefresh)) {
+                is RepositoryResult.Success -> result.data
+                is RepositoryResult.Failure -> emptyList()
+            }
+            val trackers = when (val result = trackerManagementRepository.loadTrackers(forceRefresh = forceRefresh)) {
+                is RepositoryResult.Success -> result.data
+                is RepositoryResult.Failure -> emptyList()
+            }
 
             swipeRefresh.isRefreshing = false
             if (!fromSwipeRefresh) {
@@ -432,7 +452,10 @@ class DiscoverTrackersFragment : Fragment() {
             setRowState(row, key, RowState.ADDING)
             if (acceptAsGroup) {
                 viewLifecycleOwner.lifecycleScope.launch {
-                    val accepted = TrackerRepository.acceptGroupShareSuspend(requireContext(), group.id)
+                    val accepted = when (val result = groupManagementRepository.acceptGroupShare(group.id)) {
+                        is RepositoryResult.Success -> result.data
+                        is RepositoryResult.Failure -> null
+                    }
                     if (accepted != null) {
                         moveIncomingGroupToOnMyMap(group, accepted.track_ids ?: emptyList())
                         setRowState(row, key, RowState.ADDED_CHECK)
@@ -458,7 +481,10 @@ class DiscoverTrackersFragment : Fragment() {
             val addedTrackers = mutableListOf<Tracker>()
             viewLifecycleOwner.lifecycleScope.launch {
                 for (trackId in trackIds) {
-                    val tracker = TrackerRepository.subscribeTrackerSuspend(requireContext(), trackId)
+                    val tracker = when (val result = trackerManagementRepository.subscribeTracker(trackId)) {
+                        is RepositoryResult.Success -> result.data
+                        is RepositoryResult.Failure -> null
+                    }
                     done++
                     if (tracker == null) failed = true else addedTrackers.add(tracker)
                 }
@@ -479,7 +505,7 @@ class DiscoverTrackersFragment : Fragment() {
         deleteBtn.setOnClickListener {
             if (rowStates[key] != RowState.ADDED_DELETE) return@setOnClickListener
             viewLifecycleOwner.lifecycleScope.launch {
-                val result = TrackerRepository.leaveGroupResultSuspend(requireContext(), group.id)
+                val result = groupManagementRepository.leaveGroup(group.id)
                 if (result is RepositoryResult.Success) {
                     removeRowAndMaybeHideSection(parent, row, sectionHeader, sectionList)
                 } else {
@@ -510,7 +536,10 @@ class DiscoverTrackersFragment : Fragment() {
             if (rowStates[key] != RowState.IDLE) return@setOnClickListener
             setRowState(row, key, RowState.ADDING)
             viewLifecycleOwner.lifecycleScope.launch {
-                val tracker = TrackerRepository.subscribeTrackerSuspend(requireContext(), item.id)
+                val tracker = when (val result = trackerManagementRepository.subscribeTracker(item.id)) {
+                    is RepositoryResult.Success -> result.data
+                    is RepositoryResult.Failure -> null
+                }
                 if (tracker != null) {
                     moveIncomingTrackerToOnMyMap(item)
                     setRowState(row, key, RowState.ADDED_CHECK)
@@ -526,7 +555,7 @@ class DiscoverTrackersFragment : Fragment() {
         deleteBtn.setOnClickListener {
             if (rowStates[key] != RowState.ADDED_DELETE) return@setOnClickListener
             viewLifecycleOwner.lifecycleScope.launch {
-                val result = TrackerRepository.unsubscribeTrackerResultSuspend(requireContext(), item.id)
+                val result = trackerManagementRepository.unsubscribeTracker(item.id)
                 if (result is RepositoryResult.Success) {
                     removeRowAndMaybeHideSection(parent, row, sectionHeader, parent)
                 } else {

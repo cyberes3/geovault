@@ -22,16 +22,18 @@ class LoadGroupMapUseCaseTest {
         val repository = FakeTrackRepository()
         val useCase = LoadGroupMapUseCase(repository)
 
-        val snapshot = runBlocking {
+        val result = runBlocking {
             useCase.execute(
                 group = Group(id = "g1", name = "Group 1", track_ids = emptyList()),
                 zoomToTrackerId = null
             )
         }
+        val snapshot = result.snapshot
 
         assertTrue(snapshot.trackers.isEmpty())
         assertTrue(snapshot.coordsByTrackerId.isEmpty())
         assertFalse(snapshot.fitBounds)
+        assertFalse(result.hadFailures)
     }
 
     @Test
@@ -49,17 +51,19 @@ class LoadGroupMapUseCaseTest {
         )
         val useCase = LoadGroupMapUseCase(repository)
 
-        val snapshot = runBlocking {
+        val result = runBlocking {
             useCase.execute(
                 group = Group(id = "g2", name = "Group 2", track_ids = listOf("a", "c")),
                 zoomToTrackerId = "c"
             )
         }
+        val snapshot = result.snapshot
 
         assertEquals(listOf("a", "c"), snapshot.trackers.map { it.id })
         assertEquals(2, snapshot.coordsByTrackerId.size)
         assertTrue(snapshot.fitBounds)
         assertEquals("c", snapshot.fitToTrackerId)
+        assertFalse(result.hadFailures)
     }
 
     private class FakeTrackRepository(

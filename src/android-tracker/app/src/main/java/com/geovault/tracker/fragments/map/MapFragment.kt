@@ -199,7 +199,7 @@ class MapFragment : Fragment() {
     private var standaloneLocationClient: UnifiedLocationClient? = null
     private var standaloneLocationSessionRunning = false
 
-    private val liveStreamCoordinator = MapLiveStreamCoordinator(lifecycleScope)
+    private var liveStreamCoordinator: MapLiveStreamCoordinator? = null
     private var mapCommandsJob: Job? = null
     private var lastPausedElapsedRealtimeMs: Long? = null
     private var pendingResumeCameraZoom: Double? = null
@@ -292,7 +292,13 @@ class MapFragment : Fragment() {
             MapLockMode.TRACKER_FOLLOW -> {
                 val target = when {
                     command.lockTargetLat != null && command.lockTargetLon != null -> {
-                        LatLng(command.lockTargetLat, command.lockTargetLon)
+                        val targetLat = command.lockTargetLat
+                        val targetLon = command.lockTargetLon
+                        if (targetLat == null || targetLon == null) {
+                            null
+                        } else {
+                            LatLng(targetLat, targetLon)
+                        }
                     }
                     lockTarget != null -> lockTarget
                     else -> resolveSingleTrackerCameraTarget()
@@ -356,7 +362,7 @@ class MapFragment : Fragment() {
     }
 
     private fun scheduleDebouncedMultiTrackRender() {
-        liveStreamCoordinator.scheduleMultiTrackRender(MapConstants.MULTI_TRACK_RENDER_DEBOUNCE_MS) stream@{
+        liveStreamCoordinator?.scheduleMultiTrackRender(MapConstants.MULTI_TRACK_RENDER_DEBOUNCE_MS) stream@{
             if (!isAdded || !(showAllTrackers || mapViewContext == MapViewContext.GROUP)) return@stream
             val state = allTrackersState ?: return@stream
             val map = maplibreMap ?: return@stream
@@ -374,13 +380,13 @@ class MapFragment : Fragment() {
     }
 
     private fun scheduleDebouncedSingleLiveFit() {
-        liveStreamCoordinator.scheduleSingleLiveFit(MapConstants.SINGLE_LIVE_FIT_DEBOUNCE_MS) {
+        liveStreamCoordinator?.scheduleSingleLiveFit(MapConstants.SINGLE_LIVE_FIT_DEBOUNCE_MS) {
             applySingleTrackerLiveFitNow()
         }
     }
 
     private fun clearMultiTrackContextState(clearPendingGroupIntent: Boolean = true) {
-        liveStreamCoordinator.clearAll()
+        liveStreamCoordinator?.clearAll()
         multiTrackCoordsCache.clear()
         allTrackersState = null
         activeCameraIntent = CameraIntent.NONE
@@ -405,6 +411,7 @@ class MapFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        liveStreamCoordinator = MapLiveStreamCoordinator(viewLifecycleOwner.lifecycleScope)
 
         mapLoadingOverlay = view.findViewById(R.id.mapLoadingOverlay)
         mapLoadingSpinner = view.findViewById(R.id.mapLoadingSpinner)
@@ -874,6 +881,8 @@ class MapFragment : Fragment() {
         styleReloadListener = null
         mapFragment?.setCallback(null)
         mapFragment = null
+        liveStreamCoordinator?.clearAll()
+        liveStreamCoordinator = null
         mapManager = null
         maplibreMap = null
         mapReady = false
@@ -930,8 +939,9 @@ class MapFragment : Fragment() {
         )
         setMapLockState(decision.lockState)
 
-        if (decision.followTarget != null) {
-            reduceLock(MapLockEvent.RecenterTrackerFollow(decision.followTarget))
+        val followTarget = decision.followTarget
+        if (followTarget != null) {
+            reduceLock(MapLockEvent.RecenterTrackerFollow(followTarget))
             if (resumeCameraZoom != null) {
                 // Preserve user-selected zoom when returning to map with follow lock still enabled.
                 reduceLock(MapLockEvent.CompleteTrackerInitialZoom(reachedTargetZoom = true))
@@ -939,7 +949,7 @@ class MapFragment : Fragment() {
                     map = map,
                     update = CameraUpdateFactory.newCameraPosition(
                         CameraPosition.Builder()
-                            .target(decision.followTarget)
+                            .target(followTarget)
                             .zoom(resumeCameraZoom)
                             .build()
                     ),
@@ -948,7 +958,7 @@ class MapFragment : Fragment() {
                     animate = false
                 )
             } else {
-                centerCameraOnTrackLocked(decision.followTarget)
+                centerCameraOnTrackLocked(followTarget)
             }
         }
         if (decision.shouldTrackGpsCamera) {
@@ -2156,7 +2166,7 @@ class MapFragment : Fragment() {
     private fun disableLiveActiveFitForManualCameraInteraction() {
         if (!liveActiveFitEnabled) return
         reduceLock(MapLockEvent.DisableLiveFit)
-        liveStreamCoordinator.cancelSingleLiveFit()
+        liveStreamCoordinator?.cancelSingleLiveFit()
         if (activeCameraIntent == CameraIntent.SINGLE_TRACKER_FOCUS) {
             activeCameraIntent = CameraIntent.NONE
         }
@@ -2318,7 +2328,8 @@ class MapFragment : Fragment() {
                 }
                 val feature = MapTapSelectionHandler.selectNearestFeature(map, point, features) ?: return@addOnMapClickListener false
                 val selected = selectedMapTrackerFromFeature(feature) ?: return@addOnMapClickListener false
-                if (selected.lastUpdateMs != null) lastKnownUpdateTimeMsByTrackerId[selected.id] = selected.lastUpdateMs
+                val selectedLastUpdateMs = selected.lastUpdateMs
+                if (selectedLastUpdateMs != null) lastKnownUpdateTimeMsByTrackerId[selected.id] = selectedLastUpdateMs
                 selectedMapTracker = selected
                 updateMapSelectionUi()
                 return@addOnMapClickListener true
@@ -2336,7 +2347,8 @@ class MapFragment : Fragment() {
                 val geom = feature.geometry()
                 if (geom is Point) {
                     val sel = selectedMapTrackerFromDisplayedState(geom.latitude(), geom.longitude())
-                    if (sel.lastUpdateMs != null) lastKnownUpdateTimeMsByTrackerId[sel.id] = sel.lastUpdateMs
+                    val selectedLastUpdateMs = sel.lastUpdateMs
+                    if (selectedLastUpdateMs != null) lastKnownUpdateTimeMsByTrackerId[sel.id] = selectedLastUpdateMs
                     selectedMapTracker = sel
                     updateMapSelectionUi()
                     return@addOnMapClickListener true
@@ -2347,7 +2359,8 @@ class MapFragment : Fragment() {
                 val last = trackPoints.last()
                 if (MapTapSelectionHandler.isTapNearPoint(map, latLng, last, MapConstants.TAP_NEAR_POINT_PX)) {
                     val sel = selectedMapTrackerFromDisplayedState(last.latitude, last.longitude)
-                    if (sel.lastUpdateMs != null) lastKnownUpdateTimeMsByTrackerId[sel.id] = sel.lastUpdateMs
+                    val selectedLastUpdateMs = sel.lastUpdateMs
+                    if (selectedLastUpdateMs != null) lastKnownUpdateTimeMsByTrackerId[sel.id] = selectedLastUpdateMs
                     selectedMapTracker = sel
                     updateMapSelectionUi()
                     return@addOnMapClickListener true

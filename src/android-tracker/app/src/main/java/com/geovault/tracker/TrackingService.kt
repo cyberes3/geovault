@@ -446,11 +446,12 @@ class TrackingService : TrackPointServiceBase() {
 
         consecutiveBadAccuracyPoints = 0
         isWaitingForGpsLock = false
+        val canonicalEvent = decision.canonicalEvent ?: return
         val smoothedLocation = Location(location).apply {
-            latitude = decision.canonicalEvent.lat
-            longitude = decision.canonicalEvent.lon
-            time = decision.canonicalEvent.timestampMs
-            decision.canonicalEvent.accuracyMeters?.let { accuracy = it }
+            latitude = canonicalEvent.lat
+            longitude = canonicalEvent.lon
+            time = canonicalEvent.timestampMs
+            canonicalEvent.accuracyMeters?.let { accuracy = it }
         }
         
         Log.d(TAG, "Location received: ${smoothedLocation.latitude}, ${smoothedLocation.longitude}")
@@ -495,7 +496,7 @@ class TrackingService : TrackPointServiceBase() {
 
         lastLocation = smoothedLocation
 
-        broadcastTrackPoint(smoothedLocation, decision.canonicalEvent)
+        broadcastTrackPoint(smoothedLocation, canonicalEvent)
 
         serviceScope.launch {
             val queued = QueuedLocation.fromLocation(smoothedLocation, totalDistanceMeters)
@@ -634,8 +635,13 @@ class TrackingService : TrackPointServiceBase() {
                         lastPointSentAtMs = System.currentTimeMillis()
                         syncRuntimeStateStore()
                         broadcastSessionStats()
-                        database.locationDao().delete(batch)
-                        releaseClaimedBatch(batch)
+                        withContext(NonCancellable) {
+                            try {
+                                database.locationDao().delete(batch)
+                            } finally {
+                                releaseClaimedBatch(batch)
+                            }
+                        }
                         batchesSent++
                     } else {
                         releaseClaimedBatch(batch)

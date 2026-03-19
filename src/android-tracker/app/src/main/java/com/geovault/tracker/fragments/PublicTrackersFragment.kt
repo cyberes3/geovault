@@ -23,10 +23,14 @@ import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.TrackerRepository
+import com.geovault.tracker.data.GroupManagementRepository
+import com.geovault.tracker.data.TrackerManagementRepository
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class PublicTrackersFragment : Fragment() {
 
     private enum class RowState { IDLE, ADDING, ADDED_CHECK, ADDED_DELETE }
@@ -41,6 +45,12 @@ class PublicTrackersFragment : Fragment() {
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var listContainer: LinearLayout
     private lateinit var searchInput: EditText
+
+    @Inject
+    lateinit var trackerManagementRepository: TrackerManagementRepository
+
+    @Inject
+    lateinit var groupManagementRepository: GroupManagementRepository
 
     private val rowStates = mutableMapOf<String, RowState>()
     private val handler = Handler(Looper.getMainLooper())
@@ -89,10 +99,10 @@ class PublicTrackersFragment : Fragment() {
 
     private fun loadPublic(forceRefresh: Boolean, fromSwipeRefresh: Boolean) {
         viewLifecycleOwner.lifecycleScope.launch {
-            val response = TrackerRepository.getAvailableToAddSuspend(
-                requireContext(),
-                forceRefresh = forceRefresh
-            )
+            val response = when (val result = trackerManagementRepository.loadAvailableToAdd(forceRefresh = forceRefresh)) {
+                is RepositoryResult.Success -> result.data
+                is RepositoryResult.Failure -> null
+            }
             if (!isAdded) return@launch
             swipeRefresh.isRefreshing = false
             if (response == null) {
@@ -216,7 +226,10 @@ class PublicTrackersFragment : Fragment() {
             if (rowStates[key] != RowState.IDLE) return@setOnClickListener
             setRowState(row, key, RowState.ADDING)
             viewLifecycleOwner.lifecycleScope.launch {
-                val tracker = TrackerRepository.subscribeTrackerSuspend(requireContext(), item.id)
+                val tracker = when (val result = trackerManagementRepository.subscribeTracker(item.id)) {
+                    is RepositoryResult.Success -> result.data
+                    is RepositoryResult.Failure -> null
+                }
                 if (!isAdded) return@launch
                 if (tracker != null) {
                     setRowState(row, key, RowState.ADDED_CHECK)
@@ -232,7 +245,7 @@ class PublicTrackersFragment : Fragment() {
         deleteBtn.setOnClickListener {
             if (rowStates[key] != RowState.ADDED_DELETE) return@setOnClickListener
             viewLifecycleOwner.lifecycleScope.launch {
-                val result = TrackerRepository.unsubscribeTrackerResultSuspend(requireContext(), item.id)
+                val result = trackerManagementRepository.unsubscribeTracker(item.id)
                 if (!isAdded) return@launch
                 if (result is RepositoryResult.Success) {
                     publicTrackersData = publicTrackersData.filter { it.id != item.id }
@@ -277,11 +290,9 @@ class PublicTrackersFragment : Fragment() {
                 val addedTrackers = mutableListOf<Tracker>()
                 var failed = false
                 for (trackId in trackIds) {
-                    val tracker = TrackerRepository.subscribeTrackerSuspend(requireContext(), trackId)
-                    if (tracker == null) {
-                        failed = true
-                    } else {
-                        addedTrackers.add(tracker)
+                    when (val result = trackerManagementRepository.subscribeTracker(trackId)) {
+                        is RepositoryResult.Success -> addedTrackers.add(result.data)
+                        is RepositoryResult.Failure -> failed = true
                     }
                 }
                 if (!isAdded) return@launch
@@ -299,7 +310,7 @@ class PublicTrackersFragment : Fragment() {
         deleteBtn.setOnClickListener {
             if (rowStates[key] != RowState.ADDED_DELETE) return@setOnClickListener
             viewLifecycleOwner.lifecycleScope.launch {
-                val result = TrackerRepository.leaveGroupResultSuspend(requireContext(), group.id)
+                val result = groupManagementRepository.leaveGroup(group.id)
                 if (!isAdded) return@launch
                 if (result is RepositoryResult.Success) {
                     publicGroupsData = publicGroupsData.filter { it.id != group.id }
