@@ -149,8 +149,8 @@ internal object MapZoomOrchestrator {
             durationMs: Int,
             callback: MapLibreMap.CancelableCallback?
         ) -> Unit
-    ) {
-        val target = MapDataLoader.resolveSingleTrackerZoomTarget(trackPoints, fallbackLastPoint) ?: return
+    ): Boolean {
+        val target = MapDataLoader.resolveSingleTrackerZoomTarget(trackPoints, fallbackLastPoint) ?: return false
         applyMove(
             CameraUpdateFactory.newLatLngZoom(target, followLockTargetZoom),
             CameraPaddingMode.CENTERED,
@@ -159,6 +159,7 @@ internal object MapZoomOrchestrator {
             MapConstants.FOLLOW_LOCK_ANIMATION_MS,
             null
         )
+        return true
     }
 
     fun moveCameraToFitBoundsWithMinZoomClamp(

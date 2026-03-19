@@ -295,7 +295,7 @@ class MapFragment : Fragment() {
                         LatLng(command.lockTargetLat, command.lockTargetLon)
                     }
                     lockTarget != null -> lockTarget
-                    else -> trackPoints.lastOrNull()
+                    else -> resolveSingleTrackerCameraTarget()
                 }
                 if (target == null) {
                     MapLockState.None
@@ -537,9 +537,11 @@ class MapFragment : Fragment() {
                     val loc = lastStandaloneLocation
                     if (loc != null) consumePendingStandaloneAutoZoom(loc, animate = true)
                 }
-                if (zoomToTrackAfterLoad && trackPoints.isNotEmpty()) {
-                    zoomToLatestTrackPoint(map)
-                    zoomToTrackAfterLoad = false
+                if (zoomToTrackAfterLoad) {
+                    val zoomApplied = zoomToLatestTrackPoint(map, displayedTracker?.last_point)
+                    if (zoomApplied) {
+                        zoomToTrackAfterLoad = false
+                    }
                 }
                 val (deferredGroup, deferredZoom) = navHost()?.getAndClearInitialGroupAndZoomForMap() ?: Pair(null, null)
                 if (deferredGroup != null) {
@@ -573,6 +575,7 @@ class MapFragment : Fragment() {
                     consumePendingInitialTrackForMap()
                     return
                 }
+                reapplySingleTrackerCameraStateOnMapReady()
                 // Basemap switch should keep currently rendered single-tracker tail visible.
                 // If we already have points, avoid kicking the full history refetch path.
                 if (trackPoints.isNotEmpty() && !displayedTrackerId.isNullOrEmpty()) {
@@ -1673,8 +1676,8 @@ class MapFragment : Fragment() {
     /**
      * Single-tracker open behavior: zoom to latest point (chevron), not full-history extent.
      */
-    private fun zoomToLatestTrackPoint(map: MapLibreMap, fallbackLastPoint: List<Double>? = null) {
-        MapZoomOrchestrator.zoomToLatestTrackPoint(
+    private fun zoomToLatestTrackPoint(map: MapLibreMap, fallbackLastPoint: List<Double>? = null): Boolean {
+        return MapZoomOrchestrator.zoomToLatestTrackPoint(
             trackPoints = trackPoints,
             fallbackLastPoint = fallbackLastPoint,
             followLockTargetZoom = MapConstants.FOLLOW_LOCK_TARGET_ZOOM
@@ -1689,6 +1692,24 @@ class MapFragment : Fragment() {
                 callback = callback
             )
         }
+    }
+
+    private fun resolveSingleTrackerCameraTarget(
+        fallbackLastPoint: List<Double>? = displayedTracker?.last_point
+    ): LatLng? {
+        return MapDataLoader.resolveSingleTrackerZoomTarget(
+            trackPoints = trackPoints,
+            fallbackLastPoint = fallbackLastPoint
+        )
+    }
+
+    private fun reapplySingleTrackerCameraStateOnMapReady() {
+        if (showAllTrackers || mapViewContext != MapViewContext.SINGLE_TRACKER) return
+        if (showMyLocationEnabled) return
+        val followState = mapLockState as? MapLockState.TrackerFollow ?: return
+        val target = resolveSingleTrackerCameraTarget() ?: followState.target
+        reduceLock(MapLockEvent.RecenterTrackerFollow(target))
+        centerCameraOnTrackLocked(target, forceZoomIn = followState.needsInitialZoom)
     }
 
     private fun moveCameraForAllTrackersWithMinZoom(
@@ -2665,8 +2686,9 @@ class MapFragment : Fragment() {
             val allowTrackerCameraMoveInMyLocation =
                 activeCameraIntent == CameraIntent.SINGLE_TRACKER_FOCUS ||
                     activeCameraIntent == CameraIntent.GROUP_MEMBER_FOCUS
+            val singleTrackerTarget = resolveSingleTrackerCameraTarget(fallbackLastPoint = tracker.last_point)
             var zoomApplied = false
-            if (map != null && trackPoints.isNotEmpty() &&
+            if (map != null && singleTrackerTarget != null &&
                 (!showMyLocationEnabled || allowTrackerCameraMoveInMyLocation)
             ) {
                 zoomToLatestTrackPoint(map, tracker.last_point)
@@ -2675,12 +2697,10 @@ class MapFragment : Fragment() {
             if (zoomApplied) {
                 zoomToTrackAfterLoad = false
             }
-            if (!showAllTrackers && trackPoints.isNotEmpty() && !showMyLocationEnabled) {
+            if (!showAllTrackers && singleTrackerTarget != null && !showMyLocationEnabled) {
                 disableLiveActiveFitForFollowLock()
-                trackPoints.lastOrNull()?.let { target ->
-                    reduceLock(MapLockEvent.EnableTrackerFollow(target = target, needsInitialZoom = true))
-                }
-                lockTarget?.let { centerCameraOnTrackLocked(it, forceZoomIn = true) }
+                reduceLock(MapLockEvent.EnableTrackerFollow(target = singleTrackerTarget, needsInitialZoom = true))
+                centerCameraOnTrackLocked(singleTrackerTarget, forceZoomIn = true)
                 updateFollowLockButton()
             }
         }
