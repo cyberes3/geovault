@@ -17,6 +17,7 @@ import com.geovault.common.RetrofitClient
 import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.location.NetworkStatusMonitor
+import com.geovault.tracker.location.AutoTrackingMotionEngine
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.location.TrackingControlEvent
 import com.geovault.tracker.location.TrackingControlPlane
@@ -34,11 +35,11 @@ import com.geovault.tracker.pipeline.TrackPointRejectReason
 import com.geovault.tracker.pipeline.TrackPointSource
 import com.geovault.tracker.pipeline.TrackPointServiceBase
 import com.geovault.tracker.services.TrackingRuntimeStateStore
+import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
 import com.geovault.tracker.sensor.SignificantMotionResumeBridge
 import com.geovault.tracker.settings.TrackerSettings
 import com.geovault.tracker.settings.TrackerSettingsRepository
-import com.geovault.tracker.settings.TrackerTrackingProfile
 import com.google.android.gms.location.*
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
@@ -209,9 +210,10 @@ class TrackingService : TrackPointServiceBase() {
     private var controlState: TrackingControlState = TrackingControlState()
     private var consecutivePushFailures = 0
     private var lastSyncFailureClass = SyncFailureClass.NONE
-    
-    private var currentActiveProfileIndex = -1
-    private var lastSpeedMps: Float = 0f
+
+    private val autoTrackingMotionEngine = AutoTrackingMotionEngine()
+    private var lastSpeedReferenceLocation: Location? = null
+    private var autoModeTickJob: Job? = null
     private var currentSettings: TrackerSettings = TrackerSettings()
 
     @Inject
@@ -223,6 +225,7 @@ class TrackingService : TrackPointServiceBase() {
         database = AppDatabase.getDatabase(this)
         unifiedLocationClient = UnifiedLocationClient(this)
         currentSettings = settingsRepository.getSettings()
+        autoTrackingMotionEngine.reset(System.currentTimeMillis())
         val significantMotionTrigger = SensorManagerSignificantMotionTrigger(applicationContext)
         significantMotionBridge = SignificantMotionResumeBridge(significantMotionTrigger) {
             Log.d(TAG, "Significant motion detected, resuming GPS")
@@ -323,10 +326,12 @@ class TrackingService : TrackPointServiceBase() {
         consecutiveStationaryPoints = 0
         consecutiveBadAccuracyPoints = 0
         lastLocation = null
-        currentActiveProfileIndex = if (currentSettings.autoTrackingMode) {
-            currentSettings.trackingProfile.index
+        lastSpeedReferenceLocation = null
+        if (currentSettings.autoTrackingMode) {
+            autoTrackingMotionEngine.reset(System.currentTimeMillis())
+            startAutoModeTickIfNeeded()
         } else {
-            -1
+            stopAutoModeTick()
         }
         if (!applyCurrentLocationRequest("start_tracking")) {
             failActiveTracking(getString(R.string.unable_to_start_location_updates))
@@ -362,6 +367,7 @@ class TrackingService : TrackPointServiceBase() {
         settingsRepository.clearWasTrackingBeforeExit()
         unifiedLocationClient.stopSession()
         significantMotionBridge?.cancel()
+        stopAutoModeTick()
         stopPreflightMonitor()
         stopRetryJob()
         backlogUploaderJob?.cancel()
@@ -384,6 +390,7 @@ class TrackingService : TrackPointServiceBase() {
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (selectedTrackerId.isEmpty()) return
         val nowMs = System.currentTimeMillis()
+        val observedSpeedMps = resolveObservedSpeedMps(location, lastSpeedReferenceLocation)
         val normalizedTimestampMs = CanonicalTimeNormalizer.normalizeTimestampMs(location.time, nowMs)
         val timestampSkewMs = kotlin.math.abs(normalizedTimestampMs - nowMs)
         val isMockLocation = LocationCompat.isMock(location)
@@ -440,6 +447,16 @@ class TrackingService : TrackPointServiceBase() {
                     updateNotificationCount()
                 }
             }
+            if (currentSettings.autoTrackingMode) {
+                processAutoTrackingOutput(
+                    autoTrackingMotionEngine.onRejectedFix(
+                        speedMpsHint = observedSpeedMps,
+                        eventTimeMs = nowMs
+                    ),
+                    reason = "rejected_fix"
+                )
+            }
+            lastSpeedReferenceLocation = Location(location)
             broadcastSessionStats()
             return
         }
@@ -473,28 +490,19 @@ class TrackingService : TrackPointServiceBase() {
         sessionTotalDistanceMeters = totalDistanceMeters
         syncRuntimeStateStore()
         
-        // Auto-profile switching logic
+        // Auto-mode transition logic
         if (currentSettings.autoTrackingMode) {
-            val speed = if (location.hasSpeed()) location.speed else {
-                // Fallback to calculated speed if hardware speed is missing
-                val dist = lastLocation?.distanceTo(location) ?: 0f
-                val timeSec = (location.time - (lastLocation?.time ?: location.time)) / 1000f
-                if (timeSec > 0) dist / timeSec else 0f
-            }
-            
-            // Simple smoothing for auto-mode speed detection
-            lastSpeedMps = (0.7f * lastSpeedMps) + (0.3f * speed)
-            
-            val recommended = TrackingLocationPolicy.getRecommendedProfile(lastSpeedMps, currentActiveProfileIndex)
-            if (recommended != currentActiveProfileIndex) {
-                Log.d(TAG, "Auto-switching profile from $currentActiveProfileIndex to $recommended (speed: ${lastSpeedMps}m/s)")
-                currentActiveProfileIndex = recommended
-                settingsRepository.setTrackingProfile(TrackerTrackingProfile.fromIndex(recommended))
-                reapplyLocationRequestIfActive("auto_profile_switch")
-            }
+            processAutoTrackingOutput(
+                autoTrackingMotionEngine.onAcceptedFix(
+                    speedMps = observedSpeedMps ?: 0f,
+                    eventTimeMs = nowMs
+                ),
+                reason = "accepted_fix"
+            )
         }
 
         lastLocation = smoothedLocation
+        lastSpeedReferenceLocation = Location(location)
 
         broadcastTrackPoint(smoothedLocation, canonicalEvent)
 
@@ -763,6 +771,8 @@ class TrackingService : TrackPointServiceBase() {
                 lifecycleState = controlState.lifecycleState,
                 failureReason = controlState.failureReason,
                 gpsProviderEnabled = unifiedLocationClient.isGpsProviderEnabled(),
+                autoTrackingEnabled = currentSettings.autoTrackingMode,
+                activeMotionMode = resolveRuntimeMotionMode(),
                 sessionStartTimeMs = sessionStartTimeMs,
                 pointsSentThisSession = pointsSentThisSession,
                 lastPointSentAtMs = lastPointSentAtMs,
@@ -827,6 +837,7 @@ class TrackingService : TrackPointServiceBase() {
     override fun onDestroy() {
         super.onDestroy()
         significantMotionBridge?.cancel()
+        stopAutoModeTick()
         stopPreflightMonitor()
         stopRetryJob()
         serviceScope.cancel()
@@ -916,10 +927,14 @@ class TrackingService : TrackPointServiceBase() {
     private fun pauseGps() {
         if (!isGpsPaused && isTracking) {
             isGpsPaused = true
+            if (currentSettings.autoTrackingMode) {
+                autoTrackingMotionEngine.onGpsPaused(System.currentTimeMillis())
+            }
             unifiedLocationClient.stopSession()
             significantMotionBridge?.request()
             sigMotionSensorStartTime = System.currentTimeMillis()
             startSensorWatchdog()
+            syncRuntimeStateStore()
             updateNotificationCount()
         }
     }
@@ -945,13 +960,16 @@ class TrackingService : TrackPointServiceBase() {
             isGpsPaused = false
             isWaitingForGpsLock = false
             consecutiveStationaryPoints = 0
-            lastSpeedMps = 0f
+            if (currentSettings.autoTrackingMode) {
+                autoTrackingMotionEngine.onGpsResumed(System.currentTimeMillis())
+            }
             watchdogJob?.cancel()
 
             if (!applyCurrentLocationRequest("resume_gps")) {
                 failActiveTracking(getString(R.string.location_permission_revoked))
                 return
             }
+            syncRuntimeStateStore()
             updateNotificationCount()
         }
     }
@@ -986,12 +1004,11 @@ class TrackingService : TrackPointServiceBase() {
     private fun resolveCurrentIntervalAndDistance(): Pair<Long, Float> {
         val isAuto = currentSettings.autoTrackingMode
         if (isAuto) {
-            // currentActiveProfileIndex is set when tracking starts and updated by in-run auto profile switching.
-            val params = TrackingLocationPolicy.getProfileParams(currentActiveProfileIndex)
+            val autoMode = autoTrackingMotionEngine.snapshot().mode
+            val params = TrackingLocationPolicy.getProfileParams(autoMode.profileIndex)
             return params.first to params.second
         }
 
-        currentActiveProfileIndex = -1
         return currentSettings.loggingIntervalSec to currentSettings.distanceFilterMeters
     }
 
@@ -1020,7 +1037,7 @@ class TrackingService : TrackPointServiceBase() {
         if (!started) return false
         Log.d(
             TAG,
-            "Applied LocationRequest ($reason): interval=${intervalSec}s, distance=${distanceFilter}m, profile=$currentActiveProfileIndex, auto=${currentSettings.autoTrackingMode}"
+            "Applied LocationRequest ($reason): interval=${intervalSec}s, distance=${distanceFilter}m, mode=${autoTrackingMotionEngine.snapshot().mode}, auto=${currentSettings.autoTrackingMode}"
         )
         return true
     }
@@ -1031,6 +1048,65 @@ class TrackingService : TrackPointServiceBase() {
         if (!applied) {
             failActiveTracking(getString(R.string.location_permission_revoked))
         }
+    }
+
+    private fun startAutoModeTickIfNeeded() {
+        if (!isTracking || !currentSettings.autoTrackingMode) return
+        if (autoModeTickJob?.isActive == true) return
+        autoModeTickJob = serviceScope.launch {
+            while (isActive && isTracking && currentSettings.autoTrackingMode) {
+                delay(5_000L)
+                processAutoTrackingOutput(
+                    autoTrackingMotionEngine.onTick(System.currentTimeMillis()),
+                    reason = "periodic_decay_tick"
+                )
+            }
+        }
+    }
+
+    private fun stopAutoModeTick() {
+        autoModeTickJob?.cancel()
+        autoModeTickJob = null
+    }
+
+    private fun processAutoTrackingOutput(
+        output: com.geovault.tracker.location.AutoTrackingEngineOutput,
+        reason: String
+    ) {
+        if (output.modeChanged) {
+            Log.d(
+                TAG,
+                "Auto-mode transition ($reason): mode=${output.state.mode}, speed=${output.state.smoothedSpeedMps}m/s"
+            )
+            reapplyLocationRequestIfActive("auto_mode_$reason")
+        }
+        syncRuntimeStateStore()
+    }
+
+    private fun resolveRuntimeMotionMode(): TrackingMotionMode {
+        if (currentSettings.autoTrackingMode) {
+            return autoTrackingMotionEngine.snapshot().mode
+        }
+        return when (currentSettings.trackingProfile.index) {
+            0 -> TrackingMotionMode.WALKING
+            1 -> TrackingMotionMode.BIKING
+            2 -> TrackingMotionMode.DRIVING
+            else -> TrackingMotionMode.BIKING
+        }
+    }
+
+    private fun resolveObservedSpeedMps(
+        location: Location,
+        referenceLocation: Location?
+    ): Float? {
+        if (location.hasSpeed()) {
+            return location.speed.coerceAtLeast(0f)
+        }
+        val previous = referenceLocation ?: return null
+        val elapsedSec = (location.time - previous.time) / 1000f
+        if (elapsedSec <= 0f) return null
+        val distanceMeters = previous.distanceTo(location)
+        return (distanceMeters / elapsedSec).coerceAtLeast(0f)
     }
 
     private fun trimQueuedLocationsRetention() {

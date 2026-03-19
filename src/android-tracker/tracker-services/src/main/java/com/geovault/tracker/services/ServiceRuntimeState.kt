@@ -5,11 +5,31 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+enum class TrackingMotionMode(val profileIndex: Int) {
+    WALKING(0),
+    BIKING(1),
+    DRIVING(2);
+
+    companion object {
+        @JvmStatic
+        fun fromProfileIndex(profileIndex: Int): TrackingMotionMode {
+            return when (profileIndex) {
+                WALKING.profileIndex -> WALKING
+                BIKING.profileIndex -> BIKING
+                DRIVING.profileIndex -> DRIVING
+                else -> WALKING
+            }
+        }
+    }
+}
+
 data class TrackingRuntimeSnapshot(
     val isRunning: Boolean = false,
     val lifecycleState: TrackingLifecycleState = TrackingLifecycleState.STOPPED,
     val failureReason: String? = null,
     val gpsProviderEnabled: Boolean = true,
+    val autoTrackingEnabled: Boolean = false,
+    val activeMotionMode: TrackingMotionMode = TrackingMotionMode.WALKING,
     val sessionStartTimeMs: Long = 0L,
     val pointsSentThisSession: Int = 0,
     val lastPointSentAtMs: Long = 0L,

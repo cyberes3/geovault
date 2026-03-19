@@ -18,6 +18,7 @@ import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.TrackingService
+import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.google.android.material.button.MaterialButton
@@ -247,18 +248,16 @@ class HomeFragment : Fragment() {
 
     private fun updateDebugTrackMode() {
         if (!::debugTrackModeText.isInitialized) return
-        val settings = settingsRepository.getSettings()
-        val autoEnabled = settings.autoTrackingMode
+        val runtime = trackingSnapshot()
+        val autoEnabled = runtime.autoTrackingEnabled
         if (!autoEnabled) {
             debugTrackModeText.visibility = View.GONE
             return
         }
-        val profileIndex = settings.trackingProfile.index
-        val modeResId = when (profileIndex) {
-            0 -> R.string.profile_walking
-            1 -> R.string.profile_biking
-            2 -> R.string.profile_driving
-            else -> R.string.unknown
+        val modeResId = when (runtime.activeMotionMode) {
+            TrackingMotionMode.WALKING -> R.string.profile_walking
+            TrackingMotionMode.BIKING -> R.string.profile_biking
+            TrackingMotionMode.DRIVING -> R.string.profile_driving
         }
         val modeName = getString(modeResId)
         debugTrackModeText.text = getString(R.string.track_mode_label, modeName)
