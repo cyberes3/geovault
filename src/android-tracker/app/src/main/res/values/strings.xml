@@ -23,7 +23,7 @@
     <string name="no_trackers_found_message">No trackers yet. Create one to start tracking.</string>
     <string name="no_tracker_selected_go_to_settings">No tracker selected. Go to Trackers → tap a tracker → Edit → turn on \"Selected tracker\".</string>
     <string name="tracker_validation_failed_go_to_settings">This tracker is no longer valid. Go to Trackers → Edit → turn on \"Selected tracker\" for another tracker.</string>
-    <string name="default_track_label">Selected Tracker</string>
+    <string name="default_track_label">Selected tracker</string>
     <string name="create_new_tracker">Create New Tracker</string>
     <!-- Must match gv_common_blue_400 (default_tracker_color). Used as hint in new/edit tracker forms. -->
     <string name="default_tracker_color_hex">#6C93DE</string>
@@ -113,7 +113,7 @@
     <string name="live_active_fit_enable">Enable live active tracker fit</string>
     <string name="live_active_fit_disable">Disable live active tracker fit</string>
     <!-- Extended params: when on, sends full data; when off, sends only position + time to minimize data usage -->
-    <string name="extended_params_label">Send Extended Data</string>
+    <string name="extended_params_label">Send extended data</string>
     <string name="no_extended_params_latest_point">No extended parameters for the latest point.</string>
 
     <!-- Logging settings help -->
@@ -123,7 +123,7 @@
 
     <!-- Tracking profiles -->
     <string name="tracking_settings_apply_after_restart">Changes to tracking and logging settings apply the next time you start tracking.</string>
-    <string name="auto_tracking_label">Auto Tracking Mode</string>
+    <string name="auto_tracking_label">Auto tracking mode</string>
     <string name="tracking_profile_label">Tracking Profile</string>
     <string name="profile_walking">Walking</string>
     <string name="profile_biking">Biking</string>
@@ -148,8 +148,8 @@
     <string name="motion_sensor_unavailable_toast">Motion detection isn\'t available on this device</string>
 
     <!-- Restart / start on launch -->
-    <string name="restart_tracking_if_killed_label">Restart Tracking If App Killed While Tracking</string>
-    <string name="start_tracking_on_launch_label">Start Tracking When App Is Launched</string>
+    <string name="restart_tracking_if_killed_label">Restart tracking if app killed while tracking</string>
+    <string name="start_tracking_on_launch_label">Start tracking when app is launched</string>
     <string name="resuming_tracking">Resuming tracking</string>
     <string name="tracking_started">Tracking started</string>
     <string name="status_tracking">Tracking location</string>
@@ -316,7 +316,7 @@
     <string name="group_delete_confirm_title">Delete Group?</string>
     <string name="group_delete_confirm_message">This cannot be undone. Members will lose access.</string>
     <string name="no_groups">No groups. Create one to organize trackers.</string>
-    <string name="hide_in_list_label">Hide in List</string>
+    <string name="hide_in_list_label">Hide in list</string>
     <string name="hide_in_list_hint">When on, this group is hidden from the Groups list. You can unhide it in Settings.</string>
     <string name="view_group">View Group</string>
     <string name="view_group_on_map">View Group on Map</string>
