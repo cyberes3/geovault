@@ -133,6 +133,7 @@
     <string name="profile_biking">Biking</string>
     <string name="profile_driving">Driving</string>
     <string name="profile_custom">Custom</string>
+    <string name="profile_auto">AUTO</string>
     
     <!-- Permissions -->
     <string name="permissions_required_title">Permissions Required</string>

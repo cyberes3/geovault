@@ -244,12 +244,27 @@ class SettingsFragment : Fragment() {
         val isImperial = com.geovault.common.UnitUtils.usesImperialUnitsDefault(requireContext())
         updateUnitLabels(isImperial)
 
-        updateNumericEditFromState(intervalEdit, settings.loggingIntervalSec.toString())
-        updateNumericEditFromState(distanceEdit, toDisplay(settings.distanceFilterMeters, isImperial).toString())
-        updateNumericEditFromState(accuracyEdit, toDisplay(settings.accuracyFilterMeters, isImperial).toString())
-
         autoTrackingSwitch.isChecked = settings.autoTrackingMode
         updateAutoTrackingUi(autoTrackingSwitch.isChecked)
+
+        if (settings.autoTrackingMode) {
+            profileSpinner.setText(getString(R.string.profile_auto), false)
+            intervalEdit.setText("")
+            distanceEdit.setText("")
+            accuracyEdit.setText("")
+        } else {
+            updateNumericEditFromState(intervalEdit, settings.loggingIntervalSec.toString())
+            updateNumericEditFromState(distanceEdit, toDisplay(settings.distanceFilterMeters, isImperial).toString())
+            updateNumericEditFromState(accuracyEdit, toDisplay(settings.accuracyFilterMeters, isImperial).toString())
+            selectedProfileIndex = settings.trackingProfile.index
+            val labels = listOf(
+                getString(R.string.profile_walking),
+                getString(R.string.profile_biking),
+                getString(R.string.profile_driving),
+                getString(R.string.profile_custom)
+            )
+            profileSpinner.setText(labels[selectedProfileIndex], false)
+        }
 
         extendedParamsSwitch.isChecked = settings.sendExtendedData
         significantMotionSwitch.isChecked = settings.significantDataOnly
@@ -257,14 +272,6 @@ class SettingsFragment : Fragment() {
         restartTrackingIfKilledSwitch.isChecked = settings.resetTrackingIfKilled
         startTrackingOnLaunchSwitch.isChecked = settings.startTrackingOnLaunch
 
-        selectedProfileIndex = settings.trackingProfile.index
-        val labels = listOf(
-            getString(R.string.profile_walking),
-            getString(R.string.profile_biking),
-            getString(R.string.profile_driving),
-            getString(R.string.profile_custom)
-        )
-        profileSpinner.setText(labels[selectedProfileIndex], false)
         isBindingSettings = false
     }
 
