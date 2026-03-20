@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.content.*
 import android.location.Location
 import android.os.Bundle
+import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
@@ -158,6 +159,9 @@ class MapFragment : Fragment() {
     /** Dirty flag for debounced track line updates. */
     private var trackLineDirty = false
     private var styleReloadListener: MapView.OnDidFinishLoadingStyleListener? = null
+    private val mapUiHandler = Handler(Looper.getMainLooper())
+    private var pendingInitialTrackLoadRunnable: Runnable? = null
+    private var mapCallbackGeneration: Long = 0L
     /** When in group map context, the group being displayed (for "View in list" routing). */
     private var currentGroupForMap: Group? = null
     /** Pending group to apply when map becomes ready (set when refreshMapForGroup is called before maplibreMap is ready). */
@@ -464,8 +468,11 @@ class MapFragment : Fragment() {
                 .commitNow()
         }
         mapFragment = childFragmentManager.findFragmentById(R.id.mapContainer) as? GeoVaultMapFragment
+        val callbackGeneration = ++mapCallbackGeneration
         mapFragment?.setCallback(object : GeoVaultMapFragment.Callback {
             override fun onMapReady(map: MapLibreMap, style: Style) {
+                if (!isAdded || this@MapFragment.view == null) return
+                if (callbackGeneration != mapCallbackGeneration) return
                 maplibreMap = map
                 map.setMinZoomPreference(MapConstants.MIN_ZOOM)
                 mapManager = mapFragment?.mapManager
@@ -883,6 +890,8 @@ class MapFragment : Fragment() {
         // Stop map event ingestion when the view is actually disposed.
         // Keeping the stream alive across onPause prevents background gaps.
         mapFlowViewModel.stopTrackPointStream()
+        mapCallbackGeneration += 1L
+        clearPendingInitialTrackLoad()
         setGpsAccuracyWarningVisible(false)
         styleReloadListener?.let { listener ->
             mapFragment?.mapViewOrNull?.removeOnDidFinishLoadingStyleListener(listener)
@@ -1939,8 +1948,9 @@ class MapFragment : Fragment() {
                 mode = MapScreenMode.Single
             )
         }
+        clearPendingInitialTrackLoad()
         if (isSwitching) {
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            pendingInitialTrackLoadRunnable = Runnable {
                 if (isAdded) {
                     if (loadBootstrapHistory) {
                         mapFlowViewModel.handleIntent(
@@ -1952,7 +1962,8 @@ class MapFragment : Fragment() {
                         )
                     }
                 }
-            }, 50)
+            }
+            mapUiHandler.postDelayed(pendingInitialTrackLoadRunnable!!, 50L)
         } else {
             if (loadBootstrapHistory) {
                 mapFlowViewModel.handleIntent(
@@ -1965,6 +1976,11 @@ class MapFragment : Fragment() {
             }
         }
         return true
+    }
+
+    private fun clearPendingInitialTrackLoad() {
+        pendingInitialTrackLoadRunnable?.let { mapUiHandler.removeCallbacks(it) }
+        pendingInitialTrackLoadRunnable = null
     }
 
     private fun setAnnotationLayersVisibility(visible: Boolean) {

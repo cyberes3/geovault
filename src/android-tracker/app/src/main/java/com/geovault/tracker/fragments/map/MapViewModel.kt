@@ -54,6 +54,8 @@ class MapViewModel @Inject constructor(
     private var streamJob: Job? = null
     private var streamRuntimeJob: Job? = null
     private var managementEventsJob: Job? = null
+    private var mapLoadJob: Job? = null
+    private var latestMapLoadRequestId: Long = 0L
 
     init {
         streamRuntimeJob = viewModelScope.launch {
@@ -104,6 +106,16 @@ class MapViewModel @Inject constructor(
             is MapIntent.LoadGroup -> loadGroup(intent.group, intent.zoomToTrackerId)
         }
     }
+
+    private fun launchLatestMapLoad(block: suspend (requestId: Long) -> Unit) {
+        val requestId = ++latestMapLoadRequestId
+        mapLoadJob?.cancel()
+        mapLoadJob = viewModelScope.launch {
+            block(requestId)
+        }
+    }
+
+    private fun isLatestMapLoad(requestId: Long): Boolean = requestId == latestMapLoadRequestId
 
     fun updateUiState(transform: (MapUiState) -> MapUiState) {
         _uiState.value = transform(_uiState.value)
@@ -211,7 +223,7 @@ class MapViewModel @Inject constructor(
         forceReplace: Boolean,
         mode: SingleTrackerLoadMode
     ) {
-        viewModelScope.launch {
+        launchLatestMapLoad { requestId ->
             _uiState.value = _uiState.value.copy(loading = true, mode = MapScreenMode.Single)
             val snapshot = loadSingleTrackerUseCase.execute(
                 context = getApplication(),
@@ -220,10 +232,11 @@ class MapViewModel @Inject constructor(
                 forceReplace = forceReplace,
                 mode = mode
             )
+            if (!isLatestMapLoad(requestId)) return@launchLatestMapLoad
             if (snapshot == null) {
                 _uiState.value = _uiState.value.copy(loading = false)
                 _commands.tryEmit(MapCommand.ShowError("No tracker selected"))
-                return@launch
+                return@launchLatestMapLoad
             }
 
             _uiState.value = _uiState.value.copy(
@@ -240,7 +253,7 @@ class MapViewModel @Inject constructor(
     }
 
     private fun loadAllTrackers() {
-        viewModelScope.launch {
+        launchLatestMapLoad { requestId ->
             _uiState.value = _uiState.value.copy(
                 loading = true,
                 showAllTrackers = true,
@@ -248,6 +261,7 @@ class MapViewModel @Inject constructor(
                 mode = MapScreenMode.AllTrackers
             )
             val result = loadAllTrackersUseCase.execute()
+            if (!isLatestMapLoad(requestId)) return@launchLatestMapLoad
             _uiState.value = _uiState.value.copy(loading = false)
             _commands.tryEmit(MapCommand.RenderAllTrackers(result.snapshot))
             if (result.hadFailures) {
@@ -258,7 +272,7 @@ class MapViewModel @Inject constructor(
     }
 
     private fun loadGroup(group: Group, zoomToTrackerId: String?) {
-        viewModelScope.launch {
+        launchLatestMapLoad { requestId ->
             _uiState.value = _uiState.value.copy(
                 loading = true,
                 showAllTrackers = true,
@@ -266,6 +280,7 @@ class MapViewModel @Inject constructor(
                 mode = MapScreenMode.GroupMode(group)
             )
             val result = loadGroupMapUseCase.execute(group, zoomToTrackerId)
+            if (!isLatestMapLoad(requestId)) return@launchLatestMapLoad
             _uiState.value = _uiState.value.copy(loading = false)
             _commands.tryEmit(MapCommand.RenderAllTrackers(result.snapshot))
             if (result.hadFailures) {

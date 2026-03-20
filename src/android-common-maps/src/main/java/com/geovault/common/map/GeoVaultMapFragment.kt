@@ -2,6 +2,8 @@ package com.geovault.common.map
 
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -39,6 +41,10 @@ class GeoVaultMapFragment : Fragment(), OnMapReadyCallback, MapView.OnDidFailLoa
     private var mapReady = false
     private var callback: Callback? = null
     private var forceOsmOnly = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var styleLoadWatchdog: Runnable? = null
+    private var styleLoadGeneration: Long = 0L
+    private var styleDeliveredForGeneration = false
 
     fun setCallback(cb: Callback?) {
         callback = cb
@@ -59,12 +65,16 @@ class GeoVaultMapFragment : Fragment(), OnMapReadyCallback, MapView.OnDidFailLoa
 
         mapManager = MapLibreManager(requireActivity(), mapViewRef)
         mapManager.onStyleLoaded = { map, style ->
-            val paddingPx = (DEFAULT_PADDING_DP * resources.displayMetrics.density).toInt()
-            mapManager.defaultPadding = doubleArrayOf(
-                paddingPx.toDouble(), paddingPx.toDouble(),
-                paddingPx.toDouble(), paddingPx.toDouble()
-            )
-            callback?.onMapReady(map, style)
+            if (isAdded && this@GeoVaultMapFragment.view != null) {
+                styleDeliveredForGeneration = true
+                clearStyleLoadWatchdog()
+                val paddingPx = (DEFAULT_PADDING_DP * resources.displayMetrics.density).toInt()
+                mapManager.defaultPadding = doubleArrayOf(
+                    paddingPx.toDouble(), paddingPx.toDouble(),
+                    paddingPx.toDouble(), paddingPx.toDouble()
+                )
+                callback?.onMapReady(map, style)
+            }
         }
 
         val showToggle = arguments?.getBoolean(ARG_SHOW_TOGGLE, true) ?: true
@@ -110,6 +120,8 @@ class GeoVaultMapFragment : Fragment(), OnMapReadyCallback, MapView.OnDidFailLoa
     override fun onDidFailLoadingMap(errorMessage: String) {
         Log.e(TAG, "Map style load failed: $errorMessage")
         if (!isAdded) return
+        styleDeliveredForGeneration = true
+        clearStyleLoadWatchdog()
         val map = _maplibreMap ?: return
         val effectiveId = mapManager.sourceManager.getEffectiveSourceId()
         if (mapManager.sourceManager.isVectorSource(effectiveId)) {
@@ -121,9 +133,13 @@ class GeoVaultMapFragment : Fragment(), OnMapReadyCallback, MapView.OnDidFailLoa
     }
 
     override fun onMapReady(map: MapLibreMap) {
+        if (!isAdded) return
         _maplibreMap = map
         mapReady = true
         mapManager.setupBaseMapSettings(map)
+        styleLoadGeneration += 1L
+        styleDeliveredForGeneration = false
+        scheduleStyleLoadWatchdog(map, styleLoadGeneration)
         if (forceOsmOnly || mapManager.sourcesFetched || GeovaultAuthManager.getServerUrl(requireContext()).isEmpty()) {
             mapManager.applySelectedSource(map)
         }
@@ -158,6 +174,8 @@ class GeoVaultMapFragment : Fragment(), OnMapReadyCallback, MapView.OnDidFailLoa
     }
 
     override fun onDestroyView() {
+        clearStyleLoadWatchdog()
+        mapManager.onStyleLoaded = null
         _mapView?.removeOnDidFailLoadingMapListener(this)
         _mapView?.onDestroy()
         _mapView = null
@@ -174,9 +192,27 @@ class GeoVaultMapFragment : Fragment(), OnMapReadyCallback, MapView.OnDidFailLoa
         fun onMapReady(map: MapLibreMap, style: Style)
     }
 
+    private fun scheduleStyleLoadWatchdog(map: MapLibreMap, generation: Long) {
+        clearStyleLoadWatchdog()
+        styleLoadWatchdog = Runnable {
+            if (!isAdded || view == null) return@Runnable
+            if (generation != styleLoadGeneration) return@Runnable
+            if (styleDeliveredForGeneration) return@Runnable
+            Log.w(TAG, "Map style load timed out; forcing OSM fallback")
+            mapManager.loadOsmFallback(map)
+        }
+        mainHandler.postDelayed(styleLoadWatchdog!!, STYLE_LOAD_TIMEOUT_MS)
+    }
+
+    private fun clearStyleLoadWatchdog() {
+        styleLoadWatchdog?.let { mainHandler.removeCallbacks(it) }
+        styleLoadWatchdog = null
+    }
+
     companion object {
         private const val TAG = "GeoVaultMapFragment"
         private const val DEFAULT_PADDING_DP = 50
+        private const val STYLE_LOAD_TIMEOUT_MS = 5000L
         const val ARG_SHOW_TOGGLE = "gv_common_arg_show_toggle"
         const val ARG_FORCE_OSM_ONLY = "gv_common_arg_force_osm_only"
     }

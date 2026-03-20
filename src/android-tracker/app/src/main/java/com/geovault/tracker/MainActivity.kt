@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.View
 import android.widget.EditText
@@ -73,6 +74,8 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     private var isHandlingTabBack = false
     private val startupRefreshOrchestrator by lazy { StartupRefreshOrchestrator(startupRefreshGateway) }
     private var startupRefreshJob: Job? = null
+    private var isBottomNavTransitionInFlight = false
+    private var lastBottomNavTransitionAtMs: Long = 0L
     override var isServerAccessible = true
         private set
     private var trackingErrorReceiverRegistered = false
@@ -452,30 +455,50 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         action()
     }
 
+    private fun runBottomNavTransition(action: () -> Unit) {
+        val now = SystemClock.elapsedRealtime()
+        if (isBottomNavTransitionInFlight) return
+        val sinceLastMs = now - lastBottomNavTransitionAtMs
+        if (sinceLastMs < BOTTOM_NAV_MIN_INTERVAL_MS) return
+        isBottomNavTransitionInFlight = true
+        lastBottomNavTransitionAtMs = now
+        try {
+            action()
+        } finally {
+            viewPager.post { isBottomNavTransitionInFlight = false }
+        }
+    }
+
     private fun navigateToTabWithOverlayClear(tabIndex: Int) {
-        clearOverlayAndThen { viewPager.setCurrentItem(tabIndex, false) }
+        runBottomNavTransition {
+            clearOverlayAndThen { viewPager.setCurrentItem(tabIndex, false) }
+        }
     }
 
     private fun openTrackersTabFromBottomNav() {
-        clearOverlayAndThen {
-            if (viewPager.currentItem == 2) {
-                viewPager.post {
-                    (pagerAdapter.getFragment(2) as? com.geovault.tracker.fragments.TrackersPagerFragment)?.selectTrackersTab()
+        runBottomNavTransition {
+            clearOverlayAndThen {
+                if (viewPager.currentItem == 2) {
+                    viewPager.post {
+                        (pagerAdapter.getFragment(2) as? com.geovault.tracker.fragments.TrackersPagerFragment)?.selectTrackersTab()
+                    }
+                } else {
+                    viewPager.setCurrentItem(2, false)
                 }
-            } else {
-                viewPager.setCurrentItem(2, false)
             }
         }
     }
 
     private fun openMapTabFromBottomNav() {
-        clearOverlayAndThen {
-            if (viewPager.currentItem != 1) {
-                // Normal map-tab navigation should preserve current in-memory map state.
-                val forceRefresh = initialTrackForMap != null
-                setCurrentTab(1, forceRefreshMap = forceRefresh, delayMs = 0)
-            } else {
-                viewPager.setCurrentItem(1, false)
+        runBottomNavTransition {
+            clearOverlayAndThen {
+                if (viewPager.currentItem != 1) {
+                    // Normal map-tab navigation should preserve current in-memory map state.
+                    val forceRefresh = initialTrackForMap != null
+                    setCurrentTab(1, forceRefreshMap = forceRefresh, delayMs = 0)
+                } else {
+                    viewPager.setCurrentItem(1, false)
+                }
             }
         }
     }
@@ -1063,6 +1086,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     }
 
     companion object {
+        private const val BOTTOM_NAV_MIN_INTERVAL_MS = 220L
         private const val KEY_CURRENT_TAB = "current_tab"
         private const val KEY_TAB_BACK_STACK = "tab_back_stack"
         private const val KEY_INITIAL_TRACK_FOR_MAP = "initial_track_for_map"
