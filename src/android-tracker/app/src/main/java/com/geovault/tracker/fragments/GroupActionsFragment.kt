@@ -17,6 +17,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.Group
 import com.google.android.material.card.MaterialCardView
 import com.geovault.tracker.navigation.navHost
@@ -51,6 +52,8 @@ class GroupActionsFragment : Fragment() {
         val closeButton = view.findViewById<ImageButton>(R.id.groupActionsCloseButton)
         val trackersList = view.findViewById<RecyclerView>(R.id.groupActionsTrackersList)
         val emptyView = view.findViewById<TextView>(R.id.groupActionsEmpty)
+        val loadingOverlay = view.findViewById<View>(R.id.groupActionsLoadingOverlay)
+        val loadingSpinner = view.findViewById<LoadingSpinner>(R.id.groupActionsLoadingSpinner)
         val actionEdit = view.findViewById<MaterialButton>(R.id.groupActionEditButton)
         val actionViewOnMap = view.findViewById<MaterialButton>(R.id.groupActionViewOnMap)
 
@@ -73,6 +76,7 @@ class GroupActionsFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
+                    setLoadingState(state.isLoading, loadingOverlay, loadingSpinner)
                     state.group?.let { updated ->
                         group = updated
                         title.text = updated.name
@@ -121,6 +125,20 @@ class GroupActionsFragment : Fragment() {
                     )
                 }
             }
+        }
+    }
+
+    private fun setLoadingState(
+        isLoading: Boolean,
+        loadingOverlay: View,
+        loadingSpinner: LoadingSpinner
+    ) {
+        if (isLoading) {
+            loadingOverlay.visibility = View.VISIBLE
+            loadingSpinner.start()
+        } else {
+            loadingOverlay.visibility = View.GONE
+            loadingSpinner.stop(hide = false)
         }
     }
 

@@ -2,6 +2,7 @@ package com.geovault.tracker.startup
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.geovault.tracker.Group
 import com.geovault.tracker.Tracker
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -36,6 +37,7 @@ class StartupRefreshOrchestratorTest {
         assertEquals("t1", result.selectedTrackerForMap?.id)
         assertEquals(1, gateway.fetchUserStatusCalls)
         assertEquals(1, gateway.fetchTrackersCalls)
+        assertEquals(1, gateway.fetchGroupsCalls)
         assertEquals(1, gateway.fetchSelectedTrackerCalls)
         assertEquals(1, gateway.refreshSelectedTrackerGeometryCalls)
     }
@@ -57,6 +59,7 @@ class StartupRefreshOrchestratorTest {
         assertNull(result.selectedTrackerForMap)
         assertEquals(1, gateway.fetchUserStatusCalls)
         assertEquals(1, gateway.fetchTrackersCalls)
+        assertEquals(1, gateway.fetchGroupsCalls)
         assertEquals(0, gateway.fetchSelectedTrackerCalls)
         assertEquals(0, gateway.refreshSelectedTrackerGeometryCalls)
     }
@@ -76,6 +79,7 @@ class StartupRefreshOrchestratorTest {
         assertNull(result.selectedTrackerForMap)
         assertEquals(1, gateway.fetchUserStatusCalls)
         assertEquals(1, gateway.fetchTrackersCalls)
+        assertEquals(1, gateway.fetchGroupsCalls)
         assertEquals(1, gateway.fetchSelectedTrackerCalls)
         assertEquals(1, gateway.refreshSelectedTrackerGeometryCalls)
     }
@@ -85,6 +89,7 @@ class StartupRefreshOrchestratorTest {
     ) : StartupRefreshGateway {
         var fetchUserStatusCalls = 0
         var fetchTrackersCalls = 0
+        var fetchGroupsCalls = 0
         var fetchSelectedTrackerCalls = 0
         var refreshSelectedTrackerGeometryCalls = 0
 
@@ -96,6 +101,11 @@ class StartupRefreshOrchestratorTest {
         override suspend fun fetchTrackers(context: Context, forceRefresh: Boolean): List<Tracker>? {
             fetchTrackersCalls++
             return trackers
+        }
+
+        override suspend fun fetchGroups(context: Context, forceRefresh: Boolean): List<Group>? {
+            fetchGroupsCalls++
+            return emptyList()
         }
 
         override suspend fun fetchSelectedTracker(context: Context, trackerId: String): Tracker? {

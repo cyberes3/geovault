@@ -2,8 +2,10 @@ package com.geovault.tracker.startup
 
 import android.content.Context
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.tracker.Group
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.TrackerManagementRepository
 import javax.inject.Inject
 import kotlinx.coroutines.coroutineScope
@@ -24,12 +26,14 @@ data class StartupRefreshResult(
 interface StartupRefreshGateway {
     suspend fun fetchUserStatus(context: Context): String?
     suspend fun fetchTrackers(context: Context, forceRefresh: Boolean): List<Tracker>?
+    suspend fun fetchGroups(context: Context, forceRefresh: Boolean): List<Group>?
     suspend fun fetchSelectedTracker(context: Context, trackerId: String): Tracker?
     suspend fun refreshSelectedTrackerGeometry(context: Context, trackerId: String, allData: Boolean): Tracker?
 }
 
 class RepositoryStartupRefreshGateway @Inject constructor(
-    private val trackerManagementRepository: TrackerManagementRepository
+    private val trackerManagementRepository: TrackerManagementRepository,
+    private val groupManagementRepository: GroupManagementRepository
 ) : StartupRefreshGateway {
     override suspend fun fetchUserStatus(context: Context): String? =
         suspendCancellableCoroutine { continuation ->
@@ -40,6 +44,12 @@ class RepositoryStartupRefreshGateway @Inject constructor(
 
     override suspend fun fetchTrackers(context: Context, forceRefresh: Boolean): List<Tracker>? =
         when (val result = trackerManagementRepository.loadTrackers(forceRefresh = forceRefresh)) {
+            is RepositoryResult.Success -> result.data
+            is RepositoryResult.Failure -> null
+        }
+
+    override suspend fun fetchGroups(context: Context, forceRefresh: Boolean): List<Group>? =
+        when (val result = groupManagementRepository.loadGroups(forceRefresh = forceRefresh)) {
             is RepositoryResult.Success -> result.data
             is RepositoryResult.Failure -> null
         }
@@ -64,9 +74,13 @@ class StartupRefreshOrchestrator(
     private val gateway: StartupRefreshGateway
 ) {
     suspend fun run(context: Context, input: StartupRefreshInput): StartupRefreshResult {
-        // Keep startup refresh deterministic: exactly one user-status and trackers fetch.
+        // Keep startup refresh deterministic: exactly one user-status, trackers, and groups fetch.
         gateway.fetchUserStatus(context)
-        val trackers = gateway.fetchTrackers(context, forceRefresh = true)
+        var trackers: List<Tracker>? = null
+        coroutineScope {
+            launch { trackers = gateway.fetchTrackers(context, forceRefresh = true) }
+            launch { gateway.fetchGroups(context, forceRefresh = true) }
+        }
         val selectedTrackerId = input.selectedTrackerId
         if (selectedTrackerId.isNotBlank()) {
             coroutineScope {

@@ -27,7 +27,9 @@ class GroupsListViewModel @Inject constructor(
     private val groupRepository: GroupManagementRepository,
     private val stateStore: TrackerManagementStateStore
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(GroupsListUiState())
+    private val _uiState = MutableStateFlow(
+        GroupsListUiState(groups = mapMyGroups(stateStore.groups.value))
+    )
     val uiState: StateFlow<GroupsListUiState> = _uiState.asStateFlow()
 
     init {

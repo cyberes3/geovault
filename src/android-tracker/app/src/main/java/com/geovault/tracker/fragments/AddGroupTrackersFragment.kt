@@ -43,6 +43,7 @@ class AddGroupTrackersFragment : Fragment() {
     private var allItems: List<AddableTrack> = emptyList()
     private val rowStates = mutableMapOf<String, RowState>()
     private var query: String = ""
+    private var isLoading: Boolean = true
     private val existingTrackIds = mutableSetOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -77,6 +78,7 @@ class AddGroupTrackersFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
+                    isLoading = state.isLoading
                     if (state.isLoading) {
                         loadingView.visibility = View.VISIBLE
                         spinner.start()
@@ -98,6 +100,14 @@ class AddGroupTrackersFragment : Fragment() {
     }
 
     private fun renderList() {
+        if (isLoading) {
+            emptyView.visibility = View.GONE
+            if (allItems.isEmpty()) {
+                listContainer.visibility = View.GONE
+            }
+            return
+        }
+
         val normalized = query.trim().lowercase()
         val filtered = allItems.filter { item ->
             item.id !in existingTrackIds && (

@@ -16,6 +16,7 @@
     <string name="settings_title">Settings</string>
     <string name="loading_trackers">Loading trackers…</string>
     <string name="loading_params">Loading…</string>
+    <string name="loading_group">Loading group…</string>
     <string name="loading_groups">Loading groups…</string>
     <string name="select_tracker">Select a tracker</string>
     <string name="no_tracker_selected">No tracker selected</string>

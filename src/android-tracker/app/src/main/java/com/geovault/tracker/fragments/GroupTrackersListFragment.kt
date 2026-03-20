@@ -29,6 +29,8 @@ class GroupTrackersListFragment : Fragment() {
     private lateinit var listContainer: LinearLayout
     private lateinit var emptyView: TextView
     private lateinit var addButton: com.google.android.material.button.MaterialButton
+    private lateinit var loadingOverlay: View
+    private lateinit var loadingSpinner: LoadingSpinner
 
     private var group: Group? = null
     private var preloadedAddableTrackers: List<Tracker>? = null
@@ -43,6 +45,8 @@ class GroupTrackersListFragment : Fragment() {
         listContainer = view.findViewById(R.id.groupTrackersListContainer)
         emptyView = view.findViewById(R.id.groupTrackersListEmpty)
         addButton = view.findViewById(R.id.groupTrackersListAddButton)
+        loadingOverlay = view.findViewById(R.id.groupTrackersListLoadingOverlay)
+        loadingSpinner = view.findViewById(R.id.groupTrackersListLoadingSpinner)
         view.findViewById<View>(R.id.groupTrackersListCloseButton).setOnClickListener {
             parentFragmentManager.popBackStack()
         }
@@ -53,7 +57,6 @@ class GroupTrackersListFragment : Fragment() {
         }
         view.findViewById<TextView>(R.id.groupTrackersListTitle).text = getString(R.string.group_tracks)
         addButton.visibility = if (group?.is_owner == true) View.VISIBLE else View.GONE
-        bindTrackers(group!!, emptyList())
         addButton.setOnClickListener {
             group?.let { g ->
                 parentFragmentManager.beginTransaction()
@@ -73,11 +76,12 @@ class GroupTrackersListFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
+                    setLoadingState(state.isLoading)
                     val current = state.group
                     if (current != null) {
                         group = current
                         addButton.visibility = if (current.is_owner == true) View.VISIBLE else View.GONE
-                        bindTrackers(current, state.trackers)
+                        bindTrackers(current, state.trackers, state.isLoading)
                     }
                     state.errorMessage?.takeIf { it.isNotBlank() }?.let { navHost()?.showSnackbar(it) }
                 }
@@ -91,7 +95,15 @@ class GroupTrackersListFragment : Fragment() {
         group?.id?.let { viewModel.load(it) }
     }
 
-    private fun bindTrackers(g: Group, allTrackers: List<Tracker>) {
+    private fun bindTrackers(g: Group, allTrackers: List<Tracker>, isLoading: Boolean) {
+        if (isLoading && allTrackers.isEmpty()) {
+            emptyView.visibility = View.GONE
+            if (listContainer.childCount == 0) {
+                listContainer.visibility = View.GONE
+            }
+            return
+        }
+
         val trackIds = g.track_ids ?: emptyList()
         val isOwner = g.is_owner == true
         if (trackIds.isEmpty()) {
@@ -113,6 +125,16 @@ class GroupTrackersListFragment : Fragment() {
         listContainer.visibility = View.VISIBLE
         for (tracker in ordered) {
             addTrackerCard(g, tracker, isOwner)
+        }
+    }
+
+    private fun setLoadingState(isLoading: Boolean) {
+        if (isLoading) {
+            loadingOverlay.visibility = View.VISIBLE
+            loadingSpinner.start()
+        } else {
+            loadingOverlay.visibility = View.GONE
+            loadingSpinner.stop(hide = false)
         }
     }
 
@@ -172,7 +194,7 @@ class GroupTrackersListFragment : Fragment() {
                 val updatedGroup = viewModel.uiState.value.group
                 if (updatedGroup != null) {
                     group = updatedGroup
-                    bindTrackers(updatedGroup, viewModel.uiState.value.trackers)
+                    bindTrackers(updatedGroup, viewModel.uiState.value.trackers, isLoading = false)
                 }
             } else {
                 navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))

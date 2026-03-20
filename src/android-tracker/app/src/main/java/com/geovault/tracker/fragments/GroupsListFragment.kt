@@ -69,7 +69,8 @@ class GroupsListFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
-                    if (state.isLoading) {
+                    val showBlockingLoading = state.isLoading && state.groups.isEmpty()
+                    if (showBlockingLoading) {
                         loadingOverlay.visibility = View.VISIBLE
                         loadingSpinner.start()
                     } else {

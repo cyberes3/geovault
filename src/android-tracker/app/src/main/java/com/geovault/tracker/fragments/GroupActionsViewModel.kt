@@ -14,6 +14,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 data class GroupActionsUiState(
@@ -37,11 +40,12 @@ class GroupActionsViewModel @Inject constructor(
             val groupResult = groupRepository.loadGroup(groupId)
             val trackersResult = trackerRepository.loadTrackers(forceRefresh = false)
             if (groupResult is RepositoryResult.Success && trackersResult is RepositoryResult.Success) {
+                val mergedTrackers = resolveGroupTrackers(groupResult.data, trackersResult.data)
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         group = groupResult.data,
-                        trackers = trackersResult.data,
+                        trackers = mergedTrackers,
                         errorMessage = null
                     )
                 }
@@ -58,5 +62,27 @@ class GroupActionsViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private suspend fun resolveGroupTrackers(group: Group, allTrackers: List<Tracker>): List<Tracker> {
+        val trackIds = group.track_ids.orEmpty()
+        if (trackIds.isEmpty()) return allTrackers
+
+        val existingIds = allTrackers.mapTo(mutableSetOf()) { it.id }
+        val missingIds = trackIds.filter { it !in existingIds }.distinct()
+        if (missingIds.isEmpty()) return allTrackers
+
+        val fetched = coroutineScope {
+            missingIds.map { trackerId ->
+                async {
+                    when (val result = trackerRepository.loadTracker(trackerId)) {
+                        is RepositoryResult.Success -> result.data
+                        is RepositoryResult.Failure -> null
+                    }
+                }
+            }.awaitAll().filterNotNull()
+        }
+        if (fetched.isEmpty()) return allTrackers
+        return (allTrackers + fetched).distinctBy { it.id }
     }
 }
