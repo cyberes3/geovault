@@ -14,6 +14,7 @@ import com.geovault.tracker.TrackerCreateRequest
 import com.geovault.tracker.TrackerSettingsRequest
 import com.geovault.tracker.UsersResponse
 import com.geovault.tracker.data.GroupManagementRepository
+import com.geovault.tracker.data.TrackerManagementStateStore
 import com.geovault.tracker.data.TrackerManagementRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -53,6 +54,7 @@ class SharedTrackersViewModelTest {
         val groupedTrackId = "t-grouped"
         val hiddenTrackId = "t-hidden"
         val standaloneTrackId = "t-shared"
+        val stateStore = TrackerManagementStateStore()
         val vm = SharedTrackersViewModel(
             trackerManagementRepository = FakeTrackerManagementRepository(
                 trackers = listOf(
@@ -63,7 +65,8 @@ class SharedTrackersViewModelTest {
                 mapVisibility = MapVisibilityResponse(
                     hidden_track_ids = listOf(hiddenTrackId),
                     hidden_group_ids = emptyList()
-                )
+                ),
+                stateStore = stateStore
             ),
             groupManagementRepository = FakeGroupManagementRepository(
                 groups = listOf(
@@ -77,8 +80,10 @@ class SharedTrackersViewModelTest {
                         isAccepted = false,
                         trackIds = listOf("t-pending")
                     )
-                )
+                ),
+                stateStore = stateStore
             ),
+            trackerManagementStateStore = stateStore,
             sharedSurfaceFilterUseCase = SharedSurfaceFilterUseCase()
         )
 
@@ -94,12 +99,15 @@ class SharedTrackersViewModelTest {
 
     @Test
     fun refresh_setsErrorWhenRepositoryFails() = runTest {
+        val stateStore = TrackerManagementStateStore()
         val vm = SharedTrackersViewModel(
             trackerManagementRepository = FakeTrackerManagementRepository(
                 trackers = emptyList(),
-                mapVisibility = null
+                mapVisibility = null,
+                stateStore = stateStore
             ),
-            groupManagementRepository = FakeGroupManagementRepository(groups = emptyList()),
+            groupManagementRepository = FakeGroupManagementRepository(groups = emptyList(), stateStore = stateStore),
+            trackerManagementStateStore = stateStore,
             sharedSurfaceFilterUseCase = SharedSurfaceFilterUseCase()
         )
 
@@ -135,10 +143,13 @@ class SharedTrackersViewModelTest {
 
     private class FakeTrackerManagementRepository(
         private val trackers: List<Tracker>,
-        private val mapVisibility: MapVisibilityResponse?
+        private val mapVisibility: MapVisibilityResponse?,
+        private val stateStore: TrackerManagementStateStore
     ) : TrackerManagementRepository {
-        override suspend fun loadTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> =
-            RepositoryResult.Success(trackers)
+        override suspend fun loadTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> {
+            stateStore.publishTrackers(trackers)
+            return RepositoryResult.Success(trackers)
+        }
 
         override suspend fun loadAvailableToAdd(forceRefresh: Boolean): RepositoryResult<AvailableToAddResponse> =
             RepositoryResult.Success(AvailableToAddResponse())
@@ -186,17 +197,23 @@ class SharedTrackersViewModelTest {
             RepositoryResult.Failure(AppError.Unknown)
 
         override suspend fun loadMapVisibility(forceRefresh: Boolean): RepositoryResult<MapVisibilityResponse> =
-            mapVisibility?.let { RepositoryResult.Success(it) } ?: RepositoryResult.Failure(AppError.Network)
+            mapVisibility?.let {
+                stateStore.publishMapVisibility(it)
+                RepositoryResult.Success(it)
+            } ?: RepositoryResult.Failure(AppError.Network)
 
         override suspend fun patchMapVisibility(request: MapVisibilityRequest): RepositoryResult<MapVisibilityResponse> =
             RepositoryResult.Failure(AppError.Unknown)
     }
 
     private class FakeGroupManagementRepository(
-        private val groups: List<Group>
+        private val groups: List<Group>,
+        private val stateStore: TrackerManagementStateStore
     ) : GroupManagementRepository {
-        override suspend fun loadGroups(forceRefresh: Boolean): RepositoryResult<List<Group>> =
-            RepositoryResult.Success(groups)
+        override suspend fun loadGroups(forceRefresh: Boolean): RepositoryResult<List<Group>> {
+            stateStore.publishGroups(groups)
+            return RepositoryResult.Success(groups)
+        }
 
         override suspend fun loadGroup(groupId: String): RepositoryResult<Group> =
             RepositoryResult.Failure(AppError.NotFound)

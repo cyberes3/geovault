@@ -52,7 +52,7 @@ class DiscoverTrackersViewModel @Inject constructor(
             }
             val available = (availableResult as RepositoryResult.Success).data
 
-            val visibilityResult = trackerManagementRepository.loadMapVisibility(forceRefresh = true)
+            val visibilityResult = trackerManagementRepository.loadMapVisibility(forceRefresh = forceRefresh)
             val hiddenTrackIds = (visibilityResult as? RepositoryResult.Success)?.data?.hidden_track_ids
                 ?.toSet()
                 ?: emptySet()

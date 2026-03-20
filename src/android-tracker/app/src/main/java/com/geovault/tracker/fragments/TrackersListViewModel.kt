@@ -26,7 +26,12 @@ class TrackersListViewModel @Inject constructor(
     private val trackerListRepository: TrackerListRepository,
     private val stateStore: TrackerManagementStateStore
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(TrackersListUiState())
+    private val _uiState = MutableStateFlow(
+        TrackersListUiState(
+            trackers = stateStore.trackers.value,
+            isEmpty = stateStore.trackers.value.isEmpty()
+        )
+    )
     val uiState: StateFlow<TrackersListUiState> = _uiState.asStateFlow()
 
     init {

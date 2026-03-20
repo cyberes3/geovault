@@ -90,10 +90,8 @@ class GroupsListViewModel @Inject constructor(
             when (val result = groupRepository.createGroup(name.trim())) {
                 is RepositoryResult.Success -> {
                     _uiState.update { current ->
-                        val groups = current.groups.filterNot { it.id == result.data.id }.plus(result.data)
                         current.copy(
                             isLoading = false,
-                            groups = mapMyGroups(groups),
                             createdGroup = result.data,
                             errorMessage = null
                         )

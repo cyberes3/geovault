@@ -212,7 +212,6 @@ class TrackersListFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             when (trackerManagementRepository.unsubscribeTracker(tracker.id)) {
                 is RepositoryResult.Success -> {
-                    loadTrackersInBackground()
                     navHost()?.showSnackbar(getString(R.string.unsubscribed))
                 }
                 is RepositoryResult.Failure -> {
@@ -226,7 +225,6 @@ class TrackersListFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             when (trackerManagementRepository.leaveShareWithMe(tracker.id)) {
                 is RepositoryResult.Success -> {
-                    loadTrackersInBackground()
                     navHost()?.showSnackbar(getString(R.string.removed_from_share))
                 }
                 is RepositoryResult.Failure -> {

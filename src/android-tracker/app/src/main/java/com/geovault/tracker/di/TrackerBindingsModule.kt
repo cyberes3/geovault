@@ -6,8 +6,8 @@ import com.geovault.tracker.data.TrackerListRepository
 import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.GroupTrackerEligibilityUseCase
 import com.geovault.tracker.data.ApiTrackerManagementRepository
+import com.geovault.tracker.data.ApiTrackerDetailRepository
 import com.geovault.tracker.data.DefaultGroupTrackerEligibilityUseCase
-import com.geovault.tracker.data.TrackerRepositoryTrackerDetailRepository
 import com.geovault.tracker.data.TrackerRepositoryTrackerListRepository
 import com.geovault.tracker.fragments.map.MapGroupRepository
 import com.geovault.tracker.fragments.map.MapStreamingRepository
@@ -52,7 +52,7 @@ abstract class TrackerBindingsModule {
 
     @Binds
     @Singleton
-    abstract fun bindTrackerDetailRepository(impl: TrackerRepositoryTrackerDetailRepository): TrackerDetailRepository
+    abstract fun bindTrackerDetailRepository(impl: ApiTrackerDetailRepository): TrackerDetailRepository
 
     @Binds
     @Singleton

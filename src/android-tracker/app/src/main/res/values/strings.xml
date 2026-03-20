@@ -357,7 +357,7 @@
     <string name="hidden_groups_empty">No hidden groups.</string>
     <string name="show_all_trackers_in_settings">View All Trackers</string>
     <string name="show_all_groups">Show all groups</string>
-    <string name="default_tracker_help_text">Use this as the tracker selected by default when starting tracking.</string>
+    <string name="default_tracker_help_text">Use this as the tracker to use for live tracking.</string>
 
     <string name="subscribers_title">Subscribers</string>
     <string name="export_kml">Export KML</string>

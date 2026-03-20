@@ -83,16 +83,16 @@ class HiddenTrackersFragment : Fragment() {
         loadingOverlay.visibility = View.VISIBLE
         loadingSpinner.start()
         viewLifecycleOwner.lifecycleScope.launch {
-            val trackerList = when (val result = trackerManagementRepository.loadTrackers(forceRefresh = true)) {
+            val trackerList = when (val result = trackerManagementRepository.loadTrackers(forceRefresh = false)) {
                 is RepositoryResult.Success -> result.data
                 is RepositoryResult.Failure -> emptyList()
             }
-            val visibility = when (val result = trackerManagementRepository.loadMapVisibility(forceRefresh = true)) {
+            val visibility = when (val result = trackerManagementRepository.loadMapVisibility(forceRefresh = false)) {
                 is RepositoryResult.Success -> result.data
                 is RepositoryResult.Failure -> null
             }
             val hiddenGroupIds = (visibility?.hidden_group_ids ?: emptyList()).toSet()
-            val groupsList = when (val result = groupManagementRepository.loadGroups(forceRefresh = true)) {
+            val groupsList = when (val result = groupManagementRepository.loadGroups(forceRefresh = false)) {
                 is RepositoryResult.Success -> result.data
                 is RepositoryResult.Failure -> emptyList()
             }
@@ -206,10 +206,6 @@ class HiddenTrackersFragment : Fragment() {
                 TrackerSettingsRequest(hidden_in_list = false)
             )
             if (result is RepositoryResult.Success) {
-                requireActivity().supportFragmentManager.setFragmentResult(
-                    TrackersListFragment.REQUEST_REFRESH_LIST,
-                    Bundle()
-                )
                 onSuccess?.invoke()
             } else {
                 navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
@@ -226,10 +222,6 @@ class HiddenTrackersFragment : Fragment() {
                     TrackerSettingsRequest(hidden_in_list = false)
                 )
             }
-            requireActivity().supportFragmentManager.setFragmentResult(
-                TrackersListFragment.REQUEST_REFRESH_LIST,
-                Bundle()
-            )
             onComplete()
         }
     }
@@ -256,7 +248,7 @@ class HiddenTrackersFragment : Fragment() {
         onFailure: (() -> Unit)? = null
     ) {
         viewLifecycleOwner.lifecycleScope.launch {
-            val visibility = when (val result = trackerManagementRepository.loadMapVisibility(forceRefresh = true)) {
+            val visibility = when (val result = trackerManagementRepository.loadMapVisibility(forceRefresh = false)) {
                 is RepositoryResult.Success -> result.data
                 is RepositoryResult.Failure -> null
             }
@@ -284,7 +276,7 @@ class HiddenTrackersFragment : Fragment() {
                     groupManagementRepository.patchGroup(item.id, GroupPatchRequest(hidden_in_list = false))
                 } else {
                     if (currentHiddenGroupIds == null) {
-                        currentHiddenGroupIds = when (val result = trackerManagementRepository.loadMapVisibility(forceRefresh = true)) {
+                        currentHiddenGroupIds = when (val result = trackerManagementRepository.loadMapVisibility(forceRefresh = false)) {
                             is RepositoryResult.Success -> result.data.hidden_group_ids
                             is RepositoryResult.Failure -> emptyList()
                         }

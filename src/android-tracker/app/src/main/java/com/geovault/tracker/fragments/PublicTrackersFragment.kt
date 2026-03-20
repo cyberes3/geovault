@@ -18,11 +18,10 @@ import androidx.lifecycle.lifecycleScope
 import com.geovault.common.LoadingSpinner
 import com.geovault.tracker.AvailableToAddGroup
 import com.geovault.tracker.AvailableToAddItem
-import com.geovault.tracker.Group
 import com.geovault.tracker.RepositoryResult
+import com.geovault.tracker.Tracker
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
-import com.geovault.tracker.Tracker
 import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.TrackerManagementRepository
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -198,15 +197,6 @@ class PublicTrackersFragment : Fragment() {
         handler.postDelayed(runnable, CHECK_DISPLAY_MS)
     }
 
-    private fun notifySharedTabAdded(trackers: List<Tracker>, groups: List<Group>) {
-        if (trackers.isEmpty() && groups.isEmpty()) return
-        val bundle = Bundle().apply {
-            if (trackers.isNotEmpty()) putParcelableArrayList("trackers", ArrayList(trackers))
-            if (groups.isNotEmpty()) putParcelableArrayList("groups", ArrayList(groups))
-        }
-        parentFragmentManager.setFragmentResult(SharedTrackersFragment.REQUEST_ADD_SHARED_ITEMS, bundle)
-    }
-
     private fun addTrackerRow(parent: LinearLayout, item: AvailableToAddItem) {
         val row = layoutInflater.inflate(R.layout.item_add, parent, false)
         val typeIcon = row.findViewById<ImageView>(R.id.availableTrackerTypeIcon)
@@ -234,8 +224,6 @@ class PublicTrackersFragment : Fragment() {
                 if (tracker != null) {
                     setRowState(row, key, RowState.ADDED_CHECK)
                     transitionToDeleteAfterCheck(row, key)
-                    notifySharedTabAdded(listOf(tracker), emptyList())
-                    parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
                 } else {
                     setRowState(row, key, RowState.IDLE)
                     navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
@@ -252,7 +240,6 @@ class PublicTrackersFragment : Fragment() {
                     rowStates.remove(key)
                     transitionRunnables.remove(key)?.let { handler.removeCallbacks(it) }
                     parent.removeView(row)
-                    parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
                 } else {
                     navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 }
@@ -299,8 +286,6 @@ class PublicTrackersFragment : Fragment() {
                 if (!failed) {
                     setRowState(row, key, RowState.ADDED_CHECK)
                     transitionToDeleteAfterCheck(row, key)
-                    notifySharedTabAdded(addedTrackers, emptyList())
-                    parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
                 } else {
                     setRowState(row, key, RowState.IDLE)
                     navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
@@ -317,7 +302,6 @@ class PublicTrackersFragment : Fragment() {
                     rowStates.remove(key)
                     transitionRunnables.remove(key)?.let { handler.removeCallbacks(it) }
                     parent.removeView(row)
-                    parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
                 } else {
                     navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 }

@@ -20,7 +20,9 @@ data class EditTrackerUiState(
     val isSaving: Boolean = false,
     val tracker: Tracker? = null,
     val users: List<UserItem> = emptyList(),
+    val didSave: Boolean = false,
     val didDelete: Boolean = false,
+    val didClearHistory: Boolean = false,
     val kmlBytes: ByteArray? = null,
     val errorMessage: String? = null
 )
@@ -62,7 +64,14 @@ class EditTrackerViewModel @Inject constructor(
         viewModelScope.launch {
             when (val result = trackerRepository.updateTrackerSettings(trackerId, request)) {
                 is RepositoryResult.Success -> {
-                    _uiState.update { it.copy(isSaving = false, tracker = result.data, errorMessage = null) }
+                    _uiState.update {
+                        it.copy(
+                            isSaving = false,
+                            tracker = result.data,
+                            didSave = true,
+                            errorMessage = null
+                        )
+                    }
                 }
                 is RepositoryResult.Failure -> {
                     _uiState.update { it.copy(isSaving = false, errorMessage = result.error.toString()) }
@@ -80,6 +89,15 @@ class EditTrackerViewModel @Inject constructor(
         }
     }
 
+    fun clearTrackerHistory(trackerId: String) {
+        viewModelScope.launch {
+            when (val result = trackerRepository.clearTrackerHistory(trackerId)) {
+                is RepositoryResult.Success -> _uiState.update { it.copy(didClearHistory = true, errorMessage = null) }
+                is RepositoryResult.Failure -> _uiState.update { it.copy(errorMessage = result.error.toString()) }
+            }
+        }
+    }
+
     fun exportKml(trackerId: String) {
         viewModelScope.launch {
             when (val result = trackerRepository.fetchTrackerKml(trackerId)) {
@@ -91,5 +109,17 @@ class EditTrackerViewModel @Inject constructor(
 
     fun consumeKml() {
         _uiState.update { it.copy(kmlBytes = null) }
+    }
+
+    fun consumeSave() {
+        _uiState.update { it.copy(didSave = false) }
+    }
+
+    fun consumeDelete() {
+        _uiState.update { it.copy(didDelete = false) }
+    }
+
+    fun consumeHistoryCleared() {
+        _uiState.update { it.copy(didClearHistory = false) }
     }
 }

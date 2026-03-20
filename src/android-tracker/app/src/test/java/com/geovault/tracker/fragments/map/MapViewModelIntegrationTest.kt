@@ -237,6 +237,41 @@ class MapViewModelIntegrationTest {
         assertEquals(null, viewModel.uiState.value.historyClearedTrackerId)
     }
 
+    @Test
+    fun trackerMutationEvent_reloadsAllTrackersMode() = runTest {
+        val stream = MutableSharedFlow<TrackPointEvent>(extraBufferCapacity = 8)
+        val stateStore = TrackerManagementStateStore()
+        val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<Application>()
+        val viewModel = MapViewModel(
+            application = app,
+            runtimeTrackRepository = FakeTrackRepository(),
+            bootstrapTrackRepository = FakeTrackRepository(),
+            groupRepository = FakeGroupRepository(),
+            visibilityRepository = FakeVisibilityRepository(),
+            streamingRepository = object : MapStreamingRepository {
+                override val events: Flow<TrackPointEvent> = stream
+            },
+            trackerManagementStateStore = stateStore
+        )
+        val commands = mutableListOf<MapCommand>()
+        val job = launch {
+            viewModel.commands.collect { command ->
+                commands.add(command)
+            }
+        }
+
+        viewModel.handleIntent(MapIntent.LoadAllTrackers)
+        advanceUntilIdle()
+        val initialRenderCount = commands.count { it is MapCommand.RenderAllTrackers }
+
+        stateStore.publishTracker(Tracker(id = "new-t", name = "New", color = null))
+        advanceUntilIdle()
+
+        val updatedRenderCount = commands.count { it is MapCommand.RenderAllTrackers }
+        assertTrue(updatedRenderCount > initialRenderCount)
+        job.cancel()
+    }
+
     private fun createViewModel(stream: MutableSharedFlow<TrackPointEvent>): MapViewModel {
         val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<Application>()
         return MapViewModel(

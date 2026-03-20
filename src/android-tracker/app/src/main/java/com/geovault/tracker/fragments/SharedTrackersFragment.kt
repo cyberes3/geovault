@@ -45,10 +45,6 @@ class SharedTrackersFragment : Fragment() {
     private val viewModel: SharedTrackersViewModel by viewModels()
 
     companion object {
-        /** Pass added trackers/groups for optimistic update; use keys "trackers" and "groups" (ArrayList<Tracker>/ArrayList<Group>). */
-        const val REQUEST_ADD_SHARED_ITEMS = "shared_add_items"
-        const val KEY_REMOVED_SHARED_TRACKER_ID = "removed_shared_tracker_id"
-        const val KEY_REMOVED_SHARED_GROUP_ID = "removed_shared_group_id"
     }
 
     private lateinit var addFab: FloatingActionButton
@@ -146,26 +142,6 @@ class SharedTrackersFragment : Fragment() {
         )
         recyclerView.adapter = adapter
 
-        parentFragmentManager.setFragmentResultListener(TrackersListFragment.REQUEST_REFRESH_LIST, viewLifecycleOwner) { _, bundle ->
-            val removedTrackerId = bundle.getString(KEY_REMOVED_SHARED_TRACKER_ID)
-            if (!removedTrackerId.isNullOrEmpty()) {
-                viewModel.refresh(forceRefresh = true, showLoading = false)
-                return@setFragmentResultListener
-            }
-            viewModel.refresh(forceRefresh = true, showLoading = true)
-        }
-        parentFragmentManager.setFragmentResultListener(GroupsListFragment.REQUEST_GROUPS_REFRESH, viewLifecycleOwner) { _, bundle ->
-            val removedGroupId = bundle.getString(KEY_REMOVED_SHARED_GROUP_ID)
-            if (!removedGroupId.isNullOrEmpty()) {
-                viewModel.refresh(forceRefresh = true, showLoading = false)
-                return@setFragmentResultListener
-            }
-            viewModel.refresh(forceRefresh = true, showLoading = true)
-        }
-        parentFragmentManager.setFragmentResultListener(REQUEST_ADD_SHARED_ITEMS, viewLifecycleOwner) { _, bundle ->
-            addSharedItemsFromBundle(bundle)
-        }
-
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
@@ -199,15 +175,6 @@ class SharedTrackersFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         viewModel.preload()
-    }
-
-    /** Merges trackers/groups from Add Trackers into the current list (optimistic), then refetches in background. */
-    private fun addSharedItemsFromBundle(bundle: Bundle) {
-        val trackers = bundle.getParcelableArrayList("trackers", Tracker::class.java) ?: emptyList()
-        val groups = bundle.getParcelableArrayList("groups", Group::class.java) ?: emptyList()
-        if (trackers.isEmpty() && groups.isEmpty()) return
-        viewModel.applyOptimisticAdd(trackers = trackers, groups = groups)
-        viewModel.refresh(forceRefresh = true, showLoading = false)
     }
 
     fun requestScrollToTrackerId(trackerId: String?) {

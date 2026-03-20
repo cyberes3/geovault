@@ -64,7 +64,19 @@ class ApiTrackerManagementRepository @Inject constructor(
     }
 
     override suspend fun loadTracker(trackerId: String): RepositoryResult<Tracker> {
-        return executeApiCall { api -> api.getTracker(trackerId).execute() }
+        val result = executeApiCall { api -> api.getTracker(trackerId).execute() }
+        if (result is RepositoryResult.Success) {
+            cacheMutex.withLock {
+                trackersCache = trackersCache
+                    ?.filterNot { it.id == trackerId }
+                    .orEmpty()
+                    .plus(result.data)
+                    .distinctBy { it.id }
+                    .sortedBy { it.name.lowercase() }
+            }
+            stateStore.publishTracker(result.data)
+        }
+        return result
     }
 
     override suspend fun loadTrackerGeometry(trackerId: String, allData: Boolean): RepositoryResult<Tracker> {
@@ -173,6 +185,7 @@ class ApiTrackerManagementRepository @Inject constructor(
 
     override fun getTrackerFromCache(trackerId: String): Tracker? {
         return trackersCache?.firstOrNull { it.id == trackerId }
+            ?: stateStore.trackers.value.firstOrNull { it.id == trackerId }
     }
 
     override suspend fun fetchTrackerKml(trackerId: String): RepositoryResult<ByteArray> {
@@ -227,7 +240,19 @@ class ApiTrackerManagementRepository @Inject constructor(
     }
 
     override suspend fun loadGroup(groupId: String): RepositoryResult<Group> {
-        return executeApiCall { api -> api.getGroup(groupId).execute() }
+        val result = executeApiCall { api -> api.getGroup(groupId).execute() }
+        if (result is RepositoryResult.Success) {
+            cacheMutex.withLock {
+                groupsCache = groupsCache
+                    ?.filterNot { it.id == groupId }
+                    .orEmpty()
+                    .plus(result.data)
+                    .distinctBy { it.id }
+                    .sortedBy { it.name.lowercase() }
+            }
+            stateStore.publishGroup(result.data)
+        }
+        return result
     }
 
     override suspend fun createGroup(name: String): RepositoryResult<Group> {

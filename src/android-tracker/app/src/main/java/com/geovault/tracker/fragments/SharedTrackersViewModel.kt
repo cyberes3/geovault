@@ -6,9 +6,11 @@ import com.geovault.tracker.Group
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.data.GroupManagementRepository
+import com.geovault.tracker.data.TrackerManagementStateStore
 import com.geovault.tracker.data.TrackerManagementRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,10 +33,46 @@ data class SharedTrackersUiState(
 class SharedTrackersViewModel @Inject constructor(
     private val trackerManagementRepository: TrackerManagementRepository,
     private val groupManagementRepository: GroupManagementRepository,
+    private val trackerManagementStateStore: TrackerManagementStateStore,
     private val sharedSurfaceFilterUseCase: SharedSurfaceFilterUseCase
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(SharedTrackersUiState())
+    private val _uiState = MutableStateFlow(
+        SharedTrackersUiState(
+            data = computeSharedData(
+                groups = trackerManagementStateStore.groups.value,
+                trackers = trackerManagementStateStore.trackers.value,
+                hiddenTrackIds = trackerManagementStateStore.mapVisibility.value?.hidden_track_ids?.toSet().orEmpty(),
+                hiddenGroupIds = trackerManagementStateStore.mapVisibility.value?.hidden_group_ids?.toSet().orEmpty()
+            )
+        )
+    )
     val uiState: StateFlow<SharedTrackersUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            combine(
+                trackerManagementStateStore.groups,
+                trackerManagementStateStore.trackers,
+                trackerManagementStateStore.mapVisibility
+            ) { groups, trackers, mapVisibility ->
+                val hiddenTrackIds = mapVisibility?.hidden_track_ids?.toSet().orEmpty()
+                val hiddenGroupIds = mapVisibility?.hidden_group_ids?.toSet().orEmpty()
+                computeSharedData(
+                    groups = groups,
+                    trackers = trackers,
+                    hiddenTrackIds = hiddenTrackIds,
+                    hiddenGroupIds = hiddenGroupIds
+                )
+            }.collect { data ->
+                _uiState.update { current ->
+                    current.copy(
+                        isLoading = false,
+                        data = data
+                    )
+                }
+            }
+        }
+    }
 
     fun preload() {
         viewModelScope.launch {
@@ -56,21 +94,6 @@ class SharedTrackersViewModel @Inject constructor(
             val groupsResult = groupManagementRepository.loadGroups(forceRefresh = forceRefresh)
             val trackersResult = trackerManagementRepository.loadTrackers(forceRefresh = forceRefresh)
 
-            val hiddenTrackIds = (visibilityResult as? RepositoryResult.Success)?.data?.hidden_track_ids
-                ?.toSet()
-                ?: emptySet()
-            val hiddenGroupIds = (visibilityResult as? RepositoryResult.Success)?.data?.hidden_group_ids
-                ?.toSet()
-                ?: emptySet()
-            val groups = (groupsResult as? RepositoryResult.Success)?.data ?: emptyList()
-            val trackers = (trackersResult as? RepositoryResult.Success)?.data ?: emptyList()
-            val filtered = sharedSurfaceFilterUseCase.filter(
-                groups = groups,
-                trackers = trackers,
-                hiddenTrackIds = hiddenTrackIds,
-                hiddenGroupIds = hiddenGroupIds
-            )
-
             val error = when {
                 visibilityResult is RepositoryResult.Failure -> visibilityResult.error.toString()
                 groupsResult is RepositoryResult.Failure -> groupsResult.error.toString()
@@ -81,28 +104,28 @@ class SharedTrackersViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     isLoading = false,
-                    data = SharedTrackersData(
-                        sharedGroups = filtered.sharedGroups,
-                        sharedTrackers = filtered.sharedTrackers,
-                        hiddenTrackIds = filtered.hiddenTrackIds
-                    ),
                     errorMessage = error
                 )
             }
         }
     }
 
-    fun applyOptimisticAdd(trackers: List<Tracker>, groups: List<Group>) {
-        if (trackers.isEmpty() && groups.isEmpty()) return
-        _uiState.update { current ->
-            val mergedGroups = (current.data.sharedGroups + groups).distinctBy { it.id }
-            val mergedTrackers = (current.data.sharedTrackers + trackers).distinctBy { it.id }
-            current.copy(
-                data = current.data.copy(
-                    sharedGroups = mergedGroups,
-                    sharedTrackers = mergedTrackers
-                )
-            )
-        }
+    private fun computeSharedData(
+        groups: List<Group>,
+        trackers: List<Tracker>,
+        hiddenTrackIds: Set<String>,
+        hiddenGroupIds: Set<String>
+    ): SharedTrackersData {
+        val filtered = sharedSurfaceFilterUseCase.filter(
+            groups = groups,
+            trackers = trackers,
+            hiddenTrackIds = hiddenTrackIds,
+            hiddenGroupIds = hiddenGroupIds
+        )
+        return SharedTrackersData(
+            sharedGroups = filtered.sharedGroups,
+            sharedTrackers = filtered.sharedTrackers,
+            hiddenTrackIds = filtered.hiddenTrackIds
+        )
     }
 }

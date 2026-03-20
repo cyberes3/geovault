@@ -67,14 +67,38 @@ class MapViewModel @Inject constructor(
         }
         managementEventsJob = viewModelScope.launch {
             trackerManagementStateStore.events.collectLatest { event ->
-                if (event is TrackerManagementEvent.HistoryCleared) {
-                    val current = _uiState.value
-                    _uiState.value = current.copy(
-                        historyClearSignalVersion = current.historyClearSignalVersion + 1L,
-                        historyClearedTrackerId = event.trackerId
-                    )
+                when (event) {
+                    is TrackerManagementEvent.HistoryCleared -> {
+                        val current = _uiState.value
+                        _uiState.value = current.copy(
+                            historyClearSignalVersion = current.historyClearSignalVersion + 1L,
+                            historyClearedTrackerId = event.trackerId
+                        )
+                        reloadVisibleMapData()
+                    }
+                    is TrackerManagementEvent.TrackerUpserted,
+                    is TrackerManagementEvent.TrackerDeleted,
+                    is TrackerManagementEvent.TrackersRefreshed,
+                    is TrackerManagementEvent.GroupUpserted,
+                    is TrackerManagementEvent.GroupDeleted,
+                    is TrackerManagementEvent.GroupsRefreshed,
+                    is TrackerManagementEvent.MapVisibilityChanged -> {
+                        reloadVisibleMapData()
+                    }
                 }
             }
+        }
+    }
+
+    private fun reloadVisibleMapData() {
+        when (val mode = _uiState.value.mode) {
+            is MapScreenMode.AllTrackers -> loadAllTrackers()
+            is MapScreenMode.GroupMode -> loadGroup(mode.group, zoomToTrackerId = null)
+            is MapScreenMode.Single -> loadSingle(
+                trackerId = _uiState.value.displayedTrackerId,
+                forceReplace = true,
+                mode = SingleTrackerLoadMode.RUNTIME
+            )
         }
     }
 

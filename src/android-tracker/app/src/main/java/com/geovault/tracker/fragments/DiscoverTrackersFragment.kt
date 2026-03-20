@@ -355,23 +355,12 @@ class DiscoverTrackersFragment : Fragment() {
         if (onMyMap != null && incoming != null) renderTabContent(onMyMap, incoming)
     }
 
-    /** Notify Shared tab to show added trackers/groups optimistically, then it refetches in background. */
-    private fun notifySharedTabAdded(trackers: List<Tracker>, groups: List<Group>) {
-        if (trackers.isEmpty() && groups.isEmpty()) return
-        val bundle = Bundle().apply {
-            if (trackers.isNotEmpty()) putParcelableArrayList("trackers", ArrayList(trackers))
-            if (groups.isNotEmpty()) putParcelableArrayList("groups", ArrayList(groups))
-        }
-        parentFragmentManager.setFragmentResult(SharedTrackersFragment.REQUEST_ADD_SHARED_ITEMS, bundle)
-    }
-
     private fun removeRowAndMaybeHideSection(parent: LinearLayout, row: View, header: TextView?, list: LinearLayout) {
         parent.removeView(row)
         if (parent.childCount == 0) {
             header?.visibility = View.GONE
             list.visibility = View.GONE
         }
-        parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
     }
 
     private fun addGroupRow(
@@ -410,7 +399,6 @@ class DiscoverTrackersFragment : Fragment() {
                     setRowState(row, key, RowState.ADDED_CHECK)
                     transitionToDeleteAfterCheck(row, key)
                     rerenderTabs()
-                    notifySharedTabAdded(emptyList(), listOf(accepted))
                 } else {
                     setRowState(row, key, RowState.IDLE)
                     navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
@@ -460,7 +448,6 @@ class DiscoverTrackersFragment : Fragment() {
                     setRowState(row, key, RowState.ADDED_CHECK)
                     transitionToDeleteAfterCheck(row, key)
                     rerenderTabs()
-                    notifySharedTabAdded(listOf(tracker), emptyList())
                 } else {
                     setRowState(row, key, RowState.IDLE)
                     navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))

@@ -15,7 +15,10 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.TrackerSettingsRequest
 import com.geovault.common.GeovaultAuthManager
@@ -38,10 +41,13 @@ import com.google.android.material.button.MaterialButton
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import androidx.core.widget.NestedScrollView
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class EditTrackerFragment : Fragment() {
+    private val viewModel: EditTrackerViewModel by viewModels()
+
     @Inject
     lateinit var trackerManagementRepository: TrackerManagementRepository
 
@@ -108,6 +114,16 @@ class EditTrackerFragment : Fragment() {
 
     /** Pending KML bytes to write when user picks save location (system file saver). */
     private var pendingKmlExportBytes: ByteArray? = null
+    private var trackerId: String = ""
+    private var pendingHiddenInListAfterSave: Boolean = false
+    private var didPopulateFromState: Boolean = false
+    private var pendingAction: PendingAction? = null
+
+    private enum class PendingAction {
+        SAVE,
+        CLEAR_HISTORY,
+        DELETE
+    }
 
     private val createKmlDocumentLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/vnd.google-earth.kml+xml")
@@ -245,6 +261,7 @@ class EditTrackerFragment : Fragment() {
         closeButton.setOnClickListener { tryClose() }
 
         showLoadingState(true)
+        observeViewModel()
 
         val recentDataLabels = arrayOf(
             getString(R.string.recent_data_all),
@@ -272,7 +289,7 @@ class EditTrackerFragment : Fragment() {
         }
 
         val tracker = arguments?.getParcelable<Tracker>(ARG_TRACKER, Tracker::class.java)
-        val trackerId: String = tracker?.id ?: arguments?.getString(ARG_TRACKER_ID) ?: return
+        trackerId = tracker?.id ?: arguments?.getString(ARG_TRACKER_ID) ?: return
         selectedTrackSwitch.isChecked = SelectedTrackerPrefs.selectedTrackerId(requireContext()) == trackerId
         selectedTrackSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
@@ -291,21 +308,10 @@ class EditTrackerFragment : Fragment() {
         }
         if (tracker != null) {
             populateFormFromTracker(tracker)
+            didPopulateFromState = true
             showLoadingState(false)
-        } else {
-            viewLifecycleOwner.lifecycleScope.launch {
-                when (val result = trackerManagementRepository.loadTracker(trackerId)) {
-                    is RepositoryResult.Success -> {
-                        showLoadingState(false)
-                        populateFormFromTracker(result.data)
-                    }
-                    is RepositoryResult.Failure -> {
-                        showLoadingState(false)
-                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                    }
-                }
-            }
         }
+        viewModel.load(trackerId)
 
         saveButton.setOnClickListener {
             val name = nameEdit.text.toString().trim()
@@ -329,24 +335,10 @@ class EditTrackerFragment : Fragment() {
                 allow_group_reshare = if (sharingSection.visibility == View.VISIBLE) allowGroupReshareSwitch.isChecked else null,
                 hidden_in_list = hiddenInList
             )
+            pendingAction = PendingAction.SAVE
+            pendingHiddenInListAfterSave = hiddenInList
             setAllInputsEnabled(false)
-            viewLifecycleOwner.lifecycleScope.launch {
-                val result = trackerManagementRepository.updateTrackerSettings(trackerId, request)
-                when (result) {
-                    is RepositoryResult.Success -> {
-                        val updated = result.data
-                        currentFetchedTracker = updated
-                        if (hiddenInList && trackerId == SelectedTrackerPrefs.selectedTrackerId(requireContext())) {
-                            SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
-                        }
-                        requireActivity().supportFragmentManager.popBackStack()
-                    }
-                    is RepositoryResult.Failure -> {
-                        setAllInputsEnabled(true)
-                        navHost()?.showSnackbar(getString(R.string.failed_to_save_tracker))
-                    }
-                }
-            }
+            viewModel.save(trackerId, request)
         }
 
         clearHistoryButton.setOnClickListener {
@@ -354,19 +346,9 @@ class EditTrackerFragment : Fragment() {
                 .setTitle(getString(R.string.clear_history_confirm_title))
                 .setMessage(getString(R.string.clear_history_confirm_message))
                 .setPositiveButton(getString(R.string.clear_history_tracker)) { _, _ ->
+                    pendingAction = PendingAction.CLEAR_HISTORY
                     setAllInputsEnabled(false)
-                    viewLifecycleOwner.lifecycleScope.launch {
-                        when (trackerManagementRepository.clearTrackerHistory(trackerId)) {
-                            is RepositoryResult.Success -> {
-                                historyClearedThisSession = true
-                                navHost()?.showSnackbar(getString(R.string.history_cleared))
-                            }
-                            is RepositoryResult.Failure -> {
-                                navHost()?.showSnackbar(getString(R.string.failed_to_clear_history))
-                            }
-                        }
-                        setAllInputsEnabled(true)
-                    }
+                    viewModel.clearTrackerHistory(trackerId)
                 }
                 .setNegativeButton(getString(R.string.cancel_button), null)
                 .show()
@@ -377,23 +359,9 @@ class EditTrackerFragment : Fragment() {
                 .setTitle(getString(R.string.delete_tracker_confirm_title))
                 .setMessage(getString(R.string.delete_tracker_confirm_message))
                 .setPositiveButton(getString(R.string.delete_tracker)) { _, _ ->
-                    val selectedId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
+                    pendingAction = PendingAction.DELETE
                     setAllInputsEnabled(false)
-                    viewLifecycleOwner.lifecycleScope.launch {
-                        when (trackerManagementRepository.deleteTracker(trackerId)) {
-                            is RepositoryResult.Success -> {
-                                if (trackerId == selectedId) {
-                                    SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
-                                }
-                                requireActivity().supportFragmentManager.popBackStack()
-                                navHost()?.showSnackbar(getString(R.string.tracker_deleted))
-                            }
-                            is RepositoryResult.Failure -> {
-                                setAllInputsEnabled(true)
-                                navHost()?.showSnackbar(getString(R.string.failed_to_delete_tracker))
-                            }
-                        }
-                    }
+                    viewModel.deleteTracker(trackerId)
                 }
                 .setNegativeButton(getString(R.string.cancel_button), null)
                 .show()
@@ -557,6 +525,63 @@ class EditTrackerFragment : Fragment() {
 
     private fun popBackStack() {
         requireActivity().supportFragmentManager.popBackStack()
+    }
+
+    private fun observeViewModel() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect { state ->
+                    val loadedTracker = state.tracker
+                    if (loadedTracker != null && (!didPopulateFromState || loadedTracker.id == trackerId)) {
+                        populateFormFromTracker(loadedTracker)
+                        didPopulateFromState = true
+                        showLoadingState(false)
+                    } else if (!state.isLoading && !didPopulateFromState) {
+                        showLoadingState(false)
+                    }
+
+                    if (state.didSave) {
+                        if (pendingHiddenInListAfterSave && trackerId == SelectedTrackerPrefs.selectedTrackerId(requireContext())) {
+                            SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
+                        }
+                        pendingAction = null
+                        viewModel.consumeSave()
+                        popBackStack()
+                    }
+
+                    if (state.didClearHistory) {
+                        historyClearedThisSession = true
+                        pendingAction = null
+                        setAllInputsEnabled(true)
+                        viewModel.consumeHistoryCleared()
+                        navHost()?.showSnackbar(getString(R.string.history_cleared))
+                    }
+
+                    if (state.didDelete) {
+                        if (trackerId == SelectedTrackerPrefs.selectedTrackerId(requireContext())) {
+                            SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
+                        }
+                        pendingAction = null
+                        viewModel.consumeDelete()
+                        popBackStack()
+                        navHost()?.showSnackbar(getString(R.string.tracker_deleted))
+                    }
+
+                    if (!state.errorMessage.isNullOrBlank() && pendingAction != null) {
+                        val failedAction = pendingAction
+                        setAllInputsEnabled(true)
+                        pendingAction = null
+                        val failureMessageRes = when (failedAction) {
+                            PendingAction.SAVE -> R.string.failed_to_save_tracker
+                            PendingAction.CLEAR_HISTORY -> R.string.failed_to_clear_history
+                            PendingAction.DELETE -> R.string.failed_to_delete_tracker
+                            null -> R.string.failed_to_load_tracker
+                        }
+                        navHost()?.showSnackbar(getString(failureMessageRes))
+                    }
+                }
+            }
+        }
     }
 
     private fun tryClose() {
