@@ -162,9 +162,10 @@ export function centerMapOnTrackLastPoint(map, track, options = {}) {
   const last = coords.length ? coords[coords.length - 1] : null;
   if (!last) return;
   const duration = options.duration ?? 200;
+  const zoom = map.getZoom();
   if (options.padding != null) {
-    map.easeTo({ center: last, duration, padding: options.padding });
+    map.easeTo({ center: last, zoom, duration, padding: options.padding });
     return;
   }
-  map.panTo(last, { duration });
+  map.easeTo({ center: last, zoom, duration });
 }

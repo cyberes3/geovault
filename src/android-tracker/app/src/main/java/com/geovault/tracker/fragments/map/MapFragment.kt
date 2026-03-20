@@ -508,30 +508,12 @@ class MapFragment : Fragment() {
                         allTracksPointsLayerId = MapConstants.ALL_TRACKS_POINTS_LAYER_ID
                     )
                 )
-                map.addOnMoveListener(object : MapLibreMap.OnMoveListener {
-                    override fun onMoveBegin(detector: org.maplibre.android.gestures.MoveGestureDetector) {
-                        // User panned the map manually; clear sticky camera intent.
-                        activeCameraIntent = CameraIntent.NONE
-                        preserveCenteredAllTrackersFit = false
-                        disableLiveActiveFitForManualCameraInteraction()
-                        if (mapLockState != MapLockState.None) {
-                            reduceLock(MapLockEvent.ManualCameraInteraction)
-                            LocationComponentHelper.setCameraTracking(map, enabled = false)
-                            updateFollowLockButton()
-                            if (selectedMapTracker != null) updateMapSelectionUi()
-                        } else if (showMyLocationEnabled && gpsLocationLockActive) {
-                            // Keep button affordance accurate if legacy GPS lock flag was set.
-                            reduceLock(MapLockEvent.DisableGpsFollow)
-                            updateShowMyLocationButtonVisibility()
-                        }
-                        // Pan does not turn off standalone location mode; user can recenter by tapping button again.
-                    }
-                    override fun onMove(detector: org.maplibre.android.gestures.MoveGestureDetector) { }
-                    override fun onMoveEnd(detector: org.maplibre.android.gestures.MoveGestureDetector) { }
-                })
                 map.addOnCameraMoveStartedListener { reason ->
-                    if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
-                        disableLiveActiveFitForManualCameraInteraction()
+                    val isManualGesture = MapCameraInteractionPolicy.isManualCameraInteraction(
+                        cameraMoveStartedReason = reason
+                    )
+                    if (isManualGesture) {
+                        onManualCameraInteraction(map)
                     }
                 }
                 setupMapTapListener(map)
@@ -737,6 +719,9 @@ class MapFragment : Fragment() {
 
         zoomInButton.setOnClickListener {
             disableLiveActiveFitForManualCameraInteraction()
+            if (isFollowLockActive() && followLockNeedsInitialZoom) {
+                reduceLock(MapLockEvent.CompleteTrackerInitialZoom(reachedTargetZoom = true))
+            }
             maplibreMap?.let { map ->
                 applyUnifiedCameraMove(
                     map = map,
@@ -749,6 +734,9 @@ class MapFragment : Fragment() {
         }
         zoomOutButton.setOnClickListener {
             disableLiveActiveFitForManualCameraInteraction()
+            if (isFollowLockActive() && followLockNeedsInitialZoom) {
+                reduceLock(MapLockEvent.CompleteTrackerInitialZoom(reachedTargetZoom = true))
+            }
             maplibreMap?.let { map ->
                 applyUnifiedCameraMove(
                     map = map,
@@ -2224,6 +2212,24 @@ class MapFragment : Fragment() {
         updateShowMyLocationButtonVisibility()
         // Restore default overlay-aware padding state without forcing a new camera move mid-gesture.
         refreshMapPaddingForCurrentMode(force = true, allowCameraMove = false)
+    }
+
+    private fun onManualCameraInteraction(map: MapLibreMap) {
+        // User gesture should clear sticky intent and all lock-follow behavior.
+        activeCameraIntent = CameraIntent.NONE
+        preserveCenteredAllTrackersFit = false
+        disableLiveActiveFitForManualCameraInteraction()
+        if (mapLockState != MapLockState.None) {
+            reduceLock(MapLockEvent.ManualCameraInteraction)
+            LocationComponentHelper.setCameraTracking(map, enabled = false)
+            updateFollowLockButton()
+            if (selectedMapTracker != null) updateMapSelectionUi()
+        } else if (showMyLocationEnabled && gpsLocationLockActive) {
+            // Keep button affordance accurate if legacy GPS lock flag was set.
+            reduceLock(MapLockEvent.DisableGpsFollow)
+            updateShowMyLocationButtonVisibility()
+        }
+        // Gesture navigation does not disable standalone location mode.
     }
 
     private fun updateLiveActiveFitButtonUi() {

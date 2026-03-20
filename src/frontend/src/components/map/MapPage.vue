@@ -271,6 +271,7 @@ import {
 import { fetchUserLocation } from '@/utils/map/locationUtils.js'
 import { getCoordinatesFromGeometry, filterFeaturesByBounds, cleanupDistantFeatures as cleanupDistantFeaturesUtil } from '@/utils/map/featureExtent.js'
 import { parseBboxResponse } from '@/utils/format/geobuf.js'
+import { setupUserGestureTrackingUnlock } from '@/utils/map/maplibre/trackingLock.js'
 
 import { MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js'
 
@@ -522,6 +523,8 @@ export default {
       showFeatureShareDialog: false,
       featureToShare: null,
       hoverMarker: null,
+      mapInteractionHandlers: null,
+      teardownTrackingUnlockHandlers: null,
       publicShareError: null,
       loadError: null,
       publicShareTag: null,
@@ -555,11 +558,22 @@ export default {
       geocodingMarker: null, // Marker for forward reverse_geocoding search results
       trackingState: 'disabled', // 'disabled', 'tracking', 'locked'
       locationMarker: null,
-      isAutoMoving: false,
       hasInitialZoomed: false, // Track if we've done the initial zoom
     }
   },
   methods: {
+    teardownMapInteractionHandlers() {
+      if (this.map && this.mapInteractionHandlers) {
+        const handlers = this.mapInteractionHandlers
+        this.map.off('move', handlers.onMove)
+        this.map.off('zoom', handlers.onZoom)
+        this.mapInteractionHandlers = null
+      }
+      if (this.teardownTrackingUnlockHandlers) {
+        this.teardownTrackingUnlockHandlers()
+        this.teardownTrackingUnlockHandlers = null
+      }
+    },
     // Helper method to handle missing icons
     handleStyleImageMissing(iconId) {
       // Extract the URL from the icon ID (format: icon-{encoded_url})
@@ -634,24 +648,23 @@ export default {
     // Bootstrap method to set up all map event listeners
     setupMapEventHandlers() {
       if (!this.map) return
+
+      // Defensive cleanup in case handlers are re-registered on the same map instance.
+      this.teardownMapInteractionHandlers()
       
       // Cancel pending bbox queries when user starts panning or zooming
       // Track movement state to prevent expensive operations during pan/zoom
-      this.map.on('move', () => {
+      const onMove = () => {
         this.cancelPendingBboxQuery()
         this.isMapMoving = true
-
-        // If map is locked to user location and user manually moves the map, unlock it
-        if (this.trackingState === 'locked' && !this.isAutoMoving) {
-          this.trackingState = 'tracking'
-        }
 
         if (this.movementTimeout) clearTimeout(this.movementTimeout)
         this.movementTimeout = setTimeout(() => {
           this.isMapMoving = false
         }, 150) // Map stopped moving
-      })
-      this.map.on('zoom', () => {
+      }
+      this.map.on('move', onMove)
+      const onZoom = () => {
         // Clamp zoom level to maximum
         const currentZoom = this.map.getZoom()
         if (currentZoom > MAX_ZOOM_LEVEL) {
@@ -664,7 +677,18 @@ export default {
         this.movementTimeout = setTimeout(() => {
           this.isMapMoving = false
         }, 150) // Map stopped moving
+      }
+      this.map.on('zoom', onZoom)
+      this.teardownTrackingUnlockHandlers = setupUserGestureTrackingUnlock(this.map, {
+        isLocked: () => this.trackingState === 'locked',
+        onUnlock: () => {
+          this.trackingState = 'tracking'
+        }
       })
+      this.mapInteractionHandlers = {
+        onMove,
+        onZoom
+      }
 
       // Setup basic event listeners (moveend, zoomend, click)
       setupMapEventListeners(this.map, {
@@ -2277,6 +2301,7 @@ export default {
      * Destroy the map instance completely
      */
     destroyMap() {
+      this.teardownMapInteractionHandlers()
       // Clean up label markers
       if (this.labelMarkerManager) {
         this.labelMarkerManager.clearAllMarkers()
@@ -2741,8 +2766,6 @@ export default {
       const { latitude, longitude } = this.userLocation
       if (latitude == null || longitude == null) return
 
-      this.isAutoMoving = true
-      
       if (shouldZoom) {
         // Initial activation: zoom to 10
         this.map.flyTo({
@@ -2756,11 +2779,6 @@ export default {
           duration: 500
         })
       }
-
-      // Reset auto-moving flag after animation
-      setTimeout(() => {
-        this.isAutoMoving = false
-      }, 600)
     },
     zoomToFeature(feature) {
       if (!this.map || !feature) {
@@ -4572,6 +4590,7 @@ export default {
     }
 
     if (this.map) {
+      this.teardownMapInteractionHandlers()
       this.map.remove()
       this.map = null
     }

@@ -1387,7 +1387,7 @@ export default {
       const center = getSelectedTrackLastPoint();
       if (!center) return;
       isAutoMoving.value = true;
-      map.easeTo({ center, duration: MAP_SNAP_DURATION, padding: getMapPadding() });
+      map.easeTo({ center, zoom: map.getZoom(), duration: MAP_SNAP_DURATION, padding: getMapPadding() });
       setTimeout(() => {
         isAutoMoving.value = false;
       }, MAP_SNAP_DURATION + 50);
