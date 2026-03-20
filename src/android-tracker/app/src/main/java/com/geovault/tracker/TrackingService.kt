@@ -414,7 +414,7 @@ class TrackingService : TrackPointServiceBase() {
                 timestampMs = location.time,
                 accuracyMeters = if (location.hasAccuracy()) location.accuracy else null
             ),
-            maxAccuracyMeters = currentSettings.accuracyFilterMeters,
+            maxAccuracyMeters = resolveCurrentAccuracyFilter(),
             freshnessTtlMs = 120_000L,
             isMockLocation = isMockLocation,
             nowMs = nowMs
@@ -461,7 +461,7 @@ class TrackingService : TrackPointServiceBase() {
         
         Log.d(TAG, "Location received: ${smoothedLocation.latitude}, ${smoothedLocation.longitude}")
         val sigMotionOnly = currentSettings.significantDataOnly
-        val distanceFilter = currentSettings.distanceFilterMeters
+        val (_, distanceFilter, _) = resolveCurrentProfileParams()
 
         // Speed-Aware Stationary: Trust hardware speed attributes to avoid false pauses
         val (newConsecutive, shouldPause) = TrackingLocationPolicy.stationaryUpdate(
@@ -790,7 +790,7 @@ class TrackingService : TrackPointServiceBase() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val noGoodFix = lastAccuracyMeters == null || lastAccuracyMeters!! > currentSettings.accuracyFilterMeters
+        val noGoodFix = lastAccuracyMeters == null || lastAccuracyMeters!! > resolveCurrentAccuracyFilter()
         val status = when {
             isGpsPaused -> getString(R.string.status_gps_paused)
             noGoodFix -> getString(R.string.locking)
@@ -1008,16 +1008,31 @@ class TrackingService : TrackPointServiceBase() {
         }
     }
 
-    private fun resolveCurrentIntervalAndDistance(): Pair<Long, Float> {
-        val isAuto = currentSettings.autoTrackingMode
-        if (isAuto) {
-            val autoMode = autoTrackingMotionEngine.snapshot().mode
-            val params = TrackingLocationPolicy.getProfileParams(autoMode.profileIndex)
-            return params.first to params.second
+    /**
+     * Single source of truth for effective tracking params. When auto mode is on,
+     * returns the current motion profile's (interval, distance, accuracy); otherwise
+     * returns stored settings. Use this everywhere the service needs interval, distance,
+     * or accuracy so behavior is consistent and auto mode correctly adjusts all three.
+     */
+    private fun resolveCurrentProfileParams(): Triple<Long, Float, Float> {
+        if (currentSettings.autoTrackingMode) {
+            val mode = autoTrackingMotionEngine.snapshot().mode
+            return TrackingLocationPolicy.getProfileParams(mode.profileIndex)
         }
-
-        return currentSettings.loggingIntervalSec to currentSettings.distanceFilterMeters
+        return Triple(
+            currentSettings.loggingIntervalSec,
+            currentSettings.distanceFilterMeters,
+            currentSettings.accuracyFilterMeters
+        )
     }
+
+    private fun resolveCurrentIntervalAndDistance(): Pair<Long, Float> {
+        val (interval, distance, _) = resolveCurrentProfileParams()
+        return interval to distance
+    }
+
+    private fun resolveCurrentAccuracyFilter(): Float =
+        resolveCurrentProfileParams().third
 
     private fun buildLocationRequest(intervalSec: Long, distanceFilter: Float): LocationRequest {
         val (intervalMs, minUpdateMs) = TrackingLocationPolicy.locationRequestIntervalFromSec(intervalSec)
@@ -1042,9 +1057,10 @@ class TrackingService : TrackPointServiceBase() {
             }
         )
         if (!started) return false
+        val accuracyFilter = resolveCurrentAccuracyFilter()
         Log.d(
             TAG,
-            "Applied LocationRequest ($reason): interval=${intervalSec}s, distance=${distanceFilter}m, mode=${autoTrackingMotionEngine.snapshot().mode}, auto=${currentSettings.autoTrackingMode}"
+            "Applied LocationRequest ($reason): interval=${intervalSec}s, distance=${distanceFilter}m, accuracy=${accuracyFilter}m, mode=${autoTrackingMotionEngine.snapshot().mode}, auto=${currentSettings.autoTrackingMode}"
         )
         return true
     }

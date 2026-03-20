@@ -180,6 +180,8 @@ class SettingsFragment : Fragment() {
         intervalEdit.alpha = alpha
         distanceEdit.isEnabled = !enabled
         distanceEdit.alpha = alpha
+        accuracyEdit.isEnabled = !enabled
+        accuracyEdit.alpha = alpha
     }
 
     private fun updateProfileToCustom() {
