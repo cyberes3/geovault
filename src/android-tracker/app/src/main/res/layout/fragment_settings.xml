@@ -243,6 +243,44 @@
                 android:textColor="@color/text_secondary"
                 android:layout_marginTop="8dp" />
 
+            <com.geovault.common.ToggleHelpCardView
+                android:id="@+id/lowAccuracyFallbackSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:toggleTitleText="@string/low_accuracy_fallback_label"
+                app:toggleHelpText="@string/low_accuracy_fallback_help_text"
+                android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
+                android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
+
+            <TextView
+                android:id="@+id/lowAccuracyFallbackTimeoutLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/low_accuracy_fallback_timeout_label"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp" />
+
+            <EditText
+                android:id="@+id/lowAccuracyFallbackTimeoutEdit"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:padding="14dp"
+                android:background="@drawable/edit_text_background"
+                android:textSize="16sp"
+                android:textColor="@color/text_primary"
+                android:minHeight="56dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/low_accuracy_fallback_timeout_help_text"
+                android:textSize="13sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginTop="8dp" />
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

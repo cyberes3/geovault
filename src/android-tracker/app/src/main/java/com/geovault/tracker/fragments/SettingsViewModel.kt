@@ -52,4 +52,10 @@ class SettingsViewModel @Inject constructor(
     fun setDistanceFilterMeters(value: Float) = settingsRepository.setDistanceFilterMeters(value)
 
     fun setAccuracyFilterMeters(value: Float) = settingsRepository.setAccuracyFilterMeters(value)
+
+    fun setLowAccuracyFallbackEnabled(enabled: Boolean) =
+        settingsRepository.setLowAccuracyFallbackEnabled(enabled)
+
+    fun setLowAccuracyFallbackTimeoutSec(value: Long) =
+        settingsRepository.setLowAccuracyFallbackTimeoutSec(value)
 }

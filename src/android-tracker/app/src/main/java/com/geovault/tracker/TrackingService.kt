@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.IBinder
 import android.content.pm.ServiceInfo
 import android.os.BatteryManager
+import android.os.Bundle
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.location.LocationCompat
@@ -18,6 +19,7 @@ import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.location.NetworkStatusMonitor
 import com.geovault.tracker.location.AutoTrackingMotionEngine
+import com.geovault.tracker.location.LowAccuracyFallbackCoordinator
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.location.TrackingControlEvent
 import com.geovault.tracker.location.TrackingControlPlane
@@ -151,6 +153,10 @@ class TrackingService : TrackPointServiceBase() {
         private const val MAX_BATCHES_PER_PUSH = 10
         private const val MAX_QUEUE_SIZE = 5000
         private const val MAX_QUEUE_AGE_MS = 7L * 24L * 60L * 60L * 1000L
+        private const val EXTRAS_KEY_LOW_ACCURACY_FALLBACK = "low_accuracy_fallback"
+        private const val EXTRAS_KEY_FALLBACK_SOURCE_PROVIDER = "fallback_source_provider"
+        private const val FALLBACK_PROVIDER_PREFIX = "low_accuracy_fallback:"
+        private const val FALLBACK_REJECT_SUMMARY_INTERVAL_MS = 30_000L
 
         @JvmStatic
         fun shouldRestartTrackingAfterProcessDeath(
@@ -169,6 +175,12 @@ class TrackingService : TrackPointServiceBase() {
             } catch (_: IllegalArgumentException) {
                 false
             }
+        }
+
+        @JvmStatic
+        internal fun resolveLowAccuracyFallbackTimeoutMs(timeoutSec: Long): Long {
+            val clampedTimeoutSec = TrackerSettings.clampLowAccuracyFallbackTimeoutSec(timeoutSec)
+            return clampedTimeoutSec * 1000L
         }
 
     }
@@ -216,6 +228,15 @@ class TrackingService : TrackPointServiceBase() {
     private var lastSpeedReferenceLocation: Location? = null
     private var autoModeTickJob: Job? = null
     private var currentSettings: TrackerSettings = TrackerSettings()
+    private var lowAccuracyFallbackJob: Job? = null
+    private var lowAccuracyFallbackCandidate: Location? = null
+    private val lowAccuracyFallbackCoordinator = LowAccuracyFallbackCoordinator()
+    private var lowAccuracyFallbackTimerArmedAtMs: Long = 0L
+    private var lowAccuracyFallbackEmitCountThisSession: Int = 0
+    private var lowAccuracyFallbackArmCountThisSession: Int = 0
+    private var lowAccuracyFallbackCancelCountThisSession: Int = 0
+    private var lowAccuracyFallbackRejectedFixCountThisSession: Int = 0
+    private var lowAccuracyFallbackLastRejectSummaryAtMs: Long = 0L
 
     @Inject
     lateinit var settingsRepository: TrackerSettingsRepository
@@ -325,6 +346,12 @@ class TrackingService : TrackPointServiceBase() {
         lastTrackedPropsJson = null
         consecutivePushFailures = 0
         lastSyncFailureClass = SyncFailureClass.NONE
+        lowAccuracyFallbackTimerArmedAtMs = 0L
+        lowAccuracyFallbackEmitCountThisSession = 0
+        lowAccuracyFallbackArmCountThisSession = 0
+        lowAccuracyFallbackCancelCountThisSession = 0
+        lowAccuracyFallbackRejectedFixCountThisSession = 0
+        lowAccuracyFallbackLastRejectSummaryAtMs = 0L
         TrackPointPipeline.resetLocalSession(selectedTrackerId)
         syncRuntimeStateStore()
         broadcastSessionStats()
@@ -378,6 +405,7 @@ class TrackingService : TrackPointServiceBase() {
         settingsRepository.clearWasTrackingBeforeExit()
         stopRecoveryHeartbeat()
         TrackingRecoveryCoordinator.markIntentionalStop(applicationContext, reason = reason)
+        cancelLowAccuracyFallbackTimer(clearCandidate = true, reason = "stop_tracking")
         unifiedLocationClient.stopSession()
         significantMotionBridge?.cancel()
         stopAutoModeTick()
@@ -430,6 +458,7 @@ class TrackingService : TrackPointServiceBase() {
                 decision.rejectReason == TrackPointRejectReason.STALE
             ) {
                 consecutiveBadAccuracyPoints++
+                onRejectedFixAwaitingLock(location)
                 if (consecutiveBadAccuracyPoints >= 3) {
                     isWaitingForGpsLock = true
                     updateNotificationCount()
@@ -449,8 +478,7 @@ class TrackingService : TrackPointServiceBase() {
             return
         }
 
-        consecutiveBadAccuracyPoints = 0
-        isWaitingForGpsLock = false
+        onAcceptedFixWithLock()
         val canonicalEvent = decision.canonicalEvent ?: return
         val smoothedLocation = Location(location).apply {
             latitude = canonicalEvent.lat
@@ -493,18 +521,7 @@ class TrackingService : TrackPointServiceBase() {
         lastSpeedReferenceLocation = Location(location)
 
         broadcastTrackPoint(smoothedLocation, canonicalEvent)
-
-        serviceScope.launch {
-            val queued = QueuedLocation.fromLocation(smoothedLocation, totalDistanceMeters)
-            database.locationDao().insert(queued)
-            val failureClass = pushLocations(
-                scope = QueueUploadScope.LIVE_ONLY,
-                sessionBoundaryMs = sessionBoundaryForBacklogMs
-            )
-            if (failureClass == SyncFailureClass.NONE) {
-                consecutivePushFailures = 0
-            }
-        }
+        enqueueAndPushLocation(smoothedLocation, totalDistanceMeters)
     }
 
     private suspend fun pushLocations(
@@ -740,6 +757,12 @@ class TrackingService : TrackPointServiceBase() {
             if (location.hasSpeed()) props.put("spd_kph", location.speed * 3.6f)
             props.put("prov", location.provider ?: "geovault")
             props.put("dist", distanceMeters.toDouble())
+            if (location.extras?.getBoolean(EXTRAS_KEY_LOW_ACCURACY_FALLBACK, false) == true) {
+                props.put("low_accuracy_fallback", true)
+                location.extras?.getString(EXTRAS_KEY_FALLBACK_SOURCE_PROVIDER)?.let { sourceProvider ->
+                    props.put("fallback_source_provider", sourceProvider)
+                }
+            }
             val sat = location.extras?.getInt("satellites", 0)?.takeIf { it > 0 }
             if (sat != null) props.put("sat", sat)
             val (batteryLevel, isCharging) = getBatteryStatus()
@@ -832,6 +855,7 @@ class TrackingService : TrackPointServiceBase() {
         stopAutoModeTick()
         stopPreflightMonitor()
         stopRetryJob()
+        cancelLowAccuracyFallbackTimer(clearCandidate = true, reason = "service_destroyed")
         serviceScope.cancel()
         pushDispatcher.close()
     }
@@ -967,6 +991,7 @@ class TrackingService : TrackPointServiceBase() {
             isGpsPaused = false
             isWaitingForGpsLock = false
             consecutiveStationaryPoints = 0
+            cancelLowAccuracyFallbackTimer(clearCandidate = false, reason = "gps_resumed")
             if (currentSettings.autoTrackingMode) {
                 autoTrackingMotionEngine.onGpsResumed(System.currentTimeMillis())
             }
@@ -1170,6 +1195,155 @@ class TrackingService : TrackPointServiceBase() {
     private fun transitionControlState(event: TrackingControlEvent, failureReason: String? = null) {
         controlState = TrackingControlPlane.transition(controlState, event, failureReason)
         syncRuntimeStateStore()
+    }
+
+    private fun onRejectedFixAwaitingLock(location: Location) {
+        if (!currentSettings.lowAccuracyFallbackEnabled || isGpsPaused || !isTracking) return
+        lowAccuracyFallbackRejectedFixCountThisSession++
+        lowAccuracyFallbackCandidate = Location(location)
+        val shouldStartTimer = lowAccuracyFallbackCoordinator.onRejectedFixForLock(
+            fallbackEligible = true
+        )
+        if (shouldStartTimer) {
+            lowAccuracyFallbackArmCountThisSession++
+            ensureLowAccuracyFallbackTimerRunning()
+        }
+        maybeLogFallbackRejectSummary(
+            provider = location.provider,
+            accuracyMeters = if (location.hasAccuracy()) location.accuracy else null
+        )
+    }
+
+    private fun onAcceptedFixWithLock() {
+        consecutiveBadAccuracyPoints = 0
+        isWaitingForGpsLock = false
+        lowAccuracyFallbackCoordinator.onAcceptedFix()
+        cancelLowAccuracyFallbackTimer(clearCandidate = true, reason = "lock_recovered")
+    }
+
+    private fun ensureLowAccuracyFallbackTimerRunning() {
+        if (lowAccuracyFallbackJob?.isActive == true) return
+        lowAccuracyFallbackTimerArmedAtMs = System.currentTimeMillis()
+        Log.i(
+            TAG,
+            "Low-accuracy fallback timer armed timeoutMs=${resolveLowAccuracyFallbackTimeoutMs()} " +
+                "armCountThisSession=$lowAccuracyFallbackArmCountThisSession"
+        )
+        lowAccuracyFallbackJob = serviceScope.launch {
+            while (isActive && isTracking) {
+                delay(resolveLowAccuracyFallbackTimeoutMs())
+                if (!emitLowAccuracyFallbackPointIfNeeded()) {
+                    break
+                }
+            }
+            Log.d(TAG, "Low-accuracy fallback timer loop exited isTracking=$isTracking")
+            lowAccuracyFallbackJob = null
+        }
+    }
+
+    private fun resolveLowAccuracyFallbackTimeoutMs(): Long {
+        return resolveLowAccuracyFallbackTimeoutMs(currentSettings.lowAccuracyFallbackTimeoutSec)
+    }
+
+    private fun emitLowAccuracyFallbackPointIfNeeded(): Boolean {
+        if (!isTracking || isGpsPaused || !currentSettings.lowAccuracyFallbackEnabled) return false
+        val candidate = lowAccuracyFallbackCandidate ?: return false
+        if (
+            !lowAccuracyFallbackCoordinator.shouldEmitFallback(
+                fallbackEligible = true,
+                hasCandidate = true
+            )
+        ) {
+            return false
+        }
+        val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
+        if (trackerId.isEmpty()) return false
+        val fallbackTimeMs = System.currentTimeMillis()
+        val waitingDurationMs = (fallbackTimeMs - lowAccuracyFallbackTimerArmedAtMs).coerceAtLeast(0L)
+        val fallbackLocation = Location(candidate).apply {
+            time = fallbackTimeMs
+            val sourceProvider = candidate.provider?.takeIf { it.isNotBlank() } ?: "fused"
+            provider = "$FALLBACK_PROVIDER_PREFIX$sourceProvider"
+            val mergedExtras = Bundle().apply {
+                candidate.extras?.let { putAll(it) }
+                putBoolean(EXTRAS_KEY_LOW_ACCURACY_FALLBACK, true)
+                putString(EXTRAS_KEY_FALLBACK_SOURCE_PROVIDER, sourceProvider)
+            }
+            extras = mergedExtras
+        }
+        val fallbackEvent = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackerId,
+            lon = fallbackLocation.longitude,
+            lat = fallbackLocation.latitude,
+            timestampMs = fallbackLocation.time,
+            accuracyMeters = if (fallbackLocation.hasAccuracy()) fallbackLocation.accuracy else null,
+            quality = TrackPointQuality.DEGRADED,
+            orderingKey = fallbackLocation.time
+        )
+        Log.d(
+            TAG,
+            "Low-accuracy fallback emitted provider=${candidate.provider} " +
+                "acc=${if (candidate.hasAccuracy()) candidate.accuracy else null} " +
+                "emitCountThisSession=${lowAccuracyFallbackEmitCountThisSession + 1} " +
+                "waitingDurationMs=$waitingDurationMs"
+        )
+        lowAccuracyFallbackEmitCountThisSession++
+        lowAccuracyFallbackTimerArmedAtMs = System.currentTimeMillis()
+        broadcastTrackPoint(fallbackLocation, fallbackEvent)
+        enqueueAndPushLocation(fallbackLocation, totalDistanceMeters)
+        return true
+    }
+
+    private fun enqueueAndPushLocation(location: Location, distanceMeters: Float) {
+        serviceScope.launch {
+            val queued = QueuedLocation.fromLocation(location, distanceMeters)
+            database.locationDao().insert(queued)
+            val failureClass = pushLocations(
+                scope = QueueUploadScope.LIVE_ONLY,
+                sessionBoundaryMs = sessionBoundaryForBacklogMs
+            )
+            if (failureClass == SyncFailureClass.NONE) {
+                consecutivePushFailures = 0
+            }
+        }
+    }
+
+    private fun cancelLowAccuracyFallbackTimer(clearCandidate: Boolean, reason: String) {
+        val hadActiveTimer = lowAccuracyFallbackJob?.isActive == true
+        val waitingDurationMs = if (lowAccuracyFallbackTimerArmedAtMs > 0L) {
+            (System.currentTimeMillis() - lowAccuracyFallbackTimerArmedAtMs).coerceAtLeast(0L)
+        } else {
+            0L
+        }
+        lowAccuracyFallbackJob?.cancel()
+        lowAccuracyFallbackJob = null
+        lowAccuracyFallbackCoordinator.onTrackingStopped()
+        lowAccuracyFallbackTimerArmedAtMs = 0L
+        if (hadActiveTimer) {
+            lowAccuracyFallbackCancelCountThisSession++
+            Log.i(
+                TAG,
+                "Low-accuracy fallback timer cancelled reason=$reason " +
+                    "waitingDurationMs=$waitingDurationMs " +
+                    "emitsThisSession=$lowAccuracyFallbackEmitCountThisSession " +
+                    "rejectsThisSession=$lowAccuracyFallbackRejectedFixCountThisSession"
+            )
+        }
+        if (clearCandidate) {
+            lowAccuracyFallbackCandidate = null
+        }
+    }
+
+    private fun maybeLogFallbackRejectSummary(provider: String?, accuracyMeters: Float?) {
+        val nowMs = System.currentTimeMillis()
+        if (nowMs - lowAccuracyFallbackLastRejectSummaryAtMs < FALLBACK_REJECT_SUMMARY_INTERVAL_MS) return
+        lowAccuracyFallbackLastRejectSummaryAtMs = nowMs
+        Log.d(
+            TAG,
+            "Low-accuracy fallback awaiting lock rejectsThisSession=$lowAccuracyFallbackRejectedFixCountThisSession " +
+                "provider=$provider acc=$accuracyMeters fallbackEnabled=${currentSettings.lowAccuracyFallbackEnabled}"
+        )
     }
 
 }

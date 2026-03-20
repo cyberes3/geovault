@@ -33,6 +33,8 @@ class TrackerSettingsRepositoryTest {
             .putString(TrackerSettingsRepositoryImpl.KEY_LOGGING_INTERVAL, "20")
             .putString(TrackerSettingsRepositoryImpl.KEY_LOGGING_DISTANCE, "40")
             .putString(TrackerSettingsRepositoryImpl.KEY_LOGGING_ACCURACY, "80")
+            .putBoolean(TrackerSettingsRepositoryImpl.KEY_LOW_ACCURACY_FALLBACK_ENABLED, false)
+            .putString(TrackerSettingsRepositoryImpl.KEY_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC, "90")
             .putBoolean(TrackerSettingsRepositoryImpl.KEY_EXTENDED_PARAMS, false)
             .putBoolean(TrackerSettingsRepositoryImpl.KEY_SIGNIFICANT_MOTION_ONLY, false)
             .putBoolean(TrackerSettingsRepositoryImpl.KEY_RESTART_TRACKING_IF_KILLED, false)
@@ -48,6 +50,8 @@ class TrackerSettingsRepositoryTest {
         assertEquals(20L, settings.loggingIntervalSec)
         assertEquals(40f, settings.distanceFilterMeters, 0.0001f)
         assertEquals(80f, settings.accuracyFilterMeters, 0.0001f)
+        assertFalse(settings.lowAccuracyFallbackEnabled)
+        assertEquals(90L, settings.lowAccuracyFallbackTimeoutSec)
         assertFalse(settings.sendExtendedData)
         assertFalse(settings.significantDataOnly)
         assertFalse(settings.resetTrackingIfKilled)
@@ -64,6 +68,7 @@ class TrackerSettingsRepositoryTest {
             .putString(TrackerSettingsRepositoryImpl.KEY_LOGGING_INTERVAL, "0")
             .putString(TrackerSettingsRepositoryImpl.KEY_LOGGING_DISTANCE, "-10")
             .putString(TrackerSettingsRepositoryImpl.KEY_LOGGING_ACCURACY, "999999")
+            .putString(TrackerSettingsRepositoryImpl.KEY_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC, "0")
             .commit()
 
         val repository = TrackerSettingsRepositoryImpl(context)
@@ -72,6 +77,31 @@ class TrackerSettingsRepositoryTest {
         assertEquals(TrackerSettings.MIN_LOGGING_INTERVAL_SEC, settings.loggingIntervalSec)
         assertEquals(TrackerSettings.MIN_DISTANCE_FILTER_METERS, settings.distanceFilterMeters, 0.0001f)
         assertEquals(TrackerSettings.MAX_ACCURACY_FILTER_METERS, settings.accuracyFilterMeters, 0.0001f)
+        assertEquals(
+            TrackerSettings.MIN_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC,
+            settings.lowAccuracyFallbackTimeoutSec
+        )
+    }
+
+    @Test
+    fun getSettings_usesLowAccuracyFallbackDefaults() {
+        val repository = TrackerSettingsRepositoryImpl(context)
+        val settings = repository.getSettings()
+
+        assertTrue(settings.lowAccuracyFallbackEnabled)
+        assertEquals(TrackerSettings.DEFAULT_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC, settings.lowAccuracyFallbackTimeoutSec)
+    }
+
+    @Test
+    fun setLowAccuracyFallback_updatesSettings() {
+        val repository = TrackerSettingsRepositoryImpl(context)
+
+        repository.setLowAccuracyFallbackEnabled(false)
+        repository.setLowAccuracyFallbackTimeoutSec(120L)
+        val settings = repository.getSettings()
+
+        assertFalse(settings.lowAccuracyFallbackEnabled)
+        assertEquals(120L, settings.lowAccuracyFallbackTimeoutSec)
     }
 
     @Test

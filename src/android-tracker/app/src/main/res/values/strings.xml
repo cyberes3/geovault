@@ -163,6 +163,10 @@
     <string name="logging_interval_help_text">Set how often a point can be recorded; lower values use more battery.</string>
     <string name="distance_filter_help_text">Ignore small movements until this minimum distance is reached.</string>
     <string name="accuracy_filter_help_text">Skip points with worse GPS accuracy than this limit.</string>
+    <string name="low_accuracy_fallback_label">Low Accuracy Fallback</string>
+    <string name="low_accuracy_fallback_help_text">If no GPS lock is available, send the best available location after a timeout.</string>
+    <string name="low_accuracy_fallback_timeout_label">Fallback Timeout (seconds)</string>
+    <string name="low_accuracy_fallback_timeout_help_text">How long to wait without a lock before sending a fallback location.</string>
 
     <!-- Restart / start on launch -->
     <string name="restart_tracking_if_killed_label">Restart tracking if app killed while tracking</string>

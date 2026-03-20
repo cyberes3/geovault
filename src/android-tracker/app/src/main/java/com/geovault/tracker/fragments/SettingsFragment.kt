@@ -45,6 +45,7 @@ class SettingsFragment : Fragment() {
     private lateinit var intervalEdit: EditText
     private lateinit var distanceEdit: EditText
     private lateinit var accuracyEdit: EditText
+    private lateinit var lowAccuracyFallbackTimeoutEdit: EditText
     private lateinit var profileSpinner: AutoCompleteTextView
     private lateinit var extendedParamsSwitch: ToggleHelpCardView
     private lateinit var significantMotionSwitch: ToggleHelpCardView
@@ -53,6 +54,7 @@ class SettingsFragment : Fragment() {
     private lateinit var restartTrackingIfKilledSwitch: ToggleHelpCardView
     private lateinit var startTrackingOnLaunchSwitch: ToggleHelpCardView
     private lateinit var autoTrackingSwitch: ToggleHelpCardView
+    private lateinit var lowAccuracyFallbackSwitch: ToggleHelpCardView
     private lateinit var hiddenTrackersButton: MaterialButton
     private lateinit var viewAllTrackersButton: MaterialButton
     private lateinit var distanceLabel: TextView
@@ -78,6 +80,7 @@ class SettingsFragment : Fragment() {
         intervalEdit = view.findViewById(R.id.intervalEdit)
         distanceEdit = view.findViewById(R.id.distanceEdit)
         accuracyEdit = view.findViewById(R.id.accuracyEdit)
+        lowAccuracyFallbackTimeoutEdit = view.findViewById(R.id.lowAccuracyFallbackTimeoutEdit)
         profileSpinner = view.findViewById(R.id.profileSpinner)
         extendedParamsSwitch = view.findViewById(R.id.extendedParamsSwitch)
         significantMotionRow = view.findViewById(R.id.significantMotionRow)
@@ -86,6 +89,7 @@ class SettingsFragment : Fragment() {
         restartTrackingIfKilledSwitch = view.findViewById(R.id.restartTrackingIfKilledSwitch)
         startTrackingOnLaunchSwitch = view.findViewById(R.id.startTrackingOnLaunchSwitch)
         autoTrackingSwitch = view.findViewById(R.id.autoTrackingSwitch)
+        lowAccuracyFallbackSwitch = view.findViewById(R.id.lowAccuracyFallbackSwitch)
         hiddenTrackersButton = view.findViewById(R.id.hiddenTrackersButton)
         viewAllTrackersButton = view.findViewById(R.id.viewAllTrackersButton)
         distanceLabel = view.findViewById(R.id.distanceLabel)
@@ -109,7 +113,13 @@ class SettingsFragment : Fragment() {
     private fun setupKeyboardAwareScrolling() {
         KeyboardScrollHelper.installNestedScrollFocusAutoScroll(
             scrollView = settingsScrollView,
-            focusableViews = listOf(intervalEdit, distanceEdit, accuracyEdit, serverUrlEdit),
+            focusableViews = listOf(
+                intervalEdit,
+                distanceEdit,
+                accuracyEdit,
+                lowAccuracyFallbackTimeoutEdit,
+                serverUrlEdit
+            ),
             centerBias = 0.5f
         )
     }
@@ -193,6 +203,11 @@ class SettingsFragment : Fragment() {
         }
     }
 
+    private fun updateLowAccuracyFallbackUi(enabled: Boolean) {
+        lowAccuracyFallbackTimeoutEdit.isEnabled = enabled
+        lowAccuracyFallbackTimeoutEdit.alpha = if (enabled) 1f else 0.5f
+    }
+
     private fun showLoggingHelpDialog() {
         AlertDialog.Builder(requireContext())
             .setTitle(getString(R.string.logging_help_title))
@@ -268,6 +283,12 @@ class SettingsFragment : Fragment() {
 
         extendedParamsSwitch.isChecked = settings.sendExtendedData
         significantMotionSwitch.isChecked = settings.significantDataOnly
+        lowAccuracyFallbackSwitch.isChecked = settings.lowAccuracyFallbackEnabled
+        updateLowAccuracyFallbackUi(settings.lowAccuracyFallbackEnabled)
+        updateNumericEditFromState(
+            lowAccuracyFallbackTimeoutEdit,
+            settings.lowAccuracyFallbackTimeoutSec.toString()
+        )
         startOnBootSwitch.isChecked = settings.startOnBoot
         restartTrackingIfKilledSwitch.isChecked = settings.resetTrackingIfKilled
         startTrackingOnLaunchSwitch.isChecked = settings.startTrackingOnLaunch
@@ -316,9 +337,16 @@ class SettingsFragment : Fragment() {
             updateAutoTrackingUi(isChecked)
         }
 
+        lowAccuracyFallbackSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isBindingSettings) return@setOnCheckedChangeListener
+            viewModel.setLowAccuracyFallbackEnabled(isChecked)
+            updateLowAccuracyFallbackUi(isChecked)
+        }
+
         configureNumericInputCommit(intervalEdit) { commitIntervalInput() }
         configureNumericInputCommit(distanceEdit) { commitDistanceInput() }
         configureNumericInputCommit(accuracyEdit) { commitAccuracyInput() }
+        configureNumericInputCommit(lowAccuracyFallbackTimeoutEdit) { commitLowAccuracyFallbackTimeoutInput() }
         setupProfileCustomWatchers()
     }
 
@@ -454,6 +482,19 @@ class SettingsFragment : Fragment() {
         }
     }
 
+    private fun commitLowAccuracyFallbackTimeoutInput() {
+        val raw = lowAccuracyFallbackTimeoutEdit.text?.toString()?.trim().orEmpty()
+        val parsed = raw.toLongOrNull()
+        if (parsed == null) {
+            updateNumericEditFromState(
+                lowAccuracyFallbackTimeoutEdit,
+                viewModel.uiState.value.settings.lowAccuracyFallbackTimeoutSec.toString()
+            )
+            return
+        }
+        viewModel.setLowAccuracyFallbackTimeoutSec(parsed)
+    }
+
     private fun applyDefaultsForInvalidInputs() {
         if (isBindingSettings) return
         val isImperial = com.geovault.common.UnitUtils.usesImperialUnitsDefault(requireContext())
@@ -483,6 +524,15 @@ class SettingsFragment : Fragment() {
             updateNumericEditFromState(accuracyEdit, toDisplay(defaultMeters, isImperial).toString())
         } else {
             viewModel.setAccuracyFilterMeters(fromDisplay(accuracyParsed, isImperial))
+        }
+
+        val fallbackTimeoutParsed = lowAccuracyFallbackTimeoutEdit.text?.toString()?.trim()?.toLongOrNull()
+        if (fallbackTimeoutParsed == null) {
+            val defaultTimeoutSec = TrackerSettings.DEFAULT_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC
+            viewModel.setLowAccuracyFallbackTimeoutSec(defaultTimeoutSec)
+            updateNumericEditFromState(lowAccuracyFallbackTimeoutEdit, defaultTimeoutSec.toString())
+        } else {
+            viewModel.setLowAccuracyFallbackTimeoutSec(fallbackTimeoutParsed)
         }
     }
 

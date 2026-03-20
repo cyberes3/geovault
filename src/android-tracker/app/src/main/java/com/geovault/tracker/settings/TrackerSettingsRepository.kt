@@ -14,6 +14,8 @@ interface TrackerSettingsRepository {
     fun setLoggingIntervalSec(value: Long)
     fun setDistanceFilterMeters(value: Float)
     fun setAccuracyFilterMeters(value: Float)
+    fun setLowAccuracyFallbackEnabled(enabled: Boolean)
+    fun setLowAccuracyFallbackTimeoutSec(value: Long)
     fun setStartOnBoot(enabled: Boolean)
     fun setStartTrackingOnLaunch(enabled: Boolean)
 

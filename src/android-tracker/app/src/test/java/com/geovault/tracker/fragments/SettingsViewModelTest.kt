@@ -27,12 +27,16 @@ class SettingsViewModelTest {
         viewModel.setLoggingIntervalSec(42L)
         viewModel.setTrackingProfile(TrackerTrackingProfile.DRIVING)
         viewModel.setAccuracyFilterMeters(123f)
+        viewModel.setLowAccuracyFallbackEnabled(true)
+        viewModel.setLowAccuracyFallbackTimeoutSec(77L)
 
         val state = fakeRepository.getSettings()
         assertTrue(state.autoTrackingMode)
         assertEquals(42L, state.loggingIntervalSec)
         assertEquals(TrackerTrackingProfile.DRIVING, state.trackingProfile)
         assertEquals(123f, state.accuracyFilterMeters, 0.0001f)
+        assertTrue(state.lowAccuracyFallbackEnabled)
+        assertEquals(77L, state.lowAccuracyFallbackTimeoutSec)
         assertFalse(viewModel.uiState.value.settings.sendExtendedData)
     }
 
@@ -72,6 +76,14 @@ class SettingsViewModelTest {
 
         override fun setAccuracyFilterMeters(value: Float) {
             flow.value = flow.value.copy(accuracyFilterMeters = value)
+        }
+
+        override fun setLowAccuracyFallbackEnabled(enabled: Boolean) {
+            flow.value = flow.value.copy(lowAccuracyFallbackEnabled = enabled)
+        }
+
+        override fun setLowAccuracyFallbackTimeoutSec(value: Long) {
+            flow.value = flow.value.copy(lowAccuracyFallbackTimeoutSec = value)
         }
 
         override fun setStartOnBoot(enabled: Boolean) {

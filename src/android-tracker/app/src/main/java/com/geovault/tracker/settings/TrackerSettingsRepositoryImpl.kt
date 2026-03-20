@@ -20,6 +20,8 @@ class TrackerSettingsRepositoryImpl @Inject constructor(
         const val KEY_LOGGING_INTERVAL = "logging_interval"
         const val KEY_LOGGING_DISTANCE = "logging_distance"
         const val KEY_LOGGING_ACCURACY = "logging_accuracy"
+        const val KEY_LOW_ACCURACY_FALLBACK_ENABLED = "low_accuracy_fallback_enabled"
+        const val KEY_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC = "low_accuracy_fallback_timeout_sec"
         const val KEY_EXTENDED_PARAMS = "extended_params"
         const val KEY_SIGNIFICANT_MOTION_ONLY = "significant_motion_only"
         const val KEY_AUTO_TRACKING_ENABLED = "auto_tracking_enabled"
@@ -45,6 +47,8 @@ class TrackerSettingsRepositoryImpl @Inject constructor(
         KEY_LOGGING_INTERVAL,
         KEY_LOGGING_DISTANCE,
         KEY_LOGGING_ACCURACY,
+        KEY_LOW_ACCURACY_FALLBACK_ENABLED,
+        KEY_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC,
         KEY_EXTENDED_PARAMS,
         KEY_SIGNIFICANT_MOTION_ONLY,
         KEY_AUTO_TRACKING_ENABLED,
@@ -122,6 +126,15 @@ class TrackerSettingsRepositoryImpl @Inject constructor(
         prefs.edit().putString(KEY_LOGGING_ACCURACY, clamped.toString()).apply()
     }
 
+    override fun setLowAccuracyFallbackEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_LOW_ACCURACY_FALLBACK_ENABLED, enabled).apply()
+    }
+
+    override fun setLowAccuracyFallbackTimeoutSec(value: Long) {
+        val clamped = TrackerSettings.clampLowAccuracyFallbackTimeoutSec(value)
+        prefs.edit().putString(KEY_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC, clamped.toString()).apply()
+    }
+
     override fun setStartOnBoot(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_START_ON_BOOT, enabled).apply()
     }
@@ -155,12 +168,23 @@ class TrackerSettingsRepositoryImpl @Inject constructor(
             KEY_LOGGING_ACCURACY,
             TrackerSettings.DEFAULT_ACCURACY_FILTER_METERS.toString()
         )?.toFloatOrNull() ?: TrackerSettings.DEFAULT_ACCURACY_FILTER_METERS
+        val lowAccuracyFallbackTimeoutSecRaw = prefs.getString(
+            KEY_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC,
+            TrackerSettings.DEFAULT_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC.toString()
+        )?.toLongOrNull() ?: TrackerSettings.DEFAULT_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC
         val profileIndex = prefs.getString(KEY_TRACKING_PROFILE, "1")?.toIntOrNull() ?: 1
 
         return TrackerSettings(
             loggingIntervalSec = TrackerSettings.clampLoggingIntervalSec(intervalSecRaw),
             distanceFilterMeters = TrackerSettings.clampDistanceFilterMeters(distanceRaw),
             accuracyFilterMeters = TrackerSettings.clampAccuracyFilterMeters(accuracyRaw),
+            lowAccuracyFallbackEnabled = prefs.getBoolean(
+                KEY_LOW_ACCURACY_FALLBACK_ENABLED,
+                TrackerSettings.DEFAULT_LOW_ACCURACY_FALLBACK_ENABLED
+            ),
+            lowAccuracyFallbackTimeoutSec = TrackerSettings.clampLowAccuracyFallbackTimeoutSec(
+                lowAccuracyFallbackTimeoutSecRaw
+            ),
             sendExtendedData = prefs.getBoolean(KEY_EXTENDED_PARAMS, true),
             significantDataOnly = prefs.getBoolean(KEY_SIGNIFICANT_MOTION_ONLY, true),
             resetTrackingIfKilled = prefs.getBoolean(KEY_RESTART_TRACKING_IF_KILLED, true),

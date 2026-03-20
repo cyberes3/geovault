@@ -4,6 +4,8 @@ data class TrackerSettings(
     val loggingIntervalSec: Long = DEFAULT_LOGGING_INTERVAL_SEC,
     val distanceFilterMeters: Float = DEFAULT_DISTANCE_FILTER_METERS,
     val accuracyFilterMeters: Float = DEFAULT_ACCURACY_FILTER_METERS,
+    val lowAccuracyFallbackEnabled: Boolean = DEFAULT_LOW_ACCURACY_FALLBACK_ENABLED,
+    val lowAccuracyFallbackTimeoutSec: Long = DEFAULT_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC,
     val sendExtendedData: Boolean = true,
     val significantDataOnly: Boolean = true,
     val resetTrackingIfKilled: Boolean = true,
@@ -25,6 +27,10 @@ data class TrackerSettings(
         const val DEFAULT_ACCURACY_FILTER_METERS: Float = 50f
         const val MIN_ACCURACY_FILTER_METERS: Float = 1f
         const val MAX_ACCURACY_FILTER_METERS: Float = 10_000f
+        const val DEFAULT_LOW_ACCURACY_FALLBACK_ENABLED: Boolean = true
+        const val DEFAULT_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC: Long = 60L
+        const val MIN_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC: Long = 1L
+        const val MAX_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC: Long = 3600L
 
         @JvmStatic
         fun clampLoggingIntervalSec(value: Long): Long {
@@ -39,6 +45,14 @@ data class TrackerSettings(
         @JvmStatic
         fun clampAccuracyFilterMeters(value: Float): Float {
             return value.coerceIn(MIN_ACCURACY_FILTER_METERS, MAX_ACCURACY_FILTER_METERS)
+        }
+
+        @JvmStatic
+        fun clampLowAccuracyFallbackTimeoutSec(value: Long): Long {
+            return value.coerceIn(
+                MIN_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC,
+                MAX_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC
+            )
         }
     }
 }
