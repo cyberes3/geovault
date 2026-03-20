@@ -3,4 +3,10 @@
     <declare-styleable name="LoadingSpinner">
         <attr name="spinnerSize" format="dimension" />
     </declare-styleable>
+
+    <declare-styleable name="ToggleHelpCardView">
+        <attr name="toggleTitleText" format="string" />
+        <attr name="toggleHelpText" format="string" />
+        <attr name="toggleChecked" format="boolean" />
+    </declare-styleable>
 </resources>

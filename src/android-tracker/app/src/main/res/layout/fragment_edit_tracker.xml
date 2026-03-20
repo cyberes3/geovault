@@ -135,43 +135,23 @@
                     android:layout_weight="0.5" />
             </LinearLayout>
 
-            <LinearLayout
+            <com.geovault.common.ToggleHelpCardView
+                android:id="@+id/editTrackerDefaultSwitch"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/default_track_label"
-                    android:textSize="16sp"
-                    android:textColor="@color/text_primary" />
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/editTrackerDefaultSwitch"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
-            </LinearLayout>
+                app:toggleTitleText="@string/default_track_label"
+                app:toggleHelpText="@string/default_tracker_help_text"
+                android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
+                android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
 
-            <LinearLayout
+            <com.geovault.common.ToggleHelpCardView
+                android:id="@+id/editTrackerHideOnMapSwitch"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="24dp">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/hide_on_map"
-                    android:textSize="16sp"
-                    android:textColor="@color/text_primary" />
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/editTrackerHideOnMapSwitch"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
-            </LinearLayout>
+                app:toggleTitleText="@string/hide_on_map"
+                app:toggleHelpText="@string/edit_tracker_hide_help_text"
+                android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
+                android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
 
             <TextView
                 android:layout_width="match_parent"
@@ -180,12 +160,13 @@
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:textColor="@color/text_primary"
+                android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
                 android:layout_marginBottom="8dp" />
             <com.google.android.material.textfield.TextInputLayout
                 style="@style/gv_common_ExposedDropdownMenu"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp">
+                android:layout_marginBottom="6dp">
                 <AutoCompleteTextView
                     android:id="@+id/editTrackerRecentDataSpinner"
                     style="@style/gv_common_AutoCompleteDropdown"
@@ -194,6 +175,14 @@
                     android:minHeight="56dp"
                     android:hint="@string/show_recent_data" />
             </com.google.android.material.textfield.TextInputLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/show_recent_data_help_text"
+                android:textSize="13sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="24dp" />
 
             <LinearLayout
                 android:id="@+id/editTrackerSharingSection"
@@ -207,87 +196,48 @@
                     layout="@layout/include_sharing_section"
                     android:id="@+id/editTrackerSharingSectionInclude" />
 
-                <LinearLayout
+                <com.geovault.common.ToggleHelpCardView
+                    android:id="@+id/editTrackerShareParamsRecipients"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="8dp">
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/share_params_with_recipients_label"
-                        android:textSize="14sp"
-                        android:textColor="@color/text_primary" />
-                    <androidx.appcompat.widget.SwitchCompat
-                        android:id="@+id/editTrackerShareParamsRecipients"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" />
-                </LinearLayout>
+                    app:toggleTitleText="@string/share_params_with_recipients_label"
+                    app:toggleHelpText="@string/share_params_with_recipients_help_text"
+                    android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
+                    android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
 
-                <LinearLayout
+                <com.geovault.common.ToggleHelpCardView
+                    android:id="@+id/editTrackerAllowGroupReshare"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="8dp">
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/allow_adding_to_groups_label"
-                        android:textSize="14sp"
-                        android:textColor="@color/text_primary" />
-                    <androidx.appcompat.widget.SwitchCompat
-                        android:id="@+id/editTrackerAllowGroupReshare"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" />
-                </LinearLayout>
+                    app:toggleTitleText="@string/allow_adding_to_groups_label"
+                    app:toggleHelpText="@string/allow_adding_to_groups_warning"
+                    android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
+                    android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
 
-                <LinearLayout
+                <com.geovault.common.ToggleHelpCardView
+                    android:id="@+id/editTrackerWorldShareEnabled"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="8dp">
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/world_share_enabled_label"
-                        android:textSize="14sp"
-                        android:textColor="@color/text_primary" />
-                    <androidx.appcompat.widget.SwitchCompat
-                        android:id="@+id/editTrackerWorldShareEnabled"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" />
-                </LinearLayout>
+                    app:toggleTitleText="@string/world_share_enabled_label"
+                    app:toggleHelpText="@string/world_share_enabled_help_text"
+                    android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
+                    android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
 
-                <LinearLayout
+                <com.geovault.common.ToggleHelpCardView
                     android:id="@+id/editTrackerWorldShareParamsRow"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="8dp"
+                    app:toggleTitleText="@string/share_params_with_world_label"
+                    app:toggleHelpText="@string/share_params_with_world_help_text"
+                    android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
+                    android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical"
                     android:visibility="gone">
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/share_params_with_world_label"
-                        android:textSize="14sp"
-                        android:textColor="@color/text_primary" />
-                    <androidx.appcompat.widget.SwitchCompat
-                        android:id="@+id/editTrackerShareParamsWorld"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" />
-                </LinearLayout>
+                </com.geovault.common.ToggleHelpCardView>
 
                 <FrameLayout
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content">
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical">
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/editTrackerCopyWorldLink"
                         style="@style/gv_common_ButtonOutlined"
@@ -310,24 +260,14 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:visibility="gone"
-                android:layout_marginBottom="24dp">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/owner_tools"
-                    android:textSize="14sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/text_primary"
-                    android:layout_marginBottom="8dp" />
+                android:layout_marginBottom="8dp">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/editTrackerExportKml"
                     style="@style/gv_common_ButtonOutlined"
-                    android:layout_width="wrap_content"
-                    android:layout_height="40dp"
-                    android:text="@string/export_kml"
-                    android:layout_marginBottom="8dp" />
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:text="@string/export_kml" />
 
             </LinearLayout>
 

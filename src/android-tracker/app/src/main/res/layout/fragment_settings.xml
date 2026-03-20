@@ -21,55 +21,51 @@
             android:padding="20dp">
 
             <!-- Toggle switches section (top) -->
-            <androidx.appcompat.widget.SwitchCompat
+            <com.geovault.common.ToggleHelpCardView
                 android:id="@+id/extendedParamsSwitch"
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="@string/extended_params_label"
-                android:textSize="16sp"
-                android:textColor="@color/text_primary"
-                android:layout_marginBottom="8dp" />
+                android:layout_height="wrap_content"
+                app:toggleTitleText="@string/extended_params_label"
+                app:toggleHelpText="@string/extended_params_help_text"
+                android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
+                android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
 
-            <FrameLayout
+            <com.geovault.common.ToggleHelpCardView
                 android:id="@+id/significantMotionRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp">
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/significantMotionSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="56dp"
-                    android:text="Only log if motion detected"
-                    android:textSize="16sp"
-                    android:textColor="@color/text_primary" />
-            </FrameLayout>
+                app:toggleTitleText="@string/significant_motion_label"
+                app:toggleHelpText="@string/significant_motion_help_text"
+                android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
+                android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical">
+            </com.geovault.common.ToggleHelpCardView>
 
-            <androidx.appcompat.widget.SwitchCompat
+            <com.geovault.common.ToggleHelpCardView
                 android:id="@+id/startOnBootSwitch"
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="Start tracking on boot"
-                android:textSize="16sp"
-                android:textColor="@color/text_primary"
-                android:layout_marginBottom="8dp" />
+                android:layout_height="wrap_content"
+                app:toggleTitleText="@string/start_on_boot_label"
+                app:toggleHelpText="@string/start_on_boot_help_text"
+                android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
+                android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
 
-            <androidx.appcompat.widget.SwitchCompat
+            <com.geovault.common.ToggleHelpCardView
                 android:id="@+id/restartTrackingIfKilledSwitch"
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="@string/restart_tracking_if_killed_label"
-                android:textSize="16sp"
-                android:textColor="@color/text_primary"
-                android:layout_marginBottom="8dp" />
+                android:layout_height="wrap_content"
+                app:toggleTitleText="@string/restart_tracking_if_killed_label"
+                app:toggleHelpText="@string/restart_tracking_if_killed_help_text"
+                android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
+                android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
 
-            <androidx.appcompat.widget.SwitchCompat
+            <com.geovault.common.ToggleHelpCardView
                 android:id="@+id/startTrackingOnLaunchSwitch"
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="@string/start_tracking_on_launch_label"
-                android:textSize="16sp"
-                android:textColor="@color/text_primary"
-                android:layout_marginBottom="16dp" />
+                android:layout_height="wrap_content"
+                app:toggleTitleText="@string/start_tracking_on_launch_label"
+                app:toggleHelpText="@string/start_tracking_on_launch_help_text"
+                android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
+                android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/hiddenTrackersButton"
@@ -77,6 +73,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:text="@string/hidden_trackers"
+                android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
                 android:layout_marginBottom="16dp" />
 
             <com.google.android.material.button.MaterialButton
@@ -96,14 +93,14 @@
                 android:layout_marginBottom="24dp" />
 
             <!-- Auto Tracking Toggle -->
-            <androidx.appcompat.widget.SwitchCompat
+            <com.geovault.common.ToggleHelpCardView
                 android:id="@+id/autoTrackingSwitch"
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="@string/auto_tracking_label"
-                android:textSize="16sp"
-                android:textColor="@color/text_primary"
-                android:layout_marginBottom="8dp" />
+                android:layout_height="wrap_content"
+                app:toggleTitleText="@string/auto_tracking_label"
+                app:toggleHelpText="@string/auto_tracking_help_text"
+                android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
+                android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
 
             <!-- Tracking Profile Selector -->
             <TextView
@@ -113,13 +110,14 @@
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:textColor="@color/text_primary"
+                android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
                 android:layout_marginBottom="8dp" />
 
             <com.google.android.material.textfield.TextInputLayout
                 style="@style/gv_common_ExposedDropdownMenu"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp">
+                android:layout_marginBottom="6dp">
                 <AutoCompleteTextView
                     android:id="@+id/profileSpinner"
                     style="@style/gv_common_AutoCompleteDropdown"
@@ -128,6 +126,14 @@
                     android:minHeight="56dp"
                     android:hint="@string/tracking_profile_label" />
             </com.google.android.material.textfield.TextInputLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/tracking_profile_help_text"
+                android:textSize="13sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="24dp" />
 
 
             <!-- Logging / filter fields section -->
@@ -142,7 +148,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Logging Interval (seconds)"
+                    android:text="@string/logging_interval_label"
                     android:textSize="14sp"
                     android:textStyle="bold"
                     android:textColor="@color/text_primary" />
@@ -167,8 +173,16 @@
                 android:background="@drawable/edit_text_background"
                 android:textSize="16sp"
                 android:textColor="@color/text_primary"
-                android:layout_marginBottom="24dp"
+                android:layout_marginBottom="8dp"
                 android:minHeight="56dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/logging_interval_help_text"
+                android:textSize="13sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="16dp" />
 
             <TextView
                 android:id="@+id/distanceLabel"
@@ -189,8 +203,16 @@
                 android:background="@drawable/edit_text_background"
                 android:textSize="16sp"
                 android:textColor="@color/text_primary"
-                android:layout_marginBottom="24dp"
+                android:layout_marginBottom="8dp"
                 android:minHeight="56dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/distance_filter_help_text"
+                android:textSize="13sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="16dp" />
 
             <TextView
                 android:id="@+id/accuracyLabel"
@@ -216,6 +238,14 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:text="@string/accuracy_filter_help_text"
+                android:textSize="13sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginTop="8dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:text="@string/tracking_settings_apply_after_restart"
                 android:textSize="13sp"
                 android:textColor="@color/text_secondary"
@@ -235,7 +265,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Server URL"
+                android:text="@string/server_url_label"
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:textColor="@color/text_primary"

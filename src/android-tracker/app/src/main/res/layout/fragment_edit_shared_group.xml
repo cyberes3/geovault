@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -69,33 +70,21 @@
                 android:textSize="14sp"
                 android:textColor="@color/text_secondary" />
 
-            <LinearLayout
+            <com.geovault.common.ToggleHelpCardView
+                android:id="@+id/editSharedGroupHideInListSwitch"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginTop="20dp"
-                android:layout_marginBottom="16dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/hide_in_list_label"
-                    android:textSize="16sp"
-                    android:textColor="@color/text_primary" />
-
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/editSharedGroupHideInListSwitch"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
-            </LinearLayout>
+                app:toggleTitleText="@string/hide_in_list_label"
+                app:toggleHelpText="@string/hide_in_list_hint"
+                android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
+                android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/editSharedGroupLeave"
                 style="@style/gv_common_ButtonOutlinedDestructive"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
+                android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
                 android:text="@string/leave_group" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>

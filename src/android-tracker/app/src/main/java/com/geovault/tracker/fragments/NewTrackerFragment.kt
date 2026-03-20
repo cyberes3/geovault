@@ -6,12 +6,12 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.widget.SwitchCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.geovault.common.ToggleHelpCardView
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerManager
 import com.geovault.tracker.showHueColorPickerDialog
@@ -30,7 +30,7 @@ class NewTrackerFragment : Fragment() {
     private lateinit var nameEdit: EditText
     private lateinit var colorEdit: EditText
     private lateinit var colorPreview: View
-    private lateinit var selectedTrackSwitch: SwitchCompat
+    private lateinit var selectedTrackSwitch: ToggleHelpCardView
     private lateinit var pickColorButton: MaterialButton
     private lateinit var createButton: MaterialButton
     private lateinit var cancelButton: MaterialButton

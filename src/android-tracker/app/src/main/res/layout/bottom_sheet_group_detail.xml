@@ -53,69 +53,47 @@
     <include
         layout="@layout/include_sharing_section"
         android:id="@+id/sharingSectionInclude" />
-    <LinearLayout
+    <com.geovault.common.ToggleHelpCardView
         android:id="@+id/groupDetailWorldShareRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="6dp"
-        android:visibility="gone">
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/groupDetailWorldShareSwitch"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/world_share_enabled_label"
-            android:textSize="14sp"
-            android:textColor="@color/text_primary"
-            android:paddingStart="6dp"
-            android:paddingEnd="6dp" />
-        <FrameLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content">
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/groupDetailCopyWorldLink"
-                style="@style/gv_common_ButtonOutlined"
-                android:layout_width="192dp"
-                android:layout_height="36dp"
-                android:text="@string/copy_world_share_link"
-                android:visibility="gone" />
-            <com.geovault.common.LoadingSpinner
-                android:id="@+id/groupDetailCopyWorldLinkSpinner"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                app:spinnerSize="24dp" />
-        </FrameLayout>
-    </LinearLayout>
+        app:toggleTitleText="@string/world_share_enabled_label"
+        app:toggleHelpText="@string/world_share_enabled_help_text"
+        android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
+        android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical"
+        android:visibility="gone" />
 
-    <LinearLayout
+    <FrameLayout
+        android:id="@+id/groupDetailWorldShareCopyRow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
+        android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical"
+        android:visibility="gone">
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/groupDetailCopyWorldLink"
+            style="@style/gv_common_ButtonOutlined"
+            android:layout_width="192dp"
+            android:layout_height="36dp"
+            android:text="@string/copy_world_share_link"
+            android:visibility="gone" />
+        <com.geovault.common.LoadingSpinner
+            android:id="@+id/groupDetailCopyWorldLinkSpinner"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            app:spinnerSize="24dp" />
+    </FrameLayout>
+
+    <com.geovault.common.ToggleHelpCardView
         android:id="@+id/groupDetailHideInListRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginTop="6dp"
-        android:layout_marginBottom="6dp"
-        android:visibility="gone">
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/groupDetailHideInListSwitch"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/hide_in_list_label"
-            android:textSize="14sp"
-            android:textColor="@color/text_primary"
-            android:paddingStart="6dp"
-            android:paddingEnd="6dp" />
-    </LinearLayout>
+        app:toggleTitleText="@string/hide_in_list_label"
+        app:toggleHelpText="@string/hide_in_list_hint"
+        android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
+        android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical"
+        android:visibility="gone" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/groupDetailDelete"

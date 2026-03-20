@@ -14,7 +14,6 @@ import android.widget.TextView
 import android.widget.Toast
 import android.view.inputmethod.EditorInfo
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.widget.SwitchCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
@@ -23,6 +22,7 @@ import androidx.lifecycle.lifecycleScope
 import com.geovault.common.AppResetFlow
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.KeyboardScrollHelper
+import com.geovault.common.ToggleHelpCardView
 import com.geovault.common.R as CommonR
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
@@ -46,13 +46,13 @@ class SettingsFragment : Fragment() {
     private lateinit var distanceEdit: EditText
     private lateinit var accuracyEdit: EditText
     private lateinit var profileSpinner: AutoCompleteTextView
-    private lateinit var extendedParamsSwitch: SwitchCompat
-    private lateinit var significantMotionSwitch: SwitchCompat
+    private lateinit var extendedParamsSwitch: ToggleHelpCardView
+    private lateinit var significantMotionSwitch: ToggleHelpCardView
     private lateinit var significantMotionRow: View
-    private lateinit var startOnBootSwitch: SwitchCompat
-    private lateinit var restartTrackingIfKilledSwitch: SwitchCompat
-    private lateinit var startTrackingOnLaunchSwitch: SwitchCompat
-    private lateinit var autoTrackingSwitch: SwitchCompat
+    private lateinit var startOnBootSwitch: ToggleHelpCardView
+    private lateinit var restartTrackingIfKilledSwitch: ToggleHelpCardView
+    private lateinit var startTrackingOnLaunchSwitch: ToggleHelpCardView
+    private lateinit var autoTrackingSwitch: ToggleHelpCardView
     private lateinit var hiddenTrackersButton: MaterialButton
     private lateinit var viewAllTrackersButton: MaterialButton
     private lateinit var distanceLabel: TextView
@@ -80,8 +80,8 @@ class SettingsFragment : Fragment() {
         accuracyEdit = view.findViewById(R.id.accuracyEdit)
         profileSpinner = view.findViewById(R.id.profileSpinner)
         extendedParamsSwitch = view.findViewById(R.id.extendedParamsSwitch)
-        significantMotionSwitch = view.findViewById(R.id.significantMotionSwitch)
         significantMotionRow = view.findViewById(R.id.significantMotionRow)
+        significantMotionSwitch = view.findViewById(R.id.significantMotionRow)
         startOnBootSwitch = view.findViewById(R.id.startOnBootSwitch)
         restartTrackingIfKilledSwitch = view.findViewById(R.id.restartTrackingIfKilledSwitch)
         startTrackingOnLaunchSwitch = view.findViewById(R.id.startTrackingOnLaunchSwitch)

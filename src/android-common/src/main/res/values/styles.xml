@@ -116,6 +116,14 @@
         <item name="cardMaxElevation">0dp</item>
     </style>
 
+    <style name="gv_common_ToggleHelpCard" parent="Widget.MaterialComponents.CardView">
+        <item name="cardElevation">0dp</item>
+        <item name="strokeColor">@color/gv_common_border_light</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="cardCornerRadius">8dp</item>
+        <item name="cardBackgroundColor">@color/gv_common_surface</item>
+    </style>
+
     <style name="gv_common_FloatingActionButton_NoShadow" parent="Widget.MaterialComponents.FloatingActionButton">
         <item name="elevation">0dp</item>
         <item name="hoveredFocusedTranslationZ">0dp</item>

@@ -114,6 +114,7 @@
     <string name="live_active_fit_disable">Disable live active tracker fit</string>
     <!-- Extended params: when on, sends full data; when off, sends only position + time to minimize data usage -->
     <string name="extended_params_label">Send extended data</string>
+    <string name="extended_params_help_text">Include extra sensor and telemetry fields with each point.</string>
     <string name="no_extended_params_latest_point">No extended parameters for the latest point.</string>
 
     <!-- Logging settings help -->
@@ -124,7 +125,9 @@
     <!-- Tracking profiles -->
     <string name="tracking_settings_apply_after_restart">Changes to tracking and logging settings apply the next time you start tracking.</string>
     <string name="auto_tracking_label">Auto tracking mode</string>
+    <string name="auto_tracking_help_text">Let the app adjust tracking behavior automatically instead of manual profile settings.</string>
     <string name="tracking_profile_label">Tracking Profile</string>
+    <string name="tracking_profile_help_text">Choose a preset tuned for your activity, or use Custom to control values yourself.</string>
     <string name="profile_walking">Walking</string>
     <string name="profile_biking">Biking</string>
     <string name="profile_driving">Driving</string>
@@ -146,6 +149,16 @@
     <string name="unable_to_start_location_updates">Unable to start location updates. Check permissions and location settings.</string>
     <string name="location_permission_revoked">Location permission was removed. Tracking stopped.</string>
     <string name="motion_sensor_unavailable_toast">Motion detection isn\'t available on this device</string>
+    <string name="significant_motion_label">Only log if motion detected</string>
+    <string name="significant_motion_help_text">Only record points after your device detects meaningful movement.</string>
+    <string name="start_on_boot_label">Start tracking on boot</string>
+    <string name="start_on_boot_help_text">Resume tracking automatically after the device restarts.</string>
+    <string name="restart_tracking_if_killed_help_text">Start tracking again if Android stops the app while tracking is active.</string>
+    <string name="start_tracking_on_launch_help_text">Begin tracking automatically when you open the app.</string>
+    <string name="logging_interval_label">Logging Interval (seconds)</string>
+    <string name="logging_interval_help_text">Set how often a point can be recorded; lower values use more battery.</string>
+    <string name="distance_filter_help_text">Ignore small movements until this minimum distance is reached.</string>
+    <string name="accuracy_filter_help_text">Skip points with worse GPS accuracy than this limit.</string>
 
     <!-- Restart / start on launch -->
     <string name="restart_tracking_if_killed_label">Restart tracking if app killed while tracking</string>
@@ -206,6 +219,7 @@
     <string name="failed_to_delete_tracker">Failed to delete tracker</string>
     <string name="pick_color">Pick color</string>
     <string name="show_recent_data">Show recent data</string>
+    <string name="show_recent_data_help_text">Show only points in this time window; choose All to show full history.</string>
     <string name="recent_data_all">All</string>
     <string name="recent_data_1min">1 minute</string>
     <string name="recent_data_1h">1 hour</string>
@@ -261,15 +275,20 @@
     <string name="no_other_users_found">No other users found</string>
     <string name="add_recipient">Add Recipient</string>
     <string name="pick_users_to_share_with">Pick Users to Share With</string>
+    <string name="sharing_visibility_help_text">Private is only you, Shared is specific users, and Public is open to authenticated users.</string>
+    <string name="sharing_pick_users_help_text">Add or remove users who can see this; it applies only when visibility is Shared.</string>
     <plurals name="shared_with_user_count">
         <item quantity="one">Shared with 1 user</item>
         <item quantity="other">Shared with %d users</item>
     </plurals>
     <string name="share_params_with_recipients_label">Share parameters with recipients</string>
+    <string name="share_params_with_recipients_help_text">When on, people you share with can see extended parameters such as speed and altitude.</string>
     <string name="allow_adding_to_groups_label">Allow adding to groups</string>
     <string name="allow_adding_to_groups_warning">When on, people who have access can add this tracker to their groups. Groups may share it with more users or world links.</string>
     <string name="world_share_enabled_label">Enable world share link</string>
+    <string name="world_share_enabled_help_text">When on, anyone with the link can view this on a read-only map without logging in.</string>
     <string name="share_params_with_world_label">Share parameters with world link</string>
+    <string name="share_params_with_world_help_text">When on, anyone with the world link can see extended parameters.</string>
     <string name="copy_world_share_link">Copy world link</string>
     <string name="world_link_copied">World link copied to clipboard</string>
     <string name="invalid_emails_error">Invalid emails: %1$s</string>
@@ -324,6 +343,8 @@
     <string name="edit_shared_group_title">Shared Group</string>
 
     <string name="hide_on_map">Hide</string>
+    <string name="hide_on_map_help_text">Hide this shared tracker on your map without unsubscribing.</string>
+    <string name="edit_tracker_hide_help_text">Hide this tracker from your map and lists; you can show it again in Hidden Trackers.</string>
     <string name="show_on_map">Show on map</string>
     <string name="hidden_trackers">Hidden Trackers</string>
     <string name="hidden_trackers_hint">Tap the eye icon to show a tracker again.</string>
@@ -335,6 +356,7 @@
     <string name="hidden_groups_empty">No hidden groups.</string>
     <string name="show_all_trackers_in_settings">View all trackers</string>
     <string name="show_all_groups">Show all groups</string>
+    <string name="default_tracker_help_text">Use this as the tracker selected by default when starting tracking.</string>
 
     <string name="subscribers_title">Subscribers</string>
     <string name="export_kml">Export KML</string>

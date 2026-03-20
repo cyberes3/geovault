@@ -30,13 +30,13 @@ import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.ui.applyDialogButtonColors
 import com.geovault.common.LoadingSpinner
 import com.geovault.common.NaturalSort
+import com.geovault.common.ToggleHelpCardView
 import com.geovault.common.R as CommonR
 import com.geovault.tracker.showHueColorPickerDialog
 import com.geovault.tracker.updateColorPreview
 import com.google.android.material.button.MaterialButton
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import androidx.appcompat.widget.SwitchCompat
 import androidx.core.widget.NestedScrollView
 import kotlinx.coroutines.launch
 
@@ -49,8 +49,8 @@ class EditTrackerFragment : Fragment() {
     private lateinit var colorEdit: EditText
     private lateinit var colorPreview: View
     private lateinit var pickColorButton: MaterialButton
-    private lateinit var selectedTrackSwitch: SwitchCompat
-    private lateinit var hideOnMapSwitch: SwitchCompat
+    private lateinit var selectedTrackSwitch: ToggleHelpCardView
+    private lateinit var hideOnMapSwitch: ToggleHelpCardView
     private lateinit var saveButton: MaterialButton
     private lateinit var clearHistoryButton: MaterialButton
     private lateinit var deleteButton: MaterialButton
@@ -63,12 +63,13 @@ class EditTrackerFragment : Fragment() {
     private lateinit var sharingSection: View
     private lateinit var visibilitySpinner: AutoCompleteTextView
     private lateinit var pickUsersButton: MaterialButton
+    private lateinit var pickUsersHelpText: TextView
     private lateinit var sharedWithCountText: TextView
-    private lateinit var shareParamsRecipientsSwitch: SwitchCompat
-    private lateinit var allowGroupReshareSwitch: SwitchCompat
-    private lateinit var worldShareEnabledSwitch: SwitchCompat
+    private lateinit var shareParamsRecipientsSwitch: ToggleHelpCardView
+    private lateinit var allowGroupReshareSwitch: ToggleHelpCardView
+    private lateinit var worldShareEnabledSwitch: ToggleHelpCardView
     private lateinit var worldShareParamsRow: View
-    private lateinit var shareParamsWorldSwitch: SwitchCompat
+    private lateinit var shareParamsWorldSwitch: ToggleHelpCardView
     private lateinit var copyWorldLinkButton: MaterialButton
     private lateinit var copyWorldLinkSpinner: LoadingSpinner
     private lateinit var ownerToolsSection: View
@@ -151,12 +152,13 @@ class EditTrackerFragment : Fragment() {
         sharingSection = view.findViewById(R.id.editTrackerSharingSection)
         visibilitySpinner = view.findViewById(R.id.sharing_visibility_spinner)
         pickUsersButton = view.findViewById(R.id.sharing_pick_users_button)
+        pickUsersHelpText = view.findViewById(R.id.sharing_pick_users_help_text_view)
         sharedWithCountText = view.findViewById(R.id.sharing_shared_with_count_text)
         shareParamsRecipientsSwitch = view.findViewById(R.id.editTrackerShareParamsRecipients)
         allowGroupReshareSwitch = view.findViewById(R.id.editTrackerAllowGroupReshare)
         worldShareEnabledSwitch = view.findViewById(R.id.editTrackerWorldShareEnabled)
         worldShareParamsRow = view.findViewById(R.id.editTrackerWorldShareParamsRow)
-        shareParamsWorldSwitch = view.findViewById(R.id.editTrackerShareParamsWorld)
+        shareParamsWorldSwitch = view.findViewById(R.id.editTrackerWorldShareParamsRow)
         copyWorldLinkButton = view.findViewById(R.id.editTrackerCopyWorldLink)
         copyWorldLinkSpinner = view.findViewById(R.id.editTrackerCopyWorldLinkSpinner)
         ownerToolsSection = view.findViewById(R.id.editTrackerOwnerToolsSection)
@@ -171,12 +173,14 @@ class EditTrackerFragment : Fragment() {
         visibilitySpinner.setAdapter(visibilityAdapter)
         visibilitySpinner.setText(visibilityLabels[0], false)
         pickUsersButton.visibility = View.GONE
+        pickUsersHelpText.visibility = View.GONE
         sharedWithCountText.visibility = View.GONE
         visibilitySpinner.setOnItemClickListener { _, _, position, _ ->
             selectedVisibilityIndex = position
             val vis = if (position in visibilityValues.indices) visibilityValues[position] else "private"
             val showShared = vis == "shared"
             pickUsersButton.visibility = if (showShared) View.VISIBLE else View.GONE
+            pickUsersHelpText.visibility = if (showShared) View.VISIBLE else View.GONE
             sharedWithCountText.visibility = if (showShared) View.VISIBLE else View.GONE
             if (showShared) updateSharedWithCountText()
         }
@@ -433,6 +437,7 @@ class EditTrackerFragment : Fragment() {
             visibilitySpinner.setText(visibilityLabels[visIdx], false)
             val showShared = vis == "shared"
             pickUsersButton.visibility = if (showShared) View.VISIBLE else View.GONE
+            pickUsersHelpText.visibility = if (showShared) View.VISIBLE else View.GONE
             sharedWithCountText.visibility = if (showShared) View.VISIBLE else View.GONE
             sharedWithEmails.clear()
             sharedWithEmails.addAll(tracker.shared_with_emails ?: emptyList())

@@ -11,15 +11,14 @@ import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.EditText
 import android.widget.ImageButton
-import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.widget.SwitchCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.LoadingSpinner
 import com.geovault.common.NaturalSort
+import com.geovault.common.ToggleHelpCardView
 import com.geovault.tracker.Group
 import com.geovault.tracker.GroupPatchRequest
 import com.geovault.tracker.RepositoryResult
@@ -54,13 +53,13 @@ class GroupDetailFragment : Fragment() {
     private lateinit var visibilityLayout: View
     private lateinit var visibilitySpinner: AutoCompleteTextView
     private lateinit var pickUsersButton: com.google.android.material.button.MaterialButton
+    private lateinit var pickUsersHelpText: TextView
     private lateinit var sharedWithCountText: TextView
-    private lateinit var worldShareRow: LinearLayout
-    private lateinit var worldShareSwitch: SwitchCompat
+    private lateinit var worldShareRow: ToggleHelpCardView
+    private lateinit var worldShareCopyRow: View
     private lateinit var copyWorldLinkButton: com.google.android.material.button.MaterialButton
     private lateinit var copyWorldLinkSpinner: LoadingSpinner
-    private lateinit var hideInListRow: LinearLayout
-    private lateinit var hideInListSwitch: SwitchCompat
+    private lateinit var hideInListRow: ToggleHelpCardView
     private lateinit var closeButton: ImageButton
     private lateinit var titleText: TextView
     private lateinit var loadingOverlay: View
@@ -88,13 +87,13 @@ class GroupDetailFragment : Fragment() {
         visibilityLayout = view.findViewById(R.id.sharing_visibility_layout)
         visibilitySpinner = view.findViewById(R.id.sharing_visibility_spinner)
         pickUsersButton = view.findViewById(R.id.sharing_pick_users_button)
+        pickUsersHelpText = view.findViewById(R.id.sharing_pick_users_help_text_view)
         sharedWithCountText = view.findViewById(R.id.sharing_shared_with_count_text)
         worldShareRow = view.findViewById(R.id.groupDetailWorldShareRow)
-        worldShareSwitch = view.findViewById(R.id.groupDetailWorldShareSwitch)
+        worldShareCopyRow = view.findViewById(R.id.groupDetailWorldShareCopyRow)
         copyWorldLinkButton = view.findViewById(R.id.groupDetailCopyWorldLink)
         copyWorldLinkSpinner = view.findViewById(R.id.groupDetailCopyWorldLinkSpinner)
         hideInListRow = view.findViewById(R.id.groupDetailHideInListRow)
-        hideInListSwitch = view.findViewById(R.id.groupDetailHideInListSwitch)
         closeButton = view.findViewById(R.id.groupDetailCloseButton)
         titleText = view.findViewById(R.id.groupDetailTitle)
         loadingOverlay = view.findViewById(R.id.groupDetailLoadingOverlay)
@@ -150,6 +149,7 @@ class GroupDetailFragment : Fragment() {
         visibilityHeader.visibility = View.VISIBLE
         visibilityLayout.visibility = View.VISIBLE
         worldShareRow.visibility = View.VISIBLE
+        worldShareCopyRow.visibility = View.VISIBLE
         selectedVisibilityIndex = visibilityValues.indexOf(g.visibility ?: "private").coerceIn(0, visibilityValues.size - 1)
         val labels = listOf(getString(R.string.visibility_private), getString(R.string.visibility_shared), getString(R.string.visibility_public))
         val adapter = ArrayAdapter(requireContext(), CommonR.layout.gv_common_item_dropdown, labels)
@@ -159,19 +159,22 @@ class GroupDetailFragment : Fragment() {
             selectedVisibilityIndex = position
             val isShared = visibilityValues[position] == "shared"
             pickUsersButton.visibility = if (isShared) View.VISIBLE else View.GONE
+            pickUsersHelpText.visibility = if (isShared) View.VISIBLE else View.GONE
             sharedWithCountText.visibility = if (isShared) View.VISIBLE else View.GONE
             if (isShared) updateSharedWithCountText()
         }
         if (g.visibility == "shared") {
             pickUsersButton.visibility = View.VISIBLE
+            pickUsersHelpText.visibility = View.VISIBLE
             sharedWithCountText.visibility = View.VISIBLE
             updateSharedWithCountText()
             pickUsersButton.setOnClickListener { showAddSharedWithDialog() }
         } else {
             pickUsersButton.visibility = View.GONE
+            pickUsersHelpText.visibility = View.GONE
             sharedWithCountText.visibility = View.GONE
         }
-        worldShareSwitch.isChecked = !g.world_share_id.isNullOrBlank()
+        worldShareRow.isChecked = !g.world_share_id.isNullOrBlank()
         copyWorldLinkButton.visibility = if (g.world_share_url != null) View.VISIBLE else View.GONE
         copyWorldLinkButton.setOnClickListener {
             val url = group?.world_share_url
@@ -183,16 +186,16 @@ class GroupDetailFragment : Fragment() {
                 navHost()?.showSnackbar(getString(R.string.world_link_copied))
             }
         }
-        worldShareSwitch.setOnCheckedChangeListener { _, isChecked ->
+        worldShareRow.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
                 copyWorldLinkButton.visibility = View.VISIBLE
-                worldShareSwitch.isEnabled = false
+                worldShareRow.isEnabled = false
                 copyWorldLinkButton.isEnabled = false
                 copyWorldLinkButton.text = ""
                 copyWorldLinkSpinner.show()
                 viewLifecycleOwner.lifecycleScope.launch {
                     val result = groupManagementRepository.patchGroup(g.id, GroupPatchRequest(world_share_enabled = true))
-                    worldShareSwitch.isEnabled = true
+                    worldShareRow.isEnabled = true
                     copyWorldLinkButton.isEnabled = true
                     copyWorldLinkButton.text = getString(R.string.copy_world_share_link)
                     copyWorldLinkSpinner.hide()
@@ -206,8 +209,8 @@ class GroupDetailFragment : Fragment() {
             }
         }
         hideInListRow.visibility = View.VISIBLE
-        hideInListSwitch.isChecked = g.hidden_in_list == true
-        hideInListSwitch.setOnCheckedChangeListener(null)
+        hideInListRow.isChecked = g.hidden_in_list == true
+        hideInListRow.setOnCheckedChangeListener(null)
         hideLoading()
     }
 
@@ -287,10 +290,10 @@ class GroupDetailFragment : Fragment() {
         val visibility = if (selectedVisibilityIndex in visibilityValues.indices) visibilityValues[selectedVisibilityIndex] else "private"
         val request = GroupPatchRequest(
             name = name,
-            hidden_in_list = hideInListSwitch.isChecked,
+            hidden_in_list = hideInListRow.isChecked,
             visibility = visibility,
             shared_with_emails = if (visibility == "shared") sharedWithEmailsForSave.toList() else null,
-            world_share_enabled = worldShareSwitch.isChecked
+            world_share_enabled = worldShareRow.isChecked
         )
         setAllInputsEnabled(false)
         viewLifecycleOwner.lifecycleScope.launch {
@@ -311,8 +314,8 @@ class GroupDetailFragment : Fragment() {
         nameEdit.isEnabled = enabled
         visibilitySpinner.isEnabled = enabled
         pickUsersButton.isEnabled = enabled
-        worldShareSwitch.isEnabled = enabled
-        hideInListSwitch.isEnabled = enabled
+        worldShareRow.isEnabled = enabled
+        hideInListRow.isEnabled = enabled
         deleteButton.isEnabled = enabled
         saveButton.isEnabled = enabled
     }

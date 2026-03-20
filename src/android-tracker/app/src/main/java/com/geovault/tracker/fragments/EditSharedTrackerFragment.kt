@@ -7,12 +7,12 @@ import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.widget.SwitchCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.geovault.common.ToggleHelpCardView
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
@@ -31,7 +31,7 @@ class EditSharedTrackerFragment : Fragment() {
 
     private lateinit var trackerName: TextView
     private lateinit var trackerOwner: TextView
-    private lateinit var hideOnMapSwitch: SwitchCompat
+    private lateinit var hideOnMapSwitch: ToggleHelpCardView
     private lateinit var unsubscribeButton: MaterialButton
     private lateinit var removeFromShareButton: MaterialButton
     private lateinit var closeButton: ImageButton
