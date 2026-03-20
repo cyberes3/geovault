@@ -191,7 +191,10 @@ class DiscoverTrackersFragment : Fragment() {
             }
 
             val incomingTrackers = response.shared_with_me
-            val incomingSharedGroups = response.shared_with_me_groups
+            // Defensive: pending shared groups must not expose per-track items pre-acceptance.
+            val incomingSharedGroups = response.shared_with_me_groups.map {
+                it.copy(track_ids = emptyList())
+            }
             onMyMapTrackersData = onMyMapTrackers
             onMyMapGroupsData = onMyMapGroupsForUi
             incomingTrackersData = incomingTrackers

@@ -438,6 +438,7 @@ import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } fr
 import { setupMapFollowListeners } from './mapFollowLock.js';
 import { useTileSources } from './useTileSources.js';
 import { formatTimestampLocal } from './paramFormatters.js';
+import { computeVisibleSharedTrackers, isAcceptedOrOwnedGroup } from './sharingSelectors.js';
 
 const maplibregl = window.gv_core?.maplibre || window.maplibregl;
 
@@ -532,11 +533,6 @@ export default {
 
     const trackerIdsOnMap = computed(() => new Set(trackers.value.map((t) => String(t.id))));
 
-    function isAcceptedOrOwnedGroup(group) {
-      if (group?.is_owner === true) return true;
-      return group?.is_accepted === true;
-    }
-
     const sortedGroups = computed(() => {
       return [...groups.value]
         .filter((group) => isAcceptedOrOwnedGroup(group))
@@ -567,18 +563,14 @@ export default {
     const visibleTrackersTab = computed(() =>
       sortedTrackers.value.filter((t) => t.is_owner === true && !(t.settings && t.settings.hidden_in_list))
     );
-    const visibleSharedTab = computed(() => {
-      const sharedGroups = sortedGroups.value.filter((g) => g.is_owner !== true && !hiddenGroupIds.value.has(String(g.id)));
-      const trackIdsInSharedGroups = new Set(
-        sharedGroups.flatMap((g) => (g.track_ids || []).map((id) => String(id)))
-      );
-      return sortedTrackers.value.filter(
-        (t) =>
-          t.is_owner !== true &&
-          !trackIdsInSharedGroups.has(String(t.id)) &&
-          !hiddenTrackIds.value.has(String(t.id))
-      );
-    });
+    const visibleSharedTab = computed(() =>
+      computeVisibleSharedTrackers(
+        sortedTrackers.value,
+        sortedGroups.value,
+        hiddenTrackIds.value,
+        hiddenGroupIds.value
+      )
+    );
     const visibleGroupsTab = computed(() =>
       sortedGroups.value.filter((g) => g.is_owner === true && !g.hidden_in_list)
     );
@@ -861,7 +853,10 @@ export default {
         const res = await api.get('/trackers/available-to-add/');
         const data = res.data || {};
         incomingSharedTrackers.value = Array.isArray(data.shared_with_me) ? data.shared_with_me : [];
-        incomingSharedGroups.value = Array.isArray(data.shared_with_me_groups) ? data.shared_with_me_groups : [];
+        // Defensive: pending shared groups should not expose per-track items pre-acceptance.
+        incomingSharedGroups.value = Array.isArray(data.shared_with_me_groups)
+          ? data.shared_with_me_groups.map((g) => ({ ...g, track_ids: [] }))
+          : [];
       } catch (e) {
         const err = api.handleError && api.handleError(e);
         if (window.gv_core?.GeoVault?.toast) {

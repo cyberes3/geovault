@@ -38,6 +38,8 @@ class StartupRefreshOrchestratorTest {
         assertEquals(1, gateway.fetchUserStatusCalls)
         assertEquals(1, gateway.fetchTrackersCalls)
         assertEquals(1, gateway.fetchGroupsCalls)
+        assertEquals(1, gateway.fetchMapVisibilityCalls)
+        assertEquals(1, gateway.fetchAvailableToAddCalls)
         assertEquals(1, gateway.fetchSelectedTrackerCalls)
         assertEquals(1, gateway.refreshSelectedTrackerGeometryCalls)
     }
@@ -60,6 +62,8 @@ class StartupRefreshOrchestratorTest {
         assertEquals(1, gateway.fetchUserStatusCalls)
         assertEquals(1, gateway.fetchTrackersCalls)
         assertEquals(1, gateway.fetchGroupsCalls)
+        assertEquals(1, gateway.fetchMapVisibilityCalls)
+        assertEquals(1, gateway.fetchAvailableToAddCalls)
         assertEquals(0, gateway.fetchSelectedTrackerCalls)
         assertEquals(0, gateway.refreshSelectedTrackerGeometryCalls)
     }
@@ -80,6 +84,8 @@ class StartupRefreshOrchestratorTest {
         assertEquals(1, gateway.fetchUserStatusCalls)
         assertEquals(1, gateway.fetchTrackersCalls)
         assertEquals(1, gateway.fetchGroupsCalls)
+        assertEquals(1, gateway.fetchMapVisibilityCalls)
+        assertEquals(1, gateway.fetchAvailableToAddCalls)
         assertEquals(1, gateway.fetchSelectedTrackerCalls)
         assertEquals(1, gateway.refreshSelectedTrackerGeometryCalls)
     }
@@ -90,6 +96,8 @@ class StartupRefreshOrchestratorTest {
         var fetchUserStatusCalls = 0
         var fetchTrackersCalls = 0
         var fetchGroupsCalls = 0
+        var fetchMapVisibilityCalls = 0
+        var fetchAvailableToAddCalls = 0
         var fetchSelectedTrackerCalls = 0
         var refreshSelectedTrackerGeometryCalls = 0
 
@@ -120,6 +128,14 @@ class StartupRefreshOrchestratorTest {
         ): Tracker? {
             refreshSelectedTrackerGeometryCalls++
             return trackers?.find { it.id == trackerId }
+        }
+
+        override suspend fun fetchMapVisibility(context: Context, forceRefresh: Boolean) {
+            fetchMapVisibilityCalls++
+        }
+
+        override suspend fun fetchAvailableToAdd(context: Context, forceRefresh: Boolean) {
+            fetchAvailableToAddCalls++
         }
     }
 }

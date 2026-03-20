@@ -218,6 +218,7 @@ import { ArrowPathIcon, EyeIcon, EyeSlashIcon, MagnifyingGlassIcon, PlusIcon, Us
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import Loader from 'platform/components/parts/Loader.vue';
 import TrackListChevronIcon from './TrackListChevronIcon.vue';
+import { filterByQuery, isGroupHiddenByMap, isSharedOrPublicTracker, toIdSet } from './sharingSelectors.js';
 
 export default {
   name: 'SharedWithMeSidebarContent',
@@ -250,29 +251,13 @@ export default {
   setup(props, { emit }) {
     const searchQuery = ref('');
 
-    const sharedTrackers = computed(() =>
-      props.trackers.filter(
-        (t) =>
-          t.is_owner === false &&
-          ((t.visibility || '') === 'shared' || (t.visibility || '') === 'public')
-      )
-    );
+    const sharedTrackers = computed(() => props.trackers.filter((t) => isSharedOrPublicTracker(t)));
 
-    const filterByQuery = (list, nameKey = 'name', ownerKey = 'owner_email') => {
-      const q = (searchQuery.value || '').trim().toLowerCase();
-      if (!q) return list;
-      return list.filter(
-        (item) =>
-          (item[nameKey] || '').toLowerCase().includes(q) ||
-          (item[ownerKey] || '').toLowerCase().includes(q)
-      );
-    };
-
-    const filteredIncoming = computed(() => filterByQuery(props.incomingTrackers || []));
-    const filteredIncomingGroups = computed(() => filterByQuery(props.incomingGroups || [], 'name', 'owner_email'));
-    const filteredShared = computed(() => filterByQuery(sharedTrackers.value));
+    const filteredIncoming = computed(() => filterByQuery(props.incomingTrackers || [], searchQuery.value));
+    const filteredIncomingGroups = computed(() => filterByQuery(props.incomingGroups || [], searchQuery.value, 'name', 'owner_email'));
+    const filteredShared = computed(() => filterByQuery(sharedTrackers.value, searchQuery.value));
     const filteredSharedGroupsOnMap = computed(() =>
-      filterByQuery(props.sharedGroupsOnMap || [], 'name', 'owner_email')
+      filterByQuery(props.sharedGroupsOnMap || [], searchQuery.value, 'name', 'owner_email')
     );
 
     function isAddingGroup(groupId) {
@@ -293,17 +278,11 @@ export default {
     }
 
     function isHidden(trackId) {
-      const hid = props.hiddenTrackIds;
-      if (hid instanceof Set) return hid.has(trackId);
-      return Array.isArray(hid) && hid.includes(trackId);
+      return toIdSet(props.hiddenTrackIds).has(String(trackId));
     }
 
     function isGroupHidden(group) {
-      const trackIds = group?.track_ids || [];
-      if (trackIds.length === 0) return false;
-      const hid = props.hiddenTrackIds;
-      const has = (id) => (hid instanceof Set ? hid.has(id) : Array.isArray(hid) && hid.includes(id));
-      return trackIds.every((id) => has(String(id)));
+      return isGroupHiddenByMap(group, props.hiddenTrackIds, []);
     }
 
     function isUnsubscribingGroup(groupId) {

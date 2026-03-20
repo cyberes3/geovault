@@ -95,6 +95,7 @@ import { CheckCircleIcon } from '@heroicons/vue/24/solid';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import Loader from 'platform/components/parts/Loader.vue';
+import { filterByQuery } from './sharingSelectors.js';
 
 export default {
   name: 'DiscoverTrackersModal',
@@ -126,13 +127,7 @@ export default {
     });
 
     const filteredList = computed(() => {
-      const q = (searchQuery.value || '').trim().toLowerCase();
-      if (!q) return combinedList.value;
-      return combinedList.value.filter(
-        (t) =>
-          (t.name || '').toLowerCase().includes(q) ||
-          (t.owner_email || '').toLowerCase().includes(q)
-      );
+      return filterByQuery(combinedList.value, searchQuery.value, 'name', 'owner_email');
     });
 
     async function fetchAvailable() {

@@ -602,7 +602,7 @@ class TestLiveTrackAPI(TestCase):
         self.client.force_login(self.user)
 
     def test_available_to_add_includes_shared_with_me_groups(self):
-        """GET trackers/available-to-add/ returns shared_with_me_groups when group is shared with user (LiveTrackGroupShare)."""
+        """GET trackers/available-to-add/ returns pending shared groups without per-track IDs until accepted."""
         with _patch_live_track_enabled():
             track_resp = self.client.post(
                 "/api/extensions/live-track/trackers/",
@@ -640,7 +640,7 @@ class TestLiveTrackAPI(TestCase):
         self.assertIn("shared_with_me_groups", data)
         self.assertEqual(len(data["shared_with_me_groups"]), 1)
         self.assertEqual(data["shared_with_me_groups"][0]["id"], group_id)
-        self.assertIn(track_id, data["shared_with_me_groups"][0]["track_ids"])
+        self.assertEqual(data["shared_with_me_groups"][0]["track_ids"], [])
         self.client.force_login(self.user)
 
     def test_available_to_add_includes_public_groups(self):
@@ -684,7 +684,7 @@ class TestLiveTrackAPI(TestCase):
         self.client.force_login(self.user)
 
     def test_available_to_add_shared_with_me_groups_via_group_share(self):
-        """GET trackers/available-to-add/ returns group in shared_with_me_groups when shared via GroupShare (no membership)."""
+        """GET trackers/available-to-add/ includes pending shared groups but hides group track IDs until acceptance."""
         with _patch_live_track_enabled():
             track_resp = self.client.post(
                 "/api/extensions/live-track/trackers/",
@@ -722,7 +722,7 @@ class TestLiveTrackAPI(TestCase):
         self.assertIn("shared_with_me_groups", data)
         self.assertEqual(len(data["shared_with_me_groups"]), 1)
         self.assertEqual(data["shared_with_me_groups"][0]["id"], group_id)
-        self.assertIn(track_id, data["shared_with_me_groups"][0]["track_ids"])
+        self.assertEqual(data["shared_with_me_groups"][0]["track_ids"], [])
         self.client.force_login(self.user)
 
     def test_available_to_add_includes_shared_group_even_when_track_already_owned(self):
@@ -813,6 +813,43 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(accepted.status_code, 201)
         self.assertEqual(allowed.status_code, 200)
         self.client.force_login(self.user)
+
+    def test_group_owner_can_get_group_member_track_without_subscription(self):
+        """Group owner can still fetch a track in their group when subscription row is missing."""
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            track_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Owner Missing Sub"}),
+                content_type="application/json",
+            )
+        track_id = track_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.user.email],
+                }),
+                content_type="application/json",
+            )
+        self.client.force_login(self.user)
+        with _patch_live_track_enabled():
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Owned Group Missing Sub"}),
+                content_type="application/json",
+            )
+        group_id = group_resp.json()["id"]
+        group = LiveTrackGroup.objects.get(id=group_id)
+        track = LiveTrack.objects.get(id=track_id)
+        LiveTrackGroupMember.objects.get_or_create(group=group, track=track)
+        LiveTrackSubscription.objects.filter(user=self.user, track_id=track_id).delete()
+        with _patch_live_track_enabled():
+            get_resp = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/")
+        self.assertEqual(get_resp.status_code, 200)
+        self.assertEqual(get_resp.json()["id"], track_id)
+        self.client.force_login(self.other_user)
 
     def test_cross_user_reshare_group_stays_unaccepted_until_group_accept(self):
         """Cross-user re-share path (dummy-like) does not auto-accept for recipients."""
@@ -2983,6 +3020,58 @@ class TestLiveTrackGroups(TestCase):
             accepted_list = self.client.get("/api/extensions/live-track/groups/")
         self.assertEqual(accepted_list.status_code, 200)
         self.assertTrue(accepted_list.json()[0]["is_accepted"])
+        self.client.force_login(self.user)
+
+    def test_group_track_ids_hidden_until_share_accepted(self):
+        """Pending shared groups do not expose track_ids; accepted groups do."""
+        with _patch_live_track_enabled():
+            tracker_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Shared Group Tracker"}),
+                content_type="application/json",
+            )
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Pending Group"}),
+                content_type="application/json",
+            )
+        tracker_id = tracker_resp.json()["id"]
+        group_id = group_resp.json()["id"]
+        with _patch_live_track_enabled():
+            add_resp = self.client.post(
+                f"/api/extensions/live-track/groups/{group_id}/tracks/",
+                data=json.dumps({"track_id": tracker_id}),
+                content_type="application/json",
+            )
+        self.assertEqual(add_resp.status_code, 200)
+        with _patch_live_track_enabled():
+            self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            pending_resp = self.client.get(f"/api/extensions/live-track/groups/{group_id}/")
+        self.assertEqual(pending_resp.status_code, 200)
+        self.assertEqual(pending_resp.json().get("track_ids"), [])
+        self.assertFalse(pending_resp.json().get("is_accepted"))
+
+        with _patch_live_track_enabled():
+            accept_resp = self.client.post(
+                f"/api/extensions/live-track/groups/{group_id}/accept-share/",
+                content_type="application/json",
+            )
+        self.assertEqual(accept_resp.status_code, 201)
+        with _patch_live_track_enabled():
+            accepted_resp = self.client.get(f"/api/extensions/live-track/groups/{group_id}/")
+        self.assertEqual(accepted_resp.status_code, 200)
+        self.assertIn(str(tracker_id), [str(tid) for tid in accepted_resp.json().get("track_ids", [])])
+        self.assertTrue(accepted_resp.json().get("is_accepted"))
         self.client.force_login(self.user)
 
     def test_group_patch_visibility(self):

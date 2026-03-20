@@ -1,61 +1,42 @@
 package com.geovault.tracker.fragments.map
 
-import android.content.Context
-import com.geovault.tracker.AppError
 import com.geovault.tracker.Group
 import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerCoordinatesResponse
-import com.geovault.tracker.TrackerRepository
+import com.geovault.tracker.data.GroupManagementRepository
+import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.pipeline.TrackPointBusGateway
 import com.geovault.tracker.pipeline.TrackPointEvent
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.suspendCancellableCoroutine
 import javax.inject.Inject
-import kotlin.coroutines.resume
 
 class TrackerRepositoryMapTrackRepository @Inject constructor(
-    @param:ApplicationContext private val appContext: Context
+    private val trackerRepository: TrackerManagementRepository
 ) : MapTrackRepository {
     override suspend fun getTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> =
-        suspendCancellableCoroutine { continuation ->
-            TrackerRepository.getTrackersResult(appContext, forceRefresh = forceRefresh) { result ->
-                continuation.resume(result)
-            }
-        }
+        trackerRepository.loadTrackers(forceRefresh = forceRefresh)
 
     override suspend fun getTracker(id: String, forceRefresh: Boolean): RepositoryResult<Tracker> =
-        suspendCancellableCoroutine { continuation ->
-            TrackerRepository.getTracker(appContext, id, forceRefresh = forceRefresh) { tracker ->
-                val result = if (tracker != null) {
-                    RepositoryResult.Success(tracker)
-                } else {
-                    RepositoryResult.Failure(AppError.NotFound)
-                }
-                continuation.resume(result)
-            }
-        }
+        trackerRepository.loadTracker(id)
 
     override suspend fun getTrackerGeometry(id: String, allData: Boolean): RepositoryResult<Tracker> =
-        suspendCancellableCoroutine { continuation ->
-            TrackerRepository.getTrackerGeometryResult(appContext, id, allData = allData) { result ->
-                continuation.resume(result)
-            }
-        }
+        trackerRepository.loadTrackerGeometry(id, allData = allData)
 
-    override suspend fun getTrackerCoordinates(id: String, allData: Boolean): RepositoryResult<TrackerCoordinatesResponse> =
-        suspendCancellableCoroutine { continuation ->
-            TrackerRepository.getTrackerCoordinates(appContext, id, allData) { response ->
-                val result = if (response != null) {
-                    RepositoryResult.Success(response)
-                } else {
-                    RepositoryResult.Failure(AppError.Network)
-                }
-                continuation.resume(result)
+    override suspend fun getTrackerCoordinates(id: String, allData: Boolean): RepositoryResult<TrackerCoordinatesResponse> {
+        return when (val geometryResult = trackerRepository.loadTrackerGeometry(id, allData = allData)) {
+            is RepositoryResult.Success -> {
+                RepositoryResult.Success(
+                    TrackerCoordinatesResponse(
+                        coordinates = geometryResult.data.geometry?.coordinates ?: emptyList(),
+                        point_params = geometryResult.data.point_params
+                    )
+                )
             }
+            is RepositoryResult.Failure -> RepositoryResult.Failure(geometryResult.error)
         }
+    }
 
     override suspend fun getTrackersCoordinates(
         trackerIds: List<String>,
@@ -71,43 +52,25 @@ class TrackerRepositoryMapTrackRepository @Inject constructor(
         return RepositoryResult.Success(result)
     }
 
-    override fun getTrackerFromCache(id: String): Tracker? = TrackerRepository.getTrackerFromCache(id)
+    override fun getTrackerFromCache(id: String): Tracker? = trackerRepository.getTrackerFromCache(id)
 
     override fun cancelGeometryRequest() {
-        TrackerRepository.cancelGeometryRequest()
+        // No-op: coroutine repository calls are lifecycle-cancelled by callers.
     }
 }
 
 class TrackerRepositoryMapGroupRepository @Inject constructor(
-    @param:ApplicationContext private val appContext: Context
+    private val groupRepository: GroupManagementRepository
 ) : MapGroupRepository {
     override suspend fun getGroups(forceRefresh: Boolean): RepositoryResult<List<Group>> =
-        suspendCancellableCoroutine { continuation ->
-            TrackerRepository.getGroups(appContext, forceRefresh = forceRefresh) { groups ->
-                val result = if (groups != null) {
-                    RepositoryResult.Success(groups)
-                } else {
-                    RepositoryResult.Failure(AppError.Network)
-                }
-                continuation.resume(result)
-            }
-        }
+        groupRepository.loadGroups(forceRefresh = forceRefresh)
 }
 
 class TrackerRepositoryMapVisibilityRepository @Inject constructor(
-    @param:ApplicationContext private val appContext: Context
+    private val trackerRepository: TrackerManagementRepository
 ) : MapVisibilityRepository {
     override suspend fun getMapVisibility(): RepositoryResult<MapVisibilityResponse> =
-        suspendCancellableCoroutine { continuation ->
-            TrackerRepository.getMapVisibility(appContext) { visibility ->
-                val result = if (visibility != null) {
-                    RepositoryResult.Success(visibility)
-                } else {
-                    RepositoryResult.Failure(AppError.Network)
-                }
-                continuation.resume(result)
-            }
-        }
+        trackerRepository.loadMapVisibility(forceRefresh = false)
 }
 
 class TrackPointBusStreamingRepository @Inject constructor() : MapStreamingRepository {

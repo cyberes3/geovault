@@ -28,8 +28,10 @@ from .helpers import (
     _color_from_settings,
     _filter_coords_by_recent_window,
     _strip_ser_from_params,
+    accepted_group_track_ids_for_user,
     can_user_see_track,
     can_user_see_track_via_accepted_group_share,
+    can_user_see_track_via_owned_group_membership,
     can_user_see_track_via_group_share,
     generate_hauk_password,
     track_to_response,
@@ -50,8 +52,12 @@ from .models import (
 from .world_share_views import build_live_track_share_url
 from .validation import (
     PARAM_PRETTY_NAMES,
+    AvailableToAddGroupResponse,
+    AvailableToAddItemResponse,
+    AvailableToAddResponse,
     MapVisibilityPrefsRequest,
     RegenerateTrackerTokensResponse,
+    TrackerListItemResponse,
     TrackerBulkGeometryRequest,
     TrackerCheckRequest,
     TrackerCheckResponse,
@@ -219,17 +225,6 @@ def _bbox_from_normalized_coords(coords: list) -> list | None:
     return [round(min(lons), 5), round(min(lats), 5), round(max(lons), 5), round(max(lats), 5)]
 
 
-def _accepted_group_track_ids_for_user(user):
-    """Track IDs available via accepted shared groups."""
-    return set(
-        LiveTrackGroupMember.objects.filter(
-            group__visibility=VISIBILITY_SHARED,
-            group__share_entries__shared_with=user,
-            group__accepted_subscriptions__user=user,
-        ).values_list("track_id", flat=True)
-    )
-
-
 def _get_track_for_user_or_404(user, tracker_id):
     """Return LiveTrack for owners, track subscribers (direct/public), or accepted group shares; raise Http404 otherwise."""
     from django.http import Http404
@@ -244,6 +239,8 @@ def _get_track_for_user_or_404(user, tracker_id):
     if has_track_subscription and can_user_see_track(user, track):
         return track
     if can_user_see_track_via_accepted_group_share(user, track):
+        return track
+    if can_user_see_track_via_owned_group_membership(user, track):
         return track
     raise Http404
 
@@ -286,7 +283,7 @@ def tracker_check(request):
 def tracker_list_create(request):
     if request.method == "GET":
         owned = list(LiveTrack.objects.filter(user=request.user).order_by("name"))
-        accepted_group_track_ids = _accepted_group_track_ids_for_user(request.user)
+        accepted_group_track_ids = accepted_group_track_ids_for_user(request.user)
         subs = (
             LiveTrackSubscription.objects.filter(user=request.user)
             .select_related("track", "track__user")
@@ -326,13 +323,13 @@ def tracker_list_create(request):
             if world_share:
                 payload["world_share_id"] = world_share.share_id
                 payload["world_share_url"] = build_live_track_share_url(world_share.share_id)
-            out.append(payload)
+            out.append(TrackerListItemResponse.model_validate(payload).model_dump(exclude_none=True))
         for t in visible_non_owned_by_id.values():
             payload = track_to_response_metadata_only(t, include_secret=False, is_owner=False)
             payload["is_owner"] = False
             payload["owner_email"] = (t.user.email or "") if t.user_id else ""
             payload["visibility"] = t.visibility
-            out.append(payload)
+            out.append(TrackerListItemResponse.model_validate(payload).model_dump(exclude_none=True))
         out.sort(key=lambda x: (x.get("name") or "").lower())
         return JsonResponse(out, safe=False)
 
@@ -920,7 +917,7 @@ def tracker_available_to_add(request):
     subscribed_ids = set(
         LiveTrackSubscription.objects.filter(user=request.user).values_list("track_id", flat=True)
     )
-    accepted_group_track_ids = _accepted_group_track_ids_for_user(request.user)
+    accepted_group_track_ids = accepted_group_track_ids_for_user(request.user)
     have_ids = owned_ids | subscribed_ids | accepted_group_track_ids
     public = list(
         LiveTrack.objects.filter(visibility=VISIBILITY_PUBLIC)
@@ -940,12 +937,13 @@ def tracker_available_to_add(request):
         .order_by("name")
     )
     def item(t):
-        return {
+        raw = {
             "id": str(t.id),
             "name": t.name,
             "color": _color_from_settings(t),
             "owner_email": (t.user.email or "") if t.user_id else "",
         }
+        return AvailableToAddItemResponse.model_validate(raw).model_dump(exclude_none=True)
 
     def addable_track_ids_for_group(group):
         group_track_ids = list(
@@ -977,15 +975,17 @@ def tracker_available_to_add(request):
     shared_with_me_groups = []
     for group in groups_shared_with_me:
         seen_group_ids.add(group.id)
-        addable = addable_track_ids_for_group(group)
+        # Pending shared groups are accepted at the group level. Do not expose per-track IDs
+        # before acceptance to avoid leaking unaccepted group items into client lists.
+        addable = []
         # Shared groups are accepted at the group level via groups/<id>/accept-share/,
         # so they must appear in Incoming even when no per-track "addable" IDs remain.
-        shared_with_me_groups.append({
+        shared_with_me_groups.append(AvailableToAddGroupResponse.model_validate({
             "id": str(group.id),
             "name": group.name,
             "owner_email": (group.user.email or "") if group.user_id else "",
             "track_ids": addable,
-        })
+        }).model_dump(exclude_none=True))
 
     public_groups = []
     for group in (
@@ -998,19 +998,20 @@ def tracker_available_to_add(request):
             continue
         addable = addable_track_ids_for_group(group)
         if addable:
-            public_groups.append({
+            public_groups.append(AvailableToAddGroupResponse.model_validate({
                 "id": str(group.id),
                 "name": group.name,
                 "owner_email": (group.user.email or "") if group.user_id else "",
                 "track_ids": addable,
-            })
+            }).model_dump(exclude_none=True))
 
-    return JsonResponse({
+    payload = AvailableToAddResponse.model_validate({
         "public": [item(t) for t in public],
         "shared_with_me": [item(t) for t in shared_with_me],
         "shared_with_me_groups": shared_with_me_groups,
         "public_groups": public_groups,
-    })
+    }).model_dump(exclude_none=True)
+    return JsonResponse(payload)
 
 
 def _valid_uuid_strings(ids):

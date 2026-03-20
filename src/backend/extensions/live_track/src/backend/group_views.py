@@ -26,6 +26,8 @@ from .models import (
     VISIBILITY_PUBLIC,
     VISIBILITY_SHARED,
 )
+from .helpers import accepted_group_ids_for_user, visible_group_track_ids_for_user
+from .validation import GroupResponse
 from .world_share_views import build_live_track_group_share_url
 
 User = get_user_model()
@@ -99,11 +101,13 @@ def _group_payload(group, request_user, include_track_ids=True, accepted_group_i
             out["world_share_id"] = world_share.share_id
             out["world_share_url"] = build_live_track_group_share_url(world_share.share_id)
     if include_track_ids:
-        track_ids = list(
-            LiveTrackGroupMember.objects.filter(group=group).values_list("track_id", flat=True)
+        out["track_ids"] = visible_group_track_ids_for_user(
+            group=group,
+            user=request_user,
+            is_owner=is_owner,
+            is_accepted=is_accepted,
         )
-        out["track_ids"] = [str(tid) for tid in track_ids]
-    return out
+    return GroupResponse.model_validate(out).model_dump(exclude_none=True)
 
 
 @api_or_login_required_401()
@@ -112,9 +116,7 @@ def _group_payload(group, request_user, include_track_ids=True, accepted_group_i
 def group_list_create(request):
     """GET: owned, public, and shared-with-me groups (shared groups include is_accepted; accept via POST groups/<id>/accept-share/). POST: create group."""
     if request.method == "GET":
-        accepted_group_ids = set(
-            LiveTrackGroupSubscription.objects.filter(user=request.user).values_list("group_id", flat=True)
-        )
+        accepted_group_ids = accepted_group_ids_for_user(request.user)
         owned = LiveTrackGroup.objects.filter(user=request.user).order_by("name")
         seen_ids = set()
         items = []

@@ -41,7 +41,9 @@ from geo_lib.utils.redis_connection import get_redis_connection
 
 from .models import (
     LiveTrack,
+    LiveTrackGroup,
     LiveTrackGroupMember,
+    LiveTrackGroupSubscription,
     LiveTrackGroupShare,
     LiveTrackShare,
     LiveTrackSubscription,
@@ -295,6 +297,62 @@ def can_user_see_track_via_accepted_group_share(user, track: LiveTrack) -> bool:
         group__share_entries__shared_with=user,
         group__accepted_subscriptions__user=user,
     ).exists()
+
+
+def can_user_see_track_via_owned_group_membership(user, track: LiveTrack) -> bool:
+    """True if user owns a group that includes this track."""
+    return LiveTrackGroupMember.objects.filter(
+        track=track,
+        group__user=user,
+    ).exists()
+
+
+def accepted_group_ids_for_user(user) -> set:
+    """Group IDs accepted by this user."""
+    return set(
+        LiveTrackGroupSubscription.objects.filter(user=user).values_list("group_id", flat=True)
+    )
+
+
+def accepted_group_track_ids_for_user(user) -> set:
+    """Track IDs available via accepted shared groups."""
+    return set(
+        LiveTrackGroupMember.objects.filter(
+            group__visibility=VISIBILITY_SHARED,
+            group__share_entries__shared_with=user,
+            group__accepted_subscriptions__user=user,
+        ).values_list("track_id", flat=True)
+    )
+
+
+def visible_group_track_ids_for_user(
+    group: LiveTrackGroup,
+    user,
+    is_owner: bool,
+    is_accepted: bool,
+) -> list[str]:
+    """
+    Return group track IDs that should be exposed in API payload.
+    - Owners always get full membership.
+    - Shared groups that are not accepted expose no track IDs.
+    - Non-owners only get track IDs they can access through canonical track access rules.
+    """
+    member_track_ids = list(
+        LiveTrackGroupMember.objects.filter(group=group).values_list("track_id", flat=True)
+    )
+    if not member_track_ids:
+        return []
+    if is_owner:
+        return [str(track_id) for track_id in member_track_ids]
+    if group.visibility == VISIBILITY_SHARED and not is_accepted:
+        return []
+
+    tracks = LiveTrack.objects.filter(id__in=member_track_ids).select_related("user")
+    visible_ids: list[str] = []
+    for track in tracks:
+        if can_user_see_track(user, track) or can_user_see_track_via_accepted_group_share(user, track):
+            visible_ids.append(str(track.id))
+    return visible_ids
 
 
 # Charset alias map for Content-Type (HTTP names -> Python codec names)

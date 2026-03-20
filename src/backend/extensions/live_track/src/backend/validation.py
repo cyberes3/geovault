@@ -86,6 +86,66 @@ class TrackerCheckResponse(BaseModel):
     name: Optional[str] = Field(default=None, description="Tracker name when valid")
 
 
+class TrackerListItemResponse(BaseModel):
+    id: str
+    name: str
+    color: Optional[str] = None
+    point_params: list[dict] = Field(default_factory=list)
+    bbox: Optional[list[float]] = None
+    settings: dict = Field(default_factory=dict)
+    visibility: Optional[str] = None
+    share_params_with_recipients: Optional[bool] = None
+    share_params_with_world: Optional[bool] = None
+    created_at: Optional[int] = None
+    updated_at: Optional[int] = None
+    last_point: Optional[list[float]] = None
+    is_owner: bool
+    owner_email: Optional[str] = None
+    subscriber_count: Optional[int] = None
+    world_share_id: Optional[str] = None
+    world_share_url: Optional[str] = None
+    shared_with_emails: Optional[list[str]] = None
+    tracker_secret: Optional[str] = None
+    hauk_password: Optional[str] = None
+
+
+class GroupResponse(BaseModel):
+    id: str
+    name: str
+    hidden_in_list: bool = False
+    visibility: str = "private"
+    created_at: Optional[int] = None
+    updated_at: Optional[int] = None
+    is_owner: bool
+    is_accepted: bool
+    owner_email: Optional[str] = None
+    shared_with_emails: Optional[list[str]] = None
+    world_share_id: Optional[str] = None
+    world_share_url: Optional[str] = None
+    track_ids: list[str] = Field(default_factory=list)
+
+
+class AvailableToAddItemResponse(BaseModel):
+    id: str
+    name: str
+    color: Optional[str] = None
+    owner_email: str = ""
+
+
+class AvailableToAddGroupResponse(BaseModel):
+    id: str
+    name: str
+    owner_email: str = ""
+    track_ids: list[str] = Field(default_factory=list)
+
+
+class AvailableToAddResponse(BaseModel):
+    public: list[AvailableToAddItemResponse] = Field(default_factory=list)
+    shared_with_me: list[AvailableToAddItemResponse] = Field(default_factory=list)
+    shared_with_me_groups: list[AvailableToAddGroupResponse] = Field(default_factory=list)
+    public_groups: list[AvailableToAddGroupResponse] = Field(default_factory=list)
+
+
 class RegenerateTrackerTokensResponse(BaseModel):
     """Response payload for tracker token regeneration endpoint."""
 

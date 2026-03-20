@@ -324,6 +324,7 @@ import Loader from 'platform/components/parts/Loader.vue';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
 import { getTrackDirectionAngle as getTrackDirectionAngleUtil } from './trackGeometry.js';
 import { formatTimestampLocal } from './paramFormatters.js';
+import { filterByQuery, isGroupHiddenByMap, toIdSet } from './sharingSelectors.js';
 
 const LIST_TABS = [
   { id: 'trackers', label: 'Trackers' },
@@ -392,20 +393,10 @@ export default {
     const formatTime = (ms) => formatTimestampLocal(ms);
     const getTrackDirectionAngle = getTrackDirectionAngleUtil;
 
-    function filterByQuery(list, nameKey = 'name', ownerKey = 'owner_email') {
-      const q = (searchQuery.value || '').trim().toLowerCase();
-      if (!q) return list;
-      return list.filter(
-        (item) =>
-          (item[nameKey] || '').toLowerCase().includes(q) ||
-          (item[ownerKey] || '').toLowerCase().includes(q)
-      );
-    }
-
-    const filteredTrackersTab = computed(() => filterByQuery(props.visibleTrackersTab || [], 'name'));
-    const filteredGroupsTab = computed(() => filterByQuery(props.visibleGroupsTab || [], 'name'));
-    const filteredSharedTab = computed(() => filterByQuery(props.visibleSharedTab || [], 'name', 'owner_email'));
-    const filteredSharedGroupsTab = computed(() => filterByQuery(props.visibleSharedGroupsTab || [], 'name', 'owner_email'));
+    const filteredTrackersTab = computed(() => filterByQuery(props.visibleTrackersTab || [], searchQuery.value, 'name'));
+    const filteredGroupsTab = computed(() => filterByQuery(props.visibleGroupsTab || [], searchQuery.value, 'name'));
+    const filteredSharedTab = computed(() => filterByQuery(props.visibleSharedTab || [], searchQuery.value, 'name', 'owner_email'));
+    const filteredSharedGroupsTab = computed(() => filterByQuery(props.visibleSharedGroupsTab || [], searchQuery.value, 'name', 'owner_email'));
 
     const filteredListEmptyForTab = computed(() => {
       if (props.listTab === 'trackers') return filteredTrackersTab.value.length === 0;
@@ -420,22 +411,11 @@ export default {
     });
 
     function isHidden(trackId) {
-      const hid = props.hiddenTrackIds;
-      if (hid instanceof Set) return hid.has(String(trackId));
-      return Array.isArray(hid) && hid.includes(String(trackId));
+      return toIdSet(props.hiddenTrackIds).has(String(trackId));
     }
 
     function isGroupHidden(group) {
-      const groupIds = props.hiddenGroupIds;
-      const hasGroup = group?.id != null && (
-        groupIds instanceof Set ? groupIds.has(String(group.id)) : Array.isArray(groupIds) && groupIds.includes(String(group.id))
-      );
-      if (hasGroup) return true;
-      const trackIds = group?.track_ids || [];
-      if (trackIds.length === 0) return false;
-      const hid = props.hiddenTrackIds;
-      const has = (id) => (hid instanceof Set ? hid.has(String(id)) : Array.isArray(hid) && hid.includes(String(id)));
-      return trackIds.every((id) => has(id));
+      return isGroupHiddenByMap(group, props.hiddenTrackIds, props.hiddenGroupIds);
     }
 
     const emptyTitle = computed(() => {
