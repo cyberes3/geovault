@@ -1,6 +1,8 @@
 package com.geovault.tracker.fragments
 
 import com.geovault.tracker.AppError
+import com.geovault.tracker.AvailableToAddGroup
+import com.geovault.tracker.AvailableToAddItem
 import com.geovault.tracker.AvailableToAddResponse
 import com.geovault.tracker.GeoJsonLineString
 import com.geovault.tracker.Group
@@ -35,7 +37,7 @@ import org.robolectric.annotation.Config
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], manifest = Config.NONE)
-class SharedTrackersViewModelTest {
+class DiscoverTrackersViewModelTest {
     private val dispatcher = UnconfinedTestDispatcher()
 
     @Before
@@ -49,66 +51,57 @@ class SharedTrackersViewModelTest {
     }
 
     @Test
-    fun refresh_filtersToAcceptedSharedGroupsAndVisibleSharedTrackers() = runTest {
-        val groupedTrackId = "t-grouped"
-        val hiddenTrackId = "t-hidden"
-        val standaloneTrackId = "t-shared"
-        val vm = SharedTrackersViewModel(
+    fun load_mapsOnMyMapAndIncomingSharedGroupsWithPendingTrackIdsCleared() = runTest {
+        val vm = DiscoverTrackersViewModel(
             trackerManagementRepository = FakeTrackerManagementRepository(
                 trackers = listOf(
-                    tracker(id = groupedTrackId, visibility = "shared"),
-                    tracker(id = standaloneTrackId, visibility = "public"),
-                    tracker(id = hiddenTrackId, visibility = "shared")
+                    tracker("t-on-map", "shared"),
+                    tracker("t-standalone", "public")
                 ),
-                mapVisibility = MapVisibilityResponse(
-                    hidden_track_ids = listOf(hiddenTrackId),
-                    hidden_group_ids = emptyList()
+                mapVisibility = MapVisibilityResponse(),
+                availableToAdd = AvailableToAddResponse(
+                    shared_with_me = listOf(AvailableToAddItem(id = "t-incoming", name = "Incoming")),
+                    shared_with_me_groups = listOf(
+                        AvailableToAddGroup(
+                            id = "g-pending",
+                            name = "Pending",
+                            track_ids = listOf("t-should-hide")
+                        )
+                    )
                 )
             ),
             groupManagementRepository = FakeGroupManagementRepository(
-                groups = listOf(
-                    group(
-                        id = "g-accepted",
-                        isAccepted = true,
-                        trackIds = listOf(groupedTrackId)
-                    ),
-                    group(
-                        id = "g-pending",
-                        isAccepted = false,
-                        trackIds = listOf("t-pending")
-                    )
-                )
+                groups = listOf(group("g-on-map", trackIds = listOf("t-on-map")))
             ),
             sharedSurfaceFilterUseCase = SharedSurfaceFilterUseCase()
         )
 
-        vm.refresh(forceRefresh = true, showLoading = true)
+        vm.load(forceRefresh = true)
         advanceUntilIdle()
 
         val state = vm.uiState.value
         assertFalse(state.isLoading)
-        assertEquals(listOf("g-accepted"), state.data.sharedGroups.map { it.id })
-        assertEquals(listOf(standaloneTrackId), state.data.sharedTrackers.map { it.id })
-        assertEquals(setOf(hiddenTrackId), state.data.hiddenTrackIds)
+        assertEquals(listOf("g-on-map"), state.onMyMapGroups.map { it.id })
+        assertEquals(listOf("t-standalone"), state.onMyMapTrackers.map { it.id })
+        assertEquals(listOf("t-incoming"), state.incomingTrackers.map { it.id })
+        assertEquals(emptyList<String>(), state.incomingSharedGroups.first().track_ids)
     }
 
     @Test
-    fun refresh_setsErrorWhenRepositoryFails() = runTest {
-        val vm = SharedTrackersViewModel(
+    fun load_setsErrorWhenAvailableToAddFails() = runTest {
+        val vm = DiscoverTrackersViewModel(
             trackerManagementRepository = FakeTrackerManagementRepository(
                 trackers = emptyList(),
-                mapVisibility = null
+                mapVisibility = MapVisibilityResponse(),
+                availableToAdd = null
             ),
             groupManagementRepository = FakeGroupManagementRepository(groups = emptyList()),
             sharedSurfaceFilterUseCase = SharedSurfaceFilterUseCase()
         )
-
-        vm.refresh(forceRefresh = true, showLoading = true)
+        vm.load(forceRefresh = true)
         advanceUntilIdle()
-
-        val state = vm.uiState.value
-        assertFalse(state.isLoading)
-        assertTrue(state.errorMessage != null)
+        assertFalse(vm.uiState.value.isLoading)
+        assertTrue(vm.uiState.value.errorMessage != null)
     }
 
     private fun tracker(id: String, visibility: String): Tracker =
@@ -123,25 +116,26 @@ class SharedTrackersViewModelTest {
             visibility = visibility
         )
 
-    private fun group(id: String, isAccepted: Boolean, trackIds: List<String>): Group =
+    private fun group(id: String, trackIds: List<String>): Group =
         Group(
             id = id,
             name = id,
             visibility = "shared",
             is_owner = false,
-            is_accepted = isAccepted,
+            is_accepted = true,
             track_ids = trackIds
         )
 
     private class FakeTrackerManagementRepository(
         private val trackers: List<Tracker>,
-        private val mapVisibility: MapVisibilityResponse?
+        private val mapVisibility: MapVisibilityResponse,
+        private val availableToAdd: AvailableToAddResponse?
     ) : TrackerManagementRepository {
         override suspend fun loadTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> =
             RepositoryResult.Success(trackers)
 
         override suspend fun loadAvailableToAdd(forceRefresh: Boolean): RepositoryResult<AvailableToAddResponse> =
-            RepositoryResult.Success(AvailableToAddResponse())
+            availableToAdd?.let { RepositoryResult.Success(it) } ?: RepositoryResult.Failure(AppError.Network)
 
         override suspend fun loadTracker(trackerId: String): RepositoryResult<Tracker> =
             RepositoryResult.Failure(AppError.NotFound)
@@ -186,7 +180,7 @@ class SharedTrackersViewModelTest {
             RepositoryResult.Failure(AppError.Unknown)
 
         override suspend fun loadMapVisibility(forceRefresh: Boolean): RepositoryResult<MapVisibilityResponse> =
-            mapVisibility?.let { RepositoryResult.Success(it) } ?: RepositoryResult.Failure(AppError.Network)
+            RepositoryResult.Success(mapVisibility)
 
         override suspend fun patchMapVisibility(request: MapVisibilityRequest): RepositoryResult<MapVisibilityResponse> =
             RepositoryResult.Failure(AppError.Unknown)

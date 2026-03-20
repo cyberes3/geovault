@@ -14,7 +14,10 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.geovault.common.LoadingSpinner
@@ -36,6 +39,7 @@ import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class DiscoverTrackersFragment : Fragment() {
+    private val viewModel: DiscoverTrackersViewModel by viewModels()
 
     private enum class RowState { IDLE, ADDING, ADDED_CHECK, ADDED_DELETE }
 
@@ -58,7 +62,6 @@ class DiscoverTrackersFragment : Fragment() {
     private var onMyMapGroupsData: List<AvailableToAddGroup> = emptyList()
     private var incomingTrackersData: List<AvailableToAddItem> = emptyList()
     private var incomingSharedGroupsData: List<AvailableToAddGroup> = emptyList()
-    private var incomingPublicGroupsData: List<AvailableToAddGroup> = emptyList()
     private var onMyMapQuery: String = ""
     private var incomingQuery: String = ""
     private var onMyMapSearchInput: EditText? = null
@@ -87,7 +90,7 @@ class DiscoverTrackersFragment : Fragment() {
         swipeRefresh.setOnRefreshListener {
             loadingView.visibility = View.VISIBLE
             spinner.start()
-            loadAvailable(forceRefresh = true, fromSwipeRefresh = false)
+            viewModel.load(forceRefresh = true)
         }
 
         pagerAdapter = DiscoverPagerAdapter(this)
@@ -115,7 +118,14 @@ class DiscoverTrackersFragment : Fragment() {
         tabLayout.visibility = View.GONE
         swipeRefresh.visibility = View.GONE
         spinner.start()
-        loadAvailable(forceRefresh = false, fromSwipeRefresh = false)
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect { state ->
+                    applyLoadedState(state)
+                }
+            }
+        }
+        viewModel.load(forceRefresh = false)
     }
 
     override fun onDestroyView() {
@@ -126,111 +136,49 @@ class DiscoverTrackersFragment : Fragment() {
         super.onDestroyView()
     }
 
-    private fun loadAvailable(forceRefresh: Boolean = false, fromSwipeRefresh: Boolean = false) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            val response = when (val result = trackerManagementRepository.loadAvailableToAdd(forceRefresh = forceRefresh)) {
-                is RepositoryResult.Success -> result.data
-                is RepositoryResult.Failure -> null
-            }
-            if (!isAdded) return@launch
-            if (response == null) {
-                swipeRefresh.isRefreshing = false
-                spinner.stop(hide = true)
-                loadingView.visibility = View.GONE
-                emptyView.visibility = View.VISIBLE
-                tabLayout.visibility = View.GONE
-                swipeRefresh.visibility = View.GONE
-                return@launch
-            }
+    private fun applyLoadedState(state: DiscoverTrackersUiState) {
+        if (!isAdded) return
+        swipeRefresh.isRefreshing = false
+        if (state.isLoading) {
+            loadingView.visibility = View.VISIBLE
+            spinner.start()
+            return
+        }
+        spinner.stop(hide = true)
+        loadingView.visibility = View.GONE
+        state.errorMessage?.takeIf { it.isNotBlank() }?.let { navHost()?.showSnackbar(it) }
 
-            val mapVisibility = when (val result = trackerManagementRepository.loadMapVisibility(forceRefresh = true)) {
-                is RepositoryResult.Success -> result.data
-                is RepositoryResult.Failure -> null
-            }
-            val hiddenTrackIds = mapVisibility?.hidden_track_ids?.toSet() ?: emptySet()
-            val hiddenGroupIds = mapVisibility?.hidden_group_ids?.toSet() ?: emptySet()
-            val groups = when (val result = groupManagementRepository.loadGroups(forceRefresh = forceRefresh)) {
-                is RepositoryResult.Success -> result.data
-                is RepositoryResult.Failure -> emptyList()
-            }
-            val trackers = when (val result = trackerManagementRepository.loadTrackers(forceRefresh = forceRefresh)) {
-                is RepositoryResult.Success -> result.data
-                is RepositoryResult.Failure -> emptyList()
-            }
+        onMyMapTrackersData = state.onMyMapTrackers
+        onMyMapGroupsData = state.onMyMapGroups
+        incomingTrackersData = state.incomingTrackers
+        incomingSharedGroupsData = state.incomingSharedGroups
+        pruneTransientState()
+        val onMyMapHasContent = onMyMapTrackersData.isNotEmpty() || onMyMapGroupsData.isNotEmpty()
+        val incomingHasContent = incomingTrackersData.isNotEmpty() || incomingSharedGroupsData.isNotEmpty()
+        if (!onMyMapHasContent && !incomingHasContent) {
+            emptyView.visibility = View.VISIBLE
+            tabLayout.visibility = View.GONE
+            swipeRefresh.visibility = View.GONE
+            return
+        }
 
-            swipeRefresh.isRefreshing = false
-            if (!fromSwipeRefresh) {
-                spinner.stop(hide = true)
-                loadingView.visibility = View.GONE
-            }
-
-            val onMyMapGroups = (groups ?: emptyList())
-                .filter { it.is_owner != true && it.visibility == "shared" && it.is_accepted == true }
-                .filter { it.id !in hiddenGroupIds }
-            val trackerIdsInOnMapGroups = onMyMapGroups
-                .flatMap { it.track_ids ?: emptyList() }
-                .toSet()
-            val onMyMapTrackers = (trackers ?: emptyList())
-                .filter { it.isOwner().not() && it.visibility == "shared" }
-                .filter { it.id !in hiddenTrackIds && it.id !in trackerIdsInOnMapGroups }
-                .map {
-                    AvailableToAddItem(
-                        id = it.id,
-                        name = it.name,
-                        color = it.color,
-                        owner_email = it.owner_email
-                    )
-                }
-            val onMyMapGroupsForUi = onMyMapGroups.map {
-                AvailableToAddGroup(
-                    id = it.id,
-                    name = it.name,
-                    owner_email = it.owner_email,
-                    track_ids = it.track_ids ?: emptyList()
-                )
-            }
-
-            val incomingTrackers = response.shared_with_me
-            // Defensive: pending shared groups must not expose per-track items pre-acceptance.
-            val incomingSharedGroups = response.shared_with_me_groups.map {
-                it.copy(track_ids = emptyList())
-            }
-            onMyMapTrackersData = onMyMapTrackers
-            onMyMapGroupsData = onMyMapGroupsForUi
-            incomingTrackersData = incomingTrackers
-            incomingSharedGroupsData = incomingSharedGroups
-            incomingPublicGroupsData = emptyList()
-            pruneTransientState()
-            val onMyMapHasContent = onMyMapTrackersData.isNotEmpty() || onMyMapGroupsData.isNotEmpty()
-            val incomingHasContent =
-                incomingTrackersData.isNotEmpty() || incomingSharedGroupsData.isNotEmpty() || incomingPublicGroupsData.isNotEmpty()
-
-            if (!onMyMapHasContent && !incomingHasContent) {
-                emptyView.visibility = View.VISIBLE
-                tabLayout.visibility = View.GONE
-                swipeRefresh.visibility = View.GONE
-                return@launch
-            }
-
-            emptyView.visibility = View.GONE
-            tabLayout.visibility = View.VISIBLE
-            swipeRefresh.visibility = View.VISIBLE
-            val currentTab = viewPager.currentItem.coerceIn(0, 1)
-            val tabToSelect = when {
-                !onMyMapHasContent && incomingHasContent -> 1
-                onMyMapHasContent && !incomingHasContent -> 0
-                else -> currentTab
-            }
-            viewPager.setCurrentItem(tabToSelect, false)
-
-            viewPager.post {
-                if (!isAdded) return@post
-                val onMyMapPage = pagerAdapter?.getPageView(0)
-                val incomingPage = pagerAdapter?.getPageView(1)
-                if (onMyMapPage == null || incomingPage == null) return@post
-                bindSearchInputs(onMyMapPage, incomingPage)
-                renderTabContent(onMyMapPage, incomingPage)
-            }
+        emptyView.visibility = View.GONE
+        tabLayout.visibility = View.VISIBLE
+        swipeRefresh.visibility = View.VISIBLE
+        val currentTab = viewPager.currentItem.coerceIn(0, 1)
+        val tabToSelect = when {
+            !onMyMapHasContent && incomingHasContent -> 1
+            onMyMapHasContent && !incomingHasContent -> 0
+            else -> currentTab
+        }
+        viewPager.setCurrentItem(tabToSelect, false)
+        viewPager.post {
+            if (!isAdded) return@post
+            val onMyMapPage = pagerAdapter?.getPageView(0)
+            val incomingPage = pagerAdapter?.getPageView(1)
+            if (onMyMapPage == null || incomingPage == null) return@post
+            bindSearchInputs(onMyMapPage, incomingPage)
+            renderTabContent(onMyMapPage, incomingPage)
         }
     }
 
@@ -240,7 +188,6 @@ class DiscoverTrackersFragment : Fragment() {
         validKeys.addAll(incomingTrackersData.map { "t:${it.id}" })
         validKeys.addAll(onMyMapGroupsData.map { "g:${it.id}" })
         validKeys.addAll(incomingSharedGroupsData.map { "g:${it.id}" })
-        validKeys.addAll(incomingPublicGroupsData.map { "g:${it.id}" })
         rowStates.keys.retainAll(validKeys)
         val staleTransitions = transitionRunnables.keys.filter { it !in validKeys }
         for (key in staleTransitions) {
@@ -392,13 +339,12 @@ class DiscoverTrackersFragment : Fragment() {
     }
 
     /** Moves an incoming group into on-my-map data and removes it from incoming; no network call. */
-    private fun moveIncomingGroupToOnMyMap(group: AvailableToAddGroup, trackIds: List<String>, fromShared: Boolean = true) {
+    private fun moveIncomingGroupToOnMyMap(group: AvailableToAddGroup, trackIds: List<String>) {
         val withTrackIds = AvailableToAddGroup(id = group.id, name = group.name, owner_email = group.owner_email, track_ids = trackIds)
         if (onMyMapGroupsData.none { it.id == group.id }) {
             onMyMapGroupsData = onMyMapGroupsData + withTrackIds
         }
-        if (fromShared) incomingSharedGroupsData = incomingSharedGroupsData.filter { it.id != group.id }
-        else incomingPublicGroupsData = incomingPublicGroupsData.filter { it.id != group.id }
+        incomingSharedGroupsData = incomingSharedGroupsData.filter { it.id != group.id }
         transitionRunnables.remove("g:${group.id}")?.let { handler.removeCallbacks(it) }
         rowStates["g:${group.id}"] = RowState.ADDED_DELETE
     }
@@ -452,56 +398,22 @@ class DiscoverTrackersFragment : Fragment() {
         val deleteBtn = row.findViewById<ImageButton>(R.id.availableTrackerDelete)
         addBtn.setOnClickListener {
             if (rowStates[key] != RowState.IDLE) return@setOnClickListener
+            if (!acceptAsGroup) return@setOnClickListener
             setRowState(row, key, RowState.ADDING)
-            if (acceptAsGroup) {
-                viewLifecycleOwner.lifecycleScope.launch {
-                    val accepted = when (val result = groupManagementRepository.acceptGroupShare(group.id)) {
-                        is RepositoryResult.Success -> result.data
-                        is RepositoryResult.Failure -> null
-                    }
-                    if (accepted != null) {
-                        moveIncomingGroupToOnMyMap(group, accepted.track_ids ?: emptyList())
-                        setRowState(row, key, RowState.ADDED_CHECK)
-                        transitionToDeleteAfterCheck(row, key)
-                        rerenderTabs()
-                        notifySharedTabAdded(emptyList(), listOf(accepted))
-                    } else {
-                        setRowState(row, key, RowState.IDLE)
-                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                    }
-                }
-                return@setOnClickListener
-            }
-            val trackIds = group.track_ids ?: emptyList()
-            if (trackIds.isEmpty()) {
-                removeRowAndMaybeHideSection(parent, row, sectionHeader, sectionList)
-                parentFragmentManager.setFragmentResult(TrackersListFragment.REQUEST_REFRESH_LIST, Bundle())
-                setRowState(row, key, RowState.IDLE)
-                return@setOnClickListener
-            }
-            var failed = false
-            var done = 0
-            val addedTrackers = mutableListOf<Tracker>()
             viewLifecycleOwner.lifecycleScope.launch {
-                for (trackId in trackIds) {
-                    val tracker = when (val result = trackerManagementRepository.subscribeTracker(trackId)) {
-                        is RepositoryResult.Success -> result.data
-                        is RepositoryResult.Failure -> null
-                    }
-                    done++
-                    if (tracker == null) failed = true else addedTrackers.add(tracker)
+                val accepted = when (val result = groupManagementRepository.acceptGroupShare(group.id)) {
+                    is RepositoryResult.Success -> result.data
+                    is RepositoryResult.Failure -> null
                 }
-                if (done == trackIds.size) {
-                    if (!failed) {
-                        moveIncomingGroupToOnMyMap(group, trackIds, fromShared = false)
-                        setRowState(row, key, RowState.ADDED_CHECK)
-                        transitionToDeleteAfterCheck(row, key)
-                        rerenderTabs()
-                        notifySharedTabAdded(addedTrackers, emptyList())
-                    } else {
-                        setRowState(row, key, RowState.IDLE)
-                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                    }
+                if (accepted != null) {
+                    moveIncomingGroupToOnMyMap(group, accepted.track_ids ?: emptyList())
+                    setRowState(row, key, RowState.ADDED_CHECK)
+                    transitionToDeleteAfterCheck(row, key)
+                    rerenderTabs()
+                    notifySharedTabAdded(emptyList(), listOf(accepted))
+                } else {
+                    setRowState(row, key, RowState.IDLE)
+                    navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 }
             }
         }

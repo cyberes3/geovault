@@ -30,7 +30,8 @@ data class SharedTrackersUiState(
 @HiltViewModel
 class SharedTrackersViewModel @Inject constructor(
     private val trackerManagementRepository: TrackerManagementRepository,
-    private val groupManagementRepository: GroupManagementRepository
+    private val groupManagementRepository: GroupManagementRepository,
+    private val sharedSurfaceFilterUseCase: SharedSurfaceFilterUseCase
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SharedTrackersUiState())
     val uiState: StateFlow<SharedTrackersUiState> = _uiState.asStateFlow()
@@ -63,16 +64,12 @@ class SharedTrackersViewModel @Inject constructor(
                 ?: emptySet()
             val groups = (groupsResult as? RepositoryResult.Success)?.data ?: emptyList()
             val trackers = (trackersResult as? RepositoryResult.Success)?.data ?: emptyList()
-
-            val sharedGroups = groups
-                .filter { it.is_owner != true && it.visibility == "shared" && it.id !in hiddenGroupIds }
-                .filter { it.is_accepted == true }
-            val trackIdsInSharedGroups = sharedGroups
-                .flatMap { it.track_ids ?: emptyList() }
-                .toSet()
-            val sharedTrackers = trackers
-                .filter { !it.isOwner() && (it.visibility == "shared" || it.visibility == "public") }
-                .filter { it.id !in hiddenTrackIds && it.id !in trackIdsInSharedGroups }
+            val filtered = sharedSurfaceFilterUseCase.filter(
+                groups = groups,
+                trackers = trackers,
+                hiddenTrackIds = hiddenTrackIds,
+                hiddenGroupIds = hiddenGroupIds
+            )
 
             val error = when {
                 visibilityResult is RepositoryResult.Failure -> visibilityResult.error.toString()
@@ -85,13 +82,27 @@ class SharedTrackersViewModel @Inject constructor(
                 it.copy(
                     isLoading = false,
                     data = SharedTrackersData(
-                        sharedGroups = sharedGroups,
-                        sharedTrackers = sharedTrackers,
-                        hiddenTrackIds = hiddenTrackIds
+                        sharedGroups = filtered.sharedGroups,
+                        sharedTrackers = filtered.sharedTrackers,
+                        hiddenTrackIds = filtered.hiddenTrackIds
                     ),
                     errorMessage = error
                 )
             }
+        }
+    }
+
+    fun applyOptimisticAdd(trackers: List<Tracker>, groups: List<Group>) {
+        if (trackers.isEmpty() && groups.isEmpty()) return
+        _uiState.update { current ->
+            val mergedGroups = (current.data.sharedGroups + groups).distinctBy { it.id }
+            val mergedTrackers = (current.data.sharedTrackers + trackers).distinctBy { it.id }
+            current.copy(
+                data = current.data.copy(
+                    sharedGroups = mergedGroups,
+                    sharedTrackers = mergedTrackers
+                )
+            )
         }
     }
 }

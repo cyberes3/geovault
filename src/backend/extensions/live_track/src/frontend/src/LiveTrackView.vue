@@ -207,6 +207,7 @@
             :adding-incoming-group-id="addingIncomingGroupId"
             :leaving-share-id="leavingShareId"
             :hidden-track-ids="hiddenTrackIds"
+            :hidden-group-ids="hiddenGroupIds"
             :unsubscribing-id="unsubscribingId"
             :unsubscribing-group-id="unsubscribingGroupId"
             :refreshing="sharedWithMeRefreshing"
@@ -438,7 +439,17 @@ import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } fr
 import { setupMapFollowListeners } from './mapFollowLock.js';
 import { useTileSources } from './useTileSources.js';
 import { formatTimestampLocal } from './paramFormatters.js';
-import { computeVisibleSharedTrackers, isAcceptedOrOwnedGroup } from './sharingSelectors.js';
+import {
+  computeVisibleSharedGroups,
+  computeVisibleSharedTrackers,
+  isAcceptedOrOwnedGroup,
+  isHiddenInListGroup,
+  isHiddenInListTracker,
+  isSharedGroupNotOwned,
+  isSharedOrPublicOwned,
+  isVisibleInListGroup,
+  isVisibleInListTracker
+} from './sharingSelectors.js';
 
 const maplibregl = window.gv_core?.maplibre || window.maplibregl;
 
@@ -560,9 +571,7 @@ export default {
     });
 
     const listTab = ref('trackers');
-    const visibleTrackersTab = computed(() =>
-      sortedTrackers.value.filter((t) => t.is_owner === true && !(t.settings && t.settings.hidden_in_list))
-    );
+    const visibleTrackersTab = computed(() => sortedTrackers.value.filter((t) => isVisibleInListTracker(t)));
     const visibleSharedTab = computed(() =>
       computeVisibleSharedTrackers(
         sortedTrackers.value,
@@ -571,21 +580,11 @@ export default {
         hiddenGroupIds.value
       )
     );
-    const visibleGroupsTab = computed(() =>
-      sortedGroups.value.filter((g) => g.is_owner === true && !g.hidden_in_list)
-    );
-    const visibleSharedGroupsTab = computed(() =>
-      groups.value.filter(
-        (g) =>
-          g.is_owner !== true &&
-          g.visibility === 'shared' &&
-          g.is_accepted === true &&
-          !hiddenGroupIds.value.has(String(g.id))
-      )
-    );
+    const visibleGroupsTab = computed(() => sortedGroups.value.filter((g) => isVisibleInListGroup(g)));
+    const visibleSharedGroupsTab = computed(() => computeVisibleSharedGroups(groups.value, hiddenGroupIds.value));
     const hiddenTrackersForSettings = computed(() => {
       const listHidden = trackers.value
-        .filter((t) => t.is_owner === true && (t.settings && t.settings.hidden_in_list))
+        .filter((t) => isHiddenInListTracker(t))
         .map((t) => ({ id: t.id, name: t.name, is_owner: t.is_owner, source: 'list' }));
       // Only show map-hidden trackers that are not part of a hidden group (group shows in Hidden groups instead)
       const mapHidden = trackers.value
@@ -602,18 +601,14 @@ export default {
     });
     const hiddenGroupsForSettings = computed(() => {
       const listHidden = sortedGroups.value
-        .filter((g) => g.is_owner === true && g.hidden_in_list)
+        .filter((g) => isHiddenInListGroup(g))
         .map((g) => ({ id: g.id, name: g.name, is_owner: g.is_owner, source: 'list' }));
       const mapHidden = sortedGroups.value
         .filter((g) => hiddenGroupIds.value.has(String(g.id)))
         .map((g) => ({ id: g.id, name: g.name, is_owner: g.is_owner, source: 'map' }));
       return [...listHidden, ...mapHidden];
     });
-    const sharedByYouTrackers = computed(() =>
-      trackers.value.filter(
-        (t) => t.is_owner === true && (t.visibility === 'shared' || t.visibility === 'public')
-      )
-    );
+    const sharedByYouTrackers = computed(() => trackers.value.filter((t) => isSharedOrPublicOwned(t)));
     const activeGroup = computed(() => {
       const id = activeGroupId.value;
       if (id == null) return null;
@@ -632,7 +627,7 @@ export default {
       if (id == null) return null;
       const idStr = String(id);
       return sortedGroups.value.find(
-        (g) => g.is_owner !== true && (g.track_ids || []).some((tid) => String(tid) === idStr)
+        (g) => isSharedGroupNotOwned(g) && (g.track_ids || []).some((tid) => String(tid) === idStr)
       ) ?? null;
     });
     const listEmptyForTab = computed(() => {

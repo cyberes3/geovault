@@ -34,6 +34,7 @@ from .helpers import (
     can_user_see_track_via_owned_group_membership,
     can_user_see_track_via_group_share,
     generate_hauk_password,
+    get_json_body,
     track_to_response,
     track_to_response_metadata_only,
 )
@@ -67,15 +68,6 @@ from .validation import (
 
 
 User = get_user_model()
-
-
-def _get_json_body(request):
-    """Parse request body as JSON. Returns (data, None) or (None, error_response)."""
-    try:
-        data = json.loads(request.body) if request.body else {}
-        return data, None
-    except json.JSONDecodeError:
-        return None, error_response("Invalid JSON", 400)
 
 
 def _json_size_bytes(payload: dict) -> int:
@@ -250,7 +242,7 @@ def _get_track_for_user_or_404(user, tracker_id):
 @csrf_exempt
 def tracker_check(request):
     """POST: Check a single tracker ID (and optionally password). Supports session, OAuth, and API auth."""
-    data, err = _get_json_body(request)
+    data, err = get_json_body(request)
     if err is not None:
         return err
     try:
@@ -292,11 +284,7 @@ def tracker_list_create(request):
         visible_non_owned_by_id = {}
         for sub in subs:
             t = sub.track
-            if t.visibility == VISIBILITY_PUBLIC:
-                visible_non_owned_by_id[t.id] = t
-            elif t.visibility == VISIBILITY_SHARED and LiveTrackShare.objects.filter(
-                track=t, shared_with=request.user
-            ).exists():
+            if can_user_see_track(request.user, t):
                 visible_non_owned_by_id[t.id] = t
         if accepted_group_track_ids:
             for t in (
@@ -333,7 +321,7 @@ def tracker_list_create(request):
         out.sort(key=lambda x: (x.get("name") or "").lower())
         return JsonResponse(out, safe=False)
 
-    data, err = _get_json_body(request)
+    data, err = get_json_body(request)
     if err is not None:
         return err
     name = (data.get("name") or "").strip()
@@ -393,7 +381,7 @@ def tracker_get_patch_delete(request, tracker_id):
 def tracker_post_settings(request, tracker_id):
     """POST trackers/<id>/settings/ — update name, color, recent_data_window, visibility, share_params, shared_with_emails. Owner only."""
     track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
-    data, err = _get_json_body(request)
+    data, err = get_json_body(request)
     if err is not None:
         return err
     try:
@@ -618,7 +606,7 @@ def tracker_get_geometry_bulk(request):
     """POST trackers/geometry/ — full geometry for multiple trackers. Body: {tracker_ids: [...], all_data?: bool}."""
     from django.http import Http404
 
-    data, err = _get_json_body(request)
+    data, err = get_json_body(request)
     if err is not None:
         return err
     try:
@@ -1046,7 +1034,7 @@ def map_visibility_get_patch(request):
             "hidden_group_ids": list(prefs.hidden_group_ids or []),
         })
     # PATCH
-    data, err = _get_json_body(request)
+    data, err = get_json_body(request)
     if err is not None:
         return err
     try:

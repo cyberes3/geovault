@@ -3,6 +3,7 @@ Shared helpers for live_track extension (response building, parsing, broadcast).
 """
 
 import copy
+import json
 import secrets
 import types
 
@@ -29,7 +30,6 @@ def generate_hauk_password() -> str:
     return f"{phrase}.{secrets.randbelow(10000):04d}"
 
 
-import json
 import re
 import time
 from urllib.parse import parse_qs
@@ -105,6 +105,16 @@ def _strip_ser_from_params(point_params: list) -> None:
     for p in point_params:
         if isinstance(p, dict) and "ser" in p:
             p.pop("ser", None)
+
+
+def get_json_body(request):
+    """Parse request body JSON and return (data, err_response)."""
+    try:
+        data = json.loads(request.body) if request.body else {}
+        return data, None
+    except json.JSONDecodeError:
+        from api.utils.responses import error_response
+        return None, error_response("Invalid JSON", 400)
 
 
 def track_to_response(

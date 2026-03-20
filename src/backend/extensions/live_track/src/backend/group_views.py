@@ -2,7 +2,6 @@
 Live track group CRUD and sharing views (sharing-only; no membership).
 """
 
-import json
 import uuid
 
 from django.contrib.auth import get_user_model
@@ -26,7 +25,13 @@ from .models import (
     VISIBILITY_PUBLIC,
     VISIBILITY_SHARED,
 )
-from .helpers import accepted_group_ids_for_user, visible_group_track_ids_for_user
+from .helpers import (
+    accepted_group_ids_for_user,
+    can_user_see_track,
+    can_user_see_track_via_accepted_group_share,
+    get_json_body,
+    visible_group_track_ids_for_user,
+)
 from .validation import GroupResponse
 from .world_share_views import build_live_track_group_share_url
 
@@ -42,14 +47,6 @@ def can_user_see_group(user, group):
     if group.visibility == VISIBILITY_SHARED:
         return LiveTrackGroupShare.objects.filter(group=group, shared_with=user).exists()
     return False
-
-
-def _get_json_body(request):
-    try:
-        data = json.loads(request.body) if request.body else {}
-        return data, None
-    except json.JSONDecodeError:
-        return None, error_response("Invalid JSON", 400)
 
 
 def _get_group_for_user_or_404(user, group_id):
@@ -148,7 +145,7 @@ def group_list_create(request):
         items.sort(key=lambda x: (x.get("name") or "").lower())
         return JsonResponse(items, safe=False)
     if request.method == "POST":
-        data, err = _get_json_body(request)
+        data, err = get_json_body(request)
         if err is not None:
             return err
         name = (data.get("name") or "").strip()
@@ -172,7 +169,7 @@ def group_get_patch_delete(request, group_id):
     if request.method == "PATCH":
         if not _group_can_edit(group, request.user):
             return error_response("Only the owner can update this group", 403)
-        data, err = _get_json_body(request)
+        data, err = get_json_body(request)
         if err is not None:
             return err
         update_fields = ["updated_at"]
@@ -250,7 +247,7 @@ def group_add_track(request, group_id):
     group = _get_group_for_user_or_404(request.user, group_id)
     if not _group_can_edit(group, request.user):
         return error_response("Only the owner can add trackers", 403)
-    data, err = _get_json_body(request)
+    data, err = get_json_body(request)
     if err is not None:
         return err
     track_id = data.get("track_id")
@@ -260,15 +257,15 @@ def group_add_track(request, group_id):
         track = LiveTrack.objects.get(id=track_id)
     except (LiveTrack.DoesNotExist, ValueError):
         return error_response("Tracker not found", 404)
-    # Allowed: (a) owned, (b) already subscribed to track, (c) public track (then subscribe to track)
-    if track.user_id == request.user.id:
-        pass
-    elif LiveTrackSubscription.objects.filter(user=request.user, track=track).exists():
-        pass
-    elif track.visibility == VISIBILITY_PUBLIC:
-        LiveTrackSubscription.objects.get_or_create(user=request.user, track=track)
-    else:
+    # Canonical access: owner, directly visible/shared, or available via accepted shared group.
+    has_access = (
+        can_user_see_track(request.user, track)
+        or can_user_see_track_via_accepted_group_share(request.user, track)
+    )
+    if not has_access:
         return error_response("You do not have access to this tracker", 403)
+    if track.visibility == VISIBILITY_PUBLIC and track.user_id != request.user.id:
+        LiveTrackSubscription.objects.get_or_create(user=request.user, track=track)
     # If requester is not owner, adding to group requires tracker owner to allow re-share
     if track.user_id != request.user.id:
         if not (track.settings or {}).get("allow_group_reshare"):

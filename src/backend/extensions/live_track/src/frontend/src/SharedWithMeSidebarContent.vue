@@ -241,6 +241,8 @@ export default {
     leavingShareId: { type: [String, Number], default: null },
     /** Set or array of track IDs that are hidden from the map */
     hiddenTrackIds: { type: [Set, Array], default: () => new Set() },
+    /** Set or array of group IDs that are hidden from the map */
+    hiddenGroupIds: { type: [Set, Array], default: () => new Set() },
     unsubscribingId: { type: [String, Number], default: null },
     /** Group ID currently being unsubscribed (show spinner on group row) */
     unsubscribingGroupId: { type: [String, Number], default: null },
@@ -282,7 +284,7 @@ export default {
     }
 
     function isGroupHidden(group) {
-      return isGroupHiddenByMap(group, props.hiddenTrackIds, []);
+      return isGroupHiddenByMap(group, props.hiddenTrackIds, props.hiddenGroupIds);
     }
 
     function isUnsubscribingGroup(groupId) {

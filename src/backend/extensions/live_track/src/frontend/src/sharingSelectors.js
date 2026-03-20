@@ -17,6 +17,19 @@ export function isSharedOrPublicTracker(track) {
   return !isOwned(track) && (visibility === 'shared' || visibility === 'public');
 }
 
+export function isSharedOrPublicOwned(track) {
+  const visibility = (track?.visibility || '');
+  return isOwned(track) && (visibility === 'shared' || visibility === 'public');
+}
+
+export function isPublic(item) {
+  return (item?.visibility || '') === 'public';
+}
+
+export function isShared(item) {
+  return (item?.visibility || '') === 'shared';
+}
+
 export function toIdSet(value) {
   if (value instanceof Set) return new Set([...value].map((id) => normalizeId(id)));
   if (Array.isArray(value)) return new Set(value.map((id) => normalizeId(id)));
@@ -48,6 +61,37 @@ export function computeVisibleSharedTrackers(sortedTrackers, sortedGroups, hidde
       !trackIdsInSharedGroups.has(normalizeId(track.id)) &&
       !hiddenTrackSet.has(normalizeId(track.id))
   );
+}
+
+export function computeVisibleSharedGroups(groups, hiddenGroupIds) {
+  const hiddenGroupSet = toIdSet(hiddenGroupIds);
+  return (groups || []).filter(
+    (group) =>
+      !isOwned(group) &&
+      (group?.visibility || '') === 'shared' &&
+      group?.is_accepted === true &&
+      !hiddenGroupSet.has(normalizeId(group.id))
+  );
+}
+
+export function isVisibleInListTracker(track) {
+  return isOwned(track) && !(track?.settings?.hidden_in_list);
+}
+
+export function isVisibleInListGroup(group) {
+  return isOwned(group) && !group?.hidden_in_list;
+}
+
+export function isHiddenInListTracker(track) {
+  return isOwned(track) && !!(track?.settings?.hidden_in_list);
+}
+
+export function isHiddenInListGroup(group) {
+  return isOwned(group) && !!group?.hidden_in_list;
+}
+
+export function isSharedGroupNotOwned(group) {
+  return !isOwned(group);
 }
 
 export function isGroupHiddenByMap(group, hiddenTrackIds, hiddenGroupIds) {
