@@ -139,6 +139,7 @@ class DiscoverTrackersFragment : Fragment() {
     private fun applyLoadedState(state: DiscoverTrackersUiState) {
         if (!isAdded) return
         swipeRefresh.isRefreshing = false
+        pagerAdapter?.getPageView(1)?.findViewById<SwipeRefreshLayout>(R.id.discoverIncomingSwipeRefresh)?.isRefreshing = false
         if (state.isLoading) {
             loadingView.visibility = View.VISIBLE
             spinner.start()
@@ -229,6 +230,10 @@ class DiscoverTrackersFragment : Fragment() {
                     if (onMyMap != null && incoming != null) renderTabContent(onMyMap, incoming)
                 }
             })
+        }
+        val incomingSwipeRefresh = incomingPage.findViewById<SwipeRefreshLayout>(R.id.discoverIncomingSwipeRefresh)
+        incomingSwipeRefresh?.setOnRefreshListener {
+            viewModel.load(forceRefresh = true)
         }
     }
 
