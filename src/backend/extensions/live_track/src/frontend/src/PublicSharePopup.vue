@@ -1,7 +1,7 @@
 <template>
   <BaseModal
     :is-open="!!track"
-    :title="track ? `Who has added: ${track.name || 'Unnamed'}` : 'Public share'"
+    :title="track ? `Who has added: ${track.name || 'Unnamed'}` : 'Public Share'"
     @close="$emit('close')"
   >
     <div v-if="track" class="p-4 space-y-4">
@@ -10,7 +10,7 @@
       </div>
       <template v-else>
         <p class="text-sm text-gray-900">Users who have added this public tracker to their list:</p>
-        <div v-if="subscribers.length === 0" class="text-sm text-gray-900 italic">No one has added this track yet.</div>
+        <div v-if="subscribers.length === 0" class="text-sm text-gray-900 italic">No one has added this tracker yet.</div>
         <ul v-else class="max-h-40 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
           <li
             v-for="s in subscribers"
@@ -33,7 +33,7 @@
         @click="onDeletePublicShare"
       >
         <Loader v-if="deleting" size="xs" layout="inline" :show-message="false" />
-        <span v-else>Delete public share</span>
+        <span v-else>Delete Public Share</span>
       </BaseButton>
     </template>
   </BaseModal>

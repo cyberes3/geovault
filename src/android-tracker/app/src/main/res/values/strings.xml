@@ -99,14 +99,14 @@
     <string name="no_description">No description</string>
     <string name="map_toggle_description">Toggle street or satellite map</string>
     <string name="recenter_to_tracker">Return to selected tracker</string>
-    <string name="zoom_to_latest_description">Lock camera to follow latest track point</string>
-    <string name="follow_lock_on_description">Unlock camera (stop following track)</string>
+    <string name="zoom_to_latest_description">Lock camera to follow latest tracker point</string>
+    <string name="follow_lock_on_description">Unlock camera (stop following tracker)</string>
     <string name="show_my_location_description">Show my location on map</string>
     <string name="show_my_location_on_description">Hide my location</string>
     <string name="zoom_in_description">Zoom in</string>
     <string name="zoom_out_description">Zoom out</string>
     <string name="map_gps_accuracy_warning_description">Waiting for GPS lock or better accuracy</string>
-    <string name="show_all_trackers">View all trackers</string>
+    <string name="show_all_trackers">View All Trackers</string>
     <string name="all_trackers">All Trackers</string>
     <string name="show_selected_tracker">Show selected tracker</string>
     <string name="selected_tracker">Selected tracker %1$s</string>
@@ -170,11 +170,11 @@
     <string name="stat_label_sent_queued">Sent: %1$d - Queued: %2$d</string>
 
     <!-- Tracker management -->
-    <string name="view_on_map">View on map</string>
-    <string name="view_params">View params</string>
-    <string name="view_in_trackers_list">View in trackers list</string>
-    <string name="view_in_shared_list">View in shared list</string>
-    <string name="view_in_group_members">View in group members</string>
+    <string name="view_on_map">View On Map</string>
+    <string name="view_params">View Params</string>
+    <string name="view_in_trackers_list">View In Trackers List</string>
+    <string name="view_in_shared_list">View In Shared List</string>
+    <string name="view_in_group_members">View In Group Members</string>
     <string name="map_tracker_info_view_params_content_description">View parameters for this tracker</string>
     <string name="map_tracker_info_view_in_list_content_description">Open list and show this tracker</string>
     <string name="zoom_and_lock_tracker">Zoom and lock on this tracker</string>
@@ -195,9 +195,9 @@
 <string name="tracker_secret_label">Tracker Secret</string>
 <string name="created_at_label">Created At</string>
 <string name="updated_at_label">Updated At</string>
-    <string name="track_points_count">Track points: %1$d</string>
+    <string name="track_points_count">Tracker points: %1$d</string>
     <string name="delete_tracker_confirm_title">Delete Tracker?</string>
-    <string name="delete_tracker_confirm_message">This cannot be undone. The track history will be lost.</string>
+    <string name="delete_tracker_confirm_message">This cannot be undone. The tracker history will be lost.</string>
     <string name="save">Save</string>
     <string name="saved_tracker">Saved tracker</string>
     <string name="create">Create</string>
@@ -206,9 +206,9 @@
 <string name="discard_changes_confirm_title">Discard Changes?</string>
     <string name="discard_changes_confirm_message">You have unsaved changes. Close without saving?</string>
     <string name="discard">Discard</string>
-    <string name="clear_history_tracker">Clear track history</string>
+    <string name="clear_history_tracker">Clear Tracker History</string>
     <string name="clear_history_confirm_title">Clear History?</string>
-    <string name="clear_history_confirm_message">Clear all track history except the latest point? This cannot be undone.</string>
+    <string name="clear_history_confirm_message">Clear all tracker history except the latest point? This cannot be undone.</string>
     <string name="history_cleared">History cleared</string>
     <string name="tracker_deleted">Tracker deleted</string>
     <string name="tracker_created">Tracker created</string>
@@ -217,7 +217,7 @@
     <string name="failed_to_save_tracker">Failed to save tracker</string>
     <string name="failed_to_clear_history">Failed to clear history</string>
     <string name="failed_to_delete_tracker">Failed to delete tracker</string>
-    <string name="pick_color">Pick color</string>
+    <string name="pick_color">Pick Color</string>
     <string name="show_recent_data">Show recent data</string>
     <string name="show_recent_data_help_text">Show only points in this time window; choose All to show full history.</string>
     <string name="recent_data_all">All</string>
@@ -289,7 +289,7 @@
     <string name="world_share_enabled_help_text">When on, anyone with the link can view this on a read-only map without logging in.</string>
     <string name="share_params_with_world_label">Share parameters with world link</string>
     <string name="share_params_with_world_help_text">When on, anyone with the world link can see extended parameters.</string>
-    <string name="copy_world_share_link">Copy world link</string>
+    <string name="copy_world_share_link">Copy World Link</string>
     <string name="world_link_copied">World link copied to clipboard</string>
     <string name="invalid_emails_error">Invalid emails: %1$s</string>
 
@@ -304,7 +304,7 @@
     <string name="unsubscribe">Unsubscribe</string>
     <string name="unsubscribe_confirm_title">Unsubscribe?</string>
     <string name="unsubscribe_confirm_message">This will remove the tracker from your list and map. You can add it again later from Add Trackers (public trackers) or from Incoming (shared trackers).</string>
-    <string name="remove_from_share">Remove from share</string>
+    <string name="remove_from_share">Remove From Share</string>
     <string name="remove_from_share_confirm_title">Remove From Share?</string>
     <string name="remove_from_share_confirm_message">This will remove you as a recipient. The owner will no longer have you on their share list, and you won’t see this tracker in Incoming again unless they share it with you again.</string>
     <string name="add">Add</string>
@@ -338,30 +338,30 @@
     <string name="hide_in_list_label">Hide in list</string>
     <string name="hide_in_list_hint">When on, this group is hidden from the Groups list. You can unhide it in Settings.</string>
     <string name="view_group">View Group</string>
-    <string name="view_group_on_map">View Group on Map</string>
+    <string name="view_group_on_map">View Group On Map</string>
     <string name="edit_group_content_description">Edit Group</string>
     <string name="edit_shared_group_title">Shared Group</string>
 
     <string name="hide_on_map">Hide</string>
     <string name="hide_on_map_help_text">Hide this shared tracker on your map without unsubscribing.</string>
     <string name="edit_tracker_hide_help_text">Hide this tracker from your map and lists; you can show it again in Hidden Trackers.</string>
-    <string name="show_on_map">Show on map</string>
+    <string name="show_on_map">Show On Map</string>
     <string name="hidden_trackers">Hidden Trackers</string>
     <string name="hidden_trackers_hint">Tap the eye icon to show a tracker again.</string>
     <string name="hidden_trackers_empty">No hidden trackers.</string>
     <string name="hidden_trackers_show_item">Show %1$s</string>
     <string name="show">Show</string>
-    <string name="show_all">Show all</string>
+    <string name="show_all">Show All</string>
     <string name="hidden_groups">Hidden Groups</string>
     <string name="hidden_groups_empty">No hidden groups.</string>
-    <string name="show_all_trackers_in_settings">View all trackers</string>
+    <string name="show_all_trackers_in_settings">View All Trackers</string>
     <string name="show_all_groups">Show all groups</string>
     <string name="default_tracker_help_text">Use this as the tracker selected by default when starting tracking.</string>
 
     <string name="subscribers_title">Subscribers</string>
     <string name="export_kml">Export KML</string>
-    <string name="copy_profile_url">Copy GPSLogger profile URL</string>
-    <string name="copy_secret">Copy secret</string>
+    <string name="copy_profile_url">Copy GPSLogger Profile URL</string>
+    <string name="copy_secret">Copy Secret</string>
     <string name="profile_url_copied">Profile URL copied</string>
     <string name="secret_copied">Secret copied to clipboard</string>
     <string name="kml_exported">KML saved</string>

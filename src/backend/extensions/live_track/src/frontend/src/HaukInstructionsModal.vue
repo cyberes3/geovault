@@ -58,7 +58,7 @@
         <div class="flex gap-3">
           <span class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center font-medium">4</span>
           <div>
-            <p class="font-medium text-gray-900">Start sharing</p>
+            <p class="font-medium text-gray-900">Start Sharing</p>
             <p class="text-gray-900">In Hauk, start a share session. Your live position will appear on this tracker’s map in GeoVault. Stop sharing in Hauk when you are done.</p>
           </div>
         </div>

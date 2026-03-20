@@ -131,7 +131,7 @@ export default {
     worldShareDescription() {
       return this.variant === 'group'
         ? "When on, anyone with the link can view this group's tracks on a read-only map (no login required)."
-        : 'When on, anyone with the link can view this track on a read-only map (no login required).';
+        : 'When on, anyone with the link can view this tracker on a read-only map (no login required).';
     },
   },
   methods: {

@@ -92,7 +92,7 @@
       <BaseButton variant="white" size="sm" @click="$emit('download-kml')">Download KML</BaseButton>
       <BaseButton v-if="isOwner" variant="white" size="sm" :disabled="clearHistoryDisabled" @click="$emit('clear-history')">
         <Loader v-if="clearing" size="sm" layout="inline" :show-message="false" class="mr-1" />
-        Clear tracker
+        Clear Tracker
       </BaseButton>
       <BaseButton v-if="isOwner" variant="secondary" color="gray" size="sm" class="col-span-2" :disabled="regeneratingTokens" @click="$emit('regenerate-tokens')">
         <Loader v-if="regeneratingTokens" size="sm" layout="inline" :show-message="false" class="mr-1" />
@@ -100,7 +100,7 @@
       </BaseButton>
       <BaseButton v-if="!isOwner" variant="secondary" color="gray" size="sm" :disabled="unsubscribing" @click="$emit('unsubscribe')">
         <Loader v-if="unsubscribing" size="sm" layout="inline" :show-message="false" class="mr-1" />
-        Remove from my list
+        Remove From My List
       </BaseButton>
       <BaseButton v-if="isOwner" variant="secondary" color="red" size="sm" :disabled="deleting" @click="$emit('delete')">
         <Loader v-if="deleting" size="sm" layout="inline" :show-message="false" class="mr-1" />

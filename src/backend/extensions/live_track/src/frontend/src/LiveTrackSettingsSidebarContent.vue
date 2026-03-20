@@ -39,7 +39,7 @@
     <!-- Hidden groups -->
     <div class="flex-shrink-0">
       <div class="flex items-center justify-between mb-2">
-        <h3 class="text-sm font-semibold text-gray-900">Hidden groups</h3>
+        <h3 class="text-sm font-semibold text-gray-900">Hidden Groups</h3>
         <span v-if="hiddenGroups.length > 0" class="text-xs text-gray-900">{{ hiddenGroups.length }}</span>
       </div>
       <div v-if="hiddenGroups.length === 0" class="text-xs text-gray-900 italic">None</div>

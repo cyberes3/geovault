@@ -84,7 +84,7 @@
         class="text-red-600 hover:bg-red-50"
         @click="$emit('leave')"
       >
-        Leave shared group
+        Leave Shared Group
       </BaseButton>
     </div>
   </div>
