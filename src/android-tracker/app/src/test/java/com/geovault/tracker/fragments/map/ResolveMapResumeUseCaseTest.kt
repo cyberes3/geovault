@@ -240,6 +240,19 @@ class ResolveMapResumeUseCaseTest {
         )
     }
 
+    @Test
+    fun resolve_trackingRunning_keepsDisplayedTrackerContextWhenSelectedMissing() {
+        val decision = useCase.resolve(
+            baseInput().copy(
+                trackingRunning = true,
+                selectedTrackerId = "",
+                displayedTrackerId = "tracker-2",
+                hasTrackPoints = true
+            )
+        )
+        assertTrue(decision is MapResumeDecision.NoOp)
+    }
+
     private fun baseInput() = MapResumeInput(
         trackingRunning = false,
         mapReady = true,

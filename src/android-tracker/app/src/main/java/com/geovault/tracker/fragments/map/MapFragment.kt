@@ -538,6 +538,8 @@ class MapFragment : Fragment() {
                 if (styleReloadListener == null) {
                     styleReloadListener = MapView.OnDidFinishLoadingStyleListener {
                         if (!isAdded) return@OnDidFinishLoadingStyleListener
+                        // Style reload can drop runtime GeoJSON source contents; repaint active tail immediately.
+                        updateTrackLine()
                         reapplyLocationMarkerStyleForCurrentMode()
                         updateShowMyLocationButtonVisibility()
                     }
@@ -570,31 +572,37 @@ class MapFragment : Fragment() {
                 }
                 if (deferredGroup != null) {
                     refreshMapForGroup(deferredGroup, deferredZoom)
+                    maybeReapplyLockStateAfterMapReady()
                     return
                 }
                 if (pendingGroup != null) {
                     refreshMapForGroup(pendingGroup, pendingZoom)
                     pendingGroupForMap = null
                     pendingGroupZoomToTrackerId = null
+                    maybeReapplyLockStateAfterMapReady()
                     return
                 }
                 if (pendingShowAllTrackers) {
                     pendingShowAllTrackers = false
                     loadAllTrackersAndApply()
+                    maybeReapplyLockStateAfterMapReady()
                     return
                 }
                 if (mapViewContext == MapViewContext.GROUP && currentGroupForMap != null) {
                     refreshMapForGroup(currentGroupForMap, null)
+                    maybeReapplyLockStateAfterMapReady()
                     return
                 }
                 if (showAllTrackers) {
                     if (!restoreAllTrackersFromCacheIfAvailable(map, style)) {
                         loadAllTrackersAndApply()
                     }
+                    maybeReapplyLockStateAfterMapReady()
                     return
                 }
                 if (hasPendingInitialTrack) {
                     consumePendingInitialTrackForMap()
+                    maybeReapplyLockStateAfterMapReady()
                     return
                 }
                 // Basemap switch should keep currently rendered single-tracker tail visible.
@@ -603,6 +611,7 @@ class MapFragment : Fragment() {
                     startLiveTrackStreamingForDisplayedTracker()
                     updateZoomToLatestButtonState()
                     updateTrackerLabel()
+                    maybeReapplyLockStateAfterMapReady()
                     return
                 }
                 if (displayedTrackerId.isNullOrEmpty()) {
@@ -772,7 +781,6 @@ class MapFragment : Fragment() {
             root.findViewById<View>(R.id.mapContainer)?.overScrollMode = View.OVER_SCROLL_NEVER
         }
         view?.keepScreenOn = true
-        updateTrackerLabel()
         refreshMapPaddingForCurrentMode(force = true)
 
         if (trackingRuntimeSnapshot().isRunning) {
@@ -821,10 +829,9 @@ class MapFragment : Fragment() {
             )
             when (decision) {
                 MapResumeDecision.NoOp -> Unit
-                MapResumeDecision.MultiContextNoStreaming -> updateTrackerLabel()
+                MapResumeDecision.MultiContextNoStreaming -> Unit
                 is MapResumeDecision.StartMultiContextStreaming -> {
                     startLiveTrackStreamingForTrackerSet(decision.trackerIds)
-                    updateTrackerLabel()
                 }
                 MapResumeDecision.ClearSingleTrackerState -> {
                     trackPoints.clear()
@@ -834,7 +841,6 @@ class MapFragment : Fragment() {
                     stopLiveTrackStreaming()
                     updateTrackLine()
                     updateZoomToLatestButtonState()
-                    updateTrackerLabel()
                 }
                 is MapResumeDecision.LoadSingleTrackerRuntime -> {
                     if (displayedTrackerId != decision.trackerId || mapViewContext != MapViewContext.SINGLE_TRACKER) {
@@ -870,6 +876,7 @@ class MapFragment : Fragment() {
         } else {
             pendingLockReapplyAfterMapReady = true
         }
+        updateTrackerLabel()
     }
 
     override fun onPause() {
@@ -1372,10 +1379,6 @@ class MapFragment : Fragment() {
     private fun updateTrackerLabel() {
         val trackingRunning = trackingRuntimeSnapshot().isRunning
         val selectedTrackerName = SelectedTrackerPrefs.selectedTrackerName(requireContext())
-        if (!isLiveActiveFitAvailable() && liveActiveFitEnabled) {
-            reduceLock(MapLockEvent.DisableLiveFit)
-            updateShowMyLocationButtonVisibility()
-        }
         val state = MapTrackerLabelController.computeLabelState(
             mapViewContext = mapViewContext,
             showAllTrackers = showAllTrackers,
