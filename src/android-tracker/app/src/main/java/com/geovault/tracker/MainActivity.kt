@@ -1096,7 +1096,10 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
 
     override fun updateQueueCountFromFragment(textView: TextView) {
         lifecycleScope.launch {
-            val count = withContext(Dispatchers.IO) { database.locationDao().getCount() }
+            val sessionBoundaryMs = TrackingRuntimeStateStore.state.value.sessionStartTimeMs
+            val count = withContext(Dispatchers.IO) {
+                database.locationDao().getCurrentSessionCount(sessionBoundaryMs)
+            }
             textView.text = count.toString()
         }
     }

@@ -288,7 +288,7 @@ class TrackingService : TrackPointServiceBase() {
             ACTION_RESHOW_FOREGROUND -> {
                 if (isTracking) {
                     serviceScope.launch {
-                        val count = database.locationDao().getCount()
+                        val count = database.locationDao().getCurrentSessionCount(sessionBoundaryForBacklogMs)
                         withContext(Dispatchers.Main) {
                             startForeground(
                                 NOTIFICATION_ID,
@@ -706,7 +706,7 @@ class TrackingService : TrackPointServiceBase() {
 
     private fun updateNotificationCount() {
         serviceScope.launch {
-            val count = database.locationDao().getCount()
+            val count = database.locationDao().getCurrentSessionCount(sessionBoundaryForBacklogMs)
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.notify(NOTIFICATION_ID, createNotification(pointsSentThisSession, count))
         }

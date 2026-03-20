@@ -31,6 +31,9 @@ interface LocationDao {
     @Query("SELECT COUNT(*) FROM queued_locations")
     fun getCount(): Int
 
+    @Query("SELECT COUNT(*) FROM queued_locations WHERE time >= :sessionBoundaryMs")
+    fun getCurrentSessionCount(sessionBoundaryMs: Long): Int
+
     @Query("SELECT COUNT(*) FROM queued_locations WHERE time < :sessionBoundaryMs")
     fun getBacklogCount(sessionBoundaryMs: Long): Int
 
