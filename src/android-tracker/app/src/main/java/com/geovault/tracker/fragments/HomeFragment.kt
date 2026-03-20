@@ -47,7 +47,6 @@ class HomeFragment : Fragment() {
     private lateinit var permissionsContainer: View
     private lateinit var radarDishIcon: android.widget.ImageView
     private lateinit var serverFailureOverlay: View
-    private var isAccuracyRed = false
 
     private val sessionStatsHandler = Handler(Looper.getMainLooper())
     private val sessionStatsTickerIntervalMs = 1000L
@@ -357,31 +356,16 @@ class HomeFragment : Fragment() {
         val useImperial = usesImperialUnits(requireContext())
         distanceText.text = formatDistance(runtime.sessionTotalDistanceMeters, useImperial)
         val acc = runtime.lastAccuracyMeters
-        val isNoLock = acc == null || acc > trackingAccuracyThresholdMeters()
-        
-        if (isNoLock) {
+        if (acc == null) {
             accuracyText.text = "—"
             accuracyText.setTextColor(ContextCompat.getColor(requireContext(), R.color.error_red))
-            isAccuracyRed = true
-        } else {
-            val safeAccuracy = acc ?: 0f
-            accuracyText.text = formatAccuracy(safeAccuracy, useImperial)
-            val accuracyFilter = settingsRepository.getSettings().accuracyFilterMeters
-            
-            // Hysteresis: turn red if > filter, stay red until < filter * 0.85
-            if (safeAccuracy > accuracyFilter) {
-                isAccuracyRed = true
-            } else if (safeAccuracy < accuracyFilter * 0.85f) {
-                isAccuracyRed = false
-            }
-
-            accuracyText.setTextColor(
-                ContextCompat.getColor(
-                    requireContext(),
-                    if (isAccuracyRed) R.color.error_red else R.color.text_primary
-                )
-            )
+            return
         }
+
+        accuracyText.text = formatAccuracy(acc, useImperial)
+        val accuracyFilter = settingsRepository.getSettings().accuracyFilterMeters
+        val accuracyColor = if (acc > accuracyFilter) R.color.error_red else R.color.text_primary
+        accuracyText.setTextColor(ContextCompat.getColor(requireContext(), accuracyColor))
     }
 
     private fun usesImperialUnits(context: Context): Boolean {
