@@ -774,8 +774,7 @@ export default {
         const ids = raw.map((t) => t.id).filter((id) => id != null && id !== '');
 
         const bulkRes = await api.post('/trackers/geometry/', {
-          tracker_ids: ids,
-          all_data: true
+          tracker_ids: ids
         });
         const bulkList = Array.isArray(bulkRes.data) ? bulkRes.data : [];
         const bulkById = new Map(bulkList.map((t) => [String(t.id), t]));
@@ -2032,7 +2031,7 @@ export default {
     }
 
     function onTrackSettingsChanged(payload) {
-      const { trackId, hidden_in_list } = payload || {};
+      const { trackId, hidden_in_list, refresh_map } = payload || {};
       if (trackId == null) return;
       const idStr = String(trackId);
       const idx = trackers.value.findIndex((t) => String(t.id) === idStr);
@@ -2041,6 +2040,9 @@ export default {
       const settings = { ...(t.settings || {}), hidden_in_list };
       trackers.value = trackers.value.slice(0, idx).concat([{ ...t, settings }]).concat(trackers.value.slice(idx + 1));
       updateMapFeatures();
+      if (refresh_map === true) {
+        fetchAndMergeTracker(trackId);
+      }
     }
 
     function onTrackSidebarUnsubscribed(trackId) {

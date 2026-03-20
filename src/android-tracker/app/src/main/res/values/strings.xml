@@ -129,11 +129,11 @@
     <string name="auto_tracking_help_text">Let the app adjust tracking behavior automatically instead of manual profile settings.</string>
     <string name="tracking_profile_label">Tracking Profile</string>
     <string name="tracking_profile_help_text">Choose a preset tuned for your activity, or use Custom to control values yourself.</string>
+    <string name="profile_auto">Auto</string>
     <string name="profile_walking">Walking</string>
     <string name="profile_biking">Biking</string>
     <string name="profile_driving">Driving</string>
     <string name="profile_custom">Custom</string>
-    <string name="profile_auto">AUTO</string>
     
     <!-- Permissions -->
     <string name="permissions_required_title">Permissions Required</string>
@@ -164,9 +164,9 @@
     <string name="distance_filter_help_text">Ignore small movements until this minimum distance is reached.</string>
     <string name="accuracy_filter_help_text">Skip points with worse GPS accuracy than this limit.</string>
     <string name="low_accuracy_fallback_label">Low Accuracy Fallback</string>
-    <string name="low_accuracy_fallback_help_text">If no GPS lock is available, send the best available location after a timeout.</string>
-    <string name="low_accuracy_fallback_timeout_label">Fallback Timeout (seconds)</string>
-    <string name="low_accuracy_fallback_timeout_help_text">How long to wait without a lock before sending a fallback location.</string>
+    <string name="low_accuracy_fallback_help_text">When GPS lock is weak, allow a fallback point after a timeout so tracking continues.</string>
+    <string name="low_accuracy_fallback_timeout_label">Low Accuracy Fallback Timeout (seconds)</string>
+    <string name="low_accuracy_fallback_timeout_help_text">How long to wait for a good GPS fix before sending a fallback point.</string>
 
     <!-- Restart / start on launch -->
     <string name="restart_tracking_if_killed_label">Restart tracking if app killed while tracking</string>

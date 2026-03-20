@@ -826,6 +826,11 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             .commit()
     }
 
+    override fun refreshMapAfterTrackerSettingsSaved(trackerId: String) {
+        val mapFragment = pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.map.MapFragment
+        mapFragment?.refreshForTrackerSettingsChange(trackerId)
+    }
+
     override fun showEditSharedTrackerFragment(tracker: com.geovault.tracker.Tracker) {
         val fragment = com.geovault.tracker.fragments.EditSharedTrackerFragment().apply {
             arguments = android.os.Bundle().apply {

@@ -64,8 +64,7 @@ data class TrackerCoordinatesResponse(
 
 /** POST trackers/geometry/ request body. */
 data class TrackerBulkGeometryRequest(
-    val tracker_ids: List<String> = emptyList(),
-    val all_data: Boolean = false
+    val tracker_ids: List<String> = emptyList()
 )
 
 /** GET trackers/available-to-add/ response. */

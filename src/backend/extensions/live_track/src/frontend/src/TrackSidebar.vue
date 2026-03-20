@@ -446,6 +446,8 @@ export default {
       if (props.mode !== 'edit' || !isOwner.value || !props.track?.id) return;
       if (!lastSavedSnapshot.value) return;
       const current = makeSnapshotFromState();
+      const previous = lastSavedSnapshot.value;
+      const recentWindowChanged = String(current.recentDataWindow || '') !== String(previous.recentDataWindow || '');
       if (snapshotsEqual(current, lastSavedSnapshot.value)) return;
       if (autosaveInFlight) {
         autosaveQueued = true;
@@ -463,6 +465,9 @@ export default {
         if (res?.data) {
           worldShareEnabled.value = !!(res.data.world_share_id);
           worldShareUrl.value = res.data.world_share_url || '';
+        }
+        if (recentWindowChanged) {
+          emit('settings-changed', { trackId: props.track.id, refresh_map: true });
         }
       } catch (e) {
         if (seq === autosaveSeq) {

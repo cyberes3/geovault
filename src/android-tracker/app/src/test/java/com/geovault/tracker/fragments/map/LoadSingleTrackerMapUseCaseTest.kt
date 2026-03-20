@@ -52,8 +52,8 @@ class LoadSingleTrackerMapUseCaseTest {
         assertNotNull(snapshot)
         assertEquals("t1", snapshot?.tracker?.id)
         assertEquals(2, snapshot?.coordinates?.size)
-        assertEquals(listOf(true), repository.geometryAllDataRequests)
-        assertEquals(listOf(true), repository.coordinatesAllDataRequests)
+        assertEquals(listOf(false), repository.geometryAllDataRequests)
+        assertEquals(listOf(false), repository.coordinatesAllDataRequests)
     }
 
     @Test
@@ -86,7 +86,7 @@ class LoadSingleTrackerMapUseCaseTest {
         assertEquals("t2", snapshot?.tracker?.id)
         assertTrue(snapshot?.forceReplace == true)
         assertEquals(2, snapshot?.coordinates?.size)
-        assertEquals(listOf(true), repository.coordinatesAllDataRequests)
+        assertEquals(listOf(false), repository.coordinatesAllDataRequests)
     }
 
     @Test
@@ -132,12 +132,12 @@ class LoadSingleTrackerMapUseCaseTest {
         assertNotNull(snapshot)
         assertEquals("t3", snapshot?.tracker?.id)
         assertEquals(3, snapshot?.coordinates?.size)
-        assertEquals(listOf(true), repository.geometryAllDataRequests)
-        assertEquals(listOf(true), repository.coordinatesAllDataRequests)
+        assertEquals(listOf(false), repository.geometryAllDataRequests)
+        assertEquals(listOf(false), repository.coordinatesAllDataRequests)
     }
 
     @Test
-    fun execute_bootstrap_dropsSinglePointHistoryBaseline() {
+    fun execute_bootstrap_keepsSinglePointHistoryBaseline() {
         val repository = FakeTrackRepository(
             geometryById = mapOf(
                 "t4" to Tracker(
@@ -169,7 +169,7 @@ class LoadSingleTrackerMapUseCaseTest {
 
         assertNotNull(snapshot)
         assertEquals("t4", snapshot?.tracker?.id)
-        assertEquals(0, snapshot?.coordinates?.size)
+        assertEquals(1, snapshot?.coordinates?.size)
     }
 
     @Test
@@ -216,7 +216,7 @@ class LoadSingleTrackerMapUseCaseTest {
         assertEquals("t5", snapshot?.tracker?.id)
         assertEquals(2, snapshot?.coordinates?.size)
         assertEquals(emptyList<Boolean>(), repository.geometryAllDataRequests)
-        assertEquals(listOf(true), repository.coordinatesAllDataRequests)
+        assertEquals(listOf(false), repository.coordinatesAllDataRequests)
     }
 
     private class FakeTrackRepository(
@@ -234,19 +234,18 @@ class LoadSingleTrackerMapUseCaseTest {
             return trackerById[id]?.let { RepositoryResult.Success(it) } ?: RepositoryResult.Failure(AppError.NotFound)
         }
 
-        override suspend fun getTrackerGeometry(id: String, allData: Boolean): RepositoryResult<Tracker> {
-            geometryAllDataRequests += allData
+        override suspend fun getTrackerGeometry(id: String): RepositoryResult<Tracker> {
+            geometryAllDataRequests += false
             return geometryById[id]?.let { RepositoryResult.Success(it) } ?: RepositoryResult.Failure(AppError.NotFound)
         }
 
-        override suspend fun getTrackerCoordinates(id: String, allData: Boolean): RepositoryResult<TrackerCoordinatesResponse> {
-            coordinatesAllDataRequests += allData
+        override suspend fun getTrackerCoordinates(id: String): RepositoryResult<TrackerCoordinatesResponse> {
+            coordinatesAllDataRequests += false
             return coordinatesById[id]?.let { RepositoryResult.Success(it) } ?: RepositoryResult.Failure(AppError.NotFound)
         }
 
         override suspend fun getTrackersCoordinates(
-            trackerIds: List<String>,
-            allData: Boolean
+            trackerIds: List<String>
         ): RepositoryResult<Map<String, TrackerCoordinatesResponse>> = RepositoryResult.Success(emptyMap())
 
         override fun getTrackerFromCache(id: String): Tracker? = cacheById[id]

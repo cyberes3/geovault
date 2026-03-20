@@ -543,6 +543,7 @@ class EditTrackerFragment : Fragment() {
                     }
 
                     if (state.didSave) {
+                        navHost()?.refreshMapAfterTrackerSettingsSaved(trackerId)
                         if (pendingHiddenInListAfterSave && trackerId == SelectedTrackerPrefs.selectedTrackerId(requireContext())) {
                             SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
                         }

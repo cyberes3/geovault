@@ -14,7 +14,7 @@ internal class MapSingleTrackerRuntimeUseCase(
         forceReplace: Boolean
     ): MapTrackSnapshot {
         val coordinatesResponse = when (
-            val result = trackRepository.getTrackerCoordinates(trackerId, allData = true)
+            val result = trackRepository.getTrackerCoordinates(trackerId)
         ) {
             is RepositoryResult.Success -> result.data
             is RepositoryResult.Failure -> null

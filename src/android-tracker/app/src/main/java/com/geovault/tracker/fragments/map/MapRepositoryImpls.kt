@@ -21,11 +21,11 @@ class TrackerRepositoryMapTrackRepository @Inject constructor(
     override suspend fun getTracker(id: String, forceRefresh: Boolean): RepositoryResult<Tracker> =
         trackerRepository.loadTracker(id)
 
-    override suspend fun getTrackerGeometry(id: String, allData: Boolean): RepositoryResult<Tracker> =
-        trackerRepository.loadTrackerGeometry(id, allData = allData)
+    override suspend fun getTrackerGeometry(id: String): RepositoryResult<Tracker> =
+        trackerRepository.loadTrackerGeometry(id)
 
-    override suspend fun getTrackerCoordinates(id: String, allData: Boolean): RepositoryResult<TrackerCoordinatesResponse> {
-        return when (val geometryResult = trackerRepository.loadTrackerGeometry(id, allData = allData)) {
+    override suspend fun getTrackerCoordinates(id: String): RepositoryResult<TrackerCoordinatesResponse> {
+        return when (val geometryResult = trackerRepository.loadTrackerGeometry(id)) {
             is RepositoryResult.Success -> {
                 RepositoryResult.Success(
                     TrackerCoordinatesResponse(
@@ -38,13 +38,10 @@ class TrackerRepositoryMapTrackRepository @Inject constructor(
         }
     }
 
-    override suspend fun getTrackersCoordinates(
-        trackerIds: List<String>,
-        allData: Boolean
-    ): RepositoryResult<Map<String, TrackerCoordinatesResponse>> {
+    override suspend fun getTrackersCoordinates(trackerIds: List<String>): RepositoryResult<Map<String, TrackerCoordinatesResponse>> {
         val result = linkedMapOf<String, TrackerCoordinatesResponse>()
         for (trackerId in trackerIds) {
-            when (val coordsResult = getTrackerCoordinates(trackerId, allData = allData)) {
+            when (val coordsResult = getTrackerCoordinates(trackerId)) {
                 is RepositoryResult.Success -> result[trackerId] = coordsResult.data
                 is RepositoryResult.Failure -> return RepositoryResult.Failure(coordsResult.error)
             }

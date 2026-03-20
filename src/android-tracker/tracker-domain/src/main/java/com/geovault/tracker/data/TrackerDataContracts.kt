@@ -20,7 +20,7 @@ interface TrackerManagementRepository {
     suspend fun loadTrackers(forceRefresh: Boolean = false): RepositoryResult<List<Tracker>>
     suspend fun loadAvailableToAdd(forceRefresh: Boolean = false): RepositoryResult<AvailableToAddResponse>
     suspend fun loadTracker(trackerId: String): RepositoryResult<Tracker>
-    suspend fun loadTrackerGeometry(trackerId: String, allData: Boolean = false): RepositoryResult<Tracker>
+    suspend fun loadTrackerGeometry(trackerId: String): RepositoryResult<Tracker>
     suspend fun createTracker(request: TrackerCreateRequest): RepositoryResult<Tracker>
     suspend fun updateTrackerSettings(
         trackerId: String,

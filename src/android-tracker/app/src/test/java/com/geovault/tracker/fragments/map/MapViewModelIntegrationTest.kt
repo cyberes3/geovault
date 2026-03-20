@@ -373,7 +373,7 @@ class MapViewModelIntegrationTest {
             return RepositoryResult.Success(Tracker(id = id, name = id, color = null))
         }
 
-        override suspend fun getTrackerGeometry(id: String, allData: Boolean): RepositoryResult<Tracker> {
+        override suspend fun getTrackerGeometry(id: String): RepositoryResult<Tracker> {
             return RepositoryResult.Success(Tracker(
                 id = id,
                 name = id,
@@ -385,15 +385,14 @@ class MapViewModelIntegrationTest {
             ))
         }
 
-        override suspend fun getTrackerCoordinates(id: String, allData: Boolean): RepositoryResult<TrackerCoordinatesResponse> {
+        override suspend fun getTrackerCoordinates(id: String): RepositoryResult<TrackerCoordinatesResponse> {
             return RepositoryResult.Success(
                 TrackerCoordinatesResponse(coordinates = listOf(listOf(1.0, 2.0), listOf(3.0, 4.0)))
             )
         }
 
         override suspend fun getTrackersCoordinates(
-            trackerIds: List<String>,
-            allData: Boolean
+            trackerIds: List<String>
         ): RepositoryResult<Map<String, TrackerCoordinatesResponse>> {
             return RepositoryResult.Success(
                 trackerIds.associateWith {
@@ -416,7 +415,7 @@ class MapViewModelIntegrationTest {
         override suspend fun getTracker(id: String, forceRefresh: Boolean): RepositoryResult<Tracker> =
             RepositoryResult.Success(Tracker(id = id, name = id, color = null))
 
-        override suspend fun getTrackerGeometry(id: String, allData: Boolean): RepositoryResult<Tracker> {
+        override suspend fun getTrackerGeometry(id: String): RepositoryResult<Tracker> {
             getTrackerGeometryCalls += 1
             return RepositoryResult.Success(
                 Tracker(
@@ -432,8 +431,7 @@ class MapViewModelIntegrationTest {
         }
 
         override suspend fun getTrackerCoordinates(
-            id: String,
-            allData: Boolean
+            id: String
         ): RepositoryResult<TrackerCoordinatesResponse> = RepositoryResult.Success(
             TrackerCoordinatesResponse(
                 coordinates = listOf(listOf(1.0, 2.0), listOf(3.0, 4.0))
@@ -441,8 +439,7 @@ class MapViewModelIntegrationTest {
         )
 
         override suspend fun getTrackersCoordinates(
-            trackerIds: List<String>,
-            allData: Boolean
+            trackerIds: List<String>
         ): RepositoryResult<Map<String, TrackerCoordinatesResponse>> = RepositoryResult.Success(
             trackerIds.associateWith {
                 TrackerCoordinatesResponse(

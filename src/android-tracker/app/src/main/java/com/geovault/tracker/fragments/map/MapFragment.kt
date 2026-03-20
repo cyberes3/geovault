@@ -2697,21 +2697,26 @@ class MapFragment : Fragment() {
         val coords = tracker?.geometry?.coordinates
         if (coords != null) {
             val normalizedCoords = MapCoordinateUtils.normalizeRawCoordinates(coords)
-            val hasRenderableHistory = normalizedCoords.size >= 2
-            if (forceReplace && !hasRenderableHistory) {
-                // Clear stale in-memory line when refreshed history has no renderable geometry.
-                // If backend retained one latest point, keep that point in-memory.
-                val latestCoord = normalizedCoords.firstOrNull()
-                val latestPoint = latestCoord?.takeIf { it.size >= 2 }?.let { LatLng(it[1], it[0]) }
-                val latestTimestamp = latestCoord?.let {
-                    MapCoordinateUtils.timestampFromCoordinateMs(it, System.currentTimeMillis())
-                } ?: System.currentTimeMillis()
+            val trackingActive = trackingRuntimeSnapshot().isRunning
+            val isExternalStreaming = MapDataLoader.isExternalStreaming(
+                forceReplace = forceReplace,
+                hasTrackPoints = trackPoints.isNotEmpty(),
+                displayedTrackerId = displayedTrackerId
+            )
+            val historyDecision = MapSingleTrackerHistoryPolicy.decide(
+                SingleTrackerHistoryApplyInput(
+                    forceReplace = forceReplace,
+                    normalizedCoordCount = normalizedCoords.size,
+                    hasTrackPoints = trackPoints.isNotEmpty(),
+                    trackingActive = trackingActive,
+                    isExternalStreaming = isExternalStreaming,
+                    isSelectedDefaultTrackerMode = isSelectedDefaultTrackerMode()
+                )
+            )
+            if (historyDecision.shouldClearForEmptyForceReplace) {
+                // Clear stale in-memory data when refreshed history has no coordinates.
                 trackPoints.clear()
                 trackTimestamps.clear()
-                if (latestPoint != null) {
-                    trackPoints.add(latestPoint)
-                    trackTimestamps.add(latestTimestamp)
-                }
                 scheduleTrackLineUpdate()
                 setAnnotationLayersVisibility(true)
                 updateZoomToLatestButtonState()
@@ -2719,19 +2724,7 @@ class MapFragment : Fragment() {
                 startLiveTrackStreamingForDisplayedTracker()
                 return
             }
-            val trackingActive = trackingRuntimeSnapshot().isRunning
-            val isExternalStreaming = MapDataLoader.isExternalStreaming(
-                forceReplace = forceReplace,
-                hasTrackPoints = trackPoints.isNotEmpty(),
-                displayedTrackerId = displayedTrackerId
-            )
-            val shouldMergeTrackingHistory = trackingActive && isSelectedDefaultTrackerMode()
-            val shouldApplyGeometry = hasRenderableHistory && (
-                forceReplace ||
-                    trackPoints.isEmpty() ||
-                    (isExternalStreaming && (!trackingActive || shouldMergeTrackingHistory))
-                )
-            if (shouldApplyGeometry) {
+            if (historyDecision.shouldApplyGeometry) {
                 MapHistoryUtils.applyGeometryToTrack(
                     normalizedCoords = normalizedCoords,
                     mergeExternalStreaming = isExternalStreaming,
@@ -2848,6 +2841,40 @@ class MapFragment : Fragment() {
         }
         updateZoomToLatestButtonState()
         updateTrackerLabel()
+    }
+
+    /**
+     * Refresh map data after tracker settings changed (e.g. recent-data window/session).
+     */
+    fun refreshForTrackerSettingsChange(trackerId: String) {
+        if (!isAdded) return
+        val normalizedId = trackerId.trim()
+        if (normalizedId.isEmpty()) return
+
+        if (showAllTrackers) {
+            loadAllTrackersAndApply()
+            return
+        }
+        if (mapViewContext == MapViewContext.GROUP) {
+            val group = currentGroupForMap ?: return
+            if ((group.track_ids ?: emptyList()).contains(normalizedId)) {
+                refreshMapForGroup(group, null)
+            }
+            return
+        }
+
+        val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
+        val shouldRefreshDisplayed = displayedTrackerId == normalizedId
+        val shouldRefreshSelected = selectedTrackerId == normalizedId && !isStreaming()
+        if (!shouldRefreshDisplayed && !shouldRefreshSelected) return
+
+        if (shouldRefreshSelected) {
+            restoreTrackForSelectedTrackerWithFetch()
+            return
+        }
+
+        pendingDisplayedTrackerIdOverride = normalizedId
+        fetchHistory(forceReplace = true)
     }
 
     /**

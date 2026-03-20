@@ -76,15 +76,14 @@ class LoadGroupMapUseCaseTest {
         override suspend fun getTracker(id: String, forceRefresh: Boolean): RepositoryResult<Tracker> =
             RepositoryResult.Failure(AppError.NotFound)
 
-        override suspend fun getTrackerGeometry(id: String, allData: Boolean): RepositoryResult<Tracker> =
+        override suspend fun getTrackerGeometry(id: String): RepositoryResult<Tracker> =
             RepositoryResult.Failure(AppError.NotFound)
 
-        override suspend fun getTrackerCoordinates(id: String, allData: Boolean): RepositoryResult<TrackerCoordinatesResponse> =
+        override suspend fun getTrackerCoordinates(id: String): RepositoryResult<TrackerCoordinatesResponse> =
             RepositoryResult.Failure(AppError.NotFound)
 
         override suspend fun getTrackersCoordinates(
-            trackerIds: List<String>,
-            allData: Boolean
+            trackerIds: List<String>
         ): RepositoryResult<Map<String, TrackerCoordinatesResponse>> {
             return RepositoryResult.Success(
                 trackerIds.associateWith { id ->

@@ -2,7 +2,7 @@ package com.geovault.tracker.fragments.map
 
 internal object MapSingleTrackerLoadUtils {
     fun sanitizeHistory(coords: MutableList<List<Double>>): List<List<Double>> {
-        return if (coords.size >= 2) coords else emptyList()
+        return coords
     }
 
     fun mergedCoordinates(
@@ -20,7 +20,7 @@ internal object MapSingleTrackerLoadUtils {
         }
         val other = if (base === normalizedGeometry) normalizedResponse else normalizedGeometry
         MapCoordinateUtils.mergeNewerPointsInto(base, other)
-        // Single-point baselines cause reset/jump artifacts during resume transitions.
+        // Keep single-point histories so backend fallback-to-latest remains visible on map.
         return sanitizeHistory(base)
     }
 }

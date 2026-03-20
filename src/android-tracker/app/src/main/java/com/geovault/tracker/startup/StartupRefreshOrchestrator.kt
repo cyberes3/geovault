@@ -28,7 +28,7 @@ interface StartupRefreshGateway {
     suspend fun fetchTrackers(context: Context, forceRefresh: Boolean): List<Tracker>?
     suspend fun fetchGroups(context: Context, forceRefresh: Boolean): List<Group>?
     suspend fun fetchSelectedTracker(context: Context, trackerId: String): Tracker?
-    suspend fun refreshSelectedTrackerGeometry(context: Context, trackerId: String, allData: Boolean): Tracker?
+    suspend fun refreshSelectedTrackerGeometry(context: Context, trackerId: String): Tracker?
     suspend fun fetchMapVisibility(context: Context, forceRefresh: Boolean)
     suspend fun fetchAvailableToAdd(context: Context, forceRefresh: Boolean)
 }
@@ -64,9 +64,8 @@ class RepositoryStartupRefreshGateway @Inject constructor(
 
     override suspend fun refreshSelectedTrackerGeometry(
         context: Context,
-        trackerId: String,
-        allData: Boolean
-    ): Tracker? = when (val result = trackerManagementRepository.loadTrackerGeometry(trackerId, allData = allData)) {
+        trackerId: String
+    ): Tracker? = when (val result = trackerManagementRepository.loadTrackerGeometry(trackerId)) {
         is RepositoryResult.Success -> result.data
         is RepositoryResult.Failure -> null
     }
@@ -97,7 +96,7 @@ class StartupRefreshOrchestrator(
         if (selectedTrackerId.isNotBlank()) {
             coroutineScope {
                 launch { gateway.fetchSelectedTracker(context, selectedTrackerId) }
-                launch { gateway.refreshSelectedTrackerGeometry(context, selectedTrackerId, allData = true) }
+                launch { gateway.refreshSelectedTrackerGeometry(context, selectedTrackerId) }
             }
         }
         val selectedTrackerForMap = if (input.savedTab == 1 && selectedTrackerId.isNotBlank()) {

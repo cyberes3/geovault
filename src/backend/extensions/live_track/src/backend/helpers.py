@@ -76,8 +76,17 @@ def _timestamp_to_ms(ts) -> int | None:
 
 def _filter_coords_by_recent_window(coords, point_params, window_key: str):
     """Keep only coords (and matching point_params) with timestamp >= (now - window)."""
+    def _with_latest_point_fallback(filtered_coords, filtered_params):
+        # If filtering would hide all points, preserve the most recent point.
+        if coords and not filtered_coords:
+            if len(coords) == len(point_params):
+                return [coords[-1]], [point_params[-1]]
+            return [coords[-1]], filtered_params
+        return filtered_coords, filtered_params
+
     if window_key == "session":
-        return _filter_coords_by_latest_session_start(coords, point_params)
+        filtered_coords, filtered_params = _filter_coords_by_latest_session_start(coords, point_params)
+        return _with_latest_point_fallback(filtered_coords, filtered_params)
     if window_key not in RECENT_WINDOW_MS:
         return coords, point_params
     cutoff_ms = int(time.time() * 1000) - RECENT_WINDOW_MS[window_key]
@@ -95,7 +104,7 @@ def _filter_coords_by_recent_window(coords, point_params, window_key: str):
         else:
             kept_coords.append(c)
             kept_params.append(point_params[i])
-    return kept_coords, kept_params
+    return _with_latest_point_fallback(kept_coords, kept_params)
 
 
 def _filter_coords_by_latest_session_start(coords, point_params):

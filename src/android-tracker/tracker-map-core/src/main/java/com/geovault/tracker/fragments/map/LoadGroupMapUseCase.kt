@@ -38,7 +38,7 @@ class LoadGroupMapUseCase(
         }
             .filter { it.id in groupTrackIds }
         val coordsByTrackerId = when (
-            val coordinatesResult = trackRepository.getTrackersCoordinates(trackers.map(Tracker::id), allData = true)
+            val coordinatesResult = trackRepository.getTrackersCoordinates(trackers.map(Tracker::id))
         ) {
             is RepositoryResult.Success -> coordinatesResult.data.mapValues { it.value.coordinates }
             is RepositoryResult.Failure -> {

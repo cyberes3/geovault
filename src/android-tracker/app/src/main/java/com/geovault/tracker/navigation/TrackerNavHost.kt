@@ -22,6 +22,7 @@ interface TrackerNavHost {
 
     fun showNewTrackerFragment()
     fun showEditTrackerFragment(tracker: Tracker)
+    fun refreshMapAfterTrackerSettingsSaved(trackerId: String)
     fun showEditSharedTrackerFragment(tracker: Tracker)
     fun showEditSharedGroupFragment(group: Group)
     fun showGroupsFragment()

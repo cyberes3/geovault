@@ -133,10 +133,9 @@
                 android:text="@string/tracking_profile_help_text"
                 android:textSize="13sp"
                 android:textColor="@color/text_secondary"
-                android:layout_marginBottom="24dp" />
+                android:layout_marginBottom="8dp" />
 
-
-            <!-- Logging / filter fields section -->
+            <!-- Logging / filter fields (with auto & profile section) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -241,8 +240,27 @@
                 android:text="@string/accuracy_filter_help_text"
                 android:textSize="13sp"
                 android:textColor="@color/text_secondary"
-                android:layout_marginTop="8dp" />
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="16dp" />
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/tracking_settings_apply_after_restart"
+                android:textSize="13sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="24dp" />
+
+            <!-- HR between auto/profile and low accuracy fallback -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="24dp" />
+
+            <!-- Low Accuracy Fallback section -->
             <com.geovault.common.ToggleHelpCardView
                 android:id="@+id/lowAccuracyFallbackSwitch"
                 android:layout_width="match_parent"
@@ -279,18 +297,10 @@
                 android:text="@string/low_accuracy_fallback_timeout_help_text"
                 android:textSize="13sp"
                 android:textColor="@color/text_secondary"
-                android:layout_marginTop="8dp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/tracking_settings_apply_after_restart"
-                android:textSize="13sp"
-                android:textColor="@color/text_secondary"
-                android:layout_marginTop="24dp"
+                android:layout_marginTop="8dp"
                 android:layout_marginBottom="24dp" />
 
-            <!-- HR between logging/filter and connection details -->
+            <!-- HR between low accuracy fallback and connection details -->
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"

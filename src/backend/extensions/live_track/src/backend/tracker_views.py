@@ -603,7 +603,7 @@ def tracker_get_geometry(request, tracker_id):
 @require_http_methods(["POST"])
 @csrf_exempt
 def tracker_get_geometry_bulk(request):
-    """POST trackers/geometry/ — full geometry for multiple trackers. Body: {tracker_ids: [...], all_data?: bool}."""
+    """POST trackers/geometry/ — geometry for multiple trackers. Body: {tracker_ids: [...]}."""
     from django.http import Http404
 
     data, err = get_json_body(request)
@@ -643,7 +643,7 @@ def tracker_get_geometry_bulk(request):
                 track,
                 include_secret=False,
                 is_owner=is_owner,
-                all_data=body.all_data,
+                all_data=False,
             )
         )
     return JsonResponse(result, safe=False)
@@ -708,14 +708,13 @@ LATEST_COORDINATES_LIMIT = 100
 @handle_404
 @csrf_exempt
 def tracker_get_latest_coordinates(request, tracker_id):
-    """GET trackers/<id>/coordinates/ — latest 100 coordinates + corresponding point_params. ?all=true bypasses recent_data_window filter."""
+    """GET trackers/<id>/coordinates/ — latest 100 coordinates + corresponding point_params."""
     track = _get_track_for_user_or_404(request.user, tracker_id)
     is_owner = track.user_id == request.user.id
     geom = track.geometry or {"type": "LineString", "coordinates": []}
     coords = list(geom.get("coordinates") or [])
     point_params = list(track.point_params or [])
-    all_data = request.GET.get("all", "").lower() == "true"
-    window_key = None if all_data else (track.settings or {}).get("recent_data_window")
+    window_key = (track.settings or {}).get("recent_data_window")
     if window_key:
         coords, point_params = _filter_coords_by_recent_window(coords, point_params, window_key)
     take = min(LATEST_COORDINATES_LIMIT, len(coords))
@@ -812,15 +811,10 @@ def hauk_config(request):
 @handle_404
 @csrf_exempt
 def tracker_kml(request, tracker_id):
-    """GET trackers/<id>/kml/. ?all=true bypasses recent_data_window filter. Owner or subscriber."""
+    """GET trackers/<id>/kml/. Owner or subscriber. Always exports full history."""
     track = _get_track_for_user_or_404(request.user, tracker_id)
     geom = track.geometry or {"type": "LineString", "coordinates": []}
     coords = list(geom.get("coordinates") or [])
-    point_params = list(track.point_params or [])
-    all_data = request.GET.get("all", "").lower() == "true"
-    window_key = None if all_data else (track.settings or {}).get("recent_data_window")
-    if window_key:
-        coords, _ = _filter_coords_by_recent_window(coords, point_params, window_key)
     ns = "http://www.opengis.net/kml/2.2"
     ET.register_namespace("", ns)
     kml = ET.Element(ET.QName(ns, "kml"))

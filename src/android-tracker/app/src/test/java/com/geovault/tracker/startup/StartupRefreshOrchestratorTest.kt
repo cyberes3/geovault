@@ -42,6 +42,8 @@ class StartupRefreshOrchestratorTest {
         assertEquals(1, gateway.fetchAvailableToAddCalls)
         assertEquals(1, gateway.fetchSelectedTrackerCalls)
         assertEquals(1, gateway.refreshSelectedTrackerGeometryCalls)
+        assertEquals(1, gateway.refreshSelectedTrackerGeometryTrackerIds.size)
+        assertEquals("t1", gateway.refreshSelectedTrackerGeometryTrackerIds[0])
     }
 
     @Test
@@ -88,6 +90,8 @@ class StartupRefreshOrchestratorTest {
         assertEquals(1, gateway.fetchAvailableToAddCalls)
         assertEquals(1, gateway.fetchSelectedTrackerCalls)
         assertEquals(1, gateway.refreshSelectedTrackerGeometryCalls)
+        assertEquals(1, gateway.refreshSelectedTrackerGeometryTrackerIds.size)
+        assertEquals("t1", gateway.refreshSelectedTrackerGeometryTrackerIds[0])
     }
 
     private class FakeStartupRefreshGateway(
@@ -100,6 +104,7 @@ class StartupRefreshOrchestratorTest {
         var fetchAvailableToAddCalls = 0
         var fetchSelectedTrackerCalls = 0
         var refreshSelectedTrackerGeometryCalls = 0
+        val refreshSelectedTrackerGeometryTrackerIds = mutableListOf<String>()
 
         override suspend fun fetchUserStatus(context: Context): String? {
             fetchUserStatusCalls++
@@ -123,10 +128,10 @@ class StartupRefreshOrchestratorTest {
 
         override suspend fun refreshSelectedTrackerGeometry(
             context: Context,
-            trackerId: String,
-            allData: Boolean
+            trackerId: String
         ): Tracker? {
             refreshSelectedTrackerGeometryCalls++
+            refreshSelectedTrackerGeometryTrackerIds += trackerId
             return trackers?.find { it.id == trackerId }
         }
 

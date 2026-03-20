@@ -140,7 +140,7 @@ class DiscoverTrackersViewModelTest {
         override suspend fun loadTracker(trackerId: String): RepositoryResult<Tracker> =
             RepositoryResult.Failure(AppError.NotFound)
 
-        override suspend fun loadTrackerGeometry(trackerId: String, allData: Boolean): RepositoryResult<Tracker> =
+        override suspend fun loadTrackerGeometry(trackerId: String): RepositoryResult<Tracker> =
             RepositoryResult.Failure(AppError.NotFound)
 
         override suspend fun createTracker(request: TrackerCreateRequest): RepositoryResult<Tracker> =

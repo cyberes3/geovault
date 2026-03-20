@@ -79,8 +79,8 @@ class ApiTrackerManagementRepository @Inject constructor(
         return result
     }
 
-    override suspend fun loadTrackerGeometry(trackerId: String, allData: Boolean): RepositoryResult<Tracker> {
-        return executeApiCall { api -> api.getTrackerGeometry(trackerId, allData = allData).execute() }
+    override suspend fun loadTrackerGeometry(trackerId: String): RepositoryResult<Tracker> {
+        return executeApiCall { api -> api.getTrackerGeometry(trackerId).execute() }
     }
 
     override suspend fun createTracker(request: TrackerCreateRequest): RepositoryResult<Tracker> {
@@ -189,7 +189,7 @@ class ApiTrackerManagementRepository @Inject constructor(
     }
 
     override suspend fun fetchTrackerKml(trackerId: String): RepositoryResult<ByteArray> {
-        val result = executeApiCall<ResponseBody> { api -> api.getTrackerKml(trackerId, allData = true).execute() }
+        val result = executeApiCall<ResponseBody> { api -> api.getTrackerKml(trackerId).execute() }
         return when (result) {
             is RepositoryResult.Success -> RepositoryResult.Success(result.data.bytes())
             is RepositoryResult.Failure -> result
