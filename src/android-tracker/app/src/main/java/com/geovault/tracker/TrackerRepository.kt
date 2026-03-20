@@ -556,28 +556,6 @@ object TrackerRepository {
         })
     }
 
-    fun clearTrackerHistory(context: Context, trackerId: String, callback: (Boolean) -> Unit) {
-        val serverUrl = GeovaultAuthManager.getServerUrl(context)
-        if (serverUrl.isEmpty()) {
-            callback(false)
-            return
-        }
-        val api = createApi(context, serverUrl)
-        api.clearTrackerHistory(trackerId).enqueue(object : Callback<ResponseBody> {
-            override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
-                if (response.isSuccessful) {
-                    clearGeometryCache()
-                    trackersCache = null
-                }
-                callback(response.isSuccessful)
-            }
-            override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
-                Log.e("TrackerRepository", "Failed to clear tracker history", t)
-                callback(false)
-            }
-        })
-    }
-
     /**
      * Efficient single-tracker check (POST tracker-check). Use to validate the selected tracker
      * before starting a session; call back with true only if the tracker exists and belongs to the user.
@@ -1162,16 +1140,6 @@ object TrackerRepository {
             continuation.resume(result)
         }
     }
-
-    suspend fun clearTrackerHistorySuspend(context: Context, id: String): Boolean =
-        suspendCancellableCoroutine { continuation ->
-            clearTrackerHistory(context, id) { success ->
-                continuation.resume(success)
-            }
-        }
-
-    suspend fun clearTrackerHistoryResultSuspend(context: Context, id: String): RepositoryResult<Unit> =
-        boolResult(clearTrackerHistorySuspend(context, id))
 
     suspend fun deleteTrackerSuspend(context: Context, id: String): Boolean =
         suspendCancellableCoroutine { continuation ->

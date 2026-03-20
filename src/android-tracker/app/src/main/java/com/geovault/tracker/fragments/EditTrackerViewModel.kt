@@ -21,7 +21,6 @@ data class EditTrackerUiState(
     val tracker: Tracker? = null,
     val users: List<UserItem> = emptyList(),
     val didDelete: Boolean = false,
-    val didClearHistory: Boolean = false,
     val kmlBytes: ByteArray? = null,
     val errorMessage: String? = null
 )
@@ -68,15 +67,6 @@ class EditTrackerViewModel @Inject constructor(
                 is RepositoryResult.Failure -> {
                     _uiState.update { it.copy(isSaving = false, errorMessage = result.error.toString()) }
                 }
-            }
-        }
-    }
-
-    fun clearHistory(trackerId: String) {
-        viewModelScope.launch {
-            when (val result = trackerRepository.clearTrackerHistory(trackerId)) {
-                is RepositoryResult.Success -> _uiState.update { it.copy(didClearHistory = true, errorMessage = null) }
-                is RepositoryResult.Failure -> _uiState.update { it.copy(errorMessage = result.error.toString()) }
             }
         }
     }

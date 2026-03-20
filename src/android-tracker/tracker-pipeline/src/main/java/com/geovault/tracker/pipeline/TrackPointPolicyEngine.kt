@@ -20,6 +20,8 @@ enum class TrackPointRejectReason {
 data class TrackPointPolicyConfig(
     val maxAccuracyMeters: Float?,
     val degradedAccuracyMultiplier: Float = 3f,
+    val allowDegradedAccuracy: Boolean = true,
+    val requireAccuracyForAcceptance: Boolean = false,
     val maxFutureSkewMs: Long = 5 * 60 * 1000L,
     val maxJumpSpeedMps: Double?,
     val freshnessTtlMs: Long? = null,
@@ -65,11 +67,18 @@ object TrackPointPolicyEngine {
         }
 
         val accuracyMeters = event.accuracyMeters
-        if (config.maxAccuracyMeters != null &&
-            accuracyMeters != null &&
-            accuracyMeters > config.maxAccuracyMeters * config.degradedAccuracyMultiplier.coerceAtLeast(1f)
-        ) {
-            return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.BAD_ACCURACY)
+        if (config.maxAccuracyMeters != null) {
+            if (accuracyMeters == null && config.requireAccuracyForAcceptance) {
+                return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.BAD_ACCURACY)
+            }
+            if (accuracyMeters != null) {
+                if (!config.allowDegradedAccuracy && accuracyMeters > config.maxAccuracyMeters) {
+                    return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.BAD_ACCURACY)
+                }
+                if (accuracyMeters > config.maxAccuracyMeters * config.degradedAccuracyMultiplier.coerceAtLeast(1f)) {
+                    return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.BAD_ACCURACY)
+                }
+            }
         }
 
         val previousTs = previous?.timestampMs

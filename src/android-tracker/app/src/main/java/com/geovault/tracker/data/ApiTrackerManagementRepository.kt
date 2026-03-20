@@ -110,7 +110,15 @@ class ApiTrackerManagementRepository @Inject constructor(
     }
 
     override suspend fun clearTrackerHistory(trackerId: String): RepositoryResult<Unit> {
-        return executeNoBodyCall { api -> api.clearTrackerHistory(trackerId).execute() }
+        val result = executeNoBodyCall { api -> api.clearTrackerHistory(trackerId).execute() }
+        if (result is RepositoryResult.Success) {
+            cacheMutex.withLock {
+                trackersCache = null
+            }
+            TrackerRepository.clearGeometryCache()
+            stateStore.publishHistoryCleared(trackerId)
+        }
+        return result
     }
 
     override suspend fun leaveShareWithMe(trackerId: String): RepositoryResult<Unit> {

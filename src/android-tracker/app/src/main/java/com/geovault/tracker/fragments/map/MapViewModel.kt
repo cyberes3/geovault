@@ -4,6 +4,8 @@ import android.app.Application
 import android.util.Log
 import com.geovault.tracker.Group
 import com.geovault.tracker.SelectedTrackerPrefs
+import com.geovault.tracker.data.TrackerManagementEvent
+import com.geovault.tracker.data.TrackerManagementStateStore
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import androidx.lifecycle.AndroidViewModel
@@ -27,7 +29,8 @@ class MapViewModel @Inject constructor(
     private val bootstrapTrackRepository: BootstrapMapTrackRepository,
     private val groupRepository: MapGroupRepository,
     private val visibilityRepository: MapVisibilityRepository,
-    private val streamingRepository: MapStreamingRepository
+    private val streamingRepository: MapStreamingRepository,
+    private val trackerManagementStateStore: TrackerManagementStateStore
 ) : AndroidViewModel(application) {
     private companion object {
         const val TAG = "MapViewModel"
@@ -50,6 +53,7 @@ class MapViewModel @Inject constructor(
 
     private var streamJob: Job? = null
     private var streamRuntimeJob: Job? = null
+    private var managementEventsJob: Job? = null
 
     init {
         streamRuntimeJob = viewModelScope.launch {
@@ -58,6 +62,24 @@ class MapViewModel @Inject constructor(
                     activeStreamedTrackerIds = snapshot.activeTrackerIds
                 )
             }
+        }
+        managementEventsJob = viewModelScope.launch {
+            trackerManagementStateStore.events.collectLatest { event ->
+                if (event is TrackerManagementEvent.HistoryCleared) {
+                    val current = _uiState.value
+                    _uiState.value = current.copy(
+                        historyClearSignalVersion = current.historyClearSignalVersion + 1L,
+                        historyClearedTrackerId = event.trackerId
+                    )
+                }
+            }
+        }
+    }
+
+    fun consumeHistoryClearSignal(version: Long) {
+        val current = _uiState.value
+        if (current.historyClearSignalVersion == version && current.historyClearedTrackerId != null) {
+            _uiState.value = current.copy(historyClearedTrackerId = null)
         }
     }
 

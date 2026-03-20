@@ -113,6 +113,7 @@ class MapFragment : Fragment() {
 
     /** When true, map shows all trackers; when false, a single displayed tracker. */
     private var showAllTrackers = false
+    private var lastHandledHistoryClearSignalVersion: Long = 0L
     /** Group-only mode: fit to trackers with recent live updates. */
     private var liveActiveFitEnabled = false
 
@@ -1866,6 +1867,27 @@ class MapFragment : Fragment() {
         updateTrackLine()
     }
 
+    private fun clearSingleTrackerDataKeepingLatestPointAndRender() {
+        val latestPoint = trackPoints.lastOrNull()
+        val latestTimestamp = trackTimestamps.lastOrNull() ?: System.currentTimeMillis()
+        val fallbackLastPoint = displayedTracker?.last_point?.takeIf { it.size >= 2 }?.let {
+            LatLng(it[1], it[0])
+        }
+        trackPoints.clear()
+        trackTimestamps.clear()
+        when {
+            latestPoint != null -> {
+                trackPoints.add(latestPoint)
+                trackTimestamps.add(latestTimestamp)
+            }
+            fallbackLastPoint != null -> {
+                trackPoints.add(fallbackLastPoint)
+                trackTimestamps.add(System.currentTimeMillis())
+            }
+        }
+        updateTrackLine()
+    }
+
     private fun setDisplayedTrackerPlaceholder(trackerId: String, trackerName: String?) {
         displayedTracker = null
         displayedTrackerId = trackerId
@@ -2663,6 +2685,27 @@ class MapFragment : Fragment() {
         if (coords != null) {
             val normalizedCoords = MapCoordinateUtils.normalizeRawCoordinates(coords)
             val hasRenderableHistory = normalizedCoords.size >= 2
+            if (forceReplace && !hasRenderableHistory) {
+                // Clear stale in-memory line when refreshed history has no renderable geometry.
+                // If backend retained one latest point, keep that point in-memory.
+                val latestCoord = normalizedCoords.firstOrNull()
+                val latestPoint = latestCoord?.takeIf { it.size >= 2 }?.let { LatLng(it[1], it[0]) }
+                val latestTimestamp = latestCoord?.let {
+                    MapCoordinateUtils.timestampFromCoordinateMs(it, System.currentTimeMillis())
+                } ?: System.currentTimeMillis()
+                trackPoints.clear()
+                trackTimestamps.clear()
+                if (latestPoint != null) {
+                    trackPoints.add(latestPoint)
+                    trackTimestamps.add(latestTimestamp)
+                }
+                scheduleTrackLineUpdate()
+                setAnnotationLayersVisibility(true)
+                updateZoomToLatestButtonState()
+                updateTrackerLabel()
+                startLiveTrackStreamingForDisplayedTracker()
+                return
+            }
             val trackingActive = trackingRuntimeSnapshot().isRunning
             val isExternalStreaming = MapDataLoader.isExternalStreaming(
                 forceReplace = forceReplace,
@@ -2774,7 +2817,7 @@ class MapFragment : Fragment() {
         mapFlowViewModel.handleIntent(MapIntent.LoadSingleTrackerRuntime(trackerId = selectedTrackerId, forceReplace = true))
     }
 
-    private fun fetchHistory() {
+    private fun fetchHistory(forceReplace: Boolean = false) {
         reduceLock(MapLockEvent.DisableLiveFit)
         updateShowMyLocationButtonVisibility()
         if (trackingRuntimeSnapshot().isRunning) {
@@ -2789,12 +2832,12 @@ class MapFragment : Fragment() {
         val intent = if (isStreaming()) {
             MapIntent.LoadSingleTrackerBootstrap(
                 trackerId = displayedTrackerId,
-                forceReplace = false
+                forceReplace = forceReplace
             )
         } else {
             MapIntent.LoadSingleTrackerRuntime(
                 trackerId = displayedTrackerId,
-                forceReplace = false
+                forceReplace = forceReplace
             )
         }
         mapFlowViewModel.handleIntent(intent)
@@ -2807,6 +2850,47 @@ class MapFragment : Fragment() {
                 forceReplace = forceReplace
             )
         )
+    }
+
+    private fun handleHistoryCleared(trackerId: String) {
+        when (
+            MapHistoryClearPolicy.resolve(
+                MapHistoryClearInput(
+                    clearedTrackerId = trackerId,
+                    showAllTrackers = showAllTrackers,
+                    mapViewContext = mapViewContext,
+                    displayedTrackerId = displayedTrackerId,
+                    selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
+                )
+            )
+        ) {
+            MapHistoryClearAction.REFRESH_GROUP_OR_ALL -> {
+                val group = currentGroupForMap
+                if (group != null) {
+                    refreshMapForGroup(group, null)
+                } else {
+                    loadAllTrackersAndApply()
+                }
+            }
+            MapHistoryClearAction.REFRESH_ALL -> {
+                loadAllTrackersAndApply()
+            }
+            MapHistoryClearAction.REFRESH_DISPLAYED_SINGLE_FORCE_REPLACE -> {
+                if (trackingRuntimeSnapshot().isRunning) {
+                    // During active local tracking, fetchHistory() intentionally no-ops.
+                    // Keep only the newest point to match backend clear-history semantics.
+                    clearSingleTrackerDataKeepingLatestPointAndRender()
+                    updateZoomToLatestButtonState()
+                    updateTrackerLabel()
+                } else {
+                    fetchHistory(forceReplace = true)
+                }
+            }
+            MapHistoryClearAction.REFRESH_SELECTED_SINGLE_FORCE_REPLACE -> {
+                fetchSingleTrackerHistoryAndApply(trackerId, forceReplace = true)
+            }
+            MapHistoryClearAction.NO_OP -> Unit
+        }
     }
 
     /** Start live streaming for the currently displayed single tracker. */
@@ -2918,6 +3002,13 @@ class MapFragment : Fragment() {
                         mapLoadingSpinner.stop()
                     }
                     updateTrackerLabel()
+                    val clearVersion = state.historyClearSignalVersion
+                    val clearTrackerId = state.historyClearedTrackerId
+                    if (clearVersion > lastHandledHistoryClearSignalVersion && !clearTrackerId.isNullOrEmpty()) {
+                        lastHandledHistoryClearSignalVersion = clearVersion
+                        handleHistoryCleared(clearTrackerId)
+                        mapFlowViewModel.consumeHistoryClearSignal(clearVersion)
+                    }
                 }
             }
             launch {
@@ -2931,17 +3022,14 @@ class MapFragment : Fragment() {
                                     "forceReplace=${command.snapshot.forceReplace} " +
                                     "prePoints=${trackPoints.size} range=${trackTimestampRangeSummary()}"
                             )
-                            val trackerWithGeometry = if (command.snapshot.coordinates.isNotEmpty()) {
-                                // Always render from snapshot coordinates so stale tracker.geometry cannot truncate history.
-                                command.snapshot.tracker.copy(
-                                    geometry = GeoJsonLineString(
-                                        type = "LineString",
-                                        coordinates = command.snapshot.coordinates
-                                    )
+                            // Always render from snapshot coordinates so stale tracker.geometry
+                            // from cache cannot repopulate a cleared history line.
+                            val trackerWithGeometry = command.snapshot.tracker.copy(
+                                geometry = GeoJsonLineString(
+                                    type = "LineString",
+                                    coordinates = command.snapshot.coordinates
                                 )
-                            } else {
-                                command.snapshot.tracker
-                            }
+                            )
                             handleSingleTrackGeometryLoaded(
                                 tracker = trackerWithGeometry,
                                 trackerId = trackerWithGeometry.id,

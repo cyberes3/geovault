@@ -69,6 +69,8 @@ object LocationQualityGate {
             config = TrackPointPolicyConfig(
                 maxAccuracyMeters = config.maxAccuracyMeters,
                 degradedAccuracyMultiplier = 1f,
+                allowDegradedAccuracy = false,
+                requireAccuracyForAcceptance = true,
                 maxFutureSkewMs = 5 * 60 * 1000L,
                 maxJumpSpeedMps = config.maxJumpSpeedMps,
                 freshnessTtlMs = config.freshnessTtlMs,

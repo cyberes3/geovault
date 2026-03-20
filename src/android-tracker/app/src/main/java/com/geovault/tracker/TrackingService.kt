@@ -316,6 +316,7 @@ class TrackingService : TrackPointServiceBase() {
         lastTrackedPropsJson = null
         consecutivePushFailures = 0
         lastSyncFailureClass = SyncFailureClass.NONE
+        TrackPointPipeline.resetLocalSession(selectedTrackerId)
         syncRuntimeStateStore()
         broadcastSessionStats()
 
@@ -391,51 +392,26 @@ class TrackingService : TrackPointServiceBase() {
         if (selectedTrackerId.isEmpty()) return
         val nowMs = System.currentTimeMillis()
         val observedSpeedMps = resolveObservedSpeedMps(location, lastSpeedReferenceLocation)
-        val normalizedTimestampMs = CanonicalTimeNormalizer.normalizeTimestampMs(location.time, nowMs)
-        val timestampSkewMs = kotlin.math.abs(normalizedTimestampMs - nowMs)
         val isMockLocation = LocationCompat.isMock(location)
-        val isBadlySkewedMockTimestamp = isMockLocation && timestampSkewMs > 5 * 60 * 1000L
-        if (isBadlySkewedMockTimestamp) {
-            Log.w(
-                TAG,
-                "Mock timestamp skew detected skewMs=$timestampSkewMs rawTs=${location.time} " +
-                    "normalizedTs=$normalizedTimestampMs nowMs=$nowMs provider=${location.provider}"
-            )
-        }
-        val timestampForPolicyMs = if (isBadlySkewedMockTimestamp) {
-            // Mock providers often replay historical timestamps; canonicalize to wall-clock now
-            // so policy gating validates position quality instead of transport timestamp quality.
-            nowMs
-        } else {
-            normalizedTimestampMs
-        }
-        val maxJumpSpeedMps = if (isMockLocation) {
-            // Mock route generators can emit coarse jumps between fixes.
-            // Keep other quality gates active, but effectively disable jump-speed rejection.
-            10_000.0
-        } else {
-            100.0
-        }
         val decision = TrackPointPipeline.processLocalGps(
             event = TrackPointEvent(
                 source = TrackPointSource.LOCAL_GPS,
                 trackId = selectedTrackerId,
                 lon = location.longitude,
                 lat = location.latitude,
-                timestampMs = timestampForPolicyMs,
+                timestampMs = location.time,
                 accuracyMeters = if (location.hasAccuracy()) location.accuracy else null
             ),
             maxAccuracyMeters = currentSettings.accuracyFilterMeters,
-            maxJumpSpeedMps = maxJumpSpeedMps,
             freshnessTtlMs = 120_000L,
+            isMockLocation = isMockLocation,
             nowMs = nowMs
         )
         if (!decision.accepted || decision.canonicalEvent == null) {
             Log.d(
                 TAG,
                 "Dropped location reason=${decision.rejectReason} provider=${location.provider} " +
-                    "isMock=$isMockLocation rawTs=${location.time} normalizedTs=$normalizedTimestampMs " +
-                    "policyTs=$timestampForPolicyMs nowMs=$nowMs skewMs=$timestampSkewMs " +
+                    "isMock=$isMockLocation rawTs=${location.time} nowMs=$nowMs " +
                     "acc=${if (location.hasAccuracy()) location.accuracy else null}"
             )
             if (decision.rejectReason == TrackPointRejectReason.BAD_ACCURACY ||
@@ -802,7 +778,7 @@ class TrackingService : TrackPointServiceBase() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val noGoodFix = lastAccuracyMeters == null || lastAccuracyMeters!! > 152.4f
+        val noGoodFix = lastAccuracyMeters == null || lastAccuracyMeters!! > currentSettings.accuracyFilterMeters
         val status = when {
             isGpsPaused -> getString(R.string.status_gps_paused)
             noGoodFix -> getString(R.string.locking)

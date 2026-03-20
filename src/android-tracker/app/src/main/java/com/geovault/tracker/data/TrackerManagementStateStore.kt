@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 sealed interface TrackerManagementEvent {
     data class TrackerUpserted(val tracker: Tracker) : TrackerManagementEvent
     data class TrackerDeleted(val trackerId: String) : TrackerManagementEvent
+    data class HistoryCleared(val trackerId: String) : TrackerManagementEvent
     data class TrackersRefreshed(val trackers: List<Tracker>) : TrackerManagementEvent
     data class GroupUpserted(val group: Group) : TrackerManagementEvent
     data class GroupDeleted(val groupId: String) : TrackerManagementEvent
@@ -52,6 +53,10 @@ class TrackerManagementStateStore @Inject constructor() {
     fun deleteTracker(trackerId: String) {
         _trackers.value = _trackers.value.filterNot { it.id == trackerId }
         _events.tryEmit(TrackerManagementEvent.TrackerDeleted(trackerId))
+    }
+
+    fun publishHistoryCleared(trackerId: String) {
+        _events.tryEmit(TrackerManagementEvent.HistoryCleared(trackerId))
     }
 
     fun publishGroups(groups: List<Group>) {

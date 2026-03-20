@@ -3,6 +3,7 @@ package com.geovault.tracker.pipeline
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Logger
+import kotlin.math.abs
 
 data class IngressStats(
     val accepted: Long,
@@ -22,6 +23,9 @@ internal data class TrackPointSourceProfile(
 
 object TrackPointPipeline {
     private const val REMOTE_FRESHNESS_TTL_MS = 30 * 60 * 1000L
+    private const val MOCK_TIMESTAMP_SKEW_TOLERANCE_MS = 5 * 60 * 1000L
+    private const val LOCAL_REAL_MAX_JUMP_SPEED_MPS = 100.0
+    private const val LOCAL_MOCK_MAX_JUMP_SPEED_MPS = 10_000.0
     private const val ACCEPT_LOG_SAMPLE_INTERVAL = 250L
     private val logger = Logger.getLogger(TrackPointPipeline::class.java.name)
 
@@ -70,15 +74,25 @@ object TrackPointPipeline {
     fun processLocalGps(
         event: TrackPointEvent,
         maxAccuracyMeters: Float,
-        maxJumpSpeedMps: Double,
         freshnessTtlMs: Long,
+        isMockLocation: Boolean = false,
         nowMs: Long = System.currentTimeMillis()
     ): TrackPointDecision {
+        val normalizedTimestampMs = CanonicalTimeNormalizer.normalizeTimestampMs(event.timestampMs, nowMs)
+        val timestampSkewMs = abs(normalizedTimestampMs - nowMs)
+        val timestampForPolicyMs = if (isMockLocation && timestampSkewMs > MOCK_TIMESTAMP_SKEW_TOLERANCE_MS) {
+            nowMs
+        } else {
+            normalizedTimestampMs
+        }
+        val maxJumpSpeedMps = if (isMockLocation) LOCAL_MOCK_MAX_JUMP_SPEED_MPS else LOCAL_REAL_MAX_JUMP_SPEED_MPS
         return processWithConfig(
-            event = event,
+            event = event.copy(timestampMs = timestampForPolicyMs),
             config = TrackPointPolicyConfig(
                 maxAccuracyMeters = maxAccuracyMeters,
-                degradedAccuracyMultiplier = 4f,
+                degradedAccuracyMultiplier = 1f,
+                allowDegradedAccuracy = false,
+                requireAccuracyForAcceptance = true,
                 maxFutureSkewMs = 5 * 60 * 1000L,
                 maxJumpSpeedMps = maxJumpSpeedMps,
                 freshnessTtlMs = freshnessTtlMs,
@@ -178,6 +192,12 @@ object TrackPointPipeline {
             rejectedJump = rejectedJump.get(),
             rejectedStale = rejectedStale.get()
         )
+    }
+
+    fun resetLocalSession(trackId: String) {
+        val streamKey = "${TrackPointSource.LOCAL_GPS}:$trackId"
+        lastAcceptedByStream.remove(streamKey)
+        lastAcceptedByTrack.remove(trackId)
     }
 
     fun resetForTests() {

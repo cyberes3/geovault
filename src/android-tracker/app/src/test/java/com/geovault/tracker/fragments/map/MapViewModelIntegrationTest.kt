@@ -8,11 +8,14 @@ import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerCoordinatesResponse
+import com.geovault.tracker.data.TrackerManagementStateStore
 import com.geovault.tracker.pipeline.TrackPointEvent
 import com.geovault.tracker.pipeline.TrackPointSource
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -193,7 +196,8 @@ class MapViewModelIntegrationTest {
             visibilityRepository = FakeVisibilityRepository(),
             streamingRepository = object : MapStreamingRepository {
                 override val events: Flow<TrackPointEvent> = stream
-            }
+            },
+            trackerManagementStateStore = TrackerManagementStateStore()
         )
 
         viewModel.handleIntent(MapIntent.LoadSingleTrackerRuntime(trackerId = "t1"))
@@ -203,6 +207,34 @@ class MapViewModelIntegrationTest {
         viewModel.handleIntent(MapIntent.LoadSingleTrackerBootstrap(trackerId = "t1"))
         advanceUntilIdle()
         assertTrue(countingRepo.getTrackerGeometryCalls > 0)
+    }
+
+    @Test
+    fun historyClearedEvent_updatesUiStateSignal() = runTest {
+        val stream = MutableSharedFlow<TrackPointEvent>(extraBufferCapacity = 8)
+        val stateStore = TrackerManagementStateStore()
+        val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<Application>()
+        val viewModel = MapViewModel(
+            application = app,
+            runtimeTrackRepository = FakeTrackRepository(),
+            bootstrapTrackRepository = FakeTrackRepository(),
+            groupRepository = FakeGroupRepository(),
+            visibilityRepository = FakeVisibilityRepository(),
+            streamingRepository = object : MapStreamingRepository {
+                override val events: Flow<TrackPointEvent> = stream
+            },
+            trackerManagementStateStore = stateStore
+        )
+        advanceUntilIdle()
+        val initialVersion = viewModel.uiState.value.historyClearSignalVersion
+
+        stateStore.publishHistoryCleared("t1")
+        advanceUntilIdle()
+        val updated = viewModel.uiState.value
+        assertEquals(initialVersion + 1L, updated.historyClearSignalVersion)
+        assertEquals("t1", updated.historyClearedTrackerId)
+        viewModel.consumeHistoryClearSignal(updated.historyClearSignalVersion)
+        assertEquals(null, viewModel.uiState.value.historyClearedTrackerId)
     }
 
     private fun createViewModel(stream: MutableSharedFlow<TrackPointEvent>): MapViewModel {
@@ -215,7 +247,8 @@ class MapViewModelIntegrationTest {
             visibilityRepository = FakeVisibilityRepository(),
             streamingRepository = object : MapStreamingRepository {
                 override val events: Flow<TrackPointEvent> = stream
-            }
+            },
+            trackerManagementStateStore = TrackerManagementStateStore()
         )
     }
 

@@ -51,7 +51,9 @@ data class MapUiState(
     val displayedGroupName: String? = null,
     val showAllTrackers: Boolean = false,
     val lockMode: MapLockMode = MapLockMode.NONE,
-    val activeStreamedTrackerIds: Set<String> = emptySet()
+    val activeStreamedTrackerIds: Set<String> = emptySet(),
+    val historyClearSignalVersion: Long = 0L,
+    val historyClearedTrackerId: String? = null
 )
 
 sealed class MapIntent {
