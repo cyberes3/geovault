@@ -68,6 +68,54 @@ class ResolveMapResumeUseCaseTest {
     }
 
     @Test
+    fun resolve_trackingGroupStartsStreamingWithoutSelectedTracker() {
+        val decision = useCase.resolve(
+            baseInput().copy(
+                trackingRunning = true,
+                mapViewContext = MapViewContext.GROUP,
+                currentGroupTrackIds = setOf("tracker-1", "tracker-2", "tracker-3"),
+                activeStreamedTrackerIds = setOf("tracker-1", "tracker-2")
+            )
+        )
+        assertEquals(
+            MapResumeDecision.StartMultiContextStreaming(setOf("tracker-2")),
+            decision
+        )
+    }
+
+    @Test
+    fun resolve_trackingAllContextWithoutStreams_loadsSelectedTrackerRuntime() {
+        val decision = useCase.resolve(
+            baseInput().copy(
+                trackingRunning = true,
+                showAllTrackers = true,
+                mapViewContext = MapViewContext.SINGLE_TRACKER,
+                activeStreamedTrackerIds = emptySet(),
+                currentGroupTrackIds = emptySet(),
+                selectedTrackerId = "tracker-1"
+            )
+        )
+        assertEquals(
+            MapResumeDecision.LoadSingleTrackerRuntime("tracker-1"),
+            decision
+        )
+    }
+
+    @Test
+    fun resolve_trackingSingleRestartsDisplayedStreamingForNonSelectedTracker() {
+        val decision = useCase.resolve(
+            baseInput().copy(
+                trackingRunning = true,
+                selectedTrackerId = "tracker-1",
+                displayedTrackerId = "tracker-2",
+                hasTrackPoints = false,
+                activeStreamedTrackerIds = setOf("tracker-2")
+            )
+        )
+        assertTrue(decision is MapResumeDecision.RestartDisplayedTrackerStreaming)
+    }
+
+    @Test
     fun resolve_clearsSingleStateWhenNoTrackerAndNoPendingInitial() {
         val decision = useCase.resolve(
             baseInput().copy(
@@ -152,6 +200,22 @@ class ResolveMapResumeUseCaseTest {
                 displayedTrackerId = "tracker-1",
                 hasTrackPoints = false,
                 activeStreamedTrackerIds = setOf("other-tracker")
+            )
+        )
+        assertEquals(
+            MapResumeDecision.LoadSingleTrackerRuntime(trackerId = "tracker-1"),
+            decision
+        )
+    }
+
+    @Test
+    fun resolve_loadsRuntimeWhenDisplayedTrackerMissingButSelectedExists() {
+        val decision = useCase.resolve(
+            baseInput().copy(
+                selectedTrackerId = "tracker-1",
+                displayedTrackerId = null,
+                hasTrackPoints = true,
+                activeStreamedTrackerIds = emptySet()
             )
         )
         assertEquals(

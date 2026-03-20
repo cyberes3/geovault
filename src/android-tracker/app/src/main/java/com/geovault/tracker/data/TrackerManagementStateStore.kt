@@ -38,11 +38,14 @@ class TrackerManagementStateStore @Inject constructor() {
     val mapVisibility: StateFlow<MapVisibilityResponse?> = _mapVisibility.asStateFlow()
 
     fun publishTrackers(trackers: List<Tracker>) {
+        if (_trackers.value == trackers) return
         _trackers.value = trackers
         _events.tryEmit(TrackerManagementEvent.TrackersRefreshed(trackers))
     }
 
     fun publishTracker(tracker: Tracker) {
+        val existing = _trackers.value.firstOrNull { it.id == tracker.id }
+        if (existing == tracker) return
         _trackers.value = _trackers.value
             .filterNot { it.id == tracker.id }
             .plus(tracker)
@@ -60,11 +63,14 @@ class TrackerManagementStateStore @Inject constructor() {
     }
 
     fun publishGroups(groups: List<Group>) {
+        if (_groups.value == groups) return
         _groups.value = groups
         _events.tryEmit(TrackerManagementEvent.GroupsRefreshed(groups))
     }
 
     fun publishGroup(group: Group) {
+        val existing = _groups.value.firstOrNull { it.id == group.id }
+        if (existing == group) return
         _groups.value = _groups.value
             .filterNot { it.id == group.id }
             .plus(group)
@@ -78,6 +84,7 @@ class TrackerManagementStateStore @Inject constructor() {
     }
 
     fun publishMapVisibility(value: MapVisibilityResponse) {
+        if (_mapVisibility.value == value) return
         _mapVisibility.value = value
         _events.tryEmit(TrackerManagementEvent.MapVisibilityChanged(value))
     }

@@ -34,14 +34,17 @@ internal object MapTrackerLabelController {
         trackingRunning: Boolean,
         context: Context
     ): TrackerLabelState {
-        if (trackingRunning) {
-            return TrackerLabelState.HideCardKeepDisplayed
-        }
+        val showingSingleTracker = !showAllTrackers &&
+            mapViewContext != MapViewContext.GROUP &&
+            !displayedTrackerId.isNullOrEmpty()
         if (mapViewContext == MapViewContext.GROUP) {
             return TrackerLabelState.GroupMode(
                 labelText = displayedGroupName?.takeIf { it.isNotBlank() } ?: context.getString(R.string.groups_title),
                 resetContentDescription = context.getString(R.string.show_selected_tracker)
             )
+        }
+        if (trackingRunning && !showingSingleTracker) {
+            return TrackerLabelState.HideCardKeepDisplayed
         }
         if (showAllTrackers) {
             return TrackerLabelState.ShowTrackerMode(
@@ -50,9 +53,6 @@ internal object MapTrackerLabelController {
                 resetContentDescription = context.getString(R.string.show_selected_tracker)
             )
         }
-        val showingSingleTracker = !showAllTrackers &&
-            mapViewContext != MapViewContext.GROUP &&
-            !displayedTrackerId.isNullOrEmpty()
         if (!showingSingleTracker) {
             return TrackerLabelState.HideCardClearDisplayed
         }

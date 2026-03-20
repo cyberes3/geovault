@@ -104,7 +104,7 @@ class TrackingService : TrackPointServiceBase() {
         const val NOTIFICATION_DISMISSED_ACTION = "com.geovault.tracker.TRACKING_NOTIFICATION_DISMISSED"
         const val NOTIFICATION_ID = 101
         const val CHANNEL_ID = "tracker_service"
-        /** Group key so both services can collapse together on some devices (e.g. Samsung). */
+        @Suppress("unused")
         private const val NOTIFICATION_GROUP_KEY = "geovault_service_group"
         const val SESSION_STATS_UPDATE = "com.geovault.tracker.SESSION_STATS_UPDATE"
 
@@ -202,7 +202,7 @@ class TrackingService : TrackPointServiceBase() {
     private var retryJob: Job? = null
     private var backlogUploaderJob: Job? = null
     private var preflightJob: Job? = null
-    private val pushDispatcher = Executors.newFixedThreadPool(2).asCoroutineDispatcher()
+    private val pushDispatcher = Executors.newFixedThreadPool(3).asCoroutineDispatcher()
     private val livePushSemaphore = Semaphore(2)
     private val backlogPushSemaphore = Semaphore(1)
     private val inFlightClaims = QueueInFlightClaimSet()
@@ -240,6 +240,7 @@ class TrackingService : TrackPointServiceBase() {
                 START_STICKY
             }
             ACTION_STOP -> {
+                Log.d(TAG, "ACTION_STOP received", Exception("ACTION_STOP stacktrace"))
                 stopTracking()
                 START_NOT_STICKY
             }
@@ -339,10 +340,11 @@ class TrackingService : TrackPointServiceBase() {
             return
         }
         
-        // Push any existing queued locations immediately when tracking starts
+        // Push any existing queued locations immediately when tracking starts (both
+        // current-session and backlog lanes) so startup drain is not delayed.
         serviceScope.launch {
             lastSyncFailureClass = pushLocations(
-                scope = QueueUploadScope.LIVE_ONLY,
+                scope = QueueUploadScope.ALL,
                 sessionBoundaryMs = sessionBoundaryForBacklogMs
             )
         }
@@ -800,7 +802,6 @@ class TrackingService : TrackPointServiceBase() {
             .setShowWhen(false)
             .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .setSortKey("\uFFFF")
-            .setGroup(NOTIFICATION_GROUP_KEY)  // Single-line / collapsed on some UIs (e.g. Samsung)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setDeleteIntent(dismissPendingIntent)
             .build()
@@ -811,6 +812,7 @@ class TrackingService : TrackPointServiceBase() {
     }
 
     override fun onDestroy() {
+        Log.d(TAG, "onDestroy called isTracking=$isTracking", Exception("onDestroy stacktrace"))
         super.onDestroy()
         significantMotionBridge?.cancel()
         stopAutoModeTick()
@@ -859,7 +861,7 @@ class TrackingService : TrackPointServiceBase() {
                         scope = QueueUploadScope.BACKLOG_ONLY,
                         sessionBoundaryMs = sessionBoundaryMs
                     )
-                    delay(15_000L)
+                    delay(5_000L)
                 } else {
                     // Keep background uploader alive for the full tracking session.
                     // Late-arriving points can still fall into backlog lane (e.g. stale fix timestamps).

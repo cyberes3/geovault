@@ -218,8 +218,8 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
         )
         val title = getString(R.string.live_track_streaming_title)
         val text = when {
-            trackerCount > 1 -> String.format(Locale.US, "%d trackers", trackerCount)
             trackerName?.isNotBlank() == true -> getString(R.string.live_track_streaming_text, trackerName)
+            trackerCount > 1 -> String.format(Locale.US, "%d trackers", trackerCount)
             else -> getString(R.string.live_track_streaming_text_anon)
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
@@ -235,7 +235,6 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
             .setShowWhen(false)
             .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .setSortKey("\uFFFF")
-            .setGroup("geovault_service_group")
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setDeleteIntent(dismissPendingIntent)
             .build()

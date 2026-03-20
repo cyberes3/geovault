@@ -40,7 +40,7 @@ object MapModeStateMachine {
         return when (state) {
             MapModeState.TRACKING_SINGLE -> MapSourcePolicy(
                 acceptLocalGps = true,
-                acceptRemoteStream = false
+                acceptRemoteStream = true
             )
             MapModeState.BROWSING_SINGLE,
             MapModeState.BROWSING_ALL_TRACKERS,

@@ -16,6 +16,7 @@ import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -81,5 +82,45 @@ class TrackerManagementStateStoreTest {
 
         assertTrue(store.groups.value.any { it.id == "g-1" })
         assertEquals(listOf("g-1"), store.mapVisibility.value?.hidden_group_ids)
+    }
+
+    @Test
+    fun publishTracker_sameTrackerDoesNotEmitDuplicateEvent() = runTest {
+        val store = TrackerManagementStateStore()
+        val tracker = Tracker(id = "t-1", name = "Alpha", color = "#000000")
+        store.publishTracker(tracker)
+        advanceUntilIdle()
+
+        val duplicateDeferred = async(start = CoroutineStart.UNDISPATCHED) {
+            runCatching {
+                withTimeout(150L) {
+                    store.events.first { it is TrackerManagementEvent.TrackerUpserted }
+                }
+            }.isSuccess
+        }
+        store.publishTracker(tracker)
+        advanceUntilIdle()
+
+        assertFalse(duplicateDeferred.await())
+    }
+
+    @Test
+    fun publishMapVisibility_sameValueDoesNotEmitDuplicateEvent() = runTest {
+        val store = TrackerManagementStateStore()
+        val visibility = MapVisibilityResponse(hidden_track_ids = listOf("t-1"), hidden_group_ids = listOf("g-1"))
+        store.publishMapVisibility(visibility)
+        advanceUntilIdle()
+
+        val duplicateDeferred = async(start = CoroutineStart.UNDISPATCHED) {
+            runCatching {
+                withTimeout(150L) {
+                    store.events.first { it is TrackerManagementEvent.MapVisibilityChanged }
+                }
+            }.isSuccess
+        }
+        store.publishMapVisibility(visibility)
+        advanceUntilIdle()
+
+        assertFalse(duplicateDeferred.await())
     }
 }

@@ -146,7 +146,8 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             startService(Intent(this, TrackingService::class.java).apply { this.action = action })
         } else if (action == LiveTrackStreamingService.ACTION_STOP) {
             startService(Intent(this, LiveTrackStreamingService::class.java).apply { this.action = action })
-            if (isMainContentSetup && !TrackingRuntimeStateStore.state.value.isRunning) {
+            val trackingRunning = TrackingRuntimeStateStore.state.value.isRunning
+            if (isMainContentSetup && !trackingRunning) {
                 (pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.map.MapFragment)?.restoreTrackForSelectedTracker()
             }
         }
@@ -714,8 +715,8 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
                 val (group, zoomToTrackerId) = getAndClearInitialGroupAndZoomTo()
                 if (group != null) {
                     mapFragment.refreshMapForGroup(group, zoomToTrackerId)
-                } else if (trackingRunning) {
-                    // Keep active tracking map state intact when switching tabs.
+                } else if (trackingRunning && initialTrackForMap?.id == SelectedTrackerPrefs.selectedTrackerId(this)) {
+                    // Don't reload the selected tracker when it's already being tracked on the map.
                     initialTrackForMap = null
                 } else {
                     mapFragment.consumePendingInitialTrackForMap()

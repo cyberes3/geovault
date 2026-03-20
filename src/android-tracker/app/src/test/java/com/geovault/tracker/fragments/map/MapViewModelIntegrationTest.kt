@@ -147,7 +147,7 @@ class MapViewModelIntegrationTest {
     }
 
     @Test
-    fun streamEvent_trackingRunning_acceptsLocalGpsOnly() = runTest {
+    fun streamEvent_trackingRunning_acceptsRemoteStreamWhenRouted() = runTest {
         val stream = MutableSharedFlow<TrackPointEvent>(extraBufferCapacity = 8)
         val viewModel = createViewModel(stream)
         val commands = mutableListOf<MapCommand>()
@@ -179,7 +179,44 @@ class MapViewModelIntegrationTest {
             )
         )
         advanceUntilIdle()
-        assertEquals(0, commands.count { it is MapCommand.ApplyTrackPoint })
+        assertEquals(1, commands.count { it is MapCommand.ApplyTrackPoint })
+        job.cancel()
+    }
+
+    @Test
+    fun streamEvent_trackingRunningMultiContext_keepsAcceptingLocalGps() = runTest {
+        val stream = MutableSharedFlow<TrackPointEvent>(extraBufferCapacity = 8)
+        val viewModel = createViewModel(stream)
+        val commands = mutableListOf<MapCommand>()
+        val job = launch {
+            viewModel.commands.collect { commands.add(it) }
+        }
+
+        LiveStreamRuntimeStateStore.update {
+            it.copy(isRunning = true, activeTrackerIds = setOf("remote-1"))
+        }
+        TrackingRuntimeStateStore.update { it.copy(isRunning = true) }
+        viewModel.updateUiState {
+            it.copy(
+                mode = MapScreenMode.AllTrackers,
+                showAllTrackers = true,
+                displayedTrackerId = "selected-tracker"
+            )
+        }
+        viewModel.startTrackPointStream()
+        advanceUntilIdle()
+
+        stream.emit(
+            TrackPointEvent(
+                source = TrackPointSource.LOCAL_GPS,
+                trackId = "selected-tracker",
+                lon = 10.0,
+                lat = 20.0,
+                timestampMs = 1_000L
+            )
+        )
+        advanceUntilIdle()
+        assertEquals(1, commands.count { it is MapCommand.ApplyTrackPoint })
         job.cancel()
     }
 
@@ -269,6 +306,41 @@ class MapViewModelIntegrationTest {
 
         val updatedRenderCount = commands.count { it is MapCommand.RenderAllTrackers }
         assertTrue(updatedRenderCount > initialRenderCount)
+        job.cancel()
+    }
+
+    @Test
+    fun trackerMutationEvent_doesNotReloadSingleMode() = runTest {
+        val stream = MutableSharedFlow<TrackPointEvent>(extraBufferCapacity = 8)
+        val stateStore = TrackerManagementStateStore()
+        val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<Application>()
+        val viewModel = MapViewModel(
+            application = app,
+            runtimeTrackRepository = FakeTrackRepository(),
+            bootstrapTrackRepository = FakeTrackRepository(),
+            groupRepository = FakeGroupRepository(),
+            visibilityRepository = FakeVisibilityRepository(),
+            streamingRepository = object : MapStreamingRepository {
+                override val events: Flow<TrackPointEvent> = stream
+            },
+            trackerManagementStateStore = stateStore
+        )
+        val commands = mutableListOf<MapCommand>()
+        val job = launch {
+            viewModel.commands.collect { command ->
+                commands.add(command)
+            }
+        }
+
+        viewModel.handleIntent(MapIntent.LoadSingleTrackerRuntime(trackerId = "t1"))
+        advanceUntilIdle()
+        val initialRenderCount = commands.count { it is MapCommand.RenderSingleTracker }
+
+        stateStore.publishTracker(Tracker(id = "t1", name = "Updated", color = null))
+        advanceUntilIdle()
+
+        val updatedRenderCount = commands.count { it is MapCommand.RenderSingleTracker }
+        assertEquals(initialRenderCount, updatedRenderCount)
         job.cancel()
     }
 

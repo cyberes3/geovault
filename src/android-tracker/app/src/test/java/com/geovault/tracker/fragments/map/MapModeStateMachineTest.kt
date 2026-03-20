@@ -34,7 +34,7 @@ class MapModeStateMachineTest {
     @Test
     fun sourcePolicy_isDeterministicByState() {
         assertTrue(MapModeStateMachine.acceptsSource(MapModeState.TRACKING_SINGLE, TrackPointSource.LOCAL_GPS))
-        assertFalse(MapModeStateMachine.acceptsSource(MapModeState.TRACKING_SINGLE, TrackPointSource.REMOTE_STREAM))
+        assertTrue(MapModeStateMachine.acceptsSource(MapModeState.TRACKING_SINGLE, TrackPointSource.REMOTE_STREAM))
         assertFalse(MapModeStateMachine.acceptsSource(MapModeState.BROWSING_SINGLE, TrackPointSource.LOCAL_GPS))
         assertTrue(MapModeStateMachine.acceptsSource(MapModeState.BROWSING_SINGLE, TrackPointSource.REMOTE_STREAM))
     }

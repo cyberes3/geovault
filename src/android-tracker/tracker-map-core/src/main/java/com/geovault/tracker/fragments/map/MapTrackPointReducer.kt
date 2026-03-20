@@ -1,6 +1,7 @@
 package com.geovault.tracker.fragments.map
 
 import com.geovault.tracker.pipeline.TrackPointEvent
+import com.geovault.tracker.pipeline.TrackPointSource
 
 sealed class MapTrackPointMode {
     data class Single(val displayedTrackerId: String?) : MapTrackPointMode()
@@ -29,10 +30,7 @@ object MapTrackPointReducer {
                 mapViewContext = context.mapViewContext
             )
         )
-        val mode = if (modeState == MapModeState.TRACKING_SINGLE) {
-            // During active tracking, local GPS must not be gated by multi-context streamed tracker IDs.
-            MapTrackPointMode.Single(context.displayedTrackerId)
-        } else if (MapLiveStreamHandler.isMultiContext(context.showAllTrackers, context.mapViewContext)) {
+        val mode = if (MapLiveStreamHandler.isMultiContext(context.showAllTrackers, context.mapViewContext)) {
             MapTrackPointMode.Multi(context.activeStreamedTrackerIds)
         } else {
             MapTrackPointMode.Single(context.displayedTrackerId)
@@ -45,6 +43,12 @@ object MapTrackPointReducer {
 
     fun shouldAcceptPoint(event: TrackPointEvent, state: MapTrackPointState): Boolean {
         if (!MapModeStateMachine.acceptsSource(state.modeState, event.source)) return false
+        if (event.source == TrackPointSource.LOCAL_GPS &&
+            state.modeState == MapModeState.TRACKING_SINGLE
+        ) {
+            // Local tracking must continue even when browsing multi-context streams during tracking.
+            return true
+        }
 
         return when (val mode = state.mode) {
             is MapTrackPointMode.Multi -> event.trackId in mode.activeTrackerIds

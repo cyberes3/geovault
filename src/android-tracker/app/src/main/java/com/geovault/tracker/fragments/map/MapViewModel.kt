@@ -83,7 +83,12 @@ class MapViewModel @Inject constructor(
                     is TrackerManagementEvent.GroupDeleted,
                     is TrackerManagementEvent.GroupsRefreshed,
                     is TrackerManagementEvent.MapVisibilityChanged -> {
-                        reloadVisibleMapData()
+                        val current = _uiState.value
+                        if (shouldReloadVisibleMapDataForEvent(current, event) &&
+                            shouldExecuteReloadForCurrentState(current, event)
+                        ) {
+                            reloadVisibleMapData()
+                        }
                     }
                 }
             }
@@ -99,6 +104,40 @@ class MapViewModel @Inject constructor(
                 forceReplace = true,
                 mode = SingleTrackerLoadMode.RUNTIME
             )
+        }
+    }
+
+    private fun shouldReloadVisibleMapDataForEvent(
+        state: MapUiState,
+        event: TrackerManagementEvent
+    ): Boolean {
+        return when (event) {
+            is TrackerManagementEvent.TrackerDeleted -> {
+                when (state.mode) {
+                    is MapScreenMode.Single -> state.displayedTrackerId == event.trackerId
+                    else -> true
+                }
+            }
+            is TrackerManagementEvent.TrackerUpserted,
+            is TrackerManagementEvent.TrackersRefreshed,
+            is TrackerManagementEvent.GroupUpserted,
+            is TrackerManagementEvent.GroupDeleted,
+            is TrackerManagementEvent.GroupsRefreshed,
+            is TrackerManagementEvent.MapVisibilityChanged -> state.mode !is MapScreenMode.Single
+            is TrackerManagementEvent.HistoryCleared -> true
+        }
+    }
+
+    private fun shouldExecuteReloadForCurrentState(
+        state: MapUiState,
+        event: TrackerManagementEvent
+    ): Boolean {
+        if (state.mode !is MapScreenMode.Single) return true
+        if (!state.loading) return true
+        return when (event) {
+            is TrackerManagementEvent.HistoryCleared -> true
+            is TrackerManagementEvent.TrackerDeleted -> true
+            else -> false
         }
     }
 
@@ -190,16 +229,22 @@ class MapViewModel @Inject constructor(
     }
 
     fun stopLiveTrackStreaming() {
+        Log.d(TAG, "stopLiveTrackStreaming called", Exception("stopStreaming stacktrace"))
         MapStreamingServiceHelper.stopStreaming(getApplication())
     }
 
     fun startLiveTrackStreamingForTrackerSet(trackerIds: Set<String>, trackerName: String? = null) {
-        if (TrackingRuntimeStateStore.state.value.isRunning) {
-            stopLiveTrackStreaming()
-            return
-        }
-        val cleanedIds = MapStreamingServiceHelper.startStreaming(getApplication(), trackerIds, trackerName)
+        val trackingRunning = TrackingRuntimeStateStore.state.value.isRunning
+        val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(getApplication())
+        val eligibleIds = filterStreamEligibleTrackerIds(
+            trackerIds = trackerIds,
+            selectedTrackerId = selectedTrackerId,
+            trackingRunning = trackingRunning
+        )
+        Log.d(TAG, "startLiveTrackStreamingForTrackerSet input=$trackerIds eligible=$eligibleIds tracking=$trackingRunning selected=$selectedTrackerId")
+        val cleanedIds = MapStreamingServiceHelper.startStreaming(getApplication(), eligibleIds, trackerName)
         if (cleanedIds == null) {
+            Log.d(TAG, "startLiveTrackStreamingForTrackerSet: no eligible IDs, stopping streaming")
             stopLiveTrackStreaming()
             return
         }
@@ -211,10 +256,7 @@ class MapViewModel @Inject constructor(
         selectedTrackerId: String?,
         mapViewContext: MapViewContext
     ) {
-        if (TrackingRuntimeStateStore.state.value.isRunning) {
-            stopLiveTrackStreaming()
-            return
-        }
+        Log.d(TAG, "startLiveTrackStreamingForDisplayedTracker displayed=$displayedTrackerId selected=$selectedTrackerId context=$mapViewContext")
         MapStreamingServiceHelper.updateStreamingForDisplayedTracker(
             displayedTrackerId = displayedTrackerId,
             displayedTrackerName = displayedTrackerName,
@@ -226,12 +268,10 @@ class MapViewModel @Inject constructor(
     }
 
     internal fun isStreaming(
-        trackingRunning: Boolean,
         showAllTrackers: Boolean,
         mapViewContext: MapViewContext,
         displayedTrackerId: String?
     ): Boolean {
-        if (trackingRunning) return false
         if (!LiveStreamRuntimeStateStore.state.value.isRunning) return false
         val activeIds = LiveStreamRuntimeStateStore.state.value.activeTrackerIds
         return if (showAllTrackers || mapViewContext == MapViewContext.GROUP) {
@@ -240,6 +280,15 @@ class MapViewModel @Inject constructor(
             val id = displayedTrackerId ?: return false
             id in activeIds
         }
+    }
+
+    private fun filterStreamEligibleTrackerIds(
+        trackerIds: Set<String>,
+        selectedTrackerId: String,
+        trackingRunning: Boolean
+    ): Set<String> {
+        if (!trackingRunning || selectedTrackerId.isBlank()) return trackerIds
+        return trackerIds.filterTo(mutableSetOf()) { it != selectedTrackerId }
     }
 
     private fun loadSingle(
