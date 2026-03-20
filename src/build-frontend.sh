@@ -22,6 +22,7 @@ fi
 # Install dependencies
 echo "Installing frontend dependencies..."
 npm install
+npm audit fix
 
 echo "Running frontend build..."
 npm run build
@@ -46,6 +47,7 @@ for EXT_DIR in */; do
         # Install dependencies
         echo "  Installing dependencies..."
         npm install
+        npm audit fix
         
         echo "  Running build..."
         npm run build
