@@ -65,6 +65,7 @@
         <option value="1d">Last Day</option>
         <option value="1w">Last Week</option>
         <option value="1m">Last Month</option>
+        <option value="session">Last Session</option>
       </select>
     </div>
     <div v-if="isOwner" class="space-y-2">

@@ -229,6 +229,7 @@
     <string name="recent_data_1d">1 day</string>
     <string name="recent_data_1w">1 week</string>
     <string name="recent_data_1m">1 month</string>
+    <string name="recent_data_session">Last Session</string>
     <string name="choose_color">Choose color</string>
 
     <!-- Live track streaming status -->

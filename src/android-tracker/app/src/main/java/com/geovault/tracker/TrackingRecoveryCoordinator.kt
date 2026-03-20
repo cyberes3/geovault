@@ -93,7 +93,7 @@ object TrackingRecoveryCoordinator {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val canScheduleExact = alarmManager.canScheduleExactAlarmsCompat()
         val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return false
-        val mode = appOps.unsafeCheckOpNoThrow(
+        val mode = appOps.checkOpNoThrow(
             APP_OP_SCHEDULE_EXACT_ALARM,
             context.applicationInfo.uid,
             context.packageName

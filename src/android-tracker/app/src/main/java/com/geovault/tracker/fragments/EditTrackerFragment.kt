@@ -84,8 +84,8 @@ class EditTrackerFragment : Fragment() {
     /** After clear history succeeds, keep the clear button disabled until this fragment is closed. */
     private var historyClearedThisSession = false
 
-    /** Values for recent data spinner: empty = All, then 1min, 1h, 1d, 1w, 1m */
-    private val recentDataValues = arrayOf("", "1min", "1h", "1d", "1w", "1m")
+    /** Values for recent data spinner: empty = All, then 1min, 1h, 1d, 1w, 1m, session */
+    private val recentDataValues = arrayOf("", "1min", "1h", "1d", "1w", "1m", "session")
 
     private val visibilityValues = arrayOf("private", "shared", "public")
 
@@ -269,7 +269,8 @@ class EditTrackerFragment : Fragment() {
             getString(R.string.recent_data_1h),
             getString(R.string.recent_data_1d),
             getString(R.string.recent_data_1w),
-            getString(R.string.recent_data_1m)
+            getString(R.string.recent_data_1m),
+            getString(R.string.recent_data_session)
         )
         val spinnerAdapter = ArrayAdapter(requireContext(), CommonR.layout.gv_common_item_dropdown, recentDataLabels)
         recentDataWindowSpinner.setAdapter(spinnerAdapter)
@@ -389,7 +390,8 @@ class EditTrackerFragment : Fragment() {
             getString(R.string.recent_data_1h),
             getString(R.string.recent_data_1d),
             getString(R.string.recent_data_1w),
-            getString(R.string.recent_data_1m)
+            getString(R.string.recent_data_1m),
+            getString(R.string.recent_data_session)
         )
         recentDataWindowSpinner.setText(recentDataLabels[idx], false)
         if (tracker.isOwner()) {

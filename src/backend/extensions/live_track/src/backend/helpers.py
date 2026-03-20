@@ -76,6 +76,8 @@ def _timestamp_to_ms(ts) -> int | None:
 
 def _filter_coords_by_recent_window(coords, point_params, window_key: str):
     """Keep only coords (and matching point_params) with timestamp >= (now - window)."""
+    if window_key == "session":
+        return _filter_coords_by_latest_session_start(coords, point_params)
     if window_key not in RECENT_WINDOW_MS:
         return coords, point_params
     cutoff_ms = int(time.time() * 1000) - RECENT_WINDOW_MS[window_key]
@@ -93,6 +95,40 @@ def _filter_coords_by_recent_window(coords, point_params, window_key: str):
         else:
             kept_coords.append(c)
             kept_params.append(point_params[i])
+    return kept_coords, kept_params
+
+
+def _filter_coords_by_latest_session_start(coords, point_params):
+    """
+    Keep only points from the latest session based on point_params[i].starttimestamp.
+    If starttimestamp is missing for all points, return all points unchanged.
+    """
+    if len(coords) != len(point_params):
+        return coords, point_params
+
+    latest_start_ms = None
+    for params in point_params:
+        if not isinstance(params, dict):
+            continue
+        start_ms = _timestamp_to_ms(params.get("starttimestamp"))
+        if start_ms is None:
+            continue
+        if latest_start_ms is None or start_ms > latest_start_ms:
+            latest_start_ms = start_ms
+
+    # Backward-compatible fallback for imports/older data without starttimestamp.
+    if latest_start_ms is None:
+        return coords, point_params
+
+    kept_coords = []
+    kept_params = []
+    for i, params in enumerate(point_params):
+        if not isinstance(params, dict):
+            continue
+        start_ms = _timestamp_to_ms(params.get("starttimestamp"))
+        if start_ms == latest_start_ms:
+            kept_coords.append(coords[i])
+            kept_params.append(params)
     return kept_coords, kept_params
 
 

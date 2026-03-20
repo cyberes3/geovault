@@ -1214,6 +1214,337 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(coords[0][1], 38.0)
         self.assertEqual(len(data.get("point_params", [])), 1)
 
+    def test_geometry_filtered_by_recent_data_window_session_uses_latest_starttimestamp(self):
+        """GET geometry with recent_data_window=session returns only points from latest starttimestamp."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Session Filtered Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        tracker_secret = create_resp.json()["tracker_secret"]
+        auth = _basic_auth_header("trackuser@example.com", tracker_secret)
+        now_sec = int(time.time())
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps(
+                        {
+                            "lat": 37.0,
+                            "lon": -122.0,
+                            "timestamp": now_sec - 7200,
+                            "starttimestamp": now_sec - 7500,
+                        }
+                    ),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps(
+                        {
+                            "lat": 37.5,
+                            "lon": -121.5,
+                            "timestamp": now_sec - 7100,
+                            "starttimestamp": now_sec - 7500,
+                        }
+                    ),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps(
+                        {
+                            "lat": 38.0,
+                            "lon": -121.0,
+                            "timestamp": now_sec - 300,
+                            "starttimestamp": now_sec - 600,
+                        }
+                    ),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"recent_data_window": "session"}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/geometry/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        coords = data["geometry"].get("coordinates", [])
+        params = data.get("point_params", [])
+        self.assertEqual(len(coords), 1, "Only the latest session point should be returned")
+        self.assertEqual(len(params), 1)
+        self.assertEqual(coords[0][0], -121.0)
+        self.assertEqual(coords[0][1], 38.0)
+        self.assertEqual(params[0].get("starttimestamp"), now_sec - 600)
+
+    def test_geometry_filtered_by_recent_data_window_session_without_starttimestamp_falls_back_to_all(self):
+        """GET geometry with recent_data_window=session returns all points when starttimestamp is missing."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Session Fallback Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        tracker_secret = create_resp.json()["tracker_secret"]
+        auth = _basic_auth_header("trackuser@example.com", tracker_secret)
+        now_sec = int(time.time())
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps({"lat": 37.0, "lon": -122.0, "timestamp": now_sec - 7200}),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps({"lat": 38.0, "lon": -121.0, "timestamp": now_sec - 300}),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"recent_data_window": "session"}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/geometry/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        coords = data["geometry"].get("coordinates", [])
+        params = data.get("point_params", [])
+        self.assertEqual(len(coords), 2, "Missing starttimestamp should fall back to all points")
+        self.assertEqual(len(params), 2)
+
+    def test_geometry_filtered_by_recent_data_window_session_mixed_starttimestamp_units(self):
+        """GET geometry with recent_data_window=session handles mixed seconds/milliseconds starttimestamp."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Session Mixed Units"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        tracker_secret = create_resp.json()["tracker_secret"]
+        auth = _basic_auth_header("trackuser@example.com", tracker_secret)
+        now_sec = int(time.time())
+        older_start_sec = now_sec - 1800
+        newer_start_ms = (now_sec - 600) * 1000
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps(
+                        {
+                            "lat": 37.0,
+                            "lon": -122.0,
+                            "timestamp": now_sec - 1500,
+                            "starttimestamp": older_start_sec,
+                        }
+                    ),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps(
+                        {
+                            "lat": 38.0,
+                            "lon": -121.0,
+                            "timestamp": now_sec - 300,
+                            "starttimestamp": newer_start_ms,
+                        }
+                    ),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"recent_data_window": "session"}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/geometry/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        coords = data["geometry"].get("coordinates", [])
+        self.assertEqual(len(coords), 1, "Latest session should be selected even with mixed units")
+        self.assertEqual(coords[0][0], -121.0)
+        self.assertEqual(coords[0][1], 38.0)
+
+    def test_geometry_all_true_bypasses_recent_filter_session(self):
+        """GET geometry?all=true bypasses recent_data_window=session."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Session All True"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        tracker_secret = create_resp.json()["tracker_secret"]
+        auth = _basic_auth_header("trackuser@example.com", tracker_secret)
+        now_sec = int(time.time())
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps(
+                        {"lat": 37.0, "lon": -122.0, "timestamp": now_sec - 3600, "starttimestamp": now_sec - 4000}
+                    ),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps(
+                        {"lat": 38.0, "lon": -121.0, "timestamp": now_sec - 300, "starttimestamp": now_sec - 600}
+                    ),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"recent_data_window": "session"}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/trackers/{track_id}/geometry/",
+                {"all": "true"},
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        coords = data["geometry"].get("coordinates", [])
+        params = data.get("point_params", [])
+        self.assertEqual(len(coords), 2)
+        self.assertEqual(len(params), 2)
+
+    def test_geometry_filtered_by_recent_data_window_session_ignores_point_order(self):
+        """GET geometry with recent_data_window=session uses latest starttimestamp even when points are out of order."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Session Out Of Order"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        tracker_secret = create_resp.json()["tracker_secret"]
+        auth = _basic_auth_header("trackuser@example.com", tracker_secret)
+        now_sec = int(time.time())
+        latest_session_start = now_sec - 400
+        older_session_start = now_sec - 2000
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                # Newest session point arrives first.
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps(
+                        {"lat": 38.0, "lon": -121.0, "timestamp": now_sec - 300, "starttimestamp": latest_session_start}
+                    ),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+                # Older session point arrives later (out of chronological session order in storage).
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps(
+                        {"lat": 37.0, "lon": -122.0, "timestamp": now_sec - 100, "starttimestamp": older_session_start}
+                    ),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"recent_data_window": "session"}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/geometry/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        coords = data["geometry"].get("coordinates", [])
+        params = data.get("point_params", [])
+        self.assertEqual(len(coords), 1)
+        self.assertEqual(coords[0][0], -121.0)
+        self.assertEqual(coords[0][1], 38.0)
+        self.assertEqual(params[0].get("starttimestamp"), latest_session_start)
+
+    def test_geometry_filtered_by_recent_data_window_session_ignores_invalid_starttimestamp_values(self):
+        """GET geometry with recent_data_window=session ignores invalid starttimestamp and still picks latest valid session."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Session Invalid Starttimestamp"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        tracker_secret = create_resp.json()["tracker_secret"]
+        auth = _basic_auth_header("trackuser@example.com", tracker_secret)
+        now_sec = int(time.time())
+        valid_old = now_sec - 5000
+        valid_new = now_sec - 800
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps(
+                        {"lat": 37.0, "lon": -122.0, "timestamp": now_sec - 4900, "starttimestamp": valid_old}
+                    ),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps(
+                        {"lat": 37.5, "lon": -121.5, "timestamp": now_sec - 4700, "starttimestamp": "not-a-number"}
+                    ),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps(
+                        {"lat": 38.0, "lon": -121.0, "timestamp": now_sec - 300, "starttimestamp": valid_new}
+                    ),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"recent_data_window": "session"}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/geometry/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        coords = data["geometry"].get("coordinates", [])
+        params = data.get("point_params", [])
+        self.assertEqual(len(coords), 1)
+        self.assertEqual(coords[0][0], -121.0)
+        self.assertEqual(coords[0][1], 38.0)
+        self.assertEqual(params[0].get("starttimestamp"), valid_new)
+
     def test_metadata_filtered_by_recent_data_window(self):
         """GET trackers/ returns bbox and last_point for only points within the window."""
         with _patch_live_track_enabled():
@@ -1550,6 +1881,25 @@ class TestLiveTrackAPI(TestCase):
                 content_type="application/json",
             )
         self.assertEqual(response.status_code, 400)
+
+    def test_post_settings_recent_data_window_session_is_accepted(self):
+        """POST settings with recent_data_window=session returns 200 and persists value."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"recent_data_window": "session"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["settings"]["recent_data_window"], "session")
 
     def test_post_settings_409_duplicate_name(self):
         """POST settings with name that another track of same user has returns 409."""

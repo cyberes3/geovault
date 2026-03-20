@@ -947,7 +947,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val canScheduleExact = alarmManager.canScheduleExactAlarms()
         val appOps = getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return false
-        val mode = appOps.unsafeCheckOpNoThrow(
+        val mode = appOps.checkOpNoThrow(
             APP_OP_SCHEDULE_EXACT_ALARM,
             applicationInfo.uid,
             packageName
