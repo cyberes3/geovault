@@ -1,6 +1,8 @@
 package com.geovault.tracker
 
 import android.Manifest
+import android.app.AlarmManager
+import android.app.AppOpsManager
 import android.content.*
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -11,6 +13,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
+import android.util.Log
 import android.view.View
 import android.widget.EditText
 import android.widget.TextView
@@ -80,6 +83,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         private set
     private var trackingErrorReceiverRegistered = false
     private var streamingErrorReceiverRegistered = false
+    private var lastExactAlarmStateLog: String? = null
     private val trackingErrorReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != TrackingService.ACTION_TRACKING_ERROR) return
@@ -150,6 +154,11 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             if (isMainContentSetup && !trackingRunning) {
                 (pagerAdapter.getFragment(1) as? com.geovault.tracker.fragments.map.MapFragment)?.restoreTrackForSelectedTracker()
             }
+        } else if (action == ACTION_DUMP_RECOVERY_TELEMETRY) {
+            TrackingRecoveryCoordinator.dumpTelemetryToLogcat(
+                context = applicationContext,
+                reason = "intent_action"
+            )
         }
     }
 
@@ -299,6 +308,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         supportFragmentManager.addOnBackStackChangedListener { updateBottomNavForOverlay() }
         updateBottomNavForOverlay()
         updatePermissionsState()
+        ensurePermissionsGrantScreenVisibleOnLaunch()
 
         onBackPressedDispatcher.addCallback(
             this,
@@ -357,6 +367,10 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         val settings = settingsRepository.getSettings()
         val restartIfKilled = settings.resetTrackingIfKilled
         val wasTrackingBeforeExit = settingsRepository.wasTrackingBeforeExit()
+        if (restartIfKilled && wasTrackingBeforeExit) {
+            maybePromptStrictRecoveryRequirements()
+            TrackingRecoveryCoordinator.ensureWatchdogScheduled(applicationContext)
+        }
         if (!restartIfKilled || TrackingRuntimeStateStore.state.value.isRunning) {
             if (wasTrackingBeforeExit) {
                 settingsRepository.clearWasTrackingBeforeExit()
@@ -371,7 +385,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     }
 
     private fun tryResumeTrackingAfterKill() {
-        if (!ensureTrackingStartReadiness()) {
+        if (!ensureTrackingStartReadiness(requestMissingPermissions = false)) {
             settingsRepository.clearWasTrackingBeforeExit()
             return
         }
@@ -405,7 +419,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     }
 
     private fun tryStartTrackingOnLaunch() {
-        if (!ensureTrackingStartReadiness()) return
+        if (!ensureTrackingStartReadiness(requestMissingPermissions = false)) return
         val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (trackerId.isEmpty()) return
         tryStartTrackingSilently(
@@ -898,7 +912,8 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     
     override fun hasAllRequiredPermissions(): Boolean {
         return hasLocationPermission() && hasBackgroundLocationPermission() && 
-               hasNotificationPermission() && hasBatteryOptimizationExemption()
+               hasNotificationPermission() && hasBatteryOptimizationExemption() &&
+               hasExactAlarmPermission()
     }
     
     override fun requestLocationPermission() {
@@ -926,10 +941,82 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         }
         startActivity(intent)
     }
+
+    override fun hasExactAlarmPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val canScheduleExact = alarmManager.canScheduleExactAlarms()
+        val appOps = getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return false
+        val mode = appOps.unsafeCheckOpNoThrow(
+            APP_OP_SCHEDULE_EXACT_ALARM,
+            applicationInfo.uid,
+            packageName
+        )
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        val batteryExempt = pm.isIgnoringBatteryOptimizations(packageName)
+        logExactAlarmStateIfChanged(
+            canScheduleExact = canScheduleExact,
+            appOpMode = mode,
+            batteryExempt = batteryExempt
+        )
+        return canScheduleExact
+    }
+
+    private fun logExactAlarmStateIfChanged(
+        canScheduleExact: Boolean,
+        appOpMode: Int,
+        batteryExempt: Boolean
+    ) {
+        val signature = "can=$canScheduleExact;mode=$appOpMode;batteryExempt=$batteryExempt;sdk=${Build.VERSION.SDK_INT}"
+        if (lastExactAlarmStateLog == signature) return
+        lastExactAlarmStateLog = signature
+        Log.i(
+            "TrackingRecovery",
+            "Exact alarm state (MainActivity): canScheduleExact=$canScheduleExact appOpMode=${appOpModeName(appOpMode)} batteryExempt=$batteryExempt sdk=${Build.VERSION.SDK_INT}"
+        )
+    }
+
+    private fun appOpModeName(mode: Int): String {
+        return when (mode) {
+            AppOpsManager.MODE_ALLOWED -> "allowed"
+            AppOpsManager.MODE_IGNORED -> "ignored"
+            AppOpsManager.MODE_ERRORED -> "errored"
+            AppOpsManager.MODE_DEFAULT -> "default"
+            else -> "unknown($mode)"
+        }
+    }
+
+    override fun requestExactAlarmPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+            data = Uri.parse("package:$packageName")
+        }
+        startActivity(intent)
+    }
+
+    private fun maybePromptStrictRecoveryRequirements() {
+        if (!hasExactAlarmPermission()) {
+            showSnackbar(getString(R.string.exact_alarm_permission_required))
+        }
+        if (!hasBatteryOptimizationExemption()) {
+            showSnackbar(getString(R.string.battery_optimization_exemption_required))
+        }
+    }
     
     private fun updatePermissionsState() {
         val homeFragment = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
         homeFragment?.updatePermissionsUi()
+    }
+
+    private fun ensurePermissionsGrantScreenVisibleOnLaunch() {
+        if (!isMainContentSetup || isGuestView) return
+        if (hasAllRequiredPermissions()) return
+        clearOverlayAndThen {
+            if (viewPager.currentItem != 0) {
+                viewPager.setCurrentItem(0, false)
+            }
+        }
+        updatePermissionsState()
     }
 
     private fun showStopTrackingConfirmation(onConfirm: () -> Unit) {
@@ -1011,6 +1098,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
 
     override fun onStart() {
         super.onStart()
+        AppForegroundState.markForeground()
         if (isGuestView) {
             if (GeovaultAuthManager.isLoggedIn(this)) {
                 isGuestView = false
@@ -1039,6 +1127,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             streamingErrorReceiverRegistered = true
         }
         updatePermissionsState()
+        ensurePermissionsGrantScreenVisibleOnLaunch()
         if (TrackingRuntimeStateStore.state.value.isRunning && !hasLocationPermission()) {
             settingsRepository.clearWasTrackingBeforeExit()
             startService(Intent(this, TrackingService::class.java).apply {
@@ -1049,6 +1138,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     }
 
     override fun onStop() {
+        AppForegroundState.markBackground()
         if (trackingErrorReceiverRegistered) {
             unregisterReceiver(trackingErrorReceiver)
             trackingErrorReceiverRegistered = false
@@ -1087,6 +1177,8 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     }
 
     companion object {
+        private const val APP_OP_SCHEDULE_EXACT_ALARM = "android:schedule_exact_alarm"
+        const val ACTION_DUMP_RECOVERY_TELEMETRY = "com.geovault.tracker.ACTION_DUMP_RECOVERY_TELEMETRY"
         private const val BOTTOM_NAV_MIN_INTERVAL_MS = 220L
         private const val KEY_CURRENT_TAB = "current_tab"
         private const val KEY_TAB_BACK_STACK = "tab_back_stack"
@@ -1105,24 +1197,40 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         }
     }
 
-    private fun ensureTrackingStartReadiness(): Boolean {
+    private fun ensureTrackingStartReadiness(requestMissingPermissions: Boolean = true): Boolean {
         if (!hasLocationPermission()) {
             showSnackbar(getString(R.string.location_permission_needed_first))
-            requestLocationPermission()
+            if (requestMissingPermissions) {
+                requestLocationPermission()
+            }
             return false
         }
         if (!hasBackgroundLocationPermission()) {
             showSnackbar(getString(R.string.background_location_permission_required))
-            requestBackgroundLocationPermission()
+            if (requestMissingPermissions) {
+                requestBackgroundLocationPermission()
+            }
             return false
         }
         if (!hasNotificationPermission()) {
             showSnackbar(getString(R.string.notification_permission_required))
-            requestNotificationPermission()
+            if (requestMissingPermissions) {
+                requestNotificationPermission()
+            }
             return false
         }
         if (!hasBatteryOptimizationExemption()) {
             showSnackbar(getString(R.string.battery_optimization_exemption_required))
+            if (requestMissingPermissions) {
+                requestBatteryOptimizationExemption()
+            }
+            return false
+        }
+        if (!hasExactAlarmPermission()) {
+            showSnackbar(getString(R.string.exact_alarm_permission_required))
+            if (requestMissingPermissions) {
+                requestExactAlarmPermission()
+            }
             return false
         }
         return true

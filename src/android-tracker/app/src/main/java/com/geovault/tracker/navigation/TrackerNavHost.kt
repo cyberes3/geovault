@@ -38,11 +38,13 @@ interface TrackerNavHost {
     fun hasBackgroundLocationPermission(): Boolean
     fun hasNotificationPermission(): Boolean
     fun hasBatteryOptimizationExemption(): Boolean
+    fun hasExactAlarmPermission(): Boolean
     fun hasAllRequiredPermissions(): Boolean
     fun requestLocationPermission()
     fun requestBackgroundLocationPermission()
     fun requestNotificationPermission()
     fun requestBatteryOptimizationExemption()
+    fun requestExactAlarmPermission()
     fun updateQueueCountFromFragment(textView: TextView)
     fun toggleTracking()
 }

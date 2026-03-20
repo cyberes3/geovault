@@ -139,6 +139,10 @@ class HomeFragment : Fragment() {
         view.findViewById<MaterialButton>(R.id.grantBatteryButton).setOnClickListener {
             host.requestBatteryOptimizationExemption()
         }
+
+        view.findViewById<MaterialButton>(R.id.grantExactAlarmButton).setOnClickListener {
+            host.requestExactAlarmPermission()
+        }
     }
     
     fun updatePermissionsUi() {
@@ -178,6 +182,14 @@ class HomeFragment : Fragment() {
             
             view?.findViewById<MaterialButton>(R.id.grantBatteryButton)?.apply {
                 if (host.hasBatteryOptimizationExemption()) {
+                    visibility = View.GONE
+                } else {
+                    visibility = View.VISIBLE
+                }
+            }
+
+            view?.findViewById<MaterialButton>(R.id.grantExactAlarmButton)?.apply {
+                if (host.hasExactAlarmPermission()) {
                     visibility = View.GONE
                 } else {
                     visibility = View.VISIBLE

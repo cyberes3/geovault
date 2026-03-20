@@ -17,9 +17,25 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             Log.d("BootReceiver", "Boot completed, checking if tracking should start")
-            val startOnBoot = settingsRepository.getSettings().startOnBoot
+            val settings = settingsRepository.getSettings()
+            val startOnBoot = settings.startOnBoot
+            val wasTrackingBeforeExit = settingsRepository.wasTrackingBeforeExit()
             val trackerId = SelectedTrackerPrefs.selectedTrackerId(context)
             val hasRequiredPermissions = TrackingPermissionGate.hasRequiredPermissionsForTracking(context)
+            val strictPrereqs = TrackingRecoveryCoordinator.evaluateStrictPrerequisites(context.applicationContext)
+
+            if (settings.resetTrackingIfKilled && wasTrackingBeforeExit) {
+                if (!strictPrereqs.isReady) {
+                    Log.w(
+                        "BootReceiver",
+                        "Strict recovery prerequisites missing at boot: " +
+                            "exactAlarm=${strictPrereqs.hasExactAlarmAccess} " +
+                            "batteryExempt=${strictPrereqs.hasBatteryOptimizationExemption}"
+                    )
+                }
+                TrackingRecoveryCoordinator.ensureWatchdogScheduled(context.applicationContext)
+            }
+
             if (!shouldStartTrackingOnBoot(startOnBoot, hasRequiredPermissions, trackerId)) {
                 Log.w("BootReceiver", "Skipping tracking start on boot: prerequisites missing")
                 return

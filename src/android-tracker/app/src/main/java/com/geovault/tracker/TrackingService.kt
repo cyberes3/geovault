@@ -202,6 +202,7 @@ class TrackingService : TrackPointServiceBase() {
     private var retryJob: Job? = null
     private var backlogUploaderJob: Job? = null
     private var preflightJob: Job? = null
+    private var recoveryHeartbeatJob: Job? = null
     private val pushDispatcher = Executors.newFixedThreadPool(3).asCoroutineDispatcher()
     private val livePushSemaphore = Semaphore(2)
     private val backlogPushSemaphore = Semaphore(1)
@@ -222,6 +223,7 @@ class TrackingService : TrackPointServiceBase() {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "onCreate")
+        TrackingRecoveryCoordinator.markHeartbeat(applicationContext)
         database = AppDatabase.getDatabase(this)
         unifiedLocationClient = UnifiedLocationClient(this)
         currentSettings = settingsRepository.getSettings()
@@ -237,11 +239,12 @@ class TrackingService : TrackPointServiceBase() {
         return when (intent?.action) {
             ACTION_START -> {
                 startTracking()
+                TrackingRecoveryCoordinator.ensureWatchdogScheduled(applicationContext)
                 START_STICKY
             }
             ACTION_STOP -> {
                 Log.d(TAG, "ACTION_STOP received", Exception("ACTION_STOP stacktrace"))
-                stopTracking()
+                stopTracking(reason = "action_stop")
                 START_NOT_STICKY
             }
             null -> {
@@ -253,8 +256,10 @@ class TrackingService : TrackPointServiceBase() {
                 )
                 if (shouldRestart) {
                     startTracking()
+                    TrackingRecoveryCoordinator.ensureWatchdogScheduled(applicationContext)
                     START_STICKY
                 } else {
+                    TrackingRecoveryCoordinator.markIntentionalStop(applicationContext, reason = "restart_not_required")
                     stopSelf()
                     START_NOT_STICKY
                 }
@@ -275,6 +280,7 @@ class TrackingService : TrackPointServiceBase() {
                 START_STICKY
             }
             else -> {
+                TrackingRecoveryCoordinator.markIntentionalStop(applicationContext, reason = "unknown_action")
                 stopSelf()
                 START_NOT_STICKY
             }
@@ -303,6 +309,8 @@ class TrackingService : TrackPointServiceBase() {
         transitionControlState(TrackingControlEvent.StartSucceeded)
         Log.d(TAG, "Starting tracking")
         settingsRepository.setWasTrackingBeforeExit(true)
+        TrackingRecoveryCoordinator.markTrackingStarted(applicationContext)
+        startRecoveryHeartbeat()
 
         sessionStartTimeMs = System.currentTimeMillis()
         sessionBoundaryForBacklogMs = sessionStartTimeMs
@@ -355,7 +363,7 @@ class TrackingService : TrackPointServiceBase() {
         startPreflightMonitor()
     }
 
-    private fun stopTracking() {
+    private fun stopTracking(reason: String = "tracking_stopped") {
         if (!isTracking) return
         transitionControlState(TrackingControlEvent.StopRequested)
         Log.d(TAG, "Stopping tracking")
@@ -368,6 +376,8 @@ class TrackingService : TrackPointServiceBase() {
         lastTrackedPropsJson = null
         syncRuntimeStateStore()
         settingsRepository.clearWasTrackingBeforeExit()
+        stopRecoveryHeartbeat()
+        TrackingRecoveryCoordinator.markIntentionalStop(applicationContext, reason = reason)
         unifiedLocationClient.stopSession()
         significantMotionBridge?.cancel()
         stopAutoModeTick()
@@ -813,6 +823,10 @@ class TrackingService : TrackPointServiceBase() {
 
     override fun onDestroy() {
         Log.d(TAG, "onDestroy called isTracking=$isTracking", Exception("onDestroy stacktrace"))
+        if (isTracking) {
+            TrackingRecoveryCoordinator.markUnexpectedDestroy(applicationContext, wasTracking = true)
+        }
+        stopRecoveryHeartbeat()
         super.onDestroy()
         significantMotionBridge?.cancel()
         stopAutoModeTick()
@@ -820,6 +834,21 @@ class TrackingService : TrackPointServiceBase() {
         stopRetryJob()
         serviceScope.cancel()
         pushDispatcher.close()
+    }
+
+    private fun startRecoveryHeartbeat() {
+        recoveryHeartbeatJob?.cancel()
+        recoveryHeartbeatJob = serviceScope.launch {
+            while (isActive && isTracking) {
+                TrackingRecoveryCoordinator.markHeartbeat(applicationContext)
+                delay(1_000L)
+            }
+        }
+    }
+
+    private fun stopRecoveryHeartbeat() {
+        recoveryHeartbeatJob?.cancel()
+        recoveryHeartbeatJob = null
     }
     
     private fun startRetryJob() {
@@ -1109,12 +1138,13 @@ class TrackingService : TrackPointServiceBase() {
         Log.w(TAG, "Failing active tracking: $message")
         transitionControlState(TrackingControlEvent.FatalFailure, message)
         broadcastTrackingError(message)
-        stopTracking()
+        stopTracking(reason = "fatal_failure")
     }
 
     private fun failStartup(message: String) {
         Log.w(TAG, "Tracking start failed: $message")
         settingsRepository.clearWasTrackingBeforeExit()
+        TrackingRecoveryCoordinator.markIntentionalStop(applicationContext, reason = "startup_failed")
         transitionControlState(TrackingControlEvent.StartFailed, message)
         syncRuntimeStateStore()
         broadcastTrackingError(message)

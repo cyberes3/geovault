@@ -71,6 +71,15 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/disable_battery_optimization"
+                android:textSize="16sp"
+                android:layout_marginBottom="12dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/grantExactAlarmButton"
+                style="@style/gv_common_ButtonPrimary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/grant_exact_alarm_permission"
                 android:textSize="16sp" />
 
         </LinearLayout>

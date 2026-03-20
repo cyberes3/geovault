@@ -103,6 +103,7 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
             setBypassDnd(false)
         }
         manager.createNotificationChannel(streamingChannel)
+        TrackingRecoveryCoordinator.createRecoveryChannel(applicationContext)
     }
 
 }

@@ -141,11 +141,13 @@
     <string name="grant_background_location">Grant Background Location</string>
     <string name="grant_notification_permission">Grant Notification Permission</string>
     <string name="disable_battery_optimization">Disable Battery Optimization</string>
+    <string name="grant_exact_alarm_permission">Allow Exact Alarms</string>
     <string name="location_permission_needed_first">Please grant location permission first</string>
     <string name="location_permissions_required">Location, background location, and notification permissions are required to start tracking.</string>
     <string name="background_location_permission_required">Background location permission is required to track in the background.</string>
     <string name="notification_permission_required">Notification permission is required for active tracking.</string>
     <string name="battery_optimization_exemption_required">Disable battery optimizations for GeoVault before starting tracking.</string>
+    <string name="exact_alarm_permission_required">Allow exact alarms for GeoVault so restart recovery stays reliable.</string>
     <string name="gps_provider_required">Turn on GPS/location services to continue.</string>
     <string name="unable_to_start_location_updates">Unable to start location updates. Check permissions and location settings.</string>
     <string name="location_permission_revoked">Location permission was removed. Tracking stopped.</string>
@@ -253,6 +255,12 @@
     <string name="live_track_streaming_text">%1$s</string>
     <string name="live_track_streaming_text_anon">Tracker updates</string>
     <string name="live_track_streaming_channel">Tracker streaming</string>
+    <string name="recovery_channel_name">Tracking Recovery Alerts</string>
+    <string name="recovery_channel_description">Alerts when tracking is interrupted and recovery is attempting or failed.</string>
+    <string name="recovery_attempt_title">Tracking Interrupted</string>
+    <string name="recovery_attempt_text">Attempting to restart tracking now.</string>
+    <string name="recovery_failed_title">Tracking Restart Failed</string>
+    <string name="recovery_failed_text">Open the app to resume tracking immediately.</string>
     <string name="stop_streaming">Stop Streaming</string>
     <string name="connected_as">Connected as %1$s</string>
     <string name="error_enter_server_url">Please enter server URL</string>
