@@ -15,6 +15,7 @@
     <string name="api_key_hint">API Key</string>
     <string name="settings_title">Settings</string>
     <string name="loading_trackers">Loading trackers…</string>
+    <string name="loading_shares">Loading shares…</string>
     <string name="loading_params">Loading…</string>
     <string name="loading_group">Loading group…</string>
     <string name="loading_groups">Loading groups…</string>
@@ -30,7 +31,9 @@
     <string name="default_tracker_color_hex">#6C93DE</string>
     <string name="trackers_tab">Trackers</string>
     <string name="shared_tab">Shared</string>
-    <string name="no_shared_trackers">No shared trackers. Tap Add to discover public trackers or ones shared with you.</string>
+    <string name="no_shared_trackers_title">No shared trackers.</string>
+    <string name="no_shared_trackers_hint_add">to add trackers that have been shared with you.</string>
+    <string name="no_shared_trackers_hint_public">to discover public trackers.</string>
     <string name="could_not_save_tracker_selection">Could not save tracker selection</string>
     <string name="failed_to_load_tracker">Failed to load tracker</string>
     <string name="tracker_operation_timeout">Request timed out. Please try again.</string>
@@ -309,6 +312,8 @@
     <string name="invalid_emails_error">Invalid emails: %1$s</string>
 
     <string name="add_tracker">Add Tracker</string>
+    <string name="add_shared_trackers_title">Add Shared Trackers</string>
+    <string name="add_public_trackers_title">Add Public Trackers</string>
     <string name="discover_public">Public Trackers</string>
     <string name="discover_shared_with_me">Shared With You</string>
     <string name="discover_search_hint">Search by name or owner</string>

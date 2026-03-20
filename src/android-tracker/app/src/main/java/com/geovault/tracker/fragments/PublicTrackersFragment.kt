@@ -97,6 +97,11 @@ class PublicTrackersFragment : Fragment() {
     }
 
     private fun loadPublic(forceRefresh: Boolean, fromSwipeRefresh: Boolean) {
+        if (!fromSwipeRefresh) {
+            loadingView.visibility = View.VISIBLE
+            spinner.start()
+            emptyView.visibility = View.GONE
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             val response = when (val result = trackerManagementRepository.loadAvailableToAdd(forceRefresh = forceRefresh)) {
                 is RepositoryResult.Success -> result.data

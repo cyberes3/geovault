@@ -30,7 +30,7 @@ class DiscoverTrackersViewModel @Inject constructor(
     private val groupManagementRepository: GroupManagementRepository,
     private val sharedSurfaceFilterUseCase: SharedSurfaceFilterUseCase
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(DiscoverTrackersUiState())
+    private val _uiState = MutableStateFlow(DiscoverTrackersUiState(isLoading = true))
     val uiState: StateFlow<DiscoverTrackersUiState> = _uiState.asStateFlow()
 
     fun load(forceRefresh: Boolean) {

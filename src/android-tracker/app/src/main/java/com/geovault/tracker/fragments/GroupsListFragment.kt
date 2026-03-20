@@ -69,8 +69,7 @@ class GroupsListFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
-                    val showBlockingLoading = state.isLoading && state.groups.isEmpty()
-                    if (showBlockingLoading) {
+                    if (state.isLoading) {
                         loadingOverlay.visibility = View.VISIBLE
                         loadingSpinner.start()
                     } else {
@@ -78,7 +77,7 @@ class GroupsListFragment : Fragment() {
                         loadingSpinner.stop(hide = false)
                         swipeRefresh.isRefreshing = false
                     }
-                    applyGroups(state.groups)
+                    applyGroups(state.groups, state.isLoading)
                     state.createdGroup?.let {
                         openGroupEditor(it)
                         viewModel.consumeCreatedGroup()
@@ -91,9 +90,9 @@ class GroupsListFragment : Fragment() {
         viewModel.load(forceRefresh = false)
     }
 
-    private fun applyGroups(groups: List<Group>) {
+    private fun applyGroups(groups: List<Group>, isLoading: Boolean) {
         adapter?.setGroups(groups)
-        emptyView.visibility = if (groups.isEmpty()) View.VISIBLE else View.GONE
+        emptyView.visibility = if (!isLoading && groups.isEmpty()) View.VISIBLE else View.GONE
     }
 
     fun showCreateGroupDialog() {

@@ -62,8 +62,7 @@ class TrackersListViewModel @Inject constructor(
     }
 
     fun setCached(trackers: List<Tracker>) {
-        _uiState.value = TrackersListUiState(
-            isLoading = false,
+        _uiState.value = _uiState.value.copy(
             trackers = trackers,
             isEmpty = trackers.isEmpty()
         )

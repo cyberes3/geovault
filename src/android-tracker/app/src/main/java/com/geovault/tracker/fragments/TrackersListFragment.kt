@@ -102,7 +102,7 @@ class TrackersListFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.uiState.collect { state ->
-                setTrackers(visibleOwnerTrackers(state.trackers))
+                setTrackers(visibleOwnerTrackers(state.trackers), state.isLoading)
                 if (state.isLoading) {
                     loadingOverlay.visibility = View.VISIBLE
                     loadingSpinner.start()
@@ -140,13 +140,13 @@ class TrackersListFragment : Fragment() {
         viewModel.load(forceRefresh = true, showLoading = false)
     }
 
-    private fun setTrackers(trackers: List<Tracker>) {
+    private fun setTrackers(trackers: List<Tracker>, isLoading: Boolean) {
         adapter?.setTrackers(trackers)
-        updateEmptyState()
+        updateEmptyState(isLoading)
     }
 
-    private fun updateEmptyState() {
-        emptyView.visibility = if ((adapter?.itemCount ?: 0) == 0) View.VISIBLE else View.GONE
+    private fun updateEmptyState(isLoading: Boolean) {
+        emptyView.visibility = if (!isLoading && (adapter?.itemCount ?: 0) == 0) View.VISIBLE else View.GONE
     }
 
     fun requestScrollToTrackerId(trackerId: String?) {

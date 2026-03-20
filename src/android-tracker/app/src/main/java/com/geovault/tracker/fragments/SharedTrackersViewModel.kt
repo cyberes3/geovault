@@ -66,7 +66,6 @@ class SharedTrackersViewModel @Inject constructor(
             }.collect { data ->
                 _uiState.update { current ->
                     current.copy(
-                        isLoading = false,
                         data = data
                     )
                 }

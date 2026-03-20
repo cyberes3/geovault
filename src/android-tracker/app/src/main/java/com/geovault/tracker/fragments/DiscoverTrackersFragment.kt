@@ -115,8 +115,8 @@ class DiscoverTrackersFragment : Fragment() {
             }
         })
 
-        tabLayout.visibility = View.GONE
-        swipeRefresh.visibility = View.GONE
+        tabLayout.visibility = View.VISIBLE
+        swipeRefresh.visibility = View.VISIBLE
         spinner.start()
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -143,10 +143,11 @@ class DiscoverTrackersFragment : Fragment() {
         if (state.isLoading) {
             loadingView.visibility = View.VISIBLE
             spinner.start()
+            emptyView.visibility = View.GONE
+            tabLayout.visibility = View.VISIBLE
+            swipeRefresh.visibility = View.VISIBLE
             return
         }
-        spinner.stop(hide = true)
-        loadingView.visibility = View.GONE
         state.errorMessage?.takeIf { it.isNotBlank() }?.let { navHost()?.showSnackbar(it) }
 
         onMyMapTrackersData = state.onMyMapTrackers
@@ -154,18 +155,11 @@ class DiscoverTrackersFragment : Fragment() {
         incomingTrackersData = state.incomingTrackers
         incomingSharedGroupsData = state.incomingSharedGroups
         pruneTransientState()
-        val onMyMapHasContent = onMyMapTrackersData.isNotEmpty() || onMyMapGroupsData.isNotEmpty()
-        val incomingHasContent = incomingTrackersData.isNotEmpty() || incomingSharedGroupsData.isNotEmpty()
-        if (!onMyMapHasContent && !incomingHasContent) {
-            emptyView.visibility = View.VISIBLE
-            tabLayout.visibility = View.GONE
-            swipeRefresh.visibility = View.GONE
-            return
-        }
-
         emptyView.visibility = View.GONE
         tabLayout.visibility = View.VISIBLE
         swipeRefresh.visibility = View.VISIBLE
+        val onMyMapHasContent = onMyMapTrackersData.isNotEmpty() || onMyMapGroupsData.isNotEmpty()
+        val incomingHasContent = incomingTrackersData.isNotEmpty() || incomingSharedGroupsData.isNotEmpty()
         val currentTab = viewPager.currentItem.coerceIn(0, 1)
         val tabToSelect = when {
             !onMyMapHasContent && incomingHasContent -> 1
@@ -177,9 +171,12 @@ class DiscoverTrackersFragment : Fragment() {
             if (!isAdded) return@post
             val onMyMapPage = pagerAdapter?.getPageView(0)
             val incomingPage = pagerAdapter?.getPageView(1)
-            if (onMyMapPage == null || incomingPage == null) return@post
-            bindSearchInputs(onMyMapPage, incomingPage)
-            renderTabContent(onMyMapPage, incomingPage)
+            if (onMyMapPage != null && incomingPage != null) {
+                bindSearchInputs(onMyMapPage, incomingPage)
+                renderTabContent(onMyMapPage, incomingPage)
+            }
+            spinner.stop(hide = true)
+            loadingView.visibility = View.GONE
         }
     }
 

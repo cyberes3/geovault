@@ -51,7 +51,7 @@ class SharedTrackersFragment : Fragment() {
     private lateinit var publicFab: FloatingActionButton
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var recyclerView: RecyclerView
-    private lateinit var emptyView: TextView
+    private lateinit var emptyView: View
     private lateinit var loadingOverlay: View
     private lateinit var loadingSpinner: LoadingSpinner
     private var adapter: SharedItemsAdapter? = null
@@ -157,7 +157,7 @@ class SharedTrackersFragment : Fragment() {
                         state.data.sharedTrackers.map { SharedListItem.TrackerItem(it) })
                         .sortedWith(NaturalSort.naturalOrderBy { it.sortName.lowercase(Locale.getDefault()) })
                     adapter?.setItems(combined, state.data.hiddenTrackIds)
-                    emptyView.visibility = if (combined.isEmpty()) View.VISIBLE else View.GONE
+                    emptyView.visibility = if (!state.isLoading && combined.isEmpty()) View.VISIBLE else View.GONE
                     state.errorMessage?.takeIf { it.isNotBlank() }?.let { navHost()?.showSnackbar(it) }
                     applyScrollAndHighlightIfPending()
                 }

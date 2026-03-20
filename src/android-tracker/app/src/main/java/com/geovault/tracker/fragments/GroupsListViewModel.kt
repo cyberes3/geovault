@@ -38,7 +38,7 @@ class GroupsListViewModel @Inject constructor(
                 when (event) {
                     is TrackerManagementEvent.GroupsRefreshed -> {
                         _uiState.update {
-                            it.copy(groups = mapMyGroups(event.groups), isLoading = false)
+                            it.copy(groups = mapMyGroups(event.groups))
                         }
                     }
                     is TrackerManagementEvent.GroupUpserted -> {
