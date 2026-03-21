@@ -5,6 +5,10 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// This module is included from multiple root projects; keep build outputs under each root
+// to avoid cross-project stale artifacts and duplicate class packaging collisions.
+layout.buildDirectory.set(rootProject.layout.buildDirectory.dir("external-modules/${project.name}"))
+
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
