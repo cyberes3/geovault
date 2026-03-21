@@ -15,6 +15,7 @@ class TrackingRecoveryCoordinatorTest {
             wasTrackingBeforeExit = true,
             restartTrackingIfKilled = true,
             lastHeartbeatMs = now - TrackingRecoveryCoordinator.HEARTBEAT_STALE_MS - 1L,
+            consecutiveStaleTicks = TrackingRecoveryCoordinator.REQUIRED_CONSECUTIVE_STALE_TICKS,
             lastStopWasIntentional = false,
             canStartNow = true,
             strictPrereqsReady = true,
@@ -36,6 +37,7 @@ class TrackingRecoveryCoordinatorTest {
             wasTrackingBeforeExit = true,
             restartTrackingIfKilled = true,
             lastHeartbeatMs = now - 1_000L,
+            consecutiveStaleTicks = TrackingRecoveryCoordinator.REQUIRED_CONSECUTIVE_STALE_TICKS,
             lastStopWasIntentional = false,
             canStartNow = true,
             strictPrereqsReady = true,
@@ -57,6 +59,7 @@ class TrackingRecoveryCoordinatorTest {
             wasTrackingBeforeExit = true,
             restartTrackingIfKilled = true,
             lastHeartbeatMs = 0L,
+            consecutiveStaleTicks = TrackingRecoveryCoordinator.REQUIRED_CONSECUTIVE_STALE_TICKS,
             lastStopWasIntentional = true,
             canStartNow = true,
             strictPrereqsReady = true,
@@ -78,6 +81,7 @@ class TrackingRecoveryCoordinatorTest {
             wasTrackingBeforeExit = true,
             restartTrackingIfKilled = true,
             lastHeartbeatMs = 0L,
+            consecutiveStaleTicks = TrackingRecoveryCoordinator.REQUIRED_CONSECUTIVE_STALE_TICKS,
             lastStopWasIntentional = false,
             canStartNow = true,
             strictPrereqsReady = false,
@@ -99,6 +103,7 @@ class TrackingRecoveryCoordinatorTest {
             wasTrackingBeforeExit = true,
             restartTrackingIfKilled = true,
             lastHeartbeatMs = 0L,
+            consecutiveStaleTicks = TrackingRecoveryCoordinator.REQUIRED_CONSECUTIVE_STALE_TICKS,
             lastStopWasIntentional = false,
             canStartNow = false,
             strictPrereqsReady = true,
@@ -118,6 +123,7 @@ class TrackingRecoveryCoordinatorTest {
             wasTrackingBeforeExit = true,
             restartTrackingIfKilled = true,
             lastHeartbeatMs = 0L,
+            consecutiveStaleTicks = TrackingRecoveryCoordinator.REQUIRED_CONSECUTIVE_STALE_TICKS,
             lastStopWasIntentional = false,
             canStartNow = true,
             strictPrereqsReady = true,
@@ -128,5 +134,71 @@ class TrackingRecoveryCoordinatorTest {
 
         assertEquals(TrackingRecoveryCoordinator.RecoveryState.THROTTLED, decision.state)
         assertTrue(decision.shouldStartService)
+    }
+
+    @Test
+    fun evaluateRecovery_doesNotStart_whenOnlyOneStaleTickObserved() {
+        val now = 50_000L
+        val decision = TrackingRecoveryCoordinator.evaluateRecovery(
+            nowMs = now,
+            wasTrackingBeforeExit = true,
+            restartTrackingIfKilled = true,
+            lastHeartbeatMs = now - TrackingRecoveryCoordinator.HEARTBEAT_STALE_MS - 1L,
+            consecutiveStaleTicks = 1,
+            lastStopWasIntentional = false,
+            canStartNow = true,
+            strictPrereqsReady = true,
+            exactAlarmAvailable = true,
+            recoveryWindowStartMs = now - 5_000L,
+            failureNotificationShown = false
+        )
+
+        assertEquals(TrackingRecoveryCoordinator.RecoveryState.PENDING_STALE_CONFIRMATION, decision.state)
+        assertFalse(decision.shouldStartService)
+        assertFalse(decision.shouldShowFailureNotification)
+        assertTrue(decision.shouldKeepWatchdog)
+    }
+
+    @Test
+    fun evaluateRecovery_starts_whenStaleTickThresholdReached() {
+        val now = 50_000L
+        val decision = TrackingRecoveryCoordinator.evaluateRecovery(
+            nowMs = now,
+            wasTrackingBeforeExit = true,
+            restartTrackingIfKilled = true,
+            lastHeartbeatMs = now - TrackingRecoveryCoordinator.HEARTBEAT_STALE_MS - 1L,
+            consecutiveStaleTicks = TrackingRecoveryCoordinator.REQUIRED_CONSECUTIVE_STALE_TICKS,
+            lastStopWasIntentional = false,
+            canStartNow = true,
+            strictPrereqsReady = true,
+            exactAlarmAvailable = true,
+            recoveryWindowStartMs = now - 5_000L,
+            failureNotificationShown = false
+        )
+
+        assertEquals(TrackingRecoveryCoordinator.RecoveryState.READY, decision.state)
+        assertTrue(decision.shouldStartService)
+        assertTrue(decision.shouldKeepWatchdog)
+    }
+
+    @Test
+    fun evaluateRecovery_doesNotShowFailure_beforeConfirmedRecoveryWindowExists() {
+        val now = 120_000L
+        val decision = TrackingRecoveryCoordinator.evaluateRecovery(
+            nowMs = now,
+            wasTrackingBeforeExit = true,
+            restartTrackingIfKilled = true,
+            lastHeartbeatMs = 0L,
+            consecutiveStaleTicks = TrackingRecoveryCoordinator.REQUIRED_CONSECUTIVE_STALE_TICKS,
+            lastStopWasIntentional = false,
+            canStartNow = false,
+            strictPrereqsReady = true,
+            exactAlarmAvailable = true,
+            recoveryWindowStartMs = 0L,
+            failureNotificationShown = false
+        )
+
+        assertFalse(decision.shouldShowFailureNotification)
+        assertEquals(TrackingRecoveryCoordinator.RecoveryState.BLOCKED_PREREQ, decision.state)
     }
 }

@@ -31,6 +31,7 @@ object TrackingRecoveryCoordinator {
     private const val KEY_LAST_STOP_WAS_INTENTIONAL = "last_stop_was_intentional"
     private const val KEY_LAST_STOP_REASON = "last_stop_reason"
     private const val KEY_RECOVERY_WINDOW_START_MS = "recovery_window_start_ms"
+    private const val KEY_CONSECUTIVE_STALE_TICKS = "consecutive_stale_ticks"
     private const val KEY_ATTEMPT_NOTIFICATION_SHOWN = "attempt_notification_shown"
     private const val KEY_FAILURE_NOTIFICATION_SHOWN = "failure_notification_shown"
     private const val KEY_TELEMETRY_RING = "recovery_telemetry_ring"
@@ -44,13 +45,15 @@ object TrackingRecoveryCoordinator {
     const val RECOVERY_INTERVAL_MS = 5_000L
     const val RECOVERY_TARGET_MS = 30_000L
     const val RECOVERY_FAILURE_MS = 60_000L
-    const val HEARTBEAT_STALE_MS = 6_000L
+    const val HEARTBEAT_STALE_MS = 30_000L
+    const val REQUIRED_CONSECUTIVE_STALE_TICKS = 2
     private const val START_REQUEST_MIN_GAP_MS = 1_500L
     private const val NOTIFICATION_ID_ATTEMPT = 9101
     private const val NOTIFICATION_ID_FAILURE = 9102
 
     enum class RecoveryState {
         HEALTHY,
+        PENDING_STALE_CONFIRMATION,
         READY,
         BLOCKED_PREREQ,
         THROTTLED,
@@ -143,6 +146,7 @@ object TrackingRecoveryCoordinator {
             .putString(KEY_LAST_STOP_REASON, "tracking_started")
             .putLong(KEY_LAST_HEARTBEAT_MS, now)
             .remove(KEY_RECOVERY_WINDOW_START_MS)
+            .remove(KEY_CONSECUTIVE_STALE_TICKS)
             .putBoolean(KEY_ATTEMPT_NOTIFICATION_SHOWN, false)
             .putBoolean(KEY_FAILURE_NOTIFICATION_SHOWN, false)
             .apply()
@@ -166,6 +170,7 @@ object TrackingRecoveryCoordinator {
             .putString(KEY_LAST_STOP_REASON, reason)
             .remove(KEY_LAST_HEARTBEAT_MS)
             .remove(KEY_RECOVERY_WINDOW_START_MS)
+            .remove(KEY_CONSECUTIVE_STALE_TICKS)
             .putBoolean(KEY_ATTEMPT_NOTIFICATION_SHOWN, false)
             .putBoolean(KEY_FAILURE_NOTIFICATION_SHOWN, false)
             .apply()
@@ -187,6 +192,7 @@ object TrackingRecoveryCoordinator {
             .putBoolean(KEY_LAST_STOP_WAS_INTENTIONAL, false)
             .putString(KEY_LAST_STOP_REASON, "unexpected_destroy")
             .putLong(KEY_RECOVERY_WINDOW_START_MS, now)
+            .putInt(KEY_CONSECUTIVE_STALE_TICKS, 0)
             .putBoolean(KEY_FAILURE_NOTIFICATION_SHOWN, false)
             .apply()
         showAttemptingRestartNotification(context)
@@ -231,12 +237,14 @@ object TrackingRecoveryCoordinator {
         wasTrackingBeforeExit: Boolean,
         restartTrackingIfKilled: Boolean,
         lastHeartbeatMs: Long,
+        consecutiveStaleTicks: Int,
         lastStopWasIntentional: Boolean,
         canStartNow: Boolean,
         strictPrereqsReady: Boolean,
         exactAlarmAvailable: Boolean,
         recoveryWindowStartMs: Long,
-        failureNotificationShown: Boolean
+        failureNotificationShown: Boolean,
+        requiredConsecutiveStaleTicks: Int = REQUIRED_CONSECUTIVE_STALE_TICKS
     ): RecoveryEvaluation {
         if (!restartTrackingIfKilled || !wasTrackingBeforeExit) {
             return RecoveryEvaluation(
@@ -254,6 +262,25 @@ object TrackingRecoveryCoordinator {
                 shouldKeepWatchdog = false,
                 shouldShowFailureNotification = false,
                 reason = "last stop was intentional"
+            )
+        }
+        val heartbeatStale = lastHeartbeatMs <= 0L || (nowMs - lastHeartbeatMs) > HEARTBEAT_STALE_MS
+        if (!heartbeatStale) {
+            return RecoveryEvaluation(
+                state = RecoveryState.HEALTHY,
+                shouldStartService = false,
+                shouldKeepWatchdog = true,
+                shouldShowFailureNotification = false,
+                reason = "service heartbeat is fresh"
+            )
+        }
+        if (consecutiveStaleTicks < requiredConsecutiveStaleTicks) {
+            return RecoveryEvaluation(
+                state = RecoveryState.PENDING_STALE_CONFIRMATION,
+                shouldStartService = false,
+                shouldKeepWatchdog = true,
+                shouldShowFailureNotification = false,
+                reason = "stale heartbeat confirmation pending"
             )
         }
         val elapsedRecoveryMs = if (recoveryWindowStartMs > 0L) nowMs - recoveryWindowStartMs else 0L
@@ -278,17 +305,6 @@ object TrackingRecoveryCoordinator {
                 reason = "prerequisites not met"
             )
         }
-        val heartbeatStale = lastHeartbeatMs <= 0L || (nowMs - lastHeartbeatMs) > HEARTBEAT_STALE_MS
-        if (!heartbeatStale) {
-            return RecoveryEvaluation(
-                state = RecoveryState.HEALTHY,
-                shouldStartService = false,
-                shouldKeepWatchdog = true,
-                shouldShowFailureNotification = false,
-                reason = "service heartbeat is fresh"
-            )
-        }
-
         val state = if (exactAlarmAvailable) RecoveryState.READY else RecoveryState.THROTTLED
         return RecoveryEvaluation(
             state = state,
@@ -310,9 +326,19 @@ object TrackingRecoveryCoordinator {
         val lastStopWasIntentional = prefs(context).getBoolean(KEY_LAST_STOP_WAS_INTENTIONAL, false)
         val lastHeartbeatMs = prefs(context).getLong(KEY_LAST_HEARTBEAT_MS, 0L)
         val recoveryWindowStartMs = prefs(context).getLong(KEY_RECOVERY_WINDOW_START_MS, 0L)
+        val consecutiveStaleTicks = prefs(context).getInt(KEY_CONSECUTIVE_STALE_TICKS, 0)
         val failureNotificationShown = prefs(context).getBoolean(KEY_FAILURE_NOTIFICATION_SHOWN, false)
         val exactAlarmAvailable = hasExactAlarmAccess(context)
         val trackingPrereq = checkTrackingPrerequisites(context)
+        val heartbeatStale = lastHeartbeatMs <= 0L || (now - lastHeartbeatMs) > HEARTBEAT_STALE_MS
+        val updatedConsecutiveStaleTicks = if (heartbeatStale) {
+            consecutiveStaleTicks + 1
+        } else {
+            0
+        }
+        if (updatedConsecutiveStaleTicks != consecutiveStaleTicks) {
+            prefs(context).edit().putInt(KEY_CONSECUTIVE_STALE_TICKS, updatedConsecutiveStaleTicks).apply()
+        }
         if (logTrackingPrereqIfChanged(trackingPrereq)) {
             recordTelemetry(context, "trackingPrereq canStart=${trackingPrereq.canStart} reason=${trackingPrereq.reason}")
         }
@@ -321,6 +347,7 @@ object TrackingRecoveryCoordinator {
             wasTrackingBeforeExit = wasTrackingBeforeExit,
             restartTrackingIfKilled = restartTrackingIfKilled,
             lastHeartbeatMs = lastHeartbeatMs,
+            consecutiveStaleTicks = updatedConsecutiveStaleTicks,
             lastStopWasIntentional = lastStopWasIntentional,
             canStartNow = trackingPrereq.canStart,
             strictPrereqsReady = strictStatus.isReady,
@@ -343,6 +370,7 @@ object TrackingRecoveryCoordinator {
             lastStopWasIntentional = lastStopWasIntentional,
             lastHeartbeatMs = lastHeartbeatMs,
             recoveryWindowStartMs = recoveryWindowStartMs,
+            consecutiveStaleTicks = updatedConsecutiveStaleTicks,
             strictStatus = strictStatus,
             exactAlarmAvailable = exactAlarmAvailable,
             trackingPrereq = trackingPrereq
@@ -351,7 +379,7 @@ object TrackingRecoveryCoordinator {
             val recoveryAgeMs = if (recoveryWindowStartMs > 0L) now - recoveryWindowStartMs else -1L
             recordTelemetry(
                 context,
-                "decision state=${evaluation.state} start=${evaluation.shouldStartService} keepWatchdog=${evaluation.shouldKeepWatchdog} showFailure=${evaluation.shouldShowFailureNotification} reason=${evaluation.reason} heartbeatAgeMs=$heartbeatAgeMs recoveryAgeMs=$recoveryAgeMs"
+                "decision state=${evaluation.state} start=${evaluation.shouldStartService} keepWatchdog=${evaluation.shouldKeepWatchdog} showFailure=${evaluation.shouldShowFailureNotification} reason=${evaluation.reason} heartbeatAgeMs=$heartbeatAgeMs recoveryAgeMs=$recoveryAgeMs staleTicks=$updatedConsecutiveStaleTicks requiredStaleTicks=$REQUIRED_CONSECUTIVE_STALE_TICKS"
             )
         }
 
@@ -362,7 +390,7 @@ object TrackingRecoveryCoordinator {
         }
 
         if (evaluation.state == RecoveryState.HEALTHY) {
-            clearAttemptNotificationIfResolved(context)
+            clearRecoveredState(context)
         }
 
         if (evaluation.shouldShowFailureNotification) {
@@ -414,6 +442,15 @@ object TrackingRecoveryCoordinator {
         showAttemptingRestartNotification(context)
     }
 
+    private fun clearRecoveredState(context: Context) {
+        clearAttemptNotificationIfResolved(context)
+        prefs(context).edit()
+            .remove(KEY_RECOVERY_WINDOW_START_MS)
+            .putInt(KEY_CONSECUTIVE_STALE_TICKS, 0)
+            .putBoolean(KEY_FAILURE_NOTIFICATION_SHOWN, false)
+            .apply()
+    }
+
     private fun checkTrackingPrerequisites(context: Context): TrackingPrereqCheck {
         if (!TrackingPermissionGate.hasRequiredPermissionsForTracking(context)) {
             return TrackingPrereqCheck(
@@ -461,6 +498,7 @@ object TrackingRecoveryCoordinator {
         lastStopWasIntentional: Boolean,
         lastHeartbeatMs: Long,
         recoveryWindowStartMs: Long,
+        consecutiveStaleTicks: Int,
         strictStatus: StrictPrereqStatus,
         exactAlarmAvailable: Boolean,
         trackingPrereq: TrackingPrereqCheck
@@ -480,6 +518,8 @@ object TrackingRecoveryCoordinator {
             exactAlarmAvailable.toString(),
             trackingPrereq.canStart.toString(),
             trackingPrereq.reason,
+            consecutiveStaleTicks.toString(),
+            REQUIRED_CONSECUTIVE_STALE_TICKS.toString(),
             heartbeatAgeMs.toString(),
             recoveryAgeMs.toString()
         ).joinToString("|")
@@ -487,7 +527,7 @@ object TrackingRecoveryCoordinator {
         lastRecoveryDecisionLog = signature
         Log.i(
             TAG,
-            "Recovery decision state=${evaluation.state} start=${evaluation.shouldStartService} keepWatchdog=${evaluation.shouldKeepWatchdog} showFailure=${evaluation.shouldShowFailureNotification} reason=${evaluation.reason} restartIfKilled=$restartTrackingIfKilled wasTrackingBeforeExit=$wasTrackingBeforeExit intentionalStop=$lastStopWasIntentional strictReady=${strictStatus.isReady} exactAlarmAvailable=$exactAlarmAvailable trackingPrereq=${trackingPrereq.reason} heartbeatAgeMs=$heartbeatAgeMs recoveryAgeMs=$recoveryAgeMs"
+            "Recovery decision state=${evaluation.state} start=${evaluation.shouldStartService} keepWatchdog=${evaluation.shouldKeepWatchdog} showFailure=${evaluation.shouldShowFailureNotification} reason=${evaluation.reason} restartIfKilled=$restartTrackingIfKilled wasTrackingBeforeExit=$wasTrackingBeforeExit intentionalStop=$lastStopWasIntentional strictReady=${strictStatus.isReady} exactAlarmAvailable=$exactAlarmAvailable trackingPrereq=${trackingPrereq.reason} staleTicks=$consecutiveStaleTicks requiredStaleTicks=$REQUIRED_CONSECUTIVE_STALE_TICKS heartbeatAgeMs=$heartbeatAgeMs recoveryAgeMs=$recoveryAgeMs"
         )
         return true
     }
