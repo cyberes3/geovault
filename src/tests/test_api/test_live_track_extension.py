@@ -3455,6 +3455,59 @@ class TestLiveTrackGroups(TestCase):
             data = self.client.get(f"/api/extensions/live-track/groups/{group_id}/").json()
         self.assertNotIn(track_id, data["track_ids"])
 
+    def test_group_patch_membership_delta_applies_changes(self):
+        """PATCH groups/<id>/ with add/remove ids applies membership delta only."""
+        with _patch_live_track_enabled():
+            t1_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Atomic One"}),
+                content_type="application/json",
+            )
+            t2_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Atomic Two"}),
+                content_type="application/json",
+            )
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Atomic Group"}),
+                content_type="application/json",
+            )
+        t1_id = t1_resp.json()["id"]
+        t2_id = t2_resp.json()["id"]
+        group_id = group_resp.json()["id"]
+
+        with _patch_live_track_enabled():
+            add_resp = self.client.post(
+                f"/api/extensions/live-track/groups/{group_id}/tracks/",
+                data=json.dumps({"track_id": t1_id}),
+                content_type="application/json",
+            )
+        self.assertEqual(add_resp.status_code, 200)
+        self.assertEqual(add_resp.json()["track_ids"], [t1_id])
+
+        with _patch_live_track_enabled():
+            patch_resp = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps(
+                    {
+                        "add_track_ids": [t2_id],
+                        "remove_track_ids": [t1_id],
+                    }
+                ),
+                content_type="application/json",
+            )
+        self.assertEqual(patch_resp.status_code, 200)
+        patched_track_ids = patch_resp.json()["track_ids"]
+        self.assertIn(t2_id, patched_track_ids)
+        self.assertNotIn(t1_id, patched_track_ids)
+
+        with _patch_live_track_enabled():
+            get_resp = self.client.get(f"/api/extensions/live-track/groups/{group_id}/")
+        self.assertEqual(get_resp.status_code, 200)
+        self.assertIn(t2_id, get_resp.json()["track_ids"])
+        self.assertNotIn(t1_id, get_resp.json()["track_ids"])
+
     def test_group_leave_self_unshare(self):
         """Non-owner shared with group can leave via DELETE groups/<id>/leave/ (removes their LiveTrackGroupShare)."""
         with _patch_live_track_enabled():

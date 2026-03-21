@@ -135,7 +135,9 @@ data class GroupPatchRequest(
     val hidden_in_list: Boolean? = null,
     val visibility: String? = null,
     val shared_with_emails: List<String>? = null,
-    val world_share_enabled: Boolean? = null
+    val world_share_enabled: Boolean? = null,
+    val add_track_ids: List<String>? = null,
+    val remove_track_ids: List<String>? = null
 )
 
 data class GroupAddTrackRequest(val track_id: String)

@@ -15,7 +15,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.viewModels
+import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -37,7 +37,7 @@ import kotlinx.coroutines.flow.collect
 
 @AndroidEntryPoint
 class GroupDetailFragment : Fragment() {
-    private val viewModel: GroupDetailViewModel by viewModels()
+    private val viewModel: GroupDetailViewModel by activityViewModels()
     private lateinit var nameEdit: EditText
     private lateinit var tracksRow: View
     private lateinit var tracksCountText: TextView
@@ -47,7 +47,6 @@ class GroupDetailFragment : Fragment() {
     private lateinit var visibilityLayout: View
     private lateinit var visibilitySpinner: AutoCompleteTextView
     private lateinit var pickUsersButton: com.google.android.material.button.MaterialButton
-    private lateinit var pickUsersHelpText: TextView
     private lateinit var sharedWithCountText: TextView
     private lateinit var worldShareRow: ToggleHelpCardView
     private lateinit var worldShareCopyRow: View
@@ -61,7 +60,6 @@ class GroupDetailFragment : Fragment() {
     private lateinit var saveButton: MaterialButton
 
     private var group: Group? = null
-    private var preloadedAddableTrackers: List<Tracker>? = null
     private val visibilityValues = arrayOf("private", "shared", "public")
     private var selectedVisibilityIndex = 0
     private val sharedWithEmailsForSave = mutableListOf<String>()
@@ -82,7 +80,6 @@ class GroupDetailFragment : Fragment() {
         visibilityLayout = view.findViewById(R.id.sharing_visibility_layout)
         visibilitySpinner = view.findViewById(R.id.sharing_visibility_spinner)
         pickUsersButton = view.findViewById(R.id.sharing_pick_users_button)
-        pickUsersHelpText = view.findViewById(R.id.sharing_pick_users_help_text_view)
         sharedWithCountText = view.findViewById(R.id.sharing_shared_with_count_text)
         worldShareRow = view.findViewById(R.id.groupDetailWorldShareRow)
         worldShareCopyRow = view.findViewById(R.id.groupDetailWorldShareCopyRow)
@@ -126,11 +123,10 @@ class GroupDetailFragment : Fragment() {
                         GroupDetailPhase.Loading -> showLoading()
                         GroupDetailPhase.Ready -> {
                             hideLoading()
-                            bindState(state.form)
                             if (state.group != null) {
                                 group = state.group
                             }
-                            preloadedAddableTrackers = state.addableTrackers
+                            bindState(state.form)
                             setAllInputsEnabled(true)
                             copyWorldLinkButton.isEnabled = true
                             copyWorldLinkButton.text = getString(R.string.copy_world_share_link)
@@ -140,12 +136,10 @@ class GroupDetailFragment : Fragment() {
                             hideLoading()
                             setAllInputsEnabled(false)
                         }
-                        GroupDetailPhase.Saved -> {
-                            closeEditor()
-                        }
+                        GroupDetailPhase.Saved -> closeEditor(discardDraft = false)
                         GroupDetailPhase.Deleting -> setAllInputsEnabled(false)
                         GroupDetailPhase.Deleted -> {
-                            closeEditor()
+                            closeEditor(discardDraft = false)
                             navHost()?.showSnackbar(getString(R.string.tracker_deleted))
                         }
                     }
@@ -175,7 +169,7 @@ class GroupDetailFragment : Fragment() {
         sharedWithEmailsForSave.clear()
         sharedWithEmailsForSave.addAll(form.sharedWithEmails)
 
-        updateTracksCountText()
+        updateTracksCountText(viewModel.uiState.value.draftTrackIds.size)
         if (g != null) {
             tracksRow.setOnClickListener { showGroupTrackersListView(g) }
         }
@@ -197,19 +191,16 @@ class GroupDetailFragment : Fragment() {
             }
             val isShared = visibilityValues[position] == "shared"
             pickUsersButton.visibility = if (isShared) View.VISIBLE else View.GONE
-            pickUsersHelpText.visibility = if (isShared) View.VISIBLE else View.GONE
             sharedWithCountText.visibility = if (isShared) View.VISIBLE else View.GONE
             if (isShared) updateSharedWithCountText()
         }
         if (form.visibility == "shared") {
             pickUsersButton.visibility = View.VISIBLE
-            pickUsersHelpText.visibility = View.VISIBLE
             sharedWithCountText.visibility = View.VISIBLE
             updateSharedWithCountText()
             pickUsersButton.setOnClickListener { showAddSharedWithDialog() }
         } else {
             pickUsersButton.visibility = View.GONE
-            pickUsersHelpText.visibility = View.GONE
             sharedWithCountText.visibility = View.GONE
         }
         worldShareRow.isChecked = form.worldShareEnabled
@@ -247,8 +238,7 @@ class GroupDetailFragment : Fragment() {
         isRenderingState = false
     }
 
-    private fun updateTracksCountText() {
-        val n = group?.track_ids?.size ?: 0
+    private fun updateTracksCountText(n: Int) {
         tracksCountText.text = getString(R.string.group_tracks) + " ($n)"
     }
 
@@ -256,7 +246,7 @@ class GroupDetailFragment : Fragment() {
         parentFragmentManager.beginTransaction()
             .add(
                 R.id.fragment_overlay_container,
-                GroupTrackersListFragment.newInstance(g, preloadedAddableTrackers),
+                GroupTrackersListFragment.newInstance(g),
                 "group_trackers_list"
             )
             .addToBackStack("group_trackers_list")
@@ -329,7 +319,10 @@ class GroupDetailFragment : Fragment() {
             .show()
     }
 
-    private fun closeEditor() {
+    private fun closeEditor(discardDraft: Boolean = true) {
+        if (discardDraft) {
+            viewModel.discardDraftMembership()
+        }
         requireActivity().supportFragmentManager.popBackStack()
     }
 

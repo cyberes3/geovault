@@ -294,7 +294,6 @@
     <string name="add_recipient">Add Recipient</string>
     <string name="pick_users_to_share_with">Pick Users to Share With</string>
     <string name="sharing_visibility_help_text">Private is only you, Shared is specific users, and Public is open to authenticated users.</string>
-    <string name="sharing_pick_users_help_text">Add or remove users who can see this; it applies only when visibility is Shared.</string>
     <plurals name="shared_with_user_count">
         <item quantity="one">Shared with 1 user</item>
         <item quantity="other">Shared with %d users</item>

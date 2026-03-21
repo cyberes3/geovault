@@ -9,7 +9,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.viewModels
+import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class GroupTrackersListFragment : Fragment() {
-    private val viewModel: GroupTrackersViewModel by viewModels()
+    private val viewModel: GroupDetailViewModel by activityViewModels()
 
     private lateinit var listContainer: LinearLayout
     private lateinit var emptyView: TextView
@@ -33,8 +33,6 @@ class GroupTrackersListFragment : Fragment() {
     private lateinit var loadingSpinner: LoadingSpinner
 
     private var group: Group? = null
-    private var preloadedAddableTrackers: List<Tracker>? = null
-    private val removingTrackIds = mutableSetOf<String>()
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         return inflater.inflate(R.layout.fragment_group_trackers_list, container, false)
@@ -62,10 +60,7 @@ class GroupTrackersListFragment : Fragment() {
                 parentFragmentManager.beginTransaction()
                     .add(
                         R.id.fragment_overlay_container,
-                        AddGroupTrackersFragment.newInstance(
-                            g.id,
-                            g.track_ids ?: emptyList()
-                        ),
+                        AddGroupTrackersFragment.newInstance(),
                         "add_group_trackers"
                     )
                     .addToBackStack("add_group_trackers")
@@ -76,27 +71,29 @@ class GroupTrackersListFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
-                    setLoadingState(state.isLoading)
-                    val current = state.group
-                    if (current != null) {
-                        group = current
-                        addButton.visibility = if (current.is_owner == true) View.VISIBLE else View.GONE
-                        bindTrackers(current, state.trackers, state.isLoading)
+                    val isLoading = state.phase == GroupDetailPhase.Loading
+                    setLoadingState(isLoading)
+                    val currentGroup = state.group
+                    if (currentGroup != null) {
+                        group = currentGroup
+                        addButton.visibility = if (currentGroup.is_owner == true) View.VISIBLE else View.GONE
+                        bindTrackers(currentGroup, state.draftGroupTrackers, isLoading)
                     }
-                    state.errorMessage?.takeIf { it.isNotBlank() }?.let { navHost()?.showSnackbar(it) }
+                    state.errorMessage?.takeIf { it.isNotBlank() }?.let {
+                        navHost()?.showSnackbar(it)
+                        viewModel.consumeError()
+                    }
                 }
             }
         }
-        viewModel.load(group!!.id)
     }
 
-    override fun onResume() {
-        super.onResume()
-        group?.id?.let { viewModel.load(it) }
-    }
-
-    private fun bindTrackers(g: Group, allTrackers: List<Tracker>, isLoading: Boolean) {
-        if (isLoading && allTrackers.isEmpty()) {
+    private fun bindTrackers(
+        g: Group,
+        orderedTrackers: List<Tracker>,
+        isLoading: Boolean
+    ) {
+        if (isLoading && orderedTrackers.isEmpty()) {
             emptyView.visibility = View.GONE
             if (listContainer.childCount == 0) {
                 listContainer.visibility = View.GONE
@@ -104,7 +101,7 @@ class GroupTrackersListFragment : Fragment() {
             return
         }
 
-        val trackIds = g.track_ids ?: emptyList()
+        val trackIds = viewModel.uiState.value.draftTrackIds
         val isOwner = g.is_owner == true
         if (trackIds.isEmpty()) {
             listContainer.removeAllViews()
@@ -113,18 +110,16 @@ class GroupTrackersListFragment : Fragment() {
             return
         }
 
-        val idToTracker = allTrackers.associateBy { it.id }
-        val ordered = trackIds.mapNotNull { idToTracker[it] }
         listContainer.removeAllViews()
-        if (ordered.isEmpty()) {
+        if (orderedTrackers.isEmpty()) {
             emptyView.visibility = View.VISIBLE
             listContainer.visibility = View.GONE
             return
         }
         emptyView.visibility = View.GONE
         listContainer.visibility = View.VISIBLE
-        for (tracker in ordered) {
-            addTrackerCard(g, tracker, isOwner)
+        for (tracker in orderedTrackers) {
+            addTrackerCard(tracker, isOwner)
         }
     }
 
@@ -138,7 +133,7 @@ class GroupTrackersListFragment : Fragment() {
         }
     }
 
-    private fun addTrackerCard(g: Group, tracker: Tracker, isOwner: Boolean) {
+    private fun addTrackerCard(tracker: Tracker, isOwner: Boolean) {
         val card = layoutInflater.inflate(R.layout.item_group_tracker_card, listContainer, false)
         card.findViewById<TextView>(R.id.groupTrackerName).text = tracker.name
         val ownerView = card.findViewById<TextView>(R.id.groupTrackerOwner)
@@ -158,23 +153,11 @@ class GroupTrackersListFragment : Fragment() {
         menuBtn.visibility = View.GONE
         if (isOwner) {
             removeContainer.visibility = View.VISIBLE
-            val isRemoving = tracker.id in removingTrackIds
-            removeBtn.visibility = if (isRemoving) View.GONE else View.VISIBLE
-            removeSpinner.visibility = if (isRemoving) View.VISIBLE else View.GONE
-            if (isRemoving) removeSpinner.start() else removeSpinner.stop(hide = true)
+            removeBtn.visibility = View.VISIBLE
+            removeSpinner.stop(hide = true)
+            removeSpinner.visibility = View.GONE
             removeBtn.setOnClickListener {
-                if (tracker.id in removingTrackIds) return@setOnClickListener
-                removingTrackIds.add(tracker.id)
-                removeBtn.visibility = View.GONE
-                removeSpinner.visibility = View.VISIBLE
-                removeSpinner.start()
-                removeTrack(g.id, tracker.id) { success ->
-                    if (!success && isAdded) {
-                        removeSpinner.stop(hide = true)
-                        removeSpinner.visibility = View.GONE
-                        removeBtn.visibility = View.VISIBLE
-                    }
-                }
+                viewModel.removeDraftTracker(tracker.id)
             }
         } else {
             removeContainer.visibility = View.GONE
@@ -187,35 +170,13 @@ class GroupTrackersListFragment : Fragment() {
         listContainer.addView(card)
     }
 
-    private fun removeTrack(groupId: String, trackId: String, onDone: (Boolean) -> Unit) {
-        viewModel.removeTrack(groupId, trackId) { success ->
-            removingTrackIds.remove(trackId)
-            if (success) {
-                val updatedGroup = viewModel.uiState.value.group
-                if (updatedGroup != null) {
-                    group = updatedGroup
-                    bindTrackers(updatedGroup, viewModel.uiState.value.trackers, isLoading = false)
-                }
-            } else {
-                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-            }
-            onDone(success)
-        }
-    }
-
     companion object {
-        const val REQUEST_GROUP_TRACK_REMOVED = "group_track_removed"
-        const val KEY_GROUP_ID = "group_id"
         private const val ARG_GROUP = "group"
-        private const val ARG_PRELOADED_TRACKERS = "arg_preloaded_trackers"
 
-        fun newInstance(group: Group, preloadedTrackers: List<Tracker>? = null): GroupTrackersListFragment {
+        fun newInstance(group: Group): GroupTrackersListFragment {
             return GroupTrackersListFragment().apply {
                 arguments = Bundle().apply {
                     putParcelable(ARG_GROUP, group)
-                    if (!preloadedTrackers.isNullOrEmpty()) {
-                        putParcelableArrayList(ARG_PRELOADED_TRACKERS, ArrayList(preloadedTrackers))
-                    }
                 }
             }
         }

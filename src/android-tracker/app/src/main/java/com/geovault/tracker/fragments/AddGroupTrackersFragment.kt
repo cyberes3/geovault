@@ -12,7 +12,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.viewModels
+import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -26,8 +26,8 @@ import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class AddGroupTrackersFragment : Fragment() {
-    private val viewModel: AddGroupTrackersViewModel by viewModels()
-    private enum class RowState { IDLE, ADDING }
+    private val viewModel: GroupDetailViewModel by activityViewModels()
+
     private data class AddableTrack(val tracker: Tracker) {
         val id: String get() = tracker.id
         val name: String get() = tracker.name
@@ -41,15 +41,9 @@ class AddGroupTrackersFragment : Fragment() {
     private lateinit var searchInput: EditText
 
     private var allItems: List<AddableTrack> = emptyList()
-    private val rowStates = mutableMapOf<String, RowState>()
+    private var draftTrackIds: Set<String> = emptySet()
     private var query: String = ""
     private var isLoading: Boolean = true
-    private val existingTrackIds = mutableSetOf<String>()
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        existingTrackIds.addAll(arguments?.getStringArrayList(ARG_EXISTING_TRACK_IDS) ?: emptyList())
-    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         return inflater.inflate(R.layout.fragment_add_group_trackers, container, false)
@@ -78,25 +72,27 @@ class AddGroupTrackersFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
-                    isLoading = state.isLoading
-                    if (state.isLoading) {
+                    isLoading = state.phase == GroupDetailPhase.Loading
+                    if (isLoading) {
                         loadingView.visibility = View.VISIBLE
                         spinner.start()
                     } else {
                         loadingView.visibility = View.GONE
                         spinner.stop(hide = true)
                     }
-                    allItems = state.candidates
-                        .filter { it.id !in existingTrackIds }
+                    draftTrackIds = state.draftTrackIds
+                    allItems = state.addableTrackers
                         .map { AddableTrack(it) }
                         .distinctBy { it.id }
                         .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
                     renderList()
-                    state.errorMessage?.takeIf { it.isNotBlank() }?.let { navHost()?.showSnackbar(it) }
+                    state.errorMessage?.takeIf { it.isNotBlank() }?.let {
+                        navHost()?.showSnackbar(it)
+                        viewModel.consumeError()
+                    }
                 }
             }
         }
-        viewModel.load(requireGroupId())
     }
 
     private fun renderList() {
@@ -110,11 +106,9 @@ class AddGroupTrackersFragment : Fragment() {
 
         val normalized = query.trim().lowercase()
         val filtered = allItems.filter { item ->
-            item.id !in existingTrackIds && (
-                normalized.isBlank() ||
-                    item.name.lowercase().contains(normalized) ||
-                    item.ownerEmail.lowercase().contains(normalized)
-                )
+            normalized.isBlank() ||
+                item.name.lowercase().contains(normalized) ||
+                item.ownerEmail.lowercase().contains(normalized)
         }
         listContainer.removeAllViews()
         listContainer.visibility = if (filtered.isEmpty()) View.GONE else View.VISIBLE
@@ -139,62 +133,27 @@ class AddGroupTrackersFragment : Fragment() {
             checkBtn.visibility = View.GONE
             deleteBtn.visibility = View.GONE
 
-            fun applyRowState(state: RowState) {
-                rowStates[item.id] = state
-                addBtn.visibility = if (state == RowState.IDLE) View.VISIBLE else View.GONE
-                spinnerView.visibility = if (state == RowState.ADDING) View.VISIBLE else View.GONE
-                if (state == RowState.ADDING) spinnerView.start() else spinnerView.stop(hide = true)
-            }
-
-            applyRowState(rowStates[item.id] ?: RowState.IDLE)
-            addBtn.setOnClickListener {
-                if (rowStates[item.id] == RowState.ADDING || item.id in existingTrackIds) return@setOnClickListener
-                applyRowState(RowState.ADDING)
-                viewModel.addTracker(requireGroupId(), item.id) { success ->
-                    if (!isAdded) return@addTracker
-                    if (success) {
-                        existingTrackIds.add(item.id)
-                        rowStates.remove(item.id)
-                        renderList()
-                    } else {
-                        applyRowState(RowState.IDLE)
-                    }
+            val isSelected = item.id in draftTrackIds
+            addBtn.visibility = if (isSelected) View.GONE else View.VISIBLE
+            checkBtn.visibility = if (isSelected) View.VISIBLE else View.GONE
+            spinnerView.visibility = View.GONE
+            spinnerView.stop(hide = true)
+            if (isSelected) {
+                checkBtn.setOnClickListener {
+                    viewModel.removeDraftTracker(item.id)
+                }
+            } else {
+                addBtn.setOnClickListener {
+                    viewModel.addDraftTracker(item.id)
                 }
             }
             listContainer.addView(row)
         }
     }
 
-    private fun requireGroupId(): String {
-        return requireArguments().getString(ARG_GROUP_ID)
-            ?: error("Missing group id")
-    }
-
     companion object {
-        const val REQUEST_GROUP_TRACK_ADDED = "group_track_added"
-        const val REQUEST_GROUP_TRACK_ADDED_LIST = "group_track_added_list"
-        const val KEY_GROUP_ID = "group_id"
-        const val KEY_TRACK_ID = "track_id"
-        const val KEY_TRACKER = "tracker"
-        const val KEY_GROUP = "group"
-        private const val ARG_GROUP_ID = "arg_group_id"
-        private const val ARG_EXISTING_TRACK_IDS = "arg_existing_track_ids"
-        private const val ARG_PRELOADED_TRACKERS = "arg_preloaded_trackers"
-
-        fun newInstance(
-            groupId: String,
-            existingTrackIds: List<String>,
-            preloadedTrackers: List<Tracker>? = null
-        ): AddGroupTrackersFragment {
-            return AddGroupTrackersFragment().apply {
-                arguments = Bundle().apply {
-                    putString(ARG_GROUP_ID, groupId)
-                    putStringArrayList(ARG_EXISTING_TRACK_IDS, ArrayList(existingTrackIds))
-                    if (!preloadedTrackers.isNullOrEmpty()) {
-                        putParcelableArrayList(ARG_PRELOADED_TRACKERS, ArrayList(preloadedTrackers))
-                    }
-                }
-            }
+        fun newInstance(): AddGroupTrackersFragment {
+            return AddGroupTrackersFragment()
         }
     }
 }

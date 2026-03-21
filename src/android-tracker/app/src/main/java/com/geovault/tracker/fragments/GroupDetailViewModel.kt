@@ -10,12 +10,14 @@ import com.geovault.tracker.Tracker
 import com.geovault.tracker.UserItem
 import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.GroupTrackerEligibilityUseCase
+import com.geovault.tracker.data.TrackerManagementStateStore
 import com.geovault.tracker.data.TrackerManagementRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -37,13 +39,18 @@ data class GroupDetailFormState(
     val worldShareUrl: String? = null,
     val hiddenInList: Boolean = false
 ) {
-    fun toRequest(): GroupPatchRequest {
+    fun toRequest(
+        addTrackIds: List<String>,
+        removeTrackIds: List<String>
+    ): GroupPatchRequest {
         return GroupPatchRequest(
             name = name.trim(),
             hidden_in_list = hiddenInList,
             visibility = visibility,
             shared_with_emails = if (visibility == "shared") sharedWithEmails else null,
-            world_share_enabled = worldShareEnabled
+            world_share_enabled = worldShareEnabled,
+            add_track_ids = addTrackIds,
+            remove_track_ids = removeTrackIds
         )
     }
 }
@@ -53,7 +60,10 @@ data class GroupDetailUiState(
     val group: Group? = null,
     val form: GroupDetailFormState = GroupDetailFormState(),
     val initialSnapshot: GroupDetailFormState? = null,
+    val initialTrackIds: Set<String> = emptySet(),
+    val draftTrackIds: Set<String> = emptySet(),
     val allTrackers: List<Tracker> = emptyList(),
+    val draftGroupTrackers: List<Tracker> = emptyList(),
     val addableTrackers: List<Tracker> = emptyList(),
     val users: List<UserItem> = emptyList(),
     val errorMessage: String? = null
@@ -63,10 +73,39 @@ data class GroupDetailUiState(
 class GroupDetailViewModel @Inject constructor(
     private val groupRepository: GroupManagementRepository,
     private val trackerRepository: TrackerManagementRepository,
-    private val eligibilityUseCase: GroupTrackerEligibilityUseCase
+    private val eligibilityUseCase: GroupTrackerEligibilityUseCase,
+    private val stateStore: TrackerManagementStateStore
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(GroupDetailUiState())
     val uiState: StateFlow<GroupDetailUiState> = _uiState.asStateFlow()
+    private var currentGroupId: String? = null
+
+    init {
+        viewModelScope.launch {
+            stateStore.groups.collect { groups ->
+                val groupId = currentGroupId ?: return@collect
+                val updatedGroup = groups.firstOrNull { it.id == groupId } ?: return@collect
+                _uiState.update { current ->
+                    if (current.phase != GroupDetailPhase.Ready) return@update current
+                    val hasUnsavedMembershipChanges = current.draftTrackIds != current.initialTrackIds
+                    val trackIds = if (hasUnsavedMembershipChanges) current.draftTrackIds else updatedGroup.track_ids.orEmpty().toSet()
+                    val updatedInitialTrackIds = if (hasUnsavedMembershipChanges) current.initialTrackIds else trackIds
+                    val derived = deriveDraftLists(
+                        baseGroup = updatedGroup,
+                        allTrackers = current.allTrackers,
+                        draftTrackIds = trackIds
+                    )
+                    current.copy(
+                        group = updatedGroup,
+                        initialTrackIds = updatedInitialTrackIds,
+                        draftTrackIds = trackIds,
+                        draftGroupTrackers = derived.groupTrackers,
+                        addableTrackers = derived.addableTrackers
+                    )
+                }
+            }
+        }
+    }
 
     private fun toFormState(group: Group): GroupDetailFormState {
         return GroupDetailFormState(
@@ -81,25 +120,31 @@ class GroupDetailViewModel @Inject constructor(
     }
 
     fun load(groupId: String) {
+        currentGroupId = groupId
         _uiState.update { it.copy(phase = GroupDetailPhase.Loading, errorMessage = null) }
         viewModelScope.launch {
             val groupResult = groupRepository.loadGroup(groupId)
             val trackersResult = trackerRepository.loadTrackers(forceRefresh = false)
             val usersResult = trackerRepository.loadUsers()
             if (groupResult is RepositoryResult.Success && trackersResult is RepositoryResult.Success) {
-                val addable = eligibilityUseCase
-                    .addableTrackers(trackersResult.data, groupResult.data)
-                    .filter { it.canAdd }
-                    .map { it.tracker }
+                val initialTrackIds = groupResult.data.track_ids.orEmpty().toSet()
+                val derived = deriveDraftLists(
+                    baseGroup = groupResult.data,
+                    allTrackers = trackersResult.data,
+                    draftTrackIds = initialTrackIds
+                )
                 val form = toFormState(groupResult.data)
                 _uiState.update {
                     it.copy(
                         phase = GroupDetailPhase.Ready,
                         group = groupResult.data,
                         form = form,
-                        initialSnapshot = it.initialSnapshot ?: form,
+                        initialSnapshot = form,
+                        initialTrackIds = initialTrackIds,
+                        draftTrackIds = initialTrackIds,
                         allTrackers = trackersResult.data,
-                        addableTrackers = addable,
+                        draftGroupTrackers = derived.groupTrackers,
+                        addableTrackers = derived.addableTrackers,
                         users = if (usersResult is RepositoryResult.Success) usersResult.data.users else emptyList(),
                         errorMessage = null
                     )
@@ -124,20 +169,62 @@ class GroupDetailViewModel @Inject constructor(
     fun onSharedWithEmailsChanged(value: List<String>) = _uiState.update { it.copy(form = it.form.copy(sharedWithEmails = value)) }
     fun onHiddenInListChanged(value: Boolean) = _uiState.update { it.copy(form = it.form.copy(hiddenInList = value)) }
     fun onWorldShareEnabledChanged(value: Boolean) = _uiState.update { it.copy(form = it.form.copy(worldShareEnabled = value)) }
+    fun addDraftTracker(id: String) = _uiState.update { state ->
+        if (id in state.draftTrackIds) return@update state
+        val nextDraftIds = state.draftTrackIds + id
+        val baseGroup = state.group ?: return@update state.copy(draftTrackIds = nextDraftIds)
+        val derived = deriveDraftLists(baseGroup, state.allTrackers, nextDraftIds)
+        state.copy(
+            draftTrackIds = nextDraftIds,
+            draftGroupTrackers = derived.groupTrackers,
+            addableTrackers = derived.addableTrackers
+        )
+    }
+
+    fun removeDraftTracker(id: String) = _uiState.update { state ->
+        if (id !in state.draftTrackIds) return@update state
+        val nextDraftIds = state.draftTrackIds - id
+        val baseGroup = state.group ?: return@update state.copy(draftTrackIds = nextDraftIds)
+        val derived = deriveDraftLists(baseGroup, state.allTrackers, nextDraftIds)
+        state.copy(
+            draftTrackIds = nextDraftIds,
+            draftGroupTrackers = derived.groupTrackers,
+            addableTrackers = derived.addableTrackers
+        )
+    }
+
+    fun discardDraftMembership() = _uiState.update { state ->
+        val baseGroup = state.group ?: return@update state
+        val canonical = state.initialTrackIds
+        val derived = deriveDraftLists(baseGroup, state.allTrackers, canonical)
+        state.copy(
+            draftTrackIds = canonical,
+            draftGroupTrackers = derived.groupTrackers,
+            addableTrackers = derived.addableTrackers
+        )
+    }
 
     fun saveGroup() {
         val groupId = _uiState.value.form.groupId
         if (groupId.isBlank()) return
-        val request = _uiState.value.form.toRequest()
+        val state = _uiState.value
+        val addTrackIds = state.draftTrackIds.minus(state.initialTrackIds).toList()
+        val removeTrackIds = state.initialTrackIds.minus(state.draftTrackIds).toList()
+        val request = state.form.toRequest(
+            addTrackIds = addTrackIds,
+            removeTrackIds = removeTrackIds
+        )
         _uiState.update { it.copy(phase = GroupDetailPhase.Saving, errorMessage = null) }
         viewModelScope.launch {
-            when (val result = groupRepository.patchGroup(groupId, request, publishToStore = false)) {
+            when (val result = groupRepository.patchGroup(groupId, request, publishToStore = true)) {
                 is RepositoryResult.Success -> {
                     val trackers = _uiState.value.allTrackers
-                    val addable = eligibilityUseCase
-                        .addableTrackers(trackers, result.data)
-                        .filter { it.canAdd }
-                        .map { it.tracker }
+                    val savedTrackIds = result.data.track_ids.orEmpty().toSet()
+                    val derived = deriveDraftLists(
+                        baseGroup = result.data,
+                        allTrackers = trackers,
+                        draftTrackIds = savedTrackIds
+                    )
                     val form = toFormState(result.data)
                     _uiState.update {
                         it.copy(
@@ -145,7 +232,10 @@ class GroupDetailViewModel @Inject constructor(
                             group = result.data,
                             form = form,
                             initialSnapshot = form,
-                            addableTrackers = addable
+                            initialTrackIds = savedTrackIds,
+                            draftTrackIds = savedTrackIds,
+                            draftGroupTrackers = derived.groupTrackers,
+                            addableTrackers = derived.addableTrackers
                         )
                     }
                 }
@@ -166,7 +256,7 @@ class GroupDetailViewModel @Inject constructor(
                 val result = groupRepository.patchGroup(
                     groupId = groupId,
                     request = GroupPatchRequest(world_share_enabled = true),
-                    publishToStore = false
+                    publishToStore = true
                 )
             ) {
                 is RepositoryResult.Success -> {
@@ -212,6 +302,39 @@ class GroupDetailViewModel @Inject constructor(
     fun hasUnsavedChanges(): Boolean {
         val state = _uiState.value
         val initial = state.initialSnapshot ?: return false
-        return state.form != initial
+        return state.form != initial || state.draftTrackIds != state.initialTrackIds
+    }
+
+    fun hasUnsavedMembershipChanges(): Boolean {
+        val state = _uiState.value
+        return state.draftTrackIds != state.initialTrackIds
+    }
+
+    fun consumeError() {
+        _uiState.update { it.copy(errorMessage = null) }
+    }
+
+    data class DerivedGroupTrackers(
+        val groupTrackers: List<Tracker>,
+        val addableTrackers: List<Tracker>
+    )
+
+    private fun deriveDraftLists(
+        baseGroup: Group,
+        allTrackers: List<Tracker>,
+        draftTrackIds: Set<String>
+    ): DerivedGroupTrackers {
+        val trackerById = allTrackers.associateBy { it.id }
+        val orderedTrackers = draftTrackIds.mapNotNull { trackerById[it] }
+        val draftGroup = baseGroup.copy(track_ids = draftTrackIds.toList())
+        val addable = eligibilityUseCase
+            .addableTrackers(allTrackers, draftGroup)
+            .filter { it.canAdd }
+            .map { it.tracker }
+            .sortedBy { it.name.lowercase() }
+        return DerivedGroupTrackers(
+            groupTrackers = orderedTrackers,
+            addableTrackers = addable
+        )
     }
 }

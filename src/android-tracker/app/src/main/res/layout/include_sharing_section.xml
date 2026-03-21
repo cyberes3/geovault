@@ -58,14 +58,6 @@
         android:layout_marginBottom="4dp" />
 
     <TextView
-        android:id="@+id/sharing_pick_users_help_text_view"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/sharing_pick_users_help_text"
-        android:textSize="13sp"
-        android:textColor="@color/text_secondary"
-        android:layout_marginBottom="4dp" />
-    <TextView
         android:id="@+id/sharing_shared_with_count_text"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

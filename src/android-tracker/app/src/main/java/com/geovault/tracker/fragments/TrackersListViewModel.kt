@@ -5,13 +5,13 @@ import androidx.lifecycle.viewModelScope
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.data.TrackerListRepository
-import com.geovault.tracker.data.TrackerManagementEvent
 import com.geovault.tracker.data.TrackerManagementStateStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 data class TrackersListUiState(
@@ -36,27 +36,8 @@ class TrackersListViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            stateStore.events.collect { event ->
-                when (event) {
-                    is TrackerManagementEvent.TrackersRefreshed -> setCached(event.trackers)
-                    is TrackerManagementEvent.TrackerUpserted -> {
-                        _uiState.value = _uiState.value.copy(
-                            trackers = _uiState.value.trackers
-                                .filterNot { it.id == event.tracker.id }
-                                .plus(event.tracker)
-                                .sortedBy { it.name.lowercase() },
-                            isEmpty = false
-                        )
-                    }
-                    is TrackerManagementEvent.TrackerDeleted -> {
-                        val updated = _uiState.value.trackers.filterNot { it.id == event.trackerId }
-                        _uiState.value = _uiState.value.copy(
-                            trackers = updated,
-                            isEmpty = updated.isEmpty()
-                        )
-                    }
-                    else -> Unit
-                }
+            stateStore.trackers.collectLatest { trackers ->
+                setCached(trackers)
             }
         }
     }

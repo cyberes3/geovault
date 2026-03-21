@@ -106,9 +106,7 @@ class ApiTrackerManagementRepository @Inject constructor(
                     ?.map { if (it.id == trackerId) result.data else it }
                     ?.sortedBy { it.name.lowercase() }
             }
-            if (publishToStore) {
-                stateStore.publishTracker(result.data)
-            }
+            stateStore.publishTracker(result.data, emitEvent = publishToStore)
         }
         return result
     }
@@ -281,9 +279,7 @@ class ApiTrackerManagementRepository @Inject constructor(
                     ?.map { if (it.id == groupId) result.data else it }
                     ?.sortedBy { it.name.lowercase() }
             }
-            if (publishToStore) {
-                stateStore.publishGroup(result.data)
-            }
+            stateStore.publishGroup(result.data, emitEvent = publishToStore)
         }
         return result
     }

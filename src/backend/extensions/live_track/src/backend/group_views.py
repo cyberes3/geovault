@@ -227,6 +227,61 @@ def group_get_patch_delete(request, group_id):
                 )
             else:
                 LiveTrackGroupWorldShare.objects.filter(group=group).delete()
+        if "add_track_ids" in data or "remove_track_ids" in data:
+            raw_add_track_ids = data.get("add_track_ids", [])
+            raw_remove_track_ids = data.get("remove_track_ids", [])
+            if not isinstance(raw_add_track_ids, list):
+                return error_response("add_track_ids must be a list", 400)
+            if not isinstance(raw_remove_track_ids, list):
+                return error_response("remove_track_ids must be a list", 400)
+            if any(not isinstance(track_id, str) for track_id in raw_add_track_ids):
+                return error_response("add_track_ids must be a list of strings", 400)
+            if any(not isinstance(track_id, str) for track_id in raw_remove_track_ids):
+                return error_response("remove_track_ids must be a list of strings", 400)
+
+            add_track_ids = set(raw_add_track_ids)
+            remove_track_ids = set(raw_remove_track_ids)
+            add_track_ids -= remove_track_ids
+            remove_track_ids -= set(raw_add_track_ids)
+
+            tracks = list(
+                LiveTrack.objects.filter(id__in=add_track_ids).select_related("user")
+            )
+            tracks_by_id = {str(track.id): track for track in tracks}
+            missing_track_ids = [track_id for track_id in add_track_ids if track_id not in tracks_by_id]
+            if missing_track_ids:
+                return JsonResponse(
+                    {"error": "Trackers not found", "missing_track_ids": missing_track_ids},
+                    status=404,
+                )
+
+            for track_id in add_track_ids:
+                track = tracks_by_id[track_id]
+                has_access = (
+                    can_user_see_track(request.user, track)
+                    or can_user_see_track_via_accepted_group_share(request.user, track)
+                )
+                if not has_access:
+                    return error_response("You do not have access to this tracker", 403)
+                if track.visibility == VISIBILITY_PUBLIC and track.user_id != request.user.id:
+                    LiveTrackSubscription.objects.get_or_create(user=request.user, track=track)
+                if track.user_id != request.user.id:
+                    if not (track.settings or {}).get("allow_group_reshare"):
+                        return error_response(
+                            "The tracker owner has not allowed adding this tracker to groups",
+                            403,
+                        )
+
+            if remove_track_ids:
+                LiveTrackGroupMember.objects.filter(
+                    group=group,
+                    track_id__in=remove_track_ids,
+                ).delete()
+            for track_id in add_track_ids:
+                LiveTrackGroupMember.objects.get_or_create(
+                    group=group,
+                    track_id=track_id,
+                )
         if len(update_fields) > 1:
             group.save(update_fields=update_fields)
         return JsonResponse(_group_payload(group, request.user))

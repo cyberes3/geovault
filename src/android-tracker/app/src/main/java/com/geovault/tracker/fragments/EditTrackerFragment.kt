@@ -64,7 +64,6 @@ class EditTrackerFragment : Fragment() {
     private lateinit var sharingSection: View
     private lateinit var visibilitySpinner: AutoCompleteTextView
     private lateinit var pickUsersButton: MaterialButton
-    private lateinit var pickUsersHelpText: TextView
     private lateinit var sharedWithCountText: TextView
     private lateinit var shareParamsRecipientsSwitch: ToggleHelpCardView
     private lateinit var allowGroupReshareSwitch: ToggleHelpCardView
@@ -146,7 +145,6 @@ class EditTrackerFragment : Fragment() {
         sharingSection = view.findViewById(R.id.editTrackerSharingSection)
         visibilitySpinner = view.findViewById(R.id.sharing_visibility_spinner)
         pickUsersButton = view.findViewById(R.id.sharing_pick_users_button)
-        pickUsersHelpText = view.findViewById(R.id.sharing_pick_users_help_text_view)
         sharedWithCountText = view.findViewById(R.id.sharing_shared_with_count_text)
         shareParamsRecipientsSwitch = view.findViewById(R.id.editTrackerShareParamsRecipients)
         allowGroupReshareSwitch = view.findViewById(R.id.editTrackerAllowGroupReshare)
@@ -167,7 +165,6 @@ class EditTrackerFragment : Fragment() {
         visibilitySpinner.setAdapter(visibilityAdapter)
         visibilitySpinner.setText(visibilityLabels[0], false)
         pickUsersButton.visibility = View.GONE
-        pickUsersHelpText.visibility = View.GONE
         sharedWithCountText.visibility = View.GONE
         visibilitySpinner.setOnItemClickListener { _, _, position, _ ->
             selectedVisibilityIndex = position
@@ -175,7 +172,6 @@ class EditTrackerFragment : Fragment() {
             if (!isRenderingState) viewModel.onVisibilityChanged(vis)
             val showShared = vis == "shared"
             pickUsersButton.visibility = if (showShared) View.VISIBLE else View.GONE
-            pickUsersHelpText.visibility = if (showShared) View.VISIBLE else View.GONE
             sharedWithCountText.visibility = if (showShared) View.VISIBLE else View.GONE
             if (showShared) updateSharedWithCountText()
         }
@@ -377,7 +373,6 @@ class EditTrackerFragment : Fragment() {
             }
             val showShared = vis == "shared"
             pickUsersButton.visibility = if (showShared) View.VISIBLE else View.GONE
-            pickUsersHelpText.visibility = if (showShared) View.VISIBLE else View.GONE
             sharedWithCountText.visibility = if (showShared) View.VISIBLE else View.GONE
             sharedWithEmails.clear()
             sharedWithEmails.addAll(form.sharedWithEmails)

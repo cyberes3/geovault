@@ -43,14 +43,16 @@ class TrackerManagementStateStore @Inject constructor() {
         _events.tryEmit(TrackerManagementEvent.TrackersRefreshed(trackers))
     }
 
-    fun publishTracker(tracker: Tracker) {
+    fun publishTracker(tracker: Tracker, emitEvent: Boolean = true) {
         val existing = _trackers.value.firstOrNull { it.id == tracker.id }
         if (existing == tracker) return
         _trackers.value = _trackers.value
             .filterNot { it.id == tracker.id }
             .plus(tracker)
             .sortedBy { it.name.lowercase() }
-        _events.tryEmit(TrackerManagementEvent.TrackerUpserted(tracker))
+        if (emitEvent) {
+            _events.tryEmit(TrackerManagementEvent.TrackerUpserted(tracker))
+        }
     }
 
     fun deleteTracker(trackerId: String) {
@@ -68,14 +70,16 @@ class TrackerManagementStateStore @Inject constructor() {
         _events.tryEmit(TrackerManagementEvent.GroupsRefreshed(groups))
     }
 
-    fun publishGroup(group: Group) {
+    fun publishGroup(group: Group, emitEvent: Boolean = true) {
         val existing = _groups.value.firstOrNull { it.id == group.id }
         if (existing == group) return
         _groups.value = _groups.value
             .filterNot { it.id == group.id }
             .plus(group)
             .sortedBy { it.name.lowercase() }
-        _events.tryEmit(TrackerManagementEvent.GroupUpserted(group))
+        if (emitEvent) {
+            _events.tryEmit(TrackerManagementEvent.GroupUpserted(group))
+        }
     }
 
     fun deleteGroup(groupId: String) {

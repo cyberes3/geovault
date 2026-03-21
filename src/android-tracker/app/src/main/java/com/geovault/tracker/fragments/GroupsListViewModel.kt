@@ -5,13 +5,13 @@ import androidx.lifecycle.viewModelScope
 import com.geovault.tracker.Group
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.data.GroupManagementRepository
-import com.geovault.tracker.data.TrackerManagementEvent
 import com.geovault.tracker.data.TrackerManagementStateStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -34,28 +34,8 @@ class GroupsListViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            stateStore.events.collect { event ->
-                when (event) {
-                    is TrackerManagementEvent.GroupsRefreshed -> {
-                        _uiState.update {
-                            it.copy(groups = mapMyGroups(event.groups))
-                        }
-                    }
-                    is TrackerManagementEvent.GroupUpserted -> {
-                        _uiState.update { current ->
-                            val updated = current.groups
-                                .filterNot { it.id == event.group.id }
-                                .plus(event.group)
-                            current.copy(groups = mapMyGroups(updated))
-                        }
-                    }
-                    is TrackerManagementEvent.GroupDeleted -> {
-                        _uiState.update { current ->
-                            current.copy(groups = current.groups.filterNot { it.id == event.groupId })
-                        }
-                    }
-                    else -> Unit
-                }
+            stateStore.groups.collectLatest { groups ->
+                _uiState.update { it.copy(groups = mapMyGroups(groups)) }
             }
         }
     }
