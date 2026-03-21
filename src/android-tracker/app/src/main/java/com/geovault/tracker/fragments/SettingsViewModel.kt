@@ -98,6 +98,12 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.setAccuracyFilterMeters(value)
     }
 
+    fun setFastGpsLockEnabled(enabled: Boolean) =
+        run {
+            beginSync("fast_gps_lock_enabled")
+            settingsRepository.setFastGpsLockEnabled(enabled)
+        }
+
     fun setLowAccuracyFallbackEnabled(enabled: Boolean) =
         run {
             beginSync("low_accuracy_fallback_enabled")

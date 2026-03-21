@@ -166,6 +166,8 @@
     <string name="logging_interval_help_text">Set how often a point can be recorded; lower values use more battery.</string>
     <string name="distance_filter_help_text">Ignore small movements until this minimum distance is reached.</string>
     <string name="accuracy_filter_help_text">Skip points with worse GPS accuracy than this limit.</string>
+    <string name="fast_gps_lock_label">Fast GPS lock</string>
+    <string name="fast_gps_lock_help_text">Perform short high-frequency GPS acquisitions to reestablish lock during poor accuracy (may increase battery usage).</string>
     <string name="low_accuracy_fallback_label">Low Accuracy Fallback</string>
     <string name="low_accuracy_fallback_help_text">When GPS lock is weak, allow a fallback point after a timeout so tracking continues.</string>
     <string name="low_accuracy_fallback_timeout_label">Low Accuracy Fallback Timeout (seconds)</string>
@@ -178,6 +180,8 @@
     <string name="tracking_started">Tracking started</string>
     <string name="status_tracking">Tracking location</string>
     <string name="status_gps_paused">GPS Paused (waiting for motion)</string>
+    <string name="status_waiting_for_gps_reenabled">Waiting for GPS to be enabled</string>
+    <string name="waiting_for_gps_reenabled">GPS disabled</string>
     <string name="stat_label_sent_queued">Sent: %1$d - Queued: %2$d</string>
 
     <!-- Tracker management -->

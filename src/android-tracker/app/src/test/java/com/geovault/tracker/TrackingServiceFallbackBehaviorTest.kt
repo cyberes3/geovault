@@ -1,6 +1,7 @@
 package com.geovault.tracker
 
 import com.geovault.tracker.location.LowAccuracyFallbackCoordinator
+import com.geovault.tracker.pipeline.TrackPointRejectReason
 import com.geovault.tracker.settings.TrackerSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -60,6 +61,58 @@ class TrackingServiceFallbackBehaviorTest {
             coordinator.shouldEmitFallback(
                 fallbackEligible = false,
                 hasCandidate = true
+            )
+        )
+    }
+
+    @Test
+    fun shouldStartFastGpsLock_startsForBadAccuracyOverThresholdOrMissingAccuracyWhenEnabled() {
+        assertTrue(
+            TrackingService.shouldStartFastGpsLock(
+                fastGpsLockEnabled = true,
+                rejectReason = TrackPointRejectReason.BAD_ACCURACY,
+                measuredAccuracyMeters = 80f,
+                accuracyFilterMeters = 50f
+            )
+        )
+        assertTrue(
+            TrackingService.shouldStartFastGpsLock(
+                fastGpsLockEnabled = true,
+                rejectReason = TrackPointRejectReason.BAD_ACCURACY,
+                measuredAccuracyMeters = null,
+                accuracyFilterMeters = 50f
+            )
+        )
+        assertFalse(
+            TrackingService.shouldStartFastGpsLock(
+                fastGpsLockEnabled = false,
+                rejectReason = TrackPointRejectReason.BAD_ACCURACY,
+                measuredAccuracyMeters = 80f,
+                accuracyFilterMeters = 50f
+            )
+        )
+        assertFalse(
+            TrackingService.shouldStartFastGpsLock(
+                fastGpsLockEnabled = true,
+                rejectReason = TrackPointRejectReason.STALE,
+                measuredAccuracyMeters = 80f,
+                accuracyFilterMeters = 50f
+            )
+        )
+        assertTrue(
+            TrackingService.shouldStartFastGpsLock(
+                fastGpsLockEnabled = true,
+                rejectReason = null,
+                measuredAccuracyMeters = null,
+                accuracyFilterMeters = 50f
+            )
+        )
+        assertFalse(
+            TrackingService.shouldStartFastGpsLock(
+                fastGpsLockEnabled = true,
+                rejectReason = TrackPointRejectReason.BAD_ACCURACY,
+                measuredAccuracyMeters = 40f,
+                accuracyFilterMeters = 50f
             )
         )
     }

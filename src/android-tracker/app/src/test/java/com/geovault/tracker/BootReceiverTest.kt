@@ -11,6 +11,7 @@ class BootReceiverTest {
             BootReceiver.shouldStartTrackingOnBoot(
                 startOnBoot = false,
                 hasRequiredPermissions = true,
+                gpsProviderEnabled = true,
                 selectedTrackerId = "00000000-0000-0000-0000-000000000001"
             )
         )
@@ -18,6 +19,7 @@ class BootReceiverTest {
             BootReceiver.shouldStartTrackingOnBoot(
                 startOnBoot = true,
                 hasRequiredPermissions = false,
+                gpsProviderEnabled = true,
                 selectedTrackerId = "00000000-0000-0000-0000-000000000001"
             )
         )
@@ -25,6 +27,15 @@ class BootReceiverTest {
             BootReceiver.shouldStartTrackingOnBoot(
                 startOnBoot = true,
                 hasRequiredPermissions = true,
+                gpsProviderEnabled = false,
+                selectedTrackerId = "00000000-0000-0000-0000-000000000001"
+            )
+        )
+        assertFalse(
+            BootReceiver.shouldStartTrackingOnBoot(
+                startOnBoot = true,
+                hasRequiredPermissions = true,
+                gpsProviderEnabled = true,
                 selectedTrackerId = ""
             )
         )
@@ -32,6 +43,7 @@ class BootReceiverTest {
             BootReceiver.shouldStartTrackingOnBoot(
                 startOnBoot = true,
                 hasRequiredPermissions = true,
+                gpsProviderEnabled = true,
                 selectedTrackerId = "00000000-0000-0000-0000-000000000001"
             )
         )

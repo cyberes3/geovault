@@ -291,11 +291,13 @@ class HomeFragment : Fragment() {
         if (!::trackingStatusText.isInitialized) return
         val runtime = trackingSnapshot()
         val running = runtime.isRunning
+        val waitingForGpsProvider = running && !runtime.gpsProviderEnabled
         val acc = runtime.lastAccuracyMeters
         val noGoodFix = acc == null || acc > trackingAccuracyThresholdMeters()
-        val isLocking = running && noGoodFix
+        val isLocking = running && !waitingForGpsProvider && noGoodFix
 
         trackingStatusText.text = getString(when {
+            waitingForGpsProvider -> R.string.waiting_for_gps_reenabled
             isLocking -> R.string.waiting_for_high_accuracy_fix
             running -> R.string.tracking_active
             else -> R.string.not_tracking
@@ -304,6 +306,7 @@ class HomeFragment : Fragment() {
             ContextCompat.getColor(
                 requireContext(),
                 when {
+                    waitingForGpsProvider -> R.color.error_red
                     isLocking -> R.color.warning_yellow
                     running -> R.color.warning_yellow
                     else -> R.color.primary_blue

@@ -5,6 +5,7 @@ import android.app.AlarmManager
 import android.app.AppOpsManager
 import android.content.*
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -1241,6 +1242,19 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             }
             return false
         }
+        if (!isGpsProviderEnabledForTracking()) {
+            showSnackbar(getString(R.string.gps_provider_required))
+            return false
+        }
         return true
+    }
+
+    private fun isGpsProviderEnabledForTracking(): Boolean {
+        val locationManager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return false
+        return try {
+            locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+        } catch (_: Exception) {
+            false
+        }
     }
 }

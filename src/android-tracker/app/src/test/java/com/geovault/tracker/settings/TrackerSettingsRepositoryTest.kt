@@ -33,6 +33,7 @@ class TrackerSettingsRepositoryTest {
             .putString(TrackerSettingsRepositoryImpl.KEY_LOGGING_INTERVAL, "20")
             .putString(TrackerSettingsRepositoryImpl.KEY_LOGGING_DISTANCE, "40")
             .putString(TrackerSettingsRepositoryImpl.KEY_LOGGING_ACCURACY, "80")
+            .putBoolean(TrackerSettingsRepositoryImpl.KEY_FAST_GPS_LOCK_ENABLED, false)
             .putBoolean(TrackerSettingsRepositoryImpl.KEY_LOW_ACCURACY_FALLBACK_ENABLED, false)
             .putString(TrackerSettingsRepositoryImpl.KEY_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC, "90")
             .putBoolean(TrackerSettingsRepositoryImpl.KEY_EXTENDED_PARAMS, false)
@@ -50,6 +51,7 @@ class TrackerSettingsRepositoryTest {
         assertEquals(20L, settings.loggingIntervalSec)
         assertEquals(40f, settings.distanceFilterMeters, 0.0001f)
         assertEquals(80f, settings.accuracyFilterMeters, 0.0001f)
+        assertFalse(settings.fastGpsLockEnabled)
         assertFalse(settings.lowAccuracyFallbackEnabled)
         assertEquals(90L, settings.lowAccuracyFallbackTimeoutSec)
         assertFalse(settings.sendExtendedData)
@@ -88,6 +90,7 @@ class TrackerSettingsRepositoryTest {
         val repository = TrackerSettingsRepositoryImpl(context)
         val settings = repository.getSettings()
 
+        assertTrue(settings.fastGpsLockEnabled)
         assertTrue(settings.lowAccuracyFallbackEnabled)
         assertEquals(TrackerSettings.DEFAULT_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC, settings.lowAccuracyFallbackTimeoutSec)
     }

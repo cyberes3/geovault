@@ -4002,6 +4002,50 @@ class TestLiveTrackGroups(TestCase):
         self.assertEqual(response.status_code, 403)
         self.client.force_login(self.user)
 
+    def test_group_patch_add_track_ids_blocked_when_allow_group_reshare_false(self):
+        """PATCH add_track_ids with a shared non-owned tracker returns 403 when allow_group_reshare is false."""
+        with _patch_live_track_enabled():
+            track_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Patch Blocked Shared"}),
+                content_type="application/json",
+            )
+        track_id = track_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/subscribe/",
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Patch Membership Group"}),
+                content_type="application/json",
+            )
+        group_id = group_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"add_track_ids": [track_id]}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 403)
+        group = LiveTrackGroup.objects.get(id=group_id)
+        self.assertFalse(
+            LiveTrackGroupMember.objects.filter(group=group, track_id=track_id).exists()
+        )
+        self.client.force_login(self.user)
+
     def test_group_add_shared_track_allowed_when_allow_group_reshare_true(self):
         """Adding a track shared with requester (non-owner) to a group succeeds when allow_group_reshare is true."""
         with _patch_live_track_enabled():

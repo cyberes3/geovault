@@ -1,10 +1,12 @@
 package com.geovault.tracker
 
 import android.app.*
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.location.Location
+import android.location.LocationManager
 import android.os.Build
 import android.os.IBinder
 import android.content.pm.ServiceInfo
@@ -12,6 +14,7 @@ import android.os.BatteryManager
 import android.os.Bundle
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.core.location.LocationCompat
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
@@ -157,6 +160,11 @@ class TrackingService : TrackPointServiceBase() {
         private const val EXTRAS_KEY_FALLBACK_SOURCE_PROVIDER = "fallback_source_provider"
         private const val FALLBACK_PROVIDER_PREFIX = "low_accuracy_fallback:"
         private const val FALLBACK_REJECT_SUMMARY_INTERVAL_MS = 30_000L
+        private const val FAST_GPS_LOCK_INTERVAL_MS = 1_000L
+        private const val FAST_GPS_LOCK_MIN_UPDATE_INTERVAL_MS = 500L
+        private const val FAST_GPS_LOCK_MIN_DISTANCE_METERS = 0f
+        private const val FAST_GPS_LOCK_WINDOW_MS = 60_000L
+        private const val FAST_GPS_LOCK_SUMMARY_INTERVAL_MS = 30_000L
 
         @JvmStatic
         fun shouldRestartTrackingAfterProcessDeath(
@@ -181,6 +189,19 @@ class TrackingService : TrackPointServiceBase() {
         internal fun resolveLowAccuracyFallbackTimeoutMs(timeoutSec: Long): Long {
             val clampedTimeoutSec = TrackerSettings.clampLowAccuracyFallbackTimeoutSec(timeoutSec)
             return clampedTimeoutSec * 1000L
+        }
+
+        @JvmStatic
+        internal fun shouldStartFastGpsLock(
+            fastGpsLockEnabled: Boolean,
+            rejectReason: TrackPointRejectReason?,
+            measuredAccuracyMeters: Float?,
+            accuracyFilterMeters: Float
+        ): Boolean {
+            if (!fastGpsLockEnabled) return false
+            val measuredAccuracy = measuredAccuracyMeters ?: return true
+            if (rejectReason != TrackPointRejectReason.BAD_ACCURACY) return false
+            return measuredAccuracy > accuracyFilterMeters
         }
 
     }
@@ -237,6 +258,24 @@ class TrackingService : TrackPointServiceBase() {
     private var lowAccuracyFallbackCancelCountThisSession: Int = 0
     private var lowAccuracyFallbackRejectedFixCountThisSession: Int = 0
     private var lowAccuracyFallbackLastRejectSummaryAtMs: Long = 0L
+    private var fastGpsLockWindowJob: Job? = null
+    private var isFastGpsLockWindowActive: Boolean = false
+    private var fastGpsLockStartCountThisSession: Int = 0
+    private var fastGpsLockStopCountThisSession: Int = 0
+    private var fastGpsLockTimeoutCountThisSession: Int = 0
+    private var fastGpsLockLastSummaryAtMs: Long = 0L
+    private var isWaitingForGpsProvider: Boolean = false
+    private var gpsProviderReceiverRegistered: Boolean = false
+    private val gpsProviderReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (!isTracking) return
+            if (unifiedLocationClient.isGpsProviderEnabled()) {
+                resumeFromGpsProviderWait(reason = "provider_broadcast")
+            } else {
+                enterWaitingForGpsProvider(reason = "provider_broadcast")
+            }
+        }
+    }
 
     @Inject
     lateinit var settingsRepository: TrackerSettingsRepository
@@ -352,6 +391,12 @@ class TrackingService : TrackPointServiceBase() {
         lowAccuracyFallbackCancelCountThisSession = 0
         lowAccuracyFallbackRejectedFixCountThisSession = 0
         lowAccuracyFallbackLastRejectSummaryAtMs = 0L
+        fastGpsLockStartCountThisSession = 0
+        fastGpsLockStopCountThisSession = 0
+        fastGpsLockTimeoutCountThisSession = 0
+        fastGpsLockLastSummaryAtMs = 0L
+        isWaitingForGpsProvider = false
+        stopFastGpsLockWindow(reason = "session_reset")
         TrackPointPipeline.resetLocalSession(selectedTrackerId)
         syncRuntimeStateStore()
         broadcastSessionStats()
@@ -359,6 +404,7 @@ class TrackingService : TrackPointServiceBase() {
         startForeground(NOTIFICATION_ID, createNotification(0, 0), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
 
         isGpsPaused = false
+        isWaitingForGpsProvider = false
         isWaitingForGpsLock = false
         consecutiveStationaryPoints = 0
         consecutiveBadAccuracyPoints = 0
@@ -374,6 +420,10 @@ class TrackingService : TrackPointServiceBase() {
             failActiveTracking(getString(R.string.unable_to_start_location_updates))
             return
         }
+        maybeStartFastGpsLockWindow(
+            rejectReason = null,
+            measuredAccuracyMeters = null
+        )
         
         // Push any existing queued locations immediately when tracking starts (both
         // current-session and backlog lanes) so startup drain is not delayed.
@@ -388,6 +438,7 @@ class TrackingService : TrackPointServiceBase() {
         // Start periodic retry job to push failed locations every minute
         startRetryJob()
         startPreflightMonitor()
+        ensureGpsProviderReceiverRegistered()
     }
 
     private fun stopTracking(reason: String = "tracking_stopped") {
@@ -405,11 +456,14 @@ class TrackingService : TrackPointServiceBase() {
         settingsRepository.clearWasTrackingBeforeExit()
         stopRecoveryHeartbeat()
         TrackingRecoveryCoordinator.markIntentionalStop(applicationContext, reason = reason)
+        isWaitingForGpsProvider = false
         cancelLowAccuracyFallbackTimer(clearCandidate = true, reason = "stop_tracking")
+        stopFastGpsLockWindow(reason = "stop_tracking")
         unifiedLocationClient.stopSession()
         significantMotionBridge?.cancel()
         stopAutoModeTick()
         stopPreflightMonitor()
+        unregisterGpsProviderReceiverIfNeeded()
         stopRetryJob()
         backlogUploaderJob?.cancel()
         backlogUploaderJob = null
@@ -421,8 +475,11 @@ class TrackingService : TrackPointServiceBase() {
 
     private fun onLocationReceived(location: Location) {
         if (!unifiedLocationClient.isGpsProviderEnabled()) {
-            failActiveTracking(getString(R.string.gps_provider_required))
+            enterWaitingForGpsProvider(reason = "location_callback")
             return
+        }
+        if (isWaitingForGpsProvider) {
+            resumeFromGpsProviderWait(reason = "location_callback")
         }
         // Always update last accuracy from the most recent fix so the UI shows current GPS fix quality
         lastAccuracyMeters = if (location.hasAccuracy()) location.accuracy else null
@@ -459,6 +516,14 @@ class TrackingService : TrackPointServiceBase() {
             ) {
                 consecutiveBadAccuracyPoints++
                 onRejectedFixAwaitingLock(location)
+                maybeStartFastGpsLockWindow(
+                    rejectReason = decision.rejectReason,
+                    measuredAccuracyMeters = if (location.hasAccuracy()) location.accuracy else null
+                )
+                maybeLogFastGpsLockSummary(
+                    rejectReason = decision.rejectReason,
+                    measuredAccuracyMeters = if (location.hasAccuracy()) location.accuracy else null
+                )
                 if (consecutiveBadAccuracyPoints >= 3) {
                     isWaitingForGpsLock = true
                     updateNotificationCount()
@@ -815,6 +880,7 @@ class TrackingService : TrackPointServiceBase() {
 
         val noGoodFix = lastAccuracyMeters == null || lastAccuracyMeters!! > resolveCurrentAccuracyFilter()
         val status = when {
+            isWaitingForGpsProvider -> getString(R.string.status_waiting_for_gps_reenabled)
             isGpsPaused -> getString(R.string.status_gps_paused)
             noGoodFix -> getString(R.string.locking)
             else -> getString(R.string.status_tracking)
@@ -854,6 +920,7 @@ class TrackingService : TrackPointServiceBase() {
         significantMotionBridge?.cancel()
         stopAutoModeTick()
         stopPreflightMonitor()
+        unregisterGpsProviderReceiverIfNeeded()
         stopRetryJob()
         cancelLowAccuracyFallbackTimer(clearCandidate = true, reason = "service_destroyed")
         serviceScope.cancel()
@@ -929,6 +996,31 @@ class TrackingService : TrackPointServiceBase() {
         retryJob = null
     }
 
+    private fun ensureGpsProviderReceiverRegistered() {
+        if (gpsProviderReceiverRegistered) return
+        val filter = IntentFilter().apply {
+            addAction(LocationManager.PROVIDERS_CHANGED_ACTION)
+            addAction(LocationManager.MODE_CHANGED_ACTION)
+        }
+        ContextCompat.registerReceiver(
+            this,
+            gpsProviderReceiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        gpsProviderReceiverRegistered = true
+    }
+
+    private fun unregisterGpsProviderReceiverIfNeeded() {
+        if (!gpsProviderReceiverRegistered) return
+        try {
+            unregisterReceiver(gpsProviderReceiver)
+        } catch (_: IllegalArgumentException) {
+            // Receiver may already be unregistered during lifecycle teardown races.
+        }
+        gpsProviderReceiverRegistered = false
+    }
+
     private fun startPreflightMonitor() {
         preflightJob?.cancel()
         preflightJob = serviceScope.launch {
@@ -942,9 +1034,14 @@ class TrackingService : TrackPointServiceBase() {
                 }
                 if (!unifiedLocationClient.isGpsProviderEnabled()) {
                     withContext(Dispatchers.Main) {
-                        failActiveTracking(getString(R.string.gps_provider_required))
+                        enterWaitingForGpsProvider(reason = "preflight_monitor")
                     }
-                    return@launch
+                    continue
+                }
+                if (isWaitingForGpsProvider) {
+                    withContext(Dispatchers.Main) {
+                        resumeFromGpsProviderWait(reason = "preflight_monitor")
+                    }
                 }
             }
         }
@@ -955,12 +1052,45 @@ class TrackingService : TrackPointServiceBase() {
         preflightJob = null
     }
 
+    private fun enterWaitingForGpsProvider(reason: String) {
+        if (!isTracking || isWaitingForGpsProvider) return
+        isWaitingForGpsProvider = true
+        stopFastGpsLockWindow(reason = "gps_provider_disabled")
+        cancelLowAccuracyFallbackTimer(clearCandidate = true, reason = "gps_provider_disabled")
+        unifiedLocationClient.stopSession()
+        Log.w(TAG, "GPS provider disabled while tracking; waiting for re-enable reason=$reason")
+        syncRuntimeStateStore()
+        updateNotificationCount()
+        broadcastSessionStats()
+    }
+
+    private fun resumeFromGpsProviderWait(reason: String) {
+        if (!isTracking || !isWaitingForGpsProvider) return
+        isWaitingForGpsProvider = false
+        if (isGpsPaused) {
+            Log.i(TAG, "GPS provider re-enabled while paused reason=$reason")
+            syncRuntimeStateStore()
+            updateNotificationCount()
+            broadcastSessionStats()
+            return
+        }
+        if (!applyCurrentLocationRequest("gps_provider_reenabled_$reason")) {
+            failActiveTracking(getString(R.string.location_permission_revoked))
+            return
+        }
+        Log.i(TAG, "GPS provider re-enabled, resumed location updates reason=$reason")
+        syncRuntimeStateStore()
+        updateNotificationCount()
+        broadcastSessionStats()
+    }
+
     private fun pauseGps() {
         if (!isGpsPaused && isTracking) {
             isGpsPaused = true
             if (currentSettings.autoTrackingMode) {
                 autoTrackingMotionEngine.onGpsPaused(System.currentTimeMillis())
             }
+            stopFastGpsLockWindow(reason = "gps_paused")
             unifiedLocationClient.stopSession()
             significantMotionBridge?.request()
             sigMotionSensorStartTime = System.currentTimeMillis()
@@ -991,6 +1121,7 @@ class TrackingService : TrackPointServiceBase() {
             isGpsPaused = false
             isWaitingForGpsLock = false
             consecutiveStationaryPoints = 0
+            stopFastGpsLockWindow(reason = "gps_resumed")
             cancelLowAccuracyFallbackTimer(clearCandidate = false, reason = "gps_resumed")
             if (currentSettings.autoTrackingMode) {
                 autoTrackingMotionEngine.onGpsResumed(System.currentTimeMillis())
@@ -1067,13 +1198,25 @@ class TrackingService : TrackPointServiceBase() {
             .build()
     }
 
+    private fun buildFastGpsLockLocationRequest(): LocationRequest {
+        return LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, FAST_GPS_LOCK_INTERVAL_MS)
+            .setMinUpdateIntervalMillis(FAST_GPS_LOCK_MIN_UPDATE_INTERVAL_MS)
+            .setMinUpdateDistanceMeters(FAST_GPS_LOCK_MIN_DISTANCE_METERS)
+            .setWaitForAccurateLocation(true)
+            .build()
+    }
+
     private fun applyCurrentLocationRequest(reason: String): Boolean {
         if (!isTracking) return false
         if (!unifiedLocationClient.hasLocationPermission()) {
             return false
         }
         val (intervalSec, distanceFilter) = resolveCurrentIntervalAndDistance()
-        val request = buildLocationRequest(intervalSec, distanceFilter)
+        val request = if (isFastGpsLockWindowActive) {
+            buildFastGpsLockLocationRequest()
+        } else {
+            buildLocationRequest(intervalSec, distanceFilter)
+        }
         val started = unifiedLocationClient.startSession(
             sessionRequest = UnifiedLocationSessionRequest(request),
             onLocation = ::onLocationReceived,
@@ -1085,7 +1228,7 @@ class TrackingService : TrackPointServiceBase() {
         val accuracyFilter = resolveCurrentAccuracyFilter()
         Log.d(
             TAG,
-            "Applied LocationRequest ($reason): interval=${intervalSec}s, distance=${distanceFilter}m, accuracy=${accuracyFilter}m, mode=${autoTrackingMotionEngine.snapshot().mode}, auto=${currentSettings.autoTrackingMode}"
+            "Applied LocationRequest ($reason): interval=${intervalSec}s, distance=${distanceFilter}m, accuracy=${accuracyFilter}m, mode=${autoTrackingMotionEngine.snapshot().mode}, auto=${currentSettings.autoTrackingMode}, fastLock=$isFastGpsLockWindowActive"
         )
         return true
     }
@@ -1197,6 +1340,83 @@ class TrackingService : TrackPointServiceBase() {
         syncRuntimeStateStore()
     }
 
+    private fun maybeStartFastGpsLockWindow(
+        rejectReason: TrackPointRejectReason?,
+        measuredAccuracyMeters: Float?
+    ) {
+        if (!isTracking || isGpsPaused || isFastGpsLockWindowActive) return
+        val accuracyFilterMeters = resolveCurrentAccuracyFilter()
+        if (
+            !shouldStartFastGpsLock(
+                fastGpsLockEnabled = currentSettings.fastGpsLockEnabled,
+                rejectReason = rejectReason,
+                measuredAccuracyMeters = measuredAccuracyMeters,
+                accuracyFilterMeters = accuracyFilterMeters
+            )
+        ) {
+            return
+        }
+
+        isFastGpsLockWindowActive = true
+        if (!applyCurrentLocationRequest("fast_gps_lock_start")) {
+            isFastGpsLockWindowActive = false
+            Log.w(
+                TAG,
+                "Fast GPS lock start failed rejectReason=$rejectReason measuredAcc=$measuredAccuracyMeters accuracyFilter=$accuracyFilterMeters"
+            )
+            failActiveTracking(getString(R.string.unable_to_start_location_updates))
+            return
+        }
+        fastGpsLockStartCountThisSession++
+        Log.i(
+            TAG,
+            "Fast GPS lock started rejectReason=$rejectReason acc=$measuredAccuracyMeters accuracyFilter=$accuracyFilterMeters windowMs=$FAST_GPS_LOCK_WINDOW_MS startsThisSession=$fastGpsLockStartCountThisSession"
+        )
+        fastGpsLockWindowJob?.cancel()
+        fastGpsLockWindowJob = serviceScope.launch {
+            delay(FAST_GPS_LOCK_WINDOW_MS)
+            withContext(Dispatchers.Main) {
+                stopFastGpsLockWindow(reason = "window_timeout")
+            }
+        }
+    }
+
+    private fun stopFastGpsLockWindow(reason: String) {
+        val wasActive = isFastGpsLockWindowActive
+        fastGpsLockWindowJob?.cancel()
+        fastGpsLockWindowJob = null
+        isFastGpsLockWindowActive = false
+        if (!wasActive || !isTracking || isGpsPaused) return
+        fastGpsLockStopCountThisSession++
+        if (reason == "window_timeout") {
+            fastGpsLockTimeoutCountThisSession++
+        }
+        if (!applyCurrentLocationRequest("fast_gps_lock_stop_$reason")) {
+            Log.w(TAG, "Fast GPS lock stop failed reason=$reason")
+            failActiveTracking(getString(R.string.location_permission_revoked))
+            return
+        }
+        Log.i(
+            TAG,
+            "Fast GPS lock stopped reason=$reason stopsThisSession=$fastGpsLockStopCountThisSession timeoutsThisSession=$fastGpsLockTimeoutCountThisSession"
+        )
+    }
+
+    private fun maybeLogFastGpsLockSummary(
+        rejectReason: TrackPointRejectReason?,
+        measuredAccuracyMeters: Float?
+    ) {
+        if (rejectReason != TrackPointRejectReason.BAD_ACCURACY) return
+        val nowMs = System.currentTimeMillis()
+        if (nowMs - fastGpsLockLastSummaryAtMs < FAST_GPS_LOCK_SUMMARY_INTERVAL_MS) return
+        fastGpsLockLastSummaryAtMs = nowMs
+        val accuracyFilterMeters = resolveCurrentAccuracyFilter()
+        Log.d(
+            TAG,
+            "Fast GPS lock summary active=$isFastGpsLockWindowActive enabled=${currentSettings.fastGpsLockEnabled} measuredAcc=$measuredAccuracyMeters accuracyFilter=$accuracyFilterMeters startsThisSession=$fastGpsLockStartCountThisSession stopsThisSession=$fastGpsLockStopCountThisSession timeoutsThisSession=$fastGpsLockTimeoutCountThisSession"
+        )
+    }
+
     private fun onRejectedFixAwaitingLock(location: Location) {
         if (!currentSettings.lowAccuracyFallbackEnabled || isGpsPaused || !isTracking) return
         lowAccuracyFallbackRejectedFixCountThisSession++
@@ -1218,6 +1438,7 @@ class TrackingService : TrackPointServiceBase() {
         consecutiveBadAccuracyPoints = 0
         isWaitingForGpsLock = false
         lowAccuracyFallbackCoordinator.onAcceptedFix()
+        stopFastGpsLockWindow(reason = "good_accuracy_fix")
         cancelLowAccuracyFallbackTimer(clearCandidate = true, reason = "lock_recovered")
     }
 
