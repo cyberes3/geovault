@@ -112,6 +112,11 @@
     <color name="gv_common_marker_border">#FFFFFF</color>
     <color name="gv_common_marker_border_selected">#000000</color>
 
+    <!-- Map linework (tracks, KML lines, navigation line): fixed white outer halo for contrast on imagery -->
+    <color name="gv_common_map_linework_outer_halo">#FFFFFF</color>
+    <!-- Border between halo and fill: black in day (see values-night for dark maps) -->
+    <color name="gv_common_map_linework_border">@color/gv_common_black</color>
+
     <!-- Overlay colors (semi-transparent black for modal/scrim backgrounds) -->
     <color name="gv_common_overlay_black_10">#1A000000</color>
     <color name="gv_common_overlay_black_50">#80000000</color>

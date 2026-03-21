@@ -6,6 +6,7 @@ import androidx.core.graphics.ColorUtils
 import androidx.core.content.ContextCompat
 import com.geovault.common.map.LocationComponentHelper
 import com.geovault.common.map.MapMarkerUtils
+import com.geovault.common.map.OutlinedGeoJsonLineLayers
 import com.geovault.tracker.R
 import com.geovault.tracker.parseHexToColor
 import org.maplibre.android.location.modes.RenderMode
@@ -13,7 +14,6 @@ import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.FillLayer
-import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
@@ -92,30 +92,13 @@ internal object MapStyleSetup {
             )
         )
 
-        val outerOutlineLayer = LineLayer(ids.trackOuterOutlineLayerId, ids.trackSourceId).apply {
-            setProperties(
-                PropertyFactory.lineWidth(6f),
-                PropertyFactory.lineColor(ContextCompat.getColor(context, R.color.white)),
-                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-                PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
-            )
-        }
-        val outlineLayer = LineLayer(ids.trackOutlineLayerId, ids.trackSourceId).apply {
-            setProperties(
-                PropertyFactory.lineWidth(5f),
-                PropertyFactory.lineColor(Expression.get("outlineColor")),
-                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-                PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
-            )
-        }
-        val fillLayer = LineLayer(ids.trackFillLayerId, ids.trackSourceId).apply {
-            setProperties(
-                PropertyFactory.lineWidth(3f),
-                PropertyFactory.lineColor(Expression.get("lineColor")),
-                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-                PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
-            )
-        }
+        val outerOutlineLayer = OutlinedGeoJsonLineLayers.createOuterLayer(
+            ids.trackOuterOutlineLayerId,
+            ids.trackSourceId,
+            context
+        )
+        val outlineLayer = OutlinedGeoJsonLineLayers.createBorderLayer(ids.trackOutlineLayerId, ids.trackSourceId)
+        val fillLayer = OutlinedGeoJsonLineLayers.createFillLayer(ids.trackFillLayerId, ids.trackSourceId)
         val trackerBaseColor = parseHexToColor(null, context)
         val accuracyFillColor = ColorUtils.setAlphaComponent(trackerBaseColor, TRACK_ACCURACY_ALPHA)
         val accuracyLayer = FillLayer(ids.trackPositionAccuracyLayerId, ids.trackPositionAccuracySourceId).apply {
@@ -147,33 +130,22 @@ internal object MapStyleSetup {
                 GeoJsonOptions().apply { this["synchronousUpdate"] = true }
             )
         )
-        val allTracksOuterOutlineLayer = LineLayer(ids.allTracksOuterOutlineLayerId, ids.allTracksSourceId).apply {
-            setProperties(
-                PropertyFactory.lineWidth(6f),
-                PropertyFactory.lineColor(ContextCompat.getColor(context, R.color.white)),
-                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
-                PropertyFactory.visibility(Property.NONE)
-            )
-        }
-        val allTracksOutlineLayer = LineLayer(ids.allTracksOutlineLayerId, ids.allTracksSourceId).apply {
-            setProperties(
-                PropertyFactory.lineWidth(5f),
-                PropertyFactory.lineColor(Expression.get("outlineColor")),
-                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
-                PropertyFactory.visibility(Property.NONE)
-            )
-        }
-        val allTracksFillLayer = LineLayer(ids.allTracksFillLayerId, ids.allTracksSourceId).apply {
-            setProperties(
-                PropertyFactory.lineWidth(3f),
-                PropertyFactory.lineColor(Expression.get("lineColor")),
-                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
-                PropertyFactory.visibility(Property.NONE)
-            )
-        }
+        val allTracksOuterOutlineLayer = OutlinedGeoJsonLineLayers.createOuterLayer(
+            ids.allTracksOuterOutlineLayerId,
+            ids.allTracksSourceId,
+            context,
+            visibility = Property.NONE
+        )
+        val allTracksOutlineLayer = OutlinedGeoJsonLineLayers.createBorderLayer(
+            ids.allTracksOutlineLayerId,
+            ids.allTracksSourceId,
+            visibility = Property.NONE
+        )
+        val allTracksFillLayer = OutlinedGeoJsonLineLayers.createFillLayer(
+            ids.allTracksFillLayerId,
+            ids.allTracksSourceId,
+            visibility = Property.NONE
+        )
         val allTracksPointsLayer = SymbolLayer(ids.allTracksPointsLayerId, ids.allTracksPointsSourceId).apply {
             setProperties(
                 PropertyFactory.iconImage(Expression.get("icon")),

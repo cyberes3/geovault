@@ -1,5 +1,6 @@
 package com.geovault.tracker.fragments.map
 
+import com.geovault.common.map.OutlinedGeoJsonLineLayers
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackUpdateHelper
 import org.maplibre.android.geometry.LatLng
@@ -75,8 +76,8 @@ internal object MapMultiTrackRenderer {
                 if (segment.size < 2) continue
                 val lineString = LineString.fromLngLats(segment.map { Point.fromLngLat(it.longitude, it.latitude) })
                 val feature = Feature.fromGeometry(lineString)
-                feature.addStringProperty("outlineColor", outlineColor)
-                feature.addStringProperty("lineColor", lineColor)
+                feature.addStringProperty(OutlinedGeoJsonLineLayers.PROPERTY_OUTLINE_COLOR, outlineColor)
+                feature.addStringProperty(OutlinedGeoJsonLineLayers.PROPERTY_LINE_COLOR, lineColor)
                 lineFeatures.add(feature)
             }
 

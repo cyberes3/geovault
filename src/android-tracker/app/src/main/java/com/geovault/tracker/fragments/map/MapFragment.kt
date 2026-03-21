@@ -26,6 +26,7 @@ import androidx.lifecycle.lifecycleScope
 import com.geovault.common.map.GeoVaultMapFragment
 import com.geovault.common.map.LocationComponentHelper
 import com.geovault.common.map.MapLibreManager
+import com.geovault.common.map.OutlinedGeoJsonLineLayers
 import com.geovault.tracker.defaultTrackerColorHex
 import com.geovault.tracker.Group
 import com.geovault.tracker.R
@@ -2070,10 +2071,7 @@ class MapFragment : Fragment() {
         fitToTrackerId: String? = null,
         liveActiveOnlyFit: Boolean = false
     ) {
-        val outlineColor = String.format(
-            "#%06X",
-            0xFFFFFF and ContextCompat.getColor(requireContext(), R.color.track_line_outline)
-        )
+        val outlineColor = OutlinedGeoJsonLineLayers.borderColorHex(requireContext())
         val defaultColor = defaultTrackerColorHex(requireContext()).let { if (it.startsWith("#")) it else "#$it" }
         val renderData = MapMultiTrackRenderer.buildRenderData(
             trackers = trackers,
@@ -3010,8 +3008,7 @@ class MapFragment : Fragment() {
     private fun updateTrackLine() {
         val style = maplibreMap?.style ?: return
         val lineColor = currentTrackerColor ?: defaultTrackerColorHex(requireContext())
-        val outlineColorInt = ContextCompat.getColor(requireContext(), R.color.track_line_outline)
-        val outlineColor = String.format("#%06X", 0xFFFFFF and outlineColorInt)
+        val outlineColor = OutlinedGeoJsonLineLayers.borderColorHex(requireContext())
         val hasLine = MapTrackLineUpdater.updateTrackLine(
             style = style,
             trackSourceId = MapConstants.TRACK_SOURCE_ID,

@@ -1,6 +1,7 @@
 package com.geovault.tracker.fragments.map
 
 import android.location.Location
+import com.geovault.common.map.OutlinedGeoJsonLineLayers
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.LineString
@@ -29,8 +30,8 @@ internal object MapTrackGeometryRenderer {
         }
         val multiLineString = MultiLineString.fromLineStrings(lineStrings)
         return Feature.fromGeometry(multiLineString).apply {
-            addStringProperty("outlineColor", outlineColor)
-            addStringProperty("lineColor", lineColor)
+            addStringProperty(OutlinedGeoJsonLineLayers.PROPERTY_OUTLINE_COLOR, outlineColor)
+            addStringProperty(OutlinedGeoJsonLineLayers.PROPERTY_LINE_COLOR, lineColor)
         }
     }
 

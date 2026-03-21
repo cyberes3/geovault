@@ -26,6 +26,9 @@
     <color name="gv_common_marker_border">#9ca3af</color>
     <color name="gv_common_marker_border_selected">#9ca3af</color>
 
+    <!-- Map linework border on dark basemaps (matches tracker track_line_outline night) -->
+    <color name="gv_common_map_linework_border">@color/gv_common_gray_400</color>
+
     <!-- Map load underlay (night: black) -->
     <color name="gv_common_map_underlay">#000000</color>
 
