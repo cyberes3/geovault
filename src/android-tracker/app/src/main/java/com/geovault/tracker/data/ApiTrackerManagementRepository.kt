@@ -270,7 +270,9 @@ class ApiTrackerManagementRepository @Inject constructor(
         val result = executeApiCall { api -> api.patchGroup(groupId, request).execute() }
         if (result is RepositoryResult.Success) {
             cacheMutex.withLock {
-                groupsCache = groupsCache?.map { if (it.id == groupId) result.data else it }?.sortedBy { it.name.lowercase() }
+                groupsCache = groupsCache
+                    ?.map { if (it.id == groupId) result.data else it }
+                    ?.sortedBy { it.name.lowercase() }
             }
             stateStore.publishGroup(result.data)
         }

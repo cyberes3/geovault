@@ -374,8 +374,12 @@ class EditTrackerFragment : Fragment() {
         val trackerId = tracker.id
         currentFetchedTracker = tracker
         val color = tracker.color ?: defaultTrackerColorHex(requireContext())
-        nameEdit.setText(tracker.name)
-        colorEdit.setText(color)
+        if ((nameEdit.text?.toString() ?: "") != tracker.name) {
+            nameEdit.setText(tracker.name)
+        }
+        if ((colorEdit.text?.toString() ?: "") != color) {
+            colorEdit.setText(color)
+        }
         updateColorPreview(colorPreview, color)
         initialName = tracker.name
         initialColor = normalizeColorForCompare(color)
@@ -534,7 +538,7 @@ class EditTrackerFragment : Fragment() {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
                     val loadedTracker = state.tracker
-                    if (loadedTracker != null && (!didPopulateFromState || loadedTracker.id == trackerId)) {
+                    if (loadedTracker != null && !didPopulateFromState) {
                         populateFormFromTracker(loadedTracker)
                         didPopulateFromState = true
                         showLoadingState(false)

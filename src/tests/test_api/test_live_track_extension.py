@@ -297,6 +297,8 @@ class TestLiveTrackAPI(TestCase):
         data = response.json()
         self.assertEqual(data["visibility"], "public")
         self.assertTrue(data["share_params_with_recipients"])
+        self.assertTrue(data["is_owner"])
+        self.assertNotIn("owner_email", data)
 
     def test_post_settings_shared_with_emails_sync(self):
         """POST settings with visibility=shared and shared_with_emails syncs LiveTrackShare."""
@@ -3412,6 +3414,7 @@ class TestLiveTrackGroups(TestCase):
             )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["name"], "Updated")
+        self.assertTrue(response.json()["is_owner"])
         with _patch_live_track_enabled():
             response = self.client.delete(f"/api/extensions/live-track/groups/{group_id}/")
         self.assertEqual(response.status_code, 204)

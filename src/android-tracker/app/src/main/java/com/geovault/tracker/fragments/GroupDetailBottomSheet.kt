@@ -71,6 +71,7 @@ class GroupDetailFragment : Fragment() {
     private val visibilityValues = arrayOf("private", "shared", "public")
     private var selectedVisibilityIndex = 0
     private val sharedWithEmailsForSave = mutableListOf<String>()
+    private var isSavingForm = false
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_group_detail, container, false)
@@ -107,7 +108,9 @@ class GroupDetailFragment : Fragment() {
             closeEditor()
             return
         }
-        nameEdit.setText(initialGroup.name)
+        if ((nameEdit.text?.toString() ?: "") != initialGroup.name) {
+            nameEdit.setText(initialGroup.name)
+        }
         showLoading()
 
         val groupId = arguments?.getString(ARG_GROUP_ID) ?: return
@@ -120,7 +123,11 @@ class GroupDetailFragment : Fragment() {
             when (val result = groupManagementRepository.loadGroup(groupId)) {
                 is RepositoryResult.Success -> {
                     group = result.data
-                    bindGroup(result.data)
+                    if (!isSavingForm) {
+                        bindGroup(result.data)
+                    } else {
+                        hideLoading()
+                    }
                 }
                 is RepositoryResult.Failure -> {
                     hideLoading()
@@ -132,7 +139,9 @@ class GroupDetailFragment : Fragment() {
     }
 
     private fun bindGroup(g: Group) {
-        nameEdit.setText(g.name)
+        if (!nameEdit.hasFocus() && (nameEdit.text?.toString() ?: "") != g.name) {
+            nameEdit.setText(g.name)
+        }
         nameEdit.isEnabled = true
         deleteButton.visibility = View.VISIBLE
         saveButton.visibility = View.VISIBLE
@@ -295,6 +304,7 @@ class GroupDetailFragment : Fragment() {
             shared_with_emails = if (visibility == "shared") sharedWithEmailsForSave.toList() else null,
             world_share_enabled = worldShareRow.isChecked
         )
+        isSavingForm = true
         setAllInputsEnabled(false)
         viewLifecycleOwner.lifecycleScope.launch {
             when (val result = groupManagementRepository.patchGroup(g.id, request)) {
@@ -303,6 +313,7 @@ class GroupDetailFragment : Fragment() {
                     closeEditor()
                 }
                 is RepositoryResult.Failure -> {
+                    isSavingForm = false
                     setAllInputsEnabled(true)
                     navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 }
