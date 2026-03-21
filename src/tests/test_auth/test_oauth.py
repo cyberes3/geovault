@@ -758,11 +758,13 @@ class TestEnsureOAuth2AppCommand(TestCase):
 
 
 class TestProtectedOAuthApplications(TestCase):
-    """Tests that protected (shared) OAuth applications are excluded from list and return 404 for detail/update/delete."""
+    """
+    Protected (shared) apps use PROTECTED_CLIENT_IDS; django-oauth-toolkit otherwise only filters by owner,
+    so the same user could edit or delete first-party apps. We exclude them from querysets and assert POST
+    cannot mutate them; we also assert the toolkit default when nothing is protected.
+    """
 
     def setUp(self):
-        from django.test import override_settings
-
         self.user = User.objects.create_user(
             email="owner@example.com",
             password="testpass123",
@@ -778,6 +780,11 @@ class TestProtectedOAuthApplications(TestCase):
             client_id="my-custom-app",
             redirect_uri="https://myapp.example/cb",
         )
+        self.owner_access_token = _create_access_token(
+            self.user,
+            self.other_app,
+            token_string="protected_oauth_mgmt_bearer_test",
+        )
         oauth2_settings = get_setting("OAUTH2_PROVIDER", {})
         self.overrides = {
             **oauth2_settings,
@@ -786,8 +793,6 @@ class TestProtectedOAuthApplications(TestCase):
 
     def test_list_excludes_protected(self):
         """List view does not include protected application."""
-        from django.test import override_settings
-
         self.other_app.name = "My Custom App"
         self.other_app.save()
         self.client.force_login(self.user)
@@ -803,8 +808,6 @@ class TestProtectedOAuthApplications(TestCase):
 
     def test_detail_404_for_protected(self):
         """Detail view returns 404 for protected application."""
-        from django.test import override_settings
-
         self.client.force_login(self.user)
         with override_settings(OAUTH2_PROVIDER=self.overrides):
             response = self.client.get(f"/api/oauth/applications/{self.protected_app.pk}/")
@@ -812,8 +815,6 @@ class TestProtectedOAuthApplications(TestCase):
 
     def test_detail_200_for_non_protected(self):
         """Detail view returns 200 for non-protected application."""
-        from django.test import override_settings
-
         self.client.force_login(self.user)
         with override_settings(OAUTH2_PROVIDER=self.overrides):
             response = self.client.get(f"/api/oauth/applications/{self.other_app.pk}/")
@@ -821,8 +822,6 @@ class TestProtectedOAuthApplications(TestCase):
 
     def test_update_404_for_protected(self):
         """Update view returns 404 for protected application."""
-        from django.test import override_settings
-
         self.client.force_login(self.user)
         with override_settings(OAUTH2_PROVIDER=self.overrides):
             response = self.client.get(f"/api/oauth/applications/{self.protected_app.pk}/update/")
@@ -830,11 +829,122 @@ class TestProtectedOAuthApplications(TestCase):
 
     def test_delete_404_for_protected(self):
         """Delete view returns 404 for protected application."""
-        from django.test import override_settings
-
         self.client.force_login(self.user)
         with override_settings(OAUTH2_PROVIDER=self.overrides):
             response = self.client.get(f"/api/oauth/applications/{self.protected_app.pk}/delete/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_post_update_404_for_protected_and_db_unchanged(self):
+        """POST to update cannot change a protected app (toolkit otherwise allows owner updates)."""
+        original_name = self.protected_app.name
+        original_redirect = self.protected_app.redirect_uris
+        self.client.force_login(self.user)
+        with override_settings(OAUTH2_PROVIDER=self.overrides):
+            response = self.client.post(
+                f"/api/oauth/applications/{self.protected_app.pk}/update/",
+                data={
+                    "name": "Attacker Renamed App",
+                    "client_id": self.protected_app.client_id,
+                    "client_secret": self.protected_app.client_secret or "",
+                    "client_type": self.protected_app.client_type,
+                    "authorization_grant_type": self.protected_app.authorization_grant_type,
+                    "redirect_uris": "https://evil.example/callback",
+                },
+            )
+        self.assertEqual(response.status_code, 404)
+        self.protected_app.refresh_from_db()
+        self.assertEqual(self.protected_app.name, original_name)
+        self.assertEqual(self.protected_app.redirect_uris, original_redirect)
+
+    def test_post_delete_404_for_protected_and_row_persists(self):
+        """POST to delete cannot remove a protected app (toolkit otherwise allows owner delete)."""
+        pk = self.protected_app.pk
+        self.client.force_login(self.user)
+        with override_settings(OAUTH2_PROVIDER=self.overrides):
+            response = self.client.post(f"/api/oauth/applications/{pk}/delete/")
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Application.objects.filter(pk=pk).exists())
+
+    def test_owner_can_post_update_when_client_id_not_protected(self):
+        """With empty PROTECTED_CLIENT_IDS, django-oauth-toolkit still lets the owner POST-update."""
+        self.protected_app.name = "GeoVault Places"
+        self.protected_app.save()
+        unprotected = {**get_setting("OAUTH2_PROVIDER", {}), "PROTECTED_CLIENT_IDS": []}
+        self.client.force_login(self.user)
+        with override_settings(OAUTH2_PROVIDER=unprotected):
+            response = self.client.post(
+                f"/api/oauth/applications/{self.protected_app.pk}/update/",
+                data={
+                    "name": "Renamed By Owner",
+                    "client_id": self.protected_app.client_id,
+                    "client_secret": self.protected_app.client_secret or "",
+                    "client_type": self.protected_app.client_type,
+                    "authorization_grant_type": self.protected_app.authorization_grant_type,
+                    "redirect_uris": self.protected_app.redirect_uris,
+                },
+            )
+        self.assertEqual(response.status_code, 302)
+        self.protected_app.refresh_from_db()
+        self.assertEqual(self.protected_app.name, "Renamed By Owner")
+
+    def test_owner_can_post_delete_when_client_id_not_protected(self):
+        """With empty PROTECTED_CLIENT_IDS, django-oauth-toolkit still lets the owner POST-delete."""
+        pk = self.protected_app.pk
+        unprotected = {**get_setting("OAUTH2_PROVIDER", {}), "PROTECTED_CLIENT_IDS": []}
+        self.client.force_login(self.user)
+        with override_settings(OAUTH2_PROVIDER=unprotected):
+            response = self.client.post(f"/api/oauth/applications/{pk}/delete/")
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Application.objects.filter(pk=pk).exists())
+
+    def test_bearer_cannot_access_oauth_application_management(self):
+        """OAuth Bearer must not hit HTML application CRUD (SessionOnlyMixin); avoids token-based app takeover."""
+        with override_settings(OAUTH2_PROVIDER=self.overrides):
+            list_resp = self.client.get(
+                "/api/oauth/applications/",
+                HTTP_AUTHORIZATION=f"Bearer {self.owner_access_token.token}",
+            )
+            post_resp = self.client.post(
+                f"/api/oauth/applications/{self.other_app.pk}/update/",
+                data={
+                    "name": "Via Bearer",
+                    "client_id": self.other_app.client_id,
+                    "client_secret": self.other_app.client_secret or "",
+                    "client_type": self.other_app.client_type,
+                    "authorization_grant_type": self.other_app.authorization_grant_type,
+                    "redirect_uris": self.other_app.redirect_uris,
+                },
+                HTTP_AUTHORIZATION=f"Bearer {self.owner_access_token.token}",
+            )
+        self.assertEqual(list_resp.status_code, 401)
+        self.assertEqual(post_resp.status_code, 401)
+        self.assertEqual(json.loads(list_resp.content).get("error"), "Unauthorized")
+        self.assertEqual(json.loads(post_resp.content).get("error"), "Unauthorized")
+
+    def test_other_user_cannot_access_owners_application_by_pk(self):
+        """PK guessing: queryset is scoped to request.user, so another account gets 404 for owner's apps."""
+        other = User.objects.create_user(
+            email="other_pk_guess@example.com",
+            password="testpass123",
+            username="other_pk_guess",
+        )
+        self.client.force_login(other)
+        with override_settings(OAUTH2_PROVIDER=self.overrides):
+            r_visible = self.client.get(f"/api/oauth/applications/{self.other_app.pk}/")
+            r_protected = self.client.get(f"/api/oauth/applications/{self.protected_app.pk}/")
+        self.assertEqual(r_visible.status_code, 404)
+        self.assertEqual(r_protected.status_code, 404)
+
+    def test_whitespace_in_protected_client_ids_still_hides_app(self):
+        """PROTECTED_CLIENT_IDS entries are stripped; padded strings must still match and exclude apps."""
+        oauth2_settings = get_setting("OAUTH2_PROVIDER", {})
+        overrides = {
+            **oauth2_settings,
+            "PROTECTED_CLIENT_IDS": ["  geovault-android-places  "],
+        }
+        self.client.force_login(self.user)
+        with override_settings(OAUTH2_PROVIDER=overrides):
+            response = self.client.get(f"/api/oauth/applications/{self.protected_app.pk}/update/")
         self.assertEqual(response.status_code, 404)
 
 
