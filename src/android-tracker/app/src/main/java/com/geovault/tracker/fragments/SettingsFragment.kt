@@ -61,6 +61,7 @@ class SettingsFragment : Fragment() {
     private lateinit var accuracyLabel: TextView
     private lateinit var settingsScrollView: NestedScrollView
     private var isBindingSettings = false
+    private var lastRenderedSettings: TrackerSettings? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -237,7 +238,10 @@ class SettingsFragment : Fragment() {
         loadServerUrlField()
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.uiState.collect { uiState ->
-                applySettingsToUi(uiState.settings)
+                if (lastRenderedSettings != uiState.settings) {
+                    applySettingsToUi(uiState.settings)
+                    lastRenderedSettings = uiState.settings
+                }
             }
         }
     }
@@ -259,14 +263,14 @@ class SettingsFragment : Fragment() {
         val isImperial = com.geovault.common.UnitUtils.usesImperialUnitsDefault(requireContext())
         updateUnitLabels(isImperial)
 
-        autoTrackingSwitch.isChecked = settings.autoTrackingMode
+        setSwitchCheckedIfChanged(autoTrackingSwitch, settings.autoTrackingMode)
         updateAutoTrackingUi(autoTrackingSwitch.isChecked)
 
         if (settings.autoTrackingMode) {
-            profileSpinner.setText(getString(R.string.profile_auto), false)
-            intervalEdit.setText("")
-            distanceEdit.setText("")
-            accuracyEdit.setText("")
+            setSpinnerTextIfChanged(profileSpinner, getString(R.string.profile_auto))
+            updateNumericEditFromState(intervalEdit, "")
+            updateNumericEditFromState(distanceEdit, "")
+            updateNumericEditFromState(accuracyEdit, "")
         } else {
             updateNumericEditFromState(intervalEdit, settings.loggingIntervalSec.toString())
             updateNumericEditFromState(distanceEdit, toDisplay(settings.distanceFilterMeters, isImperial).toString())
@@ -278,20 +282,20 @@ class SettingsFragment : Fragment() {
                 getString(R.string.profile_driving),
                 getString(R.string.profile_custom)
             )
-            profileSpinner.setText(labels[selectedProfileIndex], false)
+            setSpinnerTextIfChanged(profileSpinner, labels[selectedProfileIndex])
         }
 
-        extendedParamsSwitch.isChecked = settings.sendExtendedData
-        significantMotionSwitch.isChecked = settings.significantDataOnly
-        lowAccuracyFallbackSwitch.isChecked = settings.lowAccuracyFallbackEnabled
+        setSwitchCheckedIfChanged(extendedParamsSwitch, settings.sendExtendedData)
+        setSwitchCheckedIfChanged(significantMotionSwitch, settings.significantDataOnly)
+        setSwitchCheckedIfChanged(lowAccuracyFallbackSwitch, settings.lowAccuracyFallbackEnabled)
         updateLowAccuracyFallbackUi(settings.lowAccuracyFallbackEnabled)
         updateNumericEditFromState(
             lowAccuracyFallbackTimeoutEdit,
             settings.lowAccuracyFallbackTimeoutSec.toString()
         )
-        startOnBootSwitch.isChecked = settings.startOnBoot
-        restartTrackingIfKilledSwitch.isChecked = settings.resetTrackingIfKilled
-        startTrackingOnLaunchSwitch.isChecked = settings.startTrackingOnLaunch
+        setSwitchCheckedIfChanged(startOnBootSwitch, settings.startOnBoot)
+        setSwitchCheckedIfChanged(restartTrackingIfKilledSwitch, settings.resetTrackingIfKilled)
+        setSwitchCheckedIfChanged(startTrackingOnLaunchSwitch, settings.startTrackingOnLaunch)
 
         isBindingSettings = false
     }
@@ -301,6 +305,17 @@ class SettingsFragment : Fragment() {
         if (editText.hasFocus()) return
         if (editText.text?.toString() == value) return
         editText.setText(value)
+    }
+
+    private fun setSpinnerTextIfChanged(spinner: AutoCompleteTextView, value: String) {
+        if (spinner.hasFocus()) return
+        if ((spinner.text?.toString() ?: "") == value) return
+        spinner.setText(value, false)
+    }
+
+    private fun setSwitchCheckedIfChanged(toggle: ToggleHelpCardView, value: Boolean) {
+        if (toggle.isChecked == value) return
+        toggle.isChecked = value
     }
 
     private fun setupSettingsListeners() {

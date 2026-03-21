@@ -24,7 +24,8 @@ interface TrackerManagementRepository {
     suspend fun createTracker(request: TrackerCreateRequest): RepositoryResult<Tracker>
     suspend fun updateTrackerSettings(
         trackerId: String,
-        request: TrackerSettingsRequest
+        request: TrackerSettingsRequest,
+        publishToStore: Boolean = true
     ): RepositoryResult<Tracker>
     suspend fun deleteTracker(trackerId: String): RepositoryResult<Unit>
     suspend fun clearTrackerHistory(trackerId: String): RepositoryResult<Unit>
@@ -44,7 +45,11 @@ interface GroupManagementRepository {
     suspend fun loadGroups(forceRefresh: Boolean = false): RepositoryResult<List<Group>>
     suspend fun loadGroup(groupId: String): RepositoryResult<Group>
     suspend fun createGroup(name: String): RepositoryResult<Group>
-    suspend fun patchGroup(groupId: String, request: com.geovault.tracker.GroupPatchRequest): RepositoryResult<Group>
+    suspend fun patchGroup(
+        groupId: String,
+        request: com.geovault.tracker.GroupPatchRequest,
+        publishToStore: Boolean = true
+    ): RepositoryResult<Group>
     suspend fun deleteGroup(groupId: String): RepositoryResult<Unit>
     suspend fun addGroupTrack(groupId: String, trackId: String): RepositoryResult<Group>
     suspend fun removeGroupTrack(groupId: String, trackId: String): RepositoryResult<Group>

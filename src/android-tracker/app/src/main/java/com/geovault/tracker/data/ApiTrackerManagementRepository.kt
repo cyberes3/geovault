@@ -96,7 +96,8 @@ class ApiTrackerManagementRepository @Inject constructor(
 
     override suspend fun updateTrackerSettings(
         trackerId: String,
-        request: TrackerSettingsRequest
+        request: TrackerSettingsRequest,
+        publishToStore: Boolean
     ): RepositoryResult<Tracker> {
         val result = executeApiCall { api -> api.postTrackerSettings(trackerId, request).execute() }
         if (result is RepositoryResult.Success) {
@@ -105,7 +106,9 @@ class ApiTrackerManagementRepository @Inject constructor(
                     ?.map { if (it.id == trackerId) result.data else it }
                     ?.sortedBy { it.name.lowercase() }
             }
-            stateStore.publishTracker(result.data)
+            if (publishToStore) {
+                stateStore.publishTracker(result.data)
+            }
         }
         return result
     }
@@ -266,7 +269,11 @@ class ApiTrackerManagementRepository @Inject constructor(
         return result
     }
 
-    override suspend fun patchGroup(groupId: String, request: GroupPatchRequest): RepositoryResult<Group> {
+    override suspend fun patchGroup(
+        groupId: String,
+        request: GroupPatchRequest,
+        publishToStore: Boolean
+    ): RepositoryResult<Group> {
         val result = executeApiCall { api -> api.patchGroup(groupId, request).execute() }
         if (result is RepositoryResult.Success) {
             cacheMutex.withLock {
@@ -274,7 +281,9 @@ class ApiTrackerManagementRepository @Inject constructor(
                     ?.map { if (it.id == groupId) result.data else it }
                     ?.sortedBy { it.name.lowercase() }
             }
-            stateStore.publishGroup(result.data)
+            if (publishToStore) {
+                stateStore.publishGroup(result.data)
+            }
         }
         return result
     }

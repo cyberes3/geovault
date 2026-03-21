@@ -13,8 +13,12 @@ import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.LoadingSpinner
 import com.geovault.common.NaturalSort
@@ -26,24 +30,14 @@ import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.common.R as CommonR
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.data.GroupManagementRepository
-import com.geovault.tracker.data.GroupTrackerEligibilityUseCase
-import com.geovault.tracker.data.TrackerManagementRepository
 import com.google.android.material.button.MaterialButton
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 
 @AndroidEntryPoint
 class GroupDetailFragment : Fragment() {
-    @Inject
-    lateinit var groupManagementRepository: GroupManagementRepository
-
-    @Inject
-    lateinit var trackerManagementRepository: TrackerManagementRepository
-
-    @Inject
-    lateinit var groupTrackerEligibilityUseCase: GroupTrackerEligibilityUseCase
+    private val viewModel: GroupDetailViewModel by viewModels()
     private lateinit var nameEdit: EditText
     private lateinit var tracksRow: View
     private lateinit var tracksCountText: TextView
@@ -71,7 +65,7 @@ class GroupDetailFragment : Fragment() {
     private val visibilityValues = arrayOf("private", "shared", "public")
     private var selectedVisibilityIndex = 0
     private val sharedWithEmailsForSave = mutableListOf<String>()
-    private var isSavingForm = false
+    private var isRenderingState = false
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_group_detail, container, false)
@@ -115,64 +109,99 @@ class GroupDetailFragment : Fragment() {
 
         val groupId = arguments?.getString(ARG_GROUP_ID) ?: return
         group = initialGroup
-        loadGroup(groupId)
+        observeViewModel()
+        viewModel.load(groupId)
+        viewModel.onNameChanged(initialGroup.name)
+
+        nameEdit.doAfterTextChanged {
+            if (!isRenderingState) viewModel.onNameChanged(it?.toString() ?: "")
+        }
     }
 
-    private fun loadGroup(groupId: String) {
+    private fun observeViewModel() {
         viewLifecycleOwner.lifecycleScope.launch {
-            when (val result = groupManagementRepository.loadGroup(groupId)) {
-                is RepositoryResult.Success -> {
-                    group = result.data
-                    if (!isSavingForm) {
-                        bindGroup(result.data)
-                    } else {
-                        hideLoading()
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect { state ->
+                    when (state.phase) {
+                        GroupDetailPhase.Loading -> showLoading()
+                        GroupDetailPhase.Ready -> {
+                            hideLoading()
+                            bindState(state.form)
+                            if (state.group != null) {
+                                group = state.group
+                            }
+                            preloadedAddableTrackers = state.addableTrackers
+                            setAllInputsEnabled(true)
+                            copyWorldLinkButton.isEnabled = true
+                            copyWorldLinkButton.text = getString(R.string.copy_world_share_link)
+                            copyWorldLinkSpinner.hide()
+                        }
+                        GroupDetailPhase.Saving -> {
+                            hideLoading()
+                            setAllInputsEnabled(false)
+                        }
+                        GroupDetailPhase.Saved -> {
+                            closeEditor()
+                        }
+                        GroupDetailPhase.Deleting -> setAllInputsEnabled(false)
+                        GroupDetailPhase.Deleted -> {
+                            closeEditor()
+                            navHost()?.showSnackbar(getString(R.string.tracker_deleted))
+                        }
                     }
-                }
-                is RepositoryResult.Failure -> {
-                    hideLoading()
-                    navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                    closeEditor()
+                    if (!state.errorMessage.isNullOrBlank()) {
+                        setAllInputsEnabled(true)
+                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                    }
                 }
             }
         }
     }
 
-    private fun bindGroup(g: Group) {
-        if (!nameEdit.hasFocus() && (nameEdit.text?.toString() ?: "") != g.name) {
-            nameEdit.setText(g.name)
+    private fun bindState(form: GroupDetailFormState) {
+        isRenderingState = true
+        if (!nameEdit.hasFocus() && (nameEdit.text?.toString() ?: "") != form.name) {
+            nameEdit.setText(form.name)
         }
         nameEdit.isEnabled = true
         deleteButton.visibility = View.VISIBLE
         saveButton.visibility = View.VISIBLE
 
-        deleteButton.setOnClickListener { confirmDelete(g) }
+        val g = group
+        if (g != null) {
+            deleteButton.setOnClickListener { confirmDelete(g) }
+        }
 
         sharedWithEmailsForSave.clear()
-        sharedWithEmailsForSave.addAll(g.shared_with_emails ?: emptyList())
+        sharedWithEmailsForSave.addAll(form.sharedWithEmails)
 
         updateTracksCountText()
-        tracksRow.setOnClickListener { showGroupTrackersListView(g) }
-        preloadAddableTrackers(g)
+        if (g != null) {
+            tracksRow.setOnClickListener { showGroupTrackersListView(g) }
+        }
         view?.findViewById<View>(R.id.sharingSectionInclude)?.visibility = View.VISIBLE
         visibilityHeader.visibility = View.VISIBLE
         visibilityLayout.visibility = View.VISIBLE
         worldShareRow.visibility = View.VISIBLE
         worldShareCopyRow.visibility = View.VISIBLE
-        selectedVisibilityIndex = visibilityValues.indexOf(g.visibility ?: "private").coerceIn(0, visibilityValues.size - 1)
+        selectedVisibilityIndex = visibilityValues.indexOf(form.visibility).coerceIn(0, visibilityValues.size - 1)
         val labels = listOf(getString(R.string.visibility_private), getString(R.string.visibility_shared), getString(R.string.visibility_public))
         val adapter = ArrayAdapter(requireContext(), CommonR.layout.gv_common_item_dropdown, labels)
         visibilitySpinner.setAdapter(adapter)
         visibilitySpinner.setText(labels[selectedVisibilityIndex], false)
         visibilitySpinner.setOnItemClickListener { _, _, position, _ ->
             selectedVisibilityIndex = position
+            if (!isRenderingState) {
+                val visibility = if (position in visibilityValues.indices) visibilityValues[position] else "private"
+                viewModel.onVisibilityChanged(visibility)
+            }
             val isShared = visibilityValues[position] == "shared"
             pickUsersButton.visibility = if (isShared) View.VISIBLE else View.GONE
             pickUsersHelpText.visibility = if (isShared) View.VISIBLE else View.GONE
             sharedWithCountText.visibility = if (isShared) View.VISIBLE else View.GONE
             if (isShared) updateSharedWithCountText()
         }
-        if (g.visibility == "shared") {
+        if (form.visibility == "shared") {
             pickUsersButton.visibility = View.VISIBLE
             pickUsersHelpText.visibility = View.VISIBLE
             sharedWithCountText.visibility = View.VISIBLE
@@ -183,10 +212,10 @@ class GroupDetailFragment : Fragment() {
             pickUsersHelpText.visibility = View.GONE
             sharedWithCountText.visibility = View.GONE
         }
-        worldShareRow.isChecked = !g.world_share_id.isNullOrBlank()
-        copyWorldLinkButton.visibility = if (g.world_share_url != null) View.VISIBLE else View.GONE
+        worldShareRow.isChecked = form.worldShareEnabled
+        copyWorldLinkButton.visibility = if (form.worldShareUrl != null) View.VISIBLE else View.GONE
         copyWorldLinkButton.setOnClickListener {
-            val url = group?.world_share_url
+            val url = viewModel.uiState.value.form.worldShareUrl
             if (!url.isNullOrBlank()) {
                 val base = GeovaultAuthManager.getServerUrl(requireContext()).trimEnd('/')
                 val fullUrl = if (url.startsWith("http")) url else "$base$url"
@@ -196,53 +225,31 @@ class GroupDetailFragment : Fragment() {
             }
         }
         worldShareRow.setOnCheckedChangeListener { _, isChecked ->
+            if (isRenderingState) return@setOnCheckedChangeListener
+            viewModel.onWorldShareEnabledChanged(isChecked)
             if (isChecked) {
                 copyWorldLinkButton.visibility = View.VISIBLE
                 worldShareRow.isEnabled = false
                 copyWorldLinkButton.isEnabled = false
                 copyWorldLinkButton.text = ""
                 copyWorldLinkSpinner.show()
-                viewLifecycleOwner.lifecycleScope.launch {
-                    val result = groupManagementRepository.patchGroup(g.id, GroupPatchRequest(world_share_enabled = true))
-                    worldShareRow.isEnabled = true
-                    copyWorldLinkButton.isEnabled = true
-                    copyWorldLinkButton.text = getString(R.string.copy_world_share_link)
-                    copyWorldLinkSpinner.hide()
-                    if (result is RepositoryResult.Success) {
-                        group = result.data
-                        copyWorldLinkButton.visibility = if (result.data.world_share_url != null) View.VISIBLE else View.GONE
-                    }
-                }
+                viewModel.enableWorldShare()
             } else {
                 copyWorldLinkButton.visibility = View.GONE
             }
         }
         hideInListRow.visibility = View.VISIBLE
-        hideInListRow.isChecked = g.hidden_in_list == true
-        hideInListRow.setOnCheckedChangeListener(null)
+        hideInListRow.isChecked = form.hiddenInList
+        hideInListRow.setOnCheckedChangeListener { _, isChecked ->
+            if (!isRenderingState) viewModel.onHiddenInListChanged(isChecked)
+        }
         hideLoading()
+        isRenderingState = false
     }
 
     private fun updateTracksCountText() {
         val n = group?.track_ids?.size ?: 0
         tracksCountText.text = getString(R.string.group_tracks) + " ($n)"
-    }
-
-    private fun preloadAddableTrackers(g: Group) {
-        val alreadyInGroup = (g.track_ids ?: emptyList()).toSet()
-        viewLifecycleOwner.lifecycleScope.launch {
-            when (val result = trackerManagementRepository.loadTrackers(forceRefresh = false)) {
-                is RepositoryResult.Success -> {
-                    preloadedAddableTrackers = groupTrackerEligibilityUseCase
-                        .addableTrackers(result.data, g)
-                        .filter { it.canAdd && it.tracker.id !in alreadyInGroup }
-                        .map { it.tracker }
-                }
-                is RepositoryResult.Failure -> {
-                    preloadedAddableTrackers = emptyList()
-                }
-            }
-        }
     }
 
     private fun showGroupTrackersListView(g: Group) {
@@ -262,63 +269,43 @@ class GroupDetailFragment : Fragment() {
     }
 
     private fun showAddSharedWithDialog() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            val users = when (val result = trackerManagementRepository.loadUsers()) {
-                is RepositoryResult.Success -> result.data.users
-                is RepositoryResult.Failure -> emptyList()
-            }
-            if (users.isEmpty()) {
-                navHost()?.showSnackbar(getString(R.string.no_other_users_found))
-                return@launch
-            }
-            val normalizedUsers = users.map { it.email.trim().lowercase() }.toSet()
-            val pinnedExisting = sharedWithEmailsForSave
-                .map { it.trim() }
-                .filter { it.isNotBlank() && it.lowercase() !in normalizedUsers }
-            SharedUserPickerDialog.show(
-                fragment = this@GroupDetailFragment,
-                title = getString(R.string.shared_with_recipients_label),
-                users = users,
-                selectedEmails = sharedWithEmailsForSave.toSet()
-            ) { picked ->
-                sharedWithEmailsForSave.clear()
-                sharedWithEmailsForSave.addAll(pinnedExisting)
-                sharedWithEmailsForSave.addAll(picked.sortedWith(NaturalSort.naturalOrder()))
-                updateSharedWithCountText()
-            }
+        val users = viewModel.uiState.value.users
+        if (users.isEmpty()) {
+            navHost()?.showSnackbar(getString(R.string.no_other_users_found))
+            return
+        }
+        val normalizedUsers = users.map { it.email.trim().lowercase() }.toSet()
+        val pinnedExisting = sharedWithEmailsForSave
+            .map { it.trim() }
+            .filter { it.isNotBlank() && it.lowercase() !in normalizedUsers }
+        SharedUserPickerDialog.show(
+            fragment = this@GroupDetailFragment,
+            title = getString(R.string.shared_with_recipients_label),
+            users = users,
+            selectedEmails = sharedWithEmailsForSave.toSet()
+        ) { picked ->
+            sharedWithEmailsForSave.clear()
+            sharedWithEmailsForSave.addAll(pinnedExisting)
+            sharedWithEmailsForSave.addAll(picked.sortedWith(NaturalSort.naturalOrder()))
+            updateSharedWithCountText()
+            viewModel.onSharedWithEmailsChanged(sharedWithEmailsForSave.toList())
         }
     }
 
     private fun performSave() {
-        val g = group ?: return
         val name = nameEdit.text?.toString()?.trim()
         if (name.isNullOrEmpty()) {
             navHost()?.showSnackbar(getString(R.string.name_required))
             return
         }
+        viewModel.onNameChanged(name)
+        viewModel.onSharedWithEmailsChanged(sharedWithEmailsForSave.toList())
         val visibility = if (selectedVisibilityIndex in visibilityValues.indices) visibilityValues[selectedVisibilityIndex] else "private"
-        val request = GroupPatchRequest(
-            name = name,
-            hidden_in_list = hideInListRow.isChecked,
-            visibility = visibility,
-            shared_with_emails = if (visibility == "shared") sharedWithEmailsForSave.toList() else null,
-            world_share_enabled = worldShareRow.isChecked
-        )
-        isSavingForm = true
+        viewModel.onVisibilityChanged(visibility)
+        viewModel.onHiddenInListChanged(hideInListRow.isChecked)
+        viewModel.onWorldShareEnabledChanged(worldShareRow.isChecked)
         setAllInputsEnabled(false)
-        viewLifecycleOwner.lifecycleScope.launch {
-            when (val result = groupManagementRepository.patchGroup(g.id, request)) {
-                is RepositoryResult.Success -> {
-                    group = result.data
-                    closeEditor()
-                }
-                is RepositoryResult.Failure -> {
-                    isSavingForm = false
-                    setAllInputsEnabled(true)
-                    navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                }
-            }
-        }
+        viewModel.saveGroup()
     }
 
     private fun setAllInputsEnabled(enabled: Boolean) {
@@ -336,19 +323,7 @@ class GroupDetailFragment : Fragment() {
             .setTitle(getString(R.string.group_delete_confirm_title))
             .setMessage(getString(R.string.group_delete_confirm_message))
             .setPositiveButton(getString(R.string.delete_group)) { _, _ ->
-                viewLifecycleOwner.lifecycleScope.launch {
-                    when (groupManagementRepository.deleteGroup(g.id)) {
-                        is RepositoryResult.Success -> {
-                            if (!isAdded) return@launch
-                            closeEditor()
-                            navHost()?.showSnackbar(getString(R.string.tracker_deleted))
-                        }
-                        is RepositoryResult.Failure -> {
-                            if (!isAdded) return@launch
-                            navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                        }
-                    }
-                }
+                viewModel.deleteGroup(g.id)
             }
             .setNegativeButton(getString(R.string.cancel_button), null)
             .show()

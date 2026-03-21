@@ -20,7 +20,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.geovault.tracker.RepositoryResult
-import com.geovault.tracker.TrackerSettingsRequest
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.tracker.defaultTrackerColorHex
 import com.geovault.tracker.R
@@ -28,7 +27,6 @@ import com.geovault.tracker.SelectedTrackerManager
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.UserItem
-import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.ui.applyDialogButtonColors
 import com.geovault.common.LoadingSpinner
@@ -39,17 +37,14 @@ import com.geovault.tracker.showHueColorPickerDialog
 import com.geovault.tracker.updateColorPreview
 import com.google.android.material.button.MaterialButton
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 import androidx.core.widget.NestedScrollView
+import androidx.core.widget.doAfterTextChanged
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class EditTrackerFragment : Fragment() {
     private val viewModel: EditTrackerViewModel by viewModels()
-
-    @Inject
-    lateinit var trackerManagementRepository: TrackerManagementRepository
 
     private lateinit var nameEdit: EditText
     private lateinit var colorEdit: EditText
@@ -93,30 +88,13 @@ class EditTrackerFragment : Fragment() {
     private var selectedRecentDataIndex = 0
     private var selectedVisibilityIndex = 0
 
-    /** Snapshot when form was loaded; used to detect unsaved changes. */
-    private var initialName: String? = null
-    private var initialColor: String? = null
-    private var initialDefaultTrack: Boolean = false
-    private var initialRecentDataWindow: String? = null
-    private var initialVisibility: String? = null
-    private var initialSharedWithEmails: List<String>? = null
-    private var initialShareParamsRecipients: Boolean = false
-    private var initialAllowGroupReshare: Boolean = false
-    private var initialShareParamsWorld: Boolean = false
-    private var initialWorldShareEnabled: Boolean = false
-    private var initialHiddenInList: Boolean = false
-
-    /** Last fetched tracker (for world_share_url after save). */
-    private var currentFetchedTracker: Tracker? = null
-
-    /** Current list of recipient emails (when visibility = shared). */
     private val sharedWithEmails = mutableListOf<String>()
 
     /** Pending KML bytes to write when user picks save location (system file saver). */
     private var pendingKmlExportBytes: ByteArray? = null
     private var trackerId: String = ""
     private var pendingHiddenInListAfterSave: Boolean = false
-    private var didPopulateFromState: Boolean = false
+    private var isRenderingState: Boolean = false
     private var pendingAction: PendingAction? = null
 
     private enum class PendingAction {
@@ -194,6 +172,7 @@ class EditTrackerFragment : Fragment() {
         visibilitySpinner.setOnItemClickListener { _, _, position, _ ->
             selectedVisibilityIndex = position
             val vis = if (position in visibilityValues.indices) visibilityValues[position] else "private"
+            if (!isRenderingState) viewModel.onVisibilityChanged(vis)
             val showShared = vis == "shared"
             pickUsersButton.visibility = if (showShared) View.VISIBLE else View.GONE
             pickUsersHelpText.visibility = if (showShared) View.VISIBLE else View.GONE
@@ -202,51 +181,22 @@ class EditTrackerFragment : Fragment() {
         }
 
         worldShareEnabledSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isRenderingState) return@setOnCheckedChangeListener
+            viewModel.onWorldShareEnabledChanged(isChecked)
             worldShareParamsRow.visibility = if (isChecked) View.VISIBLE else View.GONE
             if (isChecked) {
-                val id = arguments?.getParcelable<Tracker>(ARG_TRACKER, Tracker::class.java)?.id
-                    ?: arguments?.getString(ARG_TRACKER_ID)
-                if (!id.isNullOrEmpty()) {
-                    worldShareParamsRow.isEnabled = false
-                    copyWorldLinkButton.visibility = View.VISIBLE
-                    copyWorldLinkButton.isEnabled = false
-                    copyWorldLinkButton.text = ""
-                    copyWorldLinkSpinner.show()
-                    viewLifecycleOwner.lifecycleScope.launch {
-                        when (
-                            val result = trackerManagementRepository.updateTrackerSettings(
-                                id,
-                                TrackerSettingsRequest(world_share_enabled = true)
-                            )
-                        ) {
-                            is RepositoryResult.Success -> {
-                                val updated = result.data
-                                if (!isAdded) return@launch
-                                currentFetchedTracker = updated
-                                copyWorldLinkButton.visibility = if (updated.world_share_url != null) View.VISIBLE else View.GONE
-                            }
-                            is RepositoryResult.Failure -> {
-                                if (!isAdded) return@launch
-                                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                            }
-                        }
-                        if (isAdded) {
-                            worldShareParamsRow.isEnabled = true
-                            copyWorldLinkButton.isEnabled = true
-                            copyWorldLinkButton.text = getString(R.string.copy_world_share_link)
-                            copyWorldLinkSpinner.hide()
-                        }
-                    }
-                } else {
-                    copyWorldLinkButton.visibility = View.GONE
-                }
+                copyWorldLinkButton.visibility = View.VISIBLE
+                copyWorldLinkButton.isEnabled = false
+                copyWorldLinkButton.text = ""
+                copyWorldLinkSpinner.show()
+                viewModel.enableWorldShare()
             } else {
                 copyWorldLinkButton.visibility = View.GONE
             }
         }
 
         copyWorldLinkButton.setOnClickListener {
-            val url = currentFetchedTracker?.world_share_url
+            val url = viewModel.uiState.value.form.worldShareUrl
             if (!url.isNullOrBlank()) {
                 val base = GeovaultAuthManager.getServerUrl(requireContext()).trimEnd('/')
                 val fullUrl = if (url.startsWith("http")) url else "$base$url"
@@ -277,6 +227,33 @@ class EditTrackerFragment : Fragment() {
         recentDataWindowSpinner.setText(recentDataLabels[0], false)
         recentDataWindowSpinner.setOnItemClickListener { _, _, position, _ ->
             selectedRecentDataIndex = position
+            if (!isRenderingState) {
+                val recentDataWindow = if (position in recentDataValues.indices) recentDataValues[position] else ""
+                viewModel.onRecentDataWindowChanged(recentDataWindow)
+            }
+        }
+
+        nameEdit.doAfterTextChanged {
+            if (!isRenderingState) viewModel.onNameChanged(it?.toString() ?: "")
+        }
+        colorEdit.doAfterTextChanged {
+            if (!isRenderingState) {
+                val value = it?.toString() ?: ""
+                viewModel.onColorChanged(value)
+                updateColorPreview(colorPreview, value)
+            }
+        }
+        hideOnMapSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (!isRenderingState) viewModel.onHiddenInListChanged(isChecked)
+        }
+        shareParamsRecipientsSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (!isRenderingState) viewModel.onShareParamsRecipientsChanged(isChecked)
+        }
+        allowGroupReshareSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (!isRenderingState) viewModel.onAllowGroupReshareChanged(isChecked)
+        }
+        shareParamsWorldSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (!isRenderingState) viewModel.onShareParamsWorldChanged(isChecked)
         }
 
         pickColorButton.setOnClickListener {
@@ -293,6 +270,7 @@ class EditTrackerFragment : Fragment() {
         trackerId = tracker?.id ?: arguments?.getString(ARG_TRACKER_ID) ?: return
         selectedTrackSwitch.isChecked = SelectedTrackerPrefs.selectedTrackerId(requireContext()) == trackerId
         selectedTrackSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (!isRenderingState) viewModel.onDefaultTrackChanged(isChecked)
             if (isChecked) {
                 val name = nameEdit.text?.toString()?.takeIf { it.isNotBlank() } ?: ""
                 SelectedTrackerManager.setSelectedTracker(
@@ -308,38 +286,25 @@ class EditTrackerFragment : Fragment() {
             }
         }
         if (tracker != null) {
-            populateFormFromTracker(tracker)
-            didPopulateFromState = true
-            showLoadingState(false)
+            viewModel.bindInitialTracker(
+                tracker = tracker,
+                defaultColorHex = defaultTrackerColorHex(requireContext()),
+                isDefaultTrack = selectedTrackSwitch.isChecked
+            )
         }
         viewModel.load(trackerId)
 
         saveButton.setOnClickListener {
             val name = nameEdit.text.toString().trim()
-            val color = colorEdit.text.toString().trim().ifEmpty { null }
             if (name.isEmpty()) {
                 navHost()?.showSnackbar(getString(R.string.name_required))
                 return@setOnClickListener
             }
-            val recentDataWindow = if (selectedRecentDataIndex in recentDataValues.indices) recentDataValues[selectedRecentDataIndex] else ""
-            val visibility = if (selectedVisibilityIndex in visibilityValues.indices) visibilityValues[selectedVisibilityIndex] else "private"
             val hiddenInList = hideOnMapSwitch.isChecked
-            val request = TrackerSettingsRequest(
-                name = name,
-                color = color?.takeIf { it.isNotBlank() },
-                recent_data_window = recentDataWindow.ifEmpty { null },
-                visibility = if (sharingSection.visibility == View.VISIBLE) visibility else null,
-                share_params_with_recipients = if (sharingSection.visibility == View.VISIBLE) shareParamsRecipientsSwitch.isChecked else null,
-                share_params_with_world = if (sharingSection.visibility == View.VISIBLE) shareParamsWorldSwitch.isChecked else null,
-                shared_with_emails = if (sharingSection.visibility == View.VISIBLE && visibility == "shared") sharedWithEmails.toList() else null,
-                world_share_enabled = if (sharingSection.visibility == View.VISIBLE) worldShareEnabledSwitch.isChecked else null,
-                allow_group_reshare = if (sharingSection.visibility == View.VISIBLE) allowGroupReshareSwitch.isChecked else null,
-                hidden_in_list = hiddenInList
-            )
             pendingAction = PendingAction.SAVE
             pendingHiddenInListAfterSave = hiddenInList
             setAllInputsEnabled(false)
-            viewModel.save(trackerId, request)
+            viewModel.save()
         }
 
         clearHistoryButton.setOnClickListener {
@@ -370,23 +335,20 @@ class EditTrackerFragment : Fragment() {
         }
     }
 
-    private fun populateFormFromTracker(tracker: Tracker) {
-        val trackerId = tracker.id
-        currentFetchedTracker = tracker
-        val color = tracker.color ?: defaultTrackerColorHex(requireContext())
-        if ((nameEdit.text?.toString() ?: "") != tracker.name) {
-            nameEdit.setText(tracker.name)
+    private fun populateFormFromState(form: EditTrackerFormState) {
+        val color = form.color.ifBlank { defaultTrackerColorHex(requireContext()) }
+        isRenderingState = true
+        if ((nameEdit.text?.toString() ?: "") != form.name) {
+            nameEdit.setText(form.name)
         }
         if ((colorEdit.text?.toString() ?: "") != color) {
             colorEdit.setText(color)
         }
         updateColorPreview(colorPreview, color)
-        initialName = tracker.name
-        initialColor = normalizeColorForCompare(color)
-        initialDefaultTrack = selectedTrackSwitch.isChecked
-        val recentVal = (tracker.settings?.get("recent_data_window") as? String) ?: ""
-        initialRecentDataWindow = recentVal
-        val idx = recentDataValues.indexOf(recentVal).coerceAtLeast(0)
+        if (selectedTrackSwitch.isChecked != form.isDefaultTrack) {
+            selectedTrackSwitch.isChecked = form.isDefaultTrack
+        }
+        val idx = recentDataValues.indexOf(form.recentDataWindow).coerceAtLeast(0)
         selectedRecentDataIndex = idx
         val recentDataLabels = arrayOf(
             getString(R.string.recent_data_all),
@@ -397,10 +359,12 @@ class EditTrackerFragment : Fragment() {
             getString(R.string.recent_data_1m),
             getString(R.string.recent_data_session)
         )
-        recentDataWindowSpinner.setText(recentDataLabels[idx], false)
-        if (tracker.isOwner()) {
+        if ((recentDataWindowSpinner.text?.toString() ?: "") != recentDataLabels[idx]) {
+            recentDataWindowSpinner.setText(recentDataLabels[idx], false)
+        }
+        if (form.isOwner) {
             sharingSection.visibility = View.VISIBLE
-            val vis = tracker.visibility ?: "private"
+            val vis = form.visibility
             val visIdx = visibilityValues.indexOf(vis).coerceIn(0, visibilityValues.size - 1)
             selectedVisibilityIndex = visIdx
             val visibilityLabels = arrayOf(
@@ -408,92 +372,43 @@ class EditTrackerFragment : Fragment() {
                 getString(R.string.visibility_shared),
                 getString(R.string.visibility_public)
             )
-            visibilitySpinner.setText(visibilityLabels[visIdx], false)
+            if ((visibilitySpinner.text?.toString() ?: "") != visibilityLabels[visIdx]) {
+                visibilitySpinner.setText(visibilityLabels[visIdx], false)
+            }
             val showShared = vis == "shared"
             pickUsersButton.visibility = if (showShared) View.VISIBLE else View.GONE
             pickUsersHelpText.visibility = if (showShared) View.VISIBLE else View.GONE
             sharedWithCountText.visibility = if (showShared) View.VISIBLE else View.GONE
             sharedWithEmails.clear()
-            sharedWithEmails.addAll(tracker.shared_with_emails ?: emptyList())
-            initialSharedWithEmails = sharedWithEmails.toList()
+            sharedWithEmails.addAll(form.sharedWithEmails)
             if (showShared) updateSharedWithCountText()
-            shareParamsRecipientsSwitch.isChecked = tracker.share_params_with_recipients == true
-            val allowReshare = (tracker.settings as? Map<*, *>)?.get("allow_group_reshare") == true
-            allowGroupReshareSwitch.isChecked = allowReshare
-            shareParamsWorldSwitch.isChecked = tracker.share_params_with_world == true
-            val worldOn = tracker.world_share_url != null
+            shareParamsRecipientsSwitch.isChecked = form.shareParamsWithRecipients
+            allowGroupReshareSwitch.isChecked = form.allowGroupReshare
+            shareParamsWorldSwitch.isChecked = form.shareParamsWithWorld
+            val worldOn = form.worldShareEnabled
             worldShareEnabledSwitch.isChecked = worldOn
-            initialVisibility = vis
-            initialShareParamsRecipients = tracker.share_params_with_recipients == true
-            initialAllowGroupReshare = allowReshare
-            initialShareParamsWorld = tracker.share_params_with_world == true
-            initialWorldShareEnabled = worldOn
             worldShareParamsRow.visibility = if (worldOn) View.VISIBLE else View.GONE
-            copyWorldLinkButton.visibility = if (worldOn && !tracker.world_share_url.isNullOrBlank()) View.VISIBLE else View.GONE
+            copyWorldLinkButton.visibility = if (worldOn && !form.worldShareUrl.isNullOrBlank()) View.VISIBLE else View.GONE
         } else {
             sharingSection.visibility = View.GONE
         }
-        if (tracker.isOwner()) {
+        if (form.isOwner) {
             ownerToolsSection.visibility = View.VISIBLE
-            exportKmlButton.setOnClickListener { exportKml(trackerId) }
+            exportKmlButton.setOnClickListener { exportKml(form.trackerId) }
         } else {
             ownerToolsSection.visibility = View.GONE
         }
-        if (SelectedTrackerPrefs.selectedTrackerId(requireContext()) == trackerId) {
-            SelectedTrackerPrefs.updateSelectedTrackerName(requireContext(), tracker.name)
+        if (SelectedTrackerPrefs.selectedTrackerId(requireContext()) == form.trackerId) {
+            SelectedTrackerPrefs.updateSelectedTrackerName(requireContext(), form.name)
         }
-        val hiddenInList = (tracker.settings?.get("hidden_in_list") as? Boolean) == true
-        initialHiddenInList = hiddenInList
-        hideOnMapSwitch.isChecked = hiddenInList
+        hideOnMapSwitch.isChecked = form.hiddenInList
+        isRenderingState = false
     }
 
-    private fun normalizeColorForCompare(color: String?): String? {
-        val t = color?.trim()?.ifEmpty { null } ?: return null
-        return if (t.startsWith("#")) t else "#$t"
-    }
-
-    private fun getSelectedRecentDataWindow(): String {
-        return if (selectedRecentDataIndex in recentDataValues.indices) recentDataValues[selectedRecentDataIndex] else ""
-    }
-
-    private fun hasUnsavedChanges(): Boolean {
-        if (initialName == null) return false
-        val currentName = nameEdit.text?.toString()?.trim() ?: ""
-        val defaultHex = defaultTrackerColorHex(requireContext())
-        val currentColorNorm = normalizeColorForCompare(colorEdit.text?.toString()?.trim()?.ifEmpty { null }) ?: defaultHex
-        val initialColorNorm = initialColor ?: defaultHex
-        val currentDefault = selectedTrackSwitch.isChecked
-        val currentRecent = getSelectedRecentDataWindow()
-        val initialRecent = initialRecentDataWindow ?: ""
-        val currentHiddenInList = hideOnMapSwitch.isChecked
-        var base = currentName != initialName || currentColorNorm != initialColorNorm || currentDefault != initialDefaultTrack || currentRecent != initialRecent || currentHiddenInList != initialHiddenInList
-        if (sharingSection.visibility == View.VISIBLE) {
-            val currentVis = if (selectedVisibilityIndex in visibilityValues.indices) visibilityValues[selectedVisibilityIndex] else "private"
-            base = base || currentVis != (initialVisibility ?: "private") ||
-                shareParamsRecipientsSwitch.isChecked != initialShareParamsRecipients ||
-                allowGroupReshareSwitch.isChecked != initialAllowGroupReshare ||
-                shareParamsWorldSwitch.isChecked != initialShareParamsWorld ||
-                worldShareEnabledSwitch.isChecked != initialWorldShareEnabled ||
-                sharedWithEmails.toSet() != (initialSharedWithEmails?.toSet() ?: emptySet<String>())
-        }
-        return base
-    }
+    private fun hasUnsavedChanges(): Boolean = viewModel.hasUnsavedChanges()
 
     private fun exportKml(trackerId: String) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            when (val result = trackerManagementRepository.fetchTrackerKml(trackerId)) {
-                is RepositoryResult.Success -> {
-                    try {
-                        val safeName = (currentFetchedTracker?.name?.map { c -> if (c.isLetterOrDigit() || c in " -_") c else "" }?.joinToString("")?.take(40) ?: "track").ifEmpty { "track" }
-                        pendingKmlExportBytes = result.data
-                        createKmlDocumentLauncher.launch("$safeName.kml")
-                    } catch (e: Exception) {
-                        navHost()?.showSnackbar(getString(R.string.failed_to_save_kml))
-                    }
-                }
-                is RepositoryResult.Failure -> navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-            }
-        }
+        viewModel.exportKml(trackerId)
     }
 
     private fun updateSharedWithCountText() {
@@ -502,30 +417,26 @@ class EditTrackerFragment : Fragment() {
     }
 
     private fun showAddRecipientDialog() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            val users = when (val result = trackerManagementRepository.loadUsers()) {
-                is RepositoryResult.Success -> result.data.users
-                is RepositoryResult.Failure -> emptyList()
-            }
-            if (users.isEmpty()) {
-                navHost()?.showSnackbar(getString(R.string.no_other_users_found))
-                return@launch
-            }
-            val normalizedUsers = users.map { it.email.trim().lowercase() }.toSet()
-            val pinnedExisting = sharedWithEmails
-                .map { it.trim() }
-                .filter { it.isNotBlank() && it.lowercase() !in normalizedUsers }
-            SharedUserPickerDialog.show(
-                fragment = this@EditTrackerFragment,
-                title = getString(R.string.add_recipient),
-                users = users,
-                selectedEmails = sharedWithEmails.toSet()
-            ) { picked ->
-                sharedWithEmails.clear()
-                sharedWithEmails.addAll(pinnedExisting)
-                sharedWithEmails.addAll(picked.sortedWith(NaturalSort.naturalOrder()))
-                updateSharedWithCountText()
-            }
+        val users = viewModel.uiState.value.users
+        if (users.isEmpty()) {
+            navHost()?.showSnackbar(getString(R.string.no_other_users_found))
+            return
+        }
+        val normalizedUsers = users.map { it.email.trim().lowercase() }.toSet()
+        val pinnedExisting = sharedWithEmails
+            .map { it.trim() }
+            .filter { it.isNotBlank() && it.lowercase() !in normalizedUsers }
+        SharedUserPickerDialog.show(
+            fragment = this@EditTrackerFragment,
+            title = getString(R.string.add_recipient),
+            users = users,
+            selectedEmails = sharedWithEmails.toSet()
+        ) { picked ->
+            sharedWithEmails.clear()
+            sharedWithEmails.addAll(pinnedExisting)
+            sharedWithEmails.addAll(picked.sortedWith(NaturalSort.naturalOrder()))
+            updateSharedWithCountText()
+            viewModel.onSharedWithEmailsChanged(sharedWithEmails.toList())
         }
     }
 
@@ -537,23 +448,27 @@ class EditTrackerFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
-                    val loadedTracker = state.tracker
-                    if (loadedTracker != null && !didPopulateFromState) {
-                        populateFormFromTracker(loadedTracker)
-                        didPopulateFromState = true
-                        showLoadingState(false)
-                    } else if (!state.isLoading && !didPopulateFromState) {
-                        showLoadingState(false)
-                    }
-
-                    if (state.didSave) {
-                        navHost()?.refreshMapAfterTrackerSettingsSaved(trackerId)
-                        if (pendingHiddenInListAfterSave && trackerId == SelectedTrackerPrefs.selectedTrackerId(requireContext())) {
-                            SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
+                    when (state.phase) {
+                        EditTrackerPhase.Loading -> showLoadingState(true)
+                        EditTrackerPhase.Ready -> {
+                            showLoadingState(false)
+                            populateFormFromState(state.form)
+                            copyWorldLinkButton.isEnabled = true
+                            copyWorldLinkButton.text = getString(R.string.copy_world_share_link)
+                            copyWorldLinkSpinner.hide()
                         }
-                        pendingAction = null
-                        viewModel.consumeSave()
-                        popBackStack()
+                        EditTrackerPhase.Saving -> {
+                            showLoadingState(false)
+                            setAllInputsEnabled(false)
+                        }
+                        EditTrackerPhase.Saved -> {
+                            navHost()?.refreshMapAfterTrackerSettingsSaved(trackerId)
+                            if (pendingHiddenInListAfterSave && trackerId == SelectedTrackerPrefs.selectedTrackerId(requireContext())) {
+                                SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
+                            }
+                            pendingAction = null
+                            popBackStack()
+                        }
                     }
 
                     if (state.didClearHistory) {
@@ -585,6 +500,25 @@ class EditTrackerFragment : Fragment() {
                             null -> R.string.failed_to_load_tracker
                         }
                         navHost()?.showSnackbar(getString(failureMessageRes))
+                    }
+                    if (!state.errorMessage.isNullOrBlank() && pendingAction == null) {
+                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                    }
+                    if (state.kmlBytes != null) {
+                        try {
+                            val safeName = (
+                                state.form.name.map { c -> if (c.isLetterOrDigit() || c in " -_") c else "" }
+                                    .joinToString("")
+                                    .take(40)
+                                    .ifEmpty { "track" }
+                                )
+                            pendingKmlExportBytes = state.kmlBytes
+                            createKmlDocumentLauncher.launch("$safeName.kml")
+                        } catch (_: Exception) {
+                            navHost()?.showSnackbar(getString(R.string.failed_to_save_kml))
+                        } finally {
+                            viewModel.consumeKml()
+                        }
                     }
                 }
             }

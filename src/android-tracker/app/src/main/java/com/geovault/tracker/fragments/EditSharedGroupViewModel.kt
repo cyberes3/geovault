@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 data class EditSharedGroupUiState(
     val isLoading: Boolean = false,
     val mapVisibility: MapVisibilityResponse? = null,
+    val pendingHiddenGroupId: String? = null,
     val errorMessage: String? = null,
     val didLeave: Boolean = false
 )
@@ -51,14 +52,38 @@ class EditSharedGroupViewModel @Inject constructor(
         } else {
             current.hidden_group_ids.filterNot { it == groupId }
         }.distinct()
+        val optimistic = current.copy(hidden_group_ids = updated)
+        _uiState.update {
+            it.copy(
+                mapVisibility = optimistic,
+                pendingHiddenGroupId = groupId,
+                errorMessage = null
+            )
+        }
         viewModelScope.launch {
             when (
                 val result = trackerRepository.patchMapVisibility(
                     MapVisibilityRequest(hidden_group_ids = updated)
                 )
             ) {
-                is RepositoryResult.Success -> _uiState.update { it.copy(mapVisibility = result.data, errorMessage = null) }
-                is RepositoryResult.Failure -> _uiState.update { it.copy(errorMessage = result.error.toString()) }
+                is RepositoryResult.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            mapVisibility = result.data,
+                            pendingHiddenGroupId = null,
+                            errorMessage = null
+                        )
+                    }
+                }
+                is RepositoryResult.Failure -> {
+                    _uiState.update {
+                        it.copy(
+                            pendingHiddenGroupId = null,
+                            errorMessage = result.error.toString()
+                        )
+                    }
+                    load()
+                }
             }
         }
     }

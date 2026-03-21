@@ -14,8 +14,15 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 data class SettingsUiState(
-    val settings: TrackerSettings = TrackerSettings()
+    val settings: TrackerSettings = TrackerSettings(),
+    val phase: SettingsPhase = SettingsPhase.Ready,
+    val pendingFieldKey: String? = null
 )
+
+enum class SettingsPhase {
+    Ready,
+    Syncing
+}
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -28,34 +35,78 @@ class SettingsViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             settingsRepository.observeSettings().collectLatest { settings ->
-                _uiState.value = SettingsUiState(settings = settings)
+                _uiState.value = SettingsUiState(
+                    settings = settings,
+                    phase = SettingsPhase.Ready,
+                    pendingFieldKey = null
+                )
             }
         }
     }
 
-    fun setSendExtendedData(enabled: Boolean) = settingsRepository.setSendExtendedData(enabled)
+    private fun beginSync(fieldKey: String) {
+        _uiState.value = _uiState.value.copy(phase = SettingsPhase.Syncing, pendingFieldKey = fieldKey)
+    }
 
-    fun setSignificantDataOnly(enabled: Boolean) = settingsRepository.setSignificantDataOnly(enabled)
+    fun setSendExtendedData(enabled: Boolean) {
+        beginSync("send_extended_data")
+        settingsRepository.setSendExtendedData(enabled)
+    }
 
-    fun setStartOnBoot(enabled: Boolean) = settingsRepository.setStartOnBoot(enabled)
+    fun setSignificantDataOnly(enabled: Boolean) {
+        beginSync("significant_data_only")
+        settingsRepository.setSignificantDataOnly(enabled)
+    }
 
-    fun setResetTrackingIfKilled(enabled: Boolean) = settingsRepository.setResetTrackingIfKilled(enabled)
+    fun setStartOnBoot(enabled: Boolean) {
+        beginSync("start_on_boot")
+        settingsRepository.setStartOnBoot(enabled)
+    }
 
-    fun setStartTrackingOnLaunch(enabled: Boolean) = settingsRepository.setStartTrackingOnLaunch(enabled)
+    fun setResetTrackingIfKilled(enabled: Boolean) {
+        beginSync("reset_tracking_if_killed")
+        settingsRepository.setResetTrackingIfKilled(enabled)
+    }
 
-    fun setAutoTrackingMode(enabled: Boolean) = settingsRepository.setAutoTrackingMode(enabled)
+    fun setStartTrackingOnLaunch(enabled: Boolean) {
+        beginSync("start_tracking_on_launch")
+        settingsRepository.setStartTrackingOnLaunch(enabled)
+    }
 
-    fun setTrackingProfile(profile: TrackerTrackingProfile) = settingsRepository.setTrackingProfile(profile)
+    fun setAutoTrackingMode(enabled: Boolean) {
+        beginSync("auto_tracking_mode")
+        settingsRepository.setAutoTrackingMode(enabled)
+    }
 
-    fun setLoggingIntervalSec(value: Long) = settingsRepository.setLoggingIntervalSec(value)
+    fun setTrackingProfile(profile: TrackerTrackingProfile) {
+        beginSync("tracking_profile")
+        settingsRepository.setTrackingProfile(profile)
+    }
 
-    fun setDistanceFilterMeters(value: Float) = settingsRepository.setDistanceFilterMeters(value)
+    fun setLoggingIntervalSec(value: Long) {
+        beginSync("logging_interval_sec")
+        settingsRepository.setLoggingIntervalSec(value)
+    }
 
-    fun setAccuracyFilterMeters(value: Float) = settingsRepository.setAccuracyFilterMeters(value)
+    fun setDistanceFilterMeters(value: Float) {
+        beginSync("distance_filter_meters")
+        settingsRepository.setDistanceFilterMeters(value)
+    }
+
+    fun setAccuracyFilterMeters(value: Float) {
+        beginSync("accuracy_filter_meters")
+        settingsRepository.setAccuracyFilterMeters(value)
+    }
 
     fun setLowAccuracyFallbackEnabled(enabled: Boolean) =
-        settingsRepository.setLowAccuracyFallbackEnabled(enabled)
+        run {
+            beginSync("low_accuracy_fallback_enabled")
+            settingsRepository.setLowAccuracyFallbackEnabled(enabled)
+        }
 
     fun setLowAccuracyFallbackTimeoutSec(value: Long) =
-        settingsRepository.setLowAccuracyFallbackTimeoutSec(value)
+        run {
+            beginSync("low_accuracy_fallback_timeout_sec")
+            settingsRepository.setLowAccuracyFallbackTimeoutSec(value)
+        }
 }

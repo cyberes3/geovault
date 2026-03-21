@@ -148,7 +148,8 @@ class DiscoverTrackersViewModelTest {
 
         override suspend fun updateTrackerSettings(
             trackerId: String,
-            request: TrackerSettingsRequest
+            request: TrackerSettingsRequest,
+            publishToStore: Boolean
         ): RepositoryResult<Tracker> = RepositoryResult.Failure(AppError.Unknown)
 
         override suspend fun deleteTracker(trackerId: String): RepositoryResult<Unit> =
@@ -198,7 +199,11 @@ class DiscoverTrackersViewModelTest {
         override suspend fun createGroup(name: String): RepositoryResult<Group> =
             RepositoryResult.Failure(AppError.Unknown)
 
-        override suspend fun patchGroup(groupId: String, request: GroupPatchRequest): RepositoryResult<Group> =
+        override suspend fun patchGroup(
+            groupId: String,
+            request: GroupPatchRequest,
+            publishToStore: Boolean
+        ): RepositoryResult<Group> =
             RepositoryResult.Failure(AppError.Unknown)
 
         override suspend fun deleteGroup(groupId: String): RepositoryResult<Unit> =

@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 data class EditSharedTrackerUiState(
     val isLoading: Boolean = false,
     val mapVisibility: MapVisibilityResponse? = null,
+    val pendingHiddenTrackerId: String? = null,
     val errorMessage: String? = null,
     val didLeave: Boolean = false
 )
@@ -49,14 +50,38 @@ class EditSharedTrackerViewModel @Inject constructor(
         } else {
             current.hidden_track_ids.filterNot { it == trackerId }
         }.distinct()
+        val optimistic = current.copy(hidden_track_ids = updated)
+        _uiState.update {
+            it.copy(
+                mapVisibility = optimistic,
+                pendingHiddenTrackerId = trackerId,
+                errorMessage = null
+            )
+        }
         viewModelScope.launch {
             when (
                 val result = trackerRepository.patchMapVisibility(
                     MapVisibilityRequest(hidden_track_ids = updated)
                 )
             ) {
-                is RepositoryResult.Success -> _uiState.update { it.copy(mapVisibility = result.data, errorMessage = null) }
-                is RepositoryResult.Failure -> _uiState.update { it.copy(errorMessage = result.error.toString()) }
+                is RepositoryResult.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            mapVisibility = result.data,
+                            pendingHiddenTrackerId = null,
+                            errorMessage = null
+                        )
+                    }
+                }
+                is RepositoryResult.Failure -> {
+                    _uiState.update {
+                        it.copy(
+                            pendingHiddenTrackerId = null,
+                            errorMessage = result.error.toString()
+                        )
+                    }
+                    load()
+                }
             }
         }
     }
