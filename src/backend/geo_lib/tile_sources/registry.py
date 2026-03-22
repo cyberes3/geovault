@@ -1,3 +1,4 @@
+from geo_lib.tile_sources.forest_service_topo_2016 import ForestServiceTopo2016TileSource
 from geo_lib.tile_sources.global_imagery import GlobalImageryTileSource
 from geo_lib.tile_sources.google_maps import GoogleMapsTileSource
 from geo_lib.tile_sources.google_satellite_hybrid import GoogleSatelliteHybridTileSource
@@ -31,6 +32,7 @@ def _initialize_tile_sources():
         OpenTopoMapTileSource(),
         OpenHikingMapTileSource(),
         MapbuilderTopoTileSource(),
+        ForestServiceTopo2016TileSource(),
         GlobalImageryTileSource(),
         MapTilerHillshadeTileSource(),
         MapTilerTerrainTileSource(),
