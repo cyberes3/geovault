@@ -1,4 +1,5 @@
 import {
+  buildRasterSourceSpec,
   buildRasterStyle,
   fetchVisibleTileSources,
   getTileSourceSelectOptions,
@@ -14,6 +15,17 @@ import {
 } from '@/utils/placesCooperativeGestures.js';
 const DEFAULT_CENTER = [0, 0];
 const DEFAULT_ZOOM = 2;
+
+/** Basemap raster ids — must not collide with layers inside vector styles (e.g. MapTiler). */
+const GV_PLACES_BASE_RASTER_SOURCE_ID = 'gv_places_basemap_raster';
+const GV_PLACES_BASE_RASTER_LAYER_ID = 'gv_places_basemap_raster_layer';
+
+const BLANK_MAP_STYLE = {
+  version: 8,
+  glyphs: '/api/fonts/{fontstack}/{range}.pbf',
+  sources: {},
+  layers: []
+};
 
 function getMaplibre() {
   return window.gv_core?.maplibre || window.maplibregl || null;
@@ -31,17 +43,12 @@ function applyInteractionPolicy(map, mode) {
   }
 }
 
-/** After setStyle(), `style.load` may never fire if the style fails; cap wait so callers never hang. */
-function waitForNextStyleLoad(map, timeoutMs = 15000) {
+function waitForMapEvent(map, eventName, timeoutMs = 15000) {
   return new Promise((resolve) => {
-    if (typeof map.isStyleLoaded === 'function' && map.isStyleLoaded()) {
-      resolve();
-      return;
-    }
-    const timer = setTimeout(resolve, timeoutMs);
-    map.once('style.load', () => {
-      clearTimeout(timer);
-      resolve();
+    const timeoutId = setTimeout(() => resolve(false), timeoutMs);
+    map.once(eventName, () => {
+      clearTimeout(timeoutId);
+      resolve(true);
     });
   });
 }
@@ -66,14 +73,19 @@ export async function createPlacesMap({
   const initialCoop = getInitialCooperativeGestures(mode);
 
   const tileSources = await fetchVisibleTileSources();
-  const resolveStyle = (baseSource) => {
+  const resolveInitialStyle = (baseSource) => {
     const useStyleUrl = isStyleBasedSource(baseSource) && !!baseSource?.client_config?.style_url;
-    return useStyleUrl ? baseSource.client_config.style_url : buildRasterStyle(baseSource);
+    return useStyleUrl
+      ? baseSource.client_config.style_url
+      : buildRasterStyle(baseSource, {
+        sourceId: GV_PLACES_BASE_RASTER_SOURCE_ID,
+        layerId: GV_PLACES_BASE_RASTER_LAYER_ID
+      });
   };
 
   let activeBaseSource = resolveInitialBaseSource(tileSources, preferredSourceId);
   let currentFeatures = [];
-  const style = resolveStyle(activeBaseSource);
+  const style = resolveInitialStyle(activeBaseSource);
 
   const map = new maplibre.Map({
     container,
@@ -87,6 +99,59 @@ export async function createPlacesMap({
     attributionControl: false,
     cooperativeGestures: initialCoop
   });
+
+  /**
+   * Match MapPage: style URL for vector tiles; blank style + add raster source/layer for rasters.
+   */
+  const applyPlacesBasemap = async (baseSource) => {
+    const clientConfig = baseSource?.client_config || {};
+    const useStyleUrl = isStyleBasedSource(baseSource) && !!clientConfig.style_url;
+
+    if (useStyleUrl) {
+      map.setStyle(clientConfig.style_url);
+      const ok = await waitForMapEvent(map, 'styledata', 30000);
+      if (!ok) {
+        throw new Error('Timed out waiting for basemap style to load');
+      }
+      map.setMaxZoom(maxZoom);
+      return;
+    }
+
+    map.setStyle(BLANK_MAP_STYLE);
+    const blankOk = await waitForMapEvent(map, 'styledata', 30000);
+    if (!blankOk) {
+      throw new Error('Timed out waiting for blank basemap style');
+    }
+    map.setMaxZoom(maxZoom);
+
+    try {
+      if (map.getLayer(GV_PLACES_BASE_RASTER_LAYER_ID)) {
+        map.removeLayer(GV_PLACES_BASE_RASTER_LAYER_ID);
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    try {
+      if (map.getSource(GV_PLACES_BASE_RASTER_SOURCE_ID)) {
+        map.removeSource(GV_PLACES_BASE_RASTER_SOURCE_ID);
+      }
+    } catch (_) {
+      /* ignore */
+    }
+
+    const spec = buildRasterSourceSpec(baseSource);
+    const minzoom = clientConfig.minzoom ?? 0;
+    const layerMaxZoom = Math.max(clientConfig.maxzoom ?? maxZoom, maxZoom + 1);
+
+    map.addSource(GV_PLACES_BASE_RASTER_SOURCE_ID, spec);
+    map.addLayer({
+      id: GV_PLACES_BASE_RASTER_LAYER_ID,
+      type: 'raster',
+      source: GV_PLACES_BASE_RASTER_SOURCE_ID,
+      minzoom,
+      maxzoom: layerMaxZoom
+    });
+  };
 
   const listeners = [];
   const on = (event, handler) => {
@@ -114,30 +179,49 @@ export async function createPlacesMap({
     resizeNow();
   });
 
-  const ensurePlacesSourceAndLayer = () => {
-    if (!map.getSource(sourceId)) {
-      map.addSource(sourceId, {
-        type: 'geojson',
-        data: {type: 'FeatureCollection', features: currentFeatures}
-      });
+  /**
+   * Always remove and re-add overlay so we never "skip" addLayer because a basemap style
+   * already defines the same id (that was the main marker-loss bug).
+   */
+  const reinstallPlacesOverlay = () => {
+    try {
+      if (map.getLayer(layerId)) {
+        map.removeLayer(layerId);
+      }
+    } catch (_) {
+      /* ignore */
     }
-    if (!map.getLayer(layerId)) {
-      map.addLayer({
-        id: layerId,
-        type: 'circle',
-        source: sourceId,
-        paint: {
-          'circle-radius': 7,
-          'circle-color': ['case', ['==', ['get', 'is_highlighted'], 1], '#F4AC45', '#163D8A'],
-          'circle-stroke-color': ['case', ['==', ['get', 'is_highlighted'], 1], '#000000', '#FFFFFF'],
-          'circle-stroke-width': 2
-        }
-      });
+    try {
+      if (map.getSource(sourceId)) {
+        map.removeSource(sourceId);
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    map.addSource(sourceId, {
+      type: 'geojson',
+      data: {type: 'FeatureCollection', features: currentFeatures}
+    });
+    map.addLayer({
+      id: layerId,
+      type: 'circle',
+      source: sourceId,
+      paint: {
+        'circle-radius': 7,
+        'circle-color': ['case', ['==', ['get', 'is_highlighted'], 1], '#F4AC45', '#163D8A'],
+        'circle-stroke-color': ['case', ['==', ['get', 'is_highlighted'], 1], '#000000', '#FFFFFF'],
+        'circle-stroke-width': 2
+      }
+    });
+    try {
+      map.moveLayer(layerId);
+    } catch (_) {
+      /* ignore */
     }
   };
 
   await new Promise((resolve) => map.once('load', resolve));
-  ensurePlacesSourceAndLayer();
+  reinstallPlacesOverlay();
 
   const setPointFeatures = (features) => {
     currentFeatures = Array.isArray(features) ? features : [];
@@ -189,24 +273,28 @@ export async function createPlacesMap({
       pitch: map.getPitch()
     };
 
-    map.setStyle(resolveStyle(nextBaseSource));
-    await waitForNextStyleLoad(map);
-
-    ensurePlacesSourceAndLayer();
-    applyInteractionPolicy(map, mode);
-    map.jumpTo(currentViewState);
-    resizeNow();
-
-    const source = map.getSource(sourceId);
-    if (source) {
-      source.setData({
-        type: 'FeatureCollection',
-        features: currentFeatures
-      });
+    try {
+      await applyPlacesBasemap(nextBaseSource);
+      await waitForMapEvent(map, 'idle', 8000);
+      reinstallPlacesOverlay();
+      applyInteractionPolicy(map, mode);
+      map.jumpTo(currentViewState);
+      resizeNow();
+      activeBaseSource = nextBaseSource;
+      return nextId;
+    } catch (error) {
+      try {
+        await applyPlacesBasemap(activeBaseSource);
+        await waitForMapEvent(map, 'idle', 8000);
+        reinstallPlacesOverlay();
+      } catch (_) {
+        /* best-effort recovery */
+      }
+      applyInteractionPolicy(map, mode);
+      map.jumpTo(currentViewState);
+      resizeNow();
+      throw error;
     }
-
-    activeBaseSource = nextBaseSource;
-    return nextId;
   };
 
   const destroy = () => {

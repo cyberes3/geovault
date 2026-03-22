@@ -206,8 +206,8 @@ import {onBeforeRouteLeave, useRoute} from 'vue-router';
 import {ArrowPathIcon, HomeIcon, MagnifyingGlassIcon, MapPinIcon, Square3Stack3DIcon} from '@heroicons/vue/24/outline';
 import {createPlacesMap} from '@/utils/placesMaplibre.js';
 import {getDefaultMapSourceIdFromStore} from '@/utils/placesMapSettings.js';
-const PLACE_EDIT_SOURCE_ID = 'place-edit-source';
-const PLACE_EDIT_LAYER_ID = 'place-edit-layer';
+const PLACE_EDIT_SOURCE_ID = 'gv_places_overlay_edit_source';
+const PLACE_EDIT_LAYER_ID = 'gv_places_overlay_edit_layer';
 const INITIAL_CENTER = [0, 0];
 const INITIAL_ZOOM = 2;
 
