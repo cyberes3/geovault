@@ -101,7 +101,7 @@
     <string name="close">Close</string>
     <string name="description">Description</string>
     <string name="no_description">No description</string>
-    <string name="map_toggle_description">Toggle street or satellite map</string>
+    <string name="map_toggle_description">Toggle streets, hybrid, or topo map</string>
     <string name="recenter_to_tracker">Return to selected tracker</string>
     <string name="zoom_to_latest_description">Lock camera to follow latest tracker point</string>
     <string name="follow_lock_on_description">Unlock camera (stop following tracker)</string>
