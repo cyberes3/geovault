@@ -681,6 +681,8 @@ export default {
       worldShareUrl,
       setWorldShareEnabled,
       onHiddenInListChange,
+      onAllowGroupReshareChange,
+      allowGroupReshare,
       onShareParamsWithRecipientsUpdate,
       isOwner,
       unsubscribing,
