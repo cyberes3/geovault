@@ -2,6 +2,7 @@
   <BaseModal
     :is-open="isOpen"
     title="Manage Shared Trackers"
+    hide-footer-on-mobile
     @close="$emit('close')"
   >
     <div class="p-4 space-y-4">

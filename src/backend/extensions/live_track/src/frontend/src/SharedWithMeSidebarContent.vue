@@ -9,22 +9,43 @@
       />
       <MagnifyingGlassIcon class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
     </div>
-    <div class="flex-shrink-0 mb-3 flex items-center gap-2">
-      <BaseButton variant="primary" color="blue" size="sm" class="flex-1" @click="$emit('openDiscover')">
-        Add Public Trackers
-      </BaseButton>
-      <BaseButton variant="primary" color="blue" size="sm" class="flex-1" @click="$emit('open-shared-list')">
-        Manage Shared
-      </BaseButton>
-      <button
-        type="button"
-        title="Refresh"
-        class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 flex-shrink-0 disabled:opacity-50 flex items-center justify-center size-9"
-        :disabled="refreshing"
-        @click="$emit('refresh')"
-      >
-        <ArrowPathIcon :class="['h-5 w-5', refreshing ? 'animate-spin' : '']" />
-      </button>
+    <div class="flex-shrink-0 mb-3">
+      <div class="flex flex-col gap-2 sm:hidden">
+        <div class="flex items-center gap-2">
+          <BaseButton variant="primary" color="blue" size="sm" class="min-w-0 flex-1" @click="$emit('openDiscover')">
+            Add Public Trackers
+          </BaseButton>
+          <button
+            type="button"
+            title="Refresh"
+            class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 flex-shrink-0 disabled:opacity-50 flex items-center justify-center size-9"
+            :disabled="refreshing"
+            @click="$emit('refresh')"
+          >
+            <ArrowPathIcon :class="['h-5 w-5', refreshing ? 'animate-spin' : '']" />
+          </button>
+        </div>
+        <BaseButton variant="primary" color="blue" size="sm" class="w-full" @click="$emit('open-shared-list')">
+          Manage Shared
+        </BaseButton>
+      </div>
+      <div class="hidden sm:flex sm:items-center sm:gap-2">
+        <BaseButton variant="primary" color="blue" size="sm" class="flex-1" @click="$emit('openDiscover')">
+          Add Public Trackers
+        </BaseButton>
+        <BaseButton variant="primary" color="blue" size="sm" class="flex-1" @click="$emit('open-shared-list')">
+          Manage Shared
+        </BaseButton>
+        <button
+          type="button"
+          title="Refresh"
+          class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 flex-shrink-0 disabled:opacity-50 flex items-center justify-center size-9"
+          :disabled="refreshing"
+          @click="$emit('refresh')"
+        >
+          <ArrowPathIcon :class="['h-5 w-5', refreshing ? 'animate-spin' : '']" />
+        </button>
+      </div>
     </div>
     <div class="flex-1 min-h-0 flex flex-col gap-3 overflow-hidden">
       <div class="flex-1 min-h-0 flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-gray-50/60 shadow-sm">

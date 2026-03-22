@@ -58,7 +58,8 @@
         <div
           v-if="$slots.footer || $slots.actions || $slots['footer-left']"
           :class="[
-            'bg-gray-50 px-4 sm:px-6 py-4 border-t border-gray-200 flex items-center flex-shrink-0',
+            'bg-gray-50 px-4 sm:px-6 py-4 border-t border-gray-200 items-center flex-shrink-0',
+            hideFooterOnMobile ? 'hidden sm:flex' : 'flex',
             $slots['footer-left'] ? 'justify-between' : 'justify-end',
             fullScreenMobile ? '' : 'rounded-b-lg',
             'sm:rounded-b-lg'
@@ -112,6 +113,11 @@ export default {
       default: true
     },
     onTop: {
+      type: Boolean,
+      default: false
+    },
+    /** When true, footer/actions row is hidden below sm; header close and ESC still work. */
+    hideFooterOnMobile: {
       type: Boolean,
       default: false
     }

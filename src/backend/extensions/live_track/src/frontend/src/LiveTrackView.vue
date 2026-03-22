@@ -2067,6 +2067,7 @@ export default {
       selectedId.value = null;
       updateMapFeatures();
       fitMapToGroupTracks(group);
+      if (isMobileView.value) collapseDrawerToPeek();
     }
 
     function openGroupQuickView(group) {
