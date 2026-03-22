@@ -1,4 +1,5 @@
 """Feature sharing operations"""
+import traceback
 import uuid
 
 from django.db.models import F
@@ -151,8 +152,8 @@ def update_feature_share(request, feature_id):
         })
     except json.JSONDecodeError:
         return error_response('Invalid JSON in request body', code=400)
-    except Exception as e:
-        _logger.error(f"Error updating feature share: {e}")
+    except Exception:
+        _logger.error("Error updating feature share: %s", traceback.format_exc())
         return error_response('Failed to update share', code=500)
 
 

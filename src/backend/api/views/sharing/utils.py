@@ -17,11 +17,11 @@ def validate_share_id(share_id: str) -> bool:
 def build_share_url(request, share_id: str) -> str:
     """
     Build a social-preview-capable share path.
-    
+
     Args:
         request: Django request object (unused, kept for API compatibility)
         share_id: The share ID (UUID4) to include in the path
-        
+
     Returns:
         Share path (e.g., "/share/map/<id>/")
     """

@@ -12,6 +12,7 @@ from api.validation.feature_updates import validate_payload, UnifiedSharePayload
 from api.views.sharing.utils import build_share_url
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
+from website.map_share_social.preview_warmup import trigger_social_preview_warmup_async
 from website.settings_utils import get_required_setting
 
 _logger = get_tagged_logger()
@@ -71,6 +72,7 @@ def create_share(request, validated_data):
             user=request.user,
             allow_downloads=allow_downloads
         )
+        trigger_social_preview_warmup_async(tag_share.share_id)
         
         share_url = build_share_url(request, tag_share.share_id)
         return JsonResponse({
@@ -105,6 +107,7 @@ def create_share(request, validated_data):
             include_tags=include_tags,
             allow_downloads=allow_downloads
         )
+        trigger_social_preview_warmup_async(collection_share.share_id)
         
         share_url = build_share_url(request, collection_share.share_id)
         return JsonResponse({
@@ -148,6 +151,7 @@ def create_share(request, validated_data):
             user=request.user,
             allow_downloads=allow_downloads
         )
+        trigger_social_preview_warmup_async(feature_share.share_id)
         
         share_url = build_share_url(request, feature_share.share_id)
         return JsonResponse({

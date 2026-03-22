@@ -1,9 +1,11 @@
 import math
+import traceback
 from io import BytesIO
 
 import requests
 from PIL import Image
 
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.tile_sources.registry import get_tile_source
 from website.config_loader import get_config_loader
 from website.map_share_social.public_base import public_base_url
@@ -15,6 +17,7 @@ _SOCIAL_PREVIEW_BACKGROUND = (238, 241, 245)
 _MAX_PREVIEW_ZOOM = 17
 _MIN_PREVIEW_ZOOM = 1
 _TILE_SIZE = 256
+_logger = get_tagged_logger("social_preview")
 
 
 def get_social_preview_source_id() -> str:
@@ -133,6 +136,11 @@ def _download_tile(request, tile_source_config: dict, z: int, x: int, y: int):
         with Image.open(BytesIO(response.content)) as image:
             return image.convert("RGB")
     except Exception:
+        _logger.error(
+            "Failed to decode social preview tile image from tile_url=%s: %s",
+            tile_url,
+            traceback.format_exc(),
+        )
         return None
 
 

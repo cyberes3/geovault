@@ -4,7 +4,6 @@
     :title="dialogTitle"
     :max-width="computedMaxWidth"
     :full-screen-mobile="shareType !== 'feature'"
-    below-navbar
     @close="closeDialog"
   >
     <!-- All Share Types - Consistent Layout -->

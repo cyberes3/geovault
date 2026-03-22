@@ -3,6 +3,7 @@
     :is-open="isOpen"
     :title="collection ? 'Edit Collection' : 'Create New Collection'"
     max-width="6xl"
+    :close-on-escape="false"
     @close="closeDialog"
   >
     <form @submit.prevent="saveCollection" class="flex flex-col flex-1 min-h-0">
@@ -214,6 +215,15 @@ export default {
       return [...sortedUserTags, ...sortedSystemTags];
     }
   },
+  watch: {
+    isOpen(newVal) {
+      if (newVal) {
+        this.$nextTick(() => {
+          this.syncFormFromProps();
+        });
+      }
+    }
+  },
   methods: {
     onTagCheckboxChange(tag, checked) {
       const index = this.formData.tags.indexOf(tag);
@@ -327,6 +337,23 @@ export default {
     closeDialog() {
       this.$emit('close');
     },
+    syncFormFromProps() {
+      this.tagSearchQuery = '';
+      this.error = null;
+      if (this.collection) {
+        this.formData.name = this.collection.name || '';
+        this.formData.description = this.collection.description || '';
+        this.formData.tags = this.collection.tags ? [...this.collection.tags] : [];
+        this.formData.feature_ids = this.collection.feature_ids
+          ? this.collection.feature_ids.map((id) => String(id))
+          : [];
+      } else {
+        this.formData.name = '';
+        this.formData.description = '';
+        this.formData.tags = [];
+        this.formData.feature_ids = [];
+      }
+    },
     handleBackdropMouseDown(event) {
       if (event.target === event.currentTarget) {
         this.closeDialog();
@@ -334,17 +361,9 @@ export default {
     }
   },
   mounted() {
-    // Initialize form data from collection if editing
-    if (this.collection) {
-      this.formData.name = this.collection.name || '';
-      this.formData.description = this.collection.description || '';
-      this.formData.tags = this.collection.tags ? [...this.collection.tags] : [];
-      this.formData.feature_ids = this.collection.feature_ids
-        ? this.collection.feature_ids.map(id => String(id))
-        : [];
+    if (this.isOpen) {
+      this.syncFormFromProps();
     }
-    
-    // Fetch available tags and features
     this.fetchTags();
     this.fetchFeatures();
   }

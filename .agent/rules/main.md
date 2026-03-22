@@ -4,7 +4,7 @@ trigger: always_on
 
 # The following are extremely relevant and important instructions. It would behoove you to follow them.
 
-Always use top-level imports in Python, not local/function level!
+Always use top-level imports in Python, not lazy/local/function level!
 
 The backend venv is at src/backend/venv
 
@@ -14,6 +14,8 @@ YES: `./run-tests.sh test_api/test_app_releases.py` NO: `src/tests/run-tests.sh 
 Do not re-export modules or use __all__. Instead, do direct imports.
 
 Don't pile Django routes in the base views.py file. Instead, create new files to organize them in a manageable way.
+
+All try/catch logging needs to explicitily print the full traceback. DO NOT swallow the exception and hide it!! 
 
 DO NOT MANUALLY CREATE OR EDIT DJANGO MIGRATIONS!!!!! Use `manage.py` to generate them.
 

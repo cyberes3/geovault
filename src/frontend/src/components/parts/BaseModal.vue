@@ -132,7 +132,7 @@ export default {
      */
     belowNavbar: {
       type: Boolean,
-      default: false
+      default: true
     }
   },
   emits: ['close'],

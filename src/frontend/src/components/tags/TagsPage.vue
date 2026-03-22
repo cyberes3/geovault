@@ -115,17 +115,30 @@
                   @focus.stop
                   @click.stop
               />
-              <BaseButton
+              <div
                   v-if="editingTag === tag"
-                  class="ml-2 p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0"
-                  variant="primary"
-                  color="blue"
-                  size="xs"
-                  title="Save Tag Name"
-                  @click.stop="saveTagEdit(tag)"
+                  class="ml-2 flex items-center gap-1 flex-shrink-0"
               >
-                <CheckIcon class="w-4 h-4" />
-              </BaseButton>
+                <BaseButton
+                    class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0"
+                    variant="primary"
+                    color="blue"
+                    size="xs"
+                    title="Save Tag Name"
+                    @click.stop="saveTagEdit(tag)"
+                >
+                  <CheckIcon class="w-4 h-4" />
+                </BaseButton>
+                <BaseButton
+                    class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0"
+                    variant="white"
+                    size="xs"
+                    title="Cancel Editing"
+                    @click.stop="cancelTagEdit"
+                >
+                  <XMarkIcon class="w-4 h-4" />
+                </BaseButton>
+              </div>
             </div>
             <!-- Control Buttons Row -->
             <div v-if="editingTag !== tag" class="flex items-center space-x-1 flex-wrap">

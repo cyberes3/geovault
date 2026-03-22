@@ -4,6 +4,7 @@ Tests creating, updating, accessing, downloading, and viewing elevations for all
 """
 import json
 import uuid
+from unittest.mock import patch
 from django.test import TestCase
 from django.contrib.gis.geos import Point, LineString
 
@@ -73,6 +74,21 @@ class TestUnifiedShareCreation(TestCase):
         self.assertEqual(data['allow_downloads'], True)
         self.assertTrue(TagShare.objects.filter(share_id=data['share_id']).exists())
 
+    @patch("api.views.sharing.management.trigger_social_preview_warmup_async")
+    def test_create_tag_share_triggers_preview_warmup(self, mock_warmup):
+        share_data = {
+            'share_type': 'tag',
+            'tag': 'shared-tag',
+        }
+        response = self.client.post(
+            '/api/sharing/create/',
+            data=json.dumps(share_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        created_share_id = json.loads(response.content)['share_id']
+        mock_warmup.assert_called_once_with(created_share_id)
+
     def test_create_collection_share_unified(self):
         """Test creating a collection share using unified endpoint."""
         share_data = {
@@ -94,6 +110,21 @@ class TestUnifiedShareCreation(TestCase):
         self.assertEqual(data['include_tags'], True)
         self.assertTrue(CollectionShare.objects.filter(share_id=data['share_id']).exists())
 
+    @patch("api.views.sharing.management.trigger_social_preview_warmup_async")
+    def test_create_collection_share_triggers_preview_warmup(self, mock_warmup):
+        share_data = {
+            'share_type': 'collection',
+            'collection_id': str(self.collection.id),
+        }
+        response = self.client.post(
+            '/api/sharing/create/',
+            data=json.dumps(share_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        created_share_id = json.loads(response.content)['share_id']
+        mock_warmup.assert_called_once_with(created_share_id)
+
     def test_create_feature_share_unified(self):
         """Test creating a feature share using unified endpoint."""
         share_data = {
@@ -112,6 +143,21 @@ class TestUnifiedShareCreation(TestCase):
         self.assertIn('url', data)
         self.assertEqual(data['allow_downloads'], True)
         self.assertTrue(FeatureShare.objects.filter(share_id=data['share_id']).exists())
+
+    @patch("api.views.sharing.management.trigger_social_preview_warmup_async")
+    def test_create_feature_share_triggers_preview_warmup(self, mock_warmup):
+        share_data = {
+            'share_type': 'feature',
+            'feature_id': self.feature.id,
+        }
+        response = self.client.post(
+            '/api/sharing/create/',
+            data=json.dumps(share_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        created_share_id = json.loads(response.content)['share_id']
+        mock_warmup.assert_called_once_with(created_share_id)
 
     def test_create_feature_share_duplicate(self):
         """Test creating duplicate feature share returns existing share."""
@@ -138,6 +184,29 @@ class TestUnifiedShareCreation(TestCase):
         self.assertEqual(response2.status_code, 200)
         share_id2 = json.loads(response2.content)['share_id']
         self.assertEqual(share_id1, share_id2)
+
+    @patch("api.views.sharing.management.trigger_social_preview_warmup_async")
+    def test_create_feature_share_duplicate_does_not_trigger_warmup_again(self, mock_warmup):
+        share_data = {
+            'share_type': 'feature',
+            'feature_id': self.feature.id,
+            'allow_downloads': False
+        }
+        response1 = self.client.post(
+            '/api/sharing/create/',
+            data=json.dumps(share_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response1.status_code, 200)
+        self.assertEqual(mock_warmup.call_count, 1)
+
+        response2 = self.client.post(
+            '/api/sharing/create/',
+            data=json.dumps(share_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response2.status_code, 200)
+        self.assertEqual(mock_warmup.call_count, 1)
 
     def test_create_share_invalid_type(self):
         """Test creating share with invalid share_type."""
