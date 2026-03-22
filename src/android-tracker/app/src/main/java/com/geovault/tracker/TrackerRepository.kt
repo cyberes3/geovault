@@ -60,6 +60,10 @@ object TrackerRepository {
         return if (success) RepositoryResult.Success(Unit) else RepositoryResult.Failure(AppError.Unknown)
     }
 
+    internal fun closeNoBodyResponse(response: Response<ResponseBody>) {
+        response.body()?.close()
+    }
+
     fun getTrackersResult(
         context: Context,
         forceRefresh: Boolean = false,
@@ -527,6 +531,7 @@ object TrackerRepository {
         val api = createApi(context, serverUrl)
         api.deleteTracker(id).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                closeNoBodyResponse(response)
                 if (response.isSuccessful) {
                     trackersCache = trackersCache?.filterNot { it.id == id }
                     geometryCache.entries.removeAll { it.key.trackerId == id }
@@ -634,6 +639,7 @@ object TrackerRepository {
         val api = createApi(context, serverUrl)
         api.unsubscribeTracker(trackerId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                closeNoBodyResponse(response)
                 if (response.isSuccessful) {
                     trackersCache = trackersCache?.filterNot { it.id == trackerId }
                     availableToAddCache = null
@@ -656,6 +662,7 @@ object TrackerRepository {
         val api = createApi(context, serverUrl)
         api.leaveShareWithMe(trackerId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                closeNoBodyResponse(response)
                 if (response.isSuccessful) {
                     trackersCache = trackersCache?.filterNot { it.id == trackerId }
                     availableToAddCache = null
@@ -871,6 +878,7 @@ object TrackerRepository {
         val api = createApi(context, serverUrl)
         api.deleteGroup(groupId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                closeNoBodyResponse(response)
                 if (response.isSuccessful) groupsCache = groupsCache?.filterNot { it.id == groupId }
                 callback(response.isSuccessful)
             }
@@ -922,6 +930,7 @@ object TrackerRepository {
         val api = createApi(context, serverUrl)
         api.removeGroupTrack(groupId, trackId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                closeNoBodyResponse(response)
                 if (response.isSuccessful) groupsCache = null
                 callback(response.isSuccessful)
             }
@@ -964,6 +973,7 @@ object TrackerRepository {
         val api = createApi(context, serverUrl)
         api.leaveGroup(groupId).enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                closeNoBodyResponse(response)
                 if (response.isSuccessful) {
                     groupsCache = groupsCache?.filterNot { it.id == groupId }
                     availableToAddCache = null

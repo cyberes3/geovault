@@ -182,6 +182,29 @@ class TrackingRecoveryCoordinatorTest {
     }
 
     @Test
+    fun evaluateRecovery_respectsCustomStaleTickThreshold() {
+        val now = 50_000L
+        val decision = TrackingRecoveryCoordinator.evaluateRecovery(
+            nowMs = now,
+            wasTrackingBeforeExit = true,
+            restartTrackingIfKilled = true,
+            lastHeartbeatMs = now - TrackingRecoveryCoordinator.HEARTBEAT_STALE_MS - 1L,
+            consecutiveStaleTicks = 2,
+            lastStopWasIntentional = false,
+            canStartNow = true,
+            strictPrereqsReady = true,
+            exactAlarmAvailable = true,
+            recoveryWindowStartMs = now - 5_000L,
+            failureNotificationShown = false,
+            requiredConsecutiveStaleTicks = 3
+        )
+
+        assertEquals(TrackingRecoveryCoordinator.RecoveryState.PENDING_STALE_CONFIRMATION, decision.state)
+        assertFalse(decision.shouldStartService)
+        assertTrue(decision.shouldKeepWatchdog)
+    }
+
+    @Test
     fun evaluateRecovery_doesNotShowFailure_beforeConfirmedRecoveryWindowExists() {
         val now = 120_000L
         val decision = TrackingRecoveryCoordinator.evaluateRecovery(

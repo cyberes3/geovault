@@ -1,0 +1,55 @@
+package com.geovault.tracker.startup
+
+import android.content.Intent
+import com.geovault.tracker.TrackingService
+
+data class BootStartupSnapshot(
+    val action: String?,
+    val startOnBoot: Boolean,
+    val hasRequiredPermissions: Boolean,
+    val gpsProviderEnabled: Boolean,
+    val selectedTrackerId: String
+)
+
+enum class BootStartupBlocker(val logLabel: String) {
+    UnsupportedAction("unsupported_action"),
+    StartOnBootDisabled("start_on_boot_disabled"),
+    MissingTrackingPermissions("missing_tracking_permissions"),
+    GpsProviderDisabled("gps_provider_disabled"),
+    InvalidSelectedTracker("invalid_selected_tracker")
+}
+
+data class BootStartupDecision(
+    val shouldStartTracking: Boolean,
+    val blockers: List<BootStartupBlocker>
+)
+
+object BootStartupPolicy {
+    private val supportedActions = setOf(
+        Intent.ACTION_BOOT_COMPLETED,
+        Intent.ACTION_MY_PACKAGE_REPLACED
+    )
+
+    fun evaluate(snapshot: BootStartupSnapshot): BootStartupDecision {
+        val blockers = mutableListOf<BootStartupBlocker>()
+        if (!supportedActions.contains(snapshot.action)) {
+            blockers += BootStartupBlocker.UnsupportedAction
+        }
+        if (!snapshot.startOnBoot) {
+            blockers += BootStartupBlocker.StartOnBootDisabled
+        }
+        if (!snapshot.hasRequiredPermissions) {
+            blockers += BootStartupBlocker.MissingTrackingPermissions
+        }
+        if (!snapshot.gpsProviderEnabled) {
+            blockers += BootStartupBlocker.GpsProviderDisabled
+        }
+        if (!TrackingService.hasValidSelectedTrackerId(snapshot.selectedTrackerId)) {
+            blockers += BootStartupBlocker.InvalidSelectedTracker
+        }
+        return BootStartupDecision(
+            shouldStartTracking = blockers.isEmpty(),
+            blockers = blockers
+        )
+    }
+}

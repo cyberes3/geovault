@@ -373,6 +373,7 @@ class ApiTrackerManagementRepository @Inject constructor(
             try {
                 val response = callProvider(api)
                 if (response.isSuccessful) {
+                    response.body()?.close()
                     RepositoryResult.Success(Unit)
                 } else {
                     RepositoryResult.Failure(mapError(response.code(), response.errorBody()?.string()))

@@ -4,9 +4,12 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.location.LocationManager
+import android.os.UserManager
 import android.util.Log
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.settings.TrackerSettingsRepository
+import com.geovault.tracker.startup.BootStartupPolicy
+import com.geovault.tracker.startup.BootStartupSnapshot
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -16,57 +19,101 @@ class BootReceiver : BroadcastReceiver() {
     lateinit var settingsRepository: TrackerSettingsRepository
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            Log.d("BootReceiver", "Boot completed, checking if tracking should start")
-            val settings = settingsRepository.getSettings()
-            val startOnBoot = settings.startOnBoot
-            val wasTrackingBeforeExit = settingsRepository.wasTrackingBeforeExit()
-            val trackerId = SelectedTrackerPrefs.selectedTrackerId(context)
-            val hasRequiredPermissions = TrackingPermissionGate.hasRequiredPermissionsForTracking(context)
-            val gpsProviderEnabled = isGpsProviderEnabled(context)
-            val strictPrereqs = TrackingRecoveryCoordinator.evaluateStrictPrerequisites(context.applicationContext)
+        val bootAction = intent.action
+        val appContext = context.applicationContext
+        val settings = settingsRepository.getSettings()
+        val startOnBoot = settings.startOnBoot
+        val wasTrackingBeforeExit = settingsRepository.wasTrackingBeforeExit()
+        val trackerId = SelectedTrackerPrefs.selectedTrackerId(context)
+        val hasRequiredPermissions = TrackingPermissionGate.hasRequiredPermissionsForTracking(context)
+        val gpsProviderEnabled = isGpsProviderEnabled(context)
+        val strictPrereqs = TrackingRecoveryCoordinator.evaluateStrictPrerequisites(appContext)
+        val userUnlocked = isUserUnlocked(context)
+        Log.i(
+            TAG,
+            "Boot signal action=$bootAction userUnlocked=$userUnlocked " +
+                "startOnBoot=$startOnBoot wasTrackingBeforeExit=$wasTrackingBeforeExit " +
+                "hasRequiredPermissions=$hasRequiredPermissions gpsEnabled=$gpsProviderEnabled " +
+                "hasSelectedTracker=${trackerId.isNotBlank()}"
+        )
 
-            if (settings.resetTrackingIfKilled && wasTrackingBeforeExit) {
-                if (!strictPrereqs.isReady) {
-                    Log.w(
-                        "BootReceiver",
-                        "Strict recovery prerequisites missing at boot: " +
-                            "exactAlarm=${strictPrereqs.hasExactAlarmAccess} " +
-                            "batteryExempt=${strictPrereqs.hasBatteryOptimizationExemption}"
-                    )
-                }
-                TrackingRecoveryCoordinator.ensureWatchdogScheduled(context.applicationContext)
-            }
+        val decision = BootStartupPolicy.evaluate(
+            BootStartupSnapshot(
+                action = bootAction,
+                startOnBoot = startOnBoot,
+                hasRequiredPermissions = hasRequiredPermissions,
+                gpsProviderEnabled = gpsProviderEnabled,
+                selectedTrackerId = trackerId
+            )
+        )
 
-            if (!shouldStartTrackingOnBoot(startOnBoot, hasRequiredPermissions, gpsProviderEnabled, trackerId)) {
-                Log.w("BootReceiver", "Skipping tracking start on boot: prerequisites missing")
-                return
+        if (settings.resetTrackingIfKilled && wasTrackingBeforeExit) {
+            if (!strictPrereqs.isReady) {
+                Log.w(
+                    TAG,
+                    "Strict recovery prerequisites missing at boot: " +
+                        "exactAlarm=${strictPrereqs.hasExactAlarmAccess} " +
+                        "batteryExempt=${strictPrereqs.hasBatteryOptimizationExemption}"
+                )
             }
-            Log.d("BootReceiver", "Starting TrackingService on boot")
-            val serviceIntent = Intent(context, TrackingService::class.java).apply {
-                action = TrackingService.ACTION_START
-            }
+            TrackingRecoveryCoordinator.ensureWatchdogScheduled(appContext)
+            Log.i(TAG, "Recovery watchdog ensured at boot")
+        }
+
+        if (!decision.shouldStartTracking) {
+            Log.w(
+                TAG,
+                "Skipping tracking start action=$bootAction blockers=${decision.blockers.joinToString(",") { it.logLabel }}"
+            )
+            return
+        }
+
+        Log.i(TAG, "Starting TrackingService from action=$bootAction")
+        val serviceIntent = Intent(context, TrackingService::class.java).apply {
+            this.action = TrackingService.ACTION_START
+        }
+        try {
             context.startForegroundService(serviceIntent)
+            Log.i(TAG, "startForegroundService dispatched from action=$bootAction")
+        } catch (e: Exception) {
+            Log.e(TAG, "Unable to start TrackingService from action=$bootAction", e)
         }
     }
 
     companion object {
+        private const val TAG = "BootReceiver"
+
         fun shouldStartTrackingOnBoot(
             startOnBoot: Boolean,
             hasRequiredPermissions: Boolean,
             gpsProviderEnabled: Boolean,
             selectedTrackerId: String
         ): Boolean {
-            if (!startOnBoot) return false
-            if (!hasRequiredPermissions) return false
-            if (!gpsProviderEnabled) return false
-            return TrackingService.hasValidSelectedTrackerId(selectedTrackerId)
+            val decision = BootStartupPolicy.evaluate(
+                BootStartupSnapshot(
+                    action = Intent.ACTION_BOOT_COMPLETED,
+                    startOnBoot = startOnBoot,
+                    hasRequiredPermissions = hasRequiredPermissions,
+                    gpsProviderEnabled = gpsProviderEnabled,
+                    selectedTrackerId = selectedTrackerId
+                )
+            )
+            return decision.shouldStartTracking
         }
 
         private fun isGpsProviderEnabled(context: Context): Boolean {
             val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return false
             return try {
                 locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        private fun isUserUnlocked(context: Context): Boolean {
+            val userManager = context.getSystemService(Context.USER_SERVICE) as? UserManager ?: return false
+            return try {
+                userManager.isUserUnlocked
             } catch (_: Exception) {
                 false
             }

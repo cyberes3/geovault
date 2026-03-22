@@ -12,6 +12,7 @@ import android.os.IBinder
 import android.content.pm.ServiceInfo
 import android.os.BatteryManager
 import android.os.Bundle
+import android.os.UserManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -166,12 +167,56 @@ class TrackingService : TrackPointServiceBase() {
         private const val FAST_GPS_LOCK_WINDOW_MS = 60_000L
         private const val FAST_GPS_LOCK_SUMMARY_INTERVAL_MS = 30_000L
 
+        internal enum class StartupCommandPath {
+            StartTracking,
+            StopNoRestart,
+            ReshowForeground,
+            StopUnknown
+        }
+
         @JvmStatic
         fun shouldRestartTrackingAfterProcessDeath(
             wasTrackingBeforeExit: Boolean,
             restartTrackingIfKilled: Boolean
         ): Boolean {
             return wasTrackingBeforeExit && restartTrackingIfKilled
+        }
+
+        @JvmStatic
+        internal fun resolveStartupCommandPath(
+            action: String?,
+            wasTrackingBeforeExit: Boolean,
+            restartTrackingIfKilled: Boolean
+        ): StartupCommandPath {
+            return when (action) {
+                ACTION_START -> StartupCommandPath.StartTracking
+                ACTION_STOP -> StartupCommandPath.StopUnknown
+                ACTION_RESHOW_FOREGROUND -> StartupCommandPath.ReshowForeground
+                null -> {
+                    if (shouldRestartTrackingAfterProcessDeath(wasTrackingBeforeExit, restartTrackingIfKilled)) {
+                        StartupCommandPath.StartTracking
+                    } else {
+                        StartupCommandPath.StopNoRestart
+                    }
+                }
+                else -> StartupCommandPath.StopUnknown
+            }
+        }
+
+        @JvmStatic
+        internal fun requiresForegroundPromotion(path: StartupCommandPath): Boolean {
+            return path == StartupCommandPath.StartTracking
+        }
+
+        @JvmStatic
+        internal fun resolveStartupTrigger(action: String?): String {
+            return when (action) {
+                ACTION_START -> "explicit_start"
+                ACTION_STOP -> "explicit_stop"
+                ACTION_RESHOW_FOREGROUND -> "reshow_foreground"
+                null -> "process_restart"
+                else -> "unknown_action"
+            }
         }
 
         @JvmStatic
@@ -265,6 +310,7 @@ class TrackingService : TrackPointServiceBase() {
     private var fastGpsLockTimeoutCountThisSession: Int = 0
     private var fastGpsLockLastSummaryAtMs: Long = 0L
     private var isWaitingForGpsProvider: Boolean = false
+    private var startupForegroundPromoted: Boolean = false
     private var gpsProviderReceiverRegistered: Boolean = false
     private val gpsProviderReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -296,35 +342,61 @@ class TrackingService : TrackPointServiceBase() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return when (intent?.action) {
-            ACTION_START -> {
-                startTracking()
-                TrackingRecoveryCoordinator.ensureWatchdogScheduled(applicationContext)
-                START_STICKY
-            }
-            ACTION_STOP -> {
-                Log.d(TAG, "ACTION_STOP received", Exception("ACTION_STOP stacktrace"))
-                stopTracking(reason = "action_stop")
-                START_NOT_STICKY
-            }
-            null -> {
-                val wasTrackingBeforeExit = settingsRepository.wasTrackingBeforeExit()
-                val restartIfKilled = currentSettings.resetTrackingIfKilled
-                val shouldRestart = shouldRestartTrackingAfterProcessDeath(
-                    wasTrackingBeforeExit = wasTrackingBeforeExit,
-                    restartTrackingIfKilled = restartIfKilled
-                )
-                if (shouldRestart) {
-                    startTracking()
+        val wasTrackingBeforeExit = settingsRepository.wasTrackingBeforeExit()
+        val restartIfKilled = currentSettings.resetTrackingIfKilled
+        val startupTrigger = resolveStartupTrigger(intent?.action)
+        val commandPath = resolveStartupCommandPath(
+            action = intent?.action,
+            wasTrackingBeforeExit = wasTrackingBeforeExit,
+            restartTrackingIfKilled = restartIfKilled
+        )
+        logNotificationSurfaceDiagnostics(
+            trigger = startupTrigger,
+            action = intent?.action,
+            path = commandPath,
+            stage = "on_start_command"
+        )
+        Log.i(
+            TAG,
+            "onStartCommand action=${intent?.action} path=$commandPath startId=$startId " +
+                "wasTrackingBeforeExit=$wasTrackingBeforeExit restartIfKilled=$restartIfKilled trigger=$startupTrigger " +
+                "isTracking=$isTracking fgsPromoted=$startupForegroundPromoted"
+        )
+        if (requiresForegroundPromotion(commandPath) &&
+            !promoteToForegroundForStartup(trigger = startupTrigger)
+        ) {
+            logStartupOutcome(
+                path = commandPath,
+                trigger = startupTrigger,
+                result = "failed",
+                reason = "foreground_promotion_failed"
+            )
+            stopSelfSafelyAfterStartup(reason = "fgs_promotion_failed")
+            return START_NOT_STICKY
+        }
+
+        return when (commandPath) {
+            StartupCommandPath.StartTracking -> {
+                val started = startTracking(commandPath, startupTrigger)
+                if (started) {
                     TrackingRecoveryCoordinator.ensureWatchdogScheduled(applicationContext)
                     START_STICKY
                 } else {
-                    TrackingRecoveryCoordinator.markIntentionalStop(applicationContext, reason = "restart_not_required")
-                    stopSelf()
                     START_NOT_STICKY
                 }
             }
-            ACTION_RESHOW_FOREGROUND -> {
+            StartupCommandPath.StopNoRestart -> {
+                TrackingRecoveryCoordinator.markIntentionalStop(applicationContext, reason = "restart_not_required")
+                stopSelfSafelyAfterStartup(reason = "restart_not_required")
+                logStartupOutcome(
+                    path = commandPath,
+                    trigger = startupTrigger,
+                    result = "stopped",
+                    reason = "restart_not_required"
+                )
+                START_NOT_STICKY
+            }
+            StartupCommandPath.ReshowForeground -> {
                 if (isTracking) {
                     serviceScope.launch {
                         val count = database.locationDao().getCurrentSessionCount(sessionBoundaryForBacklogMs)
@@ -337,32 +409,82 @@ class TrackingService : TrackPointServiceBase() {
                         }
                     }
                 }
+                logStartupOutcome(
+                    path = commandPath,
+                    trigger = startupTrigger,
+                    result = "handled",
+                    reason = if (isTracking) "foreground_reshown" else "ignored_not_tracking"
+                )
                 START_STICKY
             }
-            else -> {
-                TrackingRecoveryCoordinator.markIntentionalStop(applicationContext, reason = "unknown_action")
-                stopSelf()
+            StartupCommandPath.StopUnknown -> {
+                if (intent?.action == ACTION_STOP) {
+                    Log.d(TAG, "ACTION_STOP received", Exception("ACTION_STOP stacktrace"))
+                    stopTracking(reason = "action_stop")
+                    logStartupOutcome(
+                        path = commandPath,
+                        trigger = startupTrigger,
+                        result = "stopped",
+                        reason = "action_stop"
+                    )
+                } else {
+                    TrackingRecoveryCoordinator.markIntentionalStop(applicationContext, reason = "unknown_action")
+                    stopSelfSafelyAfterStartup(reason = "unknown_action")
+                    logStartupOutcome(
+                        path = commandPath,
+                        trigger = startupTrigger,
+                        result = "stopped",
+                        reason = "unknown_action"
+                    )
+                }
                 START_NOT_STICKY
             }
         }
     }
 
-    private fun startTracking() {
-        if (isTracking) return
+    private fun startTracking(path: StartupCommandPath, trigger: String): Boolean {
+        if (isTracking) {
+            Log.i(TAG, "Ignoring start request; tracking already active")
+            logStartupOutcome(
+                path = path,
+                trigger = trigger,
+                result = "ignored",
+                reason = "already_tracking"
+            )
+            return true
+        }
         currentSettings = settingsRepository.getSettings()
         transitionControlState(TrackingControlEvent.StartRequested)
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (!hasValidSelectedTrackerId(selectedTrackerId)) {
-            failStartup(getString(R.string.no_tracker_selected_go_to_settings))
-            return
+            Log.w(TAG, "Start blocked: invalid selected tracker id")
+            failStartup(
+                message = getString(R.string.no_tracker_selected_go_to_settings),
+                path = path,
+                trigger = trigger,
+                reason = "invalid_selected_tracker"
+            )
+            return false
         }
         if (!TrackingPermissionGate.hasRequiredPermissionsForTracking(this)) {
-            failStartup(getString(R.string.location_permissions_required))
-            return
+            Log.w(TAG, "Start blocked: required tracking permissions missing")
+            failStartup(
+                message = getString(R.string.location_permissions_required),
+                path = path,
+                trigger = trigger,
+                reason = "permissions_missing"
+            )
+            return false
         }
         if (!unifiedLocationClient.isGpsProviderEnabled()) {
-            failStartup(getString(R.string.gps_provider_required))
-            return
+            Log.w(TAG, "Start blocked: GPS provider disabled")
+            failStartup(
+                message = getString(R.string.gps_provider_required),
+                path = path,
+                trigger = trigger,
+                reason = "gps_disabled"
+            )
+            return false
         }
         isTracking = true
         isRunning = true
@@ -401,8 +523,6 @@ class TrackingService : TrackPointServiceBase() {
         syncRuntimeStateStore()
         broadcastSessionStats()
 
-        startForeground(NOTIFICATION_ID, createNotification(0, 0), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-
         isGpsPaused = false
         isWaitingForGpsProvider = false
         isWaitingForGpsLock = false
@@ -418,7 +538,13 @@ class TrackingService : TrackPointServiceBase() {
         }
         if (!applyCurrentLocationRequest("start_tracking")) {
             failActiveTracking(getString(R.string.unable_to_start_location_updates))
-            return
+            logStartupOutcome(
+                path = path,
+                trigger = trigger,
+                result = "failed",
+                reason = "location_request_apply_failed"
+            )
+            return false
         }
         maybeStartFastGpsLockWindow(
             rejectReason = null,
@@ -439,6 +565,13 @@ class TrackingService : TrackPointServiceBase() {
         startRetryJob()
         startPreflightMonitor()
         ensureGpsProviderReceiverRegistered()
+        logStartupOutcome(
+            path = path,
+            trigger = trigger,
+            result = "started",
+            reason = "tracking_session_started"
+        )
+        return true
     }
 
     private fun stopTracking(reason: String = "tracking_stopped") {
@@ -469,6 +602,7 @@ class TrackingService : TrackPointServiceBase() {
         backlogUploaderJob = null
         broadcastSessionStats()
         stopForeground(STOP_FOREGROUND_REMOVE)
+        startupForegroundPromoted = false
         transitionControlState(TrackingControlEvent.StopCompleted)
         stopSelf()
     }
@@ -665,7 +799,8 @@ class TrackingService : TrackPointServiceBase() {
             val buildSerial = if (useExtendedParams) getBuildSerial() else ""
             val sessionStart = sessionStartTimeMs
 
-            while (batchesSent < MAX_BATCHES_PER_PUSH) {
+            var shouldContinuePush = true
+            while (batchesSent < MAX_BATCHES_PER_PUSH && shouldContinuePush) {
                 val batch = claimNextBatch(
                     scope = scope,
                     sessionBoundaryMs = sessionBoundaryMs,
@@ -694,45 +829,46 @@ class TrackingService : TrackPointServiceBase() {
                     .build()
 
                 try {
-                    val response = getAuthenticatedHttpClient().newCall(request).execute()
-                    if (response.isSuccessful) {
-                        Log.d(TAG, "Successfully pushed ${batch.size} locations")
-                        val normalizedSessionStart = if (sessionStart > 0L) {
-                            CanonicalTimeNormalizer.normalizeTimestampMs(sessionStart, sessionStart)
-                        } else {
-                            0L
-                        }
-                        val sentThisSession = if (normalizedSessionStart > 0L) {
-                            batch.count { queued ->
-                                CanonicalTimeNormalizer.normalizeTimestampMs(queued.time, normalizedSessionStart) >= normalizedSessionStart
+                    getAuthenticatedHttpClient().newCall(request).execute().use { response ->
+                        if (response.isSuccessful) {
+                            Log.d(TAG, "Successfully pushed ${batch.size} locations")
+                            val normalizedSessionStart = if (sessionStart > 0L) {
+                                CanonicalTimeNormalizer.normalizeTimestampMs(sessionStart, sessionStart)
+                            } else {
+                                0L
                             }
-                        } else {
-                            batch.size
-                        }
-                        pointsSentThisSession += sentThisSession
-                        lastPointSentAtMs = System.currentTimeMillis()
-                        syncRuntimeStateStore()
-                        broadcastSessionStats()
-                        withContext(NonCancellable) {
-                            try {
-                                database.locationDao().delete(batch)
-                            } finally {
-                                releaseClaimedBatch(batch)
+                            val sentThisSession = if (normalizedSessionStart > 0L) {
+                                batch.count { queued ->
+                                    CanonicalTimeNormalizer.normalizeTimestampMs(queued.time, normalizedSessionStart) >= normalizedSessionStart
+                                }
+                            } else {
+                                batch.size
                             }
+                            pointsSentThisSession += sentThisSession
+                            lastPointSentAtMs = System.currentTimeMillis()
+                            syncRuntimeStateStore()
+                            broadcastSessionStats()
+                            withContext(NonCancellable) {
+                                try {
+                                    database.locationDao().delete(batch)
+                                } finally {
+                                    releaseClaimedBatch(batch)
+                                }
+                            }
+                            batchesSent++
+                        } else {
+                            releaseClaimedBatch(batch)
+                            Log.e(TAG, "Failed to push locations: ${response.code} ${response.message}")
+                            if (response.code in 400..499) {
+                                return@withContext SyncFailureClass.PERMANENT
+                            }
+                            shouldContinuePush = false
                         }
-                        batchesSent++
-                    } else {
-                        releaseClaimedBatch(batch)
-                        Log.e(TAG, "Failed to push locations: ${response.code} ${response.message}")
-                        if (response.code in 400..499) {
-                            return@withContext SyncFailureClass.PERMANENT
-                        }
-                        break
                     }
                 } catch (e: Exception) {
                     releaseClaimedBatch(batch)
                     Log.e(TAG, "Exception pushing locations", e)
-                    break
+                    shouldContinuePush = false
                 }
             }
 
@@ -1325,14 +1461,107 @@ class TrackingService : TrackPointServiceBase() {
         stopTracking(reason = "fatal_failure")
     }
 
-    private fun failStartup(message: String) {
-        Log.w(TAG, "Tracking start failed: $message")
+    private fun failStartup(
+        message: String,
+        path: StartupCommandPath,
+        trigger: String,
+        reason: String
+    ) {
+        Log.w(TAG, "Tracking start failed: message=$message reason=$reason path=$path trigger=$trigger")
         settingsRepository.clearWasTrackingBeforeExit()
         TrackingRecoveryCoordinator.markIntentionalStop(applicationContext, reason = "startup_failed")
         transitionControlState(TrackingControlEvent.StartFailed, message)
         syncRuntimeStateStore()
         broadcastTrackingError(message)
+        logStartupOutcome(path = path, trigger = trigger, result = "failed", reason = reason)
+        stopSelfSafelyAfterStartup(reason = "startup_failed")
+    }
+
+    private fun promoteToForegroundForStartup(trigger: String): Boolean {
+        if (startupForegroundPromoted) return true
+        return try {
+            startForeground(
+                NOTIFICATION_ID,
+                createNotification(pointsSentThisSession, queuedCount = 0),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            )
+            startupForegroundPromoted = true
+            Log.i(TAG, "Foreground promotion succeeded trigger=$trigger")
+            logNotificationSurfaceDiagnostics(
+                trigger = trigger,
+                action = ACTION_START,
+                path = StartupCommandPath.StartTracking,
+                stage = "after_start_foreground"
+            )
+            true
+        } catch (e: Exception) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && e is ForegroundServiceStartNotAllowedException) {
+                Log.e(TAG, "Foreground start not allowed for trigger=$trigger", e)
+            } else {
+                Log.e(TAG, "Foreground promotion failed for trigger=$trigger", e)
+            }
+            TrackingRecoveryCoordinator.markIntentionalStop(
+                applicationContext,
+                reason = "fgs_start_failed_$trigger"
+            )
+            false
+        }
+    }
+
+    private fun stopSelfSafelyAfterStartup(reason: String) {
+        if (startupForegroundPromoted) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            startupForegroundPromoted = false
+        }
+        Log.d(TAG, "Stopping service after startup path reason=$reason")
         stopSelf()
+    }
+
+    private fun logStartupOutcome(
+        path: StartupCommandPath,
+        trigger: String,
+        result: String,
+        reason: String
+    ) {
+        Log.i(
+            TAG,
+            "Startup outcome path=$path trigger=$trigger result=$result reason=$reason fgsPromoted=$startupForegroundPromoted isTracking=$isTracking"
+        )
+    }
+
+    private fun logNotificationSurfaceDiagnostics(
+        trigger: String,
+        action: String?,
+        path: StartupCommandPath,
+        stage: String
+    ) {
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        val userManager = getSystemService(Context.USER_SERVICE) as? UserManager
+        val channel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            notificationManager?.getNotificationChannel(CHANNEL_ID)
+        } else {
+            null
+        }
+        val activeNotificationIds = runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                notificationManager?.activeNotifications?.map { it.id } ?: emptyList()
+            } else {
+                emptyList()
+            }
+        }.getOrElse { emptyList() }
+        val appImportance = runCatching { notificationManager?.importance }.getOrNull()
+        Log.i(
+            TAG,
+            "Notification diagnostics stage=$stage trigger=$trigger action=$action path=$path " +
+                "notificationsEnabled=${notificationManager?.areNotificationsEnabled()} appImportance=$appImportance " +
+                "channelExists=${channel != null} channelImportance=${channel?.importance} " +
+                "channelLockscreenVisibility=${channel?.lockscreenVisibility} " +
+                "channelBypassDnd=${channel?.canBypassDnd()} channelShowBadge=${channel?.canShowBadge()} " +
+                "activeNotificationIds=$activeNotificationIds " +
+                "keyguardLocked=${keyguardManager?.isKeyguardLocked} " +
+                "deviceLocked=${keyguardManager?.isDeviceLocked} userUnlocked=${userManager?.isUserUnlocked}"
+        )
     }
 
     private fun transitionControlState(event: TrackingControlEvent, failureReason: String? = null) {
