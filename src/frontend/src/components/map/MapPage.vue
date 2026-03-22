@@ -84,7 +84,6 @@
         <!-- Loading Indicator -->
         <MapLoadingIndicator
             :is-loading="isDataLoading"
-            :is-public-share-mode="isPublicShareMode"
         />
 
         <!-- Feature Info Box or Edit Box -->
@@ -1408,118 +1407,101 @@ export default {
       if (!this.map) return
       // if (this.isTagFilterActive) return // REMOVED: Bbox API now handles tag filtering
 
-      // For MapLibre, check if map is ready by checking if it has bounds
-      // The loaded() check can be too strict - instead check if we can get bounds
-      let bounds
       try {
-        bounds = this.map.getBounds()
-        if (!bounds) return
-      } catch (e) {
-        // Map not ready yet
-        return
-      }
+        // For MapLibre, check if map is ready by checking if it has bounds
+        let bounds
+        try {
+          bounds = this.map.getBounds()
+          if (!bounds) return
+        } catch (e) {
+          return
+        }
 
-      // Cancel any existing request
-      if (this.currentAbortController) {
-        this.currentAbortController.abort()
-      }
+        // Cancel any existing request
+        if (this.currentAbortController) {
+          this.currentAbortController.abort()
+        }
 
-      // Create new AbortController
-      this.currentAbortController = new AbortController()
-      this.loadError = null
+        this.currentAbortController = new AbortController()
+        this.loadError = null
 
-      try {
-        // Get unified load context
-        let context = this.getLoadContext()
+        try {
+          // Get unified load context
+          let context = this.getLoadContext()
 
-        // For public shares, ensure share info is loaded first
-        // This must happen before we can build the URL or check cache
-        if (context.isPublicShare) {
-          // Set loading state for share info fetch
+          // For public shares, ensure share info is loaded first
+          if (context.isPublicShare) {
+            this.isDataLoading = true
+            const shareInfoLoaded = await this.ensurePublicShareInfo()
+            if (!shareInfoLoaded) {
+              return
+            }
+            context = this.getLoadContext()
+
+            if (!context.shareInfo || context.type === 'share_unknown') {
+              console.error('Share info not properly loaded after ensurePublicShareInfo', {
+                shareInfo: this.publicShareInfo,
+                context,
+                shareId: this.shareId
+              })
+              this.handlePublicShareError('Failed to load share information')
+              return
+            }
+          }
+
+          bounds = this.map.getBounds()
+          if (!bounds) {
+            return
+          }
+          const zoom = this.map.getZoom()
+          const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]
+
+          let bboxKey = this.getBoundingBoxKey(bbox, zoom)
+          if (context.isPublicShare && context.shareId) {
+            bboxKey = `${bboxKey}_share_${context.shareId}`
+          } else if (context.type === 'collection' && context.collectionId) {
+            bboxKey = `${bboxKey}_collection_${context.collectionId}`
+          } else if (context.tags && context.tags.length > 0) {
+            const sortedTags = [...context.tags].sort()
+            const tagsKey = sortedTags.map(tag => encodeURIComponent(tag)).join('_')
+            bboxKey = `${bboxKey}_tags_${tagsKey}`
+          }
+
+          if (context.isBboxBased && this.loadedBounds.has(bboxKey)) {
+            return
+          }
+
+          const bboxString = this.getBoundingBoxString(bbox)
+          const url = this.buildLoadUrl(context, bboxString, zoom)
+
+          if (url === null) {
+            return
+          }
+
           this.isDataLoading = true
-          const shareInfoLoaded = await this.ensurePublicShareInfo()
-          if (!shareInfoLoaded) {
+
+          if (!this.currentAbortController) {
+            this.currentAbortController = new AbortController()
+          }
+
+          const response = await fetch(url, {
+            signal: this.currentAbortController.signal
+          })
+
+          const data = await this.parseLoadResponse(response, context)
+
+          if (!response.ok) {
+            this.handleLoadError(data, context)
             return
           }
-          // Get fresh context after loading share info (this will now have the correct share type)
-          context = this.getLoadContext()
-          
-          // Double-check that we have valid share info
-          if (!context.shareInfo || context.type === 'share_unknown') {
-            console.error('Share info not properly loaded after ensurePublicShareInfo', {
-              shareInfo: this.publicShareInfo,
-              context,
-              shareId: this.shareId
-            })
-            this.handlePublicShareError('Failed to load share information')
-            return
-          }
+
+          await this.handleLoadSuccess(data, context, bboxKey)
+        } catch (error) {
+          if (error.name === 'AbortError') return
+          console.error('Error loading data:', error)
+          const context = this.getLoadContext()
+          this.handleLoadError({ error: error.message || 'Failed to load map data.' }, context)
         }
-
-        bounds = this.map.getBounds()
-        if (!bounds) {
-          return
-        }
-        const zoom = this.map.getZoom()
-        const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]
-
-        // Build bbox key with context to ensure different shares don't share cache
-        // Include share ID in key for shares, collection ID for collections, tags for tag filters
-        let bboxKey = this.getBoundingBoxKey(bbox, zoom)
-        if (context.isPublicShare && context.shareId) {
-          bboxKey = `${bboxKey}_share_${context.shareId}`
-        } else if (context.type === 'collection' && context.collectionId) {
-          bboxKey = `${bboxKey}_collection_${context.collectionId}`
-        } else if (context.tags && context.tags.length > 0) {
-          // Include tags in bbox key when tag filter is active
-          // Sort tags for consistent key generation
-          const sortedTags = [...context.tags].sort()
-          const tagsKey = sortedTags.map(tag => encodeURIComponent(tag)).join('_')
-          bboxKey = `${bboxKey}_tags_${tagsKey}`
-        }
-
-        // Check if already loaded (only for bbox-based loads)
-        if (context.isBboxBased && this.loadedBounds.has(bboxKey)) {
-          return
-        }
-
-        // Build URL based on context
-        const bboxString = this.getBoundingBoxString(bbox)
-        const url = this.buildLoadUrl(context, bboxString, zoom)
-
-        // If URL is null, request should be skipped (e.g., feature share after initial load)
-        if (url === null) {
-          return
-        }
-
-        // Set loading state right before making the network call
-        this.isDataLoading = true
-        
-        // Ensure AbortController is still valid (should always be, but defensive check)
-        if (!this.currentAbortController) {
-          this.currentAbortController = new AbortController()
-        }
-        
-        const response = await fetch(url, {
-          signal: this.currentAbortController.signal
-        })
-        
-        // Parse response using unified parser
-        const data = await this.parseLoadResponse(response, context)
-
-        // Handle error responses
-        if (!response.ok) {
-          this.handleLoadError(data, context)
-          return
-        }
-
-        // Handle successful response
-        await this.handleLoadSuccess(data, context, bboxKey)
-      } catch (error) {
-        if (error.name === 'AbortError') return
-        console.error('Error loading data:', error)
-        const context = this.getLoadContext()
-        this.handleLoadError({ error: error.message || 'Failed to load map data.' }, context)
       } finally {
         this.isDataLoading = false
         this.currentAbortController = null
@@ -2708,23 +2690,42 @@ export default {
       // Execute the navigation
       await navigationFn()
 
-      // Wait for the map movement to complete
-      // Use a one-time listener for moveend to ensure data loads after animation
+      // Wait for movement to finish, then refresh bbox data. Instant moves (e.g. fitBounds
+      // duration 0) often omit moveend; mapshare refine would otherwise hang and leave
+      // isDataLoading stuck true while awaiting handleLoadSuccess.
       return new Promise((resolve) => {
-        const onMoveEnd = () => {
-          // Clamp zoom level to maximum after animation completes
+        let settled = false
+        let fallbackId = null
+
+        const finishAfterMove = () => {
+          if (settled || !this.map) {
+            return
+          }
+          settled = true
+          this.map.off('moveend', onMoveEnd)
+          if (fallbackId != null) {
+            window.clearTimeout(fallbackId)
+            fallbackId = null
+          }
+
           const currentZoom = this.map.getZoom()
           if (currentZoom > MAX_ZOOM_LEVEL) {
             this.map.setZoom(MAX_ZOOM_LEVEL)
           }
-          
-          // Trigger immediate (non-debounced) data load
+
           this.loadDataForCurrentView()
           resolve()
         }
 
-        // Listen for moveend event (fires when flyTo/fitBounds animation completes)
-        this.map.once('moveend', onMoveEnd)
+        const onMoveEnd = () => {
+          finishAfterMove()
+        }
+
+        this.map.on('moveend', onMoveEnd)
+
+        fallbackId = window.setTimeout(() => {
+          finishAfterMove()
+        }, 300)
       })
     },
     centerToHomeExtent() {

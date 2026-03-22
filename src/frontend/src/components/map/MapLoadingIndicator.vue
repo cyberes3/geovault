@@ -1,20 +1,7 @@
 <template>
   <div
     v-show="isLoading"
-    :class="[
-      'absolute',
-      'right-4',
-      'bg-white',
-      'bg-opacity-90',
-      'px-4',
-      'py-2',
-      'rounded-lg',
-      'shadow-md',
-      'z-10',
-      'flex',
-      'items-center',
-      isPublicShareMode ? 'top-20' : 'top-4'
-    ]"
+    class="absolute right-4 top-4 z-10 flex items-center rounded-lg border border-gray-200 bg-white px-4 py-2"
   >
     <Loader
       size="sm"
@@ -38,10 +25,6 @@ export default {
     isLoading: {
       type: Boolean,
       required: true
-    },
-    isPublicShareMode: {
-      type: Boolean,
-      default: false
     }
   }
 }
