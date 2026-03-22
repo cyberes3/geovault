@@ -235,13 +235,13 @@
                 </com.geovault.common.ToggleHelpCardView>
 
                 <FrameLayout
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical">
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/editTrackerCopyWorldLink"
                         style="@style/gv_common_ButtonOutlined"
-                        android:layout_width="192dp"
+                        android:layout_width="match_parent"
                         android:layout_height="40dp"
                         android:text="@string/copy_world_share_link"
                         android:visibility="gone" />

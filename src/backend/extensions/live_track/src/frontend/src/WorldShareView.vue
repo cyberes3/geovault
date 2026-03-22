@@ -32,10 +32,57 @@
         <!-- Map column -->
         <div ref="mapWrapperRef" class="relative flex-1 min-h-0 w-full flex flex-col">
           <div ref="mapContainer" class="absolute inset-0 w-full h-full bg-gray-100" />
+
+          <!-- Mobile: map actions behind hamburger (desktop uses right strip below) -->
+          <div
+            v-if="isMobileView && !isShareMapSidebarOpen"
+            ref="mobileActionsMenuRootRef"
+            class="absolute top-3 left-3 z-30"
+          >
+            <button
+              type="button"
+              class="grid h-9 w-9 place-items-center rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 [-webkit-tap-highlight-color:transparent]"
+              aria-haspopup="menu"
+              :aria-expanded="mobileActionsMenuOpen"
+              aria-label="Map actions"
+              @click="mobileActionsMenuOpen = !mobileActionsMenuOpen"
+            >
+              <Bars3Icon class="h-5 w-5" aria-hidden="true" />
+            </button>
+            <div
+              v-show="mobileActionsMenuOpen"
+              class="absolute left-0 top-full z-30 mt-1 min-w-[13.5rem] max-h-[min(28rem,calc(100dvh-12rem))] overflow-y-auto overflow-x-hidden overscroll-y-contain rounded-lg border border-gray-200 bg-white py-1 custom-scrollbar"
+              role="menu"
+              aria-label="Map actions"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-gray-50 active:bg-gray-100 focus:outline-none focus-visible:bg-gray-50"
+                @click="closeMobileActionsMenu(); openLayerSidebar()"
+              >
+                <Square3Stack3DIcon class="h-5 w-5 flex-shrink-0 text-blue-600" />
+                <span>Map Settings</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-gray-50 active:bg-gray-100 focus:outline-none focus-visible:bg-gray-50"
+                @click="closeMobileActionsMenu(); goHome()"
+              >
+                <HomeIcon class="h-5 w-5 flex-shrink-0 text-blue-600" />
+                <span>Go to Home Extent</span>
+              </button>
+            </div>
+          </div>
+
           <!-- Selected chip: track name, deselect X -->
           <div
             v-if="selectedItemLabel"
-            class="absolute top-3 left-3 z-20 flex items-center gap-2 rounded-lg border border-blue-200 bg-white/95 px-3 py-2 shadow-sm"
+            :class="[
+              'absolute top-3 z-20 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 sm:max-w-none',
+              isMobileView ? 'left-1/2 -translate-x-1/2' : 'left-3'
+            ]"
           >
             <span class="text-sm font-medium text-gray-900 truncate max-w-[12rem]" :title="selectedItemLabel">{{ selectedItemLabel }}</span>
             <button
@@ -49,10 +96,10 @@
           </div>
         </div>
 
-        <!-- Action strip: same position as main tracker map (top bar on mobile, right strip on desktop) -->
+        <!-- Action strip: desktop only (mobile uses hamburger on map) -->
         <aside
-          v-if="!isMobileView || (!showLayerSidebar && !showParamsSidebar)"
-          class="flex flex-shrink-0 flex-row sm:flex-col w-full sm:w-12 min-h-0 border-b sm:border-b-0 sm:border-l border-gray-200 bg-white items-center justify-center sm:justify-end py-1.5 sm:py-2 gap-2 sm:gap-1 order-first sm:order-last"
+          v-if="!isMobileView"
+          class="flex flex-shrink-0 flex-col w-12 min-h-0 border-l border-gray-200 bg-white items-center justify-end py-2 gap-1 order-last"
           aria-label="Actions"
         >
           <button
@@ -80,7 +127,7 @@
           ref="mobileDrawerRef"
           :max-height="worldShareDrawerMaxHeight"
           :initial-snap-index="0"
-          :hidden="showLayerSidebar || showParamsSidebar"
+          :hidden="isShareMapSidebarOpen"
         >
           <template #default="{ atPeek }">
             <div class="flex-1 min-h-0 flex flex-col overflow-hidden px-2 pb-2">
@@ -89,6 +136,7 @@
                   :tracks="visibleTracks"
                   :selected-id="selectedId"
                   :get-params-allowed="getParamsAllowedForTrack"
+                  action-opacity-class="opacity-60"
                   @track-click="onTrackListClick"
                   @open-params="openParamsForTrack"
                 />
@@ -124,8 +172,8 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
-import { ShareIcon, Square3Stack3DIcon, XMarkIcon, HomeIcon } from '@heroicons/vue/24/outline';
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { ShareIcon, Square3Stack3DIcon, XMarkIcon, HomeIcon, Bars3Icon } from '@heroicons/vue/24/outline';
 import { useWindowSize } from '@vueuse/core';
 import Loader from 'platform/components/parts/Loader.vue';
 import LatestParamsModal from './LatestParamsModal.vue';
@@ -169,7 +217,7 @@ function getShareIdFromUrl() {
 
 export default {
   name: 'WorldShareView',
-  components: { ShareIcon, Square3Stack3DIcon, XMarkIcon, HomeIcon, Loader, LatestParamsModal, LiveTrackSidebar, MapLayerSidebar, MapTrackList, MobileMapDrawer },
+  components: { ShareIcon, Square3Stack3DIcon, XMarkIcon, HomeIcon, Bars3Icon, Loader, LatestParamsModal, LiveTrackSidebar, MapLayerSidebar, MapTrackList, MobileMapDrawer },
   setup() {
     const loading = ref(true);
     const error = ref('');
@@ -204,6 +252,43 @@ export default {
       const HEADER_PX = 64;
       const BUFFER_PX = 4;
       return Math.max(65, windowHeight.value - APP_NAV_PX - HEADER_PX - BUFFER_PX);
+    });
+
+    const mobileActionsMenuOpen = ref(false);
+    const mobileActionsMenuRootRef = ref(null);
+    let mobileActionsOutsideStop = null;
+
+    function closeMobileActionsMenu() {
+      mobileActionsMenuOpen.value = false;
+    }
+
+    const isShareMapSidebarOpen = computed(() => showLayerSidebar.value || showParamsSidebar.value);
+
+    watch(isMobileView, (mobile) => {
+      if (!mobile) closeMobileActionsMenu();
+    });
+
+    watch(mobileActionsMenuOpen, (open) => {
+      if (mobileActionsOutsideStop) {
+        mobileActionsOutsideStop();
+        mobileActionsOutsideStop = null;
+      }
+      if (!open || typeof document === 'undefined') return;
+      const handler = (e) => {
+        const root = mobileActionsMenuRootRef.value;
+        if (root && !root.contains(e.target)) {
+          mobileActionsMenuOpen.value = false;
+        }
+      };
+      document.addEventListener('pointerdown', handler, true);
+      mobileActionsOutsideStop = () => {
+        document.removeEventListener('pointerdown', handler, true);
+        mobileActionsOutsideStop = null;
+      };
+    });
+
+    watch(isShareMapSidebarOpen, (open) => {
+      if (open) closeMobileActionsMenu();
     });
 
     const visibleTracks = computed(() => {
@@ -790,6 +875,10 @@ export default {
     }
 
     onBeforeUnmount(() => {
+      if (mobileActionsOutsideStop) {
+        mobileActionsOutsideStop();
+        mobileActionsOutsideStop = null;
+      }
       if (mobileQueryListener && typeof window !== 'undefined') {
         window.matchMedia('(max-width: 639px)').removeEventListener('change', mobileQueryListener);
         mobileQueryListener = null;
@@ -811,6 +900,10 @@ export default {
       mapContainer,
       mapWrapperRef,
       mobileDrawerRef,
+      mobileActionsMenuOpen,
+      mobileActionsMenuRootRef,
+      closeMobileActionsMenu,
+      isShareMapSidebarOpen,
       tileSources,
       selectedLayer,
       showLayerSidebar,

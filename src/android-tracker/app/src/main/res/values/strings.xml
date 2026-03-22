@@ -179,7 +179,6 @@
     <string name="resuming_tracking">Resuming tracking</string>
     <string name="tracking_started">Tracking started</string>
     <string name="status_tracking">Tracking location</string>
-    <string name="status_gps_paused">GPS Paused (waiting for motion)</string>
     <string name="status_waiting_for_gps_reenabled">Waiting for GPS to be enabled</string>
     <string name="waiting_for_gps_reenabled">GPS disabled</string>
     <string name="stat_label_sent_queued">Sent: %1$d - Queued: %2$d</string>

@@ -18,9 +18,11 @@ import com.geovault.tracker.showHueColorPickerDialog
 import com.geovault.tracker.updateColorPreview
 import com.geovault.tracker.defaultTrackerColorHex
 import com.geovault.tracker.navigation.navHost
+import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.ui.applyDialogButtonColors
 import com.google.android.material.button.MaterialButton
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
@@ -76,6 +78,14 @@ class NewTrackerFragment : Fragment() {
         }
 
         cancelButton.setOnClickListener { tryClose() }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                TrackingRuntimeStateStore.state.collect { runtime ->
+                    selectedTrackSwitch.isEnabled = !runtime.isRunning
+                }
+            }
+        }
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {

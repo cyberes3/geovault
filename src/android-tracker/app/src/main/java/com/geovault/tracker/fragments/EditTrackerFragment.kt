@@ -28,6 +28,7 @@ import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.UserItem
 import com.geovault.tracker.navigation.navHost
+import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.ui.applyDialogButtonColors
 import com.geovault.common.LoadingSpinner
 import com.geovault.common.NaturalSort
@@ -95,6 +96,9 @@ class EditTrackerFragment : Fragment() {
     private var pendingHiddenInListAfterSave: Boolean = false
     private var isRenderingState: Boolean = false
     private var pendingAction: PendingAction? = null
+
+    /** Mirrors the last `enabled` passed to [setAllInputsEnabled] for combining with tracking state. */
+    private var formInteractionEnabled: Boolean = false
 
     private enum class PendingAction {
         SAVE,
@@ -213,6 +217,13 @@ class EditTrackerFragment : Fragment() {
 
         showLoadingState(true)
         observeViewModel()
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                TrackingRuntimeStateStore.state.collect {
+                    updateSelectedTrackerToggleEnabled()
+                }
+            }
+        }
 
         val recentDataLabels = arrayOf(
             getString(R.string.recent_data_all),
@@ -334,6 +345,8 @@ class EditTrackerFragment : Fragment() {
                 .show()
             confirmDialog.applyDialogButtonColors(requireContext(), destructiveAction = true)
         }
+
+        updateSelectedTrackerToggleEnabled()
     }
 
     private fun populateFormFromState(form: EditTrackerFormState) {
@@ -575,11 +588,16 @@ class EditTrackerFragment : Fragment() {
         deleteButton.alpha = alpha
     }
 
+    private fun updateSelectedTrackerToggleEnabled() {
+        selectedTrackSwitch.isEnabled =
+            formInteractionEnabled && !TrackingRuntimeStateStore.state.value.isRunning
+    }
+
     private fun setAllInputsEnabled(enabled: Boolean) {
+        formInteractionEnabled = enabled
         nameEdit.isEnabled = enabled
         colorEdit.isEnabled = enabled
         pickColorButton.isEnabled = enabled
-        selectedTrackSwitch.isEnabled = enabled
         hideOnMapSwitch.isEnabled = enabled
         recentDataWindowSpinner.isEnabled = enabled
         recentDataWindowSpinner.isClickable = enabled
@@ -599,6 +617,7 @@ class EditTrackerFragment : Fragment() {
             exportKmlButton.isEnabled = enabled
         }
         setActionButtonsEnabled(enabled)
+        updateSelectedTrackerToggleEnabled()
     }
 
     companion object {

@@ -176,8 +176,8 @@
       <div
         v-if="selectedItemLabel"
         :class="[
-          'absolute top-3 z-20 flex items-center gap-2 rounded-lg border border-blue-200 bg-white/95 px-3 py-2 shadow-sm',
-          isMobileView && !isMapSidebarOpen ? 'left-14' : 'left-3'
+          'absolute top-3 z-20 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 sm:max-w-none',
+          isMobileView ? 'left-1/2 -translate-x-1/2' : 'left-3'
         ]"
       >
         <button

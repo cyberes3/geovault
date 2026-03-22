@@ -881,7 +881,7 @@ class TrackingService : TrackPointServiceBase() {
         val noGoodFix = lastAccuracyMeters == null || lastAccuracyMeters!! > resolveCurrentAccuracyFilter()
         val status = when {
             isWaitingForGpsProvider -> getString(R.string.status_waiting_for_gps_reenabled)
-            isGpsPaused -> getString(R.string.status_gps_paused)
+            isGpsPaused -> getString(R.string.status_tracking)
             noGoodFix -> getString(R.string.locking)
             else -> getString(R.string.status_tracking)
         }

@@ -34,7 +34,10 @@
       </div>
       <div
         v-if="getParamsAllowed(track)"
-        class="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity"
+        :class="[
+          'flex items-center gap-1 flex-shrink-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100',
+          actionOpacityClass || 'opacity-0'
+        ]"
       >
         <button
           type="button"
@@ -81,7 +84,9 @@ export default {
         const hasPoints = (track?.point_params?.length || track?.geometry?.coordinates?.length || 0) > 0;
         return hasPoints;
       }
-    }
+    },
+    /** Leave default for hover-only desktop list. Mobile bottom sheet: pass opacity-60 so Latest Params is visible without hover (matches TrackerListContent). */
+    actionOpacityClass: { type: String, default: '' }
   },
   emits: ['track-click', 'open-params'],
   setup() {
