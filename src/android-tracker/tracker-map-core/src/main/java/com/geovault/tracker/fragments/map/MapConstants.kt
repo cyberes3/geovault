@@ -14,8 +14,8 @@ object MapConstants {
     /** Map cannot zoom out past this level (tracker map only). */
     const val MIN_ZOOM = 1.0
     const val MIN_ZOOM_EPSILON = 0.001
-    /** Do not draw track across jumps larger than this (meters). 30 miles. */
-    const val MAX_JUMP_METERS = 30f * 1609.344f
+    /** Do not draw track across jumps larger than this (meters). 5 miles. */
+    const val MAX_JUMP_METERS = 5f * 1609.344f
     /** Content padding (dp) so overlays (name card, buttons, spinner) don't cut off the track. */
     const val MAP_PADDING_LEFT_DP = 28
     const val MAP_PADDING_TOP_DP = 130
