@@ -101,9 +101,9 @@ const toggleClasses = computed(() => {
     'duration-200',
     'ease-in-out',
     'focus:outline-none',
-    'focus:ring-2',
-    'focus:ring-offset-2',
-    'focus:ring-blue-500',
+    'focus-visible:ring-2',
+    'focus-visible:ring-offset-2',
+    'focus-visible:ring-blue-500',
     sizeConfig.value.track
   ]
   

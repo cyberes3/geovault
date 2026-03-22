@@ -119,9 +119,7 @@ select.select-custom:hover:not(:disabled) {
 }
 
 select.select-custom:focus {
-  outline: 2px solid var(--color-blue-500);
-  outline-offset: 2px;
-  border-color: var(--color-blue-500);
+  outline: none;
 }
 
 select.select-custom:disabled {

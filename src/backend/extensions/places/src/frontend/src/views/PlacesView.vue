@@ -67,7 +67,7 @@
           <select
               id="places-sort"
               v-model="sortBy"
-              class="select-custom w-full sm:w-auto min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 flex-shrink-0"
+              class="select-custom w-full sm:w-auto min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none flex-shrink-0"
               aria-label="Sort Places"
           >
             <option value="composite">Default Sort</option>
@@ -235,7 +235,7 @@
         <select
             id="places-map-layer"
             v-model="selectedBaseSourceId"
-            class="select-custom w-full px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            class="select-custom w-full px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none"
             :disabled="baseSourceOptions.length === 0"
             @change="applyBaseSourceSelection"
         >

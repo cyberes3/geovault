@@ -7,7 +7,7 @@
       <select
         :value="visibility"
         :disabled="disabled"
-        class="select-custom w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        class="select-custom w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none"
         @change="$emit('update:visibility', ($event.target && $event.target.value) || 'private')"
       >
         <option value="private">{{ privateLabel }}</option>

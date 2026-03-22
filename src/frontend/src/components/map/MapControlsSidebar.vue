@@ -57,7 +57,7 @@
           id="layer-select"
           :value="selectedLayer"
           @change="$emit('layer-change', $event.target.value)"
-          class="select-custom w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 lg:px-2 lg:py-1.5 lg:text-xs xl:px-3 xl:py-2 xl:text-sm"
+          class="select-custom w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none lg:px-2 lg:py-1.5 lg:text-xs xl:px-3 xl:py-2 xl:text-sm"
       >
         <option
             v-for="source in tileSources"

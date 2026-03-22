@@ -9,7 +9,7 @@
         <label class="text-sm font-medium text-gray-900">Who can see and add this tracker</label>
         <select
           v-model="visibility"
-          class="select-custom w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          class="select-custom w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none"
         >
           <option value="private">Private (only me)</option>
           <option value="shared">Shared with specific users</option>
