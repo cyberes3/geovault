@@ -60,10 +60,125 @@
     <main ref="mapColumnRef" class="live-track-map-column flex-1 relative min-h-0">
       <div ref="mapContainer" class="absolute inset-0 w-full h-full bg-gray-100" />
 
+      <!-- Mobile: map actions behind a hamburger control (desktop uses right strip below) -->
+      <div
+        v-if="isMobileView && !isMapSidebarOpen"
+        ref="mobileActionsMenuRootRef"
+        class="absolute top-3 left-3 z-30"
+      >
+        <button
+          type="button"
+          class="grid h-9 w-9 place-items-center rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 [-webkit-tap-highlight-color:transparent]"
+          aria-haspopup="menu"
+          :aria-expanded="mobileActionsMenuOpen"
+          aria-label="Map actions"
+          @click="mobileActionsMenuOpen = !mobileActionsMenuOpen"
+        >
+          <Bars3Icon class="h-5 w-5" aria-hidden="true" />
+        </button>
+        <div
+          v-show="mobileActionsMenuOpen"
+          class="absolute left-0 top-full z-30 mt-1 min-w-[13.5rem] max-h-[min(28rem,calc(100dvh-12rem))] overflow-y-auto overflow-x-hidden overscroll-y-contain rounded-lg border border-gray-200 bg-white py-1 custom-scrollbar"
+          role="menu"
+          aria-label="Map actions"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-gray-50 active:bg-gray-100 focus:outline-none focus-visible:bg-gray-50"
+            @click="closeMobileActionsMenu(); openCreateTrackSidebar()"
+          >
+            <PlusIcon class="h-5 w-5 flex-shrink-0 text-blue-600" />
+            <span>New Tracker</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-gray-50 active:bg-gray-100 focus:outline-none focus-visible:bg-gray-50"
+            @click="closeMobileActionsMenu(); openSidebar('groups')"
+          >
+            <UserGroupIcon class="h-5 w-5 flex-shrink-0 text-blue-600" />
+            <span>Groups</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-gray-50 active:bg-gray-100 focus:outline-none focus-visible:bg-gray-50"
+            @click="closeMobileActionsMenu(); openSidebar('sharedWithMe')"
+          >
+            <span class="relative inline-flex h-5 w-5 flex-shrink-0 items-center justify-center text-blue-600">
+              <ShareIcon class="h-5 w-5" />
+              <span
+                v-if="incomingSharedTrackers.length + incomingSharedGroups.length > 0"
+                class="absolute -right-1.5 -top-1 min-w-[0.875rem] h-4 px-0.5 flex items-center justify-center rounded-full bg-blue-500 text-white text-[9px] font-semibold leading-none"
+              >
+                {{ incomingSharedTrackers.length + incomingSharedGroups.length > 99 ? '99+' : incomingSharedTrackers.length + incomingSharedGroups.length }}
+              </span>
+            </span>
+            <span>Shared With Me</span>
+          </button>
+          <div class="my-1 border-t border-gray-100" role="presentation" />
+          <button
+            type="button"
+            role="menuitem"
+            class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-gray-50 active:bg-gray-100 focus:outline-none focus-visible:bg-gray-50"
+            @click="closeMobileActionsMenu(); openSidebar('settings')"
+          >
+            <Cog6ToothIcon class="h-5 w-5 flex-shrink-0 text-blue-600" />
+            <span>Settings</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-gray-50 active:bg-gray-100 focus:outline-none focus-visible:bg-gray-50"
+            @click="closeMobileActionsMenu(); toggleLocationTracking()"
+          >
+            <LocationIcon
+              size="h-5 w-5"
+              class="flex-shrink-0"
+              :show-center-dot="trackingEnabled"
+              :class="trackingEnabled ? 'text-blue-600' : 'text-gray-700'"
+            />
+            <span>{{ trackingEnabled ? 'Stop My Location' : 'Show My Location' }}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-gray-50 disabled:opacity-50 disabled:hover:bg-white active:bg-gray-100 focus:outline-none focus-visible:bg-gray-50"
+            :disabled="actionStripRefreshing"
+            @click="closeMobileActionsMenu(); onFullRefresh()"
+          >
+            <ArrowPathIcon :class="['h-5 w-5 flex-shrink-0 text-blue-600', actionStripRefreshing ? 'animate-spin' : '']" />
+            <span>Refresh All</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-gray-50 active:bg-gray-100 focus:outline-none focus-visible:bg-gray-50"
+            @click="closeMobileActionsMenu(); openSidebar('layer')"
+          >
+            <Square3Stack3DIcon class="h-5 w-5 flex-shrink-0 text-blue-600" />
+            <span>Map Settings</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-gray-50 active:bg-gray-100 focus:outline-none focus-visible:bg-gray-50"
+            @click="closeMobileActionsMenu(); goHome()"
+          >
+            <HomeIcon class="h-5 w-5 flex-shrink-0 text-blue-600" />
+            <span>Go to Home Extent</span>
+          </button>
+        </div>
+      </div>
+
       <!-- Selected item chip: group or tracker name, deselect with X; group icon when locked to a track in a shared group -->
       <div
         v-if="selectedItemLabel"
-        class="absolute top-3 left-3 z-20 flex items-center gap-2 rounded-lg border border-blue-200 bg-white/95 px-3 py-2 shadow-sm"
+        :class="[
+          'absolute top-3 z-20 flex items-center gap-2 rounded-lg border border-blue-200 bg-white/95 px-3 py-2 shadow-sm',
+          isMobileView && !isMapSidebarOpen ? 'left-14' : 'left-3'
+        ]"
       >
         <button
           v-if="selectedTrackSharedGroup"
@@ -89,7 +204,7 @@
       <div
         v-if="isMapSidebarOpen"
         ref="mapSidebarRef"
-        class="fixed inset-0 sm:absolute sm:inset-0 overflow-hidden flex justify-end z-50 pointer-events-none"
+        class="fixed inset-x-0 bottom-0 top-16 sm:absolute sm:inset-0 overflow-hidden flex justify-end z-50 pointer-events-none"
         tabindex="-1"
       >
         <MapSidebarPanel
@@ -247,13 +362,13 @@
       </div>
     </main>
 
-    <!-- Action strip: top bar on mobile (compact), right strip on desktop -->
+    <!-- Action strip: right strip on desktop only (mobile uses … menu on map) -->
     <aside
-      v-if="!isMobileView || !isMapSidebarOpen"
-      class="flex flex-shrink-0 flex-row sm:flex-col w-full sm:w-12 min-h-0 border-b sm:border-b-0 sm:border-l border-gray-200 bg-white items-center justify-center sm:justify-between py-1.5 sm:py-2 gap-2 sm:gap-1 order-first sm:order-last"
+      v-if="!isMobileView"
+      class="flex flex-shrink-0 flex-col w-12 min-h-0 border-l border-gray-200 bg-white items-center justify-between py-2 gap-1 order-last"
       aria-label="Actions"
     >
-      <div class="flex flex-row sm:flex-col items-center gap-2 sm:gap-1">
+      <div class="flex flex-col items-center gap-1">
         <button
           type="button"
           title="New Tracker"
@@ -287,7 +402,7 @@
           </span>
         </button>
       </div>
-      <div class="flex flex-row sm:flex-col items-center gap-2 sm:gap-1">
+      <div class="flex flex-col items-center gap-1">
         <button
           type="button"
           title="Settings"
@@ -411,7 +526,7 @@
 
 <script>
 import { ref, computed, onMounted, onActivated, onBeforeUnmount, inject, watch, nextTick } from 'vue';
-import { PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon } from '@heroicons/vue/24/outline';
+import { PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, Bars3Icon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon } from '@heroicons/vue/24/outline';
 import { useWindowSize, useScrollLock } from '@vueuse/core';
 import { getIngressBodyTemplate } from './ingressBodyTemplateCache.js';
 import { trackersLiveSocket } from './trackersLiveSocket.js';
@@ -485,7 +600,7 @@ const LIST_TABS = [
 
 export default {
   name: 'LiveTrackView',
-  components: { BaseButton, LocationIcon, TrackSidebar, TrackDirectionIcon, LatestParamsModal, GroupsSidebarContent, DiscoverTrackersModal, SharedItemsModal, ShareSettingsModal, PublicSharePopup, MapLayerSidebar, MapSidebarPanel, SharedWithMeSidebarContent, LiveTrackSettingsSidebarContent, TrackerListContent, MobileMapDrawer, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon },
+  components: { BaseButton, LocationIcon, TrackSidebar, TrackDirectionIcon, LatestParamsModal, GroupsSidebarContent, DiscoverTrackersModal, SharedItemsModal, ShareSettingsModal, PublicSharePopup, MapLayerSidebar, MapSidebarPanel, SharedWithMeSidebarContent, LiveTrackSettingsSidebarContent, TrackerListContent, MobileMapDrawer, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, Bars3Icon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon },
   setup() {
     const api = inject('extensionApi');
     const trackers = ref([]);
@@ -513,6 +628,36 @@ export default {
     let mobileQueryListener = null;
 
     const mobileDrawerRef = ref(null);
+    const mobileActionsMenuOpen = ref(false);
+    const mobileActionsMenuRootRef = ref(null);
+    let mobileActionsOutsideStop = null;
+
+    function closeMobileActionsMenu() {
+      mobileActionsMenuOpen.value = false;
+    }
+
+    watch(isMobileView, (mobile) => {
+      if (!mobile) closeMobileActionsMenu();
+    });
+
+    watch(mobileActionsMenuOpen, (open) => {
+      if (mobileActionsOutsideStop) {
+        mobileActionsOutsideStop();
+        mobileActionsOutsideStop = null;
+      }
+      if (!open || typeof document === 'undefined') return;
+      const handler = (e) => {
+        const root = mobileActionsMenuRootRef.value;
+        if (root && !root.contains(e.target)) {
+          mobileActionsMenuOpen.value = false;
+        }
+      };
+      document.addEventListener('pointerdown', handler, true);
+      mobileActionsOutsideStop = () => {
+        document.removeEventListener('pointerdown', handler, true);
+        mobileActionsOutsideStop = null;
+      };
+    });
 
     const { height: windowHeight } = useWindowSize();
     const rootContainer = ref(null);
@@ -717,7 +862,10 @@ export default {
     watch(
       () => isMapSidebarOpen.value,
       (open) => {
-        if (open) nextTick(() => mapSidebarRef.value?.focus());
+        if (open) {
+          closeMobileActionsMenu();
+          nextTick(() => mapSidebarRef.value?.focus());
+        }
       }
     );
 
@@ -2509,6 +2657,10 @@ export default {
     );
 
     onBeforeUnmount(() => {
+      if (mobileActionsOutsideStop) {
+        mobileActionsOutsideStop();
+        mobileActionsOutsideStop = null;
+      }
       if (mobileQueryListener && typeof window !== 'undefined') {
         window.matchMedia('(max-width: 639px)').removeEventListener('change', mobileQueryListener);
         mobileQueryListener = null;
@@ -2624,6 +2776,9 @@ export default {
       isMobileView,
       isSheetOpen,
       mobileDrawerRef,
+      mobileActionsMenuOpen,
+      mobileActionsMenuRootRef,
+      closeMobileActionsMenu,
       formatTime,
       goHome,
       onLayerChange,

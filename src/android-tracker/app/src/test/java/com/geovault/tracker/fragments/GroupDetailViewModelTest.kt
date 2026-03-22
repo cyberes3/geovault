@@ -146,6 +146,57 @@ class GroupDetailViewModelTest {
         assertFalse(vm.hasUnsavedMembershipChanges())
     }
 
+    @Test
+    fun enableWorldShare_patchesWorldShareAndUpdatesForm() = runTest {
+        val stateStore = TrackerManagementStateStore()
+        val initialGroup = group(trackIds = listOf("t1"))
+        val trackers = listOf(tracker("t1", owner = true))
+        val groupRepo = FakeGroupManagementRepository(initialGroup, stateStore)
+        val vm = GroupDetailViewModel(
+            groupRepository = groupRepo,
+            trackerRepository = FakeTrackerManagementRepository(trackers, stateStore),
+            eligibilityUseCase = DefaultGroupTrackerEligibilityUseCase(),
+            stateStore = stateStore
+        )
+
+        vm.load(initialGroup.id)
+        advanceUntilIdle()
+        vm.enableWorldShare()
+        advanceUntilIdle()
+
+        assertEquals(true, groupRepo.patchCalls.last().world_share_enabled)
+        assertEquals(GroupDetailPhase.Ready, vm.uiState.value.phase)
+        assertTrue(vm.uiState.value.form.worldShareEnabled)
+        assertEquals("/live-track/share/world-share-id", vm.uiState.value.form.worldShareUrl)
+    }
+
+    @Test
+    fun disableWorldShare_patchesWorldShareFalseAndClearsUrl() = runTest {
+        val stateStore = TrackerManagementStateStore()
+        val initialGroup = group(trackIds = listOf("t1")).copy(
+            world_share_id = "world-share-id",
+            world_share_url = "/live-track/share/world-share-id"
+        )
+        val trackers = listOf(tracker("t1", owner = true))
+        val groupRepo = FakeGroupManagementRepository(initialGroup, stateStore)
+        val vm = GroupDetailViewModel(
+            groupRepository = groupRepo,
+            trackerRepository = FakeTrackerManagementRepository(trackers, stateStore),
+            eligibilityUseCase = DefaultGroupTrackerEligibilityUseCase(),
+            stateStore = stateStore
+        )
+
+        vm.load(initialGroup.id)
+        advanceUntilIdle()
+        vm.disableWorldShare()
+        advanceUntilIdle()
+
+        assertEquals(false, groupRepo.patchCalls.last().world_share_enabled)
+        assertEquals(GroupDetailPhase.Ready, vm.uiState.value.phase)
+        assertFalse(vm.uiState.value.form.worldShareEnabled)
+        assertEquals(null, vm.uiState.value.form.worldShareUrl)
+    }
+
     private fun tracker(
         id: String,
         owner: Boolean,
@@ -241,6 +292,7 @@ class GroupDetailViewModelTest {
         private val stateStore: TrackerManagementStateStore
     ) : GroupManagementRepository {
         val patchCalls = mutableListOf<GroupPatchRequest>()
+        val patchPublishFlags = mutableListOf<Boolean>()
 
         override suspend fun loadGroups(forceRefresh: Boolean): RepositoryResult<List<Group>> {
             stateStore.publishGroups(listOf(group))
@@ -261,6 +313,7 @@ class GroupDetailViewModelTest {
             publishToStore: Boolean
         ): RepositoryResult<Group> {
             patchCalls.add(request)
+            patchPublishFlags.add(publishToStore)
             val nextTrackIds = group.track_ids.orEmpty().toMutableSet()
             request.remove_track_ids.orEmpty().forEach { nextTrackIds.remove(it) }
             request.add_track_ids.orEmpty().forEach { nextTrackIds.add(it) }
@@ -269,6 +322,16 @@ class GroupDetailViewModelTest {
                 hidden_in_list = request.hidden_in_list ?: group.hidden_in_list,
                 visibility = request.visibility ?: group.visibility,
                 shared_with_emails = request.shared_with_emails ?: group.shared_with_emails,
+                world_share_id = when (request.world_share_enabled) {
+                    true -> "world-share-id"
+                    false -> null
+                    null -> group.world_share_id
+                },
+                world_share_url = when (request.world_share_enabled) {
+                    true -> "/live-track/share/world-share-id"
+                    false -> null
+                    null -> group.world_share_url
+                },
                 track_ids = nextTrackIds.toList()
             )
             stateStore.publishGroup(group, emitEvent = publishToStore)

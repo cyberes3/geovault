@@ -232,6 +232,12 @@
     <string name="failed_to_save_tracker">Failed to save tracker</string>
     <string name="failed_to_clear_history">Failed to clear history</string>
     <string name="failed_to_delete_tracker">Failed to delete tracker</string>
+    <string name="failed_to_enable_world_share">Failed to enable world link</string>
+    <string name="failed_to_disable_world_share">Failed to disable world link</string>
+    <string name="failed_to_update_visibility">Failed to update visibility</string>
+    <string name="failed_to_unsubscribe">Failed to unsubscribe tracker</string>
+    <string name="failed_to_remove_from_share">Failed to remove from share</string>
+    <string name="failed_to_leave_group">Failed to leave group</string>
     <string name="pick_color">Pick Color</string>
     <string name="show_recent_data">Show recent data</string>
     <string name="show_recent_data_help_text">Show only points in this time window; choose All to show full history.</string>

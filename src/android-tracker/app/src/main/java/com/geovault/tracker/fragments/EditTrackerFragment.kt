@@ -99,7 +99,9 @@ class EditTrackerFragment : Fragment() {
     private enum class PendingAction {
         SAVE,
         CLEAR_HISTORY,
-        DELETE
+        DELETE,
+        ENABLE_WORLD_SHARE,
+        DISABLE_WORLD_SHARE
     }
 
     private val createKmlDocumentLauncher = registerForActivityResult(
@@ -181,13 +183,16 @@ class EditTrackerFragment : Fragment() {
             viewModel.onWorldShareEnabledChanged(isChecked)
             worldShareParamsRow.visibility = if (isChecked) View.VISIBLE else View.GONE
             if (isChecked) {
+                pendingAction = PendingAction.ENABLE_WORLD_SHARE
                 copyWorldLinkButton.visibility = View.VISIBLE
                 copyWorldLinkButton.isEnabled = false
                 copyWorldLinkButton.text = ""
                 copyWorldLinkSpinner.show()
-                viewModel.enableWorldShare()
+                viewModel.enableWorldShare(trackerId)
             } else {
                 copyWorldLinkButton.visibility = View.GONE
+                pendingAction = PendingAction.DISABLE_WORLD_SHARE
+                viewModel.disableWorldShare(trackerId)
             }
         }
 
@@ -448,9 +453,16 @@ class EditTrackerFragment : Fragment() {
                         EditTrackerPhase.Ready -> {
                             showLoadingState(false)
                             populateFormFromState(state.form)
+                            setAllInputsEnabled(true)
                             copyWorldLinkButton.isEnabled = true
                             copyWorldLinkButton.text = getString(R.string.copy_world_share_link)
                             copyWorldLinkSpinner.hide()
+                            if (
+                                pendingAction == PendingAction.ENABLE_WORLD_SHARE ||
+                                pendingAction == PendingAction.DISABLE_WORLD_SHARE
+                            ) {
+                                pendingAction = null
+                            }
                         }
                         EditTrackerPhase.Saving -> {
                             showLoadingState(false)
@@ -492,6 +504,8 @@ class EditTrackerFragment : Fragment() {
                             PendingAction.SAVE -> R.string.failed_to_save_tracker
                             PendingAction.CLEAR_HISTORY -> R.string.failed_to_clear_history
                             PendingAction.DELETE -> R.string.failed_to_delete_tracker
+                            PendingAction.ENABLE_WORLD_SHARE -> R.string.failed_to_enable_world_share
+                            PendingAction.DISABLE_WORLD_SHARE -> R.string.failed_to_disable_world_share
                             null -> R.string.failed_to_load_tracker
                         }
                         navHost()?.showSnackbar(getString(failureMessageRes))

@@ -103,4 +103,8 @@ class EditSharedTrackerViewModel @Inject constructor(
             }
         }
     }
+
+    fun consumeError() {
+        _uiState.update { it.copy(errorMessage = null) }
+    }
 }

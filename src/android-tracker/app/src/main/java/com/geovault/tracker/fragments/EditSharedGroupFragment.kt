@@ -37,6 +37,13 @@ class EditSharedGroupFragment : Fragment() {
 
     private var group: Group? = null
     private var suppressHideSwitchCallback = false
+    private var pendingAction: PendingAction? = null
+
+    private enum class PendingAction {
+        LOAD,
+        HIDE,
+        LEAVE_GROUP
+    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         return inflater.inflate(R.layout.fragment_edit_shared_group, container, false)
@@ -59,6 +66,7 @@ class EditSharedGroupFragment : Fragment() {
         group = initialGroup
         renderGroup(initialGroup)
         bindActions()
+        pendingAction = PendingAction.LOAD
         viewModel.load()
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -68,8 +76,22 @@ class EditSharedGroupFragment : Fragment() {
                     suppressHideSwitchCallback = true
                     hideInListSwitch.isChecked = hiddenGroupIds.contains(initialGroup.id)
                     suppressHideSwitchCallback = false
-                    state.errorMessage?.takeIf { it.isNotBlank() }?.let { navHost()?.showSnackbar(it) }
+                    if (state.mapVisibility != null && pendingAction == PendingAction.LOAD) {
+                        pendingAction = null
+                    }
+                    state.errorMessage?.takeIf { it.isNotBlank() }?.let {
+                        val failedAction = pendingAction
+                        pendingAction = null
+                        val failureMessageRes = when (failedAction) {
+                            PendingAction.HIDE -> R.string.failed_to_update_visibility
+                            PendingAction.LEAVE_GROUP -> R.string.failed_to_leave_group
+                            PendingAction.LOAD, null -> R.string.failed_to_load_tracker
+                        }
+                        navHost()?.showSnackbar(getString(failureMessageRes))
+                        viewModel.consumeError()
+                    }
                     if (state.didLeave) {
+                        pendingAction = null
                         parentFragmentManager.popBackStack()
                     }
                 }
@@ -88,6 +110,7 @@ class EditSharedGroupFragment : Fragment() {
         val g = group ?: return
         hideInListSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (suppressHideSwitchCallback) return@setOnCheckedChangeListener
+            pendingAction = PendingAction.HIDE
             viewModel.setHidden(g.id, isChecked)
         }
 
@@ -96,6 +119,7 @@ class EditSharedGroupFragment : Fragment() {
                 .setTitle(getString(R.string.group_leave_confirm_title))
                 .setMessage(getString(R.string.group_leave_confirm_message))
                 .setPositiveButton(getString(R.string.leave_group)) { _, _ ->
+                    pendingAction = PendingAction.LEAVE_GROUP
                     viewModel.leaveGroup(g.id)
                 }
                 .setNegativeButton(getString(R.string.cancel_button), null)

@@ -192,14 +192,14 @@ class EditTrackerViewModel @Inject constructor(
         }
     }
 
-    fun enableWorldShare() {
-        val trackerId = _uiState.value.form.trackerId
-        if (trackerId.isBlank()) return
+    fun enableWorldShare(trackerId: String? = null) {
+        val resolvedTrackerId = trackerId?.takeIf { it.isNotBlank() } ?: _uiState.value.form.trackerId
+        if (resolvedTrackerId.isBlank()) return
         _uiState.update { it.copy(phase = EditTrackerPhase.Saving, errorMessage = null) }
         viewModelScope.launch {
             when (
                 val result = trackerRepository.updateTrackerSettings(
-                    trackerId = trackerId,
+                    trackerId = resolvedTrackerId,
                     request = TrackerSettingsRequest(world_share_enabled = true),
                     publishToStore = false
                 )
@@ -221,6 +221,43 @@ class EditTrackerViewModel @Inject constructor(
                         it.copy(
                             phase = EditTrackerPhase.Ready,
                             form = it.form.copy(worldShareEnabled = false),
+                            errorMessage = result.error.toString()
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun disableWorldShare(trackerId: String? = null) {
+        val resolvedTrackerId = trackerId?.takeIf { it.isNotBlank() } ?: _uiState.value.form.trackerId
+        if (resolvedTrackerId.isBlank()) return
+        _uiState.update { it.copy(phase = EditTrackerPhase.Saving, errorMessage = null) }
+        viewModelScope.launch {
+            when (
+                val result = trackerRepository.updateTrackerSettings(
+                    trackerId = resolvedTrackerId,
+                    request = TrackerSettingsRequest(world_share_enabled = false),
+                    publishToStore = false
+                )
+            ) {
+                is RepositoryResult.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            phase = EditTrackerPhase.Ready,
+                            form = it.form.copy(
+                                worldShareEnabled = false,
+                                worldShareUrl = null
+                            ),
+                            errorMessage = null
+                        )
+                    }
+                }
+                is RepositoryResult.Failure -> {
+                    _uiState.update {
+                        it.copy(
+                            phase = EditTrackerPhase.Ready,
+                            form = it.form.copy(worldShareEnabled = true),
                             errorMessage = result.error.toString()
                         )
                     }

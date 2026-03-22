@@ -3,7 +3,7 @@
     <!-- When locked to container, wrap in a layer that fills the map column so panel height = map height. pointer-events-none so map can pan/zoom; panel has pointer-events-auto. -->
     <div
       v-if="isContainerMode"
-      class="fixed inset-0 sm:absolute sm:inset-0 overflow-hidden flex justify-end pointer-events-none z-50"
+      class="fixed inset-x-0 bottom-0 top-16 sm:absolute sm:inset-0 overflow-hidden flex justify-end pointer-events-none z-50"
     >
       <div
         ref="panel"
@@ -120,7 +120,7 @@ export default {
       if (isContainerMode.value) {
         return `${base} w-full sm:w-[28rem] h-full ${animationClass}`.trim();
       }
-      return `${base} fixed right-0 top-0 bottom-0 w-full h-full sm:w-[28rem] sm:h-full ${animationClass}`.trim();
+      return `${base} fixed inset-x-0 top-16 bottom-0 w-full sm:inset-y-0 sm:right-0 sm:left-auto sm:top-0 sm:w-[28rem] sm:h-full ${animationClass}`.trim();
     });
 
     function requestClose() {

@@ -38,6 +38,14 @@ class EditSharedTrackerFragment : Fragment() {
 
     private var currentTracker: Tracker? = null
     private var suppressHideSwitchCallback = false
+    private var pendingAction: PendingAction? = null
+
+    private enum class PendingAction {
+        LOAD,
+        HIDE,
+        UNSUBSCRIBE,
+        LEAVE_SHARE
+    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         return inflater.inflate(R.layout.fragment_edit_shared_tracker, container, false)
@@ -61,6 +69,7 @@ class EditSharedTrackerFragment : Fragment() {
         currentTracker = initialTracker
         renderTracker(initialTracker)
         bindActions(initialTracker.id)
+        pendingAction = PendingAction.LOAD
         viewModel.load()
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -70,8 +79,23 @@ class EditSharedTrackerFragment : Fragment() {
                     suppressHideSwitchCallback = true
                     hideOnMapSwitch.isChecked = hiddenIds.contains(initialTracker.id)
                     suppressHideSwitchCallback = false
-                    state.errorMessage?.takeIf { it.isNotBlank() }?.let { navHost()?.showSnackbar(it) }
+                    if (state.mapVisibility != null && pendingAction == PendingAction.LOAD) {
+                        pendingAction = null
+                    }
+                    state.errorMessage?.takeIf { it.isNotBlank() }?.let {
+                        val failedAction = pendingAction
+                        pendingAction = null
+                        val failureMessageRes = when (failedAction) {
+                            PendingAction.HIDE -> R.string.failed_to_update_visibility
+                            PendingAction.UNSUBSCRIBE -> R.string.failed_to_unsubscribe
+                            PendingAction.LEAVE_SHARE -> R.string.failed_to_remove_from_share
+                            PendingAction.LOAD, null -> R.string.failed_to_load_tracker
+                        }
+                        navHost()?.showSnackbar(getString(failureMessageRes))
+                        viewModel.consumeError()
+                    }
                     if (state.didLeave) {
+                        pendingAction = null
                         parentFragmentManager.popBackStack()
                     }
                 }
@@ -91,6 +115,7 @@ class EditSharedTrackerFragment : Fragment() {
     private fun bindActions(trackerId: String) {
         hideOnMapSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (suppressHideSwitchCallback) return@setOnCheckedChangeListener
+            pendingAction = PendingAction.HIDE
             viewModel.setHidden(trackerId, isChecked)
         }
 
@@ -99,6 +124,7 @@ class EditSharedTrackerFragment : Fragment() {
                 .setTitle(getString(R.string.unsubscribe_confirm_title))
                 .setMessage(getString(R.string.unsubscribe_confirm_message))
                 .setPositiveButton(getString(R.string.unsubscribe)) { _, _ ->
+                    pendingAction = PendingAction.UNSUBSCRIBE
                     viewModel.unsubscribe(trackerId)
                 }
                 .setNegativeButton(getString(R.string.cancel_button), null)
@@ -111,6 +137,7 @@ class EditSharedTrackerFragment : Fragment() {
                 .setTitle(getString(R.string.remove_from_share_confirm_title))
                 .setMessage(getString(R.string.remove_from_share_confirm_message))
                 .setPositiveButton(getString(R.string.remove_from_share)) { _, _ ->
+                    pendingAction = PendingAction.LEAVE_SHARE
                     viewModel.leaveShared(trackerId)
                 }
                 .setNegativeButton(getString(R.string.cancel_button), null)

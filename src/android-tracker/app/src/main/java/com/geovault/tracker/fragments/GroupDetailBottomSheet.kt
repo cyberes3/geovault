@@ -28,6 +28,7 @@ import com.geovault.tracker.GroupPatchRequest
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
+import com.geovault.tracker.ui.applyDialogButtonColors
 import com.geovault.common.R as CommonR
 import com.geovault.tracker.Tracker
 import com.google.android.material.button.MaterialButton
@@ -64,6 +65,14 @@ class GroupDetailFragment : Fragment() {
     private var selectedVisibilityIndex = 0
     private val sharedWithEmailsForSave = mutableListOf<String>()
     private var isRenderingState = false
+    private var pendingAction: PendingAction? = null
+
+    private enum class PendingAction {
+        SAVE,
+        DELETE,
+        ENABLE_WORLD_SHARE,
+        DISABLE_WORLD_SHARE
+    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_group_detail, container, false)
@@ -91,7 +100,7 @@ class GroupDetailFragment : Fragment() {
         loadingOverlay = view.findViewById(R.id.groupDetailLoadingOverlay)
         loadingSpinner = view.findViewById(R.id.groupDetailLoadingSpinner)
         saveButton = view.findViewById(R.id.groupDetailSave)
-        closeButton.setOnClickListener { closeEditor() }
+        closeButton.setOnClickListener { tryClose() }
         saveButton.setOnClickListener { performSave() }
 
         val initialGroup = arguments?.getParcelable(ARG_GROUP, Group::class.java)
@@ -131,21 +140,40 @@ class GroupDetailFragment : Fragment() {
                             copyWorldLinkButton.isEnabled = true
                             copyWorldLinkButton.text = getString(R.string.copy_world_share_link)
                             copyWorldLinkSpinner.hide()
+                            if (
+                                pendingAction == PendingAction.ENABLE_WORLD_SHARE ||
+                                pendingAction == PendingAction.DISABLE_WORLD_SHARE
+                            ) {
+                                pendingAction = null
+                            }
                         }
                         GroupDetailPhase.Saving -> {
                             hideLoading()
                             setAllInputsEnabled(false)
                         }
-                        GroupDetailPhase.Saved -> closeEditor(discardDraft = false)
+                        GroupDetailPhase.Saved -> {
+                            pendingAction = null
+                            closeEditor(discardDraft = false)
+                        }
                         GroupDetailPhase.Deleting -> setAllInputsEnabled(false)
                         GroupDetailPhase.Deleted -> {
+                            pendingAction = null
                             closeEditor(discardDraft = false)
                             navHost()?.showSnackbar(getString(R.string.tracker_deleted))
                         }
                     }
                     if (!state.errorMessage.isNullOrBlank()) {
                         setAllInputsEnabled(true)
-                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                        val failedAction = pendingAction
+                        pendingAction = null
+                        val failureMessageRes = when (failedAction) {
+                            PendingAction.SAVE -> R.string.failed_to_save_tracker
+                            PendingAction.DELETE -> R.string.failed_to_delete_tracker
+                            PendingAction.ENABLE_WORLD_SHARE -> R.string.failed_to_enable_world_share
+                            PendingAction.DISABLE_WORLD_SHARE -> R.string.failed_to_disable_world_share
+                            null -> R.string.failed_to_load_tracker
+                        }
+                        navHost()?.showSnackbar(getString(failureMessageRes))
                     }
                 }
             }
@@ -219,6 +247,7 @@ class GroupDetailFragment : Fragment() {
             if (isRenderingState) return@setOnCheckedChangeListener
             viewModel.onWorldShareEnabledChanged(isChecked)
             if (isChecked) {
+                pendingAction = PendingAction.ENABLE_WORLD_SHARE
                 copyWorldLinkButton.visibility = View.VISIBLE
                 worldShareRow.isEnabled = false
                 copyWorldLinkButton.isEnabled = false
@@ -227,6 +256,8 @@ class GroupDetailFragment : Fragment() {
                 viewModel.enableWorldShare()
             } else {
                 copyWorldLinkButton.visibility = View.GONE
+                pendingAction = PendingAction.DISABLE_WORLD_SHARE
+                viewModel.disableWorldShare()
             }
         }
         hideInListRow.visibility = View.VISIBLE
@@ -294,6 +325,7 @@ class GroupDetailFragment : Fragment() {
         viewModel.onVisibilityChanged(visibility)
         viewModel.onHiddenInListChanged(hideInListRow.isChecked)
         viewModel.onWorldShareEnabledChanged(worldShareRow.isChecked)
+        pendingAction = PendingAction.SAVE
         setAllInputsEnabled(false)
         viewModel.saveGroup()
     }
@@ -313,6 +345,7 @@ class GroupDetailFragment : Fragment() {
             .setTitle(getString(R.string.group_delete_confirm_title))
             .setMessage(getString(R.string.group_delete_confirm_message))
             .setPositiveButton(getString(R.string.delete_group)) { _, _ ->
+                pendingAction = PendingAction.DELETE
                 viewModel.deleteGroup(g.id)
             }
             .setNegativeButton(getString(R.string.cancel_button), null)
@@ -324,6 +357,20 @@ class GroupDetailFragment : Fragment() {
             viewModel.discardDraftMembership()
         }
         requireActivity().supportFragmentManager.popBackStack()
+    }
+
+    private fun tryClose() {
+        if (!viewModel.hasUnsavedChanges()) {
+            closeEditor()
+            return
+        }
+        val discardDialog = AlertDialog.Builder(requireContext())
+            .setTitle(getString(R.string.discard_changes_confirm_title))
+            .setMessage(getString(R.string.discard_changes_confirm_message))
+            .setPositiveButton(getString(R.string.discard)) { _, _ -> closeEditor() }
+            .setNegativeButton(getString(R.string.cancel_button), null)
+            .show()
+        discardDialog.applyDialogButtonColors(requireContext(), destructiveAction = true)
     }
 
     private fun showLoading() {

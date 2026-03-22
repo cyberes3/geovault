@@ -285,6 +285,45 @@ class GroupDetailViewModel @Inject constructor(
         }
     }
 
+    fun disableWorldShare() {
+        val state = _uiState.value
+        val groupId = state.form.groupId
+        if (groupId.isBlank()) return
+        _uiState.update { it.copy(phase = GroupDetailPhase.Saving, errorMessage = null) }
+        viewModelScope.launch {
+            when (
+                val result = groupRepository.patchGroup(
+                    groupId = groupId,
+                    request = GroupPatchRequest(world_share_enabled = false),
+                    publishToStore = true
+                )
+            ) {
+                is RepositoryResult.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            phase = GroupDetailPhase.Ready,
+                            group = result.data,
+                            form = it.form.copy(
+                                worldShareEnabled = false,
+                                worldShareUrl = null
+                            ),
+                            errorMessage = null
+                        )
+                    }
+                }
+                is RepositoryResult.Failure -> {
+                    _uiState.update {
+                        it.copy(
+                            phase = GroupDetailPhase.Ready,
+                            form = it.form.copy(worldShareEnabled = true),
+                            errorMessage = result.error.toString()
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     fun deleteGroup(groupId: String) {
         _uiState.update { it.copy(phase = GroupDetailPhase.Deleting, errorMessage = null) }
         viewModelScope.launch {
