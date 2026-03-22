@@ -60,7 +60,10 @@ export function buildRasterStyle(tileSource, { sourceId = 'base-raster', layerId
 
 export async function fetchVisibleTileSources(apiUrl = TILE_SOURCES_API_URL) {
   try {
-    const response = await fetch(apiUrl);
+    const response = await fetch(apiUrl, {credentials: 'include'});
+    if (!response.ok) {
+      throw new Error(`Tile sources HTTP ${response.status}`);
+    }
     const data = await response.json();
     if (!Array.isArray(data?.sources)) {
       return [defaultOsmSource];
@@ -70,7 +73,8 @@ export async function fetchVisibleTileSources(apiUrl = TILE_SOURCES_API_URL) {
       return [defaultOsmSource];
     }
     return visibleSources;
-  } catch {
+  } catch (e) {
+    console.warn('fetchVisibleTileSources: using OSM fallback', e);
     return [defaultOsmSource];
   }
 }

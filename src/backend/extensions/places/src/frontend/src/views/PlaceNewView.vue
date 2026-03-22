@@ -201,7 +201,7 @@
 </template>
 
 <script>
-import {computed, inject, onBeforeUnmount, onDeactivated, onMounted, ref, watch} from 'vue';
+import {computed, inject, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch} from 'vue';
 import {onBeforeRouteLeave, useRoute} from 'vue-router';
 import {ArrowPathIcon, HomeIcon, MagnifyingGlassIcon, MapPinIcon, Square3Stack3DIcon} from '@heroicons/vue/24/outline';
 import {createPlacesMap} from '@/utils/placesMaplibre.js';
@@ -444,6 +444,7 @@ export default {
         map.value = mapController.value.map;
         baseSourceOptions.value = mapController.value.getBaseSourceOptions();
         selectedBaseSourceId.value = mapController.value.getCurrentBaseSourceId();
+        await applyDefaultBasemapFromUserSettings();
       } catch {
         return;
       }
@@ -693,6 +694,18 @@ export default {
       }
     }
 
+    /** Same pattern as Live Track: default map applies after settings load and when returning to the view. */
+    async function applyDefaultBasemapFromUserSettings() {
+      if (!mapController.value) return;
+      const desired = getDefaultMapSourceIdFromStore();
+      try {
+        selectedBaseSourceId.value = await mapController.value.setBaseSource(desired);
+        updateMarkerFromCoords();
+      } catch {
+        selectedBaseSourceId.value = mapController.value.getCurrentBaseSourceId();
+      }
+    }
+
     function handleBeforeUnload(e) {
       if (isDirty.value) {
         e.preventDefault();
@@ -752,6 +765,14 @@ export default {
       }
     }
 
+    watch(
+      () => window.gv_core?.store?.state?.userSettings,
+      () => {
+        void applyDefaultBasemapFromUserSettings();
+      },
+      {deep: true, immediate: true}
+    );
+
     onMounted(() => {
       initMap();
       window.addEventListener('beforeunload', handleBeforeUnload);
@@ -760,6 +781,10 @@ export default {
       } else {
         resetFormAndMap();
       }
+    });
+
+    onActivated(() => {
+      void applyDefaultBasemapFromUserSettings();
     });
 
     onBeforeUnmount(() => {

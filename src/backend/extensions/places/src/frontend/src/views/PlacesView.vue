@@ -478,6 +478,7 @@ export default {
         map.value = controller.map;
         baseSourceOptions.value = controller.getBaseSourceOptions();
         selectedBaseSourceId.value = controller.getCurrentBaseSourceId();
+        await applyDefaultBasemapFromUserSettings();
       } catch {
         return;
       }
@@ -601,6 +602,18 @@ export default {
         selectedBaseSourceId.value = mapController.value.getCurrentBaseSourceId();
       }
     };
+
+    /** Same pattern as Live Track: re-apply when userSettings hydrates or changes (avoids stuck-on-OSM in production). */
+    async function applyDefaultBasemapFromUserSettings() {
+      if (!mapController.value) return;
+      const desired = getDefaultMapSourceIdFromStore();
+      try {
+        selectedBaseSourceId.value = await mapController.value.setBaseSource(desired);
+        updateMapFeatures();
+      } catch {
+        selectedBaseSourceId.value = mapController.value.getCurrentBaseSourceId();
+      }
+    }
 
     const setPlaceItemRef = (id, el) => {
       if (el) placeItemRefs[id] = el;
@@ -888,6 +901,14 @@ export default {
       }
     });
 
+    watch(
+      () => window.gv_core?.store?.state?.userSettings,
+      () => {
+        void applyDefaultBasemapFromUserSettings();
+      },
+      {deep: true, immediate: true}
+    );
+
     onMounted(() => {
       initMap();
       fetchPlaces();
@@ -907,6 +928,7 @@ export default {
 
     onActivated(() => {
       fetchPlaces();
+      void applyDefaultBasemapFromUserSettings();
     });
 
     return {

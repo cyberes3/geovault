@@ -44,11 +44,7 @@ const defaultMapOptions = computed(() => {
 });
 
 async function loadTileSources() {
-  try {
-    tileSourcesList.value = await fetchVisibleTileSources();
-  } catch {
-    tileSourcesList.value = [];
-  }
+  tileSourcesList.value = await fetchVisibleTileSources();
 }
 
 function load() {
