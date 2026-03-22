@@ -38,11 +38,18 @@
         <CopyTextButton :text="trackerSecret" size="sm" />
       </div>
     </div>
-    <div class="flex flex-wrap gap-2">
-      <BaseButton variant="primary" color="blue" size="sm" @click="$emit('open-instructions')">
-        GPSLogger Instructions
+    <div class="grid gap-2" :class="haukDomain ? 'grid-cols-2' : 'grid-cols-1'">
+      <BaseButton variant="primary" color="blue" size="sm" class="w-full min-w-0" @click="$emit('open-instructions')">
+        GPSLogger Setup
       </BaseButton>
-      <BaseButton v-if="haukDomain" variant="white" size="sm" @click="$emit('open-hauk-instructions')">
+      <BaseButton
+        v-if="haukDomain"
+        variant="primary"
+        color="blue"
+        size="sm"
+        class="w-full min-w-0"
+        @click="$emit('open-hauk-instructions')"
+      >
         Hauk Setup
       </BaseButton>
     </div>
@@ -50,11 +57,12 @@
 </template>
 
 <script>
+import BaseButton from 'platform/components/parts/BaseButton.vue';
 import CopyTextButton from './CopyTextButton.vue';
 
 export default {
   name: 'CreateSuccessView',
-  components: { CopyTextButton },
+  components: { BaseButton, CopyTextButton },
   props: {
     ingressUrl: { type: String, default: '' },
     bodyTemplate: { type: String, default: '' },
