@@ -3,6 +3,7 @@ import time
 import uuid
 from typing import List, Tuple, Dict, NamedTuple, Union, Any
 
+from django.contrib.gis.db.models import Extent
 from django.db import connection
 from django.db.models import QuerySet, Q
 from django.http import JsonResponse
@@ -223,6 +224,26 @@ def _build_base_query(user_id: int, tag: str | None = None, collection_id: uuid.
 
     # Order by id to ensure consistent results when slicing
     return base_query.order_by('id')
+
+
+def get_public_share_feature_bbox(
+        user_id: int,
+        *,
+        tag: str | None = None,
+        collection_id: uuid.UUID | None = None,
+) -> tuple[float, float, float, float] | None:
+    """
+    Aggregate WGS84 bounding box for features in a public tag or collection share.
+    Matches the same feature set as bbox-based public share loads.
+    """
+    if (tag is None) == (collection_id is None):
+        return None
+    qs = _build_base_query(user_id, tag=tag, collection_id=collection_id)
+    extent = qs.aggregate(ext=Extent('geometry')).get('ext')
+    if extent is None:
+        return None
+    xmin, ymin, xmax, ymax = extent
+    return (float(xmin), float(ymin), float(xmax), float(ymax))
 
 
 def _convert_feature_to_geojson(feature: FeatureStore, public_safe: bool = False, include_tags: bool = False, allow_downloads: bool = False) -> dict[str, str | Any] | None:

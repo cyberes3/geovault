@@ -9,7 +9,12 @@ from api.models import TagShare, CollectionShare, FeatureShare, FeatureStore
 from api.utils.format_encoding import create_bbox_response
 from api.utils.responses import error_response, not_found_response
 from api.validation.feature_updates import validate_payload, TagSharePayload
-from api.views.features.bbox_utils import _build_bbox_response, _validate_bbox_params, get_features_in_bbox
+from api.views.features.bbox_utils import (
+    _build_bbox_response,
+    _validate_bbox_params,
+    get_features_in_bbox,
+    get_public_share_feature_bbox,
+)
 from api.views.sharing.utils import validate_share_id, build_share_url
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
@@ -92,22 +97,29 @@ def get_public_share_info(request, share_id):
     # Try to find the share in any of the three tables
     tag_share = TagShare.objects.filter(share_id=share_id).first()
     if tag_share:
+        bbox = get_public_share_feature_bbox(tag_share.user_id, tag=tag_share.tag)
         return JsonResponse({
             'share_type': 'tag',
             'tag': tag_share.tag,
             'created_at': tag_share.created_at.isoformat(),
-            'allow_downloads': tag_share.allow_downloads
+            'allow_downloads': tag_share.allow_downloads,
+            'feature_bbox': list(bbox) if bbox else None,
         })
 
     collection_share = CollectionShare.objects.filter(share_id=share_id).select_related('collection').first()
     if collection_share:
+        bbox = get_public_share_feature_bbox(
+            collection_share.user_id,
+            collection_id=collection_share.collection.id,
+        )
         return JsonResponse({
             'share_type': 'collection',
             'collection_name': collection_share.collection.name,
             'collection_id': str(collection_share.collection.id),
             'created_at': collection_share.created_at.isoformat(),
             'include_tags': collection_share.include_tags,
-            'allow_downloads': collection_share.allow_downloads
+            'allow_downloads': collection_share.allow_downloads,
+            'feature_bbox': list(bbox) if bbox else None,
         })
 
     feature_share = FeatureShare.objects.filter(share_id=share_id).select_related('feature').first()
@@ -119,7 +131,8 @@ def get_public_share_info(request, share_id):
             'feature_name': feature_name,
             'feature_id': feature_share.feature.id,
             'created_at': feature_share.created_at.isoformat(),
-            'allow_downloads': feature_share.allow_downloads
+            'allow_downloads': feature_share.allow_downloads,
+            'feature_bbox': None,
         })
 
     # Share not found - return same error message to prevent information disclosure

@@ -4,6 +4,7 @@
     :title="dialogTitle"
     :max-width="computedMaxWidth"
     :full-screen-mobile="shareType !== 'feature'"
+    below-navbar
     @close="closeDialog"
   >
     <!-- All Share Types - Consistent Layout -->
@@ -371,8 +372,12 @@ export default {
     }
   },
   watch: {
-    isOpen(newVal) {
-      if (newVal) {
+    isOpen: {
+      immediate: true,
+      handler(newVal) {
+        if (!newVal) {
+          return
+        }
         if (this.shareType === 'feature') {
           this.loadOrCreateFeatureShare()
         } else {
@@ -422,6 +427,7 @@ export default {
         // Try to get existing share
         const response = await fetch(`/api/sharing/features/${featureId}/`, {
           method: 'GET',
+          credentials: 'same-origin',
           headers: {
             'Content-Type': 'application/json'
           }
@@ -453,15 +459,24 @@ export default {
       this.error = null
 
       try {
-        const response = await fetch('/api/sharing/list/')
+        const response = await fetch('/api/sharing/list/', { credentials: 'same-origin' })
         const data = await response.json()
 
         if (response.ok) {
-          // Filter shares based on type
+          const list = Array.isArray(data.shares) ? data.shares : []
+          // Filter shares based on type (normalize ids/strings so list API rows always match)
           if (this.shareType === 'tag') {
-            this.shares = data.shares.filter(s => s.share_type === 'tag' && s.tag === this.item.tag)
+            const tag = (this.item.tag != null ? String(this.item.tag) : '').trim()
+            this.shares = list.filter(
+              (s) => s.share_type === 'tag' && s.tag != null && String(s.tag).trim() === tag
+            )
           } else if (this.shareType === 'collection') {
-            this.shares = data.shares.filter(s => s.share_type === 'collection' && s.collection_id === this.itemId)
+            const cid = this.itemId != null ? String(this.itemId) : ''
+            this.shares = list.filter(
+              (s) => s.share_type === 'collection' && s.collection_id != null && String(s.collection_id) === cid
+            )
+          } else {
+            this.shares = []
           }
         } else {
           throw new Error(data.error || 'Failed to load shares')
@@ -511,6 +526,7 @@ export default {
 
         const response = await fetch(endpoint, {
           method: 'POST',
+          credentials: 'same-origin',
           headers: {
             'Content-Type': 'application/json',
             'X-CSRFToken': csrfToken || ''
@@ -558,6 +574,7 @@ export default {
         const csrfToken = getCookie('csrftoken')
         const response = await fetch(`/api/sharing/${shareId}/`, {
           method: 'DELETE',
+          credentials: 'same-origin',
           headers: {
             'X-CSRFToken': csrfToken || ''
           }
@@ -597,6 +614,7 @@ export default {
         const csrfToken = getCookie('csrftoken')
         const response = await fetch(`/api/sharing/features/${this.itemId}/update/`, {
           method: 'PATCH',
+          credentials: 'same-origin',
           headers: {
             'Content-Type': 'application/json',
             'X-CSRFToken': csrfToken || ''

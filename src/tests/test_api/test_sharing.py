@@ -161,6 +161,10 @@ class TestSharingAPI(TestCase):
         self.assertIn('tag', data)
         self.assertEqual(data['tag'], 'shared-tag')
         self.assertEqual(data['allow_downloads'], True)
+        self.assertIsNotNone(data.get('feature_bbox'))
+        self.assertEqual(len(data['feature_bbox']), 4)
+        self.assertAlmostEqual(data['feature_bbox'][0], -122.4194, places=4)
+        self.assertAlmostEqual(data['feature_bbox'][1], 37.7749, places=4)
 
     def test_get_public_share_info_not_found(self):
         """Test getting info for non-existent share."""

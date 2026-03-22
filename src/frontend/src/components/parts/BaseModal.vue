@@ -16,12 +16,9 @@
     <!-- Backdrop -->
     <div class="absolute inset-0 bg-black/50 transition-opacity"></div>
 
-    <!-- Modal panel -->
+    <!-- Modal panel: optional top inset so content is centered in the viewport below the app navbar (h-16) -->
     <div
-        :class="[
-          'absolute inset-0 flex justify-stretch sm:justify-center',
-          fitContentHeight ? 'items-center' : 'items-stretch sm:items-center'
-        ]"
+        :class="modalShellClass"
     >
       <div
         :class="modalPanelClass"
@@ -128,25 +125,64 @@ export default {
     fitContentHeight: {
       type: Boolean,
       default: false
+    },
+    /**
+     * When true, the modal is vertically centered in the area below the main app navbar (4rem),
+     * so the panel does not overlap the nav. Backdrop still covers the full viewport.
+     */
+    belowNavbar: {
+      type: Boolean,
+      default: false
     }
   },
   emits: ['close'],
   computed: {
+    modalShellClass() {
+      // Nav is h-16 (4rem); 1rem margin below nav and 1rem above viewport bottom
+      const position = this.belowNavbar
+        ? 'absolute left-0 right-0 top-[calc(4rem+1rem)] bottom-4'
+        : 'absolute inset-0'
+      const layout = 'flex justify-stretch sm:justify-center'
+      const align = this.fitContentHeight ? 'items-center' : 'items-stretch sm:items-center'
+      return [position, layout, align]
+    },
     modalPanelClass() {
       const base = ['bg-white', 'flex', 'flex-col', 'w-full', 'shadow-xl', 'overflow-hidden']
+      // 4rem navbar + 1rem top gap + 1rem bottom gap = 6rem; also cap relative to viewport
+      const maxHBelowNav = 'max-h-[min(85vh,calc(100dvh-6rem))]'
+      const smMaxHBelowNav = 'sm:max-h-[min(85vh,calc(100dvh-6rem))]'
       let height
       if (this.fitContentHeight) {
         height = [
           'h-auto',
-          'max-h-[90vh]',
+          this.belowNavbar ? maxHBelowNav : 'max-h-[90vh]',
           'w-full',
           'rounded-lg',
           'sm:h-auto',
-          'sm:max-h-[90vh]',
+          this.belowNavbar ? smMaxHBelowNav : 'sm:max-h-[90vh]',
           'sm:rounded-lg'
         ]
       } else if (this.fullScreenMobile) {
-        height = ['h-full', 'sm:h-[90vh]', 'sm:rounded-lg']
+        if (this.belowNavbar) {
+          height = [
+            'h-full',
+            'max-h-[min(85vh,calc(100dvh-6rem))]',
+            'sm:h-full',
+            'sm:max-h-[min(85vh,calc(100dvh-6rem))]',
+            'sm:rounded-lg'
+          ]
+        } else {
+          height = ['h-full', 'sm:h-[90vh]', 'sm:rounded-lg']
+        }
+      } else if (this.belowNavbar) {
+        height = [
+          'max-h-[min(85vh,calc(100dvh-6rem))]',
+          'h-auto',
+          'rounded-lg',
+          'sm:max-h-[min(85vh,calc(100dvh-6rem))]',
+          'sm:h-auto',
+          'sm:rounded-lg'
+        ]
       } else {
         height = ['h-[90vh]', 'rounded-lg', 'sm:h-[90vh]', 'sm:rounded-lg']
       }
@@ -154,7 +190,10 @@ export default {
     },
     contentScrollClasses() {
       if (this.fitContentHeight) {
-        return 'overflow-y-auto bg-white max-h-[calc(90vh-9rem)]'
+        const cap = this.belowNavbar
+          ? 'max-h-[calc(min(85vh,100dvh-6rem)-9rem)]'
+          : 'max-h-[calc(90vh-9rem)]'
+        return `overflow-y-auto bg-white ${cap}`
       }
       return 'flex-1 overflow-y-auto bg-white min-h-0'
     },

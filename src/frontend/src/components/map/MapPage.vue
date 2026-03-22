@@ -12,7 +12,7 @@
         :can-hide-features="isMainMapRoute && !isPublicShareMode && !!$store.state.userInfo"
         :geocoding-available="maptilerConfig && maptilerConfig.isAvailable() && !!$store.state.userInfo"
         @close="activeMobileSidebar = null"
-        @feature-click="zoomToFeature"
+        @feature-click="handleFeatureListClick"
         @feature-hide="handleHideFeature"
         @tag-filter-change="handleTagFilterChange"
         @tag-filter-loading-change="isDataLoading = $event"
@@ -559,6 +559,8 @@ export default {
       trackingState: 'disabled', // 'disabled', 'tracking', 'locked'
       locationMarker: null,
       hasInitialZoomed: false, // Track if we've done the initial zoom
+      /** Share id for which we already applied server `feature_bbox` (mapshare tag/collection). */
+      publicShareExtentAppliedShareId: null,
     }
   },
   methods: {
@@ -1190,7 +1192,8 @@ export default {
           feature_name: infoData.feature_name || null,
           feature_id: infoData.feature_id || null,
           include_tags: infoData.include_tags || false,
-          allow_downloads: infoData.allow_downloads || false
+          allow_downloads: infoData.allow_downloads || false,
+          feature_bbox: Array.isArray(infoData.feature_bbox) ? infoData.feature_bbox : null
         }
 
         // Update display properties based on share type
@@ -1366,9 +1369,6 @@ export default {
         this.currentAbortController.abort()
       }
 
-      const zoom = this.map.getZoom()
-      const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]
-
       // Create new AbortController
       this.currentAbortController = new AbortController()
       this.loadError = null
@@ -1399,7 +1399,36 @@ export default {
             this.handlePublicShareError('Failed to load share information')
             return
           }
+
+          if (
+            (context.type === 'share_tag' || context.type === 'share_collection') &&
+            this.publicShareExtentAppliedShareId !== this.shareId
+          ) {
+            const fb = this.publicShareInfo?.feature_bbox
+            if (
+              Array.isArray(fb) &&
+              fb.length === 4 &&
+              fb.every((x) => typeof x === 'number' && Number.isFinite(x))
+            ) {
+              const [w, s, e, n] = fb
+              const extentBounds = new maplibregl.LngLatBounds([w, s], [e, n])
+              this.map.fitBounds(extentBounds, {
+                duration: 0,
+                padding: 40,
+                maxZoom: MAX_ZOOM_LEVEL
+              })
+              this.loadedBounds.clear()
+              this.publicShareExtentAppliedShareId = this.shareId
+            }
+          }
         }
+
+        bounds = this.map.getBounds()
+        if (!bounds) {
+          return
+        }
+        const zoom = this.map.getZoom()
+        const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]
 
         // Build bbox key with context to ensure different shares don't share cache
         // Include share ID in key for shares, collection ID for collections, tags for tag filters
@@ -2779,6 +2808,16 @@ export default {
           duration: 500
         })
       }
+    },
+    handleFeatureListClick(feature) {
+      if (!feature) {
+        return
+      }
+      this.isEditingFeature = false
+      this.showFeaturePopup = false
+      const normalized = markRaw(this.convertMapLibreFeature(feature))
+      this.selectedFeature = normalized
+      this.zoomToFeature(normalized)
     },
     zoomToFeature(feature) {
       if (!this.map || !feature) {
