@@ -580,8 +580,8 @@ export default {
       trackingState: 'disabled', // 'disabled', 'tracking', 'locked'
       locationMarker: null,
       hasInitialZoomed: false, // Track if we've done the initial zoom
-      /** Share id for which we already applied server `feature_bbox` (mapshare tag/collection). */
-      publicShareExtentAppliedShareId: null,
+      /** Share id for which we already ran a tight fit to loaded geometries after first bbox response (mapshare tag/collection). */
+      publicShareRefinedFitShareId: null,
     }
   },
   methods: {
@@ -1229,8 +1229,7 @@ export default {
           feature_name: infoData.feature_name || null,
           feature_id: infoData.feature_id || null,
           include_tags: infoData.include_tags || false,
-          allow_downloads: infoData.allow_downloads || false,
-          feature_bbox: Array.isArray(infoData.feature_bbox) ? infoData.feature_bbox : null
+          allow_downloads: infoData.allow_downloads || false
         }
 
         // Update display properties based on share type
@@ -1378,6 +1377,25 @@ export default {
         // Select the feature so it shows in the info box
         this.selectedFeature = feature
       }
+
+      // Mapshare tag/collection: DB extent + padding can feel loose; fit once to actual loaded coordinates
+      if (
+        context.isPublicShare &&
+        context.shareId &&
+        (context.type === 'share_tag' || context.type === 'share_collection') &&
+        this.publicShareRefinedFitShareId !== context.shareId
+      ) {
+        const rawFeatures = data.data.features || []
+        const usable = rawFeatures.filter(
+          (f) => !f.properties?._isLabelPoint && !f.properties?._isSmallFeatureReplacement
+        )
+        if (usable.length > 0) {
+          this.publicShareRefinedFitShareId = context.shareId
+          await this.$nextTick()
+          await this.waitForMapEvent('idle')
+          await this.zoomToTaggedFeatures(usable, { padding: 28, duration: 0 })
+        }
+      }
       
       // Update features in extent list after data is loaded
       this.debouncedUpdateFeaturesInExtent()
@@ -1435,28 +1453,6 @@ export default {
             })
             this.handlePublicShareError('Failed to load share information')
             return
-          }
-
-          if (
-            (context.type === 'share_tag' || context.type === 'share_collection') &&
-            this.publicShareExtentAppliedShareId !== this.shareId
-          ) {
-            const fb = this.publicShareInfo?.feature_bbox
-            if (
-              Array.isArray(fb) &&
-              fb.length === 4 &&
-              fb.every((x) => typeof x === 'number' && Number.isFinite(x))
-            ) {
-              const [w, s, e, n] = fb
-              const extentBounds = new maplibregl.LngLatBounds([w, s], [e, n])
-              this.map.fitBounds(extentBounds, {
-                duration: 0,
-                padding: 40,
-                maxZoom: MAX_ZOOM_LEVEL
-              })
-              this.loadedBounds.clear()
-              this.publicShareExtentAppliedShareId = this.shareId
-            }
           }
         }
 
@@ -3477,10 +3473,19 @@ export default {
       this.loadDataForCurrentView()
     },
 
-    zoomToTaggedFeatures(features) {
+    /**
+     * @param {Object[]} features - GeoJSON features (geometry + properties)
+     * @param {Object} [options]
+     * @param {number} [options.padding=50] - fitBounds padding (px) or per-side object
+     * @param {number} [options.duration=500] - fitBounds / flyTo duration (ms); 0 for instant
+     */
+    zoomToTaggedFeatures(features, options = {}) {
       if (!this.map || !features || features.length === 0) {
         return
       }
+
+      const padding = options.padding != null ? options.padding : 50
+      const duration = options.duration != null ? options.duration : 500
 
       // Calculate bounding box from all features
       let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity
@@ -3518,12 +3523,15 @@ export default {
       // Handle degenerate bounds (same point)
       if (minLon === maxLon && minLat === maxLat) {
         return this.navigateAndRefresh(() => {
-          this.map.flyTo({
-            center: [minLon, minLat],
-            zoom: 10,
-            duration: 500,
-            padding: 50
-          })
+          if (duration === 0) {
+            this.map.jumpTo({ center: [minLon, minLat], zoom: 14 })
+          } else {
+            this.map.flyTo({
+              center: [minLon, minLat],
+              zoom: 14,
+              duration
+            })
+          }
         })
       }
 
@@ -3535,8 +3543,8 @@ export default {
 
       return this.navigateAndRefresh(() => {
         this.map.fitBounds(bounds, {
-          padding: 50,
-          duration: 500,
+          padding,
+          duration,
           maxZoom: MAX_ZOOM_LEVEL
         })
       })

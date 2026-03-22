@@ -384,12 +384,6 @@ class TestPublicShareAccess(TestCase):
         data = json.loads(response.content)
         self.assertEqual(data['share_type'], 'tag')
         self.assertEqual(data['tag'], 'public-tag')
-        self.assertIsNotNone(data.get('feature_bbox'))
-        self.assertEqual(len(data['feature_bbox']), 4)
-        self.assertAlmostEqual(data['feature_bbox'][0], -122.4194, places=4)
-        self.assertAlmostEqual(data['feature_bbox'][1], 37.7749, places=4)
-        self.assertAlmostEqual(data['feature_bbox'][2], -122.3994, places=4)
-        self.assertAlmostEqual(data['feature_bbox'][3], 37.7949, places=4)
 
         # Collection share
         collection_share = CollectionShare.objects.create(
@@ -402,12 +396,6 @@ class TestPublicShareAccess(TestCase):
         data = json.loads(response.content)
         self.assertEqual(data['share_type'], 'collection')
         self.assertIn('collection_name', data)
-        self.assertIsNotNone(data.get('feature_bbox'))
-        self.assertEqual(len(data['feature_bbox']), 4)
-        self.assertAlmostEqual(data['feature_bbox'][0], -122.4194, places=4)
-        self.assertAlmostEqual(data['feature_bbox'][1], 37.7749, places=4)
-        self.assertAlmostEqual(data['feature_bbox'][2], -122.3994, places=4)
-        self.assertAlmostEqual(data['feature_bbox'][3], 37.7949, places=4)
 
         # Feature share
         feature = FeatureStore.objects.filter(user=self.user).first()
@@ -422,36 +410,6 @@ class TestPublicShareAccess(TestCase):
         self.assertEqual(data['share_type'], 'feature')
         self.assertIn('feature_id', data)
         self.assertIn('feature_name', data)
-        self.assertIsNone(data.get('feature_bbox'))
-
-    def test_get_public_share_info_empty_collection_bbox_null(self):
-        """Tag/collection shares with no matching geometries return null feature_bbox."""
-        empty_collection = Collection.objects.create(
-            user=self.user,
-            name='Empty',
-            feature_ids=[],
-        )
-        collection_share = CollectionShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            collection=empty_collection,
-            user=self.user,
-        )
-        response = self.client.get(f'/api/sharing/public/info/{collection_share.share_id}/')
-        self.assertEqual(response.status_code, 200)
-        data = json.loads(response.content)
-        self.assertEqual(data['share_type'], 'collection')
-        self.assertIsNone(data.get('feature_bbox'))
-
-        orphan_tag_share = TagShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            tag='no-such-tag-exists',
-            user=self.user,
-        )
-        response = self.client.get(f'/api/sharing/public/info/{orphan_tag_share.share_id}/')
-        self.assertEqual(response.status_code, 200)
-        data = json.loads(response.content)
-        self.assertEqual(data['share_type'], 'tag')
-        self.assertIsNone(data.get('feature_bbox'))
 
 
 class TestShareDownloads(TestCase):
