@@ -655,6 +655,7 @@ loadExtensions().then(() => {
     router.addRoute({
         path: '/:pathMatch(.*)*',
         name: 'NotFound',
+        meta: { title: 'Not Found' },
         component: () => import('./components/NotFoundPage.vue'),
     });
     app.use(router)

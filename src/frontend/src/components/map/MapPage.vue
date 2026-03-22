@@ -225,6 +225,7 @@ import MapLoadingIndicator from './MapLoadingIndicator.vue'
 import MobileControlsBar from './MobileControlsBar.vue'
 import LocationControl from './LocationControl.vue'
 import { toast } from '@/utils/toast'
+import { setGeoVaultPageTitle } from '@/utils/documentTitle.js'
 
 // Lazy-loaded components - only loaded when needed
 const FeatureEditBox = defineAsyncComponent(() => import('./FeatureEditBox.vue'))
@@ -372,6 +373,26 @@ export default {
     }
   },
   watch: {
+    '$route': {
+      handler() {
+        this.syncMapPageDocumentTitle()
+      },
+      deep: true,
+      immediate: true
+    },
+    viewContext: {
+      handler() {
+        this.syncMapPageDocumentTitle()
+      },
+      deep: true,
+      immediate: true
+    },
+    publicShareError: {
+      handler() {
+        this.syncMapPageDocumentTitle()
+      },
+      immediate: true
+    },
     selectedFeature(newFeature, oldFeature) {
       // Update highlighting when feature is selected/deselected (dialog opens/closes)
       this.$nextTick(() => {
@@ -564,6 +585,22 @@ export default {
     }
   },
   methods: {
+    syncMapPageDocumentTitle() {
+      const path = this.$route.path
+      if (path !== '/map' && path !== '/mapshare') {
+        return
+      }
+      if (!this.isPublicShareMode) {
+        setGeoVaultPageTitle('Map')
+        return
+      }
+      if (this.publicShareError) {
+        setGeoVaultPageTitle('Share')
+        return
+      }
+      const name = this.viewContext?.name
+      setGeoVaultPageTitle(name ?? 'Share')
+    },
     teardownMapInteractionHandlers() {
       if (this.map && this.mapInteractionHandlers) {
         const handlers = this.mapInteractionHandlers

@@ -1,14 +1,17 @@
 import {createRouter, createWebHashHistory} from 'vue-router'
+import {setGeoVaultPageTitle} from '@/utils/documentTitle.js'
 
 const routes = [
     {
         path: '/',
         name: 'Root',
+        meta: { title: 'Dashboard' },
         component: () => import('./components/dashboard/DashboardPage.vue'),
     },
     {
         path: '/dashboard',
         name: 'Dashboard',
+        meta: { title: 'Dashboard' },
         component: () => import('./components/dashboard/DashboardPage.vue'),
     },
         {
@@ -66,4 +69,14 @@ const router = createRouter({
     history: createWebHashHistory(),
     routes
 })
+
+router.afterEach((to) => {
+    if (to.path === '/mapshare' && to.query.id) {
+        setGeoVaultPageTitle('Share')
+        return
+    }
+    const label = to.meta.title ?? to.name ?? 'GeoVault'
+    setGeoVaultPageTitle(label)
+})
+
 export default router
