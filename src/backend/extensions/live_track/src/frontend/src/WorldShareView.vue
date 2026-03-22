@@ -75,7 +75,7 @@
       </div>
 
       <!-- Mobile: bottom drawer with track list -->
-      <Teleport v-if="isMobileView" to="body">
+      <Teleport v-if="isMobileView" to="#app">
         <MobileMapDrawer
           ref="mobileDrawerRef"
           :max-height="worldShareDrawerMaxHeight"

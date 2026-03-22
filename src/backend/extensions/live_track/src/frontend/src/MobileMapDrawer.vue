@@ -1,5 +1,6 @@
 <template>
   <div
+    data-app-mobile-overlay="sheet"
     :class="[
       'mobile-tracker-drawer',
       {

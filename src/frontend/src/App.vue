@@ -1,7 +1,7 @@
 <template>
   <div :class="isMapRoute ? 'fixed inset-0 w-full h-[100dvh] sm:h-screen flex flex-col bg-gray-50 overflow-hidden' : 'min-h-screen bg-gray-50'">
     <!-- Navigation Header -->
-    <nav :class="['bg-white shadow-sm border-b border-gray-200 relative z-50', isMapRoute ? 'flex-shrink-0 h-16' : '']">
+    <nav :class="['app-nav-shell bg-white shadow-sm border-b border-gray-200 relative', isMapRoute ? 'flex-shrink-0 h-16' : '']">
       <div class="w-full px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16">
           
@@ -19,7 +19,13 @@
             <div class="flex items-center md:hidden">
               <button
                   v-if="!userInfoLoading && userInfo"
-                  class="inline-flex items-center justify-center p-2 rounded-md text-gray-700 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                  :disabled="mobileMenuToggleLocked"
+                  :class="[
+                    'inline-flex items-center justify-center p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500',
+                    mobileMenuToggleLocked
+                      ? 'text-gray-400 bg-gray-100'
+                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'
+                  ]"
                   @click="toggleMobileMenu"
                   aria-label="Toggle menu"
               >
@@ -43,7 +49,7 @@
             v-if="!userInfoLoading"
             :class="[
               'md:flex md:items-center md:ml-6 md:flex-1 md:h-full',
-              mobileMenuOpen && userInfo ? 'fixed inset-x-0 top-16 bottom-0 z-50 flex flex-col bg-white shadow-lg p-4 sm:p-6 space-y-4 rounded-b-lg overflow-y-auto border-b border-gray-200 max-h-[calc(100dvh-4rem)]' : 'hidden'
+              mobileMenuOpen && userInfo ? 'mobile-menu-panel fixed inset-x-0 top-16 bottom-0 flex flex-col bg-white shadow-lg p-4 sm:p-6 space-y-4 rounded-b-lg overflow-y-auto border-b border-gray-200 max-h-[calc(100dvh-4rem)]' : 'hidden'
             ]"
           >
             
@@ -242,7 +248,7 @@
       <!-- Mobile Menu Backdrop -->
       <div
           v-if="mobileMenuOpen && userInfo"
-          class="md:hidden fixed inset-x-0 top-16 bottom-0 bg-gray-600 bg-opacity-75 z-40"
+          class="mobile-menu-backdrop md:hidden fixed inset-x-0 top-16 bottom-0 bg-gray-600 bg-opacity-75"
           @click="closeMobileMenu"
       ></div>
     </nav>
@@ -319,6 +325,8 @@ export default {
       userMenuOpen: false,
       toolsMenuOpen: false,
       mobileMenuOpen: false,
+      mobileMenuToggleLocked: false,
+      mobileMenuToggleLockTimer: null,
       userInfoLoading: true,
       loadingError: false,
       errorMessage: '',
@@ -401,20 +409,33 @@ export default {
       immediate: false
     },
     isMapRoute: {
-      handler(isMap) {
-        if (typeof document === 'undefined') return;
-        if (isMap) {
-          document.body.style.overflow = 'hidden';
-          document.documentElement.style.overflow = 'hidden';
-        } else {
-          document.body.style.overflow = '';
-          document.documentElement.style.overflow = '';
-        }
+      handler() {
+        this.syncDocumentOverlayState();
+      },
+      immediate: true
+    },
+    mobileMenuOpen: {
+      handler(isOpen) {
+        if (isOpen) this.userMenuOpen = false;
+        this.syncDocumentOverlayState();
       },
       immediate: true
     }
   },
   methods: {
+    setMobileMenuGlobalState(isOpen) {
+      if (typeof document === 'undefined') return;
+      const method = isOpen ? 'add' : 'remove';
+      document.body.classList[method]('gv-mobile-menu-open');
+      document.documentElement.classList[method]('gv-mobile-menu-open');
+    },
+    syncDocumentOverlayState() {
+      if (typeof document === 'undefined') return;
+      const shouldLockScroll = this.isMapRoute || this.mobileMenuOpen;
+      document.body.style.overflow = shouldLockScroll ? 'hidden' : '';
+      document.documentElement.style.overflow = shouldLockScroll ? 'hidden' : '';
+      this.setMobileMenuGlobalState(this.mobileMenuOpen);
+    },
     isPublicSharePath(path) {
       if (!path) return false;
       if (path === '/mapshare') return true;
@@ -567,21 +588,19 @@ export default {
       this.toolsMenuOpen = false;
     },
     toggleMobileMenu() {
-      this.mobileMenuOpen = !this.mobileMenuOpen;
-      // Close user menu when opening mobile menu
-      if (this.mobileMenuOpen) {
-        this.userMenuOpen = false;
-        // Prevent body scroll when menu is open
-        document.body.style.overflow = 'hidden';
-      } else {
-        // Restore body scroll when menu is closed
-        document.body.style.overflow = '';
+      if (this.mobileMenuToggleLocked) return;
+      this.mobileMenuToggleLocked = true;
+      if (this.mobileMenuToggleLockTimer) {
+        clearTimeout(this.mobileMenuToggleLockTimer);
       }
+      this.mobileMenuToggleLockTimer = setTimeout(() => {
+        this.mobileMenuToggleLocked = false;
+        this.mobileMenuToggleLockTimer = null;
+      }, 50);
+      this.mobileMenuOpen = !this.mobileMenuOpen;
     },
     closeMobileMenu() {
       this.mobileMenuOpen = false;
-      // Restore body scroll when menu is closed
-      document.body.style.overflow = '';
     },
     handleClickOutside(event) {
       if (this.$refs.userMenuRef && !this.$refs.userMenuRef.contains(event.target)) {
@@ -629,9 +648,39 @@ export default {
     // Don't disconnect WebSocket here - let it stay connected across the app lifecycle
     // Remove click outside listener
     document.removeEventListener('click', this.handleClickOutside);
+    if (this.mobileMenuToggleLockTimer) {
+      clearTimeout(this.mobileMenuToggleLockTimer);
+      this.mobileMenuToggleLockTimer = null;
+    }
     // Restore body scroll in case menu was open or we were on a map route
     document.body.style.overflow = '';
     document.documentElement.style.overflow = '';
+    this.setMobileMenuGlobalState(false);
   }
 };
 </script>
+
+<style scoped>
+.app-nav-shell {
+  z-index: 300 !important;
+}
+
+.mobile-menu-panel {
+  z-index: 320 !important;
+}
+
+.mobile-menu-backdrop {
+  z-index: 310 !important;
+}
+</style>
+
+<style>
+/* Keep nav menu on top by disabling mobile overlays while menu is open. */
+body.gv-mobile-menu-open [data-app-mobile-overlay='sheet'],
+body.gv-mobile-menu-open [data-app-mobile-overlay='backdrop'],
+body.gv-mobile-menu-open [data-vsbs-sheet],
+body.gv-mobile-menu-open [data-vsbs-backdrop] {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+</style>

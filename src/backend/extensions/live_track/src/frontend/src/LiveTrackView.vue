@@ -338,7 +338,7 @@
     </div>
 
     <!-- Tracker List: Mobile – shared drawer component -->
-    <Teleport v-if="isMobileView" to="body">
+    <Teleport v-if="isMobileView" to="#app">
       <MobileMapDrawer
         v-if="isMobileView && isSheetOpen"
         ref="mobileDrawerRef"
