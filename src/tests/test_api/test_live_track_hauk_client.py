@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from extensions.live_track.src.backend.models import LiveTrack
+from extensions.live_track.src.backend.models import LiveTrack, LiveTrackWorldShare
 
 from test_api.test_live_track_extension import _patch_live_track_enabled
 
@@ -39,9 +39,14 @@ def _hauk_stop_form(sid: str) -> dict:
 
 
 def _parse_hauk_lines(response) -> list[str]:
-    """Parse Hauk newline response into lines."""
-    text = response.content.decode("utf-8").rstrip("\n")
-    return text.split("\n") if text else []
+    """Parse Hauk newline response into lines (same idea as Hauk BufferedReader.readLine())."""
+    text = response.content.decode("utf-8")
+    if not text:
+        return []
+    lines = text.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    return lines
 
 
 class TestHaukClientCreatePostStop(TestCase):
@@ -72,9 +77,13 @@ class TestHaukClientCreatePostStop(TestCase):
         return track_id, hauk_password
 
     def test_hauk_create_returns_ok_sid_view_url_tracker_name(self):
-        """POST api/create.php with usr/pwd returns OK, sid, view_url, and tracker name as view_id (solo)."""
+        """POST api/create.php returns OK, sid, server origin as view_url (not a share link), tracker name as view_id."""
         track_name = "Hauk Track"
-        _, hauk_password = self._create_track_with_hauk_password(name=track_name)
+        track_id, hauk_password = self._create_track_with_hauk_password(name=track_name)
+        self.assertFalse(
+            LiveTrackWorldShare.objects.filter(track_id=track_id).exists(),
+            "Hauk create must not auto-create a world share row",
+        )
         form = _hauk_create_form(self.user.email, hauk_password, dur=120, interval=10)
         with _patch_live_track_enabled():
             response = self.client.post(
@@ -91,8 +100,18 @@ class TestHaukClientCreatePostStop(TestCase):
         view_url = lines[2]
         view_id = lines[3]
         self.assertIsNotNone(sid)
-        self.assertIn("/extensions/live-track/share", view_url or "")
+        self.assertTrue(view_url.startswith("http://") or view_url.startswith("https://"), view_url)
+        self.assertNotIn("/extensions/live-track/share", view_url)
+        self.assertEqual(view_url.rstrip("/").count("/"), 2, "view_url should be scheme://host only")
+        self.assertTrue(
+            view_url.endswith("/"),
+            "Trailing slash keeps Hauk iOS shareUrl distinct from typical serverUrl (StartSharingIntent)",
+        )
         self.assertEqual(view_id, track_name)
+        self.assertFalse(
+            LiveTrackWorldShare.objects.filter(track_id=track_id).exists(),
+            "Hauk create must not create LiveTrackWorldShare",
+        )
 
     def test_hauk_create_wrong_password_returns_401(self):
         """POST api/create.php with wrong pwd returns 401 and 'Incorrect password'."""
@@ -145,9 +164,8 @@ class TestHaukClientCreatePostStop(TestCase):
         post_lines = _parse_hauk_lines(post_resp1)
         self.assertEqual(post_lines[0], "OK")
         self.assertGreaterEqual(len(post_lines), 3, post_lines)
-        self.assertIn("%s", post_lines[1])
-        self.assertIn("/extensions/live-track/share", post_lines[1])
-        self.assertTrue(post_lines[2], "Expected share CSV (at least one share ID)")
+        self.assertEqual(post_lines[1], "")
+        self.assertEqual(post_lines[2], "")
 
         with _patch_live_track_enabled():
             post_resp2 = self.client.post(
