@@ -34,8 +34,6 @@ import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import com.geovault.common.ClipboardCopyHelper
-import com.geovault.common.NaturalSort
-import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -379,9 +377,6 @@ class MainActivity : AppCompatActivity() {
         fabMap.isEnabled = true
     }
 
-    private fun placeSortKey(feature: Feature): String =
-        (feature.properties.name ?: "Unnamed Place").lowercase(Locale.getDefault())
-
     private data class PlacesListSections(
         val savedPlaces: List<Feature>,
         val offlinePlaceFeatures: List<Feature>,
@@ -402,15 +397,13 @@ class MainActivity : AppCompatActivity() {
         } else {
             cached to offline
         }
-        val sortedOffline = filteredOffline.sortedWith(NaturalSort.naturalOrderBy { placeSortKey(it.feature) })
-        val offlineEditIds = sortedOffline.mapNotNull { it.feature.properties.database_id }.toSet()
+        val offlineEditIds = filteredOffline.mapNotNull { it.feature.properties.database_id }.toSet()
         val savedPlaces = filteredCached
             .filter { it.properties.database_id !in offlineEditIds }
-            .sortedWith(NaturalSort.naturalOrderBy { placeSortKey(it) })
         return PlacesListSections(
             savedPlaces,
-            sortedOffline.map { it.feature },
-            sortedOffline
+            filteredOffline.map { it.feature },
+            filteredOffline
         )
     }
 

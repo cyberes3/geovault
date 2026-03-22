@@ -8,6 +8,7 @@ import com.geovault.common.LoadingOverlayView
 import com.geovault.common.map.GeoVaultMapFragment
 import com.geovault.common.map.MapLibreManager
 import com.geovault.common.map.MapMarkerUtils
+import com.geovault.common.map.SymbolManagerStyleCleanup
 import com.geovault.common.RetrofitClient
 import android.Manifest
 import android.content.Context
@@ -38,6 +39,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.os.bundleOf
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -79,6 +81,12 @@ class PlaceEditActivity : AppCompatActivity() {
     private lateinit var searchPlaceSpinner: com.geovault.common.LoadingSpinner
     private lateinit var searchPlaceResults: ListView
     private lateinit var mapContainer: View
+    private lateinit var mapLayersToggleButton: ImageView
+
+    private val placeEditMapClickListener = MapLibreMap.OnMapClickListener { point ->
+        updateCoords(point.latitude, point.longitude, null)
+        true
+    }
 
     private var latitude: Double? = null
     private var longitude: Double? = null
@@ -126,14 +134,24 @@ class PlaceEditActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_place_edit)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-        initViews()
-        setupWindowInsets()
-        mapFragment = supportFragmentManager.findFragmentById(R.id.gv_common_map_fragment) as? GeoVaultMapFragment
+        if (savedInstanceState == null) {
+            supportFragmentManager.beginTransaction()
+                .replace(
+                    R.id.placeEditMapFragmentContainer,
+                    GeoVaultMapFragment().apply {
+                        arguments = bundleOf(GeoVaultMapFragment.ARG_SHOW_TOGGLE to false)
+                    }
+                )
+                .commitNow()
+        }
+        mapFragment = supportFragmentManager.findFragmentById(R.id.placeEditMapFragmentContainer) as? GeoVaultMapFragment
         mapFragment?.setCallback(object : GeoVaultMapFragment.Callback {
             override fun onMapReady(map: MapLibreMap, style: Style) {
                 onMapReadyFromFragment(map, style)
             }
         })
+        initViews()
+        setupWindowInsets()
 
         // Check for edit intent
         editFeature = intent.getParcelableExtra("feature", Feature::class.java)
@@ -171,6 +189,10 @@ class PlaceEditActivity : AppCompatActivity() {
         val mapView = mapFragment?.mapView ?: return
         val mapManager = mapFragment?.mapManager ?: return
         Log.d(TAG, "onMapReadyFromFragment: clearing old refs, style.uri=${style.uri}")
+        symbolManager?.let { old ->
+            SymbolManagerStyleCleanup.removeFromStyle(style, old)
+            old.onDestroy()
+        }
         symbolManager = null
         placeSymbol = null
         val bitmap = MapMarkerUtils.getMarkerBitmap(this, com.geovault.common.maps.R.drawable.gv_common_ic_marker_default)
@@ -180,10 +202,8 @@ class PlaceEditActivity : AppCompatActivity() {
         val manager = SymbolManager(mapView, map, style, null, null)
         symbolManager = manager
         manager.setIconAllowOverlap(true)
-        map.addOnMapClickListener { point ->
-            updateCoords(point.latitude, point.longitude, null)
-            true
-        }
+        map.removeOnMapClickListener(placeEditMapClickListener)
+        map.addOnMapClickListener(placeEditMapClickListener)
         if (latitude == null || longitude == null) {
             mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(LatLng(0.0, 0.0), 0.0))
         }
@@ -225,6 +245,8 @@ class PlaceEditActivity : AppCompatActivity() {
         searchPlaceSpinner = findViewById(R.id.searchPlaceSpinner)
         searchPlaceResults = findViewById(R.id.searchPlaceResults)
         mapContainer = findViewById(R.id.mapContainer)
+        mapLayersToggleButton = findViewById(R.id.mapLayersToggleButton)
+        mapLayersToggleButton.setOnClickListener { cycleMapBasemapSource() }
         mapSearchAdapter = object : android.widget.BaseAdapter() {
             override fun getCount(): Int = mapSearchResults.size
             override fun getItem(position: Int): AddressSearchResult = mapSearchResults[position]
@@ -314,7 +336,7 @@ class PlaceEditActivity : AppCompatActivity() {
             searchBarPanel.visibility = View.VISIBLE
             searchPlaceResults.visibility = View.GONE
             searchPlaceInput.requestFocus()
-            updateSearchCloseButtonVisibility()
+            searchPlaceCloseButton.visibility = View.VISIBLE
             ViewCompat.requestApplyInsets(findViewById(R.id.rootLayout))
             (getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
                 ?.showSoftInput(searchPlaceInput, InputMethodManager.SHOW_IMPLICIT)
@@ -340,7 +362,6 @@ class PlaceEditActivity : AppCompatActivity() {
                 mapSearchCall = null
                 searchPlaceSpinner.stop()
                 val query = searchPlaceInput.text.toString().trim()
-                updateSearchCloseButtonVisibility()
                 if (query.isEmpty()) {
                     mapSearchResults.clear()
                     mapSearchAdapter.notifyDataSetChanged()
@@ -431,9 +452,12 @@ class PlaceEditActivity : AppCompatActivity() {
         closeSearchBar()
     }
 
-    private fun updateSearchCloseButtonVisibility() {
-        searchPlaceCloseButton.visibility =
-            if (searchPlaceInput.text.toString().trim().isEmpty()) View.GONE else View.VISIBLE
+    private fun cycleMapBasemapSource() {
+        val mf = mapFragment ?: return
+        val map = mf.maplibreMap ?: return
+        val mgr = mf.mapManager
+        mgr.sourceManager.setSelectedSourceId(mgr.sourceManager.getNextSourceId())
+        mgr.applySelectedSource(map)
     }
 
     private fun closeSearchBar() {
@@ -909,7 +933,12 @@ class PlaceEditActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        symbolManager?.onDestroy()
+        val st = mapFragment?.maplibreMap?.style
+        symbolManager?.let { mgr ->
+            if (st != null) SymbolManagerStyleCleanup.removeFromStyle(st, mgr)
+            mgr.onDestroy()
+        }
+        mapFragment?.maplibreMap?.removeOnMapClickListener(placeEditMapClickListener)
         symbolManager = null
         placeSymbol = null
         mapFragment = null

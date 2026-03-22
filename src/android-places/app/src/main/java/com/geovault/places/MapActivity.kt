@@ -6,6 +6,7 @@ import com.geovault.common.R as CommonR
 import com.geovault.common.map.GeoVaultMapFragment
 import com.geovault.common.map.MapLibreManager
 import com.geovault.common.map.MapMarkerUtils
+import com.geovault.common.map.SymbolManagerStyleCleanup
 import com.geovault.common.map.OverlappingPointsPopup
 import android.os.Bundle
 import android.view.View
@@ -38,9 +39,14 @@ class MapActivity : AppCompatActivity() {
     private var lastSelectedSymbol: Symbol? = null
     private val symbols = mutableListOf<Symbol>()
     private val symbolToFeature = mutableMapOf<Symbol, Feature>()
+    private val featureIdToSymbol = mutableMapOf<Int, Symbol>()
     private var selectedFeature: Feature? = null
     private val executor = Executors.newSingleThreadExecutor()
     private var initialCameraApplied = false
+
+    private val mapTapListener by lazy(LazyThreadSafetyMode.NONE) {
+        MapLibreMap.OnMapClickListener { latLng -> handleMapTap(latLng) }
+    }
 
     private val cache: PlacesCache
         get() = (application as PlacesApplication).placesCache
@@ -54,12 +60,17 @@ class MapActivity : AppCompatActivity() {
                 val original = data.getParcelableExtra("original_feature", Feature::class.java)
                 val offlineEditIndex = data.getIntExtra("offline_edit_index", -1)
                 cache.addOrUpdateOffline(feature, original, offlineEditIndex)
-                loadFeaturesFromCache()
+                val canIncremental = feature.properties.database_id != null
+                if (!canIncremental || !applyIncrementalFeatureUpdate(feature)) {
+                    loadFeaturesFromCache()
+                }
             }
             data?.getParcelableExtra("updated_feature", Feature::class.java) != null -> {
                 val updated = data.getParcelableExtra("updated_feature", Feature::class.java)!!
                 cache.updateCachedFeature(updated)
-                loadFeaturesFromCache()
+                if (!applyIncrementalFeatureUpdate(updated)) {
+                    loadFeaturesFromCache()
+                }
             }
             else -> loadFeaturesFromCache()
         }
@@ -127,53 +138,126 @@ class MapActivity : AppCompatActivity() {
         refreshMarkers()
     }
 
+    /**
+     * Fast path for online edit updates: replace only one point instead of rebuilding all symbols.
+     * Falls back to full reload when map/symbol managers are not ready.
+     */
+    private fun applyIncrementalFeatureUpdate(updated: Feature): Boolean {
+        val updatedId = updated.properties.database_id ?: return false
+        val manager = symbolManager ?: return false
+        if (mapFragment?.maplibreMap?.style == null) return false
+
+        val existingIndexes = features
+            .withIndex()
+            .filter { it.value.properties.database_id == updatedId }
+            .map { it.index }
+        if (existingIndexes.isNotEmpty()) {
+            val insertAt = existingIndexes.first()
+            features.removeAll { it.properties.database_id == updatedId }
+            features.add(insertAt.coerceAtMost(features.size), updated)
+        } else {
+            features.add(updated)
+        }
+
+        val symbolsForId = symbolToFeature.entries
+            .filter { it.value.properties.database_id == updatedId }
+            .map { it.key }
+        symbolsForId.forEach { sym ->
+            manager.delete(sym)
+            symbols.remove(sym)
+            symbolToFeature.remove(sym)
+        }
+        featureIdToSymbol.remove(updatedId)
+
+        var newSymbol: Symbol? = null
+        val coords = updated.geometry.coordinates
+        if (coords.size >= 2) {
+            val lon = coords[0]
+            val lat = coords[1]
+            newSymbol = manager.create(
+                SymbolOptions()
+                    .withLatLng(LatLng(lat, lon))
+                    .withIconImage(ICON_MARKER_DEFAULT)
+            )
+            symbols.add(newSymbol)
+            symbolToFeature[newSymbol] = updated
+            featureIdToSymbol[updatedId] = newSymbol
+        }
+
+        if (selectedFeature?.properties?.database_id == updatedId) {
+            if (newSymbol != null) {
+                selectMarkerAndUpdateUi(newSymbol, updated)
+            } else {
+                selectionSymbol?.let { selectionSymbolManager?.delete(it) }
+                selectionSymbol = null
+                selectedFeature = null
+                lastSelectedSymbol = null
+                clearSelectionUi()
+            }
+        }
+        return true
+    }
+
     private fun refreshMarkers() {
         val map = mapFragment?.maplibreMap ?: return
-        if (map.style == null) return
+        val style = map.style ?: return
         selectionSymbol?.let { selectionSymbolManager?.delete(it) }
         selectionSymbol = null
         lastSelectedSymbol = null
         selectedFeature = null
-        selectionSymbolManager?.onDestroy()
+        destroySymbolManager(style, selectionSymbolManager)
         selectionSymbolManager = null
-        symbolManager?.onDestroy()
+        destroySymbolManager(style, symbolManager)
         symbolManager = null
         symbols.clear()
         symbolToFeature.clear()
+        featureIdToSymbol.clear()
         clearSelectionUi()
         addMarkersIfReady(map)
     }
 
+    private fun destroySymbolManager(style: Style?, manager: SymbolManager?) {
+        val m = manager ?: return
+        if (style != null) {
+            SymbolManagerStyleCleanup.removeFromStyle(style, m)
+        }
+        m.onDestroy()
+    }
+
     private fun setupMapClickListener(map: MapLibreMap) {
-        val mapView = mapFragment?.mapView ?: return
+        map.removeOnMapClickListener(mapTapListener)
+        map.addOnMapClickListener(mapTapListener)
+    }
+
+    private fun handleMapTap(latLng: LatLng): Boolean {
+        val mapView = mapFragment?.mapView ?: return false
+        val map = mapFragment?.maplibreMap ?: return false
         val hitRadiusPx = (20 * resources.displayMetrics.density).toInt().toFloat()
-        map.addOnMapClickListener { latLng ->
-            val tapScreen = map.projection.toScreenLocation(latLng)
-            val tapX = tapScreen.x
-            val tapY = tapScreen.y
-            val nearTap = symbolToFeature.entries.filter { (symbol, _) ->
-                val symScreen = map.projection.toScreenLocation(symbol.latLng)
-                val dx = symScreen.x - tapX
-                val dy = symScreen.y - tapY
-                (dx * dx + dy * dy) <= hitRadiusPx * hitRadiusPx
+        val tapScreen = map.projection.toScreenLocation(latLng)
+        val tapX = tapScreen.x
+        val tapY = tapScreen.y
+        val nearTap = symbolToFeature.entries.filter { (symbol, _) ->
+            val symScreen = map.projection.toScreenLocation(symbol.latLng)
+            val dx = symScreen.x - tapX
+            val dy = symScreen.y - tapY
+            (dx * dx + dy * dy) <= hitRadiusPx * hitRadiusPx
+        }
+        return when {
+            nearTap.isEmpty() -> false
+            nearTap.size == 1 -> {
+                val (symbol, feature) = nearTap[0]
+                selectMarkerAndUpdateUi(symbol, feature)
+                true
             }
-            when {
-                nearTap.isEmpty() -> false
-                nearTap.size == 1 -> {
-                    val (symbol, feature) = nearTap[0]
+            else -> {
+                val names = nearTap.map { (_, f) -> f.properties.name?.takeIf { n -> n.isNotBlank() } ?: "" }
+                val tapXi = tapX.toInt()
+                val tapYi = tapY.toInt()
+                OverlappingPointsPopup(this, mapView, names, tapXi, tapYi) { index ->
+                    val (symbol, feature) = nearTap[index]
                     selectMarkerAndUpdateUi(symbol, feature)
-                    true
-                }
-                else -> {
-                    val names = nearTap.map { (_, f) -> f.properties.name?.takeIf { n -> n.isNotBlank() } ?: "" }
-                    val tapXi = tapX.toInt()
-                    val tapYi = tapY.toInt()
-                    OverlappingPointsPopup(this, mapView, names, tapXi, tapYi) { index ->
-                        val (symbol, feature) = nearTap[index]
-                        selectMarkerAndUpdateUi(symbol, feature)
-                    }.show()
-                    true
-                }
+                }.show()
+                true
             }
         }
     }
@@ -288,12 +372,16 @@ class MapActivity : AppCompatActivity() {
         }
         val style = mapRef.style ?: return
         Log.d(TAG, "addMarkersIfReady: style loaded, features=${features.size}")
+        selectionSymbol?.let { selectionSymbolManager?.delete(it) }
+        selectionSymbol = null
+        lastSelectedSymbol = null
+        destroySymbolManager(style, selectionSymbolManager)
+        selectionSymbolManager = null
+        destroySymbolManager(style, symbolManager)
+        symbolManager = null
         symbols.clear()
         symbolToFeature.clear()
-        lastSelectedSymbol = null
-        selectionSymbol = null
-        symbolManager = null
-        selectionSymbolManager = null
+        featureIdToSymbol.clear()
         val defaultBitmap = MapMarkerUtils.getMarkerBitmap(this, com.geovault.common.maps.R.drawable.gv_common_ic_marker_default)
         val selectedBitmap = MapMarkerUtils.getMarkerBitmap(this, com.geovault.common.maps.R.drawable.gv_common_ic_marker_selected)
         if (defaultBitmap == null || selectedBitmap == null) {
@@ -327,6 +415,7 @@ class MapActivity : AppCompatActivity() {
                 val symbol = manager.create(opts)
                 symbols.add(symbol)
                 symbolToFeature[symbol] = feature
+                feature.properties.database_id?.let { id -> featureIdToSymbol[id] = symbol }
                 if (lat < minLat) minLat = lat
                 if (lat > maxLat) maxLat = lat
                 if (lon < minLon) minLon = lon
@@ -418,11 +507,13 @@ class MapActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        selectionSymbolManager?.onDestroy()
+        val st = mapFragment?.maplibreMap?.style
+        selectionSymbolManager?.let { destroySymbolManager(st, it) }
         selectionSymbolManager = null
         selectionSymbol = null
-        symbolManager?.onDestroy()
+        symbolManager?.let { destroySymbolManager(st, it) }
         symbolManager = null
+        mapFragment?.maplibreMap?.removeOnMapClickListener(mapTapListener)
         executor.shutdown()
         mapFragment = null
         super.onDestroy()
