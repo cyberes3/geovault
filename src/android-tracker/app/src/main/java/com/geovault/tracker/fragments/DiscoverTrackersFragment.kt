@@ -379,7 +379,7 @@ class DiscoverTrackersFragment : Fragment() {
         typeIcon.setColorFilter(requireContext().getColor(R.color.text_secondary))
         row.findViewById<TextView>(R.id.availableTrackerName).text = group.name
         row.findViewById<TextView>(R.id.availableTrackerOwner).text =
-            (group.owner_email?.takeIf { it.isNotBlank() } ?: "") + " (group)"
+            group.owner_email?.takeIf { it.isNotBlank() } ?: ""
         val key = "g:${group.id}"
         val initialState = rowStates[key] ?: if (initiallyAdded) RowState.ADDED_DELETE else RowState.IDLE
         rowStates[key] = initialState
