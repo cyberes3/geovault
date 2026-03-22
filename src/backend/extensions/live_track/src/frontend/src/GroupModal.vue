@@ -58,7 +58,6 @@
         @update:visibility="visibility = $event"
         @update:shared-with-emails="sharedWithEmails = $event"
         @update:world-share-enabled="worldShareEnabled = $event"
-        @copy="copyWorldShareUrl"
       />
       <div class="flex items-center gap-3">
         <ToggleButton
@@ -133,7 +132,6 @@
             @update:visibility="visibility = $event"
             @update:shared-with-emails="sharedWithEmails = $event"
             @update:world-share-enabled="worldShareEnabled = $event"
-            @copy="copyWorldShareUrl"
           />
           <div class="flex items-center gap-3">
             <ToggleButton
@@ -238,38 +236,6 @@ export default {
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
       return origin ? `${origin}${worldShareUrl.value}` : worldShareUrl.value;
     });
-    async function copyWorldShareUrl() {
-      if (!fullWorldShareUrl.value) return;
-      const text = fullWorldShareUrl.value;
-      const showSuccess = () => {
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Link copied');
-      };
-      if (navigator.clipboard?.writeText) {
-        try {
-          await navigator.clipboard.writeText(text);
-          showSuccess();
-        } catch {
-          fallbackCopy(text, showSuccess);
-        }
-      } else {
-        fallbackCopy(text, showSuccess);
-      }
-    }
-    function fallbackCopy(text, onSuccess) {
-      const textArea = document.createElement('textarea');
-      textArea.value = text;
-      textArea.style.position = 'fixed';
-      textArea.style.opacity = '0';
-      document.body.appendChild(textArea);
-      textArea.select();
-      try {
-        const ok = document.execCommand('copy');
-        if (ok) onSuccess();
-      } catch {
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error('Could not copy; please copy the link manually.');
-      }
-      document.body.removeChild(textArea);
-    }
     const sharedWithEmailsForSelect = computed(() =>
       (sharedWithEmails.value || []).map((e) => String(e || '').toLowerCase()).filter(Boolean)
     );
@@ -368,7 +334,6 @@ export default {
       worldShareEnabled,
       worldShareUrl,
       fullWorldShareUrl,
-      copyWorldShareUrl,
       groupTrackIdsSafe,
       allTrackers,
       create,

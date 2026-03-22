@@ -89,7 +89,7 @@
         readonly
         class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 font-mono"
       />
-      <button type="button" class="px-3 py-2 bg-gray-200 rounded text-sm whitespace-nowrap" @click="$emit('copy')">Copy</button>
+      <CopyTextButton :text="fullWorldShareUrl" size="wide" />
     </div>
   </div>
 </template>
@@ -97,10 +97,11 @@
 <script>
 import ScrollingSelect from 'platform/components/parts/ScrollingSelect.vue';
 import ToggleButton from 'platform/components/parts/ToggleButton.vue';
+import CopyTextButton from './CopyTextButton.vue';
 
 export default {
   name: 'SharingSection',
-  components: { ScrollingSelect, ToggleButton },
+  components: { CopyTextButton, ScrollingSelect, ToggleButton },
   props: {
     /** 'track' | 'group' – controls labels and track-only options */
     variant: { type: String, default: 'track' },
@@ -117,7 +118,7 @@ export default {
     shareParamsWithWorld: { type: Boolean, default: false },
     allowGroupReshare: { type: Boolean, default: false },
   },
-  emits: ['update:visibility', 'update:sharedWithEmails', 'update:worldShareEnabled', 'update:shareParamsWithRecipients', 'update:shareParamsWithWorld', 'update:allowGroupReshare', 'copy'],
+  emits: ['update:visibility', 'update:sharedWithEmails', 'update:worldShareEnabled', 'update:shareParamsWithRecipients', 'update:shareParamsWithWorld', 'update:allowGroupReshare'],
   computed: {
     visibilityLabel() {
       return this.variant === 'group' ? 'Who can see this group' : 'Who can see and add this tracker';

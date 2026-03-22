@@ -161,6 +161,7 @@ class Command(BaseCommand):
             LiveTrackGroupWorldShare = apps.get_model("live_track", "LiveTrackGroupWorldShare")
             LiveTrackShare = apps.get_model("live_track", "LiveTrackShare")
             LiveTrackWorldShare = apps.get_model("live_track", "LiveTrackWorldShare")
+            from extensions.live_track.src.backend.helpers import generate_hauk_password
         except LookupError:
             self.stdout.write(self.style.ERROR(
                 "App 'live_track' not found. Enable the Live Track extension and try again."
@@ -240,6 +241,7 @@ class Command(BaseCommand):
                     track = LiveTrack.objects.create(
                         id=uuid.uuid4(),
                         tracker_secret=secrets.token_urlsafe(32),
+                        hauk_password=generate_hauk_password(),
                         name=name,
                         user=user,
                         settings=settings,

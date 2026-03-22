@@ -1,49 +1,54 @@
 <template>
-  <TransitionGroup
-    name="toast"
-    tag="div"
-    class="fixed bottom-0 left-0 right-0 z-[9999] pointer-events-none flex flex-col items-center space-y-2 p-4"
-  >
-    <div
-      v-for="toast in toasts"
-      :key="toast.id"
-      :class="[
-        'pointer-events-auto rounded-lg shadow-lg px-4 py-3 flex items-center space-x-3 border max-w-md',
-        getToastClasses(toast)
-      ]"
+  <!-- Teleport to body so toasts sit above extension teleports (sidebars/modals) and are not clipped by map layout overflow. -->
+  <Teleport to="body">
+    <TransitionGroup
+      name="toast"
+      tag="div"
+      class="fixed bottom-0 left-0 right-0 pointer-events-none flex flex-col items-center space-y-2 p-4 isolate"
+      style="z-index: 2147483646"
     >
-      <!-- Icon -->
-      <div class="flex-shrink-0">
-        <component
-          v-if="toast.icon"
-          :is="toast.icon"
-          :class="getIconColor(toast)"
-        />
-        <CheckCircleIcon v-else-if="toast.type === 'success'" :class="getIconColor(toast)" />
-        <XCircleIcon v-else-if="toast.type === 'error'" :class="getIconColor(toast)" />
-        <ExclamationTriangleIcon v-else-if="toast.type === 'warning'" :class="getIconColor(toast)" />
-        <InformationCircleIcon v-else :class="getIconColor(toast)" />
-      </div>
-      
-      <!-- Message -->
-      <div class="flex-1 min-w-0">
-        <p v-if="!toast.html" class="text-sm font-medium" :class="getTextColor(toast)">
-          {{ toast.message }}
-        </p>
-        <div v-else class="text-sm font-medium" :class="getTextColor(toast)" v-html="toast.html"></div>
-      </div>
-      
-      <!-- Close Button -->
-      <button
-        v-if="toast.dismissible"
-        @click="removeToast(toast.id)"
-        class="flex-shrink-0 inline-flex text-gray-400 hover:text-gray-600 focus:outline-none transition-colors"
-        title="Dismiss"
+      <div
+        v-for="toast in toasts"
+        :key="toast.id"
+        role="status"
+        class="pointer-events-auto rounded-lg shadow-lg px-4 py-3 flex items-center space-x-3 border max-w-md cursor-pointer"
+        :class="getToastClasses(toast)"
+        @click="onToastSurfaceClick($event, toast.id)"
       >
-        <XMarkIcon class="h-5 w-5" />
-      </button>
-    </div>
-  </TransitionGroup>
+        <!-- Icon -->
+        <div class="flex-shrink-0">
+          <component
+            v-if="toast.icon"
+            :is="toast.icon"
+            :class="getIconColor(toast)"
+          />
+          <CheckCircleIcon v-else-if="toast.type === 'success'" :class="getIconColor(toast)" />
+          <XCircleIcon v-else-if="toast.type === 'error'" :class="getIconColor(toast)" />
+          <ExclamationTriangleIcon v-else-if="toast.type === 'warning'" :class="getIconColor(toast)" />
+          <InformationCircleIcon v-else :class="getIconColor(toast)" />
+        </div>
+
+        <!-- Message -->
+        <div class="flex-1 min-w-0">
+          <p v-if="!toast.html" class="text-sm font-medium" :class="getTextColor(toast)">
+            {{ toast.message }}
+          </p>
+          <div v-else class="text-sm font-medium" :class="getTextColor(toast)" v-html="toast.html"></div>
+        </div>
+
+        <!-- Close Button -->
+        <button
+          v-if="toast.dismissible"
+          type="button"
+          @click.stop="removeToast(toast.id)"
+          class="flex-shrink-0 inline-flex text-gray-400 hover:text-gray-600 focus:outline-none transition-colors"
+          title="Dismiss"
+        >
+          <XMarkIcon class="h-5 w-5" />
+        </button>
+      </div>
+    </TransitionGroup>
+  </Teleport>
 </template>
 
 <script>
@@ -87,6 +92,13 @@ export default {
     }
   },
   methods: {
+    onToastSurfaceClick(event, id) {
+      const el = event.target;
+      if (el && typeof el.closest === 'function' && el.closest('a, button')) {
+        return;
+      }
+      this.removeToast(id);
+    },
     addToast(toastData) {
       this.toasts.push(toastData)
       

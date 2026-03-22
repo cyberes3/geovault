@@ -47,7 +47,6 @@
         @update:share-params-with-recipients="$emit('update:shareParamsWithRecipients', $event)"
         @update:share-params-with-world="$emit('update:shareParamsWithWorld', $event)"
         @update:allow-group-reshare="$emit('update:allowGroupReshare', $event)"
-        @copy="copy(fullWorldShareUrl)"
       />
     </template>
     <div class="space-y-2">
@@ -84,26 +83,26 @@
       <label class="text-sm font-medium text-gray-700">API Password</label>
       <div class="flex gap-2">
         <input :value="trackerSecret" readonly class="flex-1 px-2 py-1 text-sm border rounded bg-gray-50" />
-        <button type="button" class="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm" @click="copy(trackerSecret)">Copy</button>
+        <CopyTextButton :text="trackerSecret" size="sm" />
       </div>
     </div>
     <div class="grid grid-cols-2 gap-3 pb-2">
       <BaseButton v-if="isOwner" variant="white" size="sm" @click="$emit('open-instructions')">GPSLogger Setup</BaseButton>
       <BaseButton v-if="isOwner && haukDomain" variant="white" size="sm" @click="$emit('open-hauk-instructions')">Hauk Setup</BaseButton>
       <BaseButton variant="white" size="sm" @click="$emit('download-kml')">Download KML</BaseButton>
-      <BaseButton v-if="isOwner" variant="white" size="sm" :disabled="clearHistoryDisabled" @click="$emit('clear-history')">
-        <Loader v-if="clearing" size="sm" layout="inline" :show-message="false" class="mr-1" />
-        Clear Tracker
-      </BaseButton>
-      <BaseButton v-if="isOwner" variant="secondary" color="gray" size="sm" class="col-span-2" :disabled="regeneratingTokens" @click="$emit('regenerate-tokens')">
+      <BaseButton v-if="isOwner" variant="white" size="sm" :disabled="regeneratingTokens" @click="$emit('regenerate-tokens')">
         <Loader v-if="regeneratingTokens" size="sm" layout="inline" :show-message="false" class="mr-1" />
         Regenerate All Tokens
+      </BaseButton>
+      <BaseButton v-if="isOwner" variant="secondary" color="red" size="sm" class="col-span-2 w-full" :disabled="clearHistoryDisabled" @click="$emit('clear-history')">
+        <Loader v-if="clearing" size="sm" layout="inline" :show-message="false" class="mr-1" />
+        Clear Tracker
       </BaseButton>
       <BaseButton v-if="!isOwner" variant="secondary" color="gray" size="sm" :disabled="unsubscribing" @click="$emit('unsubscribe')">
         <Loader v-if="unsubscribing" size="sm" layout="inline" :show-message="false" class="mr-1" />
         Remove From My List
       </BaseButton>
-      <BaseButton v-if="isOwner" variant="secondary" color="red" size="sm" :disabled="deleting" @click="$emit('delete')">
+      <BaseButton v-if="isOwner" variant="secondary" color="red" size="sm" class="col-span-2 w-full" :disabled="deleting" @click="$emit('delete')">
         <Loader v-if="deleting" size="sm" layout="inline" :show-message="false" class="mr-1" />
         Delete
       </BaseButton>
@@ -115,11 +114,12 @@
 import { ref, watch, computed } from 'vue';
 import { ArrowPathIcon } from '@heroicons/vue/24/outline';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
+import CopyTextButton from './CopyTextButton.vue';
 import SharingSection from './SharingSection.vue';
 
 export default {
   name: 'EditTrackForm',
-  components: { ArrowPathIcon, BaseButton, SharingSection },
+  components: { ArrowPathIcon, BaseButton, CopyTextButton, SharingSection },
   props: {
     track: { type: Object, default: null },
     name: { type: String, default: '' },
@@ -136,7 +136,6 @@ export default {
     /** When true, Clear history button is disabled (e.g. after clear succeeded until sidebar is closed). */
     clearHistoryDisabled: { type: Boolean, default: false },
     regeneratingTokens: { type: Boolean, default: false },
-    copy: { type: Function, required: true },
     trackerSecret: { type: String, default: '' },
     worldShareEnabled: { type: Boolean, default: false },
     worldShareUrl: { type: String, default: '' },

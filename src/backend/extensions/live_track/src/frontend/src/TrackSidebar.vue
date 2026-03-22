@@ -11,7 +11,6 @@
       :body-template="bodyTemplate"
       :user-login="userLogin"
       :tracker-secret="createdTrack?.tracker_secret ?? ''"
-      :copy="copy"
       :hauk-domain="haukDomain"
       @open-instructions="showInstructions = true"
       @open-hauk-instructions="showHaukInstructions = true"
@@ -44,7 +43,6 @@
       :regenerating-tokens="regeneratingTokens"
       :unsubscribing="unsubscribing"
       :clear-history-disabled="clearing || historyClearedThisSession"
-      :copy="copy"
       :tracker-secret="effectiveTrackerSecret"
       :world-share-enabled="worldShareEnabled"
       :world-share-url="worldShareUrl"
@@ -106,7 +104,6 @@
         :body-template="bodyTemplate"
         :user-login="userLogin"
         :tracker-secret="createdTrack?.tracker_secret ?? ''"
-        :copy="copy"
         :hauk-domain="haukDomain"
         @open-instructions="showInstructions = true"
         @open-hauk-instructions="showHaukInstructions = true"
@@ -139,7 +136,6 @@
         :regenerating-tokens="regeneratingTokens"
         :unsubscribing="unsubscribing"
         :clear-history-disabled="clearing || historyClearedThisSession"
-        :copy="copy"
         :tracker-secret="effectiveTrackerSecret"
         :world-share-enabled="worldShareEnabled"
         :world-share-url="worldShareUrl"
@@ -339,33 +335,6 @@ export default {
       if (!id || !secret) return '';
       return `${baseUrl}/trackers/${id}/${encodeURIComponent(name)}.properties?secret=${encodeURIComponent(secret)}`;
     });
-    function copy(text) {
-      const toast = window.gv_core?.GeoVault?.toast;
-      const showCopied = () => toast && toast.success('Copied');
-      if (navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(text).then(showCopied).catch(() => copyFallback(text, showCopied));
-      } else {
-        copyFallback(text, showCopied);
-      }
-    }
-    function copyFallback(text, onSuccess) {
-      const el = document.createElement('textarea');
-      el.value = text;
-      el.setAttribute('readonly', '');
-      el.style.position = 'fixed';
-      el.style.left = '-9999px';
-      el.style.top = '0';
-      document.body.appendChild(el);
-      el.select();
-      el.setSelectionRange(0, text.length);
-      try {
-        if (document.execCommand('copy')) onSuccess?.();
-      } catch (e) {
-        // ignore
-      }
-      document.body.removeChild(el);
-    }
-
     function makeSnapshotFromState() {
       return {
         name: name.value,
@@ -708,7 +677,6 @@ export default {
       instructionsIngressUrl,
       instructionsPassword,
       profileUrl,
-      copy,
       create,
       downloadKml,
       confirmClearHistory,

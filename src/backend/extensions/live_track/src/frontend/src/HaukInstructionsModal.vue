@@ -4,7 +4,7 @@
       <p class="text-gray-900">
         In the Hauk app, follow these steps to send your location to this tracker. Hauk uses the same protocol as GeoVault Tracker’s Hauk-compatible API.
       </p>
-      <div class="flex justify-center">
+      <div class="flex flex-wrap justify-center items-center gap-4">
         <a
           href="https://play.google.com/store/apps/details?id=info.varden.hauk"
           target="_blank"
@@ -18,6 +18,19 @@
             class="h-10 w-auto max-w-[180px] object-contain"
           />
         </a>
+        <a
+          href="https://apps.apple.com/app/hauk/id6738009304"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-block"
+          aria-label="Download Hauk on the App Store"
+        >
+          <img
+            :src="appStoreBadgeUrl"
+            alt="Download on the App Store"
+            class="h-10 w-auto max-w-[180px] object-contain"
+          />
+        </a>
       </div>
       <div class="space-y-4">
         <div class="flex gap-3">
@@ -27,7 +40,7 @@
             <p class="text-gray-900 mb-1">In Hauk, open settings and set <strong>Server</strong> to:</p>
             <div class="flex gap-2">
               <input :value="serverUrl" readonly class="flex-1 px-2 py-1.5 text-sm border rounded bg-gray-50 min-w-0" />
-              <button type="button" class="px-2 py-1.5 bg-gray-200 rounded text-sm flex-shrink-0" @click="copy(serverUrl)">Copy</button>
+              <CopyTextButton :text="serverUrl" size="md" />
             </div>
             <p class="text-gray-700 text-xs mt-1">Use exactly this URL (with https). Do not add a path or trailing slash.</p>
           </div>
@@ -39,7 +52,7 @@
             <p class="text-gray-900 mb-1">Set <strong>Username</strong> to your GeoVault account email:</p>
             <div class="flex gap-2">
               <input :value="userEmail" readonly class="flex-1 px-2 py-1.5 text-sm border rounded bg-gray-50 min-w-0" />
-              <button type="button" class="px-2 py-1.5 bg-gray-200 rounded text-sm flex-shrink-0" @click="copy(userEmail)">Copy</button>
+              <CopyTextButton :text="userEmail" size="md" />
             </div>
           </div>
         </div>
@@ -50,7 +63,7 @@
             <p class="text-gray-900 mb-1">Set <strong>Password</strong> to this tracker’s Hauk password:</p>
             <div class="flex gap-2">
               <input :value="haukPassword" readonly class="flex-1 px-2 py-1.5 text-sm border rounded bg-gray-50 min-w-0" />
-              <button type="button" class="px-2 py-1.5 bg-gray-200 rounded text-sm flex-shrink-0" @click="copy(haukPassword)">Copy</button>
+              <CopyTextButton :text="haukPassword" size="md" />
             </div>
             <p class="text-gray-700 text-xs mt-1">This is the Hauk-only password for this tracker, not your GeoVault login. You can regenerate it from the tracker settings if needed.</p>
           </div>
@@ -69,46 +82,21 @@
 
 <script>
 import BaseModal from 'platform/components/parts/BaseModal.vue';
-import BaseButton from 'platform/components/parts/BaseButton.vue';
+import CopyTextButton from './CopyTextButton.vue';
+import appStoreBadgeUrl from '@/assets/download-on-app-store.svg';
 import googlePlayBadgeUrl from '@/assets/get-it-on-google-play.svg';
 
 export default {
   name: 'HaukInstructionsModal',
-  components: { BaseModal, BaseButton },
+  components: { BaseModal, CopyTextButton },
   props: {
     serverUrl: { type: String, default: '' },
     userEmail: { type: String, default: '' },
     haukPassword: { type: String, default: '' }
   },
   emits: ['close'],
-  setup(props) {
-    function copy(text) {
-      const toast = window.gv_core?.GeoVault?.toast;
-      const showCopied = () => toast && toast.success('Copied');
-      if (navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(text).then(showCopied).catch(() => copyFallback(text, showCopied));
-      } else {
-        copyFallback(text, showCopied);
-      }
-    }
-    function copyFallback(text, onSuccess) {
-      const el = document.createElement('textarea');
-      el.value = text;
-      el.setAttribute('readonly', '');
-      el.style.position = 'fixed';
-      el.style.left = '-9999px';
-      el.style.top = '0';
-      document.body.appendChild(el);
-      el.select();
-      el.setSelectionRange(0, text.length);
-      try {
-        if (document.execCommand('copy')) onSuccess?.();
-      } catch (e) {
-        // ignore
-      }
-      document.body.removeChild(el);
-    }
-    return { copy, googlePlayBadgeUrl };
+  setup() {
+    return { appStoreBadgeUrl, googlePlayBadgeUrl };
   }
 };
 </script>

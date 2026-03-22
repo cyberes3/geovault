@@ -16,7 +16,7 @@
               <p class="text-gray-700 text-xs font-medium mb-1">Profile URL (paste in GPSLogger: From URL)</p>
               <div class="flex gap-2">
                 <input :value="profileUrl" readonly class="flex-1 px-2 py-1.5 text-xs border rounded bg-white min-w-0" />
-                <button type="button" class="px-2 py-1.5 bg-gray-200 rounded text-xs flex-shrink-0" @click="copy(profileUrl)">Copy</button>
+                <CopyTextButton :text="profileUrl" size="sm" />
               </div>
             </div>
             <div v-if="isMobile && gpsloggerOpenUrl" class="pt-1">
@@ -88,7 +88,7 @@
             <p class="text-gray-900 mb-1">Tap <strong>URL</strong> and paste this address:</p>
             <div class="flex gap-2">
               <input :value="ingressUrl" readonly class="flex-1 px-2 py-1.5 text-sm border rounded bg-gray-50 min-w-0" />
-              <button type="button" class="px-2 py-1.5 bg-gray-200 rounded text-sm flex-shrink-0" @click="copy(ingressUrl)">Copy</button>
+              <CopyTextButton :text="ingressUrl" size="md" />
             </div>
           </div>
         </div>
@@ -99,7 +99,7 @@
             <p class="text-gray-900 mb-1">Tap <strong>HTTP Body</strong> and paste:</p>
             <div class="flex gap-2">
               <input :value="bodyTemplate" readonly class="flex-1 px-2 py-1.5 text-sm border rounded bg-gray-50 min-w-0" />
-              <button type="button" class="px-2 py-1.5 bg-gray-200 rounded text-sm flex-shrink-0" @click="copy(bodyTemplate)">Copy</button>
+              <CopyTextButton :text="bodyTemplate" size="md" />
             </div>
           </div>
         </div>
@@ -110,7 +110,7 @@
             <p class="text-gray-900 mb-1">Tap <strong>HTTP Method</strong> and set to <strong>POST</strong>.</p>
             <div class="flex gap-2">
               <input value="POST" readonly class="flex-1 px-2 py-1.5 text-sm border rounded bg-gray-50 w-24" />
-              <button type="button" class="px-2 py-1.5 bg-gray-200 rounded text-sm" @click="copy('POST')">Copy</button>
+              <CopyTextButton text="POST" size="md" />
             </div>
           </div>
         </div>
@@ -123,14 +123,14 @@
               <p class="text-gray-900 mb-1">Username:</p>
               <div class="flex gap-2">
                 <input :value="username" readonly class="flex-1 px-2 py-1.5 text-sm border rounded bg-gray-50 min-w-0" />
-                <button type="button" class="px-2 py-1.5 bg-gray-200 rounded text-sm flex-shrink-0" @click="copy(username)">Copy</button>
+                <CopyTextButton :text="username" size="md" />
               </div>
             </div>
             <div>
               <p class="text-gray-900 mb-1">Password:</p>
               <div class="flex gap-2">
                 <input :value="password" readonly class="flex-1 px-2 py-1.5 text-sm border rounded bg-gray-50 min-w-0" />
-                <button type="button" class="px-2 py-1.5 bg-gray-200 rounded text-sm flex-shrink-0" @click="copy(password)">Copy</button>
+                <CopyTextButton :text="password" size="md" />
               </div>
             </div>
           </div>
@@ -144,11 +144,12 @@
 import { ref, watch, computed } from 'vue';
 import QRCode from 'qrcode';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
+import CopyTextButton from './CopyTextButton.vue';
 import fdroidBadgeUrl from '@/assets/get-it-on-fdroid.svg';
 
 export default {
   name: 'GpsLoggerInstructionsModal',
-  components: { BaseModal },
+  components: { BaseModal, CopyTextButton },
   props: {
     ingressUrl: { type: String, default: '' },
     bodyTemplate: { type: String, default: 'lat=%LAT&lon=%LON&timestamp=%TIMESTAMP' },
@@ -180,33 +181,7 @@ export default {
         window.location.href = gpsloggerOpenUrl.value;
       }
     }
-    function copy(text) {
-      const toast = window.gv_core?.GeoVault?.toast;
-      const showCopied = () => toast && toast.success('Copied');
-      if (navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(text).then(showCopied).catch(() => copyFallback(text, showCopied));
-      } else {
-        copyFallback(text, showCopied);
-      }
-    }
-    function copyFallback(text, onSuccess) {
-      const el = document.createElement('textarea');
-      el.value = text;
-      el.setAttribute('readonly', '');
-      el.style.position = 'fixed';
-      el.style.left = '-9999px';
-      el.style.top = '0';
-      document.body.appendChild(el);
-      el.select();
-      el.setSelectionRange(0, text.length);
-      try {
-        if (document.execCommand('copy')) onSuccess?.();
-      } catch (e) {
-        // ignore
-      }
-      document.body.removeChild(el);
-    }
-    return { copy, qrDataUrl, fdroidBadgeUrl, isMobile, openInGpsLogger, gpsloggerOpenUrl };
+    return { qrDataUrl, fdroidBadgeUrl, isMobile, openInGpsLogger, gpsloggerOpenUrl };
   }
 };
 </script>
