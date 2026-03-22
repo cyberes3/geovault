@@ -44,6 +44,11 @@ class MapActivity : AppCompatActivity() {
     private val executor = Executors.newSingleThreadExecutor()
     private var initialCameraApplied = false
 
+    private data class FeatureExtent(
+        val singlePoint: LatLng?,
+        val bounds: LatLngBounds?
+    )
+
     private val mapTapListener by lazy(LazyThreadSafetyMode.NONE) {
         MapLibreMap.OnMapClickListener { latLng -> handleMapTap(latLng) }
     }
@@ -287,6 +292,9 @@ class MapActivity : AppCompatActivity() {
             startActivity(android.content.Intent(this, SettingsActivity::class.java))
             safeNoAnimation()
         }
+        findViewById<View>(R.id.homeButton).setOnClickListener {
+            onHomeClicked()
+        }
         findViewById<android.widget.TextView>(R.id.placeName)
         findViewById<android.widget.TextView>(R.id.placeDescription)
         findViewById<android.widget.Button>(R.id.viewInListButton)
@@ -314,6 +322,104 @@ class MapActivity : AppCompatActivity() {
                 safeNoAnimation()
             }
         }
+    }
+
+    private fun onHomeClicked() {
+        clearSelectedPlaceState()
+        resetCameraToHomeExtent()
+    }
+
+    private fun clearSelectedPlaceState() {
+        selectionSymbol?.let { selectionSymbolManager?.delete(it) }
+        selectionSymbol = null
+        selectedFeature = null
+        lastSelectedSymbol = null
+        clearSelectionUi()
+    }
+
+    private fun resetCameraToHomeExtent() {
+        val map = mapFragment?.maplibreMap ?: return
+        val mapManager = mapFragment?.mapManager ?: return
+        resetMapOrientation(map)
+        val extent = computeFeatureExtent(features)
+        when {
+            extent.singlePoint != null -> {
+                val camera = CameraPosition.Builder()
+                    .target(extent.singlePoint)
+                    .zoom(MapLibreManager.DEFAULT_POINT_ZOOM)
+                    .bearing(0.0)
+                    .tilt(0.0)
+                    .build()
+                mapManager.animateCameraWithPadding(map, CameraUpdateFactory.newCameraPosition(camera))
+            }
+            extent.bounds != null -> {
+                val padding = (HOME_EXTENT_PADDING_DP * resources.displayMetrics.density).toInt()
+                mapManager.animateCameraWithPadding(map, CameraUpdateFactory.newLatLngBounds(extent.bounds, padding))
+            }
+            else -> {
+                mapManager.moveCameraWithPadding(map, CameraUpdateFactory.newLatLngZoom(LatLng(DEFAULT_HOME_LAT, DEFAULT_HOME_LON), DEFAULT_HOME_ZOOM))
+            }
+        }
+    }
+
+    private fun resetMapOrientation(map: MapLibreMap) {
+        val current = map.cameraPosition
+        map.setCameraPosition(CameraPosition.Builder(current).bearing(0.0).tilt(0.0).build())
+    }
+
+    private fun computeFeatureExtent(source: Iterable<Feature>): FeatureExtent {
+        var minLat = 90.0
+        var maxLat = -90.0
+        var minLon = 180.0
+        var maxLon = -180.0
+        var validPointCount = 0
+        var singlePoint: LatLng? = null
+
+        for (feature in source) {
+            val coords = feature.geometry.coordinates
+            if (coords.size < 2) continue
+            val lon = coords[0]
+            val lat = coords[1]
+            validPointCount += 1
+            if (validPointCount == 1) {
+                singlePoint = LatLng(lat, lon)
+            }
+            if (lat < minLat) minLat = lat
+            if (lat > maxLat) maxLat = lat
+            if (lon < minLon) minLon = lon
+            if (lon > maxLon) maxLon = lon
+        }
+
+        return when {
+            validPointCount == 0 -> FeatureExtent(singlePoint = null, bounds = null)
+            validPointCount == 1 -> FeatureExtent(singlePoint = singlePoint, bounds = null)
+            else -> FeatureExtent(singlePoint = null, bounds = createPaddedBounds(minLat, maxLat, minLon, maxLon))
+        }
+    }
+
+    private fun createPaddedBounds(minLat: Double, maxLat: Double, minLon: Double, maxLon: Double): LatLngBounds {
+        var paddedMinLat = minLat
+        var paddedMaxLat = maxLat
+        var paddedMinLon = minLon
+        var paddedMaxLon = maxLon
+        if (minLat == maxLat) {
+            paddedMinLat = minLat - 0.01
+            paddedMaxLat = maxLat + 0.01
+        }
+        if (minLon == maxLon) {
+            paddedMinLon = minLon - 0.01
+            paddedMaxLon = maxLon + 0.01
+        }
+        val latPadding = (paddedMaxLat - paddedMinLat) * 0.15
+        val lonPadding = (paddedMaxLon - paddedMinLon) * 0.15
+        paddedMinLat -= latPadding
+        paddedMaxLat += latPadding
+        paddedMinLon -= lonPadding
+        paddedMaxLon += lonPadding
+        return LatLngBounds.Builder()
+            .include(LatLng(paddedMinLat, paddedMinLon))
+            .include(LatLng(paddedMaxLat, paddedMaxLon))
+            .build()
     }
 
     private fun selectMarkerAndUpdateUi(symbol: Symbol, f: Feature) {
@@ -426,28 +532,7 @@ class MapActivity : AppCompatActivity() {
         Log.d(TAG, "addMarkersIfReady: created ${symbols.size} blue markers")
         if (hasValidPoints && !initialCameraApplied) {
             initialCameraApplied = true
-            var paddedMinLat = minLat
-            var paddedMaxLat = maxLat
-            var paddedMinLon = minLon
-            var paddedMaxLon = maxLon
-            if (minLat == maxLat) {
-                paddedMinLat = minLat - 0.01
-                paddedMaxLat = maxLat + 0.01
-            }
-            if (minLon == maxLon) {
-                paddedMinLon = minLon - 0.01
-                paddedMaxLon = maxLon + 0.01
-            }
-            val latPadding = (paddedMaxLat - paddedMinLat) * 0.15
-            val lonPadding = (paddedMaxLon - paddedMinLon) * 0.15
-            paddedMinLat -= latPadding
-            paddedMaxLat += latPadding
-            paddedMinLon -= lonPadding
-            paddedMaxLon += lonPadding
-            val bounds = LatLngBounds.Builder()
-                .include(LatLng(paddedMinLat, paddedMinLon))
-                .include(LatLng(paddedMaxLat, paddedMaxLon))
-                .build()
+            val bounds = createPaddedBounds(minLat, maxLat, minLon, maxLon)
             val zoomToId = intent.getIntExtra("zoom_to_id", -1)
             fun applyZoomAndCenter() {
                 if (intent.hasExtra("zoom_to_lat") && intent.hasExtra("zoom_to_lon")) {
@@ -539,5 +624,9 @@ class MapActivity : AppCompatActivity() {
         private const val TAG = "GeoVaultMap"
         private const val ICON_MARKER_DEFAULT = "geovault-marker-default"
         private const val ICON_MARKER_SELECTED = "geovault-marker-selected"
+        private const val DEFAULT_HOME_LAT = 0.0
+        private const val DEFAULT_HOME_LON = 0.0
+        private const val DEFAULT_HOME_ZOOM = 2.0
+        private const val HOME_EXTENT_PADDING_DP = 50
     }
 }

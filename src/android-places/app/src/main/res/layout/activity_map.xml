@@ -57,6 +57,32 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
+        <!-- Below GeoVaultMapFragment layer toggle (top|end, 44dp + 16dp margin + 8dp gap) -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="68dp"
+            android:layout_marginEnd="16dp"
+            app:cardCornerRadius="22dp"
+            app:cardElevation="0dp"
+            app:cardBackgroundColor="@color/primary_blue">
+
+            <ImageView
+                android:id="@+id/homeButton"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/ic_home"
+                android:contentDescription="@string/map_home_content_description"
+                android:scaleType="center"
+                app:tint="@color/content_on_primary"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?attr/selectableItemBackground"
+                android:padding="10dp" />
+
+        </com.google.android.material.card.MaterialCardView>
+
     </FrameLayout>
 
     <View

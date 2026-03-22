@@ -17,6 +17,7 @@
     <string name="no_places">No places found</string>
     <string name="search_places_hint">Search places</string>
     <string name="navigate">Navigate</string>
+    <string name="map_home_content_description">Reset map to home extent</string>
     <string name="no_map_app">No map app installed to open this location.</string>
     <string name="refresh">Refresh</string>
     <!-- Messages -->
