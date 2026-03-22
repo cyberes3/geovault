@@ -41,9 +41,9 @@
           ]"
         ></div>
 
-        <!-- 3D Terrain Toggle Button -->
+        <!-- 3D Terrain Toggle Button (hidden on public mapshare) -->
         <div
-            v-if="maptilerConfig"
+            v-if="maptilerConfig && !isPublicShareMode"
             class="maplibregl-ctrl maplibregl-ctrl-group"
             style="position: absolute; top: 100px; left: 10px; z-index: 2;"
         >

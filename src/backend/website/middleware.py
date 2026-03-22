@@ -77,6 +77,16 @@ def _get_content_length(response):
     return ''
 
 
+def _log_request_line(log_msg, status_code):
+    """Log one request line: server errors at ERROR, client errors at WARNING, success at INFO."""
+    if status_code >= 500:
+        _logger.error(log_msg)
+    elif status_code >= 400:
+        _logger.warning(log_msg)
+    else:
+        _logger.info(log_msg)
+
+
 class LoggingMiddleware:
     """Middleware to log all HTTP requests and catch unhandled exceptions."""
 
@@ -114,10 +124,7 @@ class LoggingMiddleware:
             else:
                 log_msg = f"{request.method} {request.path} - {user_identifier}{auth_suffix} - {client_ip} - {response.status_code}"
 
-            if response.status_code >= 400:
-                _logger.warning(log_msg)
-            else:
-                _logger.info(log_msg)
+            _log_request_line(log_msg, response.status_code)
 
         # Log static file requests (no username for static files)
         elif request.path.startswith('/static/'):
@@ -130,10 +137,7 @@ class LoggingMiddleware:
             else:
                 log_msg = f"{request.method} {request.path} - {client_ip} - {response.status_code}"
 
-            if response.status_code >= 400:
-                _logger.warning(log_msg)
-            else:
-                _logger.info(log_msg)
+            _log_request_line(log_msg, response.status_code)
 
         # Log favicon requests (no username)
         elif request.path == '/favicon.ico':
@@ -145,10 +149,7 @@ class LoggingMiddleware:
             else:
                 log_msg = f"{request.method} {request.path} - {client_ip} - {response.status_code}"
 
-            if response.status_code >= 400:
-                _logger.warning(log_msg)
-            else:
-                _logger.info(log_msg)
+            _log_request_line(log_msg, response.status_code)
 
         # Log root and other non-API requests (no username)
         elif not request.path.startswith('/api/') and not request.path.startswith('/admin/') and not request.path.startswith('/account/'):
@@ -156,10 +157,7 @@ class LoggingMiddleware:
             # Skip static files as they're handled above, but this is a fallback
             if not request.path.startswith('/static/'):
                 log_msg = f"{request.method} {request.path} - {client_ip} - {response.status_code}"
-                if response.status_code >= 400:
-                    _logger.warning(log_msg)
-                else:
-                    _logger.info(log_msg)
+                _log_request_line(log_msg, response.status_code)
 
         return response
 

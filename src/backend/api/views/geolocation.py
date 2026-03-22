@@ -19,9 +19,8 @@ def get_user_location(request):
     API endpoint to get user location based on their IP address.
     
     Returns:
-        JSON response with location information including:
-        - city, state, country
-        - latitude, longitude for map centering
+        JSON with ``location`` object (city, state, country, latitude, longitude) when known,
+        or ``location: null`` with HTTP 200 when the IP cannot be resolved (e.g. private/local).
     """
     # Get the geolocation service
     geo_service = get_geolocation_service()
@@ -33,10 +32,7 @@ def get_user_location(request):
     location_data = geo_service.get_location_from_ip(client_ip)
 
     if location_data is None:
-        return JsonResponse({
-            'error': 'Unable to determine location from IP address',
-            'location': None
-        }, status=500)
+        return JsonResponse({'location': None})
 
     # Prepare response data - only include fields used by frontend
     response_data = {
@@ -80,6 +76,11 @@ def get_location_by_ip(request):
     location_data = geo_service.get_location_from_ip(ip_address)
 
     if location_data is None:
+        _logger.error(
+            "Location by IP lookup returned no result (ip=%s, path=%s)",
+            ip_address,
+            request.path,
+        )
         return JsonResponse({
             'error': f'Location not found for IP address: {ip_address}',
             'location': None,

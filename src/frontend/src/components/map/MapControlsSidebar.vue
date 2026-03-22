@@ -1,18 +1,15 @@
 <template>
-  <div
-      :class="[
-      'bg-white flex flex-col',
-      // Tablet landscape styles (compact) - show at lg (1024px)
-      'lg:flex lg:static lg:w-56 lg:border-l lg:border-gray-200 lg:p-3 lg:h-full',
-      // Desktop styles (full width) - show at xl (1280px) and above
-      'xl:w-64 xl:p-4',
-      // Mobile/Tablet portrait styles - up to lg (1024px)
-      isMobileOpen ? 'fixed inset-0 z-50 w-full h-full' : 'hidden'
-    ]"
-  >
+  <Teleport to="body" :disabled="!isMobileOpen">
+    <div
+      data-app-mobile-overlay="sheet"
+      :class="sidebarRootClass"
+      :role="isMobileOpen ? 'dialog' : undefined"
+      :aria-modal="isMobileOpen ? 'true' : undefined"
+      :aria-labelledby="isMobileOpen ? 'map-controls-sidebar-title' : undefined"
+    >
     <!-- Mobile Header (full-width so border runs edge to edge; match left sidebar) -->
     <div class="lg:hidden flex items-center justify-between px-4 py-3 border-b border-gray-200">
-      <h2 class="text-lg font-semibold text-gray-900">Map Controls</h2>
+      <h2 id="map-controls-sidebar-title" class="text-lg font-semibold text-gray-900">Map Controls</h2>
       <button
           @click="$emit('close')"
           class="text-gray-500 hover:text-gray-700 p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 rounded-md hover:bg-gray-100"
@@ -158,7 +155,8 @@
       </BaseButton>
     </div>
     </div>
-  </div>
+    </div>
+  </Teleport>
 </template>
 
 <script>
@@ -254,6 +252,50 @@ export default {
     }
   },
   emits: ['layer-change', 'close', 'unhide-feature', 'unhide-all', 'labels-visibility-change', 'hillshade-change', 'quick-point'],
+  computed: {
+    sidebarRootClass() {
+      if (this.isMobileOpen) {
+        return [
+          'bg-white',
+          'flex',
+          'flex-col',
+          'fixed',
+          'inset-0',
+          'z-50',
+          'w-full',
+          'h-full',
+          'lg:hidden'
+        ].join(' ')
+      }
+      return [
+        'bg-white',
+        'flex',
+        'flex-col',
+        'hidden',
+        'lg:flex',
+        'lg:static',
+        'lg:w-56',
+        'lg:border-l',
+        'lg:border-gray-200',
+        'lg:p-3',
+        'lg:h-full',
+        'xl:w-64',
+        'xl:p-4'
+      ].join(' ')
+    }
+  },
+  watch: {
+    isMobileOpen(open) {
+      if (open) {
+        document.body.classList.add('overflow-hidden')
+      } else {
+        document.body.classList.remove('overflow-hidden')
+      }
+    }
+  },
+  beforeUnmount() {
+    document.body.classList.remove('overflow-hidden')
+  },
   methods: {
     handleDownload() {
       if (!this.shareId) {

@@ -25,8 +25,9 @@ class TestGeolocationAPI(TestCase):
         # Geolocation is mocked by the conditional_external_api_mocking fixture
         # It returns None since geolocation is not ready yet
         response = self.client.get('/api/location/user/')
-        # Should return 404 since geolocation is not available
-        self.assertIn(response.status_code, [404, 500])
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content)
+        self.assertIsNone(payload.get('location'))
 
     def test_get_location_by_ip(self):
         """Test getting location by IP - uses conditional geolocation mock."""

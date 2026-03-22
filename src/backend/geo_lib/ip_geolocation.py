@@ -2,7 +2,6 @@
 IP-based geolocation service using MaxMind GeoIP2 database.
 """
 import os
-import traceback
 from typing import Optional, Dict, Any
 
 import geoip2.database
@@ -64,20 +63,8 @@ class IPGeolocationService:
                 'longitude': float(response.location.longitude) if response.location.longitude else None,
             }
         except geoip2.errors.AddressNotFoundError:
-            logger.warning(f"IP address {ip_address} not found in database")
+            logger.warning("IP address %s not found in database", ip_address)
             return None
-        except:
-            logger.error(f"Error looking up IP {ip_address}: {traceback.format_exc()}")
-            return {  # Return fallback
-                'ip': ip_address,
-                'country': response.country.name,
-                'country_code': response.country.iso_code,
-                'state': None,
-                'state_code': None,
-                'city': None,
-                'latitude': None,
-                'longitude': None,
-            }
 
     def _is_private_ip(self, ip_address: str) -> bool:
         """

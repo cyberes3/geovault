@@ -15,6 +15,7 @@ Do not re-export modules or use __all__. Instead, do direct imports.
 
 Don't pile Django routes in the base views.py file. Instead, create new files to organize them in a manageable way.
 
+You do not need custom try/catch logic for the sole purpose of logging errors. Our Django site has built-in error logging.
 All try/catch logging needs to explicitily print the full traceback. DO NOT swallow the exception and hide it!! 
 
 DO NOT MANUALLY CREATE OR EDIT DJANGO MIGRATIONS!!!!! Use `manage.py` to generate them.

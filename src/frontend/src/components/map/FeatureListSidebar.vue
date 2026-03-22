@@ -1,18 +1,16 @@
 <template>
-  <div 
-    :class="[
-      'bg-white flex flex-col h-full overflow-hidden',
-      // Tablet landscape styles (compact) - show at lg (1024px)
-      'lg:flex lg:static lg:w-64 lg:border-r lg:border-gray-200',
-      // Desktop styles (full width) - show at xl (1280px) and above
-      'xl:w-80',
-      // Mobile/Tablet portrait styles (modal behavior) - up to lg (1024px)
-      isMobileOpen ? 'fixed inset-0 z-50 w-full' : 'hidden'
-    ]"
-  >
+  <!-- Teleport when open on mobile so stacking matches BaseModal (above app nav z-300). -->
+  <Teleport to="body" :disabled="!isMobileOpen">
+    <div
+      data-app-mobile-overlay="sheet"
+      :class="sidebarRootClass"
+      :role="isMobileOpen ? 'dialog' : undefined"
+      :aria-modal="isMobileOpen ? 'true' : undefined"
+      :aria-labelledby="isMobileOpen ? 'feature-list-sidebar-title' : undefined"
+    >
     <!-- Mobile Header -->
     <div class="lg:hidden flex items-center justify-between px-4 py-3 border-b border-gray-200">
-      <h2 class="text-lg font-semibold text-gray-900">Features</h2>
+      <h2 id="feature-list-sidebar-title" class="text-lg font-semibold text-gray-900">Features</h2>
       <button 
         @click="$emit('close')" 
         class="text-gray-500 hover:text-gray-700 p-1 rounded-md hover:bg-gray-100"
@@ -348,7 +346,8 @@
         </div>
       </div>
     </div>
-  </div>
+    </div>
+  </Teleport>
 </template>
 
 <script>
@@ -464,6 +463,36 @@ export default {
     showInitialTagsLoader() {
       return this.isInitialLoad && this.availableTags.length === 0 && !this.isFiltering
     },
+    sidebarRootClass() {
+      if (this.isMobileOpen) {
+        return [
+          'bg-white',
+          'flex',
+          'flex-col',
+          'overflow-hidden',
+          'fixed',
+          'inset-0',
+          'z-50',
+          'w-full',
+          'h-full',
+          'lg:hidden'
+        ].join(' ')
+      }
+      return [
+        'bg-white',
+        'flex',
+        'flex-col',
+        'h-full',
+        'overflow-hidden',
+        'hidden',
+        'lg:flex',
+        'lg:static',
+        'lg:w-64',
+        'lg:border-r',
+        'lg:border-gray-200',
+        'xl:w-80'
+      ].join(' ')
+    },
     filteredAvailableTags() {
       // Filter out already selected tags
       let unselectedTags = this.availableTags.filter(tag => !this.selectedTags.includes(tag))
@@ -527,6 +556,13 @@ export default {
             this.filterByTags()
           })
         }
+      }
+    },
+    isMobileOpen(open) {
+      if (open) {
+        document.body.classList.add('overflow-hidden')
+      } else {
+        document.body.classList.remove('overflow-hidden')
       }
     }
   },
@@ -863,6 +899,7 @@ export default {
     // System tag detection is handled by the imported isSystemTag function from tagUtils.js
   },
   beforeUnmount() {
+    document.body.classList.remove('overflow-hidden')
     // Clean up timeouts
     if (this.searchTimeout) {
       clearTimeout(this.searchTimeout)
