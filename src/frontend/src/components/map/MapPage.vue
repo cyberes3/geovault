@@ -22,7 +22,7 @@
     />
 
     <!-- Center - Map -->
-    <div class="flex-1 w-full bg-gray-50 relative overflow-hidden">
+    <div class="flex-1 w-full bg-gray-50 relative overflow-hidden flex flex-col min-h-0">
       <MobileControlsBar
         :is-public-share-mode="isPublicShareMode"
         :public-share-tag="publicShareTag"
@@ -31,7 +31,7 @@
         @toggle-features="activeMobileSidebar = 'features'"
         @toggle-controls="activeMobileSidebar = 'controls'"
       />
-      <div class="relative w-full h-full">
+      <div class="relative w-full flex-1 min-h-0">
         <!-- Map -->
         <div
             ref="mapContainer"
@@ -1182,9 +1182,7 @@ export default {
             type: `share_${this.publicShareInfo.share_type}`, // share_tag, share_collection, share_feature
             isPublicShare: true,
             shareId: this.shareId,
-            shareInfo: this.publicShareInfo,
-            isBboxBased: this.publicShareInfo.share_type !== 'feature',
-            requiresInitialLoadOnly: this.publicShareInfo.share_type === 'feature'
+            shareInfo: this.publicShareInfo
           }
         }
         // Share info not loaded yet - return placeholder context
@@ -1193,9 +1191,7 @@ export default {
           type: 'share_unknown',
           isPublicShare: true,
           shareId: this.shareId,
-          shareInfo: null,
-          isBboxBased: true, // Default assumption, will be updated
-          requiresInitialLoadOnly: false // Default assumption, will be updated
+          shareInfo: null
         }
       }
 
@@ -1204,9 +1200,7 @@ export default {
         return {
           type: 'collection',
           isPublicShare: false,
-          collectionId: this.collectionId,
-          isBboxBased: true,
-          requiresInitialLoadOnly: false
+          collectionId: this.collectionId
         }
       }
 
@@ -1214,8 +1208,6 @@ export default {
       return {
         type: 'default',
         isPublicShare: false,
-        isBboxBased: true,
-        requiresInitialLoadOnly: false,
         tags: this.currentTags,
         matchMode: this.currentTagMatchMode
       }
@@ -1387,16 +1379,15 @@ export default {
      * Handles successful data loading in a unified way.
      * @param {Object} data - Parsed response data
      * @param {Object} context - Load context from getLoadContext()
-     * @param {string} bboxKey - Bounding box cache key (for bbox-based loads)
+     * @param {string} bboxKey - Bounding box cache key (unused for share_feature)
      */
     async handleLoadSuccess(data, context, bboxKey) {
       if (!data.data || !data.data.features) {
         return
       }
 
-      // For bbox-based loads, add to loaded bounds cache
-      // Feature shares are not bbox-based, so skip caching
-      if (context.isBboxBased && bboxKey) {
+      // Per-viewport cache; public feature shares load once without bbox URL semantics
+      if (context.type !== 'share_feature' && bboxKey) {
         this.loadedBounds.add(bboxKey)
       }
 
@@ -1510,9 +1501,23 @@ export default {
             return
           }
           const zoom = this.map.getZoom()
-          const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]
+          const viewportBbox = [
+            bounds.getWest(),
+            bounds.getSouth(),
+            bounds.getEast(),
+            bounds.getNorth()
+          ]
+          const isFirstPublicBboxShareLoad =
+            context.shareId &&
+            (context.type === 'share_tag' || context.type === 'share_collection') &&
+            this.publicShareRefinedFitShareId !== context.shareId
+          // First mapshare tag/collection load: API is bbox-scoped; use world bbox once so we
+          // get features even when the initial viewport does not intersect the share.
+          const bboxForApi = isFirstPublicBboxShareLoad
+            ? [-180, -85.05112878, 180, 85.05112878]
+            : viewportBbox
 
-          let bboxKey = this.getBoundingBoxKey(bbox, zoom)
+          let bboxKey = this.getBoundingBoxKey(bboxForApi, zoom)
           if (context.isPublicShare && context.shareId) {
             bboxKey = `${bboxKey}_share_${context.shareId}`
           } else if (context.type === 'collection' && context.collectionId) {
@@ -1523,11 +1528,11 @@ export default {
             bboxKey = `${bboxKey}_tags_${tagsKey}`
           }
 
-          if (context.isBboxBased && this.loadedBounds.has(bboxKey)) {
+          if (context.type !== 'share_feature' && this.loadedBounds.has(bboxKey)) {
             return
           }
 
-          const bboxString = this.getBoundingBoxString(bbox)
+          const bboxString = this.getBoundingBoxString(bboxForApi)
           const url = this.buildLoadUrl(context, bboxString, zoom)
 
           if (url === null) {
@@ -4629,14 +4634,8 @@ export default {
     // This allows map move/zoom events to trigger data loads from now on
     this.isMapInitializing = false
 
-    // Update map size after load
-    if (this.map) {
-      this.map.once('load', () => {
-        if (this.map) {
-          this.map.resize()
-        }
-      })
-    }
+    // Ensure map size is correct after initialization/layout settles.
+    this.ensureMapResize()
 
     // Initial feature list update
     this.updateFeaturesInExtent()
