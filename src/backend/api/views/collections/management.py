@@ -10,7 +10,13 @@ from api.utils.responses import (
     handle_404,
 )
 from api.validation.feature_updates import validate_payload, CollectionCreatePayload, CollectionUpdatePayload
-from api.views.collections.utils import _serialize_collection, _count_collection_features, get_collection_feature_ids
+from api.views.collections.utils import (
+    _count_collection_features,
+    _serialize_collection,
+    filter_collection_tags_for_user,
+    filter_feature_ids_for_user,
+    get_collection_feature_ids,
+)
 from geo_lib.website.auth import api_or_login_required_401
 
 
@@ -64,15 +70,8 @@ def create_collection(request, validated_data):
     else:
         description = None
     tags = validated_data.get('tags', [])
-    feature_ids = validated_data.get('feature_ids', [])
-
-    # Verify that all feature_ids belong to the user
-    if feature_ids:
-        user_feature_ids = set(
-            FeatureStore.objects.filter(user=request.user, id__in=feature_ids)
-            .values_list('id', flat=True)
-        )
-        feature_ids = [fid for fid in feature_ids if fid in user_feature_ids]
+    tags = filter_collection_tags_for_user(request.user, tags)
+    feature_ids = filter_feature_ids_for_user(request.user, validated_data.get('feature_ids', []))
 
     # Create collection
     collection = Collection.objects.create(
@@ -136,19 +135,14 @@ def update_collection(request, collection_id, validated_data):
         # Update tags if provided
         if 'tags' in validated_data:
             tags = validated_data['tags']
+            tags = filter_collection_tags_for_user(request.user, tags) if tags else []
             collection.tags = tags if tags else []
 
         # Update feature_ids if provided
         if 'feature_ids' in validated_data:
-            feature_ids = validated_data['feature_ids']
-            # Verify that all feature_ids belong to the user
-            if feature_ids:
-                user_feature_ids = set(
-                    FeatureStore.objects.filter(user=request.user, id__in=feature_ids)
-                    .values_list('id', flat=True)
-                )
-                feature_ids = [fid for fid in feature_ids if fid in user_feature_ids]
-            collection.feature_ids = feature_ids
+            collection.feature_ids = filter_feature_ids_for_user(
+                request.user, validated_data['feature_ids']
+            )
 
         collection.save()
 

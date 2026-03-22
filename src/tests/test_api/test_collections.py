@@ -179,7 +179,7 @@ class TestCollectionsAPI(TestCase):
         update_data = {
             'name': 'Updated Name',
             'description': 'Updated description',
-            'tags': ['new'],
+            'tags': ['test'],
             'feature_ids': [self.feature.id]
         }
 
@@ -191,7 +191,86 @@ class TestCollectionsAPI(TestCase):
         self.assertEqual(response.status_code, 200)
         collection.refresh_from_db()
         self.assertEqual(collection.name, 'Updated Name')
-        self.assertEqual(collection.tags, ['new'])
+        self.assertEqual(collection.tags, ['test'])
+
+    def test_save_collection_strips_stale_tags(self):
+        """Tags not present on any user feature are dropped on create."""
+        feature_keep = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.0, 38.0, 0.0]},
+            'properties': {'name': 'Keep', 'tags': ['keep']}
+        }
+        FeatureStore.objects.create(
+            user=self.user,
+            geojson=feature_keep,
+            geometry=Point(-122.0, 38.0, 0.0),
+            geojson_hash=generate_geojson_hash(feature_keep)
+        )
+        collection_data = {
+            'name': 'Stale Tags Collection',
+            'tags': ['keep', 'gone'],
+            'feature_ids': []
+        }
+        response = self.client.post(
+            '/api/collections/create/',
+            data=json.dumps(collection_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.content)
+        collection = Collection.objects.get(id=data['collection']['id'])
+        self.assertEqual(collection.tags, ['keep'])
+
+    def test_save_collection_strips_unknown_feature_ids(self):
+        """Feature IDs that do not exist for the user are dropped on create."""
+        collection_data = {
+            'name': 'Mixed IDs Collection',
+            'tags': ['test'],
+            'feature_ids': [self.feature.id, 999_999_999]
+        }
+        response = self.client.post(
+            '/api/collections/create/',
+            data=json.dumps(collection_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.content)
+        collection = Collection.objects.get(id=data['collection']['id'])
+        self.assertEqual(collection.feature_ids, [self.feature.id])
+
+    def test_update_collection_strips_missing_features(self):
+        """After a feature is deleted, updating with its ID drops that ID from the collection."""
+        feature2_data = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-121.0, 39.0, 0.0]},
+            'properties': {'name': 'Second', 'tags': ['test']}
+        }
+        feature2 = FeatureStore.objects.create(
+            user=self.user,
+            geojson=feature2_data,
+            geometry=Point(-121.0, 39.0, 0.0),
+            geojson_hash=generate_geojson_hash(feature2_data)
+        )
+        removed_id = feature2.id
+        collection = Collection.objects.create(
+            user=self.user,
+            name='Two Features',
+            tags=['test'],
+            feature_ids=[self.feature.id, removed_id]
+        )
+        feature2.delete()
+
+        update_data = {
+            'feature_ids': [self.feature.id, removed_id]
+        }
+        response = self.client.put(
+            f'/api/collections/{collection.id}/update/',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        collection.refresh_from_db()
+        self.assertEqual(collection.feature_ids, [self.feature.id])
 
     def test_update_collection_invalid_json(self):
         """Test updating a collection with invalid JSON."""
