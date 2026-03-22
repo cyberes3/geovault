@@ -75,6 +75,10 @@ tilesources:
   # hidden:
   #   - google-satellite-hybrid
 
+  # Raster basemap source used to generate social preview images for shared map links.
+  # Must be a registered raster xyz layer from /api/tiles/sources.
+  social_preview_raster_source: osm
+
 
 maptiler:
   # MapTiler API key for accessing MapTiler maps and 3D terrain tiles

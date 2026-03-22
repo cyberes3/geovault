@@ -31,6 +31,7 @@ class SuperuserOnlyAdminSite(AdminSite):
 
 admin.site.__class__ = SuperuserOnlyAdminSite
 from website.exception_handler import custom_exception_handler
+from website.map_share_social.views import map_share_social_page, map_share_social_preview_image
 from website.views import index
 
 def well_known_routing(request, path):
@@ -107,6 +108,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include("users.urls")),
     path('api/', include("api.urls")),
+    path('share/map/<str:share_id>/', map_share_social_page, name='map_share_social_page'),
+    path('share/map/<str:share_id>/preview.png', map_share_social_preview_image, name='map_share_social_preview_image'),
     re_path(r'^extensions/static/(?P<path>.*)$', serve_extension_static),
     # Catch-all route for Vue.js router (must be last)
     # Serves index.html for any route that doesn't match above patterns

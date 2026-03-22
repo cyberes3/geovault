@@ -352,7 +352,7 @@ export default {
       return prefixes.some(prefix => path.startsWith(prefix));
     },
     isPublicShareRoute() {
-      return this.isPublicSharePath(this.$route.path);
+      return this.isPublicSharePath(this.$route.path) || !!this.getPathnameMapShareId();
     }
   },
   watch: {
@@ -366,7 +366,8 @@ export default {
           // Redirect to login if not on a public share route
           const hash = window.location.hash || '';
           const pathFromHash = hash.replace(/^#/, '').split('?')[0];
-          if (!this.isPublicSharePath(pathFromHash)) {
+          const isPathnameShare = !!this.getPathnameMapShareId();
+          if (!this.isPublicSharePath(pathFromHash) && !isPathnameShare) {
             const loginUrl = window.location.origin + '/accounts/login/';
             window.location.replace(loginUrl);
           }
@@ -423,6 +424,18 @@ export default {
     }
   },
   methods: {
+    getPathnameMapShareId() {
+      if (typeof window === 'undefined') return null;
+      const match = window.location.pathname.match(/^\/share\/map\/([0-9a-fA-F-]{36})\/?$/);
+      return match ? match[1] : null;
+    },
+    ensurePathnameShareRedirectToHash() {
+      const shareId = this.getPathnameMapShareId();
+      if (!shareId) return;
+      const hash = window.location.hash || '';
+      if (hash.startsWith('#/mapshare')) return;
+      window.location.replace(`/#/mapshare?id=${encodeURIComponent(shareId)}`);
+    },
     setMobileMenuGlobalState(isOpen) {
       if (typeof document === 'undefined') return;
       const method = isOpen ? 'add' : 'remove';
@@ -443,11 +456,13 @@ export default {
       return prefixes.some(prefix => path.startsWith(prefix));
     },
     async checkAuth() {
+      this.ensurePathnameShareRedirectToHash();
+
       // Check if we're on a public share route using window.location.hash
       // since $route might not be ready yet
       const hash = window.location.hash || '';
       const pathFromHash = hash.replace(/^#/, '').split('?')[0];
-      const isPublicShare = this.isPublicSharePath(pathFromHash);
+      const isPublicShare = this.isPublicSharePath(pathFromHash) || !!this.getPathnameMapShareId();
 
       this.userInfoLoading = true;
       

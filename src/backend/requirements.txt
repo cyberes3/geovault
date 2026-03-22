@@ -30,3 +30,4 @@ defusedxml==0.7.1
 django-oauth-toolkit==3.2.0
 pycountry==26.2.16
 diceware==1.0.1
+crawlerdetect==0.3.2

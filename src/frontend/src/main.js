@@ -1,5 +1,23 @@
 import './assets/css/main.css'
 
+/**
+ * Dev/proxy-safe fallback:
+ * If a social share URL is opened on the frontend dev server (or any origin that serves the SPA directly),
+ * remap /share/map/<id>/ to the hash route before app initialization/auth checks.
+ */
+function remapSocialSharePathToHashRoute() {
+    if (typeof window === 'undefined') return
+    if (window.location.hash) return
+
+    const match = window.location.pathname.match(/^\/share\/map\/([0-9a-fA-F-]{36})\/?$/)
+    if (!match) return
+
+    const shareId = match[1]
+    window.location.replace(`/#/mapshare?id=${encodeURIComponent(shareId)}`)
+}
+
+remapSocialSharePathToHashRoute()
+
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js?v=' + __SW_VERSION__)
 }

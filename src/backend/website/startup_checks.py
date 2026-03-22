@@ -42,6 +42,7 @@ from django.db import connection
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.file_types import FILE_TYPE_CONFIGS
 from geo_lib.processing.job_recovery import recover_interrupted_jobs as do_job_recovery
+from geo_lib.tile_sources.registry import get_tile_source
 from geo_lib.utils.redis_connection import get_redis_connection
 from website.celery_app import celery_app
 from website.config_loader import get_config_loader
@@ -365,6 +366,71 @@ def check_frontend_files():
 
     except Exception as e:
         _logger.error(f"✗ Frontend files check failed: {e}")
+        return False
+
+
+def check_social_preview_tilesource():
+    """
+    Validate tilesources.social_preview_raster_source points to a registered raster (xyz) source.
+
+    Uses the internal tile registry (get_tile_source), not only client-facing URLs, so
+    tilesources.proxy_osm rewriting the client URL to /api/tiles/... does not invalidate
+    the check when url_template remains a direct raster template.
+
+    Returns:
+        bool: True when valid, False otherwise.
+    """
+    try:
+        config_loader = get_config_loader()
+        source_id = config_loader.get_str("tilesources.social_preview_raster_source", "osm").strip() or "osm"
+        cfg = get_tile_source(source_id)
+
+        if not cfg:
+            _logger.error(
+                "✗ Social preview tile source '%s' is not registered. "
+                "Set tilesources.social_preview_raster_source to a valid raster basemap source id (default: osm).",
+                source_id,
+            )
+            return False
+
+        if cfg.get("type") != "xyz":
+            _logger.error(
+                "✗ Social preview tile source '%s' is not a raster xyz layer (type=%r). "
+                "Please configure a raster basemap (example: osm).",
+                source_id,
+                cfg.get("type"),
+            )
+            return False
+
+        client_config = cfg.get("client_config", {})
+        source_type = client_config.get("type")
+        tile_url = client_config.get("url")
+        url_template = cfg.get("url_template")
+        has_client_template = (
+            isinstance(tile_url, str)
+            and "{z}" in tile_url
+            and "{x}" in tile_url
+            and "{y}" in tile_url
+        )
+        has_upstream_template = (
+            isinstance(url_template, str)
+            and "{z}" in url_template
+            and "{x}" in url_template
+            and "{y}" in url_template
+        )
+        if source_type != "xyz" or (not has_client_template and not has_upstream_template):
+            _logger.error(
+                "✗ Social preview tile source '%s' is not a raster xyz layer with a tile URL template. "
+                "Found client_config.type=%r. Please configure a raster basemap (example: osm).",
+                source_id,
+                source_type,
+            )
+            return False
+
+        _logger.info("✓ Social preview tile source is valid: %s", source_id)
+        return True
+    except Exception as e:
+        _logger.error(f"✗ Social preview tile source check failed: {e}")
         return False
 
 
@@ -1024,6 +1090,7 @@ def run_startup_checks():
         ("Writable Directories", check_writable_directories),
         ("Frontend Files", check_frontend_files),
         ("Font Glyphs", check_font_glyphs),
+        ("Social Preview Tile Source", check_social_preview_tilesource),
         ("togeojson Installation", check_togeojson_installation),
         ("File Type Max Size", check_file_type_max_size),
         ("Site Configuration", check_site_configuration),

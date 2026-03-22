@@ -680,8 +680,7 @@ class TestShareURLFormat(TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('url', data)
-        self.assertTrue(data['url'].startswith('/#/mapshare?id='))
-        self.assertEqual(data['url'].split('id=')[1], data['share_id'])
+        self.assertEqual(data['url'], f"/share/map/{data['share_id']}/")
 
     def test_create_collection_share_url_format(self):
         """Test that creating a collection share returns URL in path format."""
@@ -697,8 +696,7 @@ class TestShareURLFormat(TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('url', data)
-        self.assertTrue(data['url'].startswith('/#/mapshare?id='))
-        self.assertEqual(data['url'].split('id=')[1], data['share_id'])
+        self.assertEqual(data['url'], f"/share/map/{data['share_id']}/")
 
     def test_create_feature_share_url_format(self):
         """Test that creating a feature share returns URL in path format."""
@@ -714,8 +712,7 @@ class TestShareURLFormat(TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('url', data)
-        self.assertTrue(data['url'].startswith('/#/mapshare?id='))
-        self.assertEqual(data['url'].split('id=')[1], data['share_id'])
+        self.assertEqual(data['url'], f"/share/map/{data['share_id']}/")
 
     def test_list_shares_url_format(self):
         """Test that listing shares returns URLs in path format."""
@@ -744,8 +741,7 @@ class TestShareURLFormat(TestCase):
 
         for share in data['shares']:
             self.assertIn('url', share)
-            self.assertTrue(share['url'].startswith('/#/mapshare?id='))
-            self.assertEqual(share['url'].split('id=')[1], share['share_id'])
+            self.assertEqual(share['url'], f"/share/map/{share['share_id']}/")
 
     def test_get_feature_share_url_format(self):
         """Test that getting feature share returns URL in path format."""
@@ -759,8 +755,7 @@ class TestShareURLFormat(TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('url', data)
-        self.assertTrue(data['url'].startswith('/#/mapshare?id='))
-        self.assertEqual(data['url'].split('id=')[1], share.share_id)
+        self.assertEqual(data['url'], f"/share/map/{share.share_id}/")
 
     def test_update_feature_share_url_format(self):
         """Test that updating feature share returns URL in path format."""
@@ -779,6 +774,5 @@ class TestShareURLFormat(TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('url', data)
-        self.assertTrue(data['url'].startswith('/#/mapshare?id='))
-        self.assertEqual(data['url'].split('id=')[1], share.share_id)
+        self.assertEqual(data['url'], f"/share/map/{share.share_id}/")
 

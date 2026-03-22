@@ -13,6 +13,8 @@ YES: `./run-tests.sh test_api/test_app_releases.py` NO: `src/tests/run-tests.sh 
 
 Do not re-export modules or use __all__. Instead, do direct imports.
 
+Don't pile Django routes in the base views.py file. Instead, create new files to organize them in a manageable way.
+
 DO NOT MANUALLY CREATE OR EDIT DJANGO MIGRATIONS!!!!! Use `manage.py` to generate them.
 
 Prioritize using the provided Heroicons components for icons on the frontend instead of creating custom SVGs.
