@@ -42,7 +42,7 @@ export default defineConfig({
                 'vue-router',
                 'vuex',
                 'axios',
-                'ol',
+                'maplibre-gl',
                 '@heroicons/vue/24/outline',
                 '@heroicons/vue/24/solid',
                 '@/components/parts/Loader.vue'
@@ -53,7 +53,7 @@ export default defineConfig({
                     'vue-router': 'VueRouter',
                     vuex: 'Vuex',
                     axios: 'axios',
-                    ol: 'ol',
+                    'maplibre-gl': 'maplibregl',
                     '@heroicons/vue/24/outline': 'HeroiconsOutline',
                     '@heroicons/vue/24/solid': 'HeroiconsSolid',
                     '@/components/parts/Loader.vue': 'Loader'

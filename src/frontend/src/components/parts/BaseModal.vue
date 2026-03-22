@@ -17,14 +17,14 @@
     <div class="absolute inset-0 bg-black/50 transition-opacity"></div>
 
     <!-- Modal panel -->
-    <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
-      <div
+    <div
         :class="[
-          'bg-white flex flex-col w-full shadow-xl overflow-hidden',
-          fullScreenMobile ? 'h-full' : 'h-[90vh] rounded-lg',
-          'sm:h-[90vh] sm:rounded-lg',
-          maxWidthClass
+          'absolute inset-0 flex justify-stretch sm:justify-center',
+          fitContentHeight ? 'items-center' : 'items-stretch sm:items-center'
         ]"
+    >
+      <div
+        :class="modalPanelClass"
         @click.stop
         @mousedown.stop
       >
@@ -50,7 +50,10 @@
         </div>
 
         <!-- Content -->
-        <div ref="contentScroll" class="flex-1 overflow-y-auto bg-white min-h-0">
+        <div
+            ref="contentScroll"
+            :class="contentScrollClasses"
+        >
           <slot></slot>
         </div>
 
@@ -120,10 +123,41 @@ export default {
     hideFooterOnMobile: {
       type: Boolean,
       default: false
+    },
+    /** When true, modal height follows content (capped by max-h) instead of filling 90vh. */
+    fitContentHeight: {
+      type: Boolean,
+      default: false
     }
   },
   emits: ['close'],
   computed: {
+    modalPanelClass() {
+      const base = ['bg-white', 'flex', 'flex-col', 'w-full', 'shadow-xl', 'overflow-hidden']
+      let height
+      if (this.fitContentHeight) {
+        height = [
+          'h-auto',
+          'max-h-[90vh]',
+          'w-full',
+          'rounded-lg',
+          'sm:h-auto',
+          'sm:max-h-[90vh]',
+          'sm:rounded-lg'
+        ]
+      } else if (this.fullScreenMobile) {
+        height = ['h-full', 'sm:h-[90vh]', 'sm:rounded-lg']
+      } else {
+        height = ['h-[90vh]', 'rounded-lg', 'sm:h-[90vh]', 'sm:rounded-lg']
+      }
+      return [...base, ...height, this.maxWidthClass]
+    },
+    contentScrollClasses() {
+      if (this.fitContentHeight) {
+        return 'overflow-y-auto bg-white max-h-[calc(90vh-9rem)]'
+      }
+      return 'flex-1 overflow-y-auto bg-white min-h-0'
+    },
     maxWidthClass() {
       const widthMap = {
         sm: 'sm:max-w-sm',

@@ -1,7 +1,12 @@
 <template>
-  <div class="space-y-0 sm:space-y-6 sm:mx-4 sm:my-4 sm:flex-1 sm:min-h-0 sm:flex sm:flex-col">
+  <!-- Map-route shell: flex-1 min-h-0 + internal overflow (body/html overflow hidden on these routes) -->
+  <div
+      class="flex flex-col flex-1 min-h-0 h-full w-full overflow-y-auto sm:overflow-hidden bg-gray-50 sm:mx-4 sm:my-4 sm:gap-6"
+  >
     <!-- Page Header (matches Collections page) -->
-    <div class="bg-white rounded-none sm:rounded-lg shadow-sm border border-gray-200 border-t-0 sm:border-t p-4 sm:p-6">
+    <div
+        class="flex-shrink-0 bg-white rounded-none sm:rounded-lg shadow-sm border border-gray-200 border-t-0 sm:border-t p-4 sm:p-6"
+    >
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <div>
           <h1 class="text-xl sm:text-2xl font-bold text-gray-900 mb-1 sm:mb-2">Places</h1>
@@ -27,12 +32,14 @@
       </div>
     </div>
 
-    <!-- List + Map row: fills remaining vertical space on desktop so list scrolls internally -->
-    <!-- Mobile: Map top, List bottom, no fixed height so page scrolls -->
-    <div class="flex flex-col-reverse sm:flex-row gap-0 sm:gap-3 min-h-0 sm:flex-1 sm:min-h-0">
+    <!-- List + Map row: fills remaining height; list scrolls inside panel -->
+    <div
+        class="flex flex-col-reverse sm:flex-row sm:items-stretch gap-0 sm:gap-3 sm:flex-1 sm:min-h-0 sm:overflow-hidden"
+    >
       <!-- List panel (50% width, card style) -->
       <div
-          class="w-full sm:w-1/2 min-w-0 min-h-0 flex-1 flex flex-col bg-white rounded-none sm:rounded-lg shadow-sm border border-gray-200 sm:overflow-hidden relative">
+          class="w-full sm:w-1/2 min-w-0 min-h-0 sm:flex-1 flex flex-col sm:overflow-hidden bg-white rounded-none sm:rounded-lg shadow-sm border border-gray-200 relative"
+      >
         <!-- Loading overlay: grey out and disable list while refreshing -->
         <div
             v-if="loading"
@@ -71,7 +78,7 @@
         </div>
 
         <!-- List -->
-        <div ref="listScrollContainer" class="flex-1 sm:overflow-y-auto p-4">
+        <div ref="listScrollContainer" class="p-4 sm:flex-1 sm:min-h-0 sm:overflow-y-auto sm:overscroll-contain">
           <div v-if="filteredPlaces.length === 0 && !loading" class="text-center py-12">
             <div class="mx-auto w-12 h-12 text-gray-500 mb-4">
               <MapPinIcon class="w-12 h-12 mx-auto"/>
@@ -188,27 +195,24 @@
         </div>
       </div>
 
-      <!-- Map (50% width, card style) -->
+      <!-- Map (50% width, card style). sm:h-full: parent row stretches; only child is position:absolute so sm:h-auto would collapse height. -->
       <div
-          class="w-full sm:w-1/2 min-w-0 flex-shrink-0 relative bg-gray-100 rounded-none sm:rounded-lg border border-gray-200 border-t-0 border-b-0 sm:border-t sm:border-b overflow-hidden h-[250px] sm:h-auto">
-        <div ref="mapContainer" class="absolute inset-0 touch-pan-y"></div>
-
-        <!-- Cooperative Gesture Overlay -->
-        <div
-            v-if="showGestureOverlay"
-            class="absolute inset-0 z-20 flex items-center justify-center bg-black/40 pointer-events-none transition-opacity duration-300"
-            :class="gestureOverlayVisible ? 'opacity-100' : 'opacity-0'"
-        >
-          <div class="bg-black/70 text-white px-4 py-3 rounded-lg text-center font-medium shadow-lg backdrop-blur-sm">
-            <p class="text-sm sm:text-base">Use two fingers to move the map</p>
-          </div>
-        </div>
+          class="w-full sm:w-1/2 min-w-0 min-h-[250px] flex-shrink-0 relative bg-gray-100 rounded-none sm:rounded-lg border border-gray-200 border-t-0 border-b-0 sm:border-t sm:border-b overflow-hidden h-[250px] sm:h-full sm:min-h-[280px]">
+        <div ref="mapContainer" class="absolute inset-0 z-0 h-full w-full min-h-0 touch-pan-y"></div>
 
         <div
             class="absolute z-10 bottom-4 left-4 flex flex-col bg-white border border-gray-200 rounded shadow-md overflow-hidden">
           <button
               type="button"
               class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
+              title="Choose Basemap"
+              @click="openLayerPickerModal"
+          >
+            <Square3Stack3DIcon class="w-5 h-5"/>
+          </button>
+          <button
+              type="button"
+              class="p-2 border-t border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
               title="Go to Home Extent"
               @click="resetMapToDefaultExtent"
           >
@@ -217,6 +221,35 @@
         </div>
       </div>
     </div>
+
+    <BaseModal
+        :is-open="showLayerPickerModal"
+        title="Map Layer"
+        max-width="md"
+        fit-content-height
+        :full-screen-mobile="false"
+        @close="closeLayerPickerModal"
+    >
+      <div class="p-4 sm:p-6">
+        <label for="places-map-layer" class="block text-sm font-medium text-gray-700 mb-2">Basemap</label>
+        <select
+            id="places-map-layer"
+            v-model="selectedBaseSourceId"
+            class="select-custom w-full px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            :disabled="baseSourceOptions.length === 0"
+            @change="applyBaseSourceSelection"
+        >
+          <option v-for="option in baseSourceOptions" :key="option.id" :value="option.id">
+            {{ option.name }}
+          </option>
+        </select>
+      </div>
+      <template #footer>
+        <BaseButton type="button" variant="white" @click="closeLayerPickerModal">
+          Close
+        </BaseButton>
+      </template>
+    </BaseModal>
 
     <!-- Description modal -->
     <BaseModal
@@ -279,6 +312,7 @@
 <script>
 import {computed, inject, nextTick, onActivated, onBeforeUnmount, onMounted, ref, shallowRef, watch} from 'vue';
 import {
+  Square3Stack3DIcon,
   CheckIcon,
   ClipboardDocumentIcon,
   DocumentTextIcon,
@@ -292,12 +326,20 @@ import {
 } from '@heroicons/vue/24/outline';
 import googleMapsIconUrl from '@/assets/google-maps-icon.svg';
 import googleMapsIconBwUrl from '@/assets/google-maps-icon-bw.svg';
+import {createPlacesMap} from '@/utils/placesMaplibre.js';
+import {getDefaultMapSourceIdFromStore} from '@/utils/placesMapSettings.js';
+const PLACE_SOURCE_ID = 'places-source';
+const PLACE_LAYER_ID = 'places-layer';
+const INITIAL_CENTER = [0, 0];
+const INITIAL_ZOOM = 2;
+const FOCUS_ZOOM = 12;
 
 export default {
   components: {
     MapPinIcon,
     PlusIcon,
     MagnifyingGlassIcon,
+    Square3Stack3DIcon,
     PencilSquareIcon,
     TrashIcon,
     XMarkIcon,
@@ -321,8 +363,7 @@ export default {
     const listScrollContainer = ref(null);
     const placeItemRefs = {};
     const map = shallowRef(null);
-    const vectorSource = shallowRef(null);
-    const vectorLayer = shallowRef(null);
+    const mapController = shallowRef(null);
     const programmaticMapMove = ref(false);
 
     const descriptionModalPlace = ref(null);
@@ -331,12 +372,11 @@ export default {
     const descriptionSaving = ref(false);
     const descriptionEditTextarea = ref(null);
     const copiedPlaceId = ref(null);
+    const showLayerPickerModal = ref(false);
+    const baseSourceOptions = ref([]);
+    const selectedBaseSourceId = ref('osm');
     let copiedPlaceIdTimeout = null;
 
-    // Cooperative gestures state
-    const showGestureOverlay = ref(false);
-    const gestureOverlayVisible = ref(false);
-    let gestureOverlayTimeout = null;
     const isMobile = computed(() => {
       return window.innerWidth < 1024;
     });
@@ -362,7 +402,7 @@ export default {
           headers: {'Cache-Control': 'no-cache', Pragma: 'no-cache'}
         });
         places.value = res.data.features || [];
-        updateMapFeatures();
+        updateMapFeatures({ fit: true });
       } catch (err) {
         console.error("Failed to load places", err);
       } finally {
@@ -373,140 +413,73 @@ export default {
     // Refetch when sort dropdown changes (watcher ensures we use updated sortBy)
     watch(sortBy, () => fetchPlaces());
 
-    // Force map re-render when selection or hover state changes
+    // Update marker appearance when selection or hover state changes
     watch([selectedPlace, hoveredPlaceId], () => {
-      if (vectorLayer.value) {
-        vectorLayer.value.changed();
-      }
+      updateMapFeatures();
     });
 
-    const initMap = () => {
-      if (!window.gv_core.ol) return;
-
-      vectorSource.value = new window.gv_core.ol.source.Vector();
-
-      // Marker style: keep in sync with android-common (gv_common_ic_marker_default.xml, gv_common_ic_marker_selected.xml) and res/values/colors.xml (gv_common_marker_border, gv_common_primary_blue, gv_common_warning_yellow).
-      // Theme: primary blue #163D8A (default) with white border, primary yellow #F4AC45 (selected/hovered) with black border.
-      const layer = new window.gv_core.ol.layer.Vector({
-        source: vectorSource.value,
-        style: (feature) => {
-          const id = feature.get('database_id');
-          const isSelected = selectedPlace.value?.properties?.database_id === id;
-          const isHovered = hoveredPlaceId.value != null && id === hoveredPlaceId.value;
-          const isHighlighted = isSelected || isHovered;
-          const fillColor = isHighlighted ? '#F4AC45' : '#163D8A';
-          const strokeColor = isHighlighted ? '#000' : '#FFF';
-          return new window.gv_core.ol.style.Style({
-            image: new window.gv_core.ol.style.Circle({
-              radius: 7,
-              fill: new window.gv_core.ol.style.Fill({ color: fillColor }),
-              stroke: new window.gv_core.ol.style.Stroke({ color: strokeColor, width: 2 })
-            }),
-            zIndex: isHighlighted ? 100 : 0
-          });
-        }
-      });
-      vectorLayer.value = layer;
-
-      map.value = new window.gv_core.ol.Map({
-        target: mapContainer.value,
-        controls: [],
-        interactions: window.gv_core.ol.interaction.defaults({
-          dragPan: false,
-          pinchRotate: false,
-          altShiftDragRotate: false
-        }).extend([
-          new window.gv_core.ol.interaction.DragPan({
-            condition: function (e) {
-              // Mouse: always allow. Touch: handled by custom two-finger pan below.
-              return e.originalEvent.pointerType === 'mouse';
-            }
+    const getMapFeatureCollection = () => {
+      return {
+        type: 'FeatureCollection',
+        features: places.value
+          .filter(place => Array.isArray(place?.geometry?.coordinates) && place.geometry.coordinates.length >= 2)
+          .map((place) => {
+            const placeId = place.properties.database_id;
+            const isSelected = selectedPlace.value?.properties?.database_id === placeId;
+            const isHovered = hoveredPlaceId.value != null && placeId === hoveredPlaceId.value;
+            return {
+              type: 'Feature',
+              geometry: {
+                type: 'Point',
+                coordinates: [place.geometry.coordinates[0], place.geometry.coordinates[1]]
+              },
+              properties: {
+                database_id: placeId,
+                is_highlighted: isSelected || isHovered ? 1 : 0
+              }
+            };
           })
-        ]),
-        layers: [
-          new window.gv_core.ol.layer.Tile({
-            source: new window.gv_core.ol.source.OSM({attributions: []})
-          }),
-          layer
-        ],
-        view: new window.gv_core.ol.View({
-          center: window.gv_core.ol.proj.fromLonLat([0, 0]),
-          zoom: 2,
+      };
+    };
+
+    const updateMapFeatures = (options = { fit: false }) => {
+      if (!mapController.value) return;
+      const data = getMapFeatureCollection();
+      mapController.value.setPointFeatures(data.features);
+      if (options.fit) {
+        mapController.value.fitToPointFeatures(data.features, {
+          focusZoom: FOCUS_ZOOM,
+          fitPadding: {top: 100, right: 100, bottom: 140, left: 140},
+          fitMaxZoom: 15
+        });
+      }
+    };
+
+    const initMap = async () => {
+      if (mapController.value) {
+        mapController.value.destroy();
+        mapController.value = null;
+      }
+      if (!mapContainer.value) {
+        return;
+      }
+      try {
+        const controller = await createPlacesMap({
+          container: mapContainer.value,
+          mode: 'list',
+          sourceId: PLACE_SOURCE_ID,
+          layerId: PLACE_LAYER_ID,
+          preferredSourceId: getDefaultMapSourceIdFromStore(),
           minZoom: 1,
           maxZoom: 18
-        })
-      });
-
-      // Add gesture handling: custom two-finger pan (centroid-based), single finger scrolls the page.
-      const container = mapContainer.value;
-      let activeTouchCount = 0;
-      let gestureStartedWithOneFinger = false;
-      let lastTwoFingerCentroidPixel = null;
-
-      function getCentroidPixel(touches) {
-        const rect = container.getBoundingClientRect();
-        const x = (touches[0].clientX + touches[1].clientX) / 2 - rect.left;
-        const y = (touches[0].clientY + touches[1].clientY) / 2 - rect.top;
-        return [x, y];
+        });
+        mapController.value = controller;
+        map.value = controller.map;
+        baseSourceOptions.value = controller.getBaseSourceOptions();
+        selectedBaseSourceId.value = controller.getCurrentBaseSourceId();
+      } catch {
+        return;
       }
-
-      const handleTouchStart = (e) => {
-        activeTouchCount = e.touches.length;
-        if (activeTouchCount >= 2) {
-          gestureStartedWithOneFinger = false;
-          lastTwoFingerCentroidPixel = getCentroidPixel(e.touches);
-          hideGestureMessage();
-        } else {
-          lastTwoFingerCentroidPixel = null;
-          if (activeTouchCount === 1) gestureStartedWithOneFinger = true;
-        }
-      };
-
-      const handleTouchEnd = (e) => {
-        activeTouchCount = e.touches.length;
-        if (activeTouchCount < 2) lastTwoFingerCentroidPixel = null;
-        if (activeTouchCount === 0) {
-          gestureStartedWithOneFinger = false;
-          hideGestureMessage();
-        } else if (activeTouchCount === 1) {
-          gestureStartedWithOneFinger = false;
-        }
-      };
-
-      const handleTouchMove = (e) => {
-        if (e.touches.length >= 2) {
-          activeTouchCount = e.touches.length;
-          gestureStartedWithOneFinger = false;
-          hideGestureMessage();
-          // Custom two-finger pan: pan by movement of centroid so both fingers move the map together.
-          const m = map.value;
-          if (m && lastTwoFingerCentroidPixel) {
-            const currentPixel = getCentroidPixel(e.touches);
-            const prevCoord = m.getCoordinateFromPixel(lastTwoFingerCentroidPixel);
-            const currCoord = m.getCoordinateFromPixel(currentPixel);
-            if (prevCoord && currCoord) {
-              const view = m.getView();
-              const center = view.getCenter();
-              view.setCenter([
-                center[0] + (prevCoord[0] - currCoord[0]),
-                center[1] + (prevCoord[1] - currCoord[1])
-              ]);
-            }
-            lastTwoFingerCentroidPixel = currentPixel;
-          } else if (m && e.touches.length === 2) {
-            lastTwoFingerCentroidPixel = getCentroidPixel(e.touches);
-          }
-        } else {
-          activeTouchCount = e.touches.length;
-          lastTwoFingerCentroidPixel = null;
-          if (activeTouchCount === 1 && gestureStartedWithOneFinger) showGestureMessage();
-        }
-      };
-
-      container.addEventListener('touchstart', handleTouchStart, {passive: true});
-      container.addEventListener('touchmove', handleTouchMove, {passive: true});
-      container.addEventListener('touchend', handleTouchEnd, {passive: true});
-      container.addEventListener('touchcancel', handleTouchEnd, {passive: true});
 
       // Helper for mobile toast to scroll down
       window._placesScrollTo = (id) => {
@@ -529,20 +502,13 @@ export default {
         }
       };
 
-      // Return cleanup function for watcher/hooks if needed, or just cleanup in onBeforeUnmount
-      onBeforeUnmount(() => {
-        container.removeEventListener('touchstart', handleTouchStart);
-        container.removeEventListener('touchmove', handleTouchMove);
-        container.removeEventListener('touchend', handleTouchEnd);
-        container.removeEventListener('touchcancel', handleTouchEnd);
-        delete window._placesScrollTo;
-      });
+      updateMapFeatures({ fit: true });
 
       // Click handler
       map.value.on('click', (e) => {
-        const feature = map.value.forEachFeatureAtPixel(e.pixel, feature => feature, {hitTolerance: 10});
-        if (feature) {
-          const placeId = feature.get('database_id');
+        const feature = mapController.value?.queryFirstPointAt(e.point);
+        if (feature?.properties?.database_id) {
+          const placeId = Number(feature.properties.database_id);
           const place = places.value.find(p => p.properties.database_id === placeId);
           if (place) {
             // Clear existing toasts before showing a new one
@@ -574,6 +540,7 @@ export default {
           // Determine coords for new place?
           // For now, maybe just deselect
           selectedPlace.value = null;
+          updateMapFeatures();
         }
       });
 
@@ -588,56 +555,49 @@ export default {
 
       // Pointer cursor when hovering over a point
       map.value.on('pointermove', (e) => {
-        const hit = map.value.hasFeatureAtPixel(e.pixel);
+        const hit = map.value.queryRenderedFeatures(e.point, { layers: [PLACE_LAYER_ID] }).length > 0;
         mapContainer.value.style.cursor = hit ? 'pointer' : '';
       });
     };
 
-    const updateMapFeatures = () => {
-      if (!vectorSource.value || !window.gv_core.ol) return;
-
-      vectorSource.value.clear();
-
-      if (places.value.length === 0) return;
-
-      const features = places.value.map(place => {
-        const coords = place.geometry.coordinates; // [lon, lat, elev]
-        const feature = new window.gv_core.ol.Feature({
-          geometry: new window.gv_core.ol.geom.Point(window.gv_core.ol.proj.fromLonLat([coords[0], coords[1]])),
-          database_id: place.properties.database_id
-        });
-        return feature;
-      });
-
-      vectorSource.value.addFeatures(features);
-
-      // Fit view to extent
-      if (features.length > 0) {
-        const extent = vectorSource.value.getExtent();
-        map.value.getView().fit(extent, {padding: [100, 100, 140, 140], maxZoom: 15, duration: 0});
-      }
-    };
-
     const resetMapToDefaultExtent = () => {
-      if (!map.value || !window.gv_core.ol) return;
+      if (!map.value || !mapController.value) return;
       selectedPlace.value = null;
       hoveredPlaceId.value = null;
-      const view = map.value.getView();
-      if (places.value.length > 0 && vectorSource.value) {
-        const extent = vectorSource.value.getExtent();
-        view.fit(extent, {
-          padding: [100, 100, 140, 140],
-          maxZoom: 15,
-          duration: 0
+      const features = getMapFeatureCollection().features;
+      if (features.length > 0) {
+        mapController.value.fitToPointFeatures(features, {
+          focusZoom: FOCUS_ZOOM,
+          fitPadding: {top: 100, right: 100, bottom: 140, left: 140},
+          fitMaxZoom: 15
         });
-        view.animate({rotation: 0, duration: 0});
+        map.value.setBearing(0);
       } else {
-        view.animate({
-          center: window.gv_core.ol.proj.fromLonLat([0, 0]),
-          zoom: 2,
+        map.value.easeTo({
+          center: INITIAL_CENTER,
+          zoom: INITIAL_ZOOM,
+          bearing: 0,
           duration: 0,
-          rotation: 0
         });
+      }
+      updateMapFeatures();
+    };
+
+    const openLayerPickerModal = () => {
+      showLayerPickerModal.value = true;
+    };
+
+    const closeLayerPickerModal = () => {
+      showLayerPickerModal.value = false;
+    };
+
+    const applyBaseSourceSelection = async () => {
+      if (!mapController.value) return;
+      try {
+        selectedBaseSourceId.value = await mapController.value.setBaseSource(selectedBaseSourceId.value);
+        updateMapFeatures();
+      } catch {
+        selectedBaseSourceId.value = mapController.value.getCurrentBaseSourceId();
       }
     };
 
@@ -663,9 +623,7 @@ export default {
       selectedPlace.value = place;
 
       // Force an immediate style update so the marker turns yellow before animation
-      if (vectorLayer.value) {
-        vectorLayer.value.changed();
-      }
+      updateMapFeatures();
 
       const scroll = options.scroll ?? true;
       const zoom = options.zoom ?? true;
@@ -676,10 +634,9 @@ export default {
 
       if (zoom && map.value && place.geometry.coordinates) {
         programmaticMapMove.value = true;
-        const coords = window.gv_core.ol.proj.fromLonLat([place.geometry.coordinates[0], place.geometry.coordinates[1]]);
-        map.value.getView().animate({
-          center: coords,
-          zoom: 12,
+        map.value.easeTo({
+          center: [place.geometry.coordinates[0], place.geometry.coordinates[1]],
+          zoom: FOCUS_ZOOM,
           duration: 0
         });
       }
@@ -911,36 +868,6 @@ export default {
       hoveredPlaceId.value = null;
     };
 
-    const showGestureMessage = () => {
-      if (gestureOverlayVisible.value) return; // Already showing
-
-      showGestureOverlay.value = true;
-      // Small delay to allow v-if render, then fade in
-      requestAnimationFrame(() => {
-        gestureOverlayVisible.value = true;
-      });
-
-      if (gestureOverlayTimeout) clearTimeout(gestureOverlayTimeout);
-      gestureOverlayTimeout = setTimeout(() => {
-        hideGestureMessage();
-      }, 2000);
-    };
-
-    const hideGestureMessage = () => {
-      if (!gestureOverlayVisible.value) return;
-
-      gestureOverlayVisible.value = false;
-      if (gestureOverlayTimeout) {
-        clearTimeout(gestureOverlayTimeout);
-        gestureOverlayTimeout = null;
-      }
-
-      // Wait for fade out to finish before removing from DOM
-      setTimeout(() => {
-        if (!gestureOverlayVisible.value) showGestureOverlay.value = false;
-      }, 300);
-    };
-
     const onDescriptionModalKeydown = (e) => {
       if (e.key === 'Escape') {
         if (descriptionModalEditing.value) {
@@ -962,9 +889,16 @@ export default {
 
     onMounted(() => {
       initMap();
+      fetchPlaces();
     });
 
     onBeforeUnmount(() => {
+      delete window._placesScrollTo;
+      if (mapController.value) {
+        mapController.value.destroy();
+        mapController.value = null;
+        map.value = null;
+      }
       if (descriptionModalPlace.value) {
         document.removeEventListener('keydown', onDescriptionModalKeydown);
       }
@@ -982,6 +916,9 @@ export default {
       filteredPlaces,
       selectedPlace,
       mapContainer,
+      showLayerPickerModal,
+      baseSourceOptions,
+      selectedBaseSourceId,
 
       descriptionModalPlace,
       descriptionModalEditing,
@@ -1005,6 +942,9 @@ export default {
       cancelDescriptionEdit,
       saveDescriptionEdit,
       resetMapToDefaultExtent,
+      openLayerPickerModal,
+      closeLayerPickerModal,
+      applyBaseSourceSelection,
       formatCoords,
       placeLocationLabel,
       copyCoordinates,
@@ -1012,9 +952,6 @@ export default {
       googleMapsUrl,
       googleMapsIconUrl,
       googleMapsIconBwUrl,
-
-      showGestureOverlay,
-      gestureOverlayVisible
     };
   }
 }

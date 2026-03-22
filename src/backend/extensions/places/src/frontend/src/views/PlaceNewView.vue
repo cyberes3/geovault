@@ -1,8 +1,10 @@
 <template>
-  <div class="h-full flex flex-col bg-gray-50">
-    <!-- Map: 50% on mobile; flex-1 on desktop so form can fit-content -->
-    <div class="h-1/2 min-h-[200px] sm:h-auto sm:flex-1 sm:min-h-0 flex-shrink-0 relative border-b border-gray-300">
-      <div ref="mapContainer" class="absolute inset-0 bg-gray-100 touch-pan-y"></div>
+  <div class="flex flex-col flex-1 min-h-0 h-full w-full overflow-y-auto sm:overflow-hidden bg-gray-50">
+    <!-- Single-page scroll layout: map has fixed viewport height and form flows below it. -->
+    <div
+        class="h-[42vh] min-h-[240px] max-h-[440px] sm:h-auto sm:max-h-none sm:min-h-[320px] sm:flex-1 sm:min-h-0 relative border-b border-gray-300"
+    >
+      <div ref="mapContainer" class="absolute inset-0 z-0 h-full w-full min-h-0 bg-gray-100 touch-pan-y"></div>
 
       <!-- Map loading overlay (edit place) -->
       <div
@@ -55,12 +57,32 @@
           </div>
         </div>
       </div>
+
+      <div
+          class="absolute z-10 bottom-4 left-4 flex flex-col bg-white border border-gray-200 rounded shadow-md overflow-hidden">
+        <button
+            type="button"
+            class="p-2 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
+            title="Choose Basemap"
+            @click="openLayerPickerModal"
+        >
+          <Square3Stack3DIcon class="w-5 h-5"/>
+        </button>
+        <button
+            type="button"
+            class="p-2 border-t border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors duration-200 focus:outline-none"
+            title="Go to Home Extent"
+            @click="resetMapViewport"
+        >
+          <HomeIcon class="w-5 h-5"/>
+        </button>
+      </div>
     </div>
 
-    <!-- Form: 50% scrollable on mobile; fit-content on desktop -->
+    <!-- Form: natural flow; page scrolls as one container -->
     <div
-        class="h-1/2 min-h-0 sm:h-auto sm:flex-shrink-0 flex flex-col bg-white border-t border-gray-300 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
-      <div class="flex-1 min-h-0 sm:flex-none sm:min-h-0 overflow-y-auto overscroll-contain">
+        class="flex flex-col bg-white border-t border-gray-300 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] sm:flex-shrink-0 sm:z-20">
+      <div>
         <div class="max-w-4xl mx-auto p-4 sm:p-6 space-y-4">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -146,18 +168,55 @@
         </div>
       </div>
     </div>
+
+    <BaseModal
+        :is-open="showLayerPickerModal"
+        title="Map Layer"
+        max-width="md"
+        fit-content-height
+        :full-screen-mobile="false"
+        @close="closeLayerPickerModal"
+    >
+      <div class="p-4 sm:p-6">
+        <label for="place-edit-map-layer" class="block text-sm font-medium text-gray-700 mb-2">Basemap</label>
+        <select
+            id="place-edit-map-layer"
+            v-model="selectedBaseSourceId"
+            class="select-custom w-full px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            :disabled="baseSourceOptions.length === 0"
+            @change="applyBaseSourceSelection"
+        >
+          <option v-for="option in baseSourceOptions" :key="option.id" :value="option.id">
+            {{ option.name }}
+          </option>
+        </select>
+      </div>
+      <template #footer>
+        <BaseButton type="button" variant="white" @click="closeLayerPickerModal">
+          Close
+        </BaseButton>
+      </template>
+    </BaseModal>
   </div>
 </template>
 
 <script>
 import {computed, inject, onBeforeUnmount, onDeactivated, onMounted, ref, watch} from 'vue';
 import {onBeforeRouteLeave, useRoute} from 'vue-router';
-import {ArrowPathIcon, MagnifyingGlassIcon, MapPinIcon} from '@heroicons/vue/24/outline';
+import {ArrowPathIcon, HomeIcon, MagnifyingGlassIcon, MapPinIcon, Square3Stack3DIcon} from '@heroicons/vue/24/outline';
+import {createPlacesMap} from '@/utils/placesMaplibre.js';
+import {getDefaultMapSourceIdFromStore} from '@/utils/placesMapSettings.js';
+const PLACE_EDIT_SOURCE_ID = 'place-edit-source';
+const PLACE_EDIT_LAYER_ID = 'place-edit-layer';
+const INITIAL_CENTER = [0, 0];
+const INITIAL_ZOOM = 2;
 
 export default {
   name: 'PlaceNewView',
   components: {
+    Square3Stack3DIcon,
     ArrowPathIcon,
+    HomeIcon,
     MagnifyingGlassIcon,
     MapPinIcon
   },
@@ -174,7 +233,10 @@ export default {
 
     const mapContainer = ref(null);
     const map = ref(null);
-    const vectorSource = ref(null);
+    const mapController = ref(null);
+    const showLayerPickerModal = ref(false);
+    const baseSourceOptions = ref([]);
+    const selectedBaseSourceId = ref('osm');
 
     const editId = computed(() => {
       const q = route.query.edit;
@@ -266,8 +328,8 @@ export default {
             setCoords(lat, lon, placeName);
             updateMarkerFromCoords(true);
             if (map.value) {
-              map.value.getView().animate({
-                center: window.gv_core.ol.proj.fromLonLat([lon, lat]),
+              map.value.easeTo({
+                center: [lon, lat],
                 duration: 300
               });
             }
@@ -334,56 +396,62 @@ export default {
     }
 
     function updateMarkerFromCoords(panMap = false) {
-      if (!vectorSource.value || !window.gv_core.ol) return;
+      if (!map.value || !mapController.value) return;
       const lat = latitude.value;
       const lon = longitude.value;
       const valid = lat != null && lon != null && isFinite(lat) && isFinite(lon);
-      vectorSource.value.clear();
       if (valid) {
-        const feature = new window.gv_core.ol.Feature({
-          geometry: new window.gv_core.ol.geom.Point(window.gv_core.ol.proj.fromLonLat([lon, lat]))
-        });
-        vectorSource.value.addFeatures([feature]);
+        mapController.value.setPointFeatures([{
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: [lon, lat]
+          },
+          properties: {
+            is_highlighted: 0
+          }
+        }]);
         if (panMap && map.value) {
-          map.value.getView().animate({
-            center: window.gv_core.ol.proj.fromLonLat([lon, lat]),
+          map.value.easeTo({
+            center: [lon, lat],
             duration: 300
           });
         }
+      } else {
+        mapController.value.setPointFeatures([]);
       }
     }
 
 
-    function initMap() {
-      if (!window.gv_core.ol || !mapContainer.value) return;
-      vectorSource.value = new window.gv_core.ol.source.Vector();
-      const vectorLayer = new window.gv_core.ol.layer.Vector({
-        source: vectorSource.value,
-        style: new window.gv_core.ol.style.Style({
-          image: new window.gv_core.ol.style.Circle({
-            radius: 7,
-            fill: new window.gv_core.ol.style.Fill({color: '#2563EB'}),
-            stroke: new window.gv_core.ol.style.Stroke({color: 'white', width: 2})
-          })
-        })
-      });
-      map.value = new window.gv_core.ol.Map({
-        target: mapContainer.value,
-        controls: [],
-        layers: [
-          new window.gv_core.ol.layer.Tile({
-            source: new window.gv_core.ol.source.OSM({attributions: []})
-          }),
-          vectorLayer
-        ],
-        view: new window.gv_core.ol.View({
-          center: window.gv_core.ol.proj.fromLonLat([0, 0]),
-          zoom: 2
-        })
-      });
+    async function initMap() {
+      if (mapController.value) {
+        mapController.value.destroy();
+        mapController.value = null;
+      }
+      if (!mapContainer.value) {
+        return;
+      }
+      try {
+        mapController.value = await createPlacesMap({
+          container: mapContainer.value,
+          mode: 'edit',
+          sourceId: PLACE_EDIT_SOURCE_ID,
+          layerId: PLACE_EDIT_LAYER_ID,
+          preferredSourceId: getDefaultMapSourceIdFromStore(),
+          minZoom: 1,
+          maxZoom: 18
+        });
+        map.value = mapController.value.map;
+        baseSourceOptions.value = mapController.value.getBaseSourceOptions();
+        selectedBaseSourceId.value = mapController.value.getCurrentBaseSourceId();
+      } catch {
+        return;
+      }
+      updateMarkerFromCoords();
+
       map.value.on('click', (e) => {
-        const lonLat = window.gv_core.ol.proj.toLonLat(e.coordinate);
-        setCoords(lonLat[1], lonLat[0]);
+        const {lng, lat} = e.lngLat;
+        setCoords(lat, lng);
       });
     }
 
@@ -403,8 +471,8 @@ export default {
             setCoords(coords[1], coords[0]);
           }
           if (map.value) {
-            map.value.getView().animate({
-              center: window.gv_core.ol.proj.fromLonLat([coords[0], coords[1]]),
+            map.value.easeTo({
+              center: [coords[0], coords[1]],
               zoom: 12,
               duration: 500
             });
@@ -468,8 +536,8 @@ export default {
         const [lon, lat] = coords;
         setCoords(lat, lon);
         if (map.value) {
-          map.value.getView().animate({
-            center: window.gv_core.ol.proj.fromLonLat([lon, lat]),
+          map.value.easeTo({
+            center: [lon, lat],
             zoom: 12,
             duration: 500
           });
@@ -504,8 +572,8 @@ export default {
         const coords = await getPos();
         setCoords(coords.latitude, coords.longitude);
         if (map.value) {
-          map.value.getView().animate({
-            center: window.gv_core.ol.proj.fromLonLat([coords.longitude, coords.latitude]),
+          map.value.easeTo({
+            center: [coords.longitude, coords.latitude],
             zoom: 14,
             duration: 500
           });
@@ -585,6 +653,46 @@ export default {
       if (router) router.navigate('');
     }
 
+    function resetMapViewport() {
+      if (!map.value) return;
+      const lat = latitude.value;
+      const lon = longitude.value;
+      const valid = lat != null && lon != null && isFinite(lat) && isFinite(lon);
+      if (valid) {
+        map.value.easeTo({
+          center: [lon, lat],
+          zoom: 12,
+          bearing: 0,
+          duration: 0
+        });
+        return;
+      }
+      map.value.easeTo({
+        center: INITIAL_CENTER,
+        zoom: INITIAL_ZOOM,
+        bearing: 0,
+        duration: 0
+      });
+    }
+
+    function openLayerPickerModal() {
+      showLayerPickerModal.value = true;
+    }
+
+    function closeLayerPickerModal() {
+      showLayerPickerModal.value = false;
+    }
+
+    async function applyBaseSourceSelection() {
+      if (!mapController.value) return;
+      try {
+        selectedBaseSourceId.value = await mapController.value.setBaseSource(selectedBaseSourceId.value);
+        updateMarkerFromCoords();
+      } catch {
+        selectedBaseSourceId.value = mapController.value.getCurrentBaseSourceId();
+      }
+    }
+
     function handleBeforeUnload(e) {
       if (isDirty.value) {
         e.preventDefault();
@@ -633,13 +741,14 @@ export default {
         addressAbortController.value.abort();
         addressAbortController.value = null;
       }
-      if (vectorSource.value) {
-        vectorSource.value.clear();
-      }
       if (map.value) {
-        const view = map.value.getView();
-        view.setCenter(window.gv_core.ol.proj.fromLonLat([0, 0]));
-        view.setZoom(2);
+        updateMarkerFromCoords();
+        map.value.easeTo({
+          center: INITIAL_CENTER,
+          zoom: INITIAL_ZOOM,
+          bearing: 0,
+          duration: 0
+        });
       }
     }
 
@@ -667,6 +776,11 @@ export default {
         addressAbortController.value.abort();
         addressAbortController.value = null;
       }
+      if (mapController.value) {
+        mapController.value.destroy();
+        mapController.value = null;
+        map.value = null;
+      }
     });
 
     onDeactivated(() => {
@@ -684,6 +798,9 @@ export default {
 
     return {
       mapContainer,
+      showLayerPickerModal,
+      baseSourceOptions,
+      selectedBaseSourceId,
       editId,
       name,
       description,
@@ -708,7 +825,11 @@ export default {
       validateCoordinates,
       useCurrentLocation,
       savePlace,
-      goToList
+      goToList,
+      resetMapViewport,
+      openLayerPickerModal,
+      closeLayerPickerModal,
+      applyBaseSourceSelection
     };
   }
 };
