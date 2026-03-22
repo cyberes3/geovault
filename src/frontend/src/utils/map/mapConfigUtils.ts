@@ -53,24 +53,30 @@ function getStateExtentConfig(location: any): MapConfig {
 }
 
 /**
- * Get initial map configuration based on user location
- * @param userLocation - User location data
- * @returns Map configuration with center and zoom
+ * First paint: origin (0,0) at low zoom. MapPage then recenters from geolocation on the main map,
+ * or mapshare loads data and fits features to the viewport.
  */
-export function getInitialMapConfig(userLocation: any): MapConfig {
-    if (userLocation && userLocation.longitude && userLocation.latitude) {
-        return getStateExtentConfig(userLocation);
-    }
+export function getInitialMapConfig(_userLocation?: unknown): MapConfig {
+    return {
+        center: [0, 0],
+        zoom: 2
+    };
+}
 
-    // Default to Colorado state extent (geolocation failure fallback)
-    return getStateExtentConfig({
-        state: 'Colorado',
-        state_code: 'CO',
-        country: 'United States',
-        country_code: 'US',
-        latitude: 39.0, // Center of Colorado
-        longitude: -105.5 // Center of Colorado
-    });
+/**
+ * After IP / geolocation resolves, center and zoom for the authenticated main map (not used on mapshare).
+ */
+export function getMapRecenterFromUserLocation(userLocation: any): MapConfig | null {
+    if (
+        userLocation == null ||
+        userLocation.longitude == null ||
+        userLocation.latitude == null ||
+        !Number.isFinite(Number(userLocation.longitude)) ||
+        !Number.isFinite(Number(userLocation.latitude))
+    ) {
+        return null;
+    }
+    return getStateExtentConfig(userLocation);
 }
 
 /**

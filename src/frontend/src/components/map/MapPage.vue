@@ -208,7 +208,11 @@ import {markRaw, defineAsyncComponent} from 'vue'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import maplibregl from 'maplibre-gl'
 import { LabelMarkerManager } from '@/utils/map/maplibre/labelMarkers.js'
-import {getInitialMapConfig, getLocationDisplayName} from '@/utils/map/mapConfigUtils'
+import {
+  getInitialMapConfig as getWorldInitialMapConfig,
+  getLocationDisplayName,
+  getMapRecenterFromUserLocation
+} from '@/utils/map/mapConfigUtils'
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from '@/utils/tagUtils.js'
 import {getInverseColor} from '@/utils/map/colorUtils'
 import {getCookie} from '@/assets/js/auth.js'
@@ -317,8 +321,12 @@ export default {
         geometry_type: f.geometry_type || null
       }))
     },
+    /** Any public mapshare URL — skip IP geolocation; camera comes from loaded share features. */
+    isMapshareRoute() {
+      return this.$route.path === '/mapshare'
+    },
     isPublicShareMode() {
-      return this.$route.path === '/mapshare' && !!this.$route.query.id
+      return this.isMapshareRoute && !!this.$route.query.id
     },
     shareId() {
       return this.$route.query.id || null
@@ -581,6 +589,10 @@ export default {
       hasInitialZoomed: false, // Track if we've done the initial zoom
       /** Share id for which we already ran a tight fit to loaded geometries after first bbox response (mapshare tag/collection). */
       publicShareRefinedFitShareId: null,
+      /**
+       * One-shot: main map, no URL-driven camera, geolocation unavailable — fit to first default bbox features.
+       */
+      pendingExtentFitWithoutGeolocation: false
     }
   },
   methods: {
@@ -954,7 +966,34 @@ export default {
       return getLocationDisplayName(this.userLocation)
     },
     getInitialMapConfig() {
-      return getInitialMapConfig(this.userLocation)
+      return getWorldInitialMapConfig()
+    },
+    /**
+     * Step 2 of boot: move from world (0,0) to geolocation-based view on the main map only.
+     * `/mapshare` skips this (no location fetch); camera is set by fitting loaded share features.
+     */
+    applyInitialUserLocationRecenter() {
+      if (this.isMapshareRoute || !this.map) {
+        return
+      }
+      const cfg = getMapRecenterFromUserLocation(this.userLocation)
+      if (!cfg) {
+        return
+      }
+      this.map.jumpTo({
+        center: cfg.center,
+        zoom: cfg.zoom
+      })
+    },
+    /**
+     * When geolocation is missing (local dev, API failure), first default bbox load will fit the map to returned features.
+     * @param {boolean} skipUrlDrivenCamera - true if collection / featureId / tag query owns the camera
+     */
+    syncPendingExtentFitWithoutGeolocation(skipUrlDrivenCamera) {
+      this.pendingExtentFitWithoutGeolocation =
+        !this.isMapshareRoute &&
+        !skipUrlDrivenCamera &&
+        !getMapRecenterFromUserLocation(this.userLocation)
     },
     getBoundingBoxKey(bounds, zoom) {
       return getBoundingBoxKey(bounds, zoom)
@@ -974,7 +1013,7 @@ export default {
         throw new Error('Map container is not available or is not an HTMLElement')
       }
 
-      // Determine initial map center and zoom based on user location
+      // World default (0,0); main map recenters after load when geolocation is available
       const mapConfig = this.getInitialMapConfig()
 
       // Create map instance with controls and event handlers
@@ -1395,7 +1434,24 @@ export default {
           await this.zoomToTaggedFeatures(usable, { padding: 28, duration: 0 })
         }
       }
-      
+
+      if (
+        this.pendingExtentFitWithoutGeolocation &&
+        context.type === 'default' &&
+        !context.isPublicShare
+      ) {
+        this.pendingExtentFitWithoutGeolocation = false
+        const rawFeatures = data.data.features || []
+        const usable = rawFeatures.filter(
+          (f) => !f.properties?._isLabelPoint && !f.properties?._isSmallFeatureReplacement
+        )
+        if (usable.length > 0) {
+          await this.$nextTick()
+          await this.waitForMapEvent('idle')
+          await this.zoomToTaggedFeatures(usable, { padding: 50, duration: 0 })
+        }
+      }
+
       // Update features in extent list after data is loaded
       this.debouncedUpdateFeaturesInExtent()
     },
@@ -4396,6 +4452,19 @@ export default {
           this.addHillshadeIfNeeded()
         }
 
+        if (!this.savedMapCenter) {
+          const skipUrlDrivenCamera =
+            !!this.collectionId ||
+            !!this.$route.query.featureId ||
+            !!this.$route.query.tag
+          if (!skipUrlDrivenCamera) {
+            this.applyInitialUserLocationRecenter()
+          }
+          this.syncPendingExtentFitWithoutGeolocation(skipUrlDrivenCamera)
+        } else {
+          this.pendingExtentFitWithoutGeolocation = false
+        }
+
         // Reload data
         if (this.collectionId) {
           await this.handleCollectionFilter(this.collectionId)
@@ -4453,8 +4522,8 @@ export default {
     // Parallelize all independent API calls for faster initialization
     const initPromises = [
       this.fetchTileSources(),
-      // getUserLocation only for authenticated, non-public-share users
-      (!this.isPublicShareMode ? this.getUserLocation() : Promise.resolve())
+      // Skip IP geolocation on mapshare; viewport is set from shared features
+      (!this.isMapshareRoute ? this.getUserLocation() : Promise.resolve())
     ]
     
     // Fetch available tags for child components (only for authenticated users)
@@ -4524,6 +4593,17 @@ export default {
         }
       })
     }
+
+    // Main map: recenter from geolocation before loading default viewport data.
+    // Skip when URL drives the camera (collection / feature / tag).
+    const skipUrlDrivenCamera =
+      !!this.collectionId ||
+      !!this.$route.query.featureId ||
+      !!this.$route.query.tag
+    if (!skipUrlDrivenCamera) {
+      this.applyInitialUserLocationRecenter()
+    }
+    this.syncPendingExtentFitWithoutGeolocation(skipUrlDrivenCamera)
 
     // Check for collection query parameter
     if (this.collectionId) {
@@ -4617,6 +4697,11 @@ export default {
         this.handleUrlTag()
       } else {
         // Normal view - reload bbox data
+        const skipUrlDrivenCamera =
+          !!this.collectionId ||
+          !!this.$route.query.featureId ||
+          !!this.$route.query.tag
+        this.syncPendingExtentFitWithoutGeolocation(skipUrlDrivenCamera)
         this.loadDataForCurrentView().then(() => {
           this.updateFeaturesInExtent()
           // Resize map after data loads (wait for idle since data is loading)

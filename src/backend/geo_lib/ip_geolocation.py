@@ -47,10 +47,9 @@ class IPGeolocationService:
         """
         assert self.reader
 
-        # Handle localhost and private IP addresses
+        # Local / private IPs are not in GeoIP; do not invent a map center (frontend fits to data).
         if self._is_private_ip(ip_address):
-            # Private IP detected, returning default location (normal operation)
-            return self._get_default_location()
+            return None
 
         try:
             response = self.reader.city(ip_address)
@@ -108,24 +107,6 @@ class IPGeolocationService:
                 pass
 
         return False
-
-    def _get_default_location(self) -> Dict[str, Any]:
-        """
-        Get default location for private/local IP addresses and geolocation failures.
-        
-        Returns:
-            Dictionary with default location (Denver, Colorado)
-        """
-        return {
-            'ip': '127.0.0.1',
-            'country': 'United States',
-            'country_code': 'US',
-            'state': 'Colorado',
-            'state_code': 'CO',
-            'city': 'Denver',
-            'latitude': 39.7392,
-            'longitude': -104.9903,
-        }
 
     def get_client_ip(self, request) -> str:
         """
