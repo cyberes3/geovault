@@ -8,14 +8,14 @@ Always use top-level imports in Python, not lazy/local/function level!
 
 The backend venv is at src/backend/venv
 
-Run tests with src/tests/run-tests.sh. We have like 2000+ tests so do not blindly run this script. Instead, run specific tests. More instructions available at src/tests/README.md. Read this before running any tests.
+Run tests with src/tests/run-tests.sh. We have like 2000+ tests so do not blindly run this script. Instead, run specific tests. More instructions available at src/tests/README.md.
 YES: `./run-tests.sh test_api/test_app_releases.py` NO: `src/tests/run-tests.sh src/tests/test_api/test_app_releases.py`
 
 Do not re-export modules or use __all__. Instead, do direct imports.
 
 Don't pile Django routes in the base views.py file. Instead, create new files to organize them in a manageable way.
 
-You do not need custom try/catch logic for the sole purpose of logging errors. Our Django site has built-in error logging.
+You do not need custom try/catch logic for the sole purpose of logging errors. Our Django site has built-in error logging and will automatically generate 500 code responses.
 All try/catch logging needs to explicitily print the full traceback. DO NOT swallow the exception and hide it!!
 
 DO NOT MANUALLY CREATE OR EDIT DJANGO MIGRATIONS!!!!! Use `manage.py` to generate them.
