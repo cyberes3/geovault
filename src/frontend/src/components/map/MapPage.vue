@@ -592,7 +592,9 @@ export default {
       /**
        * One-shot: main map, no URL-driven camera, geolocation unavailable — fit to first default bbox features.
        */
-      pendingExtentFitWithoutGeolocation: false
+      pendingExtentFitWithoutGeolocation: false,
+      /** One-shot: after empty first bbox, fetch server extent hint and recenter (main map only). */
+      mainMapExtentHintRequested: false
     }
   },
   methods: {
@@ -995,6 +997,46 @@ export default {
         !skipUrlDrivenCamera &&
         !getMapRecenterFromUserLocation(this.userLocation)
     },
+    /**
+     * When the first default bbox load returns no features (e.g. viewport away from data, no geolocation),
+     * fetch aggregate main-map extent and fit once at low zoom; leaves pendingExtentFitWithoutGeolocation
+     * true so the follow-up load can zoomToTaggedFeatures when features appear.
+     */
+    async applyMainMapExtentHintFromServer() {
+      if (!this.map || this.isMapshareRoute) {
+        this.pendingExtentFitWithoutGeolocation = false
+        return
+      }
+      try {
+        const response = await fetch('/api/geojson/extent-hint/')
+        if (!response.ok) {
+          this.pendingExtentFitWithoutGeolocation = false
+          return
+        }
+        const payload = await response.json()
+        const bbox = payload.bbox
+        if (!Array.isArray(bbox) || bbox.length !== 4) {
+          this.pendingExtentFitWithoutGeolocation = false
+          return
+        }
+        const [w, s, e, n] = bbox.map(Number)
+        if (![w, s, e, n].every((v) => Number.isFinite(v))) {
+          this.pendingExtentFitWithoutGeolocation = false
+          return
+        }
+        await this.navigateAndRefresh(() => {
+          const bounds = new maplibregl.LngLatBounds([w, s], [e, n])
+          this.map.fitBounds(bounds, {
+            padding: 40,
+            duration: 0,
+            maxZoom: 2
+          })
+        })
+      } catch (error) {
+        console.error('applyMainMapExtentHintFromServer:', error, error.stack)
+        this.pendingExtentFitWithoutGeolocation = false
+      }
+    },
     getBoundingBoxKey(bounds, zoom) {
       return getBoundingBoxKey(bounds, zoom)
     },
@@ -1382,8 +1424,12 @@ export default {
      * @param {string} bboxKey - Bounding box cache key (unused for share_feature)
      */
     async handleLoadSuccess(data, context, bboxKey) {
-      if (!data.data || !data.data.features) {
+      if (!data.data) {
         return
+      }
+      // Empty geobuf responses may omit `features`; must still run extent-hint / cache paths.
+      if (!Array.isArray(data.data.features)) {
+        data.data.features = []
       }
 
       // Per-viewport cache; public feature shares load once without bbox URL semantics
@@ -1431,15 +1477,20 @@ export default {
         context.type === 'default' &&
         !context.isPublicShare
       ) {
-        this.pendingExtentFitWithoutGeolocation = false
         const rawFeatures = data.data.features || []
         const usable = rawFeatures.filter(
           (f) => !f.properties?._isLabelPoint && !f.properties?._isSmallFeatureReplacement
         )
         if (usable.length > 0) {
+          this.pendingExtentFitWithoutGeolocation = false
           await this.$nextTick()
           await this.waitForMapEvent('idle')
           await this.zoomToTaggedFeatures(usable, { padding: 50, duration: 0 })
+        } else if (!this.mainMapExtentHintRequested) {
+          this.mainMapExtentHintRequested = true
+          await this.applyMainMapExtentHintFromServer()
+        } else {
+          this.pendingExtentFitWithoutGeolocation = false
         }
       }
 
@@ -4393,6 +4444,7 @@ export default {
     async restoreMap() {
       if (this.map) return
 
+      this.mainMapExtentHintRequested = false
       this.isMapInitializing = true
       this.isDataLoading = true
 
@@ -4667,6 +4719,7 @@ export default {
 
     // Treat this as a fresh initial load
     this.isInitialLoad = true
+    this.mainMapExtentHintRequested = false
 
     // Remount sidebar to clear internal state
     this.sidebarKey += 1

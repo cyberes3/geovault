@@ -23,3 +23,8 @@ export interface MapConfig {
   center: [number, number];
   zoom: number;
 }
+
+/** GET /api/geojson/extent-hint/ */
+export interface DataExtentHintResponse {
+  bbox: [number, number, number, number] | null;
+}
