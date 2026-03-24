@@ -1,5 +1,8 @@
 package com.geovault.common.map
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class TileSource(
     val id: String,
     val name: String,
@@ -10,6 +13,7 @@ data class TileSource(
     val client_config: TileClientConfig
 )
 
+@Serializable
 data class TileClientConfig(
     val type: String? = null,
     val url: String? = null,
@@ -18,6 +22,7 @@ data class TileClientConfig(
     val attribution: String? = null
 )
 
+@Serializable
 data class TileSourceResponse(val sources: List<TileSource>)
 
 const val SOURCE_OSM = "osm"

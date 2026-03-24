@@ -1,6 +1,7 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    id 'kotlinx-serialization'
     id 'kotlin-parcelize'
 }
 
@@ -118,10 +119,14 @@ android {
             // Only throw error if we're actually building a release
             if (gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }) {
                 if (!storePwd) {
-                    throw new GradleException('RELEASE_STORE_PASSWORD not provided. Set it as a property or environment variable.')
+                    throw new IllegalStateException(
+                        'RELEASE_STORE_PASSWORD not provided. Set it as a property or environment variable.'
+                    )
                 }
                 if (!keyPwd) {
-                    throw new GradleException('RELEASE_KEY_PASSWORD not provided. Set it as a property or environment variable.')
+                    throw new IllegalStateException(
+                        'RELEASE_KEY_PASSWORD not provided. Set it as a property or environment variable.'
+                    )
                 }
             }
             
@@ -199,6 +204,7 @@ dependencies {
     implementation 'com.squareup.retrofit2:retrofit:2.9.0'
     implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
     implementation 'com.google.code.gson:gson:2.10.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1'
 
     // Coroutines
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
