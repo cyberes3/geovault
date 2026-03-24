@@ -2034,6 +2034,35 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(get_resp.status_code, 200)
         self.assertNotIn("recent_data_window", get_resp.json().get("settings", {}))
 
+    def test_post_settings_recent_data_window_all_clears_setting(self):
+        """POST settings with recent_data_window=all clears it (show all); reopen shows All."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "ClearRecentAll"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"recent_data_window": "1h"}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"name": "ClearRecentAll", "recent_data_window": "all"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertNotIn("recent_data_window", data["settings"])
+        with _patch_live_track_enabled():
+            get_resp = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/")
+        self.assertEqual(get_resp.status_code, 200)
+        self.assertNotIn("recent_data_window", get_resp.json().get("settings", {}))
+
     def test_post_settings_empty_name_rejected(self):
         """POST settings with empty name returns 400."""
         with _patch_live_track_enabled():

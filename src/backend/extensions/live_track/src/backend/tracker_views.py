@@ -405,6 +405,9 @@ def tracker_post_settings(request, tracker_id):
     if settings_dump:
         new_settings = {**(track.settings or {})}
         for k, v in settings_dump.items():
+            if k == "recent_data_window" and v == "all":
+                new_settings.pop(k, None)
+                continue
             if v is None:
                 new_settings.pop(k, None)
             else:

@@ -499,28 +499,28 @@ class EditTrackerFragment : Fragment() {
                         navHost()?.showSnackbar(getString(R.string.tracker_deleted))
                     }
 
-                    if (!state.errorMessage.isNullOrBlank() && pendingAction != null) {
+                    if (!state.errorMessage.isNullOrBlank()) {
                         val failedAction = pendingAction
-                        setAllInputsEnabled(true)
-                        pendingAction = null
-                        val failureMessageRes = when {
-                            failedAction == PendingAction.SAVE &&
-                                state.errorMessage == EditTrackerViewModel.SAVE_PERSISTENCE_MISMATCH -> {
-                                R.string.failed_to_save_tracker_persistence_mismatch
+                        if (failedAction != null) {
+                            setAllInputsEnabled(true)
+                            pendingAction = null
+                            val failureMessageRes = when {
+                                failedAction == PendingAction.SAVE &&
+                                    state.errorMessage == EditTrackerViewModel.SAVE_PERSISTENCE_MISMATCH -> {
+                                    R.string.failed_to_save_tracker_persistence_mismatch
+                                }
+                                else -> when (failedAction) {
+                                    PendingAction.SAVE -> R.string.failed_to_save_tracker
+                                    PendingAction.CLEAR_HISTORY -> R.string.failed_to_clear_history
+                                    PendingAction.DELETE -> R.string.failed_to_delete_tracker
+                                    PendingAction.ENABLE_WORLD_SHARE -> R.string.failed_to_enable_world_share
+                                    PendingAction.DISABLE_WORLD_SHARE -> R.string.failed_to_disable_world_share
+                                }
                             }
-                            else -> when (failedAction) {
-                                PendingAction.SAVE -> R.string.failed_to_save_tracker
-                                PendingAction.CLEAR_HISTORY -> R.string.failed_to_clear_history
-                                PendingAction.DELETE -> R.string.failed_to_delete_tracker
-                                PendingAction.ENABLE_WORLD_SHARE -> R.string.failed_to_enable_world_share
-                                PendingAction.DISABLE_WORLD_SHARE -> R.string.failed_to_disable_world_share
-                                null -> R.string.failed_to_load_tracker
-                            }
+                            navHost()?.showSnackbar(getString(failureMessageRes))
+                        } else {
+                            navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                         }
-                        navHost()?.showSnackbar(getString(failureMessageRes))
-                    }
-                    if (!state.errorMessage.isNullOrBlank() && pendingAction == null) {
-                        navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                     }
                     if (state.kmlBytes != null) {
                         try {

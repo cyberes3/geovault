@@ -144,6 +144,26 @@ class EditTrackerViewModelTest {
         assertEquals(EditTrackerViewModel.SAVE_PERSISTENCE_MISMATCH, vm.uiState.value.errorMessage)
     }
 
+    @Test
+    fun save_allHistory_sendsExplicitAllAndRoundTripsAsCleared() = runTest {
+        val initial = tracker(id = "t1").copy(settings = mapOf("recent_data_window" to "session"))
+        val repo = FakeTrackerManagementRepository(initialTrackers = listOf(initial))
+        val vm = EditTrackerViewModel(repo)
+        vm.bindInitialTracker(
+            tracker = initial,
+            defaultColorHex = "#1E88E5",
+            isDefaultTrack = false
+        )
+        vm.onRecentDataWindowChanged(RecentDataWindowOptions.VALUE_ALL)
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertEquals(EditTrackerPhase.Saved, vm.uiState.value.phase)
+        assertEquals(RecentDataWindowOptions.VALUE_ALL, repo.lastTrackerSettingsRequest?.recent_data_window)
+        assertEquals("", vm.uiState.value.form.recentDataWindow)
+    }
+
     private fun tracker(id: String): Tracker = Tracker(
         id = id,
         name = "Tracker",
@@ -213,7 +233,11 @@ class EditTrackerViewModelTest {
         private fun applyRequest(base: Tracker, request: TrackerSettingsRequest): Tracker {
             val settings = (base.settings ?: emptyMap()).toMutableMap()
             if (request.recent_data_window != null) {
-                settings["recent_data_window"] = request.recent_data_window
+                if (request.recent_data_window == RecentDataWindowOptions.VALUE_ALL) {
+                    settings.remove("recent_data_window")
+                } else {
+                    settings["recent_data_window"] = request.recent_data_window
+                }
             }
             if (request.hidden_in_list != null) {
                 settings["hidden_in_list"] = request.hidden_in_list

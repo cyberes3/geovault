@@ -161,7 +161,7 @@ class TrackSettingsRequest(BaseModel):
     name: Optional[str] = Field(default=None, description="Tracker name (stored in name column)")
     color: Optional[str] = Field(default=None, description="Display color (stored in settings)")
     recent_data_window: Optional[
-        Literal["1min", "1h", "1d", "1w", "1m", "session", "current_session"]
+        Literal["all", "1min", "1h", "1d", "1w", "1m", "session", "current_session"]
     ] = Field(
         default=None, description="Show only points within this window (stored in settings); null = show all"
     )

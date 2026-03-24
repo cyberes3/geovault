@@ -64,6 +64,7 @@ class ApiTrackerManagementRepository @Inject constructor(
     }
 
     override suspend fun loadTracker(trackerId: String): RepositoryResult<Tracker> {
+        Log.d(TAG, "Loading tracker details trackerId=$trackerId")
         val result = executeApiCall { api -> api.getTracker(trackerId).execute() }
         if (result is RepositoryResult.Success) {
             cacheMutex.withLock {
@@ -75,6 +76,12 @@ class ApiTrackerManagementRepository @Inject constructor(
                     .sortedBy { it.name.lowercase() }
             }
             stateStore.publishTracker(result.data)
+            Log.d(
+                TAG,
+                "Loaded tracker details trackerId=$trackerId recentDataWindow=${result.data.settings?.get("recent_data_window")} hiddenInList=${result.data.settings?.get("hidden_in_list")}"
+            )
+        } else if (result is RepositoryResult.Failure) {
+            Log.e(TAG, "Failed loading tracker details trackerId=$trackerId error=${result.error}")
         }
         return result
     }
@@ -99,6 +106,7 @@ class ApiTrackerManagementRepository @Inject constructor(
         request: TrackerSettingsRequest,
         publishToStore: Boolean
     ): RepositoryResult<Tracker> {
+        Log.d(TAG, "Updating tracker settings trackerId=$trackerId request=$request")
         val result = executeApiCall { api -> api.postTrackerSettings(trackerId, request).execute() }
         if (result is RepositoryResult.Success) {
             cacheMutex.withLock {
@@ -107,6 +115,12 @@ class ApiTrackerManagementRepository @Inject constructor(
                     ?.sortedBy { it.name.lowercase() }
             }
             stateStore.publishTracker(result.data, emitEvent = publishToStore)
+            Log.d(
+                TAG,
+                "Updated tracker settings trackerId=$trackerId persistedRecentDataWindow=${result.data.settings?.get("recent_data_window")} persistedHiddenInList=${result.data.settings?.get("hidden_in_list")}"
+            )
+        } else if (result is RepositoryResult.Failure) {
+            Log.e(TAG, "Failed updating tracker settings trackerId=$trackerId error=${result.error}")
         }
         return result
     }

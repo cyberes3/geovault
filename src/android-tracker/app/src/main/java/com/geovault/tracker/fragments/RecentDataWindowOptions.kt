@@ -4,7 +4,8 @@ import android.content.Context
 import com.geovault.tracker.R
 
 object RecentDataWindowOptions {
-    private val values = listOf("", "1min", "1h", "1d", "1w", "1m", "session", "current_session")
+    const val VALUE_ALL = "all"
+    private val values = listOf(VALUE_ALL, "1min", "1h", "1d", "1w", "1m", "session", "current_session")
 
     fun labels(context: Context): List<String> {
         return listOf(
@@ -34,7 +35,7 @@ object RecentDataWindowOptions {
 
     fun resolveValueFromInput(rawInput: String, labels: List<String>): String? {
         val normalized = rawInput.trim()
-        if (normalized.isEmpty()) return ""
+        if (normalized.isEmpty()) return VALUE_ALL
         val direct = values.firstOrNull { it == normalized }
         if (direct != null) return direct
         val labelIndex = labels.indexOf(normalized)

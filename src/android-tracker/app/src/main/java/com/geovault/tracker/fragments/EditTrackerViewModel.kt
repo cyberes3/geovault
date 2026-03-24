@@ -1,5 +1,6 @@
 package com.geovault.tracker.fragments
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.tracker.RepositoryResult
@@ -38,11 +39,20 @@ data class EditTrackerFormState(
     val hiddenInList: Boolean = false,
     val isOwner: Boolean = false
 ) {
+    private fun normalizedRecentDataWindowForRequest(): String? {
+        val normalized = recentDataWindow.trim()
+        return when {
+            normalized.isEmpty() -> RecentDataWindowOptions.VALUE_ALL
+            normalized == RecentDataWindowOptions.VALUE_ALL -> RecentDataWindowOptions.VALUE_ALL
+            else -> normalized
+        }
+    }
+
     fun toRequest(): TrackerSettingsRequest {
         return TrackerSettingsRequest(
             name = name.trim(),
             color = color.trim().ifBlank { null },
-            recent_data_window = recentDataWindow.ifBlank { null },
+            recent_data_window = normalizedRecentDataWindowForRequest(),
             visibility = if (isOwner) visibility else null,
             share_params_with_recipients = if (isOwner) shareParamsWithRecipients else null,
             share_params_with_world = if (isOwner) shareParamsWithWorld else null,
@@ -70,6 +80,7 @@ class EditTrackerViewModel @Inject constructor(
     private val trackerRepository: TrackerManagementRepository
 ) : ViewModel() {
     companion object {
+        private const val TAG = "EditTrackerViewModel"
         const val SAVE_PERSISTENCE_MISMATCH = "save_persistence_mismatch"
     }
 
@@ -89,10 +100,12 @@ class EditTrackerViewModel @Inject constructor(
     )
 
     private fun requestSnapshot(form: EditTrackerFormState): PersistedSnapshot {
+        val normalizedRecentDataWindow = form.recentDataWindow.trim()
         return PersistedSnapshot(
             name = form.name.trim(),
             color = form.color.trim().ifBlank { null },
-            recentDataWindow = form.recentDataWindow.trim().ifBlank { null },
+            recentDataWindow = normalizedRecentDataWindow
+                .takeIf { it.isNotBlank() && it != RecentDataWindowOptions.VALUE_ALL },
             hiddenInList = form.hiddenInList,
             visibility = if (form.isOwner) form.visibility else null,
             shareParamsWithRecipients = if (form.isOwner) form.shareParamsWithRecipients else null,
@@ -108,10 +121,12 @@ class EditTrackerViewModel @Inject constructor(
 
     private fun trackerSnapshot(tracker: Tracker): PersistedSnapshot {
         val settings = tracker.settings
+        val normalizedRecentDataWindow = (settings?.get("recent_data_window") as? String)?.trim()
         return PersistedSnapshot(
             name = tracker.name.trim(),
             color = tracker.color?.trim()?.ifBlank { null },
-            recentDataWindow = (settings?.get("recent_data_window") as? String)?.trim()?.ifBlank { null },
+            recentDataWindow = normalizedRecentDataWindow
+                .takeIf { !it.isNullOrBlank() && it != RecentDataWindowOptions.VALUE_ALL },
             hiddenInList = (settings?.get("hidden_in_list") as? Boolean) == true,
             visibility = if (tracker.isOwner()) tracker.visibility else null,
             shareParamsWithRecipients = if (tracker.isOwner()) tracker.share_params_with_recipients == true else null,
@@ -123,6 +138,34 @@ class EditTrackerViewModel @Inject constructor(
                 null
             }
         )
+    }
+
+    private fun snapshotDiff(expected: PersistedSnapshot, actual: PersistedSnapshot): String {
+        val differences = mutableListOf<String>()
+        if (expected.name != actual.name) differences += "name(expected=${expected.name}, actual=${actual.name})"
+        if (expected.color != actual.color) differences += "color(expected=${expected.color}, actual=${actual.color})"
+        if (expected.recentDataWindow != actual.recentDataWindow) {
+            differences += "recentDataWindow(expected=${expected.recentDataWindow}, actual=${actual.recentDataWindow})"
+        }
+        if (expected.hiddenInList != actual.hiddenInList) {
+            differences += "hiddenInList(expected=${expected.hiddenInList}, actual=${actual.hiddenInList})"
+        }
+        if (expected.visibility != actual.visibility) {
+            differences += "visibility(expected=${expected.visibility}, actual=${actual.visibility})"
+        }
+        if (expected.shareParamsWithRecipients != actual.shareParamsWithRecipients) {
+            differences += "shareParamsWithRecipients(expected=${expected.shareParamsWithRecipients}, actual=${actual.shareParamsWithRecipients})"
+        }
+        if (expected.shareParamsWithWorld != actual.shareParamsWithWorld) {
+            differences += "shareParamsWithWorld(expected=${expected.shareParamsWithWorld}, actual=${actual.shareParamsWithWorld})"
+        }
+        if (expected.allowGroupReshare != actual.allowGroupReshare) {
+            differences += "allowGroupReshare(expected=${expected.allowGroupReshare}, actual=${actual.allowGroupReshare})"
+        }
+        if (expected.sharedWithEmails != actual.sharedWithEmails) {
+            differences += "sharedWithEmails(expected=${expected.sharedWithEmails}, actual=${actual.sharedWithEmails})"
+        }
+        return if (differences.isEmpty()) "none" else differences.joinToString(separator = "; ")
     }
 
     private fun toFormState(
@@ -221,13 +264,23 @@ class EditTrackerViewModel @Inject constructor(
         val form = _uiState.value.form
         val request = form.toRequest()
         val requestedSnapshot = requestSnapshot(form)
+        Log.d(
+            TAG,
+            "Saving tracker settings trackerId=$trackerId requestSnapshot=$requestedSnapshot request=$request"
+        )
         _uiState.update { it.copy(phase = EditTrackerPhase.Saving, errorMessage = null) }
         viewModelScope.launch {
             when (val result = trackerRepository.updateTrackerSettings(trackerId, request, publishToStore = false)) {
                 is RepositoryResult.Success -> {
+                    Log.d(TAG, "Tracker settings API save succeeded trackerId=$trackerId")
                     when (val persisted = trackerRepository.loadTracker(trackerId)) {
                         is RepositoryResult.Success -> {
-                            if (trackerSnapshot(persisted.data) != requestedSnapshot) {
+                            val persistedSnapshot = trackerSnapshot(persisted.data)
+                            if (persistedSnapshot != requestedSnapshot) {
+                                Log.e(
+                                    TAG,
+                                    "Save persistence mismatch trackerId=$trackerId diff=${snapshotDiff(requestedSnapshot, persistedSnapshot)} requested=$requestedSnapshot persisted=$persistedSnapshot"
+                                )
                                 _uiState.update {
                                     it.copy(
                                         phase = EditTrackerPhase.Ready,
@@ -252,6 +305,10 @@ class EditTrackerViewModel @Inject constructor(
                             }
                         }
                         is RepositoryResult.Failure -> {
+                            Log.e(
+                                TAG,
+                                "Tracker settings reload failed after save trackerId=$trackerId error=${persisted.error}"
+                            )
                             _uiState.update {
                                 it.copy(
                                     phase = EditTrackerPhase.Ready,
@@ -262,6 +319,10 @@ class EditTrackerViewModel @Inject constructor(
                     }
                 }
                 is RepositoryResult.Failure -> {
+                    Log.e(
+                        TAG,
+                        "Tracker settings API save failed trackerId=$trackerId error=${result.error}"
+                    )
                     _uiState.update { it.copy(phase = EditTrackerPhase.Ready, errorMessage = result.error.toString()) }
                 }
             }
