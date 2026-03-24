@@ -22,6 +22,8 @@ import com.geovault.tracker.lastPosition
 import com.geovault.tracker.lastUpdateMs
 import com.geovault.tracker.pipeline.TrackPointEventStream
 import com.geovault.tracker.pipeline.TrackPointSourceResolver
+import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -48,6 +50,7 @@ class TrackerParamsFragment : Fragment() {
     private lateinit var paramsGrid: RecyclerView
     private lateinit var paramsWaitingCard: View
     private lateinit var paramsWaitingMessage: TextView
+    private lateinit var paramsTrackingModeText: TextView
     private lateinit var paramsLoadingOverlay: View
     private lateinit var paramsLoadingSpinner: LoadingSpinner
     private lateinit var closeButton: ImageButton
@@ -73,6 +76,7 @@ class TrackerParamsFragment : Fragment() {
         paramsGrid = view.findViewById(R.id.paramsGrid)
         paramsWaitingCard = view.findViewById(R.id.paramsWaitingCard)
         paramsWaitingMessage = view.findViewById(R.id.paramsWaitingMessage)
+        paramsTrackingModeText = view.findViewById(R.id.paramsTrackingModeText)
         paramsLoadingOverlay = view.findViewById(R.id.paramsLoadingOverlay)
         paramsLoadingSpinner = view.findViewById(R.id.paramsLoadingSpinner)
         closeButton = view.findViewById(R.id.paramsCloseButton)
@@ -104,6 +108,31 @@ class TrackerParamsFragment : Fragment() {
         paramsPosition.text = if (!lat.isNaN() && !lon.isNaN()) formatLatLon(lat, lon) else "-"
 
         loadTrackerData(refresh = false)
+        viewLifecycleOwner.lifecycleScope.launch {
+            TrackingRuntimeStateStore.state.collect { runtime ->
+                if (!isAdded) return@collect
+                updateTrackingMode(runtime)
+            }
+        }
+    }
+
+    private fun updateTrackingMode(runtime: TrackingRuntimeSnapshot) {
+        val id = trackerId ?: return
+        val isLocalTrackingMode = runtime.isRunning &&
+            runtime.selectedTrackerId.isNotEmpty() &&
+            id == runtime.selectedTrackerId
+        if (!isLocalTrackingMode || !runtime.autoTrackingEnabled) {
+            paramsTrackingModeText.visibility = View.GONE
+            return
+        }
+        val modeResId = when (runtime.activeMotionMode) {
+            TrackingMotionMode.WALKING -> R.string.profile_walking
+            TrackingMotionMode.BIKING -> R.string.profile_biking
+            TrackingMotionMode.DRIVING -> R.string.profile_driving
+        }
+        val modeName = getString(modeResId)
+        paramsTrackingModeText.text = getString(R.string.track_mode_label, modeName)
+        paramsTrackingModeText.visibility = View.VISIBLE
     }
 
     override fun onStart() {

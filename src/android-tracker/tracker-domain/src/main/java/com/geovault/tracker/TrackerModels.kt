@@ -1,9 +1,11 @@
 package com.geovault.tracker
 
 import android.os.Parcelable
-import com.google.gson.annotations.SerializedName
 import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 @Parcelize
 data class Tracker(
@@ -38,28 +40,30 @@ data class GeoJsonLineString(
     val coordinates: List<List<Double>>
 ) : Parcelable
 
+@Serializable
 data class TrackerCreateRequest(
     val name: String,
     val color: String? = null
 )
 
 /** Request body for POST trackers/<id>/settings/. Matches backend TrackSettingsRequest. */
+@Serializable
 data class TrackerSettingsRequest(
     val name: String? = null,
     val color: String? = null,
-    @SerializedName("recent_data_window")
+    @SerialName("recent_data_window")
     val recent_data_window: String? = null,
     val visibility: String? = null,
-    @SerializedName("share_params_with_recipients")
+    @SerialName("share_params_with_recipients")
     val share_params_with_recipients: Boolean? = null,
-    @SerializedName("share_params_with_world")
+    @SerialName("share_params_with_world")
     val share_params_with_world: Boolean? = null,
-    @SerializedName("shared_with_emails")
+    @SerialName("shared_with_emails")
     val shared_with_emails: List<String>? = null,
-    @SerializedName("world_share_enabled")
+    @SerialName("world_share_enabled")
     val world_share_enabled: Boolean? = null,
     val hidden: Boolean? = null,
-    @SerializedName("allow_group_reshare")
+    @SerialName("allow_group_reshare")
     val allow_group_reshare: Boolean? = null
 )
 
@@ -70,12 +74,14 @@ data class TrackerCoordinatesResponse(
 )
 
 /** POST trackers/geometry/ request body. */
+@Serializable
 data class TrackerBulkGeometryRequest(
-    @SerializedName("tracker_ids")
+    @SerialName("tracker_ids")
     val tracker_ids: List<String> = emptyList()
 )
 
 /** GET trackers/available-to-add/ response. */
+@Serializable
 data class AvailableToAddResponse(
     val public: List<AvailableToAddItem> = emptyList(),
     val shared_with_me: List<AvailableToAddItem> = emptyList(),
@@ -83,6 +89,7 @@ data class AvailableToAddResponse(
     val public_groups: List<AvailableToAddGroup> = emptyList()
 )
 
+@Serializable
 data class AvailableToAddItem(
     val id: String,
     val name: String,
@@ -90,6 +97,7 @@ data class AvailableToAddItem(
     val owner_email: String? = null
 )
 
+@Serializable
 data class AvailableToAddGroup(
     val id: String,
     val name: String,
@@ -98,29 +106,34 @@ data class AvailableToAddGroup(
 )
 
 /** GET trackers/<id>/subscribers/ response. */
+@Serializable
 data class SubscribersResponse(
     val subscribers: List<SubscriberItem> = emptyList()
 )
 
+@Serializable
 data class SubscriberItem(
     val id: String,
     val email: String
 )
 
 /** GET / PATCH map-visibility/ request and response. */
+@Serializable
 data class MapVisibilityResponse(
     val hidden_track_ids: List<String> = emptyList(),
     val hidden_group_ids: List<String> = emptyList()
 )
 
+@Serializable
 data class MapVisibilityRequest(
-    @SerializedName("hidden_track_ids")
+    @SerialName("hidden_track_ids")
     val hidden_track_ids: List<String>? = null,
-    @SerializedName("hidden_group_ids")
+    @SerialName("hidden_group_ids")
     val hidden_group_ids: List<String>? = null
 )
 
 /** Group payload from GET/POST/PATCH groups. */
+@Serializable
 @Parcelize
 data class Group(
     val id: String,
@@ -138,23 +151,26 @@ data class Group(
     val track_ids: List<String>? = null
 ) : Parcelable
 
+@Serializable
 data class GroupCreateRequest(val name: String)
 
+@Serializable
 data class GroupPatchRequest(
     val name: String? = null,
     val hidden: Boolean? = null,
     val visibility: String? = null,
-    @SerializedName("shared_with_emails")
+    @SerialName("shared_with_emails")
     val shared_with_emails: List<String>? = null,
-    @SerializedName("world_share_enabled")
+    @SerialName("world_share_enabled")
     val world_share_enabled: Boolean? = null,
-    @SerializedName("add_track_ids")
+    @SerialName("add_track_ids")
     val add_track_ids: List<String>? = null,
-    @SerializedName("remove_track_ids")
+    @SerialName("remove_track_ids")
     val remove_track_ids: List<String>? = null
 )
 
-data class GroupAddTrackRequest(@SerializedName("track_id") val track_id: String)
+@Serializable
+data class GroupAddTrackRequest(@SerialName("track_id") val track_id: String)
 
 data class TrackerAddToGroupCandidate(
     val tracker: Tracker,
@@ -163,6 +179,44 @@ data class TrackerAddToGroupCandidate(
 )
 
 /** GET /api/users/ — list users for share recipient picker. */
+@Serializable
 data class UsersResponse(val users: List<UserItem> = emptyList())
 
+@Serializable
 data class UserItem(val id: Int, val email: String)
+
+@Serializable
+data class GeoJsonLineStringDto(
+    val type: String,
+    val coordinates: List<List<Double>>
+)
+
+@Serializable
+data class TrackerDto(
+    val id: String,
+    val name: String,
+    val color: String? = null,
+    val settings: JsonObject? = null,
+    val geometry: GeoJsonLineStringDto? = null,
+    @SerialName("point_params") val point_params: List<JsonObject>? = null,
+    @SerialName("last_point") val last_point: List<Double>? = null,
+    val bbox: List<Double>? = null,
+    @SerialName("tracker_secret") val tracker_secret: String? = null,
+    @SerialName("created_at") val created_at: Long? = null,
+    @SerialName("updated_at") val updated_at: Long? = null,
+    @SerialName("is_owner") val is_owner: Boolean? = null,
+    val visibility: String? = null,
+    @SerialName("share_params_with_recipients") val share_params_with_recipients: Boolean? = null,
+    @SerialName("share_params_with_world") val share_params_with_world: Boolean? = null,
+    @SerialName("owner_email") val owner_email: String? = null,
+    @SerialName("subscriber_count") val subscriber_count: Int? = null,
+    @SerialName("world_share_id") val world_share_id: String? = null,
+    @SerialName("world_share_url") val world_share_url: String? = null,
+    @SerialName("shared_with_emails") val shared_with_emails: List<String>? = null
+)
+
+@Serializable
+data class TrackerCoordinatesResponseDto(
+    val coordinates: List<List<Double>> = emptyList(),
+    @SerialName("point_params") val point_params: List<JsonObject>? = null
+)

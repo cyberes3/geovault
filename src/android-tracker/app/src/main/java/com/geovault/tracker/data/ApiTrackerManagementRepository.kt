@@ -20,6 +20,8 @@ import com.geovault.tracker.TrackerCreateRequest
 import com.geovault.tracker.TrackerSettingsRequest
 import com.geovault.tracker.TrackerRepository
 import com.geovault.tracker.UsersResponse
+import com.geovault.tracker.toDomainModel
+import com.geovault.tracker.toDomainModels
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -50,12 +52,17 @@ class ApiTrackerManagementRepository @Inject constructor(
             if (!forceRefresh && trackersCache != null) {
                 return@withLock RepositoryResult.Success(trackersCache!!)
             }
-            val result = executeApiCall { api -> api.getTrackers().execute() }
-            if (result is RepositoryResult.Success) {
-                trackersCache = result.data
-                stateStore.publishTrackers(result.data)
+            val networkResult = executeApiCall { api -> api.getTrackers().execute() }
+            if (networkResult is RepositoryResult.Success) {
+                val trackers = networkResult.data.toDomainModels()
+                trackersCache = trackers
+                stateStore.publishTrackers(trackers)
+                return@withLock RepositoryResult.Success(trackers)
             }
-            result
+            when (networkResult) {
+                is RepositoryResult.Success -> error("Unexpected success branch")
+                is RepositoryResult.Failure -> networkResult
+            }
         }
     }
 
@@ -65,40 +72,53 @@ class ApiTrackerManagementRepository @Inject constructor(
 
     override suspend fun loadTracker(trackerId: String): RepositoryResult<Tracker> {
         Log.d(TAG, "Loading tracker details trackerId=$trackerId")
-        val result = executeApiCall { api -> api.getTracker(trackerId).execute() }
-        if (result is RepositoryResult.Success) {
+        val networkResult = executeApiCall { api -> api.getTracker(trackerId).execute() }
+        if (networkResult is RepositoryResult.Success) {
+            val tracker = networkResult.data.toDomainModel()
             cacheMutex.withLock {
                 trackersCache = trackersCache
                     ?.filterNot { it.id == trackerId }
                     .orEmpty()
-                    .plus(result.data)
+                    .plus(tracker)
                     .distinctBy { it.id }
                     .sortedBy { it.name.lowercase() }
             }
-            stateStore.publishTracker(result.data)
+            stateStore.publishTracker(tracker)
             Log.d(
                 TAG,
-                "Loaded tracker details trackerId=$trackerId recentDataWindow=${result.data.settings?.get("recent_data_window")} hidden=${result.data.settings?.get("hidden")}"
+                "Loaded tracker details trackerId=$trackerId recentDataWindow=${tracker.settings?.get("recent_data_window")} hidden=${tracker.settings?.get("hidden")}"
             )
-        } else if (result is RepositoryResult.Failure) {
-            Log.e(TAG, "Failed loading tracker details trackerId=$trackerId error=${result.error}")
+            return RepositoryResult.Success(tracker)
+        } else if (networkResult is RepositoryResult.Failure) {
+            Log.e(TAG, "Failed loading tracker details trackerId=$trackerId error=${networkResult.error}")
         }
-        return result
+        return when (networkResult) {
+            is RepositoryResult.Success -> error("Unexpected success branch")
+            is RepositoryResult.Failure -> networkResult
+        }
     }
 
     override suspend fun loadTrackerGeometry(trackerId: String): RepositoryResult<Tracker> {
-        return executeApiCall { api -> api.getTrackerGeometry(trackerId).execute() }
+        return when (val networkResult = executeApiCall { api -> api.getTrackerGeometry(trackerId).execute() }) {
+            is RepositoryResult.Success -> RepositoryResult.Success(networkResult.data.toDomainModel())
+            is RepositoryResult.Failure -> networkResult
+        }
     }
 
     override suspend fun createTracker(request: TrackerCreateRequest): RepositoryResult<Tracker> {
-        val result = executeApiCall { api -> api.createTracker(request).execute() }
-        if (result is RepositoryResult.Success) {
+        val networkResult = executeApiCall { api -> api.createTracker(request).execute() }
+        if (networkResult is RepositoryResult.Success) {
+            val tracker = networkResult.data.toDomainModel()
             cacheMutex.withLock {
-                trackersCache = trackersCache.orEmpty().plus(result.data).sortedBy { it.name.lowercase() }
+                trackersCache = trackersCache.orEmpty().plus(tracker).sortedBy { it.name.lowercase() }
             }
-            stateStore.publishTracker(result.data)
+            stateStore.publishTracker(tracker)
+            return RepositoryResult.Success(tracker)
         }
-        return result
+        return when (networkResult) {
+            is RepositoryResult.Success -> error("Unexpected success branch")
+            is RepositoryResult.Failure -> networkResult
+        }
     }
 
     override suspend fun updateTrackerSettings(
@@ -107,22 +127,27 @@ class ApiTrackerManagementRepository @Inject constructor(
         publishToStore: Boolean
     ): RepositoryResult<Tracker> {
         Log.d(TAG, "Updating tracker settings trackerId=$trackerId request=$request")
-        val result = executeApiCall { api -> api.postTrackerSettings(trackerId, request).execute() }
-        if (result is RepositoryResult.Success) {
+        val networkResult = executeApiCall { api -> api.postTrackerSettings(trackerId, request).execute() }
+        if (networkResult is RepositoryResult.Success) {
+            val tracker = networkResult.data.toDomainModel()
             cacheMutex.withLock {
                 trackersCache = trackersCache
-                    ?.map { if (it.id == trackerId) result.data else it }
+                    ?.map { if (it.id == trackerId) tracker else it }
                     ?.sortedBy { it.name.lowercase() }
             }
-            stateStore.publishTracker(result.data, emitEvent = publishToStore)
+            stateStore.publishTracker(tracker, emitEvent = publishToStore)
             Log.d(
                 TAG,
-                "Updated tracker settings trackerId=$trackerId persistedRecentDataWindow=${result.data.settings?.get("recent_data_window")} persistedHidden=${result.data.settings?.get("hidden")}"
+                "Updated tracker settings trackerId=$trackerId persistedRecentDataWindow=${tracker.settings?.get("recent_data_window")} persistedHidden=${tracker.settings?.get("hidden")}"
             )
-        } else if (result is RepositoryResult.Failure) {
-            Log.e(TAG, "Failed updating tracker settings trackerId=$trackerId error=${result.error}")
+            return RepositoryResult.Success(tracker)
+        } else if (networkResult is RepositoryResult.Failure) {
+            Log.e(TAG, "Failed updating tracker settings trackerId=$trackerId error=${networkResult.error}")
         }
-        return result
+        return when (networkResult) {
+            is RepositoryResult.Success -> error("Unexpected success branch")
+            is RepositoryResult.Failure -> networkResult
+        }
     }
 
     override suspend fun deleteTracker(trackerId: String): RepositoryResult<Unit> {
@@ -171,19 +196,24 @@ class ApiTrackerManagementRepository @Inject constructor(
     }
 
     override suspend fun subscribeTracker(trackerId: String): RepositoryResult<Tracker> {
-        val result = executeApiCall { api -> api.subscribeTracker(trackerId).execute() }
-        if (result is RepositoryResult.Success) {
+        val networkResult = executeApiCall { api -> api.subscribeTracker(trackerId).execute() }
+        if (networkResult is RepositoryResult.Success) {
+            val tracker = networkResult.data.toDomainModel()
             cacheMutex.withLock {
                 trackersCache = trackersCache
                     ?.filterNot { it.id == trackerId }
                     .orEmpty()
-                    .plus(result.data)
+                    .plus(tracker)
                     .distinctBy { it.id }
                     .sortedBy { it.name.lowercase() }
             }
-            stateStore.publishTracker(result.data)
+            stateStore.publishTracker(tracker)
+            return RepositoryResult.Success(tracker)
         }
-        return result
+        return when (networkResult) {
+            is RepositoryResult.Success -> error("Unexpected success branch")
+            is RepositoryResult.Failure -> networkResult
+        }
     }
 
     override suspend fun checkTracker(request: TrackerCheckRequest): RepositoryResult<Boolean> {

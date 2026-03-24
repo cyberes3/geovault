@@ -2291,8 +2291,8 @@ class TestLiveTrackAPI(TestCase):
         data = response.json()
         self.assertEqual(data["settings"]["recent_data_window"], "current_session")
 
-    def test_post_settings_accepts_camel_case_aliases(self):
-        """POST settings accepts camelCase aliases used by older/mobile clients."""
+    def test_post_settings_rejects_camel_case_aliases(self):
+        """POST settings rejects camelCase keys; canonical snake_case is required."""
         with _patch_live_track_enabled():
             create_resp = self.client.post(
                 "/api/extensions/live-track/trackers/",
@@ -2310,14 +2310,10 @@ class TestLiveTrackAPI(TestCase):
                 }),
                 content_type="application/json",
             )
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data["color"], "#A7DE00")
-        self.assertEqual(data["settings"]["recent_data_window"], "current_session")
-        self.assertTrue(data["settings"]["allow_group_reshare"])
+        self.assertEqual(response.status_code, 400)
 
-    def test_post_settings_accepts_nested_settings_payload(self):
-        """POST settings accepts color/window values nested under a settings object."""
+    def test_post_settings_rejects_nested_settings_payload(self):
+        """POST settings rejects nested settings payloads; top-level canonical keys are required."""
         with _patch_live_track_enabled():
             create_resp = self.client.post(
                 "/api/extensions/live-track/trackers/",
@@ -2336,10 +2332,7 @@ class TestLiveTrackAPI(TestCase):
                 }),
                 content_type="application/json",
             )
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data["color"], "#DE0038")
-        self.assertEqual(data["settings"]["recent_data_window"], "session")
+        self.assertEqual(response.status_code, 400)
 
     def test_post_settings_409_duplicate_name(self):
         """POST settings with name that another track of same user has returns 409."""

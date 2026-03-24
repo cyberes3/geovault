@@ -156,7 +156,7 @@ class RegenerateTrackerTokensResponse(BaseModel):
 class TrackSettingsRequest(BaseModel):
     """Request body for POST trackers/<id>/settings/. Name, visibility, share_params, shared_with_emails; color and recent_data_window in settings JSON."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     name: Optional[str] = Field(default=None, description="Tracker name (stored in name column)")
     color: Optional[str] = Field(default=None, description="Display color (stored in settings)")

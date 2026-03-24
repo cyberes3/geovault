@@ -72,39 +72,6 @@ from .validation import (
 User = get_user_model()
 
 
-def _normalize_track_settings_request_payload(data: dict | None) -> dict:
-    """Accept legacy/camelCase client payloads for tracker settings updates."""
-    payload = dict(data or {})
-    settings_payload = payload.get("settings")
-
-    alias_map = {
-        "recentDataWindow": "recent_data_window",
-        "shareParamsWithRecipients": "share_params_with_recipients",
-        "shareParamsWithWorld": "share_params_with_world",
-        "sharedWithEmails": "shared_with_emails",
-        "worldShareEnabled": "world_share_enabled",
-        "allowGroupReshare": "allow_group_reshare",
-    }
-    for source_key, target_key in alias_map.items():
-        if source_key in payload and target_key not in payload:
-            payload[target_key] = payload[source_key]
-
-    if isinstance(settings_payload, dict):
-        setting_alias_map = {
-            "color": "color",
-            "recent_data_window": "recent_data_window",
-            "recentDataWindow": "recent_data_window",
-            "hidden": "hidden",
-            "allow_group_reshare": "allow_group_reshare",
-            "allowGroupReshare": "allow_group_reshare",
-        }
-        for source_key, target_key in setting_alias_map.items():
-            if source_key in settings_payload and target_key not in payload:
-                payload[target_key] = settings_payload[source_key]
-
-    return payload
-
-
 def _json_size_bytes(payload: dict) -> int:
     encoded = json.dumps(
         payload,
@@ -419,9 +386,8 @@ def tracker_post_settings(request, tracker_id):
     data, err = get_json_body(request)
     if err is not None:
         return err
-    normalized_data = _normalize_track_settings_request_payload(data)
     try:
-        body = TrackSettingsRequest.model_validate(normalized_data or {})
+        body = TrackSettingsRequest.model_validate(data or {})
     except PydanticValidationError as e:
         errs = e.errors()
         msg = errs[0].get("msg", "Invalid body") if errs else "Invalid body"

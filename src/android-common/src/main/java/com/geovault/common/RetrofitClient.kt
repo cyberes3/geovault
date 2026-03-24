@@ -1,12 +1,14 @@
 package com.geovault.common
 
 import android.content.Context
+import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import okhttp3.Authenticator
 import okhttp3.Interceptor
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Route
+import kotlinx.serialization.json.Json
 import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 /**
@@ -21,6 +23,12 @@ import java.util.concurrent.TimeUnit
  * Use application context when creating long-lived clients to avoid leaking activities.
  */
 object RetrofitClient {
+    private val networkJson = Json {
+        ignoreUnknownKeys = true
+        explicitNulls = false
+        encodeDefaults = false
+        isLenient = true
+    }
 
     /**
      * Adds the current access token to requests. Does not perform refresh; expired tokens result in 401,
@@ -126,7 +134,7 @@ object RetrofitClient {
         return Retrofit.Builder()
             .baseUrl(baseUrl)
             .client(client)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(networkJson.asConverterFactory("application/json".toMediaType()))
             .build()
     }
 }

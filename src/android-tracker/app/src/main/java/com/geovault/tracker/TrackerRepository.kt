@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
+import com.geovault.tracker.toDomainModel
+import com.geovault.tracker.toDomainModels
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.ResponseBody
 import retrofit2.Call
@@ -79,18 +81,18 @@ object TrackerRepository {
             return
         }
         val api = createApi(context, serverUrl)
-        api.getTrackers().enqueue(object : Callback<List<Tracker>> {
-            override fun onResponse(call: Call<List<Tracker>>, response: Response<List<Tracker>>) {
+        api.getTrackers().enqueue(object : Callback<List<TrackerDto>> {
+            override fun onResponse(call: Call<List<TrackerDto>>, response: Response<List<TrackerDto>>) {
                 if (!response.isSuccessful) {
                     callback(RepositoryResult.Failure(errorFromResponseCode(response.code())))
                     return
                 }
-                val list = response.body() ?: emptyList()
+                val list = response.body()?.toDomainModels() ?: emptyList()
                 trackersCache = list
                 callback(RepositoryResult.Success(list))
             }
 
-            override fun onFailure(call: Call<List<Tracker>>, t: Throwable) {
+            override fun onFailure(call: Call<List<TrackerDto>>, t: Throwable) {
                 callback(RepositoryResult.Failure(AppError.Network))
             }
         })
@@ -113,13 +115,13 @@ object TrackerRepository {
             return
         }
         val api = createApi(context, serverUrl)
-        api.getTrackerGeometry(id).enqueue(object : Callback<Tracker> {
-            override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
+        api.getTrackerGeometry(id).enqueue(object : Callback<TrackerDto> {
+            override fun onResponse(call: Call<TrackerDto>, response: Response<TrackerDto>) {
                 if (!response.isSuccessful) {
                     callback(RepositoryResult.Failure(errorFromResponseCode(response.code())))
                     return
                 }
-                val tracker = response.body()
+                val tracker = response.body()?.toDomainModel()
                 if (tracker == null) {
                     callback(RepositoryResult.Failure(AppError.Unknown))
                     return
@@ -128,7 +130,7 @@ object TrackerRepository {
                 callback(RepositoryResult.Success(tracker))
             }
 
-            override fun onFailure(call: Call<Tracker>, t: Throwable) {
+            override fun onFailure(call: Call<TrackerDto>, t: Throwable) {
                 callback(RepositoryResult.Failure(AppError.Network))
             }
         })
@@ -175,20 +177,20 @@ object TrackerRepository {
         
         val api = createApi(context, serverUrl)
 
-        api.getTrackers().enqueue(object : Callback<List<Tracker>> {
-            override fun onResponse(call: Call<List<Tracker>>, response: Response<List<Tracker>>) {
+        api.getTrackers().enqueue(object : Callback<List<TrackerDto>> {
+            override fun onResponse(call: Call<List<TrackerDto>>, response: Response<List<TrackerDto>>) {
                 if (!response.isSuccessful) {
                     isFetching = false
                     notifyListeners(null)
                     return
                 }
-                val list = response.body() ?: emptyList()
+                val list = response.body()?.toDomainModels() ?: emptyList()
                 isFetching = false
                 trackersCache = list
                 notifyListeners(list)
             }
 
-            override fun onFailure(call: Call<List<Tracker>>, t: Throwable) {
+            override fun onFailure(call: Call<List<TrackerDto>>, t: Throwable) {
                 isFetching = false
                 Log.e("TrackerRepository", "Failed to fetch trackers", t)
                 notifyListeners(null)
@@ -253,17 +255,17 @@ object TrackerRepository {
         trackerCall?.cancel()
         val call = api.getTracker(id)
         trackerCall = call
-        call.enqueue(object : Callback<Tracker> {
-            override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
+        call.enqueue(object : Callback<TrackerDto> {
+            override fun onResponse(call: Call<TrackerDto>, response: Response<TrackerDto>) {
                 trackerCall = null
-                val tracker = if (response.isSuccessful) response.body() else null
+                val tracker = if (response.isSuccessful) response.body()?.toDomainModel() else null
                 if (tracker != null && id == selectedId) {
                     currentTrackerId = id
                     currentTrackerCache = tracker
                 }
                 callback(tracker)
             }
-            override fun onFailure(call: Call<Tracker>, t: Throwable) {
+            override fun onFailure(call: Call<TrackerDto>, t: Throwable) {
                 trackerCall = null
                 if (!call.isCanceled()) Log.e("TrackerRepository", "Failed to fetch tracker", t)
                 callback(null)
@@ -271,7 +273,7 @@ object TrackerRepository {
         })
     }
 
-    private var trackerCall: Call<Tracker>? = null
+    private var trackerCall: Call<TrackerDto>? = null
 
     /** Cancels any in-flight GET tracker request. Call when the edit screen is closed so the callback does not run. */
     fun cancelTrackerRequest() {
@@ -279,8 +281,8 @@ object TrackerRepository {
         trackerCall = null
     }
 
-    private var geometryCall: Call<Tracker>? = null
-    private var coordinatesCall: Call<TrackerCoordinatesResponse>? = null
+    private var geometryCall: Call<TrackerDto>? = null
+    private var coordinatesCall: Call<TrackerCoordinatesResponseDto>? = null
     /** Cached geometry keyed by tracker and all-data mode. */
     private val geometryCache = mutableMapOf<TrackDataCacheKey, Tracker>()
     /** Cached coordinates keyed by tracker and all-data mode. */
@@ -348,10 +350,10 @@ object TrackerRepository {
         val api = createApi(context, serverUrl)
         val call = api.getTrackerGeometry(id)
         geometryCall = call
-        call.enqueue(object : Callback<Tracker> {
-            override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
+        call.enqueue(object : Callback<TrackerDto> {
+            override fun onResponse(call: Call<TrackerDto>, response: Response<TrackerDto>) {
                 geometryCall = null
-                val tracker = if (response.isSuccessful) response.body() else null
+                val tracker = if (response.isSuccessful) response.body()?.toDomainModel() else null
                 if (tracker != null && tracker.id == selectedId) {
                     geometryCache[TrackDataCacheKey(tracker.id)] = tracker
                     val coords = tracker.geometry?.coordinates
@@ -364,7 +366,7 @@ object TrackerRepository {
                 }
                 callback(tracker)
             }
-            override fun onFailure(call: Call<Tracker>, t: Throwable) {
+            override fun onFailure(call: Call<TrackerDto>, t: Throwable) {
                 geometryCall = null
                 if (call.isCanceled()) return
                 Log.e("TrackerRepository", "Failed to fetch tracker geometry", t)
@@ -394,17 +396,17 @@ object TrackerRepository {
         coordinatesCall?.cancel()
         val call = api.getTrackerCoordinates(id)
         coordinatesCall = call
-        call.enqueue(object : Callback<TrackerCoordinatesResponse> {
-            override fun onResponse(call: Call<TrackerCoordinatesResponse>, response: Response<TrackerCoordinatesResponse>) {
+        call.enqueue(object : Callback<TrackerCoordinatesResponseDto> {
+            override fun onResponse(call: Call<TrackerCoordinatesResponseDto>, response: Response<TrackerCoordinatesResponseDto>) {
                 coordinatesCall = null
-                val body = if (response.isSuccessful) response.body() else null
+                val body = if (response.isSuccessful) response.body()?.toDomainModel() else null
                 if (body != null) {
                     coordinatesCache[key] = body
                 }
                 callback(body)
             }
 
-            override fun onFailure(call: Call<TrackerCoordinatesResponse>, t: Throwable) {
+            override fun onFailure(call: Call<TrackerCoordinatesResponseDto>, t: Throwable) {
                 coordinatesCall = null
                 if (call.isCanceled()) return
                 Log.e("TrackerRepository", "Failed to fetch tracker coordinates", t)
@@ -430,12 +432,12 @@ object TrackerRepository {
         }
         val api = createApi(context, serverUrl)
         val request = TrackerBulkGeometryRequest(tracker_ids = trackerIds)
-        api.getTrackersGeometry(request).enqueue(object : Callback<List<Tracker>> {
-            override fun onResponse(call: Call<List<Tracker>>, response: Response<List<Tracker>>) {
-                callback(if (response.isSuccessful) (response.body() ?: emptyList()) else null)
+        api.getTrackersGeometry(request).enqueue(object : Callback<List<TrackerDto>> {
+            override fun onResponse(call: Call<List<TrackerDto>>, response: Response<List<TrackerDto>>) {
+                callback(if (response.isSuccessful) (response.body()?.toDomainModels() ?: emptyList()) else null)
             }
 
-            override fun onFailure(call: Call<List<Tracker>>, t: Throwable) {
+            override fun onFailure(call: Call<List<TrackerDto>>, t: Throwable) {
                 Log.e("TrackerRepository", "Failed to fetch trackers geometry", t)
                 callback(null)
             }
@@ -482,10 +484,10 @@ object TrackerRepository {
         }
         val api = createApi(context, serverUrl)
         api.postTrackerSettings(id, request)
-            .enqueue(object : Callback<Tracker> {
-                override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
+            .enqueue(object : Callback<TrackerDto> {
+                override fun onResponse(call: Call<TrackerDto>, response: Response<TrackerDto>) {
                     if (response.isSuccessful) {
-                        val tracker = response.body()
+                        val tracker = response.body()?.toDomainModel()
                         if (tracker != null) {
                             val selectedId = SelectedTrackerPrefs.selectedTrackerId(context)
                             if (id == selectedId) {
@@ -515,7 +517,7 @@ object TrackerRepository {
                     }
                     callback(null, errorMsg)
                 }
-                override fun onFailure(call: Call<Tracker>, t: Throwable) {
+                override fun onFailure(call: Call<TrackerDto>, t: Throwable) {
                     Log.e("TrackerRepository", "Failed to update tracker settings", t)
                     callback(null, null)
                 }
@@ -615,15 +617,15 @@ object TrackerRepository {
             return
         }
         val api = createApi(context, serverUrl)
-        api.subscribeTracker(trackerId).enqueue(object : Callback<Tracker> {
-            override fun onResponse(call: Call<Tracker>, response: Response<Tracker>) {
+        api.subscribeTracker(trackerId).enqueue(object : Callback<TrackerDto> {
+            override fun onResponse(call: Call<TrackerDto>, response: Response<TrackerDto>) {
                 if (response.isSuccessful) {
                     trackersCache = null
                     availableToAddCache = null
                 }
-                callback(response.body())
+                callback(response.body()?.toDomainModel())
             }
-            override fun onFailure(call: Call<Tracker>, t: Throwable) {
+            override fun onFailure(call: Call<TrackerDto>, t: Throwable) {
                 Log.e("TrackerRepository", "Subscribe failed", t)
                 callback(null)
             }

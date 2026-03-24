@@ -137,6 +137,7 @@
     <string name="profile_walking">Walking</string>
     <string name="profile_biking">Biking</string>
     <string name="profile_driving">Driving</string>
+    <string name="track_mode_label">Tracker mode: %1$s</string>
     <string name="profile_custom">Custom</string>
     
     <!-- Permissions -->
