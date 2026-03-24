@@ -2,6 +2,7 @@ package com.geovault.tracker
 
 import android.location.Location
 import com.geovault.tracker.location.LowAccuracyFallbackCoordinator
+import com.geovault.tracker.pipeline.TrackPointQuality
 import com.geovault.tracker.pipeline.TrackPointRejectReason
 import com.geovault.tracker.settings.TrackerSettings
 import org.junit.Assert.assertEquals
@@ -179,6 +180,38 @@ class TrackingServiceFallbackBehaviorTest {
                 rejectReason = TrackPointRejectReason.BAD_ACCURACY,
                 measuredAccuracyMeters = 40f,
                 accuracyFilterMeters = 50f
+            )
+        )
+    }
+
+    @Test
+    fun hasRecoveredFastGpsLock_requiresHighConfidenceAndAccuracyAtOrBelowFilter() {
+        assertTrue(
+            TrackingService.hasRecoveredFastGpsLock(
+                quality = TrackPointQuality.HIGH_CONFIDENCE,
+                measuredAccuracyMeters = 15f,
+                accuracyFilterMeters = 20f
+            )
+        )
+        assertFalse(
+            TrackingService.hasRecoveredFastGpsLock(
+                quality = TrackPointQuality.DEGRADED,
+                measuredAccuracyMeters = 10f,
+                accuracyFilterMeters = 20f
+            )
+        )
+        assertFalse(
+            TrackingService.hasRecoveredFastGpsLock(
+                quality = TrackPointQuality.HIGH_CONFIDENCE,
+                measuredAccuracyMeters = null,
+                accuracyFilterMeters = 20f
+            )
+        )
+        assertFalse(
+            TrackingService.hasRecoveredFastGpsLock(
+                quality = TrackPointQuality.HIGH_CONFIDENCE,
+                measuredAccuracyMeters = 25f,
+                accuracyFilterMeters = 20f
             )
         )
     }

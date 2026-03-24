@@ -177,8 +177,8 @@ class TrackingService : TrackPointServiceBase() {
         private const val EXTRAS_KEY_FALLBACK_SOURCE_PROVIDER = "fallback_source_provider"
         private const val FALLBACK_PROVIDER_PREFIX = "low_accuracy_fallback:"
         private const val FALLBACK_REJECT_SUMMARY_INTERVAL_MS = 30_000L
-        private const val FAST_GPS_LOCK_INTERVAL_MS = 1_000L
-        private const val FAST_GPS_LOCK_MIN_UPDATE_INTERVAL_MS = 500L
+        private const val FAST_GPS_LOCK_INTERVAL_MS = 0L
+        private const val FAST_GPS_LOCK_MIN_UPDATE_INTERVAL_MS = 0L
         private const val FAST_GPS_LOCK_MIN_DISTANCE_METERS = 0f
         private const val FAST_GPS_LOCK_WINDOW_MS = 60_000L
         private const val FAST_GPS_LOCK_MIN_SAMPLES = 3
@@ -268,6 +268,17 @@ class TrackingService : TrackPointServiceBase() {
             val measuredAccuracy = measuredAccuracyMeters ?: return true
             if (rejectReason != TrackPointRejectReason.BAD_ACCURACY) return false
             return measuredAccuracy > accuracyFilterMeters
+        }
+
+        @JvmStatic
+        internal fun hasRecoveredFastGpsLock(
+            quality: TrackPointQuality,
+            measuredAccuracyMeters: Float?,
+            accuracyFilterMeters: Float
+        ): Boolean {
+            if (quality != TrackPointQuality.HIGH_CONFIDENCE) return false
+            val measuredAccuracy = measuredAccuracyMeters ?: return false
+            return measuredAccuracy <= accuracyFilterMeters
         }
 
         @JvmStatic
@@ -844,8 +855,14 @@ class TrackingService : TrackPointServiceBase() {
             return
         }
 
-        onAcceptedFixWithLock()
         val canonicalEvent = decision.canonicalEvent ?: return
+        onAcceptedFixWithLock(
+            lockRecovered = hasRecoveredFastGpsLock(
+                quality = canonicalEvent.quality,
+                measuredAccuracyMeters = canonicalEvent.accuracyMeters,
+                accuracyFilterMeters = resolveCurrentAccuracyFilter()
+            )
+        )
         val smoothedLocation = Location(location).apply {
             latitude = canonicalEvent.lat
             longitude = canonicalEvent.lon
@@ -1767,7 +1784,7 @@ class TrackingService : TrackPointServiceBase() {
                         "Fast GPS lock satisfied by fresh last-known fix; skipping burst " +
                             "acc=${cachedLocation?.accuracy} accuracyFilter=$accuracyFilterMeters"
                     )
-                    onAcceptedFixWithLock()
+                    onAcceptedFixWithLock(lockRecovered = true)
                     return@getLastLocation
                 }
                 startFastGpsLockBurst(
@@ -1881,13 +1898,17 @@ class TrackingService : TrackPointServiceBase() {
         )
     }
 
-    private fun onAcceptedFixWithLock() {
+    private fun onAcceptedFixWithLock(lockRecovered: Boolean) {
         consecutiveBadAccuracyPoints = 0
-        isWaitingForGpsLock = false
-        lowAccuracyFallbackCoordinator.onAcceptedFix()
-        if (isFastGpsLockWindowActive && fastGpsLockSampleCount < FAST_GPS_LOCK_EARLY_EXIT_MIN_SAMPLES) {
+        if (!lockRecovered) {
+            if (isFastGpsLockWindowActive) {
+                isWaitingForGpsLock = true
+                updateNotificationCount()
+            }
             return
         }
+        isWaitingForGpsLock = false
+        lowAccuracyFallbackCoordinator.onAcceptedFix()
         stopFastGpsLockWindow(reason = "good_accuracy_fix")
         cancelLowAccuracyFallbackTimer(clearCandidate = true, reason = "lock_recovered")
     }
@@ -2018,6 +2039,7 @@ class TrackingService : TrackPointServiceBase() {
         val nowMs = System.currentTimeMillis()
         val fallbackLocation = Location(candidate).apply {
             time = nowMs
+            elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
             val sourceProvider = candidate.provider?.takeIf { it.isNotBlank() } ?: "fused"
             provider = "$FALLBACK_PROVIDER_PREFIX$sourceProvider"
             val mergedExtras = Bundle().apply {
@@ -2045,7 +2067,8 @@ class TrackingService : TrackPointServiceBase() {
             timestampMs = fallbackLocation.time,
             accuracyMeters = if (fallbackLocation.hasAccuracy()) fallbackLocation.accuracy else null,
             quality = TrackPointQuality.DEGRADED,
-            orderingKey = fallbackLocation.time
+            orderingKey = fallbackLocation.time,
+            elapsedRealtimeNanos = fallbackLocation.elapsedRealtimeNanos
         )
         Log.i(
             TAG,
@@ -2097,6 +2120,7 @@ class TrackingService : TrackPointServiceBase() {
         val waitingDurationMs = (fallbackTimeMs - lowAccuracyFallbackTimerArmedAtMs).coerceAtLeast(0L)
         val fallbackLocation = Location(candidate).apply {
             time = fallbackTimeMs
+            elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
             val sourceProvider = candidate.provider?.takeIf { it.isNotBlank() } ?: "fused"
             provider = "$FALLBACK_PROVIDER_PREFIX$sourceProvider"
             val mergedExtras = Bundle().apply {
@@ -2114,7 +2138,8 @@ class TrackingService : TrackPointServiceBase() {
             timestampMs = fallbackLocation.time,
             accuracyMeters = if (fallbackLocation.hasAccuracy()) fallbackLocation.accuracy else null,
             quality = TrackPointQuality.DEGRADED,
-            orderingKey = fallbackLocation.time
+            orderingKey = fallbackLocation.time,
+            elapsedRealtimeNanos = fallbackLocation.elapsedRealtimeNanos
         )
         if (
             !shouldEmitFallbackForTransition(
