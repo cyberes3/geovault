@@ -242,7 +242,7 @@
     <string name="failed_to_remove_from_share">Failed to remove from share</string>
     <string name="failed_to_leave_group">Failed to leave group</string>
     <string name="pick_color">Pick Color</string>
-    <string name="show_recent_data">Show recent data</string>
+    <string name="show_recent_data">Recent data filter</string>
     <string name="show_recent_data_help_text">Show only points in this time window; choose All to show full history.</string>
     <string name="recent_data_all">All</string>
     <string name="recent_data_1min">1 minute</string>
@@ -251,6 +251,7 @@
     <string name="recent_data_1w">1 week</string>
     <string name="recent_data_1m">1 month</string>
     <string name="recent_data_session">Last Session</string>
+    <string name="recent_data_current_session">Current Session</string>
     <string name="invalid_recent_data_window_selection">Invalid recent data selection</string>
     <string name="choose_color">Choose color</string>
 

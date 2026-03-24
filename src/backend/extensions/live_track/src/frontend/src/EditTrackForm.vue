@@ -50,7 +50,7 @@
       />
     </template>
     <div class="space-y-2">
-      <label class="text-sm font-medium text-gray-700">Visibility Window</label>
+      <label class="text-sm font-medium text-gray-700">Recent data filter</label>
       <select
         :value="recentDataWindow"
         :disabled="!isOwner"
@@ -65,6 +65,7 @@
         <option value="1w">Last Week</option>
         <option value="1m">Last Month</option>
         <option value="session">Last Session</option>
+        <option value="current_session">Current Session</option>
       </select>
     </div>
     <div v-if="isOwner" class="space-y-2">

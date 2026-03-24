@@ -4,7 +4,7 @@ import android.content.Context
 import com.geovault.tracker.R
 
 object RecentDataWindowOptions {
-    private val values = listOf("", "1min", "1h", "1d", "1w", "1m", "session")
+    private val values = listOf("", "1min", "1h", "1d", "1w", "1m", "session", "current_session")
 
     fun labels(context: Context): List<String> {
         return listOf(
@@ -14,7 +14,8 @@ object RecentDataWindowOptions {
             context.getString(R.string.recent_data_1d),
             context.getString(R.string.recent_data_1w),
             context.getString(R.string.recent_data_1m),
-            context.getString(R.string.recent_data_session)
+            context.getString(R.string.recent_data_session),
+            context.getString(R.string.recent_data_current_session)
         )
     }
 

@@ -84,7 +84,7 @@ def _filter_coords_by_recent_window(coords, point_params, window_key: str):
             return [coords[-1]], filtered_params
         return filtered_coords, filtered_params
 
-    if window_key == "session":
+    if window_key in {"session", "current_session"}:
         filtered_coords, filtered_params = _filter_coords_by_latest_session_start(coords, point_params)
         return _with_latest_point_fallback(filtered_coords, filtered_params)
     if window_key not in RECENT_WINDOW_MS:
