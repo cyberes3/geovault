@@ -66,6 +66,40 @@ class LoadGroupMapUseCaseTest {
         assertFalse(result.hadFailures)
     }
 
+    @Test
+    fun execute_excludesListHiddenOwnedTrackersInGroup() {
+        val repository = FakeTrackRepository(
+            trackers = listOf(
+                Tracker(
+                    id = "a",
+                    name = "A",
+                    color = null,
+                    is_owner = true,
+                    settings = mapOf("hidden_in_list" to true)
+                ),
+                Tracker(id = "b", name = "B", color = null, is_owner = true, settings = emptyMap())
+            ),
+            geometryById = mapOf(
+                "a" to listOf(listOf(10.0, 20.0), listOf(11.0, 21.0)),
+                "b" to listOf(listOf(30.0, 40.0), listOf(31.0, 41.0))
+            )
+        )
+        val useCase = LoadGroupMapUseCase(repository)
+
+        val result = runBlocking {
+            useCase.execute(
+                group = Group(id = "g2", name = "Group 2", track_ids = listOf("a", "b")),
+                zoomToTrackerId = null
+            )
+        }
+        val snapshot = result.snapshot
+
+        assertEquals(listOf("b"), snapshot.trackers.map { it.id })
+        assertEquals(1, snapshot.coordsByTrackerId.size)
+        assertTrue(snapshot.fitBounds)
+        assertFalse(result.hadFailures)
+    }
+
     private class FakeTrackRepository(
         private val trackers: List<Tracker> = emptyList(),
         private val geometryById: Map<String, List<List<Double>>> = emptyMap()

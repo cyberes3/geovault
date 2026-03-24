@@ -45,6 +45,7 @@ class LoadAllTrackersMapUseCase(
             }
         }
             .filter { it.id !in hiddenTrackIds && it.id !in hiddenGroupTrackIds }
+            .filter { !(it.isOwner() && (it.settings?.get("hidden_in_list") as? Boolean) == true) }
 
         if (trackers.isEmpty()) {
             return Result(

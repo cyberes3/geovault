@@ -72,5 +72,68 @@ class LoadAllTrackersMapUseCaseTest {
         assertTrue(snapshot.coordsByTrackerId["t3"]?.isNotEmpty() == true)
         assertTrue(!result.hadFailures)
     }
+
+    @Test
+    fun execute_excludesListHiddenOwnedTrackers() {
+        val trackRepo = object : MapTrackRepository {
+            override suspend fun getTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> {
+                return RepositoryResult.Success(
+                    listOf(
+                        Tracker(id = "t1", name = "T1", color = null, is_owner = true, settings = emptyMap()),
+                        Tracker(
+                            id = "t2",
+                            name = "T2",
+                            color = null,
+                            is_owner = true,
+                            settings = mapOf("hidden_in_list" to true)
+                        ),
+                        Tracker(id = "t3", name = "T3", color = null, is_owner = true, settings = emptyMap())
+                    )
+                )
+            }
+
+            override suspend fun getTracker(id: String, forceRefresh: Boolean): RepositoryResult<Tracker> =
+                RepositoryResult.Failure(com.geovault.tracker.AppError.NotFound)
+
+            override suspend fun getTrackerGeometry(id: String): RepositoryResult<Tracker> =
+                RepositoryResult.Failure(com.geovault.tracker.AppError.NotFound)
+
+            override suspend fun getTrackerCoordinates(id: String): RepositoryResult<TrackerCoordinatesResponse> =
+                RepositoryResult.Failure(com.geovault.tracker.AppError.NotFound)
+
+            override suspend fun getTrackersCoordinates(
+                trackerIds: List<String>
+            ): RepositoryResult<Map<String, TrackerCoordinatesResponse>> {
+                return RepositoryResult.Success(
+                    trackerIds.associateWith {
+                        TrackerCoordinatesResponse(
+                            coordinates = listOf(listOf(10.0, 20.0), listOf(11.0, 21.0))
+                        )
+                    }
+                )
+            }
+
+            override fun getTrackerFromCache(id: String): Tracker? = null
+        }
+        val groupRepo = object : MapGroupRepository {
+            override suspend fun getGroups(forceRefresh: Boolean): RepositoryResult<List<Group>> {
+                return RepositoryResult.Success(emptyList())
+            }
+        }
+        val visibilityRepo = object : MapVisibilityRepository {
+            override suspend fun getMapVisibility(): RepositoryResult<MapVisibilityResponse> {
+                return RepositoryResult.Success(
+                    MapVisibilityResponse(hidden_track_ids = emptyList(), hidden_group_ids = emptyList())
+                )
+            }
+        }
+
+        val useCase = LoadAllTrackersMapUseCase(trackRepo, groupRepo, visibilityRepo)
+        val result = kotlinx.coroutines.runBlocking { useCase.execute() }
+        val snapshot = result.snapshot
+
+        assertEquals(listOf("t1", "t3"), snapshot.trackers.map { it.id })
+        assertTrue(!result.hadFailures)
+    }
 }
 

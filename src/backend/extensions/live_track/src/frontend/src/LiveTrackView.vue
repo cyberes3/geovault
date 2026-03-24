@@ -559,6 +559,7 @@ import {
   computeVisibleSharedGroups,
   computeVisibleSharedTrackers,
   isAcceptedOrOwnedGroup,
+  isHiddenFromOwnerMapTrack,
   isHiddenInListGroup,
   isHiddenInListTracker,
   isSharedGroupNotOwned,
@@ -1109,6 +1110,7 @@ export default {
       const features = [];
       for (const track of trackers.value) {
         if (hidden.has(String(track.id))) continue;
+        if (isHiddenFromOwnerMapTrack(track, sortedGroups.value)) continue;
         if (groupTrackIds != null && !groupTrackIds.has(String(track.id))) continue;
         const coordsSorted = getCoordsSortedByTime(track);
         const coords = coordsSorted.map((c) => [c[0], c[1]]);
@@ -1145,6 +1147,7 @@ export default {
       const features = [];
       for (const track of trackers.value) {
         if (hidden.has(String(track.id))) continue;
+        if (isHiddenFromOwnerMapTrack(track, sortedGroups.value)) continue;
         if (groupTrackIds != null && !groupTrackIds.has(String(track.id))) continue;
         const coordsSorted = getCoordsSortedByTime(track);
         const last = coordsSorted.length ? coordsSorted[coordsSorted.length - 1] : null;
@@ -1709,8 +1712,12 @@ export default {
 
     function fitMapToTracks() {
       if (!map || trackers.value.length === 0) return;
+      const hidden = hiddenTrackIds.value;
+      const groups = sortedGroups.value;
       const allCoords = [];
       for (const track of trackers.value) {
+        if (hidden.has(String(track.id))) continue;
+        if (isHiddenFromOwnerMapTrack(track, groups)) continue;
         allCoords.push(...getLastNCoords(track, LAST_POINTS_FIT));
       }
       fitBoundsFromCoords(allCoords);
@@ -2053,12 +2060,15 @@ export default {
 
     function fitMapToGroupTracks(group) {
       if (!map || !group?.track_ids?.length) return;
-      const trackIds = new Set(group.track_ids);
+      const trackIds = new Set(group.track_ids.map((id) => String(id)));
+      const hidden = hiddenTrackIds.value;
+      const groups = sortedGroups.value;
       const coords = [];
       for (const track of trackers.value) {
-        if (trackIds.has(track.id)) {
-          coords.push(...getLastNCoords(track, LAST_POINTS_FIT));
-        }
+        if (!trackIds.has(String(track.id))) continue;
+        if (hidden.has(String(track.id))) continue;
+        if (isHiddenFromOwnerMapTrack(track, groups)) continue;
+        coords.push(...getLastNCoords(track, LAST_POINTS_FIT));
       }
       if (coords.length === 0) return;
       fitBoundsFromCoords(coords);
@@ -2230,6 +2240,7 @@ export default {
       if (idx < 0) return;
       const g = groups.value[idx];
       groups.value = groups.value.slice(0, idx).concat([{ ...g, hidden_in_list: !!value }]).concat(groups.value.slice(idx + 1));
+      updateMapFeatures();
     }
 
     function toggleTrackVisibility(trackId) {

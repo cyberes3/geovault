@@ -90,6 +90,21 @@ export function isHiddenInListGroup(group) {
   return isOwned(group) && !!group?.hidden_in_list;
 }
 
+/** Owner list-hide: hide on map (not persisted in map-visibility). */
+export function isHiddenFromOwnerMapTrack(track, groups) {
+  if (isHiddenInListTracker(track)) return true;
+  const tid = normalizeId(track?.id);
+  if (!tid) return false;
+  for (const group of groups || []) {
+    if (!isHiddenInListGroup(group)) continue;
+    const ids = group.track_ids || [];
+    for (let i = 0; i < ids.length; i += 1) {
+      if (normalizeId(ids[i]) === tid) return true;
+    }
+  }
+  return false;
+}
+
 export function isSharedGroupNotOwned(group) {
   return !isOwned(group);
 }
