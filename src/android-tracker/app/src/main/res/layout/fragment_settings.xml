@@ -67,15 +67,6 @@
                 android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
                 android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
 
-            <com.geovault.common.ToggleHelpCardView
-                android:id="@+id/fastGpsLockSwitch"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:toggleTitleText="@string/fast_gps_lock_label"
-                app:toggleHelpText="@string/fast_gps_lock_help_text"
-                android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
-                android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
-
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/hiddenTrackersButton"
                 style="@style/gv_common_ButtonOutlined"

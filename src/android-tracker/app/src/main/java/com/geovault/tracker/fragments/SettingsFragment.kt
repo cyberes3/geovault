@@ -54,7 +54,6 @@ class SettingsFragment : Fragment() {
     private lateinit var restartTrackingIfKilledSwitch: ToggleHelpCardView
     private lateinit var startTrackingOnLaunchSwitch: ToggleHelpCardView
     private lateinit var autoTrackingSwitch: ToggleHelpCardView
-    private lateinit var fastGpsLockSwitch: ToggleHelpCardView
     private lateinit var lowAccuracyFallbackSwitch: ToggleHelpCardView
     private lateinit var hiddenTrackersButton: MaterialButton
     private lateinit var viewAllTrackersButton: MaterialButton
@@ -91,7 +90,6 @@ class SettingsFragment : Fragment() {
         restartTrackingIfKilledSwitch = view.findViewById(R.id.restartTrackingIfKilledSwitch)
         startTrackingOnLaunchSwitch = view.findViewById(R.id.startTrackingOnLaunchSwitch)
         autoTrackingSwitch = view.findViewById(R.id.autoTrackingSwitch)
-        fastGpsLockSwitch = view.findViewById(R.id.fastGpsLockSwitch)
         lowAccuracyFallbackSwitch = view.findViewById(R.id.lowAccuracyFallbackSwitch)
         hiddenTrackersButton = view.findViewById(R.id.hiddenTrackersButton)
         viewAllTrackersButton = view.findViewById(R.id.viewAllTrackersButton)
@@ -289,7 +287,6 @@ class SettingsFragment : Fragment() {
 
         setSwitchCheckedIfChanged(extendedParamsSwitch, settings.sendExtendedData)
         setSwitchCheckedIfChanged(significantMotionSwitch, settings.significantDataOnly)
-        setSwitchCheckedIfChanged(fastGpsLockSwitch, settings.fastGpsLockEnabled)
         setSwitchCheckedIfChanged(lowAccuracyFallbackSwitch, settings.lowAccuracyFallbackEnabled)
         updateLowAccuracyFallbackUi(settings.lowAccuracyFallbackEnabled)
         updateNumericEditFromState(
@@ -353,11 +350,6 @@ class SettingsFragment : Fragment() {
             if (isBindingSettings) return@setOnCheckedChangeListener
             viewModel.setAutoTrackingMode(isChecked)
             updateAutoTrackingUi(isChecked)
-        }
-
-        fastGpsLockSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (isBindingSettings) return@setOnCheckedChangeListener
-            viewModel.setFastGpsLockEnabled(isChecked)
         }
 
         lowAccuracyFallbackSwitch.setOnCheckedChangeListener { _, isChecked ->

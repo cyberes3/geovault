@@ -20,7 +20,6 @@ class TrackerSettingsRepositoryImpl @Inject constructor(
         const val KEY_LOGGING_INTERVAL = "logging_interval"
         const val KEY_LOGGING_DISTANCE = "logging_distance"
         const val KEY_LOGGING_ACCURACY = "logging_accuracy"
-        const val KEY_FAST_GPS_LOCK_ENABLED = "fast_gps_lock_enabled"
         const val KEY_LOW_ACCURACY_FALLBACK_ENABLED = "low_accuracy_fallback_enabled"
         const val KEY_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC = "low_accuracy_fallback_timeout_sec"
         const val KEY_EXTENDED_PARAMS = "extended_params"
@@ -48,7 +47,6 @@ class TrackerSettingsRepositoryImpl @Inject constructor(
         KEY_LOGGING_INTERVAL,
         KEY_LOGGING_DISTANCE,
         KEY_LOGGING_ACCURACY,
-        KEY_FAST_GPS_LOCK_ENABLED,
         KEY_LOW_ACCURACY_FALLBACK_ENABLED,
         KEY_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC,
         KEY_EXTENDED_PARAMS,
@@ -128,10 +126,6 @@ class TrackerSettingsRepositoryImpl @Inject constructor(
         prefs.edit().putString(KEY_LOGGING_ACCURACY, clamped.toString()).apply()
     }
 
-    override fun setFastGpsLockEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_FAST_GPS_LOCK_ENABLED, enabled).apply()
-    }
-
     override fun setLowAccuracyFallbackEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_LOW_ACCURACY_FALLBACK_ENABLED, enabled).apply()
     }
@@ -184,10 +178,6 @@ class TrackerSettingsRepositoryImpl @Inject constructor(
             loggingIntervalSec = TrackerSettings.clampLoggingIntervalSec(intervalSecRaw),
             distanceFilterMeters = TrackerSettings.clampDistanceFilterMeters(distanceRaw),
             accuracyFilterMeters = TrackerSettings.clampAccuracyFilterMeters(accuracyRaw),
-            fastGpsLockEnabled = prefs.getBoolean(
-                KEY_FAST_GPS_LOCK_ENABLED,
-                TrackerSettings.DEFAULT_FAST_GPS_LOCK_ENABLED
-            ),
             lowAccuracyFallbackEnabled = prefs.getBoolean(
                 KEY_LOW_ACCURACY_FALLBACK_ENABLED,
                 TrackerSettings.DEFAULT_LOW_ACCURACY_FALLBACK_ENABLED

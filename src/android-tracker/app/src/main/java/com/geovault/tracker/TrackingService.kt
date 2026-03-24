@@ -181,6 +181,10 @@ class TrackingService : TrackPointServiceBase() {
         private const val FAST_GPS_LOCK_MIN_UPDATE_INTERVAL_MS = 500L
         private const val FAST_GPS_LOCK_MIN_DISTANCE_METERS = 0f
         private const val FAST_GPS_LOCK_WINDOW_MS = 60_000L
+        private const val FAST_GPS_LOCK_MIN_SAMPLES = 3
+        private const val FAST_GPS_LOCK_EARLY_EXIT_MIN_SAMPLES = 2
+        private const val FAST_GPS_LOCK_MAX_LAST_LOCATION_AGE_MS = 30_000L
+        private const val FAST_GPS_LOCK_MAX_SAMPLE_AGE_MS = 30_000L
         private const val FAST_GPS_LOCK_SUMMARY_INTERVAL_MS = 30_000L
         private const val FALLBACK_MAX_JUMP_SPEED_MPS = 60.0
         private const val FALLBACK_MAX_BURST_DISTANCE_METERS = 300.0
@@ -257,15 +261,84 @@ class TrackingService : TrackPointServiceBase() {
 
         @JvmStatic
         internal fun shouldStartFastGpsLock(
-            fastGpsLockEnabled: Boolean,
             rejectReason: TrackPointRejectReason?,
             measuredAccuracyMeters: Float?,
             accuracyFilterMeters: Float
         ): Boolean {
-            if (!fastGpsLockEnabled) return false
             val measuredAccuracy = measuredAccuracyMeters ?: return true
             if (rejectReason != TrackPointRejectReason.BAD_ACCURACY) return false
             return measuredAccuracy > accuracyFilterMeters
+        }
+
+        @JvmStatic
+        internal fun selectPreferredFastGpsSample(
+            currentBest: Location?,
+            candidate: Location?,
+            desiredAccuracyMeters: Float,
+            nowMs: Long,
+            nowElapsedRealtimeNanos: Long = SystemClock.elapsedRealtimeNanos()
+        ): Location? {
+            if (candidate == null) return currentBest
+            if (currentBest == null) return candidate
+
+            fun ageMs(location: Location): Long {
+                val normalized = CanonicalTimeNormalizer.normalizeTimestampMs(location.time, nowMs)
+                return CanonicalTimeNormalizer.ageMs(
+                    nowMs = nowMs,
+                    eventMs = normalized,
+                    nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+                    eventElapsedRealtimeNanos = location.elapsedRealtimeNanos
+                )
+            }
+
+            fun isValid(location: Location): Boolean {
+                if (!location.hasAccuracy() || location.accuracy < 0f) return false
+                return ageMs(location) <= 120_000L
+            }
+
+            val candidateValid = isValid(candidate)
+            val currentValid = isValid(currentBest)
+            if (candidateValid != currentValid) {
+                return if (candidateValid) candidate else currentBest
+            }
+            if (!candidateValid && !currentValid) {
+                return if (ageMs(candidate) <= ageMs(currentBest)) candidate else currentBest
+            }
+
+            val candidateAcc = if (candidate.hasAccuracy()) candidate.accuracy else Float.MAX_VALUE
+            val currentAcc = if (currentBest.hasAccuracy()) currentBest.accuracy else Float.MAX_VALUE
+            val candidateAge = ageMs(candidate)
+            val currentAge = ageMs(currentBest)
+            val ageDeltaMs = candidateAge - currentAge
+            val accuracyDelta = candidateAcc - currentAcc
+            val candidateMeetsDesired = desiredAccuracyMeters > 0f && candidateAcc <= desiredAccuracyMeters
+            val currentMeetsDesired = desiredAccuracyMeters > 0f && currentAcc <= desiredAccuracyMeters
+
+            if (kotlin.math.abs(ageDeltaMs) <= 5_000L && candidateMeetsDesired != currentMeetsDesired) {
+                return if (candidateMeetsDesired) candidate else currentBest
+            }
+            if (kotlin.math.abs(accuracyDelta) > 50f && kotlin.math.abs(ageDeltaMs) <= 30_000L) {
+                return if (candidateAcc < currentAcc) candidate else currentBest
+            }
+            if (kotlin.math.abs(ageDeltaMs) > 30_000L && kotlin.math.abs(accuracyDelta) <= 50f) {
+                return if (candidateAge < currentAge) candidate else currentBest
+            }
+
+            if (desiredAccuracyMeters > 0f && kotlin.math.abs(ageDeltaMs) <= 5_000L) {
+                val candidateDistanceToDesired = kotlin.math.abs(candidateAcc - desiredAccuracyMeters)
+                val currentDistanceToDesired = kotlin.math.abs(currentAcc - desiredAccuracyMeters)
+                if (candidateDistanceToDesired != currentDistanceToDesired) {
+                    return if (candidateDistanceToDesired < currentDistanceToDesired) candidate else currentBest
+                }
+            }
+
+            if (candidateAge != currentAge) {
+                return if (candidateAge < currentAge) candidate else currentBest
+            }
+            if (candidateAcc != currentAcc) {
+                return if (candidateAcc < currentAcc) candidate else currentBest
+            }
+            return candidate
         }
 
         @JvmStatic
@@ -374,6 +447,12 @@ class TrackingService : TrackPointServiceBase() {
     private var lowAccuracyFallbackLastRejectSummaryAtMs: Long = 0L
     private var fastGpsLockWindowJob: Job? = null
     private var isFastGpsLockWindowActive: Boolean = false
+    private var isFastGpsLockPriming: Boolean = false
+    private var fastGpsLockSampleCount: Int = 0
+    private var fastGpsLockPreferredSample: Location? = null
+    private var fastGpsLockBestAccuracySample: Location? = null
+    private var fastGpsLockFreshestSample: Location? = null
+    private var fastGpsLockNewestSample: Location? = null
     private var fastGpsLockStartCountThisSession: Int = 0
     private var fastGpsLockStopCountThisSession: Int = 0
     private var fastGpsLockTimeoutCountThisSession: Int = 0
@@ -590,6 +669,7 @@ class TrackingService : TrackPointServiceBase() {
         fastGpsLockLastSummaryAtMs = 0L
         isWaitingForGpsProvider = false
         stopFastGpsLockWindow(reason = "session_reset")
+        resetFastGpsLockSamples()
         TrackPointPipeline.resetLocalSession(selectedTrackerId)
         syncRuntimeStateStore()
         broadcastSessionStats()
@@ -700,6 +780,13 @@ class TrackingService : TrackPointServiceBase() {
         if (selectedTrackerId.isEmpty()) return
         val nowMs = System.currentTimeMillis()
         val nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+        if (isFastGpsLockWindowActive) {
+            recordFastGpsLockSample(
+                location = location,
+                nowMs = nowMs,
+                nowElapsedRealtimeNanos = nowElapsedRealtimeNanos
+            )
+        }
         val observedSpeedMps = resolveObservedSpeedMps(location, lastSpeedReferenceLocation)
         val isMockLocation = LocationCompat.isMock(location)
         val decision = TrackPointPipeline.processLocalGps(
@@ -1658,11 +1745,10 @@ class TrackingService : TrackPointServiceBase() {
         rejectReason: TrackPointRejectReason?,
         measuredAccuracyMeters: Float?
     ) {
-        if (!isTracking || isGpsPaused || isFastGpsLockWindowActive) return
+        if (!isTracking || isGpsPaused || isFastGpsLockWindowActive || isFastGpsLockPriming) return
         val accuracyFilterMeters = resolveCurrentAccuracyFilter()
         if (
             !shouldStartFastGpsLock(
-                fastGpsLockEnabled = currentSettings.fastGpsLockEnabled,
                 rejectReason = rejectReason,
                 measuredAccuracyMeters = measuredAccuracyMeters,
                 accuracyFilterMeters = accuracyFilterMeters
@@ -1670,7 +1756,46 @@ class TrackingService : TrackPointServiceBase() {
         ) {
             return
         }
+        isFastGpsLockPriming = true
+        unifiedLocationClient.getLastLocation(
+            onSuccess = { cachedLocation ->
+                isFastGpsLockPriming = false
+                if (!isTracking || isGpsPaused || isFastGpsLockWindowActive) return@getLastLocation
+                if (isFreshAccurateLocation(cachedLocation, accuracyFilterMeters)) {
+                    Log.i(
+                        TAG,
+                        "Fast GPS lock satisfied by fresh last-known fix; skipping burst " +
+                            "acc=${cachedLocation?.accuracy} accuracyFilter=$accuracyFilterMeters"
+                    )
+                    onAcceptedFixWithLock()
+                    return@getLastLocation
+                }
+                startFastGpsLockBurst(
+                    rejectReason = rejectReason,
+                    measuredAccuracyMeters = measuredAccuracyMeters,
+                    accuracyFilterMeters = accuracyFilterMeters
+                )
+            },
+            onFailure = { error ->
+                isFastGpsLockPriming = false
+                Log.w(TAG, "Fast GPS lock prime failed; starting burst", error)
+                if (!isTracking || isGpsPaused || isFastGpsLockWindowActive) return@getLastLocation
+                startFastGpsLockBurst(
+                    rejectReason = rejectReason,
+                    measuredAccuracyMeters = measuredAccuracyMeters,
+                    accuracyFilterMeters = accuracyFilterMeters
+                )
+            }
+        )
+    }
 
+    private fun startFastGpsLockBurst(
+        rejectReason: TrackPointRejectReason?,
+        measuredAccuracyMeters: Float?,
+        accuracyFilterMeters: Float
+    ) {
+        if (!isTracking || isGpsPaused || isFastGpsLockWindowActive) return
+        resetFastGpsLockSamples()
         isFastGpsLockWindowActive = true
         if (!applyCurrentLocationRequest("fast_gps_lock_start")) {
             isFastGpsLockWindowActive = false
@@ -1697,9 +1822,14 @@ class TrackingService : TrackPointServiceBase() {
 
     private fun stopFastGpsLockWindow(reason: String) {
         val wasActive = isFastGpsLockWindowActive
+        isFastGpsLockPriming = false
         fastGpsLockWindowJob?.cancel()
         fastGpsLockWindowJob = null
         isFastGpsLockWindowActive = false
+        if (reason == "window_timeout" && wasActive) {
+            emitFastGpsLockTimeoutBestSample()
+        }
+        resetFastGpsLockSamples()
         if (!wasActive || !isTracking || isGpsPaused) return
         fastGpsLockStopCountThisSession++
         if (reason == "window_timeout") {
@@ -1727,7 +1857,7 @@ class TrackingService : TrackPointServiceBase() {
         val accuracyFilterMeters = resolveCurrentAccuracyFilter()
         Log.d(
             TAG,
-            "Fast GPS lock summary active=$isFastGpsLockWindowActive enabled=${currentSettings.fastGpsLockEnabled} measuredAcc=$measuredAccuracyMeters accuracyFilter=$accuracyFilterMeters startsThisSession=$fastGpsLockStartCountThisSession stopsThisSession=$fastGpsLockStopCountThisSession timeoutsThisSession=$fastGpsLockTimeoutCountThisSession"
+            "Fast GPS lock summary active=$isFastGpsLockWindowActive measuredAcc=$measuredAccuracyMeters accuracyFilter=$accuracyFilterMeters startsThisSession=$fastGpsLockStartCountThisSession stopsThisSession=$fastGpsLockStopCountThisSession timeoutsThisSession=$fastGpsLockTimeoutCountThisSession"
         )
     }
 
@@ -1736,7 +1866,10 @@ class TrackingService : TrackPointServiceBase() {
         lowAccuracyFallbackRejectedFixCountThisSession++
         lowAccuracyFallbackCandidate = Location(location)
         val shouldStartTimer = lowAccuracyFallbackCoordinator.onRejectedFixForLock(
-            fallbackEligible = true
+            fallbackEligible = true,
+            candidateLatitude = location.latitude,
+            candidateLongitude = location.longitude,
+            candidateTimestampMs = location.time
         )
         if (shouldStartTimer) {
             lowAccuracyFallbackArmCountThisSession++
@@ -1752,8 +1885,175 @@ class TrackingService : TrackPointServiceBase() {
         consecutiveBadAccuracyPoints = 0
         isWaitingForGpsLock = false
         lowAccuracyFallbackCoordinator.onAcceptedFix()
+        if (isFastGpsLockWindowActive && fastGpsLockSampleCount < FAST_GPS_LOCK_EARLY_EXIT_MIN_SAMPLES) {
+            return
+        }
         stopFastGpsLockWindow(reason = "good_accuracy_fix")
         cancelLowAccuracyFallbackTimer(clearCandidate = true, reason = "lock_recovered")
+    }
+
+    private fun resetFastGpsLockSamples() {
+        fastGpsLockSampleCount = 0
+        fastGpsLockPreferredSample = null
+        fastGpsLockBestAccuracySample = null
+        fastGpsLockFreshestSample = null
+        fastGpsLockNewestSample = null
+    }
+
+    private fun isFreshAccurateLocation(location: Location?, accuracyFilterMeters: Float): Boolean {
+        location ?: return false
+        if (!location.hasAccuracy() || location.accuracy > accuracyFilterMeters) return false
+        val nowMs = System.currentTimeMillis()
+        val normalizedTimestampMs = CanonicalTimeNormalizer.normalizeTimestampMs(location.time, nowMs)
+        val ageMs = CanonicalTimeNormalizer.ageMs(
+            nowMs = nowMs,
+            eventMs = normalizedTimestampMs,
+            nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+            eventElapsedRealtimeNanos = location.elapsedRealtimeNanos
+        )
+        return ageMs in 0..FAST_GPS_LOCK_MAX_LAST_LOCATION_AGE_MS
+    }
+
+    private fun recordFastGpsLockSample(
+        location: Location,
+        nowMs: Long,
+        nowElapsedRealtimeNanos: Long
+    ) {
+        fastGpsLockSampleCount++
+        val sample = Location(location)
+        fastGpsLockNewestSample = sample
+        fastGpsLockPreferredSample = selectPreferredFastGpsSample(
+            currentBest = fastGpsLockPreferredSample,
+            candidate = sample,
+            desiredAccuracyMeters = resolveCurrentAccuracyFilter(),
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = nowElapsedRealtimeNanos
+        )
+        if (
+            fastGpsLockBestAccuracySample == null ||
+            isMoreAccurateSample(sample, fastGpsLockBestAccuracySample)
+        ) {
+            fastGpsLockBestAccuracySample = sample
+        }
+        if (
+            fastGpsLockFreshestSample == null ||
+            isFresherSample(sample, fastGpsLockFreshestSample, nowMs, nowElapsedRealtimeNanos)
+        ) {
+            fastGpsLockFreshestSample = sample
+        }
+        val accuracyFilter = resolveCurrentAccuracyFilter()
+        if (
+            fastGpsLockSampleCount >= FAST_GPS_LOCK_EARLY_EXIT_MIN_SAMPLES &&
+            fastGpsLockSampleCount <= FAST_GPS_LOCK_MIN_SAMPLES &&
+            isFreshAccurateLocation(sample, accuracyFilter)
+        ) {
+            stopFastGpsLockWindow(reason = "sample_goal_reached")
+            cancelLowAccuracyFallbackTimer(clearCandidate = true, reason = "sample_goal_reached")
+        }
+    }
+
+    private fun isMoreAccurateSample(candidate: Location, currentBest: Location?): Boolean {
+        currentBest ?: return true
+        if (!candidate.hasAccuracy()) return false
+        if (!currentBest.hasAccuracy()) return true
+        return candidate.accuracy < currentBest.accuracy
+    }
+
+    private fun isFresherSample(
+        candidate: Location,
+        currentBest: Location?,
+        nowMs: Long,
+        nowElapsedRealtimeNanos: Long
+    ): Boolean {
+        currentBest ?: return true
+        val candidateAgeMs = CanonicalTimeNormalizer.ageMs(
+            nowMs = nowMs,
+            eventMs = CanonicalTimeNormalizer.normalizeTimestampMs(candidate.time, nowMs),
+            nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+            eventElapsedRealtimeNanos = candidate.elapsedRealtimeNanos
+        )
+        val currentBestAgeMs = CanonicalTimeNormalizer.ageMs(
+            nowMs = nowMs,
+            eventMs = CanonicalTimeNormalizer.normalizeTimestampMs(currentBest.time, nowMs),
+            nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+            eventElapsedRealtimeNanos = currentBest.elapsedRealtimeNanos
+        )
+        return candidateAgeMs < currentBestAgeMs
+    }
+
+    private fun selectBestFastGpsLockSample(): Location? {
+        val nowMs = System.currentTimeMillis()
+        fastGpsLockPreferredSample?.let { preferred ->
+            if (isFreshAccurateLocation(preferred, resolveCurrentAccuracyFilter())) {
+                return preferred
+            }
+        }
+        fastGpsLockBestAccuracySample?.let { bestAccuracy ->
+            if (isFreshAccurateLocation(bestAccuracy, resolveCurrentAccuracyFilter())) {
+                return bestAccuracy
+            }
+        }
+        fastGpsLockFreshestSample?.let { freshest ->
+            val normalizedTs = CanonicalTimeNormalizer.normalizeTimestampMs(freshest.time, nowMs)
+            val ageMs = CanonicalTimeNormalizer.ageMs(
+                nowMs = nowMs,
+                eventMs = normalizedTs,
+                nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+                eventElapsedRealtimeNanos = freshest.elapsedRealtimeNanos
+            )
+            if (ageMs in 0..FAST_GPS_LOCK_MAX_SAMPLE_AGE_MS) {
+                return freshest
+            }
+        }
+        return fastGpsLockPreferredSample
+            ?: fastGpsLockBestAccuracySample
+            ?: fastGpsLockNewestSample
+    }
+
+    private fun emitFastGpsLockTimeoutBestSample() {
+        if (!isTracking || isGpsPaused) return
+        val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
+        if (trackerId.isEmpty()) return
+        val candidate = selectBestFastGpsLockSample() ?: return
+        val nowMs = System.currentTimeMillis()
+        val fallbackLocation = Location(candidate).apply {
+            time = nowMs
+            val sourceProvider = candidate.provider?.takeIf { it.isNotBlank() } ?: "fused"
+            provider = "$FALLBACK_PROVIDER_PREFIX$sourceProvider"
+            val mergedExtras = Bundle().apply {
+                candidate.extras?.let { putAll(it) }
+                putBoolean(EXTRAS_KEY_LOW_ACCURACY_FALLBACK, true)
+                putString(EXTRAS_KEY_FALLBACK_SOURCE_PROVIDER, sourceProvider)
+            }
+            extras = mergedExtras
+        }
+        if (
+            !shouldEmitFallbackForTransition(
+                previousAcceptedLocation = lastLocation,
+                fallbackCandidateLocation = fallbackLocation,
+                nowMs = nowMs
+            )
+        ) {
+            Log.w(TAG, "Fast GPS lock timeout best-sample rejected as implausible transition")
+            return
+        }
+        val fallbackEvent = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackerId,
+            lon = fallbackLocation.longitude,
+            lat = fallbackLocation.latitude,
+            timestampMs = fallbackLocation.time,
+            accuracyMeters = if (fallbackLocation.hasAccuracy()) fallbackLocation.accuracy else null,
+            quality = TrackPointQuality.DEGRADED,
+            orderingKey = fallbackLocation.time
+        )
+        Log.i(
+            TAG,
+            "Fast GPS lock timeout emitted best sample " +
+                "samples=$fastGpsLockSampleCount acc=${if (fallbackLocation.hasAccuracy()) fallbackLocation.accuracy else null}"
+        )
+        broadcastTrackPoint(fallbackLocation, fallbackEvent)
+        enqueueAndPushLocation(fallbackLocation, totalDistanceMeters)
     }
 
     private fun ensureLowAccuracyFallbackTimerRunning() {
@@ -1838,6 +2138,11 @@ class TrackingService : TrackPointServiceBase() {
                 "waitingDurationMs=$waitingDurationMs"
         )
         lowAccuracyFallbackEmitCountThisSession++
+        lowAccuracyFallbackCoordinator.onFallbackEmitted(
+            candidateLatitude = candidate.latitude,
+            candidateLongitude = candidate.longitude,
+            candidateTimestampMs = candidate.time
+        )
         lowAccuracyFallbackTimerArmedAtMs = System.currentTimeMillis()
         broadcastTrackPoint(fallbackLocation, fallbackEvent)
         enqueueAndPushLocation(fallbackLocation, totalDistanceMeters)

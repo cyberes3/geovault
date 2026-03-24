@@ -50,8 +50,19 @@ class TrackingServiceFallbackBehaviorTest {
     @Test
     fun rejectedFix_thenAcceptedBeforeTimeout_cancelsFallbackEmission() {
         val coordinator = LowAccuracyFallbackCoordinator()
+        val candidate = location(
+            lat = 38.9,
+            lon = -104.8,
+            timeMs = 1_800_000_000_000L,
+            accuracyMeters = 120f
+        )
 
-        val shouldArm = coordinator.onRejectedFixForLock(fallbackEligible = true)
+        val shouldArm = coordinator.onRejectedFixForLock(
+            fallbackEligible = true,
+            candidateLatitude = candidate.latitude,
+            candidateLongitude = candidate.longitude,
+            candidateTimestampMs = candidate.time
+        )
         assertTrue(shouldArm)
 
         coordinator.onAcceptedFix()
@@ -66,18 +77,65 @@ class TrackingServiceFallbackBehaviorTest {
     @Test
     fun timeoutWhileAwaitingLock_emitsAndStaysArmedForRepeatCycles() {
         val coordinator = LowAccuracyFallbackCoordinator()
+        val firstCandidate = location(
+            lat = 38.9,
+            lon = -104.8,
+            timeMs = 1_800_000_000_000L,
+            accuracyMeters = 120f
+        )
+        val secondCandidate = location(
+            lat = 38.9001,
+            lon = -104.7999,
+            timeMs = 1_800_000_030_000L,
+            accuracyMeters = 130f
+        )
 
-        assertTrue(coordinator.onRejectedFixForLock(fallbackEligible = true))
+        assertTrue(
+            coordinator.onRejectedFixForLock(
+                fallbackEligible = true,
+                candidateLatitude = firstCandidate.latitude,
+                candidateLongitude = firstCandidate.longitude,
+                candidateTimestampMs = firstCandidate.time
+            )
+        )
         assertTrue(coordinator.shouldEmitFallback(fallbackEligible = true, hasCandidate = true))
-        // Service loop should be able to emit again on the next timeout if lock is still missing.
+        coordinator.onFallbackEmitted(
+            candidateLatitude = firstCandidate.latitude,
+            candidateLongitude = firstCandidate.longitude,
+            candidateTimestampMs = firstCandidate.time
+        )
+        // Service loop should not emit the exact same stale fallback repeatedly.
+        assertFalse(coordinator.shouldEmitFallback(fallbackEligible = true, hasCandidate = true))
+        // Service loop should emit again once a materially newer candidate arrives.
+        assertFalse(
+            coordinator.onRejectedFixForLock(
+                fallbackEligible = true,
+                candidateLatitude = secondCandidate.latitude,
+                candidateLongitude = secondCandidate.longitude,
+                candidateTimestampMs = secondCandidate.time
+            )
+        )
         assertTrue(coordinator.shouldEmitFallback(fallbackEligible = true, hasCandidate = true))
     }
 
     @Test
     fun disabledFallback_neverArmsOrEmits() {
         val coordinator = LowAccuracyFallbackCoordinator()
+        val candidate = location(
+            lat = 38.9,
+            lon = -104.8,
+            timeMs = 1_800_000_000_000L,
+            accuracyMeters = 120f
+        )
 
-        assertFalse(coordinator.onRejectedFixForLock(fallbackEligible = false))
+        assertFalse(
+            coordinator.onRejectedFixForLock(
+                fallbackEligible = false,
+                candidateLatitude = candidate.latitude,
+                candidateLongitude = candidate.longitude,
+                candidateTimestampMs = candidate.time
+            )
+        )
         assertFalse(
             coordinator.shouldEmitFallback(
                 fallbackEligible = false,
@@ -87,10 +145,9 @@ class TrackingServiceFallbackBehaviorTest {
     }
 
     @Test
-    fun shouldStartFastGpsLock_startsForBadAccuracyOverThresholdOrMissingAccuracyWhenEnabled() {
+    fun shouldStartFastGpsLock_startsForBadAccuracyOverThresholdOrMissingAccuracy() {
         assertTrue(
             TrackingService.shouldStartFastGpsLock(
-                fastGpsLockEnabled = true,
                 rejectReason = TrackPointRejectReason.BAD_ACCURACY,
                 measuredAccuracyMeters = 80f,
                 accuracyFilterMeters = 50f
@@ -98,7 +155,6 @@ class TrackingServiceFallbackBehaviorTest {
         )
         assertTrue(
             TrackingService.shouldStartFastGpsLock(
-                fastGpsLockEnabled = true,
                 rejectReason = TrackPointRejectReason.BAD_ACCURACY,
                 measuredAccuracyMeters = null,
                 accuracyFilterMeters = 50f
@@ -106,15 +162,6 @@ class TrackingServiceFallbackBehaviorTest {
         )
         assertFalse(
             TrackingService.shouldStartFastGpsLock(
-                fastGpsLockEnabled = false,
-                rejectReason = TrackPointRejectReason.BAD_ACCURACY,
-                measuredAccuracyMeters = 80f,
-                accuracyFilterMeters = 50f
-            )
-        )
-        assertFalse(
-            TrackingService.shouldStartFastGpsLock(
-                fastGpsLockEnabled = true,
                 rejectReason = TrackPointRejectReason.STALE,
                 measuredAccuracyMeters = 80f,
                 accuracyFilterMeters = 50f
@@ -122,7 +169,6 @@ class TrackingServiceFallbackBehaviorTest {
         )
         assertTrue(
             TrackingService.shouldStartFastGpsLock(
-                fastGpsLockEnabled = true,
                 rejectReason = null,
                 measuredAccuracyMeters = null,
                 accuracyFilterMeters = 50f
@@ -130,12 +176,86 @@ class TrackingServiceFallbackBehaviorTest {
         )
         assertFalse(
             TrackingService.shouldStartFastGpsLock(
-                fastGpsLockEnabled = true,
                 rejectReason = TrackPointRejectReason.BAD_ACCURACY,
                 measuredAccuracyMeters = 40f,
                 accuracyFilterMeters = 50f
             )
         )
+    }
+
+    @Test
+    fun selectPreferredFastGpsSample_prefersValidAccurateOverInvalid() {
+        val nowMs = 1_800_000_100_000L
+        val invalid = location(
+            lat = 38.9,
+            lon = -104.8,
+            timeMs = nowMs - 1_000L,
+            accuracyMeters = null
+        )
+        val valid = location(
+            lat = 38.9001,
+            lon = -104.7999,
+            timeMs = nowMs - 2_000L,
+            accuracyMeters = 25f
+        )
+        val selected = TrackingService.selectPreferredFastGpsSample(
+            currentBest = invalid,
+            candidate = valid,
+            desiredAccuracyMeters = 50f,
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = 0L
+        )
+        assertEquals(valid, selected)
+    }
+
+    @Test
+    fun selectPreferredFastGpsSample_prefersDesiredAccuracyWhenAgesSimilar() {
+        val nowMs = 1_800_000_100_000L
+        val current = location(
+            lat = 38.9,
+            lon = -104.8,
+            timeMs = nowMs - 3_000L,
+            accuracyMeters = 70f
+        )
+        val candidate = location(
+            lat = 38.9001,
+            lon = -104.7999,
+            timeMs = nowMs - 2_500L,
+            accuracyMeters = 40f
+        )
+        val selected = TrackingService.selectPreferredFastGpsSample(
+            currentBest = current,
+            candidate = candidate,
+            desiredAccuracyMeters = 50f,
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = 0L
+        )
+        assertEquals(candidate, selected)
+    }
+
+    @Test
+    fun selectPreferredFastGpsSample_prefersNewerWhenAccuracySimilarAndAgeGapLarge() {
+        val nowMs = 1_800_000_100_000L
+        val oldAccurate = location(
+            lat = 38.9,
+            lon = -104.8,
+            timeMs = nowMs - 90_000L,
+            accuracyMeters = 40f
+        )
+        val newerSlightlyWorse = location(
+            lat = 38.9002,
+            lon = -104.7998,
+            timeMs = nowMs - 5_000L,
+            accuracyMeters = 45f
+        )
+        val selected = TrackingService.selectPreferredFastGpsSample(
+            currentBest = oldAccurate,
+            candidate = newerSlightlyWorse,
+            desiredAccuracyMeters = 50f,
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = 0L
+        )
+        assertEquals(newerSlightlyWorse, selected)
     }
 
     @Test

@@ -27,7 +27,6 @@ class SettingsViewModelTest {
         viewModel.setLoggingIntervalSec(42L)
         viewModel.setTrackingProfile(TrackerTrackingProfile.DRIVING)
         viewModel.setAccuracyFilterMeters(123f)
-        viewModel.setFastGpsLockEnabled(false)
         viewModel.setLowAccuracyFallbackEnabled(true)
         viewModel.setLowAccuracyFallbackTimeoutSec(77L)
 
@@ -36,7 +35,6 @@ class SettingsViewModelTest {
         assertEquals(42L, state.loggingIntervalSec)
         assertEquals(TrackerTrackingProfile.DRIVING, state.trackingProfile)
         assertEquals(123f, state.accuracyFilterMeters, 0.0001f)
-        assertFalse(state.fastGpsLockEnabled)
         assertTrue(state.lowAccuracyFallbackEnabled)
         assertEquals(77L, state.lowAccuracyFallbackTimeoutSec)
         assertFalse(viewModel.uiState.value.settings.sendExtendedData)
@@ -78,10 +76,6 @@ class SettingsViewModelTest {
 
         override fun setAccuracyFilterMeters(value: Float) {
             flow.value = flow.value.copy(accuracyFilterMeters = value)
-        }
-
-        override fun setFastGpsLockEnabled(enabled: Boolean) {
-            flow.value = flow.value.copy(fastGpsLockEnabled = enabled)
         }
 
         override fun setLowAccuracyFallbackEnabled(enabled: Boolean) {
