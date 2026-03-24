@@ -17,6 +17,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
 import com.geovault.common.LoadingSpinner
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -521,6 +522,7 @@ class MapFragment : Fragment() {
                     }
                 }
                 setupMapTapListener(map)
+                setupMapLongClickCopyCoordinates(map)
                 if (styleReloadListener == null) {
                     styleReloadListener = MapView.OnDidFinishLoadingStyleListener {
                         if (!isAdded) return@OnDidFinishLoadingStyleListener
@@ -2424,6 +2426,17 @@ class MapFragment : Fragment() {
             }
             clearMapSelection()
             false
+        }
+    }
+
+    private fun setupMapLongClickCopyCoordinates(map: MapLibreMap) {
+        map.addOnMapLongClickListener { latLng ->
+            if (!isAdded) return@addOnMapLongClickListener false
+            val text = MapSelectionUtils.formatCoords(latLng.latitude, latLng.longitude)
+            val cm = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            cm?.setPrimaryClip(ClipData.newPlainText("coordinates", text))
+            Toast.makeText(requireContext(), getString(R.string.map_coordinates_copied_toast), Toast.LENGTH_SHORT).show()
+            true
         }
     }
 

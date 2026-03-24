@@ -183,6 +183,7 @@ import MapTrackList from './MapTrackList.vue';
 import MobileMapDrawer from './MobileMapDrawer.vue';
 import { buildLineFeatures, buildPointFeature, fitMapToTracks, fitMapToSingleTrack, centerMapOnTrackLastPoint } from './trackGeometry.js';
 import { setupMapFollowListeners } from './mapFollowLock.js';
+import { setupCopyMapCoordinatesOnContextMenu } from 'platform/utils/map/copyMapCoordinatesOnContextMenu.js';
 import { ensureArrowImage } from './trackArrowMap.js';
 import { trackToParamsModalShape } from './trackParamsShape.js';
 import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } from './mapTileUtils.js';
@@ -537,6 +538,7 @@ export default {
         },
         onUnlock: () => updateMapData().catch(() => {})
       });
+      setupCopyMapCoordinatesOnContextMenu(map);
     }
 
     const TRACK_CLICK_HIT_RADIUS_PX = 15;

@@ -552,6 +552,7 @@ import { getCoordsSortedByTime, getTrackDirectionAngle, splitTrackIntoSegments }
 import { getArrowImageId, ensureArrowImage } from './trackArrowMap.js';
 import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } from './mapTileUtils.js';
 import { setupMapFollowListeners } from './mapFollowLock.js';
+import { setupCopyMapCoordinatesOnContextMenu } from 'platform/utils/map/copyMapCoordinatesOnContextMenu.js';
 import { useTileSources } from './useTileSources.js';
 import { formatTimestampLocal } from './paramFormatters.js';
 import {
@@ -1627,6 +1628,7 @@ export default {
         const features = map.queryRenderedFeatures(e.point, { layers });
         canvas.style.cursor = features.length ? 'pointer' : '';
       });
+      setupCopyMapCoordinatesOnContextMenu(map);
     }
 
     /** Disable map rotation (drag, touch pinch, keyboard) so north stays up. See maplibre disable-map-rotation example. */

@@ -255,6 +255,7 @@ import {
   updateUserLocationMarker,
   removeUserLocationMarker
 } from '@/utils/map/maplibre'
+import { setupCopyMapCoordinatesOnContextMenu } from '@/utils/map/copyMapCoordinatesOnContextMenu.js'
 import { geolocationManager } from '@/utils/map/geolocationManager'
 import {
   restoreGeoJsonFeatures,
@@ -619,6 +620,9 @@ export default {
         const handlers = this.mapInteractionHandlers
         this.map.off('move', handlers.onMove)
         this.map.off('zoom', handlers.onZoom)
+        if (handlers.teardownCopyCoords) {
+          handlers.teardownCopyCoords()
+        }
         this.mapInteractionHandlers = null
       }
       if (this.teardownTrackingUnlockHandlers) {
@@ -739,7 +743,11 @@ export default {
       })
       this.mapInteractionHandlers = {
         onMove,
-        onZoom
+        onZoom,
+        teardownCopyCoords: setupCopyMapCoordinatesOnContextMenu(this.map, {
+          toast,
+          ClipboardDocumentIcon
+        })
       }
 
       // Setup basic event listeners (moveend, zoomend, click)
@@ -931,37 +939,6 @@ export default {
           this.hoveredFeatureId = null
           this.updateFeatureHighlighting()
         }
-      })
-
-      // Add contextmenu (right-click) handler to copy coordinates
-      this.map.on('contextmenu', (e) => {
-        // Prevent default browser context menu
-        e.preventDefault()
-        
-        // Get coordinates and zoom level
-        const { lng, lat } = e.lngLat
-        const zoom = Math.round(this.map.getZoom())
-        
-        // Format coordinates with 6 decimal places
-        const coordinateString = `${lat.toFixed(6)}, ${lng.toFixed(6)}`
-        
-        // Generate CalTopo URL
-        const caltopoUrl = `https://caltopo.com/map.html#ll=${lat.toFixed(5)},${lng.toFixed(5)}&z=${zoom}`
-        
-        // Copy to clipboard
-        navigator.clipboard.writeText(coordinateString).then(() => {
-          // Show success message with CalTopo link
-          const html = `Coordinates copied! <a href="${caltopoUrl}" target="_blank" rel="noopener noreferrer">Open in CalTopo</a>`
-          toast.show('Coordinates copied!', 'info', { 
-            html, 
-            duration: 5000,
-            plain: true,
-            icon: ClipboardDocumentIcon
-          })
-        }).catch((err) => {
-          console.error('Failed to copy coordinates:', err)
-          toast.error('Failed to copy coordinates')
-        })
       })
     },
     getLocationDisplayName() {

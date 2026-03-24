@@ -110,6 +110,7 @@
     <string name="zoom_in_description">Zoom in</string>
     <string name="zoom_out_description">Zoom out</string>
     <string name="map_gps_accuracy_warning_description">Waiting for GPS lock or better accuracy</string>
+    <string name="map_coordinates_copied_toast">Coordinates copied to clipboard</string>
     <string name="show_all_trackers">View All Trackers</string>
     <string name="all_trackers">All Trackers</string>
     <string name="show_selected_tracker">Show selected tracker</string>
