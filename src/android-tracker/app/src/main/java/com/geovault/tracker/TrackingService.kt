@@ -7,7 +7,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.location.Location
 import android.location.LocationManager
-import android.os.Build
 import android.os.IBinder
 import android.content.pm.ServiceInfo
 import android.os.BatteryManager
@@ -257,6 +256,11 @@ class TrackingService : TrackPointServiceBase() {
         internal fun resolveLowAccuracyFallbackTimeoutMs(timeoutSec: Long): Long {
             val clampedTimeoutSec = TrackerSettings.clampLowAccuracyFallbackTimeoutSec(timeoutSec)
             return clampedTimeoutSec * 1000L
+        }
+
+        @JvmStatic
+        internal fun successfulBatchSentCount(batchSize: Int): Int {
+            return batchSize.coerceAtLeast(0)
         }
 
         @JvmStatic
@@ -558,7 +562,7 @@ class TrackingService : TrackPointServiceBase() {
             StartupCommandPath.ReshowForeground -> {
                 if (isTracking) {
                     serviceScope.launch {
-                        val count = database.locationDao().getCurrentSessionCount(sessionBoundaryForBacklogMs)
+                        val count = database.locationDao().getCount()
                         withContext(Dispatchers.Main) {
                             startForeground(
                                 NOTIFICATION_ID,
@@ -981,9 +985,8 @@ class TrackingService : TrackPointServiceBase() {
 
                 // Fetch these once per push to avoid high-cost IPC calls in loop.
                 val (batteryLevel, isCharging) = if (useExtendedParams) getBatteryStatus() else Pair(0, false)
-                val buildSerial = if (useExtendedParams) getBuildSerial() else ""
+                val deviceIdentifier = if (useExtendedParams) getDeviceIdentifier() else ""
                 val sessionStart = sessionStartTimeMs
-
                 var shouldContinuePush = true
                 while (batchesSent < MAX_BATCHES_PER_PUSH && shouldContinuePush) {
                     val batch = claimNextBatch(
@@ -1000,7 +1003,7 @@ class TrackingService : TrackPointServiceBase() {
                             sessionStart,
                             batteryLevel,
                             isCharging,
-                            buildSerial
+                            deviceIdentifier
                         )
                     } else {
                         BinaryPayloadBuilder.buildPayloadMinimal(batch, trackerId)
@@ -1018,19 +1021,7 @@ class TrackingService : TrackPointServiceBase() {
                         getAuthenticatedHttpClient().newCall(request).execute().use { response ->
                             if (response.isSuccessful) {
                                 Log.d(TAG, "Successfully pushed ${batch.size} locations")
-                                val normalizedSessionStart = if (sessionStart > 0L) {
-                                    CanonicalTimeNormalizer.normalizeTimestampMs(sessionStart, sessionStart)
-                                } else {
-                                    0L
-                                }
-                                val sentThisSession = if (normalizedSessionStart > 0L) {
-                                    batch.count { queued ->
-                                        CanonicalTimeNormalizer.normalizeTimestampMs(queued.time, normalizedSessionStart) >= normalizedSessionStart
-                                    }
-                                } else {
-                                    batch.size
-                                }
-                                pointsSentThisSession += sentThisSession
+                                pointsSentThisSession += successfulBatchSentCount(batch.size)
                                 lastPointSentAtMs = System.currentTimeMillis()
                                 syncRuntimeStateStore()
                                 broadcastSessionStats()
@@ -1104,7 +1095,7 @@ class TrackingService : TrackPointServiceBase() {
 
     private fun updateNotificationCount() {
         serviceScope.launch {
-            val count = database.locationDao().getCurrentSessionCount(sessionBoundaryForBacklogMs)
+            val count = database.locationDao().getCount()
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.notify(NOTIFICATION_ID, createNotification(pointsSentThisSession, count))
         }
@@ -1166,6 +1157,10 @@ class TrackingService : TrackPointServiceBase() {
             val (batteryLevel, isCharging) = getBatteryStatus()
             props.put("batt", batteryLevel)
             props.put("ischarging", isCharging)
+            val deviceIdentifier = getDeviceIdentifier()
+            if (deviceIdentifier.isNotEmpty()) {
+                props.put("ser", deviceIdentifier)
+            }
             props.toString()
         } catch (e: Exception) {
             Log.w(TAG, "Failed to build extended tracking point payload", e)
@@ -1489,12 +1484,11 @@ class TrackingService : TrackPointServiceBase() {
         }
     }
 
-    private fun getBuildSerial(): String {
-        return try {
-            Build.getSerial() ?: ""
-        } catch (e: SecurityException) {
-            ""
-        }
+    private fun getDeviceIdentifier(): String {
+        return android.provider.Settings.Secure.getString(
+            contentResolver,
+            android.provider.Settings.Secure.ANDROID_ID
+        ) ?: ""
     }
 
     /**

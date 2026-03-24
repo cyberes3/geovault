@@ -487,6 +487,13 @@ class EditTrackerViewModel @Inject constructor(
         return state.form != initial
     }
 
+    fun hasUnsavedChangesExcludingRecentDataWindow(): Boolean {
+        val state = _uiState.value
+        val initial = state.initialSnapshot ?: return false
+        val normalizedForm = state.form.copy(recentDataWindow = initial.recentDataWindow)
+        return normalizedForm != initial
+    }
+
     fun deleteTracker(trackerId: String) {
         viewModelScope.launch {
             when (val result = trackerRepository.deleteTracker(trackerId)) {

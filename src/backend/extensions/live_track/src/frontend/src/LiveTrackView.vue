@@ -542,7 +542,6 @@ import {
   computeVisibleSharedGroups,
   computeVisibleSharedTrackers,
   isAcceptedOrOwnedGroup,
-  isHiddenFromOwnerMapTrack,
   isHiddenOwnedGroup,
   isHiddenOwnedTracker,
   isSharedGroupNotOwned,
@@ -1085,7 +1084,7 @@ export default {
           : null;
       const features = [];
       for (const track of trackers.value) {
-        if (isHiddenFromOwnerMapTrack(track)) continue;
+        if (isHiddenOwnedTracker(track)) continue;
         if (groupTrackIds != null && !groupTrackIds.has(String(track.id))) continue;
         const coordsSorted = getCoordsSortedByTime(track);
         const coords = coordsSorted.map((c) => [c[0], c[1]]);
@@ -1120,7 +1119,7 @@ export default {
           : null;
       const features = [];
       for (const track of trackers.value) {
-        if (isHiddenFromOwnerMapTrack(track)) continue;
+        if (isHiddenOwnedTracker(track)) continue;
         if (groupTrackIds != null && !groupTrackIds.has(String(track.id))) continue;
         const coordsSorted = getCoordsSortedByTime(track);
         const last = coordsSorted.length ? coordsSorted[coordsSorted.length - 1] : null;
@@ -1687,7 +1686,7 @@ export default {
       if (!map || trackers.value.length === 0) return;
       const allCoords = [];
       for (const track of trackers.value) {
-        if (isHiddenFromOwnerMapTrack(track)) continue;
+        if (isHiddenOwnedTracker(track)) continue;
         allCoords.push(...getLastNCoords(track, LAST_POINTS_FIT));
       }
       fitBoundsFromCoords(allCoords);
@@ -1996,7 +1995,7 @@ export default {
       const coords = [];
       for (const track of trackers.value) {
         if (!trackIds.has(String(track.id))) continue;
-        if (isHiddenFromOwnerMapTrack(track)) continue;
+        if (isHiddenOwnedTracker(track)) continue;
         coords.push(...getLastNCoords(track, LAST_POINTS_FIT));
       }
       if (coords.length === 0) return;

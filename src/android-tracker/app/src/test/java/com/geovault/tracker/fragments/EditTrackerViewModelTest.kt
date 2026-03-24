@@ -244,6 +244,25 @@ class EditTrackerViewModelTest {
     }
 
     @Test
+    fun hasUnsavedChangesExcludingRecentDataWindow_ignoresRecentOnlyChanges() = runTest {
+        val initial = tracker(id = "t1").copy(settings = mapOf("recent_data_window" to "1min"))
+        val repo = FakeTrackerManagementRepository(initialTrackers = listOf(initial))
+        val vm = EditTrackerViewModel(repo)
+        vm.bindInitialTracker(
+            tracker = initial,
+            defaultColorHex = "#1E88E5",
+            isDefaultTrack = false
+        )
+        vm.onRecentDataWindowChanged("1h")
+
+        assertTrue(vm.hasUnsavedChanges())
+        assertFalse(vm.hasUnsavedChangesExcludingRecentDataWindow())
+
+        vm.onNameChanged("Renamed")
+        assertTrue(vm.hasUnsavedChangesExcludingRecentDataWindow())
+    }
+
+    @Test
     fun queueRecentDataWindowPersist_unchanged_skipsUpdate() = runTest {
         Dispatchers.resetMain()
         val td = StandardTestDispatcher(testScheduler)

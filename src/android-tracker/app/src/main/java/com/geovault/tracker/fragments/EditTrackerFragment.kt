@@ -91,6 +91,8 @@ class EditTrackerFragment : Fragment() {
     private var pendingKmlExportBytes: ByteArray? = null
     private var trackerId: String = ""
     private var pendingHiddenAfterSave: Boolean = false
+    private var pendingSaveHasNonRecentChanges: Boolean = false
+    private var didAutoRefreshMapForRecentDataWindow: Boolean = false
     private var isRenderingState: Boolean = false
     private var pendingAction: PendingAction? = null
 
@@ -312,6 +314,7 @@ class EditTrackerFragment : Fragment() {
             }
             viewModel.onRecentDataWindowChanged(resolvedRecentDataWindow)
             val hidden = hideOnMapSwitch.isChecked
+            pendingSaveHasNonRecentChanges = viewModel.hasUnsavedChangesExcludingRecentDataWindow()
             pendingAction = PendingAction.SAVE
             pendingHiddenAfterSave = hidden
             setAllInputsEnabled(false)
@@ -453,6 +456,7 @@ class EditTrackerFragment : Fragment() {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
                     viewModel.recentDataWindowPersisted.collect { id ->
+                        didAutoRefreshMapForRecentDataWindow = true
                         navHost()?.refreshMapAfterTrackerSettingsSaved(id)
                     }
                 }
@@ -484,10 +488,17 @@ class EditTrackerFragment : Fragment() {
                                 setAllInputsEnabled(false)
                             }
                             EditTrackerPhase.Saved -> {
-                                navHost()?.refreshMapAfterTrackerSettingsSaved(trackerId)
+                                val shouldRefreshAfterSave =
+                                    !didAutoRefreshMapForRecentDataWindow ||
+                                        pendingSaveHasNonRecentChanges ||
+                                        pendingHiddenAfterSave
+                                if (shouldRefreshAfterSave) {
+                                    navHost()?.refreshMapAfterTrackerSettingsSaved(trackerId)
+                                }
                                 if (pendingHiddenAfterSave && trackerId == SelectedTrackerPrefs.selectedTrackerId(requireContext())) {
                                     SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
                                 }
+                                pendingSaveHasNonRecentChanges = false
                                 pendingAction = null
                                 popBackStack()
                             }

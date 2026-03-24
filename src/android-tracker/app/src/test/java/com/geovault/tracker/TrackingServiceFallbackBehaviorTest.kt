@@ -185,6 +185,19 @@ class TrackingServiceFallbackBehaviorTest {
     }
 
     @Test
+    fun successfulBatchSentCount_matchesSuccessfulUploadBatchSize() {
+        assertEquals(0, TrackingService.successfulBatchSentCount(0))
+        assertEquals(1, TrackingService.successfulBatchSentCount(1))
+        assertEquals(50, TrackingService.successfulBatchSentCount(50))
+    }
+
+    @Test
+    fun successfulBatchSentCount_neverReturnsNegative() {
+        assertEquals(0, TrackingService.successfulBatchSentCount(-1))
+        assertEquals(0, TrackingService.successfulBatchSentCount(Int.MIN_VALUE))
+    }
+
+    @Test
     fun hasRecoveredFastGpsLock_requiresHighConfidenceAndAccuracyAtOrBelowFilter() {
         assertTrue(
             TrackingService.hasRecoveredFastGpsLock(

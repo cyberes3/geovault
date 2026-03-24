@@ -307,7 +307,6 @@ class MapViewModel @Inject constructor(
             if (!isLatestMapLoad(requestId)) return@launchLatestMapLoad
             if (snapshot == null) {
                 _uiState.value = _uiState.value.copy(loading = false)
-                _commands.tryEmit(MapCommand.ShowError("No tracker selected"))
                 return@launchLatestMapLoad
             }
 

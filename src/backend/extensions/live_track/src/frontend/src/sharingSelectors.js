@@ -83,11 +83,6 @@ export function isHiddenOwnedGroup(group) {
   return isOwned(group) && !!group?.hidden;
 }
 
-/** Tracker hidden state is independent from containing group hidden state. */
-export function isHiddenFromOwnerMapTrack(track) {
-  return isHiddenOwnedTracker(track);
-}
-
 export function isSharedGroupNotOwned(group) {
   return !isOwned(group);
 }
