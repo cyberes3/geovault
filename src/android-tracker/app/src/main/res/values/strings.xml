@@ -160,7 +160,7 @@
     <string name="significant_motion_label">Only log if motion detected</string>
     <string name="significant_motion_help_text">Only record points after your device detects meaningful movement.</string>
     <string name="start_on_boot_label">Start tracking on boot</string>
-    <string name="start_on_boot_help_text">Resume tracking automatically after the device restarts.</string>
+    <string name="start_on_boot_help_text">Automatically begin tracking after the device restarts, post first unlock.</string>
     <string name="restart_tracking_if_killed_help_text">Start tracking again if Android stops the app while tracking is active.</string>
     <string name="start_tracking_on_launch_help_text">Begin tracking automatically when you open the app.</string>
     <string name="logging_interval_label">Logging Interval (seconds)</string>
