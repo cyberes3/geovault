@@ -30,6 +30,7 @@ class TrackerSettingsRepositoryImpl @Inject constructor(
         const val KEY_RESTART_TRACKING_IF_KILLED = "restart_tracking_if_killed"
         const val KEY_START_ON_BOOT = "start_on_boot"
         const val KEY_START_TRACKING_ON_LAUNCH = "start_tracking_on_launch"
+        const val KEY_KEEP_SCREEN_ON_WHILE_VIEWING_MAP = "keep_screen_on_while_viewing_map"
     }
 
     private val prefs: SharedPreferences =
@@ -55,7 +56,8 @@ class TrackerSettingsRepositoryImpl @Inject constructor(
         KEY_TRACKING_PROFILE,
         KEY_RESTART_TRACKING_IF_KILLED,
         KEY_START_ON_BOOT,
-        KEY_START_TRACKING_ON_LAUNCH
+        KEY_START_TRACKING_ON_LAUNCH,
+        KEY_KEEP_SCREEN_ON_WHILE_VIEWING_MAP
     )
 
     init {
@@ -143,6 +145,10 @@ class TrackerSettingsRepositoryImpl @Inject constructor(
         prefs.edit().putBoolean(KEY_START_TRACKING_ON_LAUNCH, enabled).apply()
     }
 
+    override fun setKeepScreenOnWhileViewingMap(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_KEEP_SCREEN_ON_WHILE_VIEWING_MAP, enabled).apply()
+    }
+
     override fun wasTrackingBeforeExit(): Boolean {
         return prefs.getBoolean(KEY_WAS_TRACKING_BEFORE_EXIT, false)
     }
@@ -191,7 +197,11 @@ class TrackerSettingsRepositoryImpl @Inject constructor(
             autoTrackingMode = prefs.getBoolean(KEY_AUTO_TRACKING_ENABLED, true),
             trackingProfile = TrackerTrackingProfile.fromIndex(profileIndex),
             startOnBoot = prefs.getBoolean(KEY_START_ON_BOOT, false),
-            startTrackingOnLaunch = prefs.getBoolean(KEY_START_TRACKING_ON_LAUNCH, false)
+            startTrackingOnLaunch = prefs.getBoolean(KEY_START_TRACKING_ON_LAUNCH, false),
+            keepScreenOnWhileViewingMap = prefs.getBoolean(
+                KEY_KEEP_SCREEN_ON_WHILE_VIEWING_MAP,
+                TrackerSettings.DEFAULT_KEEP_SCREEN_ON_WHILE_VIEWING_MAP
+            )
         )
     }
 }

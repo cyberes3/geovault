@@ -174,6 +174,8 @@
     <!-- Restart / start on launch -->
     <string name="restart_tracking_if_killed_label">Restart tracking if app killed while tracking</string>
     <string name="start_tracking_on_launch_label">Start tracking when app is launched</string>
+    <string name="keep_screen_on_while_viewing_map_label">Keep Screen On While Viewing Map</string>
+    <string name="keep_screen_on_while_viewing_map_help_text">When enabled, the display stays on while the map is open. Turn off to save battery and use the normal screen timeout.</string>
     <string name="resuming_tracking">Resuming tracking</string>
     <string name="tracking_started">Tracking started</string>
     <string name="status_tracking">Tracking location</string>

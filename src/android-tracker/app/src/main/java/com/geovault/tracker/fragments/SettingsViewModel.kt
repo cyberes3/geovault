@@ -73,6 +73,11 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.setStartTrackingOnLaunch(enabled)
     }
 
+    fun setKeepScreenOnWhileViewingMap(enabled: Boolean) {
+        beginSync("keep_screen_on_while_viewing_map")
+        settingsRepository.setKeepScreenOnWhileViewingMap(enabled)
+    }
+
     fun setAutoTrackingMode(enabled: Boolean) {
         beginSync("auto_tracking_mode")
         settingsRepository.setAutoTrackingMode(enabled)

@@ -67,6 +67,16 @@
                 android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
                 android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
 
+            <com.geovault.common.ToggleHelpCardView
+                android:id="@+id/keepScreenOnWhileViewingMapSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:toggleChecked="true"
+                app:toggleTitleText="@string/keep_screen_on_while_viewing_map_label"
+                app:toggleHelpText="@string/keep_screen_on_while_viewing_map_help_text"
+                android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
+                android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/hiddenTrackersButton"
                 style="@style/gv_common_ButtonOutlined"

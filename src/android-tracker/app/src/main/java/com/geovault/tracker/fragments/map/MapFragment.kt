@@ -22,7 +22,9 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.core.os.bundleOf
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.geovault.common.map.GeoVaultMapFragment
 import com.geovault.common.map.LocationComponentHelper
 import com.geovault.common.map.MapLibreManager
@@ -46,6 +48,7 @@ import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collect
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdate
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -756,6 +759,13 @@ class MapFragment : Fragment() {
         }
         liveActiveFitButton.setOnClickListener { onLiveActiveFitButtonClick() }
         observeMapFlow()
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                settingsRepository.observeSettings().collect { settings ->
+                    view?.keepScreenOn = settings.keepScreenOnWhileViewingMap
+                }
+            }
+        }
         view.post { if (isAdded) refreshMapPaddingForCurrentMode(force = true) }
     }
 
@@ -769,7 +779,6 @@ class MapFragment : Fragment() {
             root.overScrollMode = View.OVER_SCROLL_NEVER
             root.findViewById<View>(R.id.mapContainer)?.overScrollMode = View.OVER_SCROLL_NEVER
         }
-        view?.keepScreenOn = true
         refreshMapPaddingForCurrentMode(force = true)
 
         if (trackingRuntimeSnapshot().isRunning) {

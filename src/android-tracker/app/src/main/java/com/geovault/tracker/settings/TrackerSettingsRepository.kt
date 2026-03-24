@@ -18,6 +18,7 @@ interface TrackerSettingsRepository {
     fun setLowAccuracyFallbackTimeoutSec(value: Long)
     fun setStartOnBoot(enabled: Boolean)
     fun setStartTrackingOnLaunch(enabled: Boolean)
+    fun setKeepScreenOnWhileViewingMap(enabled: Boolean)
 
     fun wasTrackingBeforeExit(): Boolean
     fun setWasTrackingBeforeExit(value: Boolean)

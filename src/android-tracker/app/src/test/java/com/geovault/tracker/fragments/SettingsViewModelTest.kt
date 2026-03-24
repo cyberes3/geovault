@@ -29,6 +29,7 @@ class SettingsViewModelTest {
         viewModel.setAccuracyFilterMeters(123f)
         viewModel.setLowAccuracyFallbackEnabled(true)
         viewModel.setLowAccuracyFallbackTimeoutSec(77L)
+        viewModel.setKeepScreenOnWhileViewingMap(false)
 
         val state = fakeRepository.getSettings()
         assertTrue(state.autoTrackingMode)
@@ -37,6 +38,7 @@ class SettingsViewModelTest {
         assertEquals(123f, state.accuracyFilterMeters, 0.0001f)
         assertTrue(state.lowAccuracyFallbackEnabled)
         assertEquals(77L, state.lowAccuracyFallbackTimeoutSec)
+        assertFalse(state.keepScreenOnWhileViewingMap)
         assertFalse(viewModel.uiState.value.settings.sendExtendedData)
     }
 
@@ -92,6 +94,10 @@ class SettingsViewModelTest {
 
         override fun setStartTrackingOnLaunch(enabled: Boolean) {
             flow.value = flow.value.copy(startTrackingOnLaunch = enabled)
+        }
+
+        override fun setKeepScreenOnWhileViewingMap(enabled: Boolean) {
+            flow.value = flow.value.copy(keepScreenOnWhileViewingMap = enabled)
         }
 
         override fun wasTrackingBeforeExit(): Boolean = false

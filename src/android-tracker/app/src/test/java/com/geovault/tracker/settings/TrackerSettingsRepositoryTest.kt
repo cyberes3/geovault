@@ -59,6 +59,7 @@ class TrackerSettingsRepositoryTest {
         assertEquals(TrackerTrackingProfile.DRIVING, settings.trackingProfile)
         assertTrue(settings.startOnBoot)
         assertTrue(settings.startTrackingOnLaunch)
+        assertTrue(settings.keepScreenOnWhileViewingMap)
     }
 
     @Test
@@ -90,6 +91,18 @@ class TrackerSettingsRepositoryTest {
 
         assertTrue(settings.lowAccuracyFallbackEnabled)
         assertEquals(TrackerSettings.DEFAULT_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC, settings.lowAccuracyFallbackTimeoutSec)
+        assertTrue(settings.keepScreenOnWhileViewingMap)
+    }
+
+    @Test
+    fun setKeepScreenOnWhileViewingMap_updatesSettings() {
+        val repository = TrackerSettingsRepositoryImpl(context)
+
+        assertTrue(repository.getSettings().keepScreenOnWhileViewingMap)
+        repository.setKeepScreenOnWhileViewingMap(false)
+        assertFalse(repository.getSettings().keepScreenOnWhileViewingMap)
+        repository.setKeepScreenOnWhileViewingMap(true)
+        assertTrue(repository.getSettings().keepScreenOnWhileViewingMap)
     }
 
     @Test

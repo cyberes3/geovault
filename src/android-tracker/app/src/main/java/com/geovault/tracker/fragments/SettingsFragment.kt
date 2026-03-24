@@ -53,6 +53,7 @@ class SettingsFragment : Fragment() {
     private lateinit var startOnBootSwitch: ToggleHelpCardView
     private lateinit var restartTrackingIfKilledSwitch: ToggleHelpCardView
     private lateinit var startTrackingOnLaunchSwitch: ToggleHelpCardView
+    private lateinit var keepScreenOnWhileViewingMapSwitch: ToggleHelpCardView
     private lateinit var autoTrackingSwitch: ToggleHelpCardView
     private lateinit var lowAccuracyFallbackSwitch: ToggleHelpCardView
     private lateinit var hiddenTrackersButton: MaterialButton
@@ -89,6 +90,7 @@ class SettingsFragment : Fragment() {
         startOnBootSwitch = view.findViewById(R.id.startOnBootSwitch)
         restartTrackingIfKilledSwitch = view.findViewById(R.id.restartTrackingIfKilledSwitch)
         startTrackingOnLaunchSwitch = view.findViewById(R.id.startTrackingOnLaunchSwitch)
+        keepScreenOnWhileViewingMapSwitch = view.findViewById(R.id.keepScreenOnWhileViewingMapSwitch)
         autoTrackingSwitch = view.findViewById(R.id.autoTrackingSwitch)
         lowAccuracyFallbackSwitch = view.findViewById(R.id.lowAccuracyFallbackSwitch)
         hiddenTrackersButton = view.findViewById(R.id.hiddenTrackersButton)
@@ -296,6 +298,7 @@ class SettingsFragment : Fragment() {
         setSwitchCheckedIfChanged(startOnBootSwitch, settings.startOnBoot)
         setSwitchCheckedIfChanged(restartTrackingIfKilledSwitch, settings.resetTrackingIfKilled)
         setSwitchCheckedIfChanged(startTrackingOnLaunchSwitch, settings.startTrackingOnLaunch)
+        setSwitchCheckedIfChanged(keepScreenOnWhileViewingMapSwitch, settings.keepScreenOnWhileViewingMap)
 
         isBindingSettings = false
     }
@@ -344,6 +347,11 @@ class SettingsFragment : Fragment() {
         startTrackingOnLaunchSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isBindingSettings) return@setOnCheckedChangeListener
             viewModel.setStartTrackingOnLaunch(isChecked)
+        }
+
+        keepScreenOnWhileViewingMapSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isBindingSettings) return@setOnCheckedChangeListener
+            viewModel.setKeepScreenOnWhileViewingMap(isChecked)
         }
 
         autoTrackingSwitch.setOnCheckedChangeListener { _, isChecked ->
