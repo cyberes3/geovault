@@ -1,6 +1,10 @@
 """
 Create or reuse a tracker, then stream realistic simulated live points.
 
+Each invocation is one tracking session: every point shares the same
+``starttimestamp`` (Unix ms), matching the native app and enabling
+``session`` / ``current_session`` filters and live session-boundary UX.
+
 The command supports activity styles (walk/run/bike/drive), can resume from the
 latest existing point, and writes richer point_params for UI/testing.
 """
@@ -100,11 +104,6 @@ class Command(BaseCommand):
             help="Random seed for reproducible simulation.",
         )
         parser.add_argument(
-            "--reset",
-            action="store_true",
-            help="Clear existing history for this track before streaming.",
-        )
-        parser.add_argument(
             "--once",
             action="store_true",
             help="Emit a single point then exit (useful for testing).",
@@ -163,13 +162,8 @@ class Command(BaseCommand):
         interval = max(0.1, float(options["interval"]))
         once = options.get("once", False)
 
-        if options.get("reset"):
-            with transaction.atomic():
-                track_locked = LiveTrack.objects.select_for_update().get(pk=track.id)
-                track_locked.geometry = {"type": "LineString", "coordinates": []}
-                track_locked.point_params = []
-                track_locked.save(update_fields=["geometry", "point_params", "updated_at"])
-            self.stdout.write(self.style.WARNING("Reset existing track history."))
+        # One session per process run (same convention as app batch starttimestamp).
+        session_start_ms = int(timezone.now().timestamp() * 1000)
 
         latest = (
             LiveTrack.objects.filter(pk=track.id)
@@ -186,7 +180,10 @@ class Command(BaseCommand):
             lat, lon = pick_starting_point(rng)
             self.stdout.write(f"Starting at ({lat:.5f}, {lon:.5f})")
 
-        self.stdout.write(f"Streaming style={style}, interval={interval:.1f}s")
+        self.stdout.write(
+            f"Streaming style={style}, interval={interval:.1f}s, "
+            f"session_start_ms={session_start_ms}"
+        )
 
         count = 0
         try:
@@ -207,6 +204,8 @@ class Command(BaseCommand):
                 altitude_m += rng.gauss(0.0, alt_drift)
 
                 extra = {
+                    "starttimestamp": session_start_ms,
+                    "timestamp": int(timestamp_ms // 1000),
                     "acc": round(acc_m, 1),  # meters; UI can convert to ft if needed
                     "spd_kph": round(speed_kph, 1),
                     "bearing": round(bearing_deg, 1),

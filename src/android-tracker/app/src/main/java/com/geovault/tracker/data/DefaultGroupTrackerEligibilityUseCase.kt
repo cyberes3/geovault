@@ -13,7 +13,7 @@ class DefaultGroupTrackerEligibilityUseCase @Inject constructor() : GroupTracker
         val alreadyInGroup = (group.track_ids ?: emptyList()).toSet()
         return trackers.map { tracker ->
             val canAdd = tracker.id !in alreadyInGroup && if (tracker.isOwner()) {
-                ((tracker.settings?.get("hidden_in_list") as? Boolean) != true)
+                ((tracker.settings?.get("hidden") as? Boolean) != true)
             } else {
                 ((tracker.settings?.get("allow_group_reshare") as? Boolean) == true) &&
                     tracker.visibility == "public"

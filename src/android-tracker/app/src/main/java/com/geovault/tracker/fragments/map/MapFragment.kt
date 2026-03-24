@@ -132,6 +132,8 @@ class MapFragment : Fragment() {
 
     /** Last streamed point timestamp (ms) for the currently displayed single tracker. */
     private var lastStreamedPointTimeMs: Long? = null
+    /** Latest displayed session starttimestamp (ms) used by session-window live filtering. */
+    private var displayedTrackerSessionStartMs: Long? = null
     /** Last streamed point accuracy (m) for the currently displayed single tracker. */
     private var lastStreamedAccuracyMeters: Float? = null
     /** Cached last-update time (ms) from loaded tracker/initial data; used to prefill "Updated" chip before first network point. */
@@ -1455,6 +1457,27 @@ class MapFragment : Fragment() {
         return tracker?.lastUpdateMs()
     }
 
+    private fun displayedTrackerRecentDataWindow(): String? {
+        return displayedTracker?.settings?.get("recent_data_window") as? String
+    }
+
+    private fun applySessionWindowOnIncomingPoint(event: com.geovault.tracker.pipeline.TrackPointEvent): Boolean {
+        if (showAllTrackers || mapViewContext == MapViewContext.GROUP) return true
+        val activeTrackerId = displayedTrackerId ?: return true
+        if (event.trackId != activeTrackerId) return true
+        val decision = MapSessionWindowPolicy.decide(
+            recentDataWindow = displayedTrackerRecentDataWindow(),
+            currentSessionStartMs = displayedTrackerSessionStartMs,
+            incomingPropsJson = event.propsJson
+        )
+        displayedTrackerSessionStartMs = decision.nextSessionStartMs
+        if (decision.shouldIgnorePoint) return false
+        if (decision.shouldResetTrackGeometry) {
+            clearSingleTrackerDataAndRender()
+        }
+        return true
+    }
+
     /** Show bottom-right indicator: red circle when streaming, spinner when loading geometry. */
     private fun updateBottomRightSpinner() {
         val showGpsAccuracyWarning = shouldShowGpsAccuracyWarning()
@@ -1904,6 +1927,7 @@ class MapFragment : Fragment() {
         lastCachedUpdateTimeMs = null
         currentTrackerColor = null
         lastStreamedAccuracyMeters = null
+        displayedTrackerSessionStartMs = null
     }
 
     /**
@@ -2720,6 +2744,7 @@ class MapFragment : Fragment() {
             (tracker.point_params?.lastOrNull()?.get("acc") as? Number)?.toFloat()?.takeIf { it > 0f }
                 ?.let { lastStreamedAccuracyMeters = it }
         }
+        displayedTrackerSessionStartMs = MapSessionWindowPolicy.resolveLatestSessionStartMs(tracker?.point_params)
         val coords = tracker?.geometry?.coordinates
         if (coords != null) {
             val normalizedCoords = MapCoordinateUtils.normalizeRawCoordinates(coords)
@@ -2803,6 +2828,7 @@ class MapFragment : Fragment() {
         applyDisplayedTrackerMetadata(initial)
         displayedGroupName = null
         mapViewContext = MapViewContext.SINGLE_TRACKER
+        displayedTrackerSessionStartMs = MapSessionWindowPolicy.resolveLatestSessionStartMs(initial.point_params)
         lastStreamedAccuracyMeters = (initial.point_params?.lastOrNull()?.get("acc") as? Number)
             ?.toFloat()
             ?.takeIf { it > 0f }
@@ -3157,6 +3183,9 @@ class MapFragment : Fragment() {
                         }
                         is MapCommand.ApplyTrackPoint -> {
                             command.event.accuracyMeters?.let { lastStreamedAccuracyMeters = it }
+                            if (!applySessionWindowOnIncomingPoint(command.event)) {
+                                return@collect
+                            }
                             applyLiveStreamPoint(
                                 trackId = command.event.trackId,
                                 lat = command.event.lat,

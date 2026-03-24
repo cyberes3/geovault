@@ -6,11 +6,33 @@ import copy
 import json
 import secrets
 import types
+from typing import Any, Optional
 
 import diceware
 
 # Default track color (blue-400 from frontend scale); used when no color is set.
 DEFAULT_TRACK_COLOR = "#6C93DE"
+
+
+def normalize_track_settings_for_api(settings: Optional[dict[str, Any]]) -> dict:
+    """API responses use ``hidden``; migrate legacy ``hidden_in_list`` from stored JSON."""
+    s = dict(settings or {})
+    if "hidden_in_list" in s:
+        legacy = s.pop("hidden_in_list")
+        if "hidden" not in s:
+            s["hidden"] = legacy
+    return s
+
+
+def scrub_legacy_hidden_from_track_settings(settings: Optional[dict[str, Any]]) -> dict:
+    """Persist only ``hidden`` in LiveTrack.settings JSON."""
+    s = dict(settings or {})
+    if "hidden_in_list" in s:
+        if "hidden" not in s:
+            s["hidden"] = s.pop("hidden_in_list")
+        else:
+            del s["hidden_in_list"]
+    return s
 
 
 def generate_hauk_password() -> str:
@@ -84,8 +106,11 @@ def _filter_coords_by_recent_window(coords, point_params, window_key: str):
             return [coords[-1]], filtered_params
         return filtered_coords, filtered_params
 
-    if window_key in {"session", "current_session"}:
+    if window_key == "current_session":
         filtered_coords, filtered_params = _filter_coords_by_latest_session_start(coords, point_params)
+        return _with_latest_point_fallback(filtered_coords, filtered_params)
+    if window_key == "session":
+        filtered_coords, filtered_params = _filter_coords_by_last_and_current_session(coords, point_params)
         return _with_latest_point_fallback(filtered_coords, filtered_params)
     if window_key not in RECENT_WINDOW_MS:
         return coords, point_params
@@ -148,6 +173,61 @@ def _filter_coords_by_latest_session_start(coords, point_params):
         coord = coords[i]
         coord_ts_ms = _timestamp_to_ms(coord[2]) if len(coord) >= 3 else None
         if start_ms is None and coord_ts_ms is not None and coord_ts_ms >= latest_start_ms:
+            kept_coords.append(coord)
+            kept_params.append(params)
+    return kept_coords, kept_params
+
+
+def _filter_coords_by_last_and_current_session(coords, point_params):
+    """
+    Keep points from the latest two sessions (previous + current) using starttimestamp.
+    If only one session exists, behaves like current-session filtering.
+    If starttimestamp is missing for all points, return all points unchanged.
+    """
+    if len(coords) != len(point_params):
+        return coords, point_params
+
+    session_starts_ms = []
+    for params in point_params:
+        if not isinstance(params, dict):
+            continue
+        start_ms = _timestamp_to_ms(params.get("starttimestamp"))
+        if start_ms is None:
+            continue
+        session_starts_ms.append(start_ms)
+
+    unique_starts_desc = sorted(set(session_starts_ms), reverse=True)
+    if not unique_starts_desc:
+        # Backward-compatible fallback for imports/older data without starttimestamp.
+        return coords, point_params
+
+    latest_start_ms = unique_starts_desc[0]
+    previous_start_ms = unique_starts_desc[1] if len(unique_starts_desc) > 1 else None
+
+    allowed_starts = {latest_start_ms}
+    if previous_start_ms is not None:
+        allowed_starts.add(previous_start_ms)
+
+    # For points missing starttimestamp, keep those that are on/after the previous
+    # session boundary (or latest boundary when there is only one known session).
+    fallback_cutoff_ms = previous_start_ms if previous_start_ms is not None else latest_start_ms
+
+    kept_coords = []
+    kept_params = []
+    for i, params in enumerate(point_params):
+        start_ms = (
+            _timestamp_to_ms(params.get("starttimestamp"))
+            if isinstance(params, dict)
+            else None
+        )
+        if start_ms in allowed_starts:
+            kept_coords.append(coords[i])
+            kept_params.append(params)
+            continue
+
+        coord = coords[i]
+        coord_ts_ms = _timestamp_to_ms(coord[2]) if len(coord) >= 3 else None
+        if start_ms is None and coord_ts_ms is not None and coord_ts_ms >= fallback_cutoff_ms:
             kept_coords.append(coord)
             kept_params.append(params)
     return kept_coords, kept_params
@@ -238,7 +318,7 @@ def track_to_response(
         "geometry": geom,
         "point_params": point_params,
         "bbox": bbox,
-        "settings": track.settings or {},
+        "settings": normalize_track_settings_for_api(track.settings),
         "visibility": getattr(track, "visibility", "private"),
         "share_params_with_recipients": getattr(track, "share_params_with_recipients", False),
         "is_owner": is_owner,
@@ -315,7 +395,7 @@ def track_to_response_metadata_only(
         "color": _color_from_settings(track),
         "point_params": latest_params,
         "bbox": bbox,
-        "settings": track.settings or {},
+        "settings": normalize_track_settings_for_api(track.settings),
         "visibility": getattr(track, "visibility", "private"),
         "share_params_with_recipients": getattr(track, "share_params_with_recipients", False),
         "share_params_with_world": getattr(track, "share_params_with_world", False),

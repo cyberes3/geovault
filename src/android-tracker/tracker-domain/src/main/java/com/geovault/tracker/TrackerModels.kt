@@ -52,7 +52,7 @@ data class TrackerSettingsRequest(
     val share_params_with_world: Boolean? = null,
     val shared_with_emails: List<String>? = null,
     val world_share_enabled: Boolean? = null,
-    val hidden_in_list: Boolean? = null,
+    val hidden: Boolean? = null,
     val allow_group_reshare: Boolean? = null
 )
 
@@ -115,7 +115,7 @@ data class MapVisibilityRequest(
 data class Group(
     val id: String,
     val name: String,
-    val hidden_in_list: Boolean? = null,
+    val hidden: Boolean? = null,
     val visibility: String? = null,
     val shared_with_emails: List<String>? = null,
     val world_share_id: String? = null,
@@ -132,7 +132,7 @@ data class GroupCreateRequest(val name: String)
 
 data class GroupPatchRequest(
     val name: String? = null,
-    val hidden_in_list: Boolean? = null,
+    val hidden: Boolean? = null,
     val visibility: String? = null,
     val shared_with_emails: List<String>? = null,
     val world_share_enabled: Boolean? = null,

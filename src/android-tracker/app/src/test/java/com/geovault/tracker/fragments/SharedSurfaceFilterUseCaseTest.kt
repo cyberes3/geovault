@@ -24,13 +24,8 @@ class SharedSurfaceFilterUseCaseTest {
             Tracker(id = "t-standalone", name = "Standalone", color = null, is_owner = false, visibility = "public"),
             Tracker(id = "t-hidden", name = "Hidden", color = null, is_owner = false, visibility = "shared")
         )
-        val result = useCase.filter(
-            groups = groups,
-            trackers = trackers,
-            hiddenTrackIds = setOf("t-hidden"),
-            hiddenGroupIds = emptySet()
-        )
+        val result = useCase.filter(groups = groups, trackers = trackers)
         assertEquals(listOf("g-accepted"), result.sharedGroups.map { it.id })
-        assertEquals(listOf("t-standalone"), result.sharedTrackers.map { it.id })
+        assertEquals(listOf("t-standalone", "t-hidden"), result.sharedTrackers.map { it.id })
     }
 }

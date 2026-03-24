@@ -19,8 +19,7 @@ import kotlinx.coroutines.launch
 
 data class SharedTrackersData(
     val sharedGroups: List<Group> = emptyList(),
-    val sharedTrackers: List<Tracker> = emptyList(),
-    val hiddenTrackIds: Set<String> = emptySet()
+    val sharedTrackers: List<Tracker> = emptyList()
 )
 
 data class SharedTrackersUiState(
@@ -40,9 +39,7 @@ class SharedTrackersViewModel @Inject constructor(
         SharedTrackersUiState(
             data = computeSharedData(
                 groups = trackerManagementStateStore.groups.value,
-                trackers = trackerManagementStateStore.trackers.value,
-                hiddenTrackIds = trackerManagementStateStore.mapVisibility.value?.hidden_track_ids?.toSet().orEmpty(),
-                hiddenGroupIds = trackerManagementStateStore.mapVisibility.value?.hidden_group_ids?.toSet().orEmpty()
+                trackers = trackerManagementStateStore.trackers.value
             )
         )
     )
@@ -52,22 +49,12 @@ class SharedTrackersViewModel @Inject constructor(
         viewModelScope.launch {
             combine(
                 trackerManagementStateStore.groups,
-                trackerManagementStateStore.trackers,
-                trackerManagementStateStore.mapVisibility
-            ) { groups, trackers, mapVisibility ->
-                val hiddenTrackIds = mapVisibility?.hidden_track_ids?.toSet().orEmpty()
-                val hiddenGroupIds = mapVisibility?.hidden_group_ids?.toSet().orEmpty()
-                computeSharedData(
-                    groups = groups,
-                    trackers = trackers,
-                    hiddenTrackIds = hiddenTrackIds,
-                    hiddenGroupIds = hiddenGroupIds
-                )
+                trackerManagementStateStore.trackers
+            ) { groups, trackers ->
+                computeSharedData(groups = groups, trackers = trackers)
             }.collect { data ->
                 _uiState.update { current ->
-                    current.copy(
-                        data = data
-                    )
+                    current.copy(data = data)
                 }
             }
         }
@@ -76,7 +63,6 @@ class SharedTrackersViewModel @Inject constructor(
     fun preload() {
         viewModelScope.launch {
             trackerManagementRepository.loadAvailableToAdd(forceRefresh = false)
-            trackerManagementRepository.loadMapVisibility(forceRefresh = false)
             groupManagementRepository.loadGroups(forceRefresh = false)
             trackerManagementRepository.loadTrackers(forceRefresh = false)
         }
@@ -89,12 +75,10 @@ class SharedTrackersViewModel @Inject constructor(
             _uiState.update { it.copy(errorMessage = null) }
         }
         viewModelScope.launch {
-            val visibilityResult = trackerManagementRepository.loadMapVisibility(forceRefresh = forceRefresh)
             val groupsResult = groupManagementRepository.loadGroups(forceRefresh = forceRefresh)
             val trackersResult = trackerManagementRepository.loadTrackers(forceRefresh = forceRefresh)
 
             val error = when {
-                visibilityResult is RepositoryResult.Failure -> visibilityResult.error.toString()
                 groupsResult is RepositoryResult.Failure -> groupsResult.error.toString()
                 trackersResult is RepositoryResult.Failure -> trackersResult.error.toString()
                 else -> null
@@ -111,20 +95,12 @@ class SharedTrackersViewModel @Inject constructor(
 
     private fun computeSharedData(
         groups: List<Group>,
-        trackers: List<Tracker>,
-        hiddenTrackIds: Set<String>,
-        hiddenGroupIds: Set<String>
+        trackers: List<Tracker>
     ): SharedTrackersData {
-        val filtered = sharedSurfaceFilterUseCase.filter(
-            groups = groups,
-            trackers = trackers,
-            hiddenTrackIds = hiddenTrackIds,
-            hiddenGroupIds = hiddenGroupIds
-        )
+        val filtered = sharedSurfaceFilterUseCase.filter(groups = groups, trackers = trackers)
         return SharedTrackersData(
             sharedGroups = filtered.sharedGroups,
-            sharedTrackers = filtered.sharedTrackers,
-            hiddenTrackIds = filtered.hiddenTrackIds
+            sharedTrackers = filtered.sharedTrackers
         )
     }
 }

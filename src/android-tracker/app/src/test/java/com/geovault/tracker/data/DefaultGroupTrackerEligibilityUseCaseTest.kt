@@ -21,9 +21,9 @@ class DefaultGroupTrackerEligibilityUseCaseTest {
     }
 
     @Test
-    fun addableTrackers_ownerHiddenInList_isNotAddable() {
+    fun addableTrackers_ownerHidden_isNotAddable() {
         val group = group(trackIds = emptyList())
-        val tracker = tracker(id = "t1", owner = true, hiddenInList = true)
+        val tracker = tracker(id = "t1", owner = true, hidden = true)
 
         val result = useCase.addableTrackers(listOf(tracker), group)
 
@@ -88,7 +88,7 @@ class DefaultGroupTrackerEligibilityUseCaseTest {
         id: String,
         owner: Boolean,
         allowReshare: Boolean = false,
-        hiddenInList: Boolean = false,
+        hidden: Boolean = false,
         visibility: String = "private"
     ): Tracker = Tracker(
         id = id,
@@ -96,7 +96,7 @@ class DefaultGroupTrackerEligibilityUseCaseTest {
         color = null,
         settings = mapOf(
             "allow_group_reshare" to allowReshare,
-            "hidden_in_list" to hiddenInList
+            "hidden" to hidden
         ),
         geometry = GeoJsonLineString(type = "LineString", coordinates = emptyList()),
         point_params = emptyList(),

@@ -52,7 +52,7 @@ class TrackersListFragment : Fragment() {
 
     private fun visibleOwnerTrackers(list: List<Tracker>): List<Tracker> {
         return list.filter { tracker ->
-            tracker.isOwner() && ((tracker.settings?.get("hidden_in_list") as? Boolean) != true)
+            tracker.isOwner() && ((tracker.settings?.get("hidden") as? Boolean) != true)
         }
     }
 

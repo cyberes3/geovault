@@ -100,7 +100,6 @@ class SharedTrackersFragment : Fragment() {
         })
         adapter = SharedItemsAdapter(
             emptyList(),
-            emptySet(),
             null,
             onTrackerAction = { tracker, action ->
                 when (action) {
@@ -156,7 +155,7 @@ class SharedTrackersFragment : Fragment() {
                     val combined = (state.data.sharedGroups.map { SharedListItem.GroupItem(it) } +
                         state.data.sharedTrackers.map { SharedListItem.TrackerItem(it) })
                         .sortedWith(NaturalSort.naturalOrderBy { it.sortName.lowercase(Locale.getDefault()) })
-                    adapter?.setItems(combined, state.data.hiddenTrackIds)
+                    adapter?.setItems(combined)
                     emptyView.visibility = if (!state.isLoading && combined.isEmpty()) View.VISIBLE else View.GONE
                     state.errorMessage?.takeIf { it.isNotBlank() }?.let { navHost()?.showSnackbar(it) }
                     applyScrollAndHighlightIfPending()
@@ -266,7 +265,6 @@ class SharedTrackersFragment : Fragment() {
 
     private class SharedItemsAdapter(
         private var items: List<SharedListItem>,
-        private var hiddenTrackIds: Set<String>,
         private var highlightedTrackerId: String? = null,
         private var highlightedGroupId: String? = null,
         private val onTrackerAction: (Tracker, TrackerAction) -> Unit,
@@ -275,14 +273,12 @@ class SharedTrackersFragment : Fragment() {
         private val onGroupEditClick: (Group) -> Unit
     ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
-        fun setItems(list: List<SharedListItem>, hidden: Set<String> = emptySet()) {
+        fun setItems(list: List<SharedListItem>) {
             items = list
-            hiddenTrackIds = hidden
             notifyDataSetChanged()
         }
 
         fun getItems(): List<SharedListItem> = items
-        fun getHiddenTrackIds(): Set<String> = hiddenTrackIds
 
         fun indexOfTrackerId(id: String): Int = items.indexOfFirst { it is SharedListItem.TrackerItem && it.tracker.id == id }
 
@@ -339,7 +335,7 @@ class SharedTrackersFragment : Fragment() {
                 GroupViewHolder(view, onGroupCardClick, onGroupViewOnMapClick, onGroupEditClick, { highlightedGroupId })
             } else {
                 val view = LayoutInflater.from(parent.context).inflate(R.layout.item_tracker_card, parent, false)
-                TrackerViewHolder(view, onTrackerAction, { hiddenTrackIds }, { highlightedTrackerId })
+                TrackerViewHolder(view, onTrackerAction, { highlightedTrackerId })
             }
         }
 
@@ -355,7 +351,6 @@ class SharedTrackersFragment : Fragment() {
         class TrackerViewHolder(
             itemView: View,
             private val onAction: (Tracker, TrackerAction) -> Unit,
-            private val getHiddenTrackIds: () -> Set<String>,
             private val getHighlightedTrackerId: () -> String?
         ) : RecyclerView.ViewHolder(itemView) {
             private val trackerName: TextView = itemView.findViewById(R.id.trackerName)

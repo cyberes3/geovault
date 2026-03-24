@@ -49,17 +49,6 @@
                 <PencilIcon class="h-5 w-5" />
               </button>
             </template>
-            <template v-else>
-              <button
-                type="button"
-                :title="isGroupHidden(g) ? 'Show on Map' : 'Hide on Map'"
-                class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-                @click="$emit('toggleGroupVisibility', g)"
-              >
-                <EyeIcon v-if="isGroupHidden(g)" class="h-5 w-5" />
-                <EyeSlashIcon v-else class="h-5 w-5" />
-              </button>
-            </template>
           </div>
         </div>
         <p v-if="sortedGroups.length === 0" class="text-sm text-gray-500 py-2">No Groups Yet. Create One to Get Started.</p>
@@ -89,7 +78,7 @@
         @saved="onEditSaved"
         @refreshed="onEditRefreshed"
         @leave="onLeaveGroup"
-        @hidden-in-list-changed="$emit('hidden-in-list-changed', $event)"
+        @group-hidden-changed="$emit('group-hidden-changed', $event)"
       />
     </div>
   </div>
@@ -97,13 +86,13 @@
 
 <script>
 import { ref, computed, watch } from 'vue';
-import { ArrowPathIcon, EyeIcon, EyeSlashIcon, PencilIcon } from '@heroicons/vue/24/outline';
+import { ArrowPathIcon, PencilIcon } from '@heroicons/vue/24/outline';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import GroupModal from './GroupModal.vue';
 
 export default {
   name: 'GroupsSidebarContent',
-  components: { BaseButton, GroupModal, ArrowPathIcon, EyeIcon, EyeSlashIcon, PencilIcon },
+  components: { BaseButton, GroupModal, ArrowPathIcon, PencilIcon },
   props: {
     /** When true, show loading state on refresh button */
     refreshing: { type: Boolean, default: false },
@@ -112,10 +101,8 @@ export default {
     api: { type: Object, required: true },
     /** When set, open in edit view for this group id. */
     initialGroupId: { type: [String, Number], default: null },
-    /** Set or array of group ids that are hidden on the map (eye = show, eye-slash = hide). */
-    hiddenGroupIds: { type: [Set, Array], default: () => new Set() },
   },
-  emits: ['saved', 'refreshed', 'leave', 'hidden-in-list-changed', 'toggleGroupVisibility'],
+  emits: ['saved', 'refreshed', 'leave', 'group-hidden-changed'],
   setup(props, { emit }) {
     const view = ref('list');
     const selectedGroup = ref(null);
@@ -175,14 +162,6 @@ export default {
       selectedGroup.value = null;
     }
 
-    function isGroupHidden(group) {
-      const groupIds = props.hiddenGroupIds;
-      if (!group?.id) return false;
-      const id = String(group.id);
-      if (groupIds instanceof Set) return groupIds.has(id);
-      return Array.isArray(groupIds) && groupIds.includes(id);
-    }
-
     return {
       view,
       selectedGroup,
@@ -192,7 +171,6 @@ export default {
       onEditSaved,
       onEditRefreshed,
       onLeaveGroup,
-      isGroupHidden,
     };
   },
 };

@@ -89,8 +89,8 @@
         android:id="@+id/groupDetailHideInListRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:toggleTitleText="@string/hide_in_list_label"
-        app:toggleHelpText="@string/hide_in_list_hint"
+        app:toggleTitleText="@string/hidden_label"
+        app:toggleHelpText="@string/hidden_group_help"
         android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
         android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical"
         android:visibility="gone" />

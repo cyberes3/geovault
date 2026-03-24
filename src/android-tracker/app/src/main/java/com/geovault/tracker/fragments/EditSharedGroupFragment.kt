@@ -12,7 +12,6 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.geovault.common.ToggleHelpCardView
 import com.geovault.tracker.Group
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
@@ -31,17 +30,13 @@ class EditSharedGroupFragment : Fragment() {
 
     private lateinit var groupName: TextView
     private lateinit var groupOwner: TextView
-    private lateinit var hideInListSwitch: ToggleHelpCardView
     private lateinit var leaveButton: MaterialButton
     private lateinit var closeButton: ImageButton
 
     private var group: Group? = null
-    private var suppressHideSwitchCallback = false
     private var pendingAction: PendingAction? = null
 
     private enum class PendingAction {
-        LOAD,
-        HIDE,
         LEAVE_GROUP
     }
 
@@ -53,7 +48,6 @@ class EditSharedGroupFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         groupName = view.findViewById(R.id.editSharedGroupName)
         groupOwner = view.findViewById(R.id.editSharedGroupOwner)
-        hideInListSwitch = view.findViewById(R.id.editSharedGroupHideInListSwitch)
         leaveButton = view.findViewById(R.id.editSharedGroupLeave)
         closeButton = view.findViewById(R.id.editSharedGroupClose)
 
@@ -66,32 +60,16 @@ class EditSharedGroupFragment : Fragment() {
         group = initialGroup
         renderGroup(initialGroup)
         bindActions()
-        pendingAction = PendingAction.LOAD
-        viewModel.load()
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
-                    val hiddenGroupIds = state.mapVisibility?.hidden_group_ids ?: emptyList()
-                    suppressHideSwitchCallback = true
-                    hideInListSwitch.isChecked = hiddenGroupIds.contains(initialGroup.id)
-                    suppressHideSwitchCallback = false
-                    if (state.mapVisibility != null && pendingAction == PendingAction.LOAD) {
-                        pendingAction = null
-                    }
                     state.errorMessage?.takeIf { it.isNotBlank() }?.let {
                         val failedAction = pendingAction
                         pendingAction = null
-                        val failureMessageRes = when {
-                            failedAction == PendingAction.HIDE &&
-                                state.errorMessage == EditSharedGroupViewModel.VISIBILITY_PERSISTENCE_MISMATCH -> {
-                                R.string.failed_to_update_visibility_persistence_mismatch
-                            }
-                            else -> when (failedAction) {
-                                PendingAction.HIDE -> R.string.failed_to_update_visibility
-                                PendingAction.LEAVE_GROUP -> R.string.failed_to_leave_group
-                                PendingAction.LOAD, null -> R.string.failed_to_load_tracker
-                            }
+                        val failureMessageRes = when (failedAction) {
+                            PendingAction.LEAVE_GROUP -> R.string.failed_to_leave_group
+                            null -> R.string.failed_to_load_tracker
                         }
                         navHost()?.showSnackbar(getString(failureMessageRes))
                         viewModel.consumeError()
@@ -108,18 +86,10 @@ class EditSharedGroupFragment : Fragment() {
     private fun renderGroup(g: Group) {
         groupName.text = g.name
         groupOwner.text = g.owner_email?.takeIf { it.isNotBlank() } ?: ""
-
-        // visibility binding is handled through ViewModel state collection
     }
 
     private fun bindActions() {
         val g = group ?: return
-        hideInListSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (suppressHideSwitchCallback) return@setOnCheckedChangeListener
-            pendingAction = PendingAction.HIDE
-            viewModel.setHidden(g.id, isChecked)
-        }
-
         leaveButton.setOnClickListener {
             val d = AlertDialog.Builder(requireContext())
                 .setTitle(getString(R.string.group_leave_confirm_title))

@@ -52,24 +52,12 @@ class DiscoverTrackersViewModel @Inject constructor(
             }
             val available = (availableResult as RepositoryResult.Success).data
 
-            val visibilityResult = trackerManagementRepository.loadMapVisibility(forceRefresh = forceRefresh)
-            val hiddenTrackIds = (visibilityResult as? RepositoryResult.Success)?.data?.hidden_track_ids
-                ?.toSet()
-                ?: emptySet()
-            val hiddenGroupIds = (visibilityResult as? RepositoryResult.Success)?.data?.hidden_group_ids
-                ?.toSet()
-                ?: emptySet()
             val groupsResult = groupManagementRepository.loadGroups(forceRefresh = forceRefresh)
             val trackersResult = trackerManagementRepository.loadTrackers(forceRefresh = forceRefresh)
             val groups = (groupsResult as? RepositoryResult.Success)?.data ?: emptyList()
             val trackers = (trackersResult as? RepositoryResult.Success)?.data ?: emptyList()
 
-            val filtered = sharedSurfaceFilterUseCase.filter(
-                groups = groups,
-                trackers = trackers,
-                hiddenTrackIds = hiddenTrackIds,
-                hiddenGroupIds = hiddenGroupIds
-            )
+            val filtered = sharedSurfaceFilterUseCase.filter(groups = groups, trackers = trackers)
             val onMyMapTrackers = filtered.sharedTrackers.map {
                 AvailableToAddItem(
                     id = it.id,
@@ -90,7 +78,6 @@ class DiscoverTrackersViewModel @Inject constructor(
             val incomingSharedGroups = available.shared_with_me_groups.map { it.copy(track_ids = emptyList()) }
 
             val error = when {
-                visibilityResult is RepositoryResult.Failure -> visibilityResult.error.toString()
                 groupsResult is RepositoryResult.Failure -> groupsResult.error.toString()
                 trackersResult is RepositoryResult.Failure -> trackersResult.error.toString()
                 else -> null

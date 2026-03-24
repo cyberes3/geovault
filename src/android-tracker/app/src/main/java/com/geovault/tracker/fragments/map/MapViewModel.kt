@@ -28,7 +28,6 @@ class MapViewModel @Inject constructor(
     private val runtimeTrackRepository: RuntimeMapTrackRepository,
     private val bootstrapTrackRepository: BootstrapMapTrackRepository,
     private val groupRepository: MapGroupRepository,
-    private val visibilityRepository: MapVisibilityRepository,
     private val streamingRepository: MapStreamingRepository,
     private val trackerManagementStateStore: TrackerManagementStateStore
 ) : AndroidViewModel(application) {
@@ -39,7 +38,7 @@ class MapViewModel @Inject constructor(
     }
 
     private val loadSingleTrackerUseCase = LoadSingleTrackerMapUseCase(runtimeTrackRepository, bootstrapTrackRepository)
-    private val loadAllTrackersUseCase = LoadAllTrackersMapUseCase(runtimeTrackRepository, groupRepository, visibilityRepository)
+    private val loadAllTrackersUseCase = LoadAllTrackersMapUseCase(runtimeTrackRepository, groupRepository)
     private val loadGroupMapUseCase = LoadGroupMapUseCase(runtimeTrackRepository)
     private val handleTrackPointUseCase = HandleTrackPointUseCase()
     private val applyCameraPolicyUseCase = ApplyCameraPolicyUseCase()

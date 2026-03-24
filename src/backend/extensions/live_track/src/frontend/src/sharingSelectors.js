@@ -46,74 +46,49 @@ export function filterByQuery(list, query, nameKey = 'name', ownerKey = 'owner_e
   );
 }
 
-export function computeVisibleSharedTrackers(sortedTrackers, sortedGroups, hiddenTrackIds, hiddenGroupIds) {
-  const hiddenTrackSet = toIdSet(hiddenTrackIds);
-  const hiddenGroupSet = toIdSet(hiddenGroupIds);
-  const sharedGroups = (sortedGroups || []).filter(
-    (group) => !isOwned(group) && !hiddenGroupSet.has(normalizeId(group.id))
-  );
+export function computeVisibleSharedTrackers(sortedTrackers, sortedGroups) {
+  const sharedGroups = (sortedGroups || []).filter((group) => !isOwned(group));
   const trackIdsInSharedGroups = new Set(
     sharedGroups.flatMap((group) => (group.track_ids || []).map((id) => normalizeId(id)))
   );
   return (sortedTrackers || []).filter(
     (track) =>
       isSharedOrPublicTracker(track) &&
-      !trackIdsInSharedGroups.has(normalizeId(track.id)) &&
-      !hiddenTrackSet.has(normalizeId(track.id))
+      !trackIdsInSharedGroups.has(normalizeId(track.id))
   );
 }
 
-export function computeVisibleSharedGroups(groups, hiddenGroupIds) {
-  const hiddenGroupSet = toIdSet(hiddenGroupIds);
+export function computeVisibleSharedGroups(groups) {
   return (groups || []).filter(
     (group) =>
       !isOwned(group) &&
       (group?.visibility || '') === 'shared' &&
-      group?.is_accepted === true &&
-      !hiddenGroupSet.has(normalizeId(group.id))
+      group?.is_accepted === true
   );
 }
 
-export function isVisibleInListTracker(track) {
-  return isOwned(track) && !(track?.settings?.hidden_in_list);
+export function isVisibleOwnedTracker(track) {
+  return isOwned(track) && !track?.settings?.hidden;
 }
 
-export function isVisibleInListGroup(group) {
-  return isOwned(group) && !group?.hidden_in_list;
+export function isVisibleOwnedGroup(group) {
+  return isOwned(group) && !group?.hidden;
 }
 
-export function isHiddenInListTracker(track) {
-  return isOwned(track) && !!(track?.settings?.hidden_in_list);
+export function isHiddenOwnedTracker(track) {
+  return isOwned(track) && !!track?.settings?.hidden;
 }
 
-export function isHiddenInListGroup(group) {
-  return isOwned(group) && !!group?.hidden_in_list;
+export function isHiddenOwnedGroup(group) {
+  return isOwned(group) && !!group?.hidden;
 }
 
-/** Owner list-hide: hide on map (not persisted in map-visibility). */
-export function isHiddenFromOwnerMapTrack(track, groups) {
-  if (isHiddenInListTracker(track)) return true;
-  const tid = normalizeId(track?.id);
-  if (!tid) return false;
-  for (const group of groups || []) {
-    if (!isHiddenInListGroup(group)) continue;
-    const ids = group.track_ids || [];
-    for (let i = 0; i < ids.length; i += 1) {
-      if (normalizeId(ids[i]) === tid) return true;
-    }
-  }
-  return false;
+/** Tracker hidden state is independent from containing group hidden state. */
+export function isHiddenFromOwnerMapTrack(track) {
+  return isHiddenOwnedTracker(track);
 }
 
 export function isSharedGroupNotOwned(group) {
   return !isOwned(group);
 }
 
-export function isGroupHiddenByMap(group, hiddenTrackIds, hiddenGroupIds) {
-  const groupSet = toIdSet(hiddenGroupIds);
-  const trackSet = toIdSet(hiddenTrackIds);
-  if (groupSet.has(normalizeId(group?.id))) return true;
-  const trackIds = group?.track_ids || [];
-  if (!trackIds.length) return false;
-  return trackIds.every((id) => trackSet.has(normalizeId(id)));
-}

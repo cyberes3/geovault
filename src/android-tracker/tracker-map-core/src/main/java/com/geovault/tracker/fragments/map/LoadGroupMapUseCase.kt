@@ -37,7 +37,7 @@ class LoadGroupMapUseCase(
             }
         }
             .filter { it.id in groupTrackIds }
-            .filter { !(it.isOwner() && (it.settings?.get("hidden_in_list") as? Boolean) == true) }
+            .filter { !(it.isOwner() && (it.settings?.get("hidden") as? Boolean) == true) }
         val coordsByTrackerId = when (
             val coordinatesResult = trackRepository.getTrackersCoordinates(trackers.map(Tracker::id))
         ) {

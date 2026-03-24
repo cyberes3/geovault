@@ -71,14 +71,14 @@
     <div v-if="isOwner" class="space-y-2">
       <div class="flex items-center gap-3">
         <ToggleButton
-          :model-value="hiddenInList"
-          label="Hide in List"
+          :model-value="hidden"
+          label="Hidden"
           size="md"
-          @update:model-value="$emit('update:hidden-in-list', $event)"
+          @update:model-value="$emit('update:hidden', $event)"
         />
-        <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="$emit('update:hidden-in-list', !hiddenInList)">Hide in List</label>
+        <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="$emit('update:hidden', !hidden)">Hidden</label>
       </div>
-      <p class="text-xs text-gray-500">When on, this tracker is hidden from the sidebar list. You can unhide it in Settings.</p>
+      <p class="text-xs text-gray-500">When on, this tracker is hidden from the map and your tracker list. You can show it again in Settings.</p>
     </div>
     <div class="space-y-2">
       <label class="text-sm font-medium text-gray-700">API Password</label>
@@ -141,12 +141,12 @@ export default {
     worldShareEnabled: { type: Boolean, default: false },
     worldShareUrl: { type: String, default: '' },
     shareParamsWithWorld: { type: Boolean, default: false },
-    hiddenInList: { type: Boolean, default: false },
+    hidden: { type: Boolean, default: false },
     allowGroupReshare: { type: Boolean, default: false },
     /** When set, the Hauk Setup button is shown (admin configured hauk_domain). */
     haukDomain: { type: String, default: '' }
   },
-  emits: ['update:name', 'update:color', 'update:recentDataWindow', 'update:visibility', 'update:shareParamsWithRecipients', 'update:shareParamsWithWorld', 'update:sharedWithEmails', 'update:worldShareEnabled', 'update:allowGroupReshare', 'update:hidden-in-list', 'reset-color', 'open-instructions', 'open-hauk-instructions', 'download-kml', 'clear-history', 'regenerate-tokens', 'delete', 'unsubscribe'],
+  emits: ['update:name', 'update:color', 'update:recentDataWindow', 'update:visibility', 'update:shareParamsWithRecipients', 'update:shareParamsWithWorld', 'update:sharedWithEmails', 'update:worldShareEnabled', 'update:allowGroupReshare', 'update:hidden', 'reset-color', 'open-instructions', 'open-hauk-instructions', 'download-kml', 'clear-history', 'regenerate-tokens', 'delete', 'unsubscribe'],
   setup(props, { emit }) {
     const fullWorldShareUrl = computed(() => {
       const path = props.worldShareUrl || '';

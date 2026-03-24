@@ -351,7 +351,7 @@ class GroupDetailViewModelTest {
             request.add_track_ids.orEmpty().forEach { nextTrackIds.add(it) }
             val updated = group.copy(
                 name = request.name ?: group.name,
-                hidden_in_list = request.hidden_in_list ?: group.hidden_in_list,
+                hidden = request.hidden ?: group.hidden,
                 visibility = request.visibility ?: group.visibility,
                 shared_with_emails = request.shared_with_emails ?: group.shared_with_emails,
                 world_share_id = when (request.world_share_enabled) {

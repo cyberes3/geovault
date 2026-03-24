@@ -74,15 +74,6 @@
                     android:textSize="14sp"
                     android:textColor="@color/text_secondary" />
 
-                <com.geovault.common.ToggleHelpCardView
-                    android:id="@+id/editSharedTrackerHideOnMapSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    app:toggleTitleText="@string/hide_on_map"
-                    app:toggleHelpText="@string/hide_on_map_help_text"
-                    android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
-                    android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
-
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/editSharedTrackerUnsubscribe"
                     style="@style/gv_common_ButtonOutlinedDestructive"

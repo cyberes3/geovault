@@ -396,7 +396,7 @@ class Command(BaseCommand):
                 name=f"{DUMMY_GROUP_PREFIX}Re-share from {user.email}",
                 user=reshare_user,
                 visibility="shared",
-                hidden_in_list=True,
+                hidden=True,
             )
             LiveTrackGroupMember.objects.get_or_create(group=reshare_group, track=reshare_track)
             LiveTrackGroupShare.objects.get_or_create(

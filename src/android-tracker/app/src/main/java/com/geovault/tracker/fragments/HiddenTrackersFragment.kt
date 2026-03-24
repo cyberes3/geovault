@@ -12,14 +12,13 @@ import androidx.lifecycle.lifecycleScope
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.geovault.common.LoadingSpinner
 import com.geovault.common.NaturalSort
-import com.geovault.tracker.Group
-import com.geovault.tracker.MapVisibilityRequest
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
+import com.geovault.tracker.Group
+import com.geovault.tracker.GroupPatchRequest
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerSettingsRequest
-import com.geovault.tracker.GroupPatchRequest
 import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.google.android.material.button.MaterialButton
@@ -42,13 +41,6 @@ class HiddenTrackersFragment : Fragment() {
 
     @Inject
     lateinit var groupManagementRepository: GroupManagementRepository
-
-    private sealed class HiddenItem {
-        abstract val name: String
-        data class Tracker(val id: String, override val name: String) : HiddenItem()
-        /** source: "list" = owner hidden_in_list (unhide via PATCH group), "map" = in hidden_group_ids (unhide via patchMapVisibility) */
-        data class Group(val id: String, override val name: String, val source: String) : HiddenItem()
-    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -75,113 +67,111 @@ class HiddenTrackersFragment : Fragment() {
         loadAll()
     }
 
-    private fun isHiddenInList(tracker: Tracker): Boolean {
-        return (tracker.settings?.get("hidden_in_list") as? Boolean) == true
+    private fun isHidden(tracker: Tracker): Boolean {
+        return (tracker.settings?.get("hidden") as? Boolean) == true
     }
 
-    private fun loadAll() {
-        loadingOverlay.visibility = View.VISIBLE
-        loadingSpinner.start()
+    private fun isHiddenOwnedGroup(group: Group): Boolean {
+        return group.is_owner == true && group.hidden == true
+    }
+
+    private fun loadAll(showLoadingOverlay: Boolean = true) {
+        if (showLoadingOverlay) {
+            loadingOverlay.visibility = View.VISIBLE
+            loadingSpinner.start()
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             val trackerList = when (val result = trackerManagementRepository.loadTrackers(forceRefresh = false)) {
                 is RepositoryResult.Success -> result.data
                 is RepositoryResult.Failure -> emptyList()
             }
-            val visibility = when (val result = trackerManagementRepository.loadMapVisibility(forceRefresh = false)) {
-                is RepositoryResult.Success -> result.data
-                is RepositoryResult.Failure -> null
-            }
-            val hiddenGroupIds = (visibility?.hidden_group_ids ?: emptyList()).toSet()
-            val groupsList = when (val result = groupManagementRepository.loadGroups(forceRefresh = false)) {
+            val groupList = when (val result = groupManagementRepository.loadGroups(forceRefresh = false)) {
                 is RepositoryResult.Success -> result.data
                 is RepositoryResult.Failure -> emptyList()
             }
 
             val hiddenTrackers = trackerList
-                .filter { it.isOwner() && isHiddenInList(it) }
-                .map { HiddenItem.Tracker(id = it.id, name = it.name) }
+                .filter { it.isOwner() && isHidden(it) }
+                .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
+            val hiddenGroups = groupList
+                .filter { isHiddenOwnedGroup(it) }
+                .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
 
-            val listHidden = groupsList
-                .filter { it.is_owner == true && it.hidden_in_list == true }
-                .map { HiddenItem.Group(id = it.id, name = it.name, source = "list") }
-            val listHiddenIds = listHidden.map { it.id }.toSet()
-            val mapHidden = groupsList
-                .filter { it.id in hiddenGroupIds && it.id !in listHiddenIds }
-                .map { HiddenItem.Group(id = it.id, name = it.name, source = "map") }
-            val hiddenGroups = listHidden + mapHidden
-
-            val items = (hiddenTrackers as List<HiddenItem>) + hiddenGroups
-            bindList(items.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() }))
-            loadingOverlay.visibility = View.GONE
-            loadingSpinner.stop(hide = false)
+            bindList(hiddenTrackers, hiddenGroups)
+            if (showLoadingOverlay) {
+                loadingOverlay.visibility = View.GONE
+                loadingSpinner.stop(hide = false)
+            }
             swipeRefresh.isRefreshing = false
         }
     }
 
-    private fun bindList(items: List<HiddenItem>) {
+    private fun bindList(trackers: List<Tracker>, groups: List<Group>) {
         listContainer.removeAllViews()
-        if (items.isEmpty()) {
+        if (trackers.isEmpty() && groups.isEmpty()) {
             emptyText.visibility = View.VISIBLE
             showAllButton.visibility = View.GONE
             return
         }
         emptyText.visibility = View.GONE
-        showAllButton.visibility = if (items.size > 1) View.VISIBLE else View.GONE
+        val totalHidden = trackers.size + groups.size
+        showAllButton.visibility = if (totalHidden > 1) View.VISIBLE else View.GONE
         showAllButton.isEnabled = true
 
-        val trackerIds = items.filterIsInstance<HiddenItem.Tracker>().map { it.id }
-        val groupItems = items.filterIsInstance<HiddenItem.Group>()
+        val trackerIds = trackers.map { it.id }
+        val groupIds = groups.map { it.id }
 
-        for (item in items) {
-            val layoutId = when (item) {
-                is HiddenItem.Tracker -> R.layout.item_hidden_tracker_row
-                is HiddenItem.Group -> R.layout.item_hidden_group_row
+        fun addSectionTitle(textRes: Int) {
+            val density = resources.displayMetrics.density
+            val padTop = (16 * density).toInt()
+            val padBottom = (8 * density).toInt()
+            val title = TextView(requireContext()).apply {
+                setText(textRes)
+                textSize = 12f
+                setTextColor(requireContext().getColor(R.color.text_secondary))
+                setPadding(0, padTop, 0, padBottom)
             }
-            val row = layoutInflater.inflate(layoutId, listContainer, false)
-            row.findViewById<TextView>(R.id.hiddenTrackerName).text = item.name
-            val showBtn = row.findViewById<ImageButton>(R.id.hiddenTrackerShow)
-            showBtn.setOnClickListener {
-                showBtn.isEnabled = false
-                when (item) {
-                    is HiddenItem.Tracker -> unhideTracker(
-                        item.id,
-                        onSuccess = {
-                            listContainer.removeView(row)
-                            if (listContainer.childCount == 0) {
-                                emptyText.visibility = View.VISIBLE
-                                showAllButton.visibility = View.GONE
-                            }
-                        },
+            listContainer.addView(title)
+        }
+
+        if (trackers.isNotEmpty()) {
+            if (groups.isNotEmpty()) {
+                addSectionTitle(R.string.hidden_list_section_trackers)
+            }
+            for (tracker in trackers) {
+                val row = layoutInflater.inflate(R.layout.item_hidden_tracker_row, listContainer, false)
+                row.findViewById<TextView>(R.id.hiddenTrackerName).text = tracker.name
+                val showBtn = row.findViewById<ImageButton>(R.id.hiddenTrackerShow)
+                showBtn.setOnClickListener {
+                    showBtn.isEnabled = false
+                    unhideTracker(
+                        tracker.id,
+                        onSuccess = { loadAll(showLoadingOverlay = false) },
                         onFailure = { showBtn.isEnabled = true }
                     )
-                    is HiddenItem.Group -> if (item.source == "list") {
-                        unhideGroup(
-                            item.id,
-                            onSuccess = {
-                                listContainer.removeView(row)
-                                if (listContainer.childCount == 0) {
-                                    emptyText.visibility = View.VISIBLE
-                                    showAllButton.visibility = View.GONE
-                                }
-                            },
-                            onFailure = { showBtn.isEnabled = true }
-                        )
-                    } else {
-                        unhideGroupFromMap(
-                            item.id,
-                            onSuccess = {
-                                listContainer.removeView(row)
-                                if (listContainer.childCount == 0) {
-                                    emptyText.visibility = View.VISIBLE
-                                    showAllButton.visibility = View.GONE
-                                }
-                            },
-                            onFailure = { showBtn.isEnabled = true }
-                        )
-                    }
                 }
+                listContainer.addView(row)
             }
-            listContainer.addView(row)
+        }
+
+        if (groups.isNotEmpty()) {
+            if (trackers.isNotEmpty()) {
+                addSectionTitle(R.string.hidden_groups)
+            }
+            for (group in groups) {
+                val row = layoutInflater.inflate(R.layout.item_hidden_tracker_row, listContainer, false)
+                row.findViewById<TextView>(R.id.hiddenTrackerName).text = group.name
+                val showBtn = row.findViewById<ImageButton>(R.id.hiddenTrackerShow)
+                showBtn.setOnClickListener {
+                    showBtn.isEnabled = false
+                    unhideGroup(
+                        group.id,
+                        onSuccess = { loadAll(showLoadingOverlay = false) },
+                        onFailure = { showBtn.isEnabled = true }
+                    )
+                }
+                listContainer.addView(row)
+            }
         }
 
         showAllButton.setOnClickListener {
@@ -189,9 +179,7 @@ class HiddenTrackersFragment : Fragment() {
             for (i in 0 until listContainer.childCount) {
                 listContainer.getChildAt(i).findViewById<ImageButton>(R.id.hiddenTrackerShow)?.isEnabled = false
             }
-            unhideAllTrackers(trackerIds = trackerIds, onComplete = {
-                unhideAllGroups(groupItems, onComplete = { loadAll() })
-            })
+            unhideAllHidden(trackerIds, groupIds, onComplete = { loadAll() })
         }
     }
 
@@ -203,7 +191,7 @@ class HiddenTrackersFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             val result = trackerManagementRepository.updateTrackerSettings(
                 trackerId,
-                TrackerSettingsRequest(hidden_in_list = false)
+                TrackerSettingsRequest(hidden = false)
             )
             if (result is RepositoryResult.Success) {
                 onSuccess?.invoke()
@@ -211,18 +199,6 @@ class HiddenTrackersFragment : Fragment() {
                 navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 onFailure?.invoke()
             }
-        }
-    }
-
-    private fun unhideAllTrackers(trackerIds: List<String>, onComplete: () -> Unit, index: Int = 0) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            for (id in trackerIds.drop(index)) {
-                trackerManagementRepository.updateTrackerSettings(
-                    id,
-                    TrackerSettingsRequest(hidden_in_list = false)
-                )
-            }
-            onComplete()
         }
     }
 
@@ -232,62 +208,29 @@ class HiddenTrackersFragment : Fragment() {
         onFailure: (() -> Unit)? = null
     ) {
         viewLifecycleOwner.lifecycleScope.launch {
-            val result = groupManagementRepository.patchGroup(groupId, GroupPatchRequest(hidden_in_list = false))
+            val result = groupManagementRepository.patchGroup(
+                groupId,
+                GroupPatchRequest(hidden = false)
+            )
             if (result is RepositoryResult.Success) {
                 onSuccess?.invoke()
             } else {
-                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
+                navHost()?.showSnackbar(getString(R.string.failed_to_save_group))
                 onFailure?.invoke()
             }
         }
     }
 
-    private fun unhideGroupFromMap(
-        groupId: String,
-        onSuccess: (() -> Unit)? = null,
-        onFailure: (() -> Unit)? = null
-    ) {
+    private fun unhideAllHidden(trackerIds: List<String>, groupIds: List<String>, onComplete: () -> Unit) {
         viewLifecycleOwner.lifecycleScope.launch {
-            val visibility = when (val result = trackerManagementRepository.loadMapVisibility(forceRefresh = false)) {
-                is RepositoryResult.Success -> result.data
-                is RepositoryResult.Failure -> null
-            }
-            val current = (visibility?.hidden_group_ids ?: emptyList()).toMutableList()
-            val newList = current.filter { it != groupId }
-            if (newList.size == current.size) {
-                onSuccess?.invoke()
-                return@launch
-            }
-            val result = trackerManagementRepository.patchMapVisibility(
-                MapVisibilityRequest(hidden_group_ids = newList)
-            )
-            if (result is RepositoryResult.Success) onSuccess?.invoke() else {
-                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
-                onFailure?.invoke()
-            }
-        }
-    }
-
-    private fun unhideAllGroups(groups: List<HiddenItem.Group>, onComplete: () -> Unit, index: Int = 0) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            var currentHiddenGroupIds: List<String>? = null
-            for (item in groups.drop(index)) {
-                if (item.source == "list") {
-                    groupManagementRepository.patchGroup(item.id, GroupPatchRequest(hidden_in_list = false))
-                } else {
-                    if (currentHiddenGroupIds == null) {
-                        currentHiddenGroupIds = when (val result = trackerManagementRepository.loadMapVisibility(forceRefresh = false)) {
-                            is RepositoryResult.Success -> result.data.hidden_group_ids
-                            is RepositoryResult.Failure -> emptyList()
-                        }
-                    }
-                    currentHiddenGroupIds = currentHiddenGroupIds.orEmpty().filter { it != item.id }
-                }
-            }
-            currentHiddenGroupIds?.let { remainingHidden ->
-                trackerManagementRepository.patchMapVisibility(
-                    MapVisibilityRequest(hidden_group_ids = remainingHidden)
+            for (id in trackerIds) {
+                trackerManagementRepository.updateTrackerSettings(
+                    id,
+                    TrackerSettingsRequest(hidden = false)
                 )
+            }
+            for (id in groupIds) {
+                groupManagementRepository.patchGroup(id, GroupPatchRequest(hidden = false))
             }
             onComplete()
         }

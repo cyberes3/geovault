@@ -90,7 +90,7 @@ class GroupsListViewModel @Inject constructor(
 
     private fun mapMyGroups(groups: List<Group>): List<Group> {
         return groups
-            .filter { it.is_owner == true && it.hidden_in_list != true }
+            .filter { it.is_owner == true && it.hidden != true }
             .sortedBy { it.name.lowercase() }
     }
 }

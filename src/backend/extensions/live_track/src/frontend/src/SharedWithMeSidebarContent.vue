@@ -138,15 +138,6 @@
               <div class="text-xs text-gray-500 truncate" :title="track.owner_email">{{ track.owner_email }}</div>
             </div>
             <div class="flex items-center gap-1 flex-shrink-0" @click.stop>
-              <button
-                type="button"
-                :title="isHidden(track.id) ? 'Show on Map' : 'Hide on Map'"
-                class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 flex items-center justify-center size-9 flex-shrink-0"
-                @click="$emit('toggleVisibility', track.id)"
-              >
-                <EyeIcon v-if="isHidden(track.id)" class="h-5 w-5" />
-                <EyeSlashIcon v-else class="h-5 w-5" />
-              </button>
               <template v-if="(track.visibility || '') === 'public'">
                 <button
                   type="button"
@@ -197,16 +188,6 @@
             <div class="flex items-center gap-1 flex-shrink-0" @click.stop>
               <button
                 type="button"
-                :title="isGroupHidden(group) ? 'Show Group on Map' : 'Hide Group on Map'"
-                class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 flex items-center justify-center size-9 flex-shrink-0"
-                :disabled="isUnsubscribingGroup(group.id)"
-                @click="$emit('toggleGroupVisibility', group)"
-              >
-                <EyeIcon v-if="isGroupHidden(group)" class="h-5 w-5" />
-                <EyeSlashIcon v-else class="h-5 w-5" />
-              </button>
-              <button
-                type="button"
                 title="Unsubscribe from all trackers in this group (you can add again from Incoming)"
                 class="p-2 rounded-lg text-gray-500 hover:text-amber-600 hover:bg-amber-50 flex items-center justify-center size-9 flex-shrink-0"
                 :disabled="isUnsubscribingGroup(group.id)"
@@ -235,15 +216,15 @@
 
 <script>
 import { ref, computed } from 'vue';
-import { ArrowPathIcon, EyeIcon, EyeSlashIcon, MagnifyingGlassIcon, PlusIcon, UserGroupIcon, UserMinusIcon, XMarkIcon } from '@heroicons/vue/24/outline';
+import { ArrowPathIcon, MagnifyingGlassIcon, PlusIcon, UserGroupIcon, UserMinusIcon, XMarkIcon } from '@heroicons/vue/24/outline';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import Loader from 'platform/components/parts/Loader.vue';
 import TrackListChevronIcon from './TrackListChevronIcon.vue';
-import { filterByQuery, isGroupHiddenByMap, isSharedOrPublicTracker, toIdSet } from './sharingSelectors.js';
+import { filterByQuery, isSharedOrPublicTracker } from './sharingSelectors.js';
 
 export default {
   name: 'SharedWithMeSidebarContent',
-  components: { BaseButton, Loader, TrackListChevronIcon, ArrowPathIcon, EyeIcon, EyeSlashIcon, MagnifyingGlassIcon, PlusIcon, UserGroupIcon, UserMinusIcon, XMarkIcon },
+  components: { BaseButton, Loader, TrackListChevronIcon, ArrowPathIcon, MagnifyingGlassIcon, PlusIcon, UserGroupIcon, UserMinusIcon, XMarkIcon },
   props: {
     /** When true, show loading state on refresh button */
     refreshing: { type: Boolean, default: false },
@@ -260,17 +241,13 @@ export default {
     addingIncomingGroupId: { type: [String, Number], default: null },
     /** Track ID currently being removed from share (leave share in progress) */
     leavingShareId: { type: [String, Number], default: null },
-    /** Set or array of track IDs that are hidden from the map */
-    hiddenTrackIds: { type: [Set, Array], default: () => new Set() },
-    /** Set or array of group IDs that are hidden from the map */
-    hiddenGroupIds: { type: [Set, Array], default: () => new Set() },
     unsubscribingId: { type: [String, Number], default: null },
     /** Group ID currently being unsubscribed (show spinner on group row) */
     unsubscribingGroupId: { type: [String, Number], default: null },
     /** API client for leave-group call */
     api: { type: Object, default: null },
   },
-  emits: ['toggleVisibility', 'unsubscribe', 'leaveShare', 'addIncoming', 'addIncomingGroup', 'leaveGroup', 'toggleGroupVisibility', 'unsubscribeGroup', 'selectTrack', 'selectGroup', 'openDiscover', 'open-shared-list', 'refresh'],
+  emits: ['unsubscribe', 'leaveShare', 'addIncoming', 'addIncomingGroup', 'leaveGroup', 'unsubscribeGroup', 'selectTrack', 'selectGroup', 'openDiscover', 'open-shared-list', 'refresh'],
   setup(props, { emit }) {
     const searchQuery = ref('');
 
@@ -300,14 +277,6 @@ export default {
       }
     }
 
-    function isHidden(trackId) {
-      return toIdSet(props.hiddenTrackIds).has(String(trackId));
-    }
-
-    function isGroupHidden(group) {
-      return isGroupHiddenByMap(group, props.hiddenTrackIds, props.hiddenGroupIds);
-    }
-
     function isUnsubscribingGroup(groupId) {
       const id = props.unsubscribingGroupId;
       return id != null && String(id) === String(groupId);
@@ -334,8 +303,6 @@ export default {
       filteredIncomingGroups,
       filteredShared,
       filteredSharedGroupsOnMap,
-      isHidden,
-      isGroupHidden,
       isAdding,
       isAddingGroup,
       isUnsubscribing,

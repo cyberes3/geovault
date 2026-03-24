@@ -155,15 +155,6 @@
             >
               <button
                 type="button"
-                :title="isGroupHidden(group) ? 'Show on Map' : 'Hide on Map'"
-                class="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-white"
-                @click.stop="$emit('toggleGroupVisibility', group)"
-              >
-                <EyeIcon v-if="isGroupHidden(group)" class="h-5 w-5" />
-                <EyeSlashIcon v-else class="h-5 w-5" />
-              </button>
-              <button
-                type="button"
                 title="View Group"
                 class="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-white"
                 @click.stop="$emit('viewGroup', group)"
@@ -219,15 +210,6 @@
               class="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity"
               :class="actionOpacityClass"
             >
-              <button
-                type="button"
-                :title="isHidden(track.id) ? 'Show on Map' : 'Hide on Map'"
-                class="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-white active:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
-                @click.stop="$emit('toggleVisibility', track.id)"
-              >
-                <EyeIcon v-if="isHidden(track.id)" class="h-5 w-5" />
-                <EyeSlashIcon v-else class="h-5 w-5" />
-              </button>
               <button
                 type="button"
                 title="Latest Params"
@@ -319,12 +301,12 @@
 
 <script>
 import { ref, computed, watch } from 'vue';
-import { Square3Stack3DIcon, PencilIcon, TableCellsIcon, CloudIcon, ListBulletIcon, EyeIcon, EyeSlashIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
+import { Square3Stack3DIcon, PencilIcon, TableCellsIcon, CloudIcon, ListBulletIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
 import Loader from 'platform/components/parts/Loader.vue';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
 import { getTrackDirectionAngle as getTrackDirectionAngleUtil } from './trackGeometry.js';
 import { formatTimestampLocal } from './paramFormatters.js';
-import { filterByQuery, isGroupHiddenByMap, toIdSet } from './sharingSelectors.js';
+import { filterByQuery } from './sharingSelectors.js';
 
 const LIST_TABS = [
   { id: 'trackers', label: 'Trackers' },
@@ -341,8 +323,6 @@ export default {
     TableCellsIcon,
     CloudIcon,
     ListBulletIcon,
-    EyeIcon,
-    EyeSlashIcon,
     MagnifyingGlassIcon,
     TrackDirectionIcon
   },
@@ -356,10 +336,6 @@ export default {
     selectedId: { type: [Number, String], default: null },
     activeGroupId: { type: [Number, String], default: null },
     highlightedId: { type: [Number, String], default: null },
-    /** Set or array of track IDs hidden on map (for Shared tab eye button). */
-    hiddenTrackIds: { type: [Set, Array], default: () => new Set() },
-    /** Set or array of group IDs hidden on map (for Shared tab eye button). */
-    hiddenGroupIds: { type: [Set, Array], default: () => new Set() },
     loading: { type: Boolean, default: false },
     listEmptyForTab: { type: Boolean, default: true },
     scrollContainerClass: {
@@ -378,8 +354,6 @@ export default {
     'leaveGroup',
     'editGroup',
     'viewGroup',
-    'toggleVisibility',
-    'toggleGroupVisibility',
     'clearHighlight'
   ],
   setup(props) {
@@ -409,14 +383,6 @@ export default {
       if (props.listTab === 'groups') return 'Search groups...';
       return 'Search by name or owner...';
     });
-
-    function isHidden(trackId) {
-      return toIdSet(props.hiddenTrackIds).has(String(trackId));
-    }
-
-    function isGroupHidden(group) {
-      return isGroupHiddenByMap(group, props.hiddenTrackIds, props.hiddenGroupIds);
-    }
 
     const emptyTitle = computed(() => {
       if (props.listTab === 'trackers') return 'No Trackers Yet';
@@ -458,8 +424,6 @@ export default {
       filteredListEmptyForTab,
       formatTime,
       getTrackDirectionAngle,
-      isHidden,
-      isGroupHidden,
       emptyTitle,
       emptyMessage,
       trackRowClass

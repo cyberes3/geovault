@@ -70,15 +70,6 @@
                 android:textSize="14sp"
                 android:textColor="@color/text_secondary" />
 
-            <com.geovault.common.ToggleHelpCardView
-                android:id="@+id/editSharedGroupHideInListSwitch"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:toggleTitleText="@string/hide_in_list_label"
-                app:toggleHelpText="@string/hide_in_list_hint"
-                android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
-                android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
-
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/editSharedGroupLeave"
                 style="@style/gv_common_ButtonOutlinedDestructive"

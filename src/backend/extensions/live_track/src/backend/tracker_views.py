@@ -26,6 +26,8 @@ from django.db.models import Count, F, Q
 from .helpers import (
     DEFAULT_TRACK_COLOR,
     _color_from_settings,
+    normalize_track_settings_for_api,
+    scrub_legacy_hidden_from_track_settings,
     _filter_coords_by_recent_window,
     _strip_ser_from_params,
     accepted_group_track_ids_for_user,
@@ -399,11 +401,11 @@ def tracker_post_settings(request, tracker_id):
             return error_response("A track with this name already exists", 409)
         track.name = name
         update_fields.append("name")
-    # Settings JSON: color, recent_data_window, hidden_in_list, allow_group_reshare (visibility etc. are model fields)
-    settings_keys = {"color", "recent_data_window", "hidden_in_list", "allow_group_reshare"}
+    # Settings JSON: color, recent_data_window, hidden, allow_group_reshare (visibility etc. are model fields)
+    settings_keys = {"color", "recent_data_window", "hidden", "allow_group_reshare"}
     settings_dump = {k: v for k, v in body.model_dump(exclude_unset=True).items() if k in settings_keys}
     if settings_dump:
-        new_settings = {**(track.settings or {})}
+        new_settings = scrub_legacy_hidden_from_track_settings({**(track.settings or {})})
         for k, v in settings_dump.items():
             if k == "recent_data_window" and v == "all":
                 new_settings.pop(k, None)
@@ -412,7 +414,7 @@ def tracker_post_settings(request, tracker_id):
                 new_settings.pop(k, None)
             else:
                 new_settings[k] = v
-        track.settings = new_settings
+        track.settings = scrub_legacy_hidden_from_track_settings(new_settings)
         update_fields.append("settings")
     if body.visibility is not None:
         track.visibility = body.visibility
@@ -539,7 +541,7 @@ def tracker_get_geometry(request, tracker_id):
             "id": str(track.id),
             "name": track.name,
             "color": _color_from_settings(track),
-            "settings": track.settings or {},
+            "settings": normalize_track_settings_for_api(track.settings),
             "visibility": getattr(track, "visibility", "private"),
             "share_params_with_recipients": getattr(track, "share_params_with_recipients", False),
             "is_owner": is_owner,

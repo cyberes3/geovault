@@ -61,14 +61,14 @@
       />
       <div class="flex items-center gap-3">
         <ToggleButton
-          :model-value="hiddenInList"
-          label="Hide in List"
+          :model-value="groupHidden"
+          label="Hidden"
           size="md"
-          @update:model-value="onHiddenInListChange($event)"
+          @update:model-value="onGroupHiddenChange($event)"
         />
-        <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="onHiddenInListChange(!hiddenInList)">Hide in List</label>
+        <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="onGroupHiddenChange(!groupHidden)">Hidden</label>
       </div>
-      <p class="text-xs text-gray-500">When on, this group is hidden from the sidebar list. You can unhide it in Settings.</p>
+      <p class="text-xs text-gray-500">When on, this group is hidden from the map and the Groups list. Turn this off to show it again.</p>
     </div>
     <div class="flex flex-wrap gap-2 pt-2">
       <BaseButton variant="primary" color="blue" size="sm" :disabled="saving || !name.trim()" @click="save">
@@ -135,14 +135,14 @@
           />
           <div class="flex items-center gap-3">
             <ToggleButton
-              :model-value="hiddenInList"
-              label="Hide in List"
+              :model-value="groupHidden"
+              label="Hidden"
               size="md"
-              @update:model-value="onHiddenInListChange($event)"
+              @update:model-value="onGroupHiddenChange($event)"
             />
-            <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="onHiddenInListChange(!hiddenInList)">Hide in List</label>
+            <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="onGroupHiddenChange(!groupHidden)">Hidden</label>
           </div>
-          <p class="text-xs text-gray-500">When on, this group is hidden from the sidebar list. You can unhide it in Settings.</p>
+          <p class="text-xs text-gray-500">When on, this group is hidden from the map and the Groups list. Turn this off to show it again.</p>
         </div>
       </template>
     </div>
@@ -194,12 +194,12 @@ export default {
     /** When true and group is null, render only the create form (no modal wrapper) for use inside a sidebar. */
     embedded: { type: Boolean, default: false },
   },
-  emits: ['close', 'saved', 'refreshed', 'leave', 'hidden-in-list-changed'],
+  emits: ['close', 'saved', 'refreshed', 'leave', 'group-hidden-changed'],
   setup(props, { emit }) {
     const name = ref(props.group?.name || '');
     const nameError = ref('');
     const saving = ref(false);
-    const hiddenInList = ref(props.group?.hidden_in_list === true);
+    const groupHidden = ref(props.group?.hidden === true);
     const groupTrackIds = ref([]);
     const groupTrackIdsSafe = computed({
       get: () => groupTrackIds.value ?? [],
@@ -243,7 +243,7 @@ export default {
     watch(() => props.group, (g) => {
       name.value = g?.name || '';
       nameError.value = '';
-      hiddenInList.value = g?.hidden_in_list === true;
+      groupHidden.value = g?.hidden === true;
       visibility.value = g?.visibility || 'private';
       sharedWithEmails.value = Array.isArray(g?.shared_with_emails) ? [...g.shared_with_emails] : [];
       worldShareEnabled.value = !!(g?.world_share_id);
@@ -277,7 +277,7 @@ export default {
       try {
         const payload = {
           name: name.value.trim(),
-          hidden_in_list: hiddenInList.value,
+          hidden: groupHidden.value,
           visibility: visibility.value,
           world_share_enabled: worldShareEnabled.value,
         };
@@ -315,10 +315,10 @@ export default {
       }
     }
 
-    function onHiddenInListChange(value) {
-      hiddenInList.value = value;
+    function onGroupHiddenChange(value) {
+      groupHidden.value = value;
       if (props.group?.id) {
-        emit('hidden-in-list-changed', { groupId: props.group.id, hiddenInList: value });
+        emit('group-hidden-changed', { groupId: props.group.id, hidden: value });
       }
     }
 
@@ -326,7 +326,7 @@ export default {
       name,
       nameError,
       saving,
-      hiddenInList,
+      groupHidden,
       visibility,
       sharedWithEmails,
       sharedWithSelectItems,
@@ -340,7 +340,7 @@ export default {
       save,
       allUsers,
       loadingUsers,
-      onHiddenInListChange,
+      onGroupHiddenChange,
     };
   },
 };

@@ -148,8 +148,8 @@
                 android:id="@+id/editTrackerHideOnMapSwitch"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:toggleTitleText="@string/hide_on_map"
-                app:toggleHelpText="@string/edit_tracker_hide_help_text"
+                app:toggleTitleText="@string/hidden_label"
+                app:toggleHelpText="@string/hidden_tracker_help"
                 android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
                 android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
 

@@ -1,7 +1,6 @@
 package com.geovault.tracker.fragments.map
 
 import com.geovault.tracker.Group
-import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerCoordinatesResponse
@@ -16,15 +15,15 @@ import org.robolectric.annotation.Config
 @Config(sdk = [28], manifest = Config.NONE)
 class LoadAllTrackersMapUseCaseTest {
     @Test
-    fun execute_filtersHiddenTrackersAndGroups() {
+    fun execute_doesNotExcludeTracksInHiddenGroups() {
         val trackRepo = object : MapTrackRepository {
             override suspend fun getTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> {
                 return RepositoryResult.Success(
                     listOf(
-                    Tracker(id = "t1", name = "T1", color = null),
-                    Tracker(id = "t2", name = "T2", color = null),
-                    Tracker(id = "t3", name = "T3", color = null)
-                )
+                        Tracker(id = "t1", name = "T1", color = null),
+                        Tracker(id = "t2", name = "T2", color = null),
+                        Tracker(id = "t3", name = "T3", color = null)
+                    )
                 )
             }
 
@@ -53,22 +52,19 @@ class LoadAllTrackersMapUseCaseTest {
         }
         val groupRepo = object : MapGroupRepository {
             override suspend fun getGroups(forceRefresh: Boolean): RepositoryResult<List<Group>> {
-                return RepositoryResult.Success(listOf(Group(id = "g1", name = "G1", track_ids = listOf("t2"))))
-            }
-        }
-        val visibilityRepo = object : MapVisibilityRepository {
-            override suspend fun getMapVisibility(): RepositoryResult<MapVisibilityResponse> {
                 return RepositoryResult.Success(
-                    MapVisibilityResponse(hidden_track_ids = listOf("t1"), hidden_group_ids = listOf("g1"))
+                    listOf(
+                        Group(id = "g1", name = "G1", hidden = true, track_ids = listOf("t2"))
+                    )
                 )
             }
         }
 
-        val useCase = LoadAllTrackersMapUseCase(trackRepo, groupRepo, visibilityRepo)
+        val useCase = LoadAllTrackersMapUseCase(trackRepo, groupRepo)
         val result = kotlinx.coroutines.runBlocking { useCase.execute() }
         val snapshot = result.snapshot
 
-        assertEquals(listOf("t3"), snapshot.trackers.map { it.id })
+        assertEquals(listOf("t1", "t2", "t3"), snapshot.trackers.map { it.id })
         assertTrue(snapshot.coordsByTrackerId["t3"]?.isNotEmpty() == true)
         assertTrue(!result.hadFailures)
     }
@@ -85,7 +81,7 @@ class LoadAllTrackersMapUseCaseTest {
                             name = "T2",
                             color = null,
                             is_owner = true,
-                            settings = mapOf("hidden_in_list" to true)
+                            settings = mapOf("hidden" to true)
                         ),
                         Tracker(id = "t3", name = "T3", color = null, is_owner = true, settings = emptyMap())
                     )
@@ -120,15 +116,8 @@ class LoadAllTrackersMapUseCaseTest {
                 return RepositoryResult.Success(emptyList())
             }
         }
-        val visibilityRepo = object : MapVisibilityRepository {
-            override suspend fun getMapVisibility(): RepositoryResult<MapVisibilityResponse> {
-                return RepositoryResult.Success(
-                    MapVisibilityResponse(hidden_track_ids = emptyList(), hidden_group_ids = emptyList())
-                )
-            }
-        }
 
-        val useCase = LoadAllTrackersMapUseCase(trackRepo, groupRepo, visibilityRepo)
+        val useCase = LoadAllTrackersMapUseCase(trackRepo, groupRepo)
         val result = kotlinx.coroutines.runBlocking { useCase.execute() }
         val snapshot = result.snapshot
 
@@ -136,4 +125,3 @@ class LoadAllTrackersMapUseCaseTest {
         assertTrue(!result.hadFailures)
     }
 }
-

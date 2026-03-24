@@ -267,9 +267,9 @@ class GroupDetailFragment : Fragment() {
             }
         }
         hideInListRow.visibility = View.VISIBLE
-        hideInListRow.isChecked = form.hiddenInList
+        hideInListRow.isChecked = form.hidden
         hideInListRow.setOnCheckedChangeListener { _, isChecked ->
-            if (!isRenderingState) viewModel.onHiddenInListChanged(isChecked)
+            if (!isRenderingState) viewModel.onHiddenChanged(isChecked)
         }
         hideLoading()
         isRenderingState = false
@@ -329,7 +329,7 @@ class GroupDetailFragment : Fragment() {
         viewModel.onSharedWithEmailsChanged(sharedWithEmailsForSave.toList())
         val visibility = if (selectedVisibilityIndex in visibilityValues.indices) visibilityValues[selectedVisibilityIndex] else "private"
         viewModel.onVisibilityChanged(visibility)
-        viewModel.onHiddenInListChanged(hideInListRow.isChecked)
+        viewModel.onHiddenChanged(hideInListRow.isChecked)
         viewModel.onWorldShareEnabledChanged(worldShareRow.isChecked)
         pendingAction = PendingAction.SAVE
         setAllInputsEnabled(false)

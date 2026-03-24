@@ -37,7 +37,7 @@ data class GroupDetailFormState(
     val sharedWithEmails: List<String> = emptyList(),
     val worldShareEnabled: Boolean = false,
     val worldShareUrl: String? = null,
-    val hiddenInList: Boolean = false
+    val hidden: Boolean = false
 ) {
     fun toRequest(
         addTrackIds: List<String>,
@@ -45,7 +45,7 @@ data class GroupDetailFormState(
     ): GroupPatchRequest {
         return GroupPatchRequest(
             name = name.trim(),
-            hidden_in_list = hiddenInList,
+            hidden = hidden,
             visibility = visibility,
             shared_with_emails = if (visibility == "shared") sharedWithEmails else null,
             world_share_enabled = worldShareEnabled,
@@ -88,7 +88,7 @@ class GroupDetailViewModel @Inject constructor(
         val name: String,
         val visibility: String,
         val sharedWithEmails: List<String>,
-        val hiddenInList: Boolean,
+        val hidden: Boolean,
         val trackIds: Set<String>
     )
 
@@ -127,7 +127,7 @@ class GroupDetailViewModel @Inject constructor(
             sharedWithEmails = group.shared_with_emails ?: emptyList(),
             worldShareEnabled = !group.world_share_id.isNullOrBlank(),
             worldShareUrl = group.world_share_url,
-            hiddenInList = group.hidden_in_list == true
+            hidden = group.hidden == true
         )
     }
 
@@ -142,7 +142,7 @@ class GroupDetailViewModel @Inject constructor(
             name = form.name.trim(),
             visibility = form.visibility,
             sharedWithEmails = normalizedShared,
-            hiddenInList = form.hiddenInList,
+            hidden = form.hidden,
             trackIds = state.draftTrackIds
         )
     }
@@ -158,7 +158,7 @@ class GroupDetailViewModel @Inject constructor(
             name = group.name.trim(),
             visibility = visibility,
             sharedWithEmails = normalizedShared,
-            hiddenInList = group.hidden_in_list == true,
+            hidden = group.hidden == true,
             trackIds = group.track_ids.orEmpty().toSet()
         )
     }
@@ -211,7 +211,7 @@ class GroupDetailViewModel @Inject constructor(
     fun onNameChanged(value: String) = _uiState.update { it.copy(form = it.form.copy(name = value)) }
     fun onVisibilityChanged(value: String) = _uiState.update { it.copy(form = it.form.copy(visibility = value)) }
     fun onSharedWithEmailsChanged(value: List<String>) = _uiState.update { it.copy(form = it.form.copy(sharedWithEmails = value)) }
-    fun onHiddenInListChanged(value: Boolean) = _uiState.update { it.copy(form = it.form.copy(hiddenInList = value)) }
+    fun onHiddenChanged(value: Boolean) = _uiState.update { it.copy(form = it.form.copy(hidden = value)) }
     fun onWorldShareEnabledChanged(value: Boolean) = _uiState.update { it.copy(form = it.form.copy(worldShareEnabled = value)) }
     fun addDraftTracker(id: String) = _uiState.update { state ->
         if (id in state.draftTrackIds) return@update state

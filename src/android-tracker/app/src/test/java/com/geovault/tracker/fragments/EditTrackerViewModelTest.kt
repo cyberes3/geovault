@@ -14,7 +14,10 @@ import com.geovault.tracker.UsersResponse
 import com.geovault.tracker.data.TrackerManagementRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -164,6 +167,205 @@ class EditTrackerViewModelTest {
         assertEquals("", vm.uiState.value.form.recentDataWindow)
     }
 
+    @Test
+    fun form_toRequest_defaultTrack_alwaysSendsHiddenFalse() {
+        val form = EditTrackerFormState(
+            trackerId = "t1",
+            name = "A",
+            isDefaultTrack = true,
+            hidden = true,
+            isOwner = true
+        )
+        assertEquals(false, form.toRequest().hidden)
+    }
+
+    @Test
+    fun onDefaultTrackChanged_true_clearsHidden() {
+        val repo = FakeTrackerManagementRepository()
+        val vm = EditTrackerViewModel(repo)
+        vm.bindInitialTracker(
+            tracker = tracker(id = "t1"),
+            defaultColorHex = "#1E88E5",
+            isDefaultTrack = false
+        )
+        vm.onHiddenChanged(true)
+        assertTrue(vm.uiState.value.form.hidden)
+
+        vm.onDefaultTrackChanged(true)
+
+        assertTrue(vm.uiState.value.form.isDefaultTrack)
+        assertFalse(vm.uiState.value.form.hidden)
+    }
+
+    @Test
+    fun bindInitialTracker_defaultTrack_coercesServerHiddenToFalse() {
+        val t = tracker(id = "t1").copy(settings = mapOf("hidden" to true))
+        val vm = EditTrackerViewModel(FakeTrackerManagementRepository())
+        vm.bindInitialTracker(
+            tracker = t,
+            defaultColorHex = "#1E88E5",
+            isDefaultTrack = true
+        )
+        assertFalse(vm.uiState.value.form.hidden)
+    }
+
+    @Test
+    fun load_defaultTrack_coercesServerHiddenToFalse() = runTest {
+        val hiddenOnServer = tracker(id = "t1").copy(settings = mapOf("hidden" to true))
+        val repo = FakeTrackerManagementRepository(initialTrackers = listOf(hiddenOnServer))
+        val vm = EditTrackerViewModel(repo)
+        vm.bindInitialTracker(
+            tracker = tracker(id = "t1"),
+            defaultColorHex = "#1E88E5",
+            isDefaultTrack = true
+        )
+        vm.load("t1")
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.form.isDefaultTrack)
+        assertFalse(vm.uiState.value.form.hidden)
+    }
+
+    @Test
+    fun save_defaultTrack_sendsHiddenFalse() = runTest {
+        val initial = tracker(id = "t1")
+        val repo = FakeTrackerManagementRepository(initialTrackers = listOf(initial))
+        val vm = EditTrackerViewModel(repo)
+        vm.bindInitialTracker(
+            tracker = initial,
+            defaultColorHex = "#1E88E5",
+            isDefaultTrack = true
+        )
+        vm.save()
+        advanceUntilIdle()
+
+        assertEquals(false, repo.lastTrackerSettingsRequest?.hidden)
+        assertEquals(EditTrackerPhase.Saved, vm.uiState.value.phase)
+    }
+
+    @Test
+    fun queueRecentDataWindowPersist_unchanged_skipsUpdate() = runTest {
+        Dispatchers.resetMain()
+        val td = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(td)
+        val initial = tracker(id = "t1").copy(settings = mapOf("recent_data_window" to "1h"))
+        val repo = FakeTrackerManagementRepository(initialTrackers = listOf(initial))
+        val vm = EditTrackerViewModel(repo)
+        vm.bindInitialTracker(
+            tracker = initial,
+            defaultColorHex = "#1E88E5",
+            isDefaultTrack = false
+        )
+        vm.queueRecentDataWindowPersist()
+        advanceTimeBy(500)
+        advanceUntilIdle()
+        assertEquals(null, repo.lastUpdatedTrackerId)
+    }
+
+    @Test
+    fun queueRecentDataWindowPersist_afterDebounce_postsRecentWindowAndSyncsSnapshots() = runTest {
+        Dispatchers.resetMain()
+        val td = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(td)
+        val initial = tracker(id = "t1").copy(settings = mapOf("recent_data_window" to "1min"))
+        val repo = FakeTrackerManagementRepository(initialTrackers = listOf(initial))
+        val vm = EditTrackerViewModel(repo)
+        vm.bindInitialTracker(
+            tracker = initial,
+            defaultColorHex = "#1E88E5",
+            isDefaultTrack = false
+        )
+        var persistedId: String? = null
+        val collectJob = launch {
+            vm.recentDataWindowPersisted.collect { persistedId = it }
+        }
+        vm.onRecentDataWindowChanged("1h")
+        vm.queueRecentDataWindowPersist()
+        advanceTimeBy(500)
+        advanceUntilIdle()
+        assertEquals("t1", repo.lastUpdatedTrackerId)
+        assertEquals("1h", repo.lastTrackerSettingsRequest?.recent_data_window)
+        assertEquals(null, repo.lastTrackerSettingsRequest?.name)
+        assertEquals("1h", vm.uiState.value.form.recentDataWindow)
+        assertEquals("1h", vm.uiState.value.initialSnapshot?.recentDataWindow)
+        assertEquals("t1", persistedId)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun queueRecentDataWindowPersist_lastChangeWins() = runTest {
+        Dispatchers.resetMain()
+        val td = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(td)
+        val initial = tracker(id = "t1").copy(settings = mapOf("recent_data_window" to "1min"))
+        val repo = FakeTrackerManagementRepository(initialTrackers = listOf(initial))
+        val vm = EditTrackerViewModel(repo)
+        vm.bindInitialTracker(
+            tracker = initial,
+            defaultColorHex = "#1E88E5",
+            isDefaultTrack = false
+        )
+        vm.onRecentDataWindowChanged("1h")
+        vm.queueRecentDataWindowPersist()
+        advanceTimeBy(200)
+        vm.onRecentDataWindowChanged("1d")
+        vm.queueRecentDataWindowPersist()
+        advanceTimeBy(500)
+        advanceUntilIdle()
+        assertEquals("1d", repo.lastTrackerSettingsRequest?.recent_data_window)
+    }
+
+    @Test
+    fun queueRecentDataWindowPersist_failure_emitsFailed() = runTest {
+        Dispatchers.resetMain()
+        val td = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(td)
+        val initial = tracker(id = "t1")
+        val repo = FakeTrackerManagementRepository(
+            initialTrackers = listOf(initial),
+            failOnUpdate = true
+        )
+        val vm = EditTrackerViewModel(repo)
+        vm.bindInitialTracker(
+            tracker = initial,
+            defaultColorHex = "#1E88E5",
+            isDefaultTrack = false
+        )
+        var failed = false
+        val collectJob = launch {
+            vm.recentDataWindowPersistFailed.collect { failed = true }
+        }
+        vm.onRecentDataWindowChanged("1h")
+        vm.queueRecentDataWindowPersist()
+        advanceTimeBy(500)
+        advanceUntilIdle()
+        assertTrue(failed)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun save_cancelsPendingRecentDataWindowPersist() = runTest {
+        Dispatchers.resetMain()
+        val td = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(td)
+        val initial = tracker(id = "t1")
+        val repo = FakeTrackerManagementRepository(initialTrackers = listOf(initial))
+        val vm = EditTrackerViewModel(repo)
+        vm.bindInitialTracker(
+            tracker = initial,
+            defaultColorHex = "#1E88E5",
+            isDefaultTrack = false
+        )
+        vm.onRecentDataWindowChanged("1h")
+        vm.queueRecentDataWindowPersist()
+        vm.save()
+        advanceUntilIdle()
+        advanceTimeBy(500)
+        advanceUntilIdle()
+        assertEquals("Tracker", repo.lastTrackerSettingsRequest?.name)
+        assertEquals("1h", repo.lastTrackerSettingsRequest?.recent_data_window)
+    }
+
     private fun tracker(id: String): Tracker = Tracker(
         id = id,
         name = "Tracker",
@@ -239,8 +441,8 @@ class EditTrackerViewModelTest {
                     settings["recent_data_window"] = request.recent_data_window
                 }
             }
-            if (request.hidden_in_list != null) {
-                settings["hidden_in_list"] = request.hidden_in_list
+            if (request.hidden != null) {
+                settings["hidden"] = request.hidden
             }
             if (request.allow_group_reshare != null) {
                 settings["allow_group_reshare"] = request.allow_group_reshare

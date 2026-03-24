@@ -90,7 +90,7 @@ class EditTrackerFragment : Fragment() {
     /** Pending KML bytes to write when user picks save location (system file saver). */
     private var pendingKmlExportBytes: ByteArray? = null
     private var trackerId: String = ""
-    private var pendingHiddenInListAfterSave: Boolean = false
+    private var pendingHiddenAfterSave: Boolean = false
     private var isRenderingState: Boolean = false
     private var pendingAction: PendingAction? = null
 
@@ -231,6 +231,7 @@ class EditTrackerFragment : Fragment() {
             if (!isRenderingState) {
                 val recentDataWindow = RecentDataWindowOptions.valueForIndex(position)
                 viewModel.onRecentDataWindowChanged(recentDataWindow)
+                viewModel.queueRecentDataWindowPersist()
             }
         }
 
@@ -245,7 +246,7 @@ class EditTrackerFragment : Fragment() {
             }
         }
         hideOnMapSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (!isRenderingState) viewModel.onHiddenInListChanged(isChecked)
+            if (!isRenderingState) viewModel.onHiddenChanged(isChecked)
         }
         shareParamsRecipientsSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (!isRenderingState) viewModel.onShareParamsRecipientsChanged(isChecked)
@@ -310,9 +311,9 @@ class EditTrackerFragment : Fragment() {
                 return@setOnClickListener
             }
             viewModel.onRecentDataWindowChanged(resolvedRecentDataWindow)
-            val hiddenInList = hideOnMapSwitch.isChecked
+            val hidden = hideOnMapSwitch.isChecked
             pendingAction = PendingAction.SAVE
-            pendingHiddenInListAfterSave = hiddenInList
+            pendingHiddenAfterSave = hidden
             setAllInputsEnabled(false)
             viewModel.save()
         }
@@ -404,7 +405,7 @@ class EditTrackerFragment : Fragment() {
         if (SelectedTrackerPrefs.selectedTrackerId(requireContext()) == form.trackerId) {
             SelectedTrackerPrefs.updateSelectedTrackerName(requireContext(), form.name)
         }
-        hideOnMapSwitch.isChecked = form.hiddenInList
+        hideOnMapSwitch.isChecked = form.hidden
         isRenderingState = false
     }
 
@@ -450,92 +451,104 @@ class EditTrackerFragment : Fragment() {
     private fun observeViewModel() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.uiState.collect { state ->
-                    when (state.phase) {
-                        EditTrackerPhase.Loading -> showLoadingState(true)
-                        EditTrackerPhase.Ready -> {
-                            showLoadingState(false)
-                            populateFormFromState(state.form)
-                            setAllInputsEnabled(true)
-                            copyWorldLinkButton.isEnabled = true
-                            copyWorldLinkButton.text = getString(R.string.copy_world_share_link)
-                            copyWorldLinkSpinner.hide()
-                            if (
-                                pendingAction == PendingAction.ENABLE_WORLD_SHARE ||
-                                pendingAction == PendingAction.DISABLE_WORLD_SHARE
-                            ) {
+                launch {
+                    viewModel.recentDataWindowPersisted.collect { id ->
+                        navHost()?.refreshMapAfterTrackerSettingsSaved(id)
+                    }
+                }
+                launch {
+                    viewModel.recentDataWindowPersistFailed.collect {
+                        navHost()?.showSnackbar(getString(R.string.failed_to_save_tracker))
+                    }
+                }
+                launch {
+                    viewModel.uiState.collect { state ->
+                        when (state.phase) {
+                            EditTrackerPhase.Loading -> showLoadingState(true)
+                            EditTrackerPhase.Ready -> {
+                                showLoadingState(false)
+                                populateFormFromState(state.form)
+                                setAllInputsEnabled(true)
+                                copyWorldLinkButton.isEnabled = true
+                                copyWorldLinkButton.text = getString(R.string.copy_world_share_link)
+                                copyWorldLinkSpinner.hide()
+                                if (
+                                    pendingAction == PendingAction.ENABLE_WORLD_SHARE ||
+                                    pendingAction == PendingAction.DISABLE_WORLD_SHARE
+                                ) {
+                                    pendingAction = null
+                                }
+                            }
+                            EditTrackerPhase.Saving -> {
+                                showLoadingState(false)
+                                setAllInputsEnabled(false)
+                            }
+                            EditTrackerPhase.Saved -> {
+                                navHost()?.refreshMapAfterTrackerSettingsSaved(trackerId)
+                                if (pendingHiddenAfterSave && trackerId == SelectedTrackerPrefs.selectedTrackerId(requireContext())) {
+                                    SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
+                                }
                                 pendingAction = null
+                                popBackStack()
                             }
                         }
-                        EditTrackerPhase.Saving -> {
-                            showLoadingState(false)
-                            setAllInputsEnabled(false)
+
+                        if (state.didClearHistory) {
+                            historyClearedThisSession = true
+                            pendingAction = null
+                            setAllInputsEnabled(true)
+                            viewModel.consumeHistoryCleared()
+                            navHost()?.showSnackbar(getString(R.string.history_cleared))
                         }
-                        EditTrackerPhase.Saved -> {
-                            navHost()?.refreshMapAfterTrackerSettingsSaved(trackerId)
-                            if (pendingHiddenInListAfterSave && trackerId == SelectedTrackerPrefs.selectedTrackerId(requireContext())) {
+
+                        if (state.didDelete) {
+                            if (trackerId == SelectedTrackerPrefs.selectedTrackerId(requireContext())) {
                                 SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
                             }
                             pendingAction = null
+                            viewModel.consumeDelete()
                             popBackStack()
+                            navHost()?.showSnackbar(getString(R.string.tracker_deleted))
                         }
-                    }
 
-                    if (state.didClearHistory) {
-                        historyClearedThisSession = true
-                        pendingAction = null
-                        setAllInputsEnabled(true)
-                        viewModel.consumeHistoryCleared()
-                        navHost()?.showSnackbar(getString(R.string.history_cleared))
-                    }
-
-                    if (state.didDelete) {
-                        if (trackerId == SelectedTrackerPrefs.selectedTrackerId(requireContext())) {
-                            SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(requireContext())
-                        }
-                        pendingAction = null
-                        viewModel.consumeDelete()
-                        popBackStack()
-                        navHost()?.showSnackbar(getString(R.string.tracker_deleted))
-                    }
-
-                    if (!state.errorMessage.isNullOrBlank()) {
-                        val failedAction = pendingAction
-                        if (failedAction != null) {
-                            setAllInputsEnabled(true)
-                            pendingAction = null
-                            val failureMessageRes = when {
-                                failedAction == PendingAction.SAVE &&
-                                    state.errorMessage == EditTrackerViewModel.SAVE_PERSISTENCE_MISMATCH -> {
-                                    R.string.failed_to_save_tracker_persistence_mismatch
+                        if (!state.errorMessage.isNullOrBlank()) {
+                            val failedAction = pendingAction
+                            if (failedAction != null) {
+                                setAllInputsEnabled(true)
+                                pendingAction = null
+                                val failureMessageRes = when {
+                                    failedAction == PendingAction.SAVE &&
+                                        state.errorMessage == EditTrackerViewModel.SAVE_PERSISTENCE_MISMATCH -> {
+                                        R.string.failed_to_save_tracker_persistence_mismatch
+                                    }
+                                    else -> when (failedAction) {
+                                        PendingAction.SAVE -> R.string.failed_to_save_tracker
+                                        PendingAction.CLEAR_HISTORY -> R.string.failed_to_clear_history
+                                        PendingAction.DELETE -> R.string.failed_to_delete_tracker
+                                        PendingAction.ENABLE_WORLD_SHARE -> R.string.failed_to_enable_world_share
+                                        PendingAction.DISABLE_WORLD_SHARE -> R.string.failed_to_disable_world_share
+                                    }
                                 }
-                                else -> when (failedAction) {
-                                    PendingAction.SAVE -> R.string.failed_to_save_tracker
-                                    PendingAction.CLEAR_HISTORY -> R.string.failed_to_clear_history
-                                    PendingAction.DELETE -> R.string.failed_to_delete_tracker
-                                    PendingAction.ENABLE_WORLD_SHARE -> R.string.failed_to_enable_world_share
-                                    PendingAction.DISABLE_WORLD_SHARE -> R.string.failed_to_disable_world_share
-                                }
+                                navHost()?.showSnackbar(getString(failureMessageRes))
+                            } else {
+                                navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                             }
-                            navHost()?.showSnackbar(getString(failureMessageRes))
-                        } else {
-                            navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                         }
-                    }
-                    if (state.kmlBytes != null) {
-                        try {
-                            val safeName = (
-                                state.form.name.map { c -> if (c.isLetterOrDigit() || c in " -_") c else "" }
-                                    .joinToString("")
-                                    .take(40)
-                                    .ifEmpty { "track" }
-                                )
-                            pendingKmlExportBytes = state.kmlBytes
-                            createKmlDocumentLauncher.launch("$safeName.kml")
-                        } catch (_: Exception) {
-                            navHost()?.showSnackbar(getString(R.string.failed_to_save_kml))
-                        } finally {
-                            viewModel.consumeKml()
+                        if (state.kmlBytes != null) {
+                            try {
+                                val safeName = (
+                                    state.form.name.map { c -> if (c.isLetterOrDigit() || c in " -_") c else "" }
+                                        .joinToString("")
+                                        .take(40)
+                                        .ifEmpty { "track" }
+                                    )
+                                pendingKmlExportBytes = state.kmlBytes
+                                createKmlDocumentLauncher.launch("$safeName.kml")
+                            } catch (_: Exception) {
+                                navHost()?.showSnackbar(getString(R.string.failed_to_save_kml))
+                            } finally {
+                                viewModel.consumeKml()
+                            }
                         }
                     }
                 }
@@ -594,7 +607,7 @@ class EditTrackerFragment : Fragment() {
         nameEdit.isEnabled = enabled
         colorEdit.isEnabled = enabled
         pickColorButton.isEnabled = enabled
-        hideOnMapSwitch.isEnabled = enabled
+        hideOnMapSwitch.isEnabled = enabled && !viewModel.uiState.value.form.isDefaultTrack
         recentDataWindowSpinner.isEnabled = enabled
         recentDataWindowSpinner.isClickable = enabled
         recentDataWindowSpinner.isFocusable = enabled

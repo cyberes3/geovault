@@ -4,7 +4,6 @@ import android.app.Application
 import com.geovault.tracker.AppError
 import com.geovault.tracker.GeoJsonLineString
 import com.geovault.tracker.Group
-import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerCoordinatesResponse
@@ -230,7 +229,6 @@ class MapViewModelIntegrationTest {
             runtimeTrackRepository = countingRepo,
             bootstrapTrackRepository = countingRepo,
             groupRepository = FakeGroupRepository(),
-            visibilityRepository = FakeVisibilityRepository(),
             streamingRepository = object : MapStreamingRepository {
                 override val events: Flow<TrackPointEvent> = stream
             },
@@ -256,7 +254,6 @@ class MapViewModelIntegrationTest {
             runtimeTrackRepository = FakeTrackRepository(),
             bootstrapTrackRepository = FakeTrackRepository(),
             groupRepository = FakeGroupRepository(),
-            visibilityRepository = FakeVisibilityRepository(),
             streamingRepository = object : MapStreamingRepository {
                 override val events: Flow<TrackPointEvent> = stream
             },
@@ -284,7 +281,6 @@ class MapViewModelIntegrationTest {
             runtimeTrackRepository = FakeTrackRepository(),
             bootstrapTrackRepository = FakeTrackRepository(),
             groupRepository = FakeGroupRepository(),
-            visibilityRepository = FakeVisibilityRepository(),
             streamingRepository = object : MapStreamingRepository {
                 override val events: Flow<TrackPointEvent> = stream
             },
@@ -319,7 +315,6 @@ class MapViewModelIntegrationTest {
             runtimeTrackRepository = FakeTrackRepository(),
             bootstrapTrackRepository = FakeTrackRepository(),
             groupRepository = FakeGroupRepository(),
-            visibilityRepository = FakeVisibilityRepository(),
             streamingRepository = object : MapStreamingRepository {
                 override val events: Flow<TrackPointEvent> = stream
             },
@@ -351,7 +346,6 @@ class MapViewModelIntegrationTest {
             runtimeTrackRepository = FakeTrackRepository(),
             bootstrapTrackRepository = FakeTrackRepository(),
             groupRepository = FakeGroupRepository(),
-            visibilityRepository = FakeVisibilityRepository(),
             streamingRepository = object : MapStreamingRepository {
                 override val events: Flow<TrackPointEvent> = stream
             },
@@ -456,9 +450,5 @@ class MapViewModelIntegrationTest {
             RepositoryResult.Success(emptyList())
     }
 
-    private class FakeVisibilityRepository : MapVisibilityRepository {
-        override suspend fun getMapVisibility(): RepositoryResult<MapVisibilityResponse> =
-            RepositoryResult.Success(MapVisibilityResponse(hidden_track_ids = emptyList(), hidden_group_ids = emptyList()))
-    }
 }
 

@@ -46,7 +46,7 @@
       :tracker-secret="effectiveTrackerSecret"
       :world-share-enabled="worldShareEnabled"
       :world-share-url="worldShareUrl"
-      :hidden-in-list="hiddenInList"
+      :hidden="trackerHidden"
       :allow-group-reshare="allowGroupReshare"
       :hauk-domain="haukDomain"
       @update:name="name = $event"
@@ -58,7 +58,7 @@
       @update:sharedWithEmails="sharedWithEmails = $event"
       @update:worldShareEnabled="setWorldShareEnabled"
       @update:allowGroupReshare="onAllowGroupReshareChange($event)"
-      @update:hidden-in-list="onHiddenInListChange($event)"
+      @update:hidden="onTrackerHiddenChange($event)"
       @reset-color="resetColorToDeterministic"
       @open-instructions="showInstructions = true"
       @open-hauk-instructions="showHaukInstructions = true"
@@ -139,7 +139,7 @@
         :tracker-secret="effectiveTrackerSecret"
         :world-share-enabled="worldShareEnabled"
         :world-share-url="worldShareUrl"
-        :hidden-in-list="hiddenInList"
+        :hidden="trackerHidden"
         :allow-group-reshare="allowGroupReshare"
         :hauk-domain="haukDomain"
         @update:name="name = $event"
@@ -151,7 +151,7 @@
         @update:sharedWithEmails="sharedWithEmails = $event"
         @update:worldShareEnabled="setWorldShareEnabled"
         @update:allowGroupReshare="onAllowGroupReshareChange($event)"
-        @update:hidden-in-list="onHiddenInListChange($event)"
+        @update:hidden="onTrackerHiddenChange($event)"
         @reset-color="resetColorToDeterministic"
         @open-instructions="showInstructions = true"
         @open-hauk-instructions="showHaukInstructions = true"
@@ -241,7 +241,7 @@ export default {
     const worldShareEnabled = ref(false);
     const worldShareUrl = ref('');
     const shareParamsWithWorld = ref(false);
-    const hiddenInList = ref(false);
+    const trackerHidden = ref(false);
     const allowGroupReshare = ref(false);
     const lastSavedSnapshot = ref(null);
     const isInitializingDraft = ref(false);
@@ -345,7 +345,7 @@ export default {
         shareParamsWithWorld: shareParamsWithWorld.value === true,
         sharedWithEmails: [...(sharedWithEmails.value || [])].map((e) => String(e || '').toLowerCase()),
         worldShareEnabled: worldShareEnabled.value === true,
-        hiddenInList: hiddenInList.value === true,
+        trackerHidden: trackerHidden.value === true,
         allowGroupReshare: allowGroupReshare.value === true
       };
     }
@@ -364,7 +364,7 @@ export default {
           .filter(Boolean)
           .sort(),
         worldShareEnabled: snapshot.worldShareEnabled === true,
-        hiddenInList: snapshot.hiddenInList === true,
+        trackerHidden: snapshot.trackerHidden === true,
         allowGroupReshare: snapshot.allowGroupReshare === true
       };
     }
@@ -382,7 +382,7 @@ export default {
         share_params_with_recipients: snapshot.shareParamsWithRecipients,
         share_params_with_world: snapshot.shareParamsWithWorld,
         world_share_enabled: snapshot.worldShareEnabled,
-        hidden_in_list: snapshot.hiddenInList,
+        hidden: snapshot.trackerHidden,
         allow_group_reshare: snapshot.allowGroupReshare
       };
       if (snapshot.visibility === 'shared') {
@@ -555,7 +555,7 @@ export default {
         sharedWithEmails.value = Array.isArray(t.shared_with_emails) ? [...t.shared_with_emails] : [];
         worldShareEnabled.value = !!(t.world_share_id);
         worldShareUrl.value = t.world_share_url || '';
-        hiddenInList.value = (t.settings && t.settings.hidden_in_list) === true;
+        trackerHidden.value = (t.settings && t.settings.hidden) === true;
         allowGroupReshare.value = (t.settings && t.settings.allow_group_reshare) === true;
         userPickedColor.value = true;
       } else {
@@ -568,7 +568,7 @@ export default {
         sharedWithEmails.value = [];
         worldShareEnabled.value = false;
         worldShareUrl.value = '';
-        hiddenInList.value = false;
+        trackerHidden.value = false;
         allowGroupReshare.value = false;
       }
       lastSavedSnapshot.value = makeSnapshotFromState();
@@ -580,10 +580,10 @@ export default {
       queueAutosave();
     }
 
-    function onHiddenInListChange(value) {
-      hiddenInList.value = value;
+    function onTrackerHiddenChange(value) {
+      trackerHidden.value = value;
       if (props.track?.id) {
-        emit('settings-changed', { trackId: props.track.id, hidden_in_list: value });
+        emit('settings-changed', { trackId: props.track.id, hidden: value });
       }
       queueAutosave();
     }
@@ -607,7 +607,7 @@ export default {
         shareParamsWithRecipients: shareParamsWithRecipients.value,
         shareParamsWithWorld: shareParamsWithWorld.value,
         sharedWithEmails: sharedWithEmails.value,
-        hiddenInList: hiddenInList.value,
+        trackerHidden: trackerHidden.value,
         worldShareEnabled: worldShareEnabled.value,
         allowGroupReshare: allowGroupReshare.value
       }),
@@ -645,11 +645,11 @@ export default {
       shareParamsWithRecipients,
       shareParamsWithWorld,
       sharedWithEmails,
-      hiddenInList,
+      trackerHidden,
       worldShareEnabled,
       worldShareUrl,
       setWorldShareEnabled,
-      onHiddenInListChange,
+      onTrackerHiddenChange,
       onAllowGroupReshareChange,
       allowGroupReshare,
       onShareParamsWithRecipientsUpdate,

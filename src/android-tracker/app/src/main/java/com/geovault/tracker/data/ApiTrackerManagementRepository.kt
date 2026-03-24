@@ -78,7 +78,7 @@ class ApiTrackerManagementRepository @Inject constructor(
             stateStore.publishTracker(result.data)
             Log.d(
                 TAG,
-                "Loaded tracker details trackerId=$trackerId recentDataWindow=${result.data.settings?.get("recent_data_window")} hiddenInList=${result.data.settings?.get("hidden_in_list")}"
+                "Loaded tracker details trackerId=$trackerId recentDataWindow=${result.data.settings?.get("recent_data_window")} hidden=${result.data.settings?.get("hidden")}"
             )
         } else if (result is RepositoryResult.Failure) {
             Log.e(TAG, "Failed loading tracker details trackerId=$trackerId error=${result.error}")
@@ -117,7 +117,7 @@ class ApiTrackerManagementRepository @Inject constructor(
             stateStore.publishTracker(result.data, emitEvent = publishToStore)
             Log.d(
                 TAG,
-                "Updated tracker settings trackerId=$trackerId persistedRecentDataWindow=${result.data.settings?.get("recent_data_window")} persistedHiddenInList=${result.data.settings?.get("hidden_in_list")}"
+                "Updated tracker settings trackerId=$trackerId persistedRecentDataWindow=${result.data.settings?.get("recent_data_window")} persistedHidden=${result.data.settings?.get("hidden")}"
             )
         } else if (result is RepositoryResult.Failure) {
             Log.e(TAG, "Failed updating tracker settings trackerId=$trackerId error=${result.error}")

@@ -5,8 +5,7 @@ import com.geovault.tracker.Tracker
 
 class LoadAllTrackersMapUseCase(
     private val trackRepository: RuntimeMapTrackRepository,
-    private val groupRepository: MapGroupRepository,
-    private val visibilityRepository: MapVisibilityRepository
+    private val groupRepository: MapGroupRepository
 ) {
     data class Result(
         val snapshot: MapAllTrackersSnapshot,
@@ -15,27 +14,14 @@ class LoadAllTrackersMapUseCase(
 
     suspend fun execute(): Result {
         var hadFailures = false
-        val visibility = when (val visibilityResult = visibilityRepository.getMapVisibility()) {
-            is RepositoryResult.Success -> visibilityResult.data
-            is RepositoryResult.Failure -> {
-                hadFailures = true
-                null
-            }
-        }
-        val hiddenTrackIds = (visibility?.hidden_track_ids ?: emptyList()).toSet()
-        val hiddenGroupIds = (visibility?.hidden_group_ids ?: emptyList()).toSet()
 
-        val groups = when (val groupResult = groupRepository.getGroups(forceRefresh = false)) {
+        when (val groupResult = groupRepository.getGroups(forceRefresh = false)) {
             is RepositoryResult.Success -> groupResult.data
             is RepositoryResult.Failure -> {
                 hadFailures = true
                 emptyList()
             }
         }
-        val hiddenGroupTrackIds = groups
-            .filter { it.id in hiddenGroupIds || it.hidden_in_list == true }
-            .flatMap { it.track_ids ?: emptyList() }
-            .toSet()
 
         val trackers = when (val trackerResult = trackRepository.getTrackers(forceRefresh = false)) {
             is RepositoryResult.Success -> trackerResult.data
@@ -44,8 +30,7 @@ class LoadAllTrackersMapUseCase(
                 emptyList()
             }
         }
-            .filter { it.id !in hiddenTrackIds && it.id !in hiddenGroupTrackIds }
-            .filter { !(it.isOwner() && (it.settings?.get("hidden_in_list") as? Boolean) == true) }
+            .filter { !(it.isOwner() && (it.settings?.get("hidden") as? Boolean) == true) }
 
         if (trackers.isEmpty()) {
             return Result(
@@ -74,4 +59,3 @@ class LoadAllTrackersMapUseCase(
         )
     }
 }
-

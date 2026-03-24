@@ -112,7 +112,7 @@ class TrackerListItemResponse(BaseModel):
 class GroupResponse(BaseModel):
     id: str
     name: str
-    hidden_in_list: bool = False
+    hidden: bool = False
     visibility: str = "private"
     created_at: Optional[int] = None
     updated_at: Optional[int] = None
@@ -180,8 +180,9 @@ class TrackSettingsRequest(BaseModel):
     world_share_enabled: Optional[bool] = Field(
         default=None, description="When True, create or keep world (unauthenticated) share link; when False, remove it"
     )
-    hidden_in_list: Optional[bool] = Field(
-        default=None, description="When True, hide this tracker from the sidebar list (owner only)"
+    hidden: Optional[bool] = Field(
+        default=None,
+        description="When True, hide this tracker from the map and sidebar lists for the owner (owner only)",
     )
     allow_group_reshare: Optional[bool] = Field(
         default=None,

@@ -94,7 +94,7 @@ class LiveTrackGroup(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="live_track_groups")
-    hidden_in_list = models.BooleanField(default=False)
+    hidden = models.BooleanField(default=False)
     visibility = models.CharField(
         max_length=20,
         choices=VISIBILITY_CHOICES,

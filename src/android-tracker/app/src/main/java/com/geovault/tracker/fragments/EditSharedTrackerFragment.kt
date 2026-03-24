@@ -12,7 +12,6 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.geovault.common.ToggleHelpCardView
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
@@ -31,18 +30,13 @@ class EditSharedTrackerFragment : Fragment() {
 
     private lateinit var trackerName: TextView
     private lateinit var trackerOwner: TextView
-    private lateinit var hideOnMapSwitch: ToggleHelpCardView
     private lateinit var unsubscribeButton: MaterialButton
     private lateinit var removeFromShareButton: MaterialButton
     private lateinit var closeButton: ImageButton
 
-    private var currentTracker: Tracker? = null
-    private var suppressHideSwitchCallback = false
     private var pendingAction: PendingAction? = null
 
     private enum class PendingAction {
-        LOAD,
-        HIDE,
         UNSUBSCRIBE,
         LEAVE_SHARE
     }
@@ -55,7 +49,6 @@ class EditSharedTrackerFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         trackerName = view.findViewById(R.id.editSharedTrackerName)
         trackerOwner = view.findViewById(R.id.editSharedTrackerOwner)
-        hideOnMapSwitch = view.findViewById(R.id.editSharedTrackerHideOnMapSwitch)
         unsubscribeButton = view.findViewById(R.id.editSharedTrackerUnsubscribe)
         removeFromShareButton = view.findViewById(R.id.editSharedTrackerRemoveFromShare)
         closeButton = view.findViewById(R.id.editSharedTrackerClose)
@@ -66,30 +59,19 @@ class EditSharedTrackerFragment : Fragment() {
             parentFragmentManager.popBackStack()
             return
         }
-        currentTracker = initialTracker
         renderTracker(initialTracker)
         bindActions(initialTracker.id)
-        pendingAction = PendingAction.LOAD
-        viewModel.load()
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
-                    val hiddenIds = state.mapVisibility?.hidden_track_ids ?: emptyList()
-                    suppressHideSwitchCallback = true
-                    hideOnMapSwitch.isChecked = hiddenIds.contains(initialTracker.id)
-                    suppressHideSwitchCallback = false
-                    if (state.mapVisibility != null && pendingAction == PendingAction.LOAD) {
-                        pendingAction = null
-                    }
                     state.errorMessage?.takeIf { it.isNotBlank() }?.let {
                         val failedAction = pendingAction
                         pendingAction = null
                         val failureMessageRes = when (failedAction) {
-                            PendingAction.HIDE -> R.string.failed_to_update_visibility
                             PendingAction.UNSUBSCRIBE -> R.string.failed_to_unsubscribe
                             PendingAction.LEAVE_SHARE -> R.string.failed_to_remove_from_share
-                            PendingAction.LOAD, null -> R.string.failed_to_load_tracker
+                            null -> R.string.failed_to_load_tracker
                         }
                         navHost()?.showSnackbar(getString(failureMessageRes))
                         viewModel.consumeError()
@@ -106,19 +88,10 @@ class EditSharedTrackerFragment : Fragment() {
     private fun renderTracker(tracker: Tracker) {
         trackerName.text = tracker.name
         trackerOwner.text = tracker.owner_email?.takeIf { it.isNotBlank() } ?: ""
-
         removeFromShareButton.visibility = if ((tracker.visibility ?: "") == "shared") View.VISIBLE else View.GONE
-
-        // visibility binding is handled through ViewModel state collection
     }
 
     private fun bindActions(trackerId: String) {
-        hideOnMapSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (suppressHideSwitchCallback) return@setOnCheckedChangeListener
-            pendingAction = PendingAction.HIDE
-            viewModel.setHidden(trackerId, isChecked)
-        }
-
         unsubscribeButton.setOnClickListener {
             val d = AlertDialog.Builder(requireContext())
                 .setTitle(getString(R.string.unsubscribe_confirm_title))

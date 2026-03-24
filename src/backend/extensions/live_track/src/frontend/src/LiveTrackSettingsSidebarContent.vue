@@ -1,6 +1,5 @@
 <template>
-  <div class="flex-1 min-h-0 flex flex-col p-4 overflow-hidden">
-    <!-- Hidden trackers -->
+  <div class="flex-1 min-h-0 flex flex-col p-4 overflow-y-auto">
     <div class="flex-shrink-0 mb-4">
       <div class="flex items-center justify-between mb-2">
         <h3 class="text-sm font-semibold text-gray-900">Hidden Trackers</h3>
@@ -9,8 +8,8 @@
       <div v-if="hiddenTrackers.length === 0" class="text-xs text-gray-900 italic">None</div>
       <ul v-else class="space-y-1">
         <li
-          v-for="(track, index) in hiddenTrackers"
-          :key="track.source === 'list' ? track.id : 'map-' + track.id + '-' + index"
+          v-for="track in hiddenTrackers"
+          :key="track.id"
           class="flex items-center justify-between py-1.5 px-2 rounded hover:bg-gray-50"
         >
           <span class="text-sm text-gray-900 truncate flex-1 min-w-0 mr-2 flex items-center gap-1.5">
@@ -20,7 +19,7 @@
           <button
             type="button"
             class="text-xs text-blue-600 hover:text-blue-800 font-medium flex-shrink-0"
-            @click="track.source === 'list' ? $emit('unhide-tracker', track.id) : $emit('unhide-tracker-from-map', track.id)"
+            @click="$emit('unhide-tracker', track.id)"
           >
             Show
           </button>
@@ -35,9 +34,7 @@
         Show all trackers
       </button>
     </div>
-
-    <!-- Hidden groups -->
-    <div class="flex-shrink-0">
+    <div class="flex-shrink-0 mb-4 border-t border-gray-200 pt-4">
       <div class="flex items-center justify-between mb-2">
         <h3 class="text-sm font-semibold text-gray-900">Hidden Groups</h3>
         <span v-if="hiddenGroups.length > 0" class="text-xs text-gray-900">{{ hiddenGroups.length }}</span>
@@ -45,8 +42,8 @@
       <div v-if="hiddenGroups.length === 0" class="text-xs text-gray-900 italic">None</div>
       <ul v-else class="space-y-1">
         <li
-          v-for="(group, index) in hiddenGroups"
-          :key="group.source === 'list' ? group.id : 'map-' + group.id + '-' + index"
+          v-for="group in hiddenGroups"
+          :key="group.id"
           class="flex items-center justify-between py-1.5 px-2 rounded hover:bg-gray-50"
         >
           <span class="text-sm text-gray-900 truncate flex-1 min-w-0 mr-2 flex items-center gap-1.5">
@@ -56,7 +53,7 @@
           <button
             type="button"
             class="text-xs text-blue-600 hover:text-blue-800 font-medium flex-shrink-0"
-            @click="group.source === 'list' ? $emit('unhide-group', group.id) : $emit('unhide-group-from-map', group.id)"
+            @click="$emit('unhide-group', group.id)"
           >
             Show
           </button>
@@ -81,18 +78,11 @@ export default {
   name: 'LiveTrackSettingsSidebarContent',
   components: { CloudIcon },
   props: {
-    /** Each item: { id, name, is_owner, source: 'list'|'map' } */
+    /** Each item: { id, name, is_owner } — trackers with owner Hidden on. */
     hiddenTrackers: { type: Array, default: () => [] },
-    /** Each item: { id, name, is_owner, source: 'list'|'map' } */
+    /** Each item: { id, name, is_owner } — owned groups with Hidden on. */
     hiddenGroups: { type: Array, default: () => [] },
   },
-  emits: [
-    'unhide-tracker',
-    'unhide-all-trackers',
-    'unhide-tracker-from-map',
-    'unhide-group',
-    'unhide-all-groups',
-    'unhide-group-from-map',
-  ],
+  emits: ['unhide-tracker', 'unhide-all-trackers', 'unhide-group', 'unhide-all-groups'],
 };
 </script>

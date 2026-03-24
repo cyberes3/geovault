@@ -75,7 +75,7 @@ class LoadGroupMapUseCaseTest {
                     name = "A",
                     color = null,
                     is_owner = true,
-                    settings = mapOf("hidden_in_list" to true)
+                    settings = mapOf("hidden" to true)
                 ),
                 Tracker(id = "b", name = "B", color = null, is_owner = true, settings = emptyMap())
             ),
