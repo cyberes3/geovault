@@ -142,10 +142,15 @@ window.gv_core = {
     ol: olNamespace,
     maplibre: maplibregl,
     createRouteWrapper,
+    BaseButton: null, // set below after import
+    BaseModal: null, // set below after import
     Loader: null, // set below after import
+    LocationIcon: null, // set below after import
+    ScrollingSelect: null, // set below after import
+    SearchableCheckboxList: null, // set below after import
+    ToggleButton: null, // set below after import
     store: null
 };
-window.gv_core.Loader = Loader;
 
 // Top-level aliases so extension UMD bundles (external vue, ol, etc.) keep working
 window.GeoVault = window.gv_core.GeoVault;
@@ -157,15 +162,32 @@ window.HeroiconsOutline = window.gv_core.HeroiconsOutline;
 window.HeroiconsSolid = window.gv_core.HeroiconsSolid;
 window.ol = window.gv_core.ol;
 window.maplibregl = window.gv_core.maplibre;
-window.Loader = window.gv_core.Loader;
 window.gv_core.realtimeSocket = realtimeSocket;
 
 import BaseButton from '@/components/parts/BaseButton.vue';
 import ToggleButton from '@/components/parts/ToggleButton.vue';
 import Loader from '@/components/parts/Loader.vue';
+import LocationIcon from '@/components/parts/LocationIcon.vue';
+import ScrollingSelect from '@/components/parts/ScrollingSelect.vue';
+import SearchableCheckboxList from '@/components/parts/SearchableCheckboxList.vue';
 import SettingsInput from '@/components/settings/components/SettingsInput.vue';
 import BaseModal from '@/components/parts/BaseModal.vue';
 import ColorPickerElement from '@/components/parts/ColorPickerElement.vue';
+
+window.gv_core.BaseButton = BaseButton;
+window.gv_core.BaseModal = BaseModal;
+window.gv_core.Loader = Loader;
+window.gv_core.LocationIcon = LocationIcon;
+window.gv_core.ScrollingSelect = ScrollingSelect;
+window.gv_core.SearchableCheckboxList = SearchableCheckboxList;
+window.gv_core.ToggleButton = ToggleButton;
+window.BaseButton = window.gv_core.BaseButton;
+window.BaseModal = window.gv_core.BaseModal;
+window.Loader = window.gv_core.Loader;
+window.LocationIcon = window.gv_core.LocationIcon;
+window.ScrollingSelect = window.gv_core.ScrollingSelect;
+window.SearchableCheckboxList = window.gv_core.SearchableCheckboxList;
+window.ToggleButton = window.gv_core.ToggleButton;
 
 const app = createApp(App);
 

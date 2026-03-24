@@ -58,27 +58,45 @@ export default defineConfig({
       formats: ['umd'] // UMD works with dynamic import() and global externals
     },
     rollupOptions: {
-      // CRITICAL: Externalize the Vue ecosystem!
-      // The platform provides these libraries globally (window.Vue, window.Vuex, etc.).
-      // If you bundler them here, the extension will have its own independent Vue instance,
-      // breaking reactivity, routing, and store access.
-      external: [
-        'vue',
-        'vue-router',
-        'vuex',
-        'axios',
-        '@heroicons/vue/24/outline',
-        '@heroicons/vue/24/solid'
-      ],
+      // CRITICAL: Externalize the shared ecosystem provided by the platform globals.
+      external: (id) => {
+        if (['vue', 'vue-router', 'vuex', 'axios', 'maplibre-gl'].includes(id)) {
+          return true;
+        }
+        if (id.startsWith('@heroicons/vue')) {
+          return true;
+        }
+        // Shared part components are provided by core globals (window.gv_core + top-level aliases).
+        if (id.startsWith('platform/components/parts/')) {
+          return true;
+        }
+        return false;
+      },
       output: {
         // Map externalized imports to the global window variables provided by the platform
-        globals: {
-          vue: 'Vue',
-          'vue-router': 'VueRouter',
-          vuex: 'Vuex',
-          axios: 'axios',
-          '@heroicons/vue/24/outline': 'HeroiconsOutline',
-          '@heroicons/vue/24/solid': 'HeroiconsSolid'
+        globals: (id) => {
+          const baseGlobals = {
+            vue: 'Vue',
+            'vue-router': 'VueRouter',
+            vuex: 'Vuex',
+            axios: 'axios',
+            'maplibre-gl': 'maplibregl',
+            '@heroicons/vue/24/outline': 'HeroiconsOutline',
+            '@heroicons/vue/24/solid': 'HeroiconsSolid'
+          };
+          if (baseGlobals[id]) {
+            return baseGlobals[id];
+          }
+          const sharedPartGlobals = {
+            'platform/components/parts/BaseButton.vue': 'BaseButton',
+            'platform/components/parts/BaseModal.vue': 'BaseModal',
+            'platform/components/parts/Loader.vue': 'Loader',
+            'platform/components/parts/LocationIcon.vue': 'LocationIcon',
+            'platform/components/parts/ScrollingSelect.vue': 'ScrollingSelect',
+            'platform/components/parts/SearchableCheckboxList.vue': 'SearchableCheckboxList',
+            'platform/components/parts/ToggleButton.vue': 'ToggleButton'
+          };
+          return sharedPartGlobals[id];
         },
         // Ensure the setup function is appended to the global object rather than overwriting it
         extend: true

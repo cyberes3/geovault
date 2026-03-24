@@ -511,7 +511,6 @@
 <script>
 import { ref, computed, onMounted, onActivated, onBeforeUnmount, inject, watch, nextTick } from 'vue';
 import { PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, Bars3Icon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon } from '@heroicons/vue/24/outline';
-import { useWindowSize, useScrollLock } from '@vueuse/core';
 import { getIngressBodyTemplate } from './ingressBodyTemplateCache.js';
 import { trackersLiveSocket } from './trackersLiveSocket.js';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
@@ -641,18 +640,31 @@ export default {
       };
     });
 
-    const { height: windowHeight } = useWindowSize();
+    const windowHeight = ref(typeof window !== 'undefined' ? window.innerHeight : 800);
     const rootContainer = ref(null);
-    const bodyScrollLock = useScrollLock(typeof document !== 'undefined' ? document.body : null);
+    let resizeListenerAttached = false;
+    let bodyOverflowBeforeLock = '';
+
+    function updateWindowHeight() {
+      if (typeof window === 'undefined') return;
+      windowHeight.value = window.innerHeight;
+    }
+
+    function setBodyScrollLocked(locked) {
+      if (typeof document === 'undefined') return;
+      if (locked) {
+        if (document.body.style.overflow !== 'hidden') {
+          bodyOverflowBeforeLock = document.body.style.overflow;
+          document.body.style.overflow = 'hidden';
+        }
+        return;
+      }
+      document.body.style.overflow = bodyOverflowBeforeLock;
+    }
 
     watch([isMobileView, isSheetOpen], ([mobile, open]) => {
-      if (typeof document === 'undefined') return;
-      bodyScrollLock.value = mobile && open;
+      setBodyScrollLocked(mobile && open);
     }, { immediate: true });
-
-    onBeforeUnmount(() => {
-      bodyScrollLock.value = false;
-    });
 
     const trackerMaxHeight = computed(() => {
       // App nav = 64px, tracker title bar = 64px, small buffer = 4px.
@@ -1073,7 +1085,7 @@ export default {
           : null;
       const features = [];
       for (const track of trackers.value) {
-        if (isHiddenFromOwnerMapTrack(track, sortedGroups.value)) continue;
+        if (isHiddenFromOwnerMapTrack(track)) continue;
         if (groupTrackIds != null && !groupTrackIds.has(String(track.id))) continue;
         const coordsSorted = getCoordsSortedByTime(track);
         const coords = coordsSorted.map((c) => [c[0], c[1]]);
@@ -1108,7 +1120,7 @@ export default {
           : null;
       const features = [];
       for (const track of trackers.value) {
-        if (isHiddenFromOwnerMapTrack(track, sortedGroups.value)) continue;
+        if (isHiddenFromOwnerMapTrack(track)) continue;
         if (groupTrackIds != null && !groupTrackIds.has(String(track.id))) continue;
         const coordsSorted = getCoordsSortedByTime(track);
         const last = coordsSorted.length ? coordsSorted[coordsSorted.length - 1] : null;
@@ -1673,10 +1685,9 @@ export default {
 
     function fitMapToTracks() {
       if (!map || trackers.value.length === 0) return;
-      const groups = sortedGroups.value;
       const allCoords = [];
       for (const track of trackers.value) {
-        if (isHiddenFromOwnerMapTrack(track, groups)) continue;
+        if (isHiddenFromOwnerMapTrack(track)) continue;
         allCoords.push(...getLastNCoords(track, LAST_POINTS_FIT));
       }
       fitBoundsFromCoords(allCoords);
@@ -1982,11 +1993,10 @@ export default {
     function fitMapToGroupTracks(group) {
       if (!map || !group?.track_ids?.length) return;
       const trackIds = new Set(group.track_ids.map((id) => String(id)));
-      const groups = sortedGroups.value;
       const coords = [];
       for (const track of trackers.value) {
         if (!trackIds.has(String(track.id))) continue;
-        if (isHiddenFromOwnerMapTrack(track, groups)) continue;
+        if (isHiddenFromOwnerMapTrack(track)) continue;
         coords.push(...getLastNCoords(track, LAST_POINTS_FIT));
       }
       if (coords.length === 0) return;
@@ -2117,12 +2127,16 @@ export default {
       const idx = trackers.value.findIndex((t) => String(t.id) === idStr);
       if (idx < 0) return;
       const t = trackers.value[idx];
+      const hasHiddenUpdate = Object.prototype.hasOwnProperty.call(payload || {}, 'hidden');
       const settings = { ...(t.settings || {}) };
-      if (Object.prototype.hasOwnProperty.call(payload || {}, 'hidden')) {
+      if (hasHiddenUpdate) {
         settings.hidden = hidden;
       }
       trackers.value = trackers.value.slice(0, idx).concat([{ ...t, settings }]).concat(trackers.value.slice(idx + 1));
-      updateMapFeatures();
+      // Avoid a transient redraw when we're only waiting for refreshed geometry.
+      if (hasHiddenUpdate) {
+        updateMapFeatures();
+      }
       if (refresh_map === true) {
         fetchAndMergeTracker(trackId);
       }
@@ -2434,6 +2448,11 @@ export default {
     }
 
     onMounted(async () => {
+      if (typeof window !== 'undefined' && !resizeListenerAttached) {
+        window.addEventListener('resize', updateWindowHeight);
+        updateWindowHeight();
+        resizeListenerAttached = true;
+      }
       const store = window.gv_core?.store;
       const userInfo = store?.state?.userInfo;
       if (userInfo?.email) userLogin.value = userInfo.email;
@@ -2573,6 +2592,11 @@ export default {
     );
 
     onBeforeUnmount(() => {
+      setBodyScrollLocked(false);
+      if (typeof window !== 'undefined' && resizeListenerAttached) {
+        window.removeEventListener('resize', updateWindowHeight);
+        resizeListenerAttached = false;
+      }
       if (mobileActionsOutsideStop) {
         mobileActionsOutsideStop();
         mobileActionsOutsideStop = null;

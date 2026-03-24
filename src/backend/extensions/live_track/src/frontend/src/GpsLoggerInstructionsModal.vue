@@ -142,7 +142,6 @@
 
 <script>
 import { ref, watch, computed } from 'vue';
-import QRCode from 'qrcode';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
 import CopyTextButton from './CopyTextButton.vue';
 import fdroidBadgeUrl from '@/assets/get-it-on-fdroid.svg';
@@ -160,20 +159,27 @@ export default {
   emits: ['close'],
   setup(props) {
     const qrDataUrl = ref('');
+    let qrLoadNonce = 0;
     // gpslogger:// link is exactly profileUrl with scheme prefix so it always matches "Profile URL (paste in GPSLogger: From URL)"
     const gpsloggerOpenUrl = computed(() =>
       props.profileUrl ? `gpslogger://properties/${props.profileUrl}` : ''
     );
-    watch(() => gpsloggerOpenUrl.value, (url) => {
+    watch(() => gpsloggerOpenUrl.value, async (url) => {
+      qrLoadNonce += 1;
+      const currentNonce = qrLoadNonce;
       if (!url) {
         qrDataUrl.value = '';
         return;
       }
-      QRCode.toDataURL(url, { width: 256, margin: 1 }).then((dataUrl) => {
+      try {
+        const { default: QRCode } = await import('qrcode');
+        const dataUrl = await QRCode.toDataURL(url, { width: 256, margin: 1 });
+        if (currentNonce !== qrLoadNonce) return;
         qrDataUrl.value = dataUrl;
-      }).catch(() => {
+      } catch {
+        if (currentNonce !== qrLoadNonce) return;
         qrDataUrl.value = '';
-      });
+      }
     }, { immediate: true });
     const isMobile = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     function openInGpsLogger() {

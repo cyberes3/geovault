@@ -174,7 +174,6 @@
 <script>
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { ShareIcon, Square3Stack3DIcon, XMarkIcon, HomeIcon, Bars3Icon } from '@heroicons/vue/24/outline';
-import { useWindowSize } from '@vueuse/core';
 import Loader from 'platform/components/parts/Loader.vue';
 import LatestParamsModal from './LatestParamsModal.vue';
 import LiveTrackSidebar from './LiveTrackSidebar.vue';
@@ -245,7 +244,11 @@ export default {
     );
     let mobileQueryListener = null;
 
-    const { height: windowHeight } = useWindowSize();
+    const windowHeight = ref(typeof window !== 'undefined' ? window.innerHeight : 800);
+    function updateWindowHeight() {
+      if (typeof window === 'undefined') return;
+      windowHeight.value = window.innerHeight;
+    }
     const worldShareDrawerMaxHeight = computed(() => {
       // Same as main tracker: app nav = 64px, header bar = 64px, buffer = 4px.
       // Max drawer height = viewport minus those so sheet stops at bottom of header.
@@ -665,6 +668,10 @@ export default {
     }
 
     onMounted(async () => {
+      if (typeof window !== 'undefined') {
+        window.addEventListener('resize', updateWindowHeight);
+        updateWindowHeight();
+      }
       const shareId = getShareIdFromUrl();
       if (!shareId) {
         error.value = 'Invalid share link';
@@ -877,6 +884,9 @@ export default {
     }
 
     onBeforeUnmount(() => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('resize', updateWindowHeight);
+      }
       if (mobileActionsOutsideStop) {
         mobileActionsOutsideStop();
         mobileActionsOutsideStop = null;
