@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import com.geovault.tracker.services.TrackingRuntimeStateStore
+import com.geovault.tracker.startup.TrackingServiceLaunchGate
 
 object SelectedTrackerManager {
     private const val TAG = "SelectedTrackerManager"
@@ -55,9 +56,10 @@ object SelectedTrackerManager {
             action = TrackingService.ACTION_STOP
         })
         val restartRunnable = Runnable {
-            appContext.startForegroundService(Intent(appContext, TrackingService::class.java).apply {
-                action = TrackingService.ACTION_START
-            })
+            TrackingServiceLaunchGate.dispatchStart(
+                context = appContext,
+                trigger = "selected_tracker_restart"
+            )
             pendingRestart = null
         }
         pendingRestart = restartRunnable

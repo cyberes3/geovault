@@ -74,6 +74,29 @@ class TrackPointPipelineTest {
     }
 
     @Test
+    fun processLocalGps_prefersMonotonicAgeForFreshness() {
+        val nowMs = 1_800_000_000_000L
+        val nowElapsedNanos = 10_000_000_000L
+        val event = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = "local-monotonic-freshness",
+            lon = 1.0,
+            lat = 2.0,
+            timestampMs = nowMs - 5 * 60 * 1000L,
+            accuracyMeters = 10f,
+            elapsedRealtimeNanos = 9_940_000_000L
+        )
+        val decision = TrackPointPipeline.processLocalGps(
+            event = event,
+            maxAccuracyMeters = 50f,
+            freshnessTtlMs = 120_000L,
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = nowElapsedNanos
+        )
+        assertTrue(decision.accepted)
+    }
+
+    @Test
     fun processLocalGps_rejectsPointWithoutAccuracy() {
         val nowMs = 1_800_000_000_000L
         val event = TrackPointEvent(
@@ -271,6 +294,121 @@ class TrackPointPipelineTest {
     }
 
     @Test
+    fun processLocalGps_rejectsWalkingScaleSpikeEvenWithReasonableImpliedSpeed() {
+        val nowMs = 1_800_000_000_000L
+        val trackId = "walking-spike"
+        val baseline = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -104.8000,
+            lat = 38.9000,
+            timestampMs = nowMs - 30_000L,
+            accuracyMeters = 8f
+        )
+        val baselineDecision = TrackPointPipeline.processLocalGps(
+            event = baseline,
+            maxAccuracyMeters = 50f,
+            freshnessTtlMs = 120_000L,
+            nowMs = nowMs
+        )
+        assertTrue(baselineDecision.accepted)
+
+        val spike = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -104.7992,
+            lat = 38.9018,
+            timestampMs = nowMs,
+            accuracyMeters = 15f
+        )
+        val spikeDecision = TrackPointPipeline.processLocalGps(
+            event = spike,
+            maxAccuracyMeters = 50f,
+            freshnessTtlMs = 120_000L,
+            nowMs = nowMs
+        )
+        assertFalse(spikeDecision.accepted)
+        assertEquals(TrackPointRejectReason.JUMP, spikeDecision.rejectReason)
+    }
+
+    @Test
+    fun processLocalGps_shortDeltaLargeTeleport_isRejected() {
+        val nowMs = 1_800_000_000_000L
+        val trackId = "short-delta-teleport"
+        val baseline = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -104.8000,
+            lat = 38.9000,
+            timestampMs = nowMs - 1_000L,
+            accuracyMeters = 5f
+        )
+        assertTrue(
+            TrackPointPipeline.processLocalGps(
+                event = baseline,
+                maxAccuracyMeters = 50f,
+                freshnessTtlMs = 120_000L,
+                nowMs = nowMs
+            ).accepted
+        )
+
+        val teleport = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -104.7900,
+            lat = 38.9100,
+            timestampMs = nowMs - 900L,
+            accuracyMeters = 5f
+        )
+        val teleportDecision = TrackPointPipeline.processLocalGps(
+            event = teleport,
+            maxAccuracyMeters = 50f,
+            freshnessTtlMs = 120_000L,
+            nowMs = nowMs
+        )
+        assertFalse(teleportDecision.accepted)
+        assertEquals(TrackPointRejectReason.JUMP, teleportDecision.rejectReason)
+    }
+
+    @Test
+    fun processLocalGps_acceptsFastDrivingDisplacementWhenPlausible() {
+        val nowMs = 1_800_000_000_000L
+        val trackId = "driving-plausible"
+        val baseline = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -104.8000,
+            lat = 38.9000,
+            timestampMs = nowMs - 10_000L,
+            accuracyMeters = 30f
+        )
+        assertTrue(
+            TrackPointPipeline.processLocalGps(
+                event = baseline,
+                maxAccuracyMeters = 200f,
+                freshnessTtlMs = 120_000L,
+                nowMs = nowMs
+            ).accepted
+        )
+
+        val drivingMove = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -104.7976,
+            lat = 38.9010,
+            timestampMs = nowMs,
+            accuracyMeters = 35f
+        )
+        val decision = TrackPointPipeline.processLocalGps(
+            event = drivingMove,
+            maxAccuracyMeters = 200f,
+            freshnessTtlMs = 120_000L,
+            nowMs = nowMs
+        )
+        assertTrue(decision.accepted)
+    }
+
+    @Test
     fun process_rejectsRemotePointOutsideFreshnessWindow() {
         val nowMs = 1_800_000_000_000L
         val staleRemote = TrackPointEvent(
@@ -285,5 +423,41 @@ class TrackPointPipelineTest {
 
         assertFalse(decision.accepted)
         assertEquals(TrackPointRejectReason.STALE, decision.rejectReason)
+    }
+
+    @Test
+    fun policyCoercion_clampsUnsafeValuesToGuardrails() {
+        val sanitized = TrackPointPolicyCoercion.sanitize(
+            TrackPointPolicyConfig(
+                maxAccuracyMeters = 100_000f,
+                degradedAccuracyMultiplier = 0.2f,
+                allowDegradedAccuracy = true,
+                requireAccuracyForAcceptance = false,
+                maxFutureSkewMs = Long.MAX_VALUE,
+                maxJumpSpeedMps = 0.01,
+                maxBurstDistanceMeters = 50_000.0,
+                burstWindowSeconds = 0.01,
+                rollingWindowSize = 1,
+                outlierDistanceMultiplier = 0.2,
+                accuracyEnvelopePaddingMeters = -50.0,
+                accuracyEnvelopeMultiplier = 0.2,
+                minimumKinematicCapMeters = -10.0,
+                rollingDistanceMultiplier = 50.0,
+                freshnessTtlMs = Long.MAX_VALUE
+            )
+        )
+        assertEquals(10_000f, sanitized.maxAccuracyMeters)
+        assertEquals(1f, sanitized.degradedAccuracyMultiplier)
+        assertEquals(24L * 60L * 60L * 1000L, sanitized.maxFutureSkewMs)
+        assertEquals(1.0, sanitized.maxJumpSpeedMps ?: 0.0, 0.0)
+        assertEquals(2_000.0, sanitized.maxBurstDistanceMeters, 0.0)
+        assertEquals(0.2, sanitized.burstWindowSeconds, 0.0)
+        assertEquals(3, sanitized.rollingWindowSize)
+        assertEquals(1.0, sanitized.outlierDistanceMultiplier, 0.0)
+        assertEquals(0.0, sanitized.accuracyEnvelopePaddingMeters, 0.0)
+        assertEquals(1.0, sanitized.accuracyEnvelopeMultiplier, 0.0)
+        assertEquals(1.0, sanitized.minimumKinematicCapMeters, 0.0)
+        assertEquals(10.0, sanitized.rollingDistanceMultiplier, 0.0)
+        assertEquals(24L * 60L * 60L * 1000L, sanitized.freshnessTtlMs)
     }
 }

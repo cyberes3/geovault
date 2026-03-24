@@ -9,12 +9,12 @@ import android.content.Context
 import android.content.Intent
 import android.location.LocationManager
 import android.media.AudioAttributes
-import android.os.Build
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.geovault.tracker.location.TrackingPermissionGate
+import com.geovault.tracker.startup.TrackingServiceLaunchGate
 
 object TrackingRecoveryCoordinator {
     private const val TAG = "TrackingRecovery"
@@ -92,7 +92,6 @@ object TrackingRecoveryCoordinator {
 
     @JvmStatic
     fun hasExactAlarmAccess(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val canScheduleExact = alarmManager.canScheduleExactAlarmsCompat()
         val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return false
@@ -111,12 +110,12 @@ object TrackingRecoveryCoordinator {
         appOpMode: Int,
         batteryExempt: Boolean
     ) {
-        val signature = "can=$canScheduleExact;mode=$appOpMode;batteryExempt=$batteryExempt;sdk=${Build.VERSION.SDK_INT}"
+        val signature = "can=$canScheduleExact;mode=$appOpMode;batteryExempt=$batteryExempt"
         if (lastExactAlarmStateLog == signature) return
         lastExactAlarmStateLog = signature
         Log.i(
             TAG,
-            "Exact alarm state (Recovery): canScheduleExact=$canScheduleExact appOpMode=${appOpModeName(appOpMode)} batteryExempt=$batteryExempt sdk=${Build.VERSION.SDK_INT}"
+            "Exact alarm state (Recovery): canScheduleExact=$canScheduleExact appOpMode=${appOpModeName(appOpMode)} batteryExempt=$batteryExempt"
         )
     }
 
@@ -418,18 +417,18 @@ object TrackingRecoveryCoordinator {
         }
 
         prefs(context).edit().putLong(KEY_LAST_START_REQUEST_MS, nowMs).apply()
-        try {
-            val intent = Intent(context, TrackingService::class.java).apply {
-                action = TrackingService.ACTION_START
-                setPackage(context.packageName)
-            }
-            context.startForegroundService(intent)
-            Log.i(TAG, "Watchdog startForegroundService issued")
-            recordTelemetry(context, "restart request issued via startForegroundService")
-        } catch (e: Exception) {
-            Log.w(TAG, "Watchdog start attempt failed", e)
-            recordTelemetry(context, "restart request failed exception=${e::class.java.simpleName}")
-        }
+        val launchDecision = TrackingServiceLaunchGate.dispatchStart(
+            context = context,
+            trigger = "watchdog_tick"
+        )
+        Log.i(
+            TAG,
+            "Watchdog launch decision allowed=${launchDecision.allowed} retryInMs=${launchDecision.retryInMs} reason=${launchDecision.reason}"
+        )
+        recordTelemetry(
+            context,
+            "watchdog launch allowed=${launchDecision.allowed} retryInMs=${launchDecision.retryInMs} reason=${launchDecision.reason}"
+        )
     }
 
     private fun startRecoveryWindow(context: Context, nowMs: Long) {

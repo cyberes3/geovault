@@ -6,6 +6,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class TrackingServiceQueueInFlightClaimSetTest {
@@ -64,5 +65,21 @@ class TrackingServiceQueueInFlightClaimSetTest {
 
         assertEquals(uniqueIds.size, allIds.size)
         assertTrue(uniqueIds.size <= candidates.size)
+    }
+
+    @Test
+    fun releaseIds_cleansUpLeakedClaims() = runBlocking {
+        val claims = TrackingService.QueueInFlightClaimSet()
+        val candidates = listOf(queued(200L), queued(201L), queued(202L))
+        val claimed = claims.claim(candidates, limit = 3)
+        assertEquals(3, claims.claimedCount())
+
+        claims.releaseIds(setOf(200L, 202L))
+        assertEquals(1, claims.claimedCount())
+
+        val reclaimed = claims.claim(candidates, limit = 3).map { it.id }.toSet()
+        assertTrue(200L in reclaimed)
+        assertTrue(202L in reclaimed)
+        assertFalse(201L in reclaimed)
     }
 }

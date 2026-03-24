@@ -1,5 +1,6 @@
 package com.geovault.tracker
 
+import android.location.Location
 import com.geovault.tracker.location.LowAccuracyFallbackCoordinator
 import com.geovault.tracker.pipeline.TrackPointRejectReason
 import com.geovault.tracker.settings.TrackerSettings
@@ -7,8 +8,28 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28])
 class TrackingServiceFallbackBehaviorTest {
+    private fun location(
+        lat: Double,
+        lon: Double,
+        timeMs: Long,
+        accuracyMeters: Float? = null
+    ): Location {
+        return Location("gps").apply {
+            latitude = lat
+            longitude = lon
+            time = timeMs
+            if (accuracyMeters != null) {
+                accuracy = accuracyMeters
+            }
+        }
+    }
 
     @Test
     fun timeoutMs_clampsAndConvertsToMilliseconds() {
@@ -115,5 +136,49 @@ class TrackingServiceFallbackBehaviorTest {
                 accuracyFilterMeters = 50f
             )
         )
+    }
+
+    @Test
+    fun shouldEmitFallbackForTransition_rejectsImplausibleJump() {
+        val previous = location(
+            lat = 38.9000,
+            lon = -104.8000,
+            timeMs = 1_800_000_000_000L,
+            accuracyMeters = 10f
+        )
+        val candidate = location(
+            lat = 38.9055,
+            lon = -104.7950,
+            timeMs = 1_800_000_010_000L,
+            accuracyMeters = 180f
+        )
+        val result = TrackingService.shouldEmitFallbackForTransition(
+            previousAcceptedLocation = previous,
+            fallbackCandidateLocation = candidate,
+            nowMs = candidate.time
+        )
+        assertFalse(result)
+    }
+
+    @Test
+    fun shouldEmitFallbackForTransition_acceptsPlausibleNearbyFix() {
+        val previous = location(
+            lat = 38.9000,
+            lon = -104.8000,
+            timeMs = 1_800_000_000_000L,
+            accuracyMeters = 10f
+        )
+        val candidate = location(
+            lat = 38.9005,
+            lon = -104.7997,
+            timeMs = 1_800_000_060_000L,
+            accuracyMeters = 150f
+        )
+        val result = TrackingService.shouldEmitFallbackForTransition(
+            previousAcceptedLocation = previous,
+            fallbackCandidateLocation = candidate,
+            nowMs = candidate.time
+        )
+        assertTrue(result)
     }
 }

@@ -12,6 +12,7 @@ import android.os.IBinder
 import android.content.pm.ServiceInfo
 import android.os.BatteryManager
 import android.os.Bundle
+import android.os.SystemClock
 import android.os.UserManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -34,7 +35,11 @@ import com.geovault.tracker.location.SyncFailureClass
 import com.geovault.tracker.location.UnifiedLocationClient
 import com.geovault.tracker.location.UnifiedLocationSessionRequest
 import com.geovault.tracker.pipeline.CanonicalTimeNormalizer
+import com.geovault.tracker.pipeline.TrackPointBus
 import com.geovault.tracker.pipeline.TrackPointEvent
+import com.geovault.tracker.pipeline.TrackPointOutlierPolicy
+import com.geovault.tracker.pipeline.TrackPointPolicyConfig
+import com.geovault.tracker.pipeline.TrackPointPolicyEngine
 import com.geovault.tracker.pipeline.TrackPointPipeline
 import com.geovault.tracker.pipeline.TrackPointQuality
 import com.geovault.tracker.pipeline.TrackPointRejectReason
@@ -91,6 +96,17 @@ class TrackingService : TrackPointServiceBase() {
                     claimedIds.remove(item.id)
                 }
             }
+        }
+
+        suspend fun releaseIds(ids: Set<Long>) {
+            if (ids.isEmpty()) return
+            mutex.withLock {
+                claimedIds.removeAll(ids)
+            }
+        }
+
+        suspend fun claimedCount(): Int {
+            return mutex.withLock { claimedIds.size }
         }
     }
 
@@ -166,6 +182,9 @@ class TrackingService : TrackPointServiceBase() {
         private const val FAST_GPS_LOCK_MIN_DISTANCE_METERS = 0f
         private const val FAST_GPS_LOCK_WINDOW_MS = 60_000L
         private const val FAST_GPS_LOCK_SUMMARY_INTERVAL_MS = 30_000L
+        private const val FALLBACK_MAX_JUMP_SPEED_MPS = 60.0
+        private const val FALLBACK_MAX_BURST_DISTANCE_METERS = 300.0
+        private const val FALLBACK_BURST_WINDOW_SECONDS = 10.0
 
         internal enum class StartupCommandPath {
             StartTracking,
@@ -249,6 +268,54 @@ class TrackingService : TrackPointServiceBase() {
             return measuredAccuracy > accuracyFilterMeters
         }
 
+        @JvmStatic
+        internal fun shouldEmitFallbackForTransition(
+            previousAcceptedLocation: Location?,
+            fallbackCandidateLocation: Location,
+            nowMs: Long
+        ): Boolean {
+            val previous = previousAcceptedLocation ?: return true
+            val previousEvent = TrackPointEvent(
+                source = TrackPointSource.LOCAL_GPS,
+                trackId = "fallback_guard",
+                lon = previous.longitude,
+                lat = previous.latitude,
+                timestampMs = previous.time,
+                accuracyMeters = if (previous.hasAccuracy()) previous.accuracy else null,
+                elapsedRealtimeNanos = previous.elapsedRealtimeNanos
+            )
+            val candidateEvent = TrackPointEvent(
+                source = TrackPointSource.LOCAL_GPS,
+                trackId = "fallback_guard",
+                lon = fallbackCandidateLocation.longitude,
+                lat = fallbackCandidateLocation.latitude,
+                timestampMs = fallbackCandidateLocation.time,
+                accuracyMeters = if (fallbackCandidateLocation.hasAccuracy()) fallbackCandidateLocation.accuracy else null,
+                elapsedRealtimeNanos = fallbackCandidateLocation.elapsedRealtimeNanos
+            )
+            val decision = TrackPointPolicyEngine.evaluate(
+                event = candidateEvent,
+                previous = previousEvent,
+                history = emptyList(),
+                nowMs = nowMs,
+                nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+                rawConfig = TrackPointPolicyConfig(
+                    maxAccuracyMeters = null,
+                    allowDegradedAccuracy = true,
+                    requireAccuracyForAcceptance = false,
+                    maxFutureSkewMs = 5 * 60 * 1000L,
+                    maxJumpSpeedMps = FALLBACK_MAX_JUMP_SPEED_MPS,
+                    maxBurstDistanceMeters = FALLBACK_MAX_BURST_DISTANCE_METERS,
+                    burstWindowSeconds = FALLBACK_BURST_WINDOW_SECONDS,
+                    rollingWindowSize = 5,
+                    outlierPolicy = TrackPointOutlierPolicy.STRICT,
+                    freshnessTtlMs = 2 * 60 * 1000L,
+                    normalizeSecondsTimestamps = false
+                )
+            )
+            return decision.accepted
+        }
+
     }
 
     private var isTracking = false
@@ -289,6 +356,8 @@ class TrackingService : TrackPointServiceBase() {
     private var controlState: TrackingControlState = TrackingControlState()
     private var consecutivePushFailures = 0
     private var lastSyncFailureClass = SyncFailureClass.NONE
+    @Volatile
+    private var startupReadyForEvents = false
 
     private val autoTrackingMotionEngine = AutoTrackingMotionEngine()
     private var lastSpeedReferenceLocation: Location? = null
@@ -486,6 +555,8 @@ class TrackingService : TrackPointServiceBase() {
             )
             return false
         }
+        TrackPointBus.pauseLocalDelivery()
+        startupReadyForEvents = false
         isTracking = true
         isRunning = true
         transitionControlState(TrackingControlEvent.StartSucceeded)
@@ -538,6 +609,8 @@ class TrackingService : TrackPointServiceBase() {
         }
         if (!applyCurrentLocationRequest("start_tracking")) {
             failActiveTracking(getString(R.string.unable_to_start_location_updates))
+            startupReadyForEvents = false
+            TrackPointBus.resumeLocalDelivery()
             logStartupOutcome(
                 path = path,
                 trigger = trigger,
@@ -565,12 +638,14 @@ class TrackingService : TrackPointServiceBase() {
         startRetryJob()
         startPreflightMonitor()
         ensureGpsProviderReceiverRegistered()
+        startupReadyForEvents = true
         logStartupOutcome(
             path = path,
             trigger = trigger,
             result = "started",
             reason = "tracking_session_started"
         )
+        TrackPointBus.resumeLocalDelivery()
         return true
     }
 
@@ -585,6 +660,7 @@ class TrackingService : TrackPointServiceBase() {
         lastTrackedLongitude = null
         lastTrackedTimestampMs = 0L
         lastTrackedPropsJson = null
+        startupReadyForEvents = true
         syncRuntimeStateStore()
         settingsRepository.clearWasTrackingBeforeExit()
         stopRecoveryHeartbeat()
@@ -600,6 +676,7 @@ class TrackingService : TrackPointServiceBase() {
         stopRetryJob()
         backlogUploaderJob?.cancel()
         backlogUploaderJob = null
+        TrackPointBus.resumeLocalDelivery()
         broadcastSessionStats()
         stopForeground(STOP_FOREGROUND_REMOVE)
         startupForegroundPromoted = false
@@ -622,6 +699,7 @@ class TrackingService : TrackPointServiceBase() {
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (selectedTrackerId.isEmpty()) return
         val nowMs = System.currentTimeMillis()
+        val nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
         val observedSpeedMps = resolveObservedSpeedMps(location, lastSpeedReferenceLocation)
         val isMockLocation = LocationCompat.isMock(location)
         val decision = TrackPointPipeline.processLocalGps(
@@ -631,12 +709,14 @@ class TrackingService : TrackPointServiceBase() {
                 lon = location.longitude,
                 lat = location.latitude,
                 timestampMs = location.time,
-                accuracyMeters = if (location.hasAccuracy()) location.accuracy else null
+                accuracyMeters = if (location.hasAccuracy()) location.accuracy else null,
+                elapsedRealtimeNanos = location.elapsedRealtimeNanos
             ),
             maxAccuracyMeters = resolveCurrentAccuracyFilter(),
             freshnessTtlMs = 120_000L,
             isMockLocation = isMockLocation,
-            nowMs = nowMs
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = nowElapsedRealtimeNanos
         )
         if (!decision.accepted || decision.canonicalEvent == null) {
             Log.d(
@@ -730,6 +810,7 @@ class TrackingService : TrackPointServiceBase() {
         return withContext(pushDispatcher) {
             var liveAcquired = false
             var backlogAcquired = false
+            val locallyClaimedIds = linkedSetOf<Long>()
             val lockAcquired = when (scope) {
                 QueueUploadScope.LIVE_ONLY -> {
                     liveAcquired = livePushSemaphore.tryAcquire()
@@ -761,121 +842,132 @@ class TrackingService : TrackPointServiceBase() {
             }
 
             try {
-            trimQueuedLocationsRetention()
-            if (!NetworkStatusMonitor.hasUsableNetwork(this@TrackingService)) {
-                updateNotificationCount()
-                return@withContext SyncFailureClass.TRANSIENT
-            }
-            val trackerIdStr = SelectedTrackerPrefs.selectedTrackerId(this@TrackingService)
-            if (trackerIdStr.isEmpty()) {
-                Log.e(TAG, "No tracker selected, cannot push locations")
-                broadcastTrackingError(getString(R.string.no_tracker_selected_go_to_settings))
-                updateNotificationCount()
-                return@withContext SyncFailureClass.PERMANENT
-            }
-            val trackerId = try {
-                java.util.UUID.fromString(trackerIdStr)
-            } catch (e: IllegalArgumentException) {
-                Log.e(TAG, "Invalid selected tracker id, cannot push locations", e)
-                broadcastTrackingError(getString(R.string.tracker_validation_failed_go_to_settings))
-                updateNotificationCount()
-                return@withContext SyncFailureClass.PERMANENT
-            }
+                trimQueuedLocationsRetention()
+                if (!NetworkStatusMonitor.hasUsableNetwork(this@TrackingService)) {
+                    updateNotificationCount()
+                    return@withContext SyncFailureClass.TRANSIENT
+                }
+                val trackerIdStr = SelectedTrackerPrefs.selectedTrackerId(this@TrackingService)
+                if (trackerIdStr.isEmpty()) {
+                    Log.e(TAG, "No tracker selected, cannot push locations")
+                    broadcastTrackingError(getString(R.string.no_tracker_selected_go_to_settings))
+                    updateNotificationCount()
+                    return@withContext SyncFailureClass.PERMANENT
+                }
+                val trackerId = try {
+                    java.util.UUID.fromString(trackerIdStr)
+                } catch (e: IllegalArgumentException) {
+                    Log.e(TAG, "Invalid selected tracker id, cannot push locations", e)
+                    broadcastTrackingError(getString(R.string.tracker_validation_failed_go_to_settings))
+                    updateNotificationCount()
+                    return@withContext SyncFailureClass.PERMANENT
+                }
 
-            val serverUrl = GeovaultAuthManager.getServerUrl(this@TrackingService)
-            if (serverUrl.isEmpty()) {
-                updateNotificationCount()
-                return@withContext SyncFailureClass.PERMANENT
-            }
+                val serverUrl = GeovaultAuthManager.getServerUrl(this@TrackingService)
+                if (serverUrl.isEmpty()) {
+                    updateNotificationCount()
+                    return@withContext SyncFailureClass.PERMANENT
+                }
 
-            val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-            val ingressUrl = "${baseUrl}api/extensions/live-track/app-ingress/"
+                val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+                val ingressUrl = "${baseUrl}api/extensions/live-track/app-ingress/"
 
-            var batchesSent = 0
-            val useExtendedParams = currentSettings.sendExtendedData
-            
-            // Fetch these once per push to avoid high-cost IPC calls in loop
-            val (batteryLevel, isCharging) = if (useExtendedParams) getBatteryStatus() else Pair(0, false)
-            val buildSerial = if (useExtendedParams) getBuildSerial() else ""
-            val sessionStart = sessionStartTimeMs
+                var batchesSent = 0
+                val useExtendedParams = currentSettings.sendExtendedData
 
-            var shouldContinuePush = true
-            while (batchesSent < MAX_BATCHES_PER_PUSH && shouldContinuePush) {
-                val batch = claimNextBatch(
-                    scope = scope,
-                    sessionBoundaryMs = sessionBoundaryMs,
-                    limit = 50
-                )
-                if (batch.isEmpty()) break
-                val payload = if (useExtendedParams) {
-                    BinaryPayloadBuilder.buildPayload(
-                        batch,
-                        trackerId,
-                        sessionStart,
-                        batteryLevel,
-                        isCharging,
-                        buildSerial
+                // Fetch these once per push to avoid high-cost IPC calls in loop.
+                val (batteryLevel, isCharging) = if (useExtendedParams) getBatteryStatus() else Pair(0, false)
+                val buildSerial = if (useExtendedParams) getBuildSerial() else ""
+                val sessionStart = sessionStartTimeMs
+
+                var shouldContinuePush = true
+                while (batchesSent < MAX_BATCHES_PER_PUSH && shouldContinuePush) {
+                    val batch = claimNextBatch(
+                        scope = scope,
+                        sessionBoundaryMs = sessionBoundaryMs,
+                        limit = 50
                     )
-                } else {
-                    BinaryPayloadBuilder.buildPayloadMinimal(batch, trackerId)
-                }
-                val compressedBody = gzipCompress(payload)
-                val requestBody = compressedBody.toRequestBody("application/octet-stream".toMediaTypeOrNull())
-
-                val request = Request.Builder()
-                    .url(ingressUrl)
-                    .addHeader("Content-Encoding", "gzip")
-                    .post(requestBody)
-                    .build()
-
-                try {
-                    getAuthenticatedHttpClient().newCall(request).execute().use { response ->
-                        if (response.isSuccessful) {
-                            Log.d(TAG, "Successfully pushed ${batch.size} locations")
-                            val normalizedSessionStart = if (sessionStart > 0L) {
-                                CanonicalTimeNormalizer.normalizeTimestampMs(sessionStart, sessionStart)
-                            } else {
-                                0L
-                            }
-                            val sentThisSession = if (normalizedSessionStart > 0L) {
-                                batch.count { queued ->
-                                    CanonicalTimeNormalizer.normalizeTimestampMs(queued.time, normalizedSessionStart) >= normalizedSessionStart
-                                }
-                            } else {
-                                batch.size
-                            }
-                            pointsSentThisSession += sentThisSession
-                            lastPointSentAtMs = System.currentTimeMillis()
-                            syncRuntimeStateStore()
-                            broadcastSessionStats()
-                            withContext(NonCancellable) {
-                                try {
-                                    database.locationDao().delete(batch)
-                                } finally {
-                                    releaseClaimedBatch(batch)
-                                }
-                            }
-                            batchesSent++
-                        } else {
-                            releaseClaimedBatch(batch)
-                            Log.e(TAG, "Failed to push locations: ${response.code} ${response.message}")
-                            if (response.code in 400..499) {
-                                return@withContext SyncFailureClass.PERMANENT
-                            }
-                            shouldContinuePush = false
-                        }
+                    if (batch.isEmpty()) break
+                    locallyClaimedIds.addAll(batch.map { it.id })
+                    val payload = if (useExtendedParams) {
+                        BinaryPayloadBuilder.buildPayload(
+                            batch,
+                            trackerId,
+                            sessionStart,
+                            batteryLevel,
+                            isCharging,
+                            buildSerial
+                        )
+                    } else {
+                        BinaryPayloadBuilder.buildPayloadMinimal(batch, trackerId)
                     }
-                } catch (e: Exception) {
-                    releaseClaimedBatch(batch)
-                    Log.e(TAG, "Exception pushing locations", e)
-                    shouldContinuePush = false
-                }
-            }
+                    val compressedBody = gzipCompress(payload)
+                    val requestBody = compressedBody.toRequestBody("application/octet-stream".toMediaTypeOrNull())
 
-            updateNotificationCount()
-            trimQueuedLocationsRetention()
-            return@withContext if (batchesSent > 0) SyncFailureClass.NONE else SyncFailureClass.TRANSIENT
+                    val request = Request.Builder()
+                        .url(ingressUrl)
+                        .addHeader("Content-Encoding", "gzip")
+                        .post(requestBody)
+                        .build()
+
+                    try {
+                        getAuthenticatedHttpClient().newCall(request).execute().use { response ->
+                            if (response.isSuccessful) {
+                                Log.d(TAG, "Successfully pushed ${batch.size} locations")
+                                val normalizedSessionStart = if (sessionStart > 0L) {
+                                    CanonicalTimeNormalizer.normalizeTimestampMs(sessionStart, sessionStart)
+                                } else {
+                                    0L
+                                }
+                                val sentThisSession = if (normalizedSessionStart > 0L) {
+                                    batch.count { queued ->
+                                        CanonicalTimeNormalizer.normalizeTimestampMs(queued.time, normalizedSessionStart) >= normalizedSessionStart
+                                    }
+                                } else {
+                                    batch.size
+                                }
+                                pointsSentThisSession += sentThisSession
+                                lastPointSentAtMs = System.currentTimeMillis()
+                                syncRuntimeStateStore()
+                                broadcastSessionStats()
+                                withContext(NonCancellable) {
+                                    try {
+                                        database.locationDao().delete(batch)
+                                    } finally {
+                                        releaseClaimedBatch(batch)
+                                        locallyClaimedIds.removeAll(batch.map { it.id }.toSet())
+                                    }
+                                }
+                                batchesSent++
+                            } else {
+                                releaseClaimedBatch(batch)
+                                locallyClaimedIds.removeAll(batch.map { it.id }.toSet())
+                                Log.e(TAG, "Failed to push locations: ${response.code} ${response.message}")
+                                if (response.code in 400..499) {
+                                    return@withContext SyncFailureClass.PERMANENT
+                                }
+                                shouldContinuePush = false
+                            }
+                        }
+                    } catch (e: Exception) {
+                        releaseClaimedBatch(batch)
+                        locallyClaimedIds.removeAll(batch.map { it.id }.toSet())
+                        Log.e(TAG, "Exception pushing locations", e)
+                        shouldContinuePush = false
+                    }
+                }
+
+                updateNotificationCount()
+                trimQueuedLocationsRetention()
+                return@withContext if (batchesSent > 0) SyncFailureClass.NONE else SyncFailureClass.TRANSIENT
             } finally {
+                if (locallyClaimedIds.isNotEmpty()) {
+                    inFlightClaims.releaseIds(locallyClaimedIds.toSet())
+                    Log.w(
+                        TAG,
+                        "Released leaked in-flight queue claims count=${locallyClaimedIds.size} scope=$scope"
+                    )
+                }
                 if (backlogAcquired) backlogPushSemaphore.release()
                 if (liveAcquired) livePushSemaphore.release()
             }
@@ -901,6 +993,7 @@ class TrackingService : TrackPointServiceBase() {
     }
 
     private fun broadcastSessionStats() {
+        if (isTracking && !startupReadyForEvents) return
         val intent = Intent(SESSION_STATS_UPDATE).apply { setPackage(packageName) }
         sendBroadcast(intent)
     }
@@ -1495,7 +1588,7 @@ class TrackingService : TrackPointServiceBase() {
             )
             true
         } catch (e: Exception) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && e is ForegroundServiceStartNotAllowedException) {
+            if (e is ForegroundServiceStartNotAllowedException) {
                 Log.e(TAG, "Foreground start not allowed for trigger=$trigger", e)
             } else {
                 Log.e(TAG, "Foreground promotion failed for trigger=$trigger", e)
@@ -1538,17 +1631,9 @@ class TrackingService : TrackPointServiceBase() {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
         val userManager = getSystemService(Context.USER_SERVICE) as? UserManager
-        val channel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            notificationManager?.getNotificationChannel(CHANNEL_ID)
-        } else {
-            null
-        }
+        val channel = notificationManager?.getNotificationChannel(CHANNEL_ID)
         val activeNotificationIds = runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                notificationManager?.activeNotifications?.map { it.id } ?: emptyList()
-            } else {
-                emptyList()
-            }
+            notificationManager?.activeNotifications?.map { it.id } ?: emptyList()
         }.getOrElse { emptyList() }
         val appImportance = runCatching { notificationManager?.importance }.getOrNull()
         Log.i(
@@ -1731,6 +1816,20 @@ class TrackingService : TrackPointServiceBase() {
             quality = TrackPointQuality.DEGRADED,
             orderingKey = fallbackLocation.time
         )
+        if (
+            !shouldEmitFallbackForTransition(
+                previousAcceptedLocation = lastLocation,
+                fallbackCandidateLocation = fallbackLocation,
+                nowMs = fallbackTimeMs
+            )
+        ) {
+            Log.w(
+                TAG,
+                "Low-accuracy fallback rejected as implausible transition " +
+                    "provider=${candidate.provider} acc=${if (candidate.hasAccuracy()) candidate.accuracy else null}"
+            )
+            return true
+        }
         Log.d(
             TAG,
             "Low-accuracy fallback emitted provider=${candidate.provider} " +

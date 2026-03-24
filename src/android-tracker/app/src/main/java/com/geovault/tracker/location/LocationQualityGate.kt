@@ -66,7 +66,7 @@ object LocationQualityGate {
             event = currentEvent,
             previous = previousEvent,
             nowMs = nowMs,
-            config = TrackPointPolicyConfig(
+            rawConfig = TrackPointPolicyConfig(
                 maxAccuracyMeters = config.maxAccuracyMeters,
                 degradedAccuracyMultiplier = 1f,
                 allowDegradedAccuracy = false,

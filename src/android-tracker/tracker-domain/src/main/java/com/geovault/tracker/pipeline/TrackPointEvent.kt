@@ -19,5 +19,6 @@ data class TrackPointEvent(
     val accuracyMeters: Float? = null,
     val propsJson: String? = null,
     val quality: TrackPointQuality = TrackPointQuality.HIGH_CONFIDENCE,
-    val orderingKey: Long = 0L
+    val orderingKey: Long = 0L,
+    val elapsedRealtimeNanos: Long? = null
 )

@@ -10,6 +10,7 @@ import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.startup.BootStartupPolicy
 import com.geovault.tracker.startup.BootStartupSnapshot
+import com.geovault.tracker.startup.TrackingServiceLaunchGate
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -69,15 +70,14 @@ class BootReceiver : BroadcastReceiver() {
         }
 
         Log.i(TAG, "Starting TrackingService from action=$bootAction")
-        val serviceIntent = Intent(context, TrackingService::class.java).apply {
-            this.action = TrackingService.ACTION_START
-        }
-        try {
-            context.startForegroundService(serviceIntent)
-            Log.i(TAG, "startForegroundService dispatched from action=$bootAction")
-        } catch (e: Exception) {
-            Log.e(TAG, "Unable to start TrackingService from action=$bootAction", e)
-        }
+        val launchDecision = TrackingServiceLaunchGate.dispatchStart(
+            context = context,
+            trigger = "boot:${bootAction ?: "unknown"}"
+        )
+        Log.i(
+            TAG,
+            "Boot launch decision allowed=${launchDecision.allowed} retryInMs=${launchDecision.retryInMs} reason=${launchDecision.reason}"
+        )
     }
 
     companion object {

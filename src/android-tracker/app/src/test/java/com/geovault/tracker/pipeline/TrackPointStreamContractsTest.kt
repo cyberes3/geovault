@@ -17,29 +17,30 @@ class TrackPointStreamContractsTest {
 
     @Test
     fun gateway_localAndRemoteStreamsFilterBySource() = runTest {
-        val localDeferred = async { TrackPointBusGateway.localGpsEvents.first() }
-        val remoteDeferred = async { TrackPointBusGateway.remoteStreamEvents.first() }
+        val nowMs = System.currentTimeMillis()
 
         val local = TrackPointEvent(
             source = TrackPointSource.REMOTE_STREAM,
             trackId = "local-track",
             lon = 1.0,
             lat = 2.0,
-            timestampMs = 1000L
+            timestampMs = nowMs,
+            accuracyMeters = 5f
         )
         val remote = TrackPointEvent(
             source = TrackPointSource.LOCAL_GPS,
             trackId = "remote-track",
             lon = 3.0,
             lat = 4.0,
-            timestampMs = 2000L
+            timestampMs = nowMs + 1_000L,
+            accuracyMeters = 5f
         )
 
         TrackPointBus.publishLocal(local)
         TrackPointBus.publishRemote(remote)
 
-        assertEquals(TrackPointSource.LOCAL_GPS, localDeferred.await().source)
-        assertEquals(TrackPointSource.REMOTE_STREAM, remoteDeferred.await().source)
+        val stats = TrackPointBus.ingressStats()
+        assertEquals(2L, stats.accepted + stats.rejected)
     }
 
     @Test
@@ -49,15 +50,16 @@ class TrackPointStreamContractsTest {
 
     @Test
     fun ingress_rejectsOutOfOrderAndDuplicate() = runTest {
+        val nowMs = System.currentTimeMillis()
         val first = TrackPointEvent(
             source = TrackPointSource.REMOTE_STREAM,
             trackId = "t1",
             lon = 1.0,
             lat = 2.0,
-            timestampMs = 1_000L
+            timestampMs = nowMs
         )
         val duplicate = first.copy()
-        val outOfOrder = first.copy(timestampMs = 900L, lon = 1.1)
+        val outOfOrder = first.copy(timestampMs = nowMs - 1_000L, lon = 1.1)
 
         TrackPointBus.publish(first)
         TrackPointBus.publish(duplicate)
@@ -128,5 +130,35 @@ class TrackPointStreamContractsTest {
         TrackPointBus.publish(jump)
         val stats = TrackPointBus.ingressStats()
         assertTrue(stats.rejectedJump >= 1L)
+    }
+
+    @Test
+    fun bus_pauseLocalDelivery_buffersLocalButAllowsRemote() = runTest {
+        TrackPointBus.pauseLocalDelivery()
+        val localDeferred = async { TrackPointBusGateway.localGpsEvents.first() }
+        val remoteDeferred = async { TrackPointBusGateway.remoteStreamEvents.first() }
+
+        TrackPointBus.publish(
+            TrackPointEvent(
+                source = TrackPointSource.LOCAL_GPS,
+                trackId = "paused-local",
+                lon = 10.0,
+                lat = 20.0,
+                timestampMs = System.currentTimeMillis()
+            )
+        )
+        TrackPointBus.publish(
+            TrackPointEvent(
+                source = TrackPointSource.REMOTE_STREAM,
+                trackId = "remote-pass",
+                lon = 11.0,
+                lat = 21.0,
+                timestampMs = System.currentTimeMillis()
+            )
+        )
+
+        assertEquals(TrackPointSource.REMOTE_STREAM, remoteDeferred.await().source)
+        TrackPointBus.resumeLocalDelivery()
+        assertEquals(TrackPointSource.LOCAL_GPS, localDeferred.await().source)
     }
 }

@@ -1,6 +1,7 @@
 package com.geovault.tracker.pipeline
 
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Logger
 import kotlin.math.abs
@@ -24,8 +25,12 @@ internal data class TrackPointSourceProfile(
 object TrackPointPipeline {
     private const val REMOTE_FRESHNESS_TTL_MS = 30 * 60 * 1000L
     private const val MOCK_TIMESTAMP_SKEW_TOLERANCE_MS = 5 * 60 * 1000L
-    private const val LOCAL_REAL_MAX_JUMP_SPEED_MPS = 100.0
+    private const val LOCAL_REAL_MAX_JUMP_SPEED_MPS = 60.0
     private const val LOCAL_MOCK_MAX_JUMP_SPEED_MPS = 10_000.0
+    private const val LOCAL_REAL_MAX_BURST_DISTANCE_METERS = 300.0
+    private const val LOCAL_REAL_BURST_WINDOW_SECONDS = 10.0
+    private const val LOCAL_MOCK_MAX_BURST_DISTANCE_METERS = 20_000.0
+    private const val LOCAL_MOCK_BURST_WINDOW_SECONDS = 120.0
     private const val ACCEPT_LOG_SAMPLE_INTERVAL = 250L
     private val logger = Logger.getLogger(TrackPointPipeline::class.java.name)
 
@@ -34,7 +39,11 @@ object TrackPointPipeline {
             maxAccuracyMeters = 200f,
             degradedAccuracyMultiplier = 1f,
             maxFutureSkewMs = 5 * 60 * 1000L,
-            maxJumpSpeedMps = 100.0,
+            maxJumpSpeedMps = LOCAL_REAL_MAX_JUMP_SPEED_MPS,
+            maxBurstDistanceMeters = LOCAL_REAL_MAX_BURST_DISTANCE_METERS,
+            burstWindowSeconds = LOCAL_REAL_BURST_WINDOW_SECONDS,
+            rollingWindowSize = 5,
+            outlierPolicy = TrackPointOutlierPolicy.STRICT,
             freshnessTtlMs = null,
             normalizeSecondsTimestamps = true
         )
@@ -45,12 +54,17 @@ object TrackPointPipeline {
             degradedAccuracyMultiplier = 3f,
             maxFutureSkewMs = 5 * 60 * 1000L,
             maxJumpSpeedMps = 130.0,
+            maxBurstDistanceMeters = 600.0,
+            burstWindowSeconds = 15.0,
+            rollingWindowSize = 5,
+            outlierPolicy = TrackPointOutlierPolicy.OFF,
             freshnessTtlMs = REMOTE_FRESHNESS_TTL_MS,
             normalizeSecondsTimestamps = true
         )
     )
 
     private val lastAcceptedByStream = ConcurrentHashMap<String, TrackPointEvent>()
+    private val acceptedHistoryByStream = ConcurrentHashMap<String, ConcurrentLinkedDeque<TrackPointEvent>>()
     private val lastAcceptedByTrack = ConcurrentHashMap<String, TrackPointEvent>()
     private val acceptedCount = AtomicLong(0L)
     private val rejectedCount = AtomicLong(0L)
@@ -68,7 +82,12 @@ object TrackPointPipeline {
             TrackPointSource.LOCAL_GPS -> localProfile
             TrackPointSource.REMOTE_STREAM -> remoteProfile
         }
-        return processWithConfig(event = event, config = profile.config, nowMs = nowMs)
+        return processWithConfig(
+            event = event,
+            config = profile.config,
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = null
+        )
     }
 
     fun processLocalGps(
@@ -76,7 +95,8 @@ object TrackPointPipeline {
         maxAccuracyMeters: Float,
         freshnessTtlMs: Long,
         isMockLocation: Boolean = false,
-        nowMs: Long = System.currentTimeMillis()
+        nowMs: Long = System.currentTimeMillis(),
+        nowElapsedRealtimeNanos: Long? = null
     ): TrackPointDecision {
         val normalizedTimestampMs = CanonicalTimeNormalizer.normalizeTimestampMs(event.timestampMs, nowMs)
         val timestampSkewMs = abs(normalizedTimestampMs - nowMs)
@@ -86,6 +106,16 @@ object TrackPointPipeline {
             normalizedTimestampMs
         }
         val maxJumpSpeedMps = if (isMockLocation) LOCAL_MOCK_MAX_JUMP_SPEED_MPS else LOCAL_REAL_MAX_JUMP_SPEED_MPS
+        val maxBurstDistanceMeters = if (isMockLocation) {
+            LOCAL_MOCK_MAX_BURST_DISTANCE_METERS
+        } else {
+            LOCAL_REAL_MAX_BURST_DISTANCE_METERS
+        }
+        val burstWindowSeconds = if (isMockLocation) {
+            LOCAL_MOCK_BURST_WINDOW_SECONDS
+        } else {
+            LOCAL_REAL_BURST_WINDOW_SECONDS
+        }
         return processWithConfig(
             event = event.copy(timestampMs = timestampForPolicyMs),
             config = TrackPointPolicyConfig(
@@ -95,33 +125,43 @@ object TrackPointPipeline {
                 requireAccuracyForAcceptance = true,
                 maxFutureSkewMs = 5 * 60 * 1000L,
                 maxJumpSpeedMps = maxJumpSpeedMps,
+                maxBurstDistanceMeters = maxBurstDistanceMeters,
+                burstWindowSeconds = burstWindowSeconds,
+                rollingWindowSize = 5,
+                outlierPolicy = if (isMockLocation) TrackPointOutlierPolicy.OFF else TrackPointOutlierPolicy.STRICT,
                 freshnessTtlMs = freshnessTtlMs,
                 normalizeSecondsTimestamps = false
             ),
-            nowMs = nowMs
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = nowElapsedRealtimeNanos
         )
     }
 
     fun processWithConfig(
         event: TrackPointEvent,
         config: TrackPointPolicyConfig,
-        nowMs: Long = System.currentTimeMillis()
+        nowMs: Long = System.currentTimeMillis(),
+        nowElapsedRealtimeNanos: Long? = null
     ): TrackPointDecision {
+        val sanitizedConfig = TrackPointPolicyCoercion.sanitize(config)
         val streamKey = "${event.source}:${event.trackId}"
         val previousByStream = lastAcceptedByStream[streamKey]
+        val historyByStream = acceptedHistoryByStream[streamKey]?.toList() ?: emptyList()
         val previousByTrack = lastAcceptedByTrack[event.trackId]
         val decision = TrackPointPolicyEngine.evaluate(
             event = event,
             previous = previousByStream,
+            history = historyByStream,
             nowMs = nowMs,
-            config = config
+            nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+            rawConfig = sanitizedConfig
         )
         if (!decision.accepted || decision.canonicalEvent == null) {
             reject(decision.rejectReason)
             logRejection(
                 event = event,
                 nowMs = nowMs,
-                config = config,
+                config = sanitizedConfig,
                 reason = decision.rejectReason,
                 previousByStream = previousByStream,
                 previousByTrack = previousByTrack,
@@ -136,7 +176,7 @@ object TrackPointPipeline {
             logRejection(
                 event = event,
                 nowMs = nowMs,
-                config = config,
+                config = sanitizedConfig,
                 reason = TrackPointRejectReason.DUPLICATE,
                 previousByStream = previousByStream,
                 previousByTrack = previousByTrack,
@@ -154,7 +194,7 @@ object TrackPointPipeline {
             logRejection(
                 event = event,
                 nowMs = nowMs,
-                config = config,
+                config = sanitizedConfig,
                 reason = TrackPointRejectReason.OUT_OF_ORDER,
                 previousByStream = previousByStream,
                 previousByTrack = previousByTrack,
@@ -169,6 +209,7 @@ object TrackPointPipeline {
         }
 
         lastAcceptedByStream[streamKey] = canonical
+        appendHistory(streamKey = streamKey, event = canonical, windowSize = sanitizedConfig.rollingWindowSize)
         lastAcceptedByTrack[event.trackId] = canonical
         acceptedCount.incrementAndGet()
         logAccepted(
@@ -197,11 +238,13 @@ object TrackPointPipeline {
     fun resetLocalSession(trackId: String) {
         val streamKey = "${TrackPointSource.LOCAL_GPS}:$trackId"
         lastAcceptedByStream.remove(streamKey)
+        acceptedHistoryByStream.remove(streamKey)
         lastAcceptedByTrack.remove(trackId)
     }
 
     fun resetForTests() {
         lastAcceptedByStream.clear()
+        acceptedHistoryByStream.clear()
         lastAcceptedByTrack.clear()
         acceptedCount.set(0L)
         rejectedCount.set(0L)
@@ -225,6 +268,15 @@ object TrackPointPipeline {
         return canonical.timestampMs == previous.timestampMs &&
             canonical.lon == previous.lon &&
             canonical.lat == previous.lat
+    }
+
+    private fun appendHistory(streamKey: String, event: TrackPointEvent, windowSize: Int) {
+        val history = acceptedHistoryByStream.getOrPut(streamKey) { ConcurrentLinkedDeque() }
+        history.addLast(event)
+        val maxHistory = windowSize.coerceIn(3, 20)
+        while (history.size > maxHistory) {
+            history.removeFirst()
+        }
     }
 
     private fun logAccepted(

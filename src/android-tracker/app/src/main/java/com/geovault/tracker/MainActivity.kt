@@ -7,7 +7,6 @@ import android.content.*
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -42,6 +41,7 @@ import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.startup.StartupRefreshInput
 import com.geovault.tracker.startup.StartupRefreshGateway
 import com.geovault.tracker.startup.StartupRefreshOrchestrator
+import com.geovault.tracker.startup.TrackingServiceLaunchGate
 import com.geovault.tracker.ui.applyDialogButtonColors
 import com.google.android.material.button.MaterialButton
 import dagger.hilt.android.AndroidEntryPoint
@@ -408,8 +408,10 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
                 hf?.updateTrackingUi()
             },
             onValid = {
-                val intent = Intent(this, TrackingService::class.java).apply { action = TrackingService.ACTION_START }
-                startForegroundService(intent)
+                TrackingServiceLaunchGate.dispatchStart(
+                    context = this,
+                    trigger = "main_resume_after_kill"
+                )
                 Handler(Looper.getMainLooper()).postDelayed({
                     val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
                     hf?.updateTrackingUi()
@@ -435,8 +437,10 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
                 hf?.updateTrackingUi()
             },
             onValid = {
-                val intent = Intent(this, TrackingService::class.java).apply { action = TrackingService.ACTION_START }
-                startForegroundService(intent)
+                TrackingServiceLaunchGate.dispatchStart(
+                    context = this,
+                    trigger = "main_start_on_launch"
+                )
                 Handler(Looper.getMainLooper()).postDelayed({
                     val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
                     hf?.updateTrackingUi()
@@ -949,7 +953,6 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     }
 
     override fun hasExactAlarmPermission(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val canScheduleExact = alarmManager.canScheduleExactAlarms()
         val appOps = getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return false
@@ -973,12 +976,12 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         appOpMode: Int,
         batteryExempt: Boolean
     ) {
-        val signature = "can=$canScheduleExact;mode=$appOpMode;batteryExempt=$batteryExempt;sdk=${Build.VERSION.SDK_INT}"
+        val signature = "can=$canScheduleExact;mode=$appOpMode;batteryExempt=$batteryExempt"
         if (lastExactAlarmStateLog == signature) return
         lastExactAlarmStateLog = signature
         Log.i(
             "TrackingRecovery",
-            "Exact alarm state (MainActivity): canScheduleExact=$canScheduleExact appOpMode=${appOpModeName(appOpMode)} batteryExempt=$batteryExempt sdk=${Build.VERSION.SDK_INT}"
+            "Exact alarm state (MainActivity): canScheduleExact=$canScheduleExact appOpMode=${appOpModeName(appOpMode)} batteryExempt=$batteryExempt"
         )
     }
 
@@ -993,7 +996,6 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     }
 
     override fun requestExactAlarmPermission() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
         val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
             data = Uri.parse("package:$packageName")
         }
@@ -1086,8 +1088,10 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
                 hf?.updateTrackingUi()
                 return@launch
             }
-            intent.action = TrackingService.ACTION_START
-            startForegroundService(intent)
+            TrackingServiceLaunchGate.dispatchStart(
+                context = this@MainActivity,
+                trigger = "main_toggle_tracking"
+            )
             Handler(Looper.getMainLooper()).postDelayed({
                 val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
                 hf?.updateTrackingUi()
