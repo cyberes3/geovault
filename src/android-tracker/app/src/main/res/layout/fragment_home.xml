@@ -5,10 +5,10 @@
     android:layout_height="match_parent"
     android:background="@color/surface">
 
-    <FrameLayout
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:gravity="center_vertical">
+        android:orientation="vertical">
 
         <!-- Permissions Container (shown when permissions not granted) -->
         <LinearLayout
@@ -420,25 +420,34 @@
 
         </LinearLayout>
 
-    </FrameLayout>
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/trackingParamsButton"
-        style="@style/gv_common_ButtonText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="0dp"
-        android:minWidth="0dp"
-        android:gravity="bottom|center_horizontal"
-        android:paddingHorizontal="16dp"
-        android:paddingTop="6dp"
-        android:paddingBottom="8dp"
-        android:includeFontPadding="false"
-        android:text="@string/button_params"
-        android:textSize="14sp"
-        android:contentDescription="@string/map_tracker_info_view_params_content_description"
-        android:visibility="gone" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/trackingParamsButton"
+            style="@style/gv_common_ButtonText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:minWidth="0dp"
+            android:gravity="center"
+            android:paddingHorizontal="16dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="8dp"
+            android:includeFontPadding="false"
+            android:text="@string/button_params"
+            android:textSize="14sp"
+            android:contentDescription="@string/map_tracker_info_view_params_content_description"
+            android:visibility="gone" />
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+    </LinearLayout>
 
     <!-- Server Failure Overlay -->
     <FrameLayout

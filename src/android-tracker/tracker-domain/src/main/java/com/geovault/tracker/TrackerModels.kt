@@ -1,6 +1,7 @@
 package com.geovault.tracker
 
 import android.os.Parcelable
+import com.google.gson.annotations.SerializedName
 import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
 
@@ -46,13 +47,19 @@ data class TrackerCreateRequest(
 data class TrackerSettingsRequest(
     val name: String? = null,
     val color: String? = null,
+    @SerializedName("recent_data_window")
     val recent_data_window: String? = null,
     val visibility: String? = null,
+    @SerializedName("share_params_with_recipients")
     val share_params_with_recipients: Boolean? = null,
+    @SerializedName("share_params_with_world")
     val share_params_with_world: Boolean? = null,
+    @SerializedName("shared_with_emails")
     val shared_with_emails: List<String>? = null,
+    @SerializedName("world_share_enabled")
     val world_share_enabled: Boolean? = null,
     val hidden: Boolean? = null,
+    @SerializedName("allow_group_reshare")
     val allow_group_reshare: Boolean? = null
 )
 
@@ -64,6 +71,7 @@ data class TrackerCoordinatesResponse(
 
 /** POST trackers/geometry/ request body. */
 data class TrackerBulkGeometryRequest(
+    @SerializedName("tracker_ids")
     val tracker_ids: List<String> = emptyList()
 )
 
@@ -106,7 +114,9 @@ data class MapVisibilityResponse(
 )
 
 data class MapVisibilityRequest(
+    @SerializedName("hidden_track_ids")
     val hidden_track_ids: List<String>? = null,
+    @SerializedName("hidden_group_ids")
     val hidden_group_ids: List<String>? = null
 )
 
@@ -134,13 +144,17 @@ data class GroupPatchRequest(
     val name: String? = null,
     val hidden: Boolean? = null,
     val visibility: String? = null,
+    @SerializedName("shared_with_emails")
     val shared_with_emails: List<String>? = null,
+    @SerializedName("world_share_enabled")
     val world_share_enabled: Boolean? = null,
+    @SerializedName("add_track_ids")
     val add_track_ids: List<String>? = null,
+    @SerializedName("remove_track_ids")
     val remove_track_ids: List<String>? = null
 )
 
-data class GroupAddTrackRequest(val track_id: String)
+data class GroupAddTrackRequest(@SerializedName("track_id") val track_id: String)
 
 data class TrackerAddToGroupCandidate(
     val tracker: Tracker,

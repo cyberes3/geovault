@@ -1,5 +1,6 @@
 package com.geovault.tracker
 
+import com.google.gson.annotations.SerializedName
 import okhttp3.ResponseBody
 import retrofit2.Call
 import retrofit2.http.Body
@@ -10,7 +11,10 @@ import retrofit2.http.POST
 import retrofit2.http.Path
 
 /** Request body for POST tracker-check: validate tracker ID (password optional). */
-data class TrackerCheckRequest(val tracker_id: String, val password: String? = null)
+data class TrackerCheckRequest(
+    @SerializedName("tracker_id") val tracker_id: String,
+    val password: String? = null
+)
 
 /** Response from tracker-check: valid and optional name when valid. */
 data class TrackerCheckResponse(val valid: Boolean, val name: String? = null)
