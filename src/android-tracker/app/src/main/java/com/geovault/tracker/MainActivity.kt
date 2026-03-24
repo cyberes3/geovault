@@ -16,7 +16,6 @@ import android.provider.Settings
 import android.util.Log
 import android.view.View
 import android.widget.EditText
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -252,6 +251,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
 
         importantMessageSnackbar = findViewById(R.id.importantMessageSnackbar)
         database = AppDatabase.getDatabase(this)
+        SelectedTrackerManager.syncRuntimeSelectedTracker(this)
 
         viewPager = findViewById(R.id.viewPager)
         viewPager.overScrollMode = View.OVER_SCROLL_NEVER
@@ -1099,17 +1099,9 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         }
     }
 
-    override fun updateQueueCountFromFragment(textView: TextView) {
-        lifecycleScope.launch {
-            val count = withContext(Dispatchers.IO) {
-                database.locationDao().getCount()
-            }
-            textView.text = count.toString()
-        }
-    }
-
     override fun onStart() {
         super.onStart()
+        SelectedTrackerManager.syncRuntimeSelectedTracker(this)
         AppForegroundState.markForeground()
         if (isGuestView) {
             if (GeovaultAuthManager.isLoggedIn(this)) {

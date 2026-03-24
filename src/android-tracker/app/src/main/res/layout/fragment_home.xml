@@ -432,16 +432,24 @@
 
     </FrameLayout>
 
-    <TextView
-        android:id="@+id/debugTrackModeText"
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/trackingParamsButton"
+        style="@style/gv_common_ButtonText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="20dp"
-        android:textSize="12sp"
-        android:textColor="@color/text_secondary"
+        android:layout_marginBottom="0dp"
+        android:minWidth="0dp"
+        android:gravity="bottom|center_horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="8dp"
+        android:includeFontPadding="false"
+        android:text="@string/button_params"
+        android:textSize="14sp"
+        android:contentDescription="@string/map_tracker_info_view_params_content_description"
         android:visibility="gone" />
-    
+
     <!-- Server Failure Overlay -->
     <FrameLayout
         android:id="@+id/serverFailureOverlay"

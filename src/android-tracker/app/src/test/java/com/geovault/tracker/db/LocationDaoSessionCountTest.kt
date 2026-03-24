@@ -33,18 +33,28 @@ class LocationDaoSessionCountTest {
     }
 
     @Test
-    fun getCurrentSessionCount_excludesBacklogRows() {
-        dao.insertAll(
-            listOf(
-                queued(time = 900L),
-                queued(time = 999L),
-                queued(time = 1000L),
-                queued(time = 1200L)
-            )
-        )
+    fun getCurrentSessionCountById_excludesRowsBeforeSessionBoundaryId() {
+        dao.insert(queued(time = 5_000L))
+        val boundaryId = dao.insert(queued(time = 1_000L))
+        dao.insert(queued(time = 100L))
+        dao.insert(queued(time = 200L))
 
-        assertEquals(2, dao.getCurrentSessionCount(sessionBoundaryMs = 1000L))
-        assertEquals(2, dao.getBacklogCount(sessionBoundaryMs = 1000L))
+        assertEquals(2, dao.getCurrentSessionCountById(sessionBoundaryId = boundaryId))
+        assertEquals(2, dao.getBacklogCountById(sessionBoundaryId = boundaryId))
+    }
+
+    @Test
+    fun getOldestCurrentSessionById_usesIdBoundaryNotPointTime() {
+        val backlogA = dao.insert(queued(time = 10_000L))
+        val boundaryId = dao.insert(queued(time = 20_000L))
+        val liveA = dao.insert(queued(time = 100L))
+        val liveB = dao.insert(queued(time = 200L))
+
+        val liveRows = dao.getOldestCurrentSessionById(sessionBoundaryId = boundaryId, limit = 10)
+        val backlogRows = dao.getOldestBacklogById(sessionBoundaryId = boundaryId, limit = 10)
+
+        assertEquals(listOf(liveA, liveB), liveRows.map { it.id })
+        assertEquals(listOf(backlogA, boundaryId), backlogRows.map { it.id })
     }
 
     private fun queued(time: Long): QueuedLocation {

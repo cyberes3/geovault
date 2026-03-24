@@ -51,7 +51,7 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
         ) { hookContext ->
             TrackerRepository.clearListCaches()
             TrackerRepository.clearSelectedTrackerCaches()
-            SelectedTrackerPrefs.clearSelectedTracker(hookContext)
+            SelectedTrackerManager.clearSelectedTracker(hookContext)
         }
         GeovaultAuthManager.setAuthFailureListener(this)
         MapLibreInitializer.init(applicationContext)

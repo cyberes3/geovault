@@ -11,17 +11,23 @@ class ServiceRuntimeStateTest {
         TrackingRuntimeStateStore.update {
             it.copy(
                 isRunning = true,
+                selectedTrackerId = "tracker-id",
+                selectedTrackerName = "Tracker Name",
                 sessionStartTimeMs = 123L,
                 pointsSentThisSession = 4,
-                lastPointSentAtMs = 321L
+                lastPointSentAtMs = 321L,
+                queuedPointsVisible = 2
             )
         }
 
         val state = TrackingRuntimeStateStore.state.value
         assertTrue(state.isRunning)
+        assertEquals("tracker-id", state.selectedTrackerId)
+        assertEquals("Tracker Name", state.selectedTrackerName)
         assertEquals(123L, state.sessionStartTimeMs)
         assertEquals(4, state.pointsSentThisSession)
         assertEquals(321L, state.lastPointSentAtMs)
+        assertEquals(2, state.queuedPointsVisible)
     }
 
     @Test

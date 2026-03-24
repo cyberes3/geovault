@@ -144,6 +144,10 @@ class TrackingService : TrackPointServiceBase() {
         @Volatile
         var lastPointSentAtMs: Long = 0
 
+        /** Visible queued points for current tracking run (backlog excluded). */
+        @Volatile
+        var queuedPointsVisible: Int = 0
+
         /** Total distance (meters) traveled this session. 0 when not tracking. */
         @Volatile
         var sessionTotalDistanceMeters: Float = 0f
@@ -261,6 +265,12 @@ class TrackingService : TrackPointServiceBase() {
         @JvmStatic
         internal fun successfulBatchSentCount(batchSize: Int): Int {
             return batchSize.coerceAtLeast(0)
+        }
+
+        @JvmStatic
+        internal fun visibleSentCountForBatchIds(batchIds: List<Long>, sessionBoundaryId: Long): Int {
+            if (batchIds.isEmpty()) return 0
+            return batchIds.count { it > sessionBoundaryId }
         }
 
         @JvmStatic
@@ -440,7 +450,8 @@ class TrackingService : TrackPointServiceBase() {
     private val livePushSemaphore = Semaphore(2)
     private val backlogPushSemaphore = Semaphore(1)
     private val inFlightClaims = QueueInFlightClaimSet()
-    private var sessionBoundaryForBacklogMs: Long = 0L
+    private var sessionBoundaryForBacklogId: Long = 0L
+    private var sessionVisibleBoundaryId: Long = 0L
     private var controlState: TrackingControlState = TrackingControlState()
     private var consecutivePushFailures = 0
     private var lastSyncFailureClass = SyncFailureClass.NONE
@@ -448,6 +459,7 @@ class TrackingService : TrackPointServiceBase() {
     private var startupReadyForEvents = false
 
     private val autoTrackingMotionEngine = AutoTrackingMotionEngine()
+    private var lastLoggedTrackingMotionMode: TrackingMotionMode? = null
     private var lastSpeedReferenceLocation: Location? = null
     private var autoModeTickJob: Job? = null
     private var currentSettings: TrackerSettings = TrackerSettings()
@@ -495,6 +507,11 @@ class TrackingService : TrackPointServiceBase() {
         TrackingRecoveryCoordinator.markHeartbeat(applicationContext)
         database = AppDatabase.getDatabase(this)
         unifiedLocationClient = UnifiedLocationClient(this)
+        SelectedTrackerManager.syncRuntimeSelectedTracker(applicationContext)
+        serviceScope.launch {
+            queuedPointsVisible = 0
+            syncRuntimeStateStore()
+        }
         currentSettings = settingsRepository.getSettings()
         autoTrackingMotionEngine.reset(System.currentTimeMillis())
         val significantMotionTrigger = SensorManagerSignificantMotionTrigger(applicationContext)
@@ -562,7 +579,9 @@ class TrackingService : TrackPointServiceBase() {
             StartupCommandPath.ReshowForeground -> {
                 if (isTracking) {
                     serviceScope.launch {
-                        val count = database.locationDao().getCount()
+                        val count = database.locationDao().getCurrentSessionCountById(sessionVisibleBoundaryId)
+                        queuedPointsVisible = count
+                        syncRuntimeStateStore()
                         withContext(Dispatchers.Main) {
                             startForeground(
                                 NOTIFICATION_ID,
@@ -660,9 +679,9 @@ class TrackingService : TrackPointServiceBase() {
         startRecoveryHeartbeat()
 
         sessionStartTimeMs = System.currentTimeMillis()
-        sessionBoundaryForBacklogMs = sessionStartTimeMs
-        pointsSentThisSession = 0
-        lastPointSentAtMs = 0
+        sessionVisibleBoundaryId = readQueueMaxIdBlocking()
+        sessionBoundaryForBacklogId = sessionVisibleBoundaryId
+        resetRunVisibleMetrics()
         totalDistanceMeters = 0f
         sessionTotalDistanceMeters = 0f
         lastAccuracyMeters = null
@@ -724,16 +743,17 @@ class TrackingService : TrackPointServiceBase() {
         serviceScope.launch {
             lastSyncFailureClass = pushLocations(
                 scope = QueueUploadScope.ALL,
-                sessionBoundaryMs = sessionBoundaryForBacklogMs
+                sessionBoundaryId = sessionBoundaryForBacklogId
             )
         }
-        startBacklogUploader(sessionBoundaryForBacklogMs)
+        startBacklogUploader(sessionBoundaryForBacklogId)
         
         // Start periodic retry job to push failed locations every minute
         startRetryJob()
         startPreflightMonitor()
         ensureGpsProviderReceiverRegistered()
         startupReadyForEvents = true
+        updateNotificationCount(broadcastStats = true)
         logStartupOutcome(
             path = path,
             trigger = trigger,
@@ -751,6 +771,9 @@ class TrackingService : TrackPointServiceBase() {
         isTracking = false
         isRunning = false
         sessionStartTimeMs = 0
+        resetRunVisibleMetrics()
+        sessionTotalDistanceMeters = 0f
+        lastAccuracyMeters = null
         lastTrackedLatitude = null
         lastTrackedLongitude = null
         lastTrackedTimestampMs = 0L
@@ -913,7 +936,7 @@ class TrackingService : TrackPointServiceBase() {
 
     private suspend fun pushLocations(
         scope: QueueUploadScope = QueueUploadScope.ALL,
-        sessionBoundaryMs: Long = sessionBoundaryForBacklogMs
+        sessionBoundaryId: Long = sessionBoundaryForBacklogId
     ): SyncFailureClass {
         return withContext(pushDispatcher) {
             var liveAcquired = false
@@ -991,7 +1014,7 @@ class TrackingService : TrackPointServiceBase() {
                 while (batchesSent < MAX_BATCHES_PER_PUSH && shouldContinuePush) {
                     val batch = claimNextBatch(
                         scope = scope,
-                        sessionBoundaryMs = sessionBoundaryMs,
+                        sessionBoundaryId = sessionBoundaryId,
                         limit = 50
                     )
                     if (batch.isEmpty()) break
@@ -1021,10 +1044,6 @@ class TrackingService : TrackPointServiceBase() {
                         getAuthenticatedHttpClient().newCall(request).execute().use { response ->
                             if (response.isSuccessful) {
                                 Log.d(TAG, "Successfully pushed ${batch.size} locations")
-                                pointsSentThisSession += successfulBatchSentCount(batch.size)
-                                lastPointSentAtMs = System.currentTimeMillis()
-                                syncRuntimeStateStore()
-                                broadcastSessionStats()
                                 withContext(NonCancellable) {
                                     try {
                                         database.locationDao().delete(batch)
@@ -1033,6 +1052,12 @@ class TrackingService : TrackPointServiceBase() {
                                         locallyClaimedIds.removeAll(batch.map { it.id }.toSet())
                                     }
                                 }
+                                val visibleSentCount = visibleSentCountForBatchIds(
+                                    batchIds = batch.map { it.id },
+                                    sessionBoundaryId = sessionVisibleBoundaryId
+                                )
+                                onUploadBatchSucceeded(visibleSentCount = visibleSentCount)
+                                updateNotificationCount(broadcastStats = true)
                                 batchesSent++
                             } else {
                                 releaseClaimedBatch(batch)
@@ -1071,12 +1096,12 @@ class TrackingService : TrackPointServiceBase() {
 
     private suspend fun claimNextBatch(
         scope: QueueUploadScope,
-        sessionBoundaryMs: Long,
+        sessionBoundaryId: Long,
         limit: Int
     ): List<QueuedLocation> {
         val candidates = when (scope) {
-            QueueUploadScope.BACKLOG_ONLY -> database.locationDao().getOldestBacklog(sessionBoundaryMs, limit * 3)
-            QueueUploadScope.LIVE_ONLY -> database.locationDao().getOldestCurrentSession(sessionBoundaryMs, limit * 3)
+            QueueUploadScope.BACKLOG_ONLY -> database.locationDao().getOldestBacklogById(sessionBoundaryId, limit * 3)
+            QueueUploadScope.LIVE_ONLY -> database.locationDao().getOldestCurrentSessionById(sessionBoundaryId, limit * 3)
             QueueUploadScope.ALL -> database.locationDao().getOldest(limit * 3)
         }
         if (candidates.isEmpty()) return emptyList()
@@ -1093,9 +1118,18 @@ class TrackingService : TrackPointServiceBase() {
         sendBroadcast(intent)
     }
 
-    private fun updateNotificationCount() {
+    private fun updateNotificationCount(broadcastStats: Boolean = false) {
         serviceScope.launch {
-            val count = database.locationDao().getCount()
+            val count = if (isTracking) {
+                database.locationDao().getCurrentSessionCountById(sessionVisibleBoundaryId)
+            } else {
+                0
+            }
+            queuedPointsVisible = count
+            syncRuntimeStateStore()
+            if (broadcastStats) {
+                broadcastSessionStats()
+            }
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.notify(NOTIFICATION_ID, createNotification(pointsSentThisSession, count))
         }
@@ -1169,17 +1203,40 @@ class TrackingService : TrackPointServiceBase() {
     }
 
     private fun syncRuntimeStateStore() {
+        val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
+        val selectedTrackerName = SelectedTrackerPrefs.selectedTrackerName(this)
+        val motionMode = resolveRuntimeMotionMode()
+        if (isTracking) {
+            val previous = lastLoggedTrackingMotionMode
+            if (previous != null && previous != motionMode) {
+                val detail = if (currentSettings.autoTrackingMode) {
+                    "smoothedSpeedMps=${autoTrackingMotionEngine.snapshot().smoothedSpeedMps}"
+                } else {
+                    "profileIndex=${currentSettings.trackingProfile.index}"
+                }
+                Log.i(
+                    TAG,
+                    "Tracking motion mode changed: $previous -> $motionMode; autoTracking=${currentSettings.autoTrackingMode}; $detail"
+                )
+            }
+            lastLoggedTrackingMotionMode = motionMode
+        } else {
+            lastLoggedTrackingMotionMode = null
+        }
         TrackingRuntimeStateStore.update {
             it.copy(
                 isRunning = isRunning,
                 lifecycleState = controlState.lifecycleState,
                 failureReason = controlState.failureReason,
+                selectedTrackerId = selectedTrackerId,
+                selectedTrackerName = selectedTrackerName,
                 gpsProviderEnabled = unifiedLocationClient.isGpsProviderEnabled(),
                 autoTrackingEnabled = currentSettings.autoTrackingMode,
-                activeMotionMode = resolveRuntimeMotionMode(),
+                activeMotionMode = motionMode,
                 sessionStartTimeMs = sessionStartTimeMs,
                 pointsSentThisSession = pointsSentThisSession,
                 lastPointSentAtMs = lastPointSentAtMs,
+                queuedPointsVisible = queuedPointsVisible,
                 sessionTotalDistanceMeters = sessionTotalDistanceMeters,
                 lastAccuracyMeters = lastAccuracyMeters,
                 lastTrackedLatitude = lastTrackedLatitude,
@@ -1285,7 +1342,7 @@ class TrackingService : TrackPointServiceBase() {
                     Log.d(TAG, "Retry job: attempting to push $count queued locations")
                     val outcome = pushLocations(
                         scope = QueueUploadScope.LIVE_ONLY,
-                        sessionBoundaryMs = sessionBoundaryForBacklogMs
+                        sessionBoundaryId = sessionBoundaryForBacklogId
                     )
                     lastSyncFailureClass = outcome
                     if (outcome == SyncFailureClass.NONE) {
@@ -1298,21 +1355,20 @@ class TrackingService : TrackPointServiceBase() {
         }
     }
 
-    private fun startBacklogUploader(sessionBoundaryMs: Long) {
+    private fun startBacklogUploader(sessionBoundaryId: Long) {
         backlogUploaderJob?.cancel()
         backlogUploaderJob = serviceScope.launch {
             while (isActive && isTracking) {
-                val backlogCount = database.locationDao().getBacklogCount(sessionBoundaryMs)
+                val backlogCount = database.locationDao().getBacklogCountById(sessionBoundaryId)
                 if (backlogCount > 0) {
                     Log.d(TAG, "Backlog uploader: attempting to push $backlogCount queued backlog points")
                     pushLocations(
                         scope = QueueUploadScope.BACKLOG_ONLY,
-                        sessionBoundaryMs = sessionBoundaryMs
+                        sessionBoundaryId = sessionBoundaryId
                     )
                     delay(5_000L)
                 } else {
                     // Keep background uploader alive for the full tracking session.
-                    // Late-arriving points can still fall into backlog lane (e.g. stale fix timestamps).
                     delay(30_000L)
                 }
             }
@@ -1592,10 +1648,6 @@ class TrackingService : TrackPointServiceBase() {
         reason: String
     ) {
         if (output.modeChanged) {
-            Log.d(
-                TAG,
-                "Auto-mode transition ($reason): mode=${output.state.mode}, speed=${output.state.smoothedSpeedMps}m/s"
-            )
             reapplyLocationRequestIfActive("auto_mode_$reason")
         }
         syncRuntimeStateStore()
@@ -1673,7 +1725,7 @@ class TrackingService : TrackPointServiceBase() {
         return try {
             startForeground(
                 NOTIFICATION_ID,
-                createNotification(pointsSentThisSession, queuedCount = 0),
+                createNotification(pointsSentThisSession, queuedCount = queuedPointsVisible),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
             )
             startupForegroundPromoted = true
@@ -2174,7 +2226,7 @@ class TrackingService : TrackPointServiceBase() {
             database.locationDao().insert(queued)
             val failureClass = pushLocations(
                 scope = QueueUploadScope.LIVE_ONLY,
-                sessionBoundaryMs = sessionBoundaryForBacklogMs
+                sessionBoundaryId = sessionBoundaryForBacklogId
             )
             if (failureClass == SyncFailureClass.NONE) {
                 consecutivePushFailures = 0
@@ -2217,6 +2269,26 @@ class TrackingService : TrackPointServiceBase() {
             "Low-accuracy fallback awaiting lock rejectsThisSession=$lowAccuracyFallbackRejectedFixCountThisSession " +
                 "provider=$provider acc=$accuracyMeters fallbackEnabled=${currentSettings.lowAccuracyFallbackEnabled}"
         )
+    }
+
+    private fun resetRunVisibleMetrics() {
+        pointsSentThisSession = 0
+        lastPointSentAtMs = 0L
+        queuedPointsVisible = 0
+    }
+
+    private fun onUploadBatchSucceeded(visibleSentCount: Int) {
+        val sentDelta = successfulBatchSentCount(visibleSentCount)
+        pointsSentThisSession += sentDelta
+        if (sentDelta > 0) {
+            lastPointSentAtMs = System.currentTimeMillis()
+        }
+    }
+
+    private fun readQueueMaxIdBlocking(): Long {
+        return runBlocking(Dispatchers.IO) {
+            database.locationDao().getMaxId()
+        }
     }
 
 }

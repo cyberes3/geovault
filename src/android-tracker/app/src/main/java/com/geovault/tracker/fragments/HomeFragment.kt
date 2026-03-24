@@ -12,13 +12,10 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.core.content.ContextCompat
-import androidx.core.content.IntentCompat
 import androidx.fragment.app.Fragment
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
-import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.TrackingService
-import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.google.android.material.button.MaterialButton
@@ -42,7 +39,7 @@ class HomeFragment : Fragment() {
     private lateinit var distanceText: TextView
     private lateinit var accuracyText: TextView
 
-    private lateinit var debugTrackModeText: TextView
+    private lateinit var trackingParamsButton: MaterialButton
     private lateinit var trackingContentContainer: View
     private lateinit var permissionsContainer: View
     private lateinit var radarDishIcon: android.widget.ImageView
@@ -57,17 +54,6 @@ class HomeFragment : Fragment() {
             updateSessionStats()
             updateQueueCount()
             sessionStatsHandler.postDelayed(this, sessionStatsTickerIntervalMs)
-        }
-    }
-
-    private val locationReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val location = IntentCompat.getParcelableExtra(intent, "location", android.location.Location::class.java)
-            if (location != null) {
-                currentLocationText.text = "Last point: ${String.format("%.6f", location.latitude)}, ${String.format("%.6f", location.longitude)}"
-            }
-            updateQueueCount()
-            updateSessionStats()
         }
     }
 
@@ -97,7 +83,7 @@ class HomeFragment : Fragment() {
         
         trackingStatusText = view.findViewById(R.id.trackingStatusText)
         trackingTrackNameText = view.findViewById(R.id.trackingTrackNameText)
-        debugTrackModeText = view.findViewById(R.id.debugTrackModeText)
+        trackingParamsButton = view.findViewById(R.id.trackingParamsButton)
         queueCountText = view.findViewById(R.id.queueCountText)
         sessionStatsContainer = view.findViewById(R.id.sessionStatsContainer)
         trackingDurationText = view.findViewById(R.id.trackingDurationText)
@@ -112,11 +98,32 @@ class HomeFragment : Fragment() {
             navHost()?.toggleTracking()
         }
 
+        trackingParamsButton.setOnClickListener {
+            val host = navHost() ?: return@setOnClickListener
+            val runtime = trackingSnapshot()
+            val id = runtime.selectedTrackerId
+            if (id.isBlank()) return@setOnClickListener
+            val name = runtime.selectedTrackerName.takeIf { it.isNotBlank() }
+            val lastMs = when {
+                runtime.lastTrackedTimestampMs > 0L -> runtime.lastTrackedTimestampMs
+                runtime.lastPointSentAtMs > 0L -> runtime.lastPointSentAtMs
+                else -> null
+            }
+            val lat = runtime.lastTrackedLatitude
+            val lon = runtime.lastTrackedLongitude
+            host.showTrackerParamsFragment(
+                id,
+                name,
+                lastUpdateMs = lastMs,
+                positionLat = lat,
+                positionLon = lon
+            )
+        }
+
         setupPermissionButtons(view)
         updatePermissionsUi()
         updateTrackingUi()
         updateServerAccessibilityUi(navHost()?.isServerAccessible ?: true)
-        updateDebugTrackMode()
         updateQueueCount()
     }
     
@@ -203,12 +210,6 @@ class HomeFragment : Fragment() {
         val context = requireContext()
         ContextCompat.registerReceiver(
             context,
-            locationReceiver,
-            IntentFilter("com.geovault.tracker.LOCATION_UPDATE"),
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
-        ContextCompat.registerReceiver(
-            context,
             sessionStatsReceiver,
             IntentFilter(TrackingService.SESSION_STATS_UPDATE),
             ContextCompat.RECEIVER_NOT_EXPORTED
@@ -216,7 +217,6 @@ class HomeFragment : Fragment() {
         
         updatePermissionsUi()
         updateTrackingUi()
-        updateDebugTrackMode()
         updateQueueCount()
         
         if (trackingSnapshot().isRunning) {
@@ -231,7 +231,6 @@ class HomeFragment : Fragment() {
         sessionStatsHandler.removeCallbacks(sessionStatsTicker)
 
         try {
-            requireContext().unregisterReceiver(locationReceiver)
             requireContext().unregisterReceiver(sessionStatsReceiver)
         } catch (e: IllegalArgumentException) {
             // Already unregistered
@@ -257,33 +256,18 @@ class HomeFragment : Fragment() {
         serverFailureOverlay.visibility = if (accessible) View.GONE else View.VISIBLE
     }
 
-    private fun updateDebugTrackMode() {
-        if (!::debugTrackModeText.isInitialized) return
-        val runtime = trackingSnapshot()
-        val autoEnabled = runtime.autoTrackingEnabled
-        if (!autoEnabled) {
-            debugTrackModeText.visibility = View.GONE
-            return
-        }
-        val modeResId = when (runtime.activeMotionMode) {
-            TrackingMotionMode.WALKING -> R.string.profile_walking
-            TrackingMotionMode.BIKING -> R.string.profile_biking
-            TrackingMotionMode.DRIVING -> R.string.profile_driving
-        }
-        val modeName = getString(modeResId)
-        debugTrackModeText.text = getString(R.string.track_mode_label, modeName)
-        debugTrackModeText.visibility = View.VISIBLE
-    }
-
     private fun updateTrackingTrackName() {
         if (!::trackingTrackNameText.isInitialized) return
-        val name = SelectedTrackerPrefs.selectedTrackerName(requireContext()).takeIf { it.isNotBlank() }
+        val runtime = trackingSnapshot()
+        val selectedTrackerId = runtime.selectedTrackerId
+        val name = runtime.selectedTrackerName.takeIf { it.isNotBlank() }
         if (name != null) {
             trackingTrackNameText.text = name
             trackingTrackNameText.setTextColor(ContextCompat.getColor(requireContext(), R.color.text_secondary))
         } else {
             trackingTrackNameText.text = getString(R.string.no_tracker_selected).uppercase()
-            trackingTrackNameText.setTextColor(ContextCompat.getColor(requireContext(), R.color.error_red))
+            val colorRes = if (selectedTrackerId.isBlank()) R.color.error_red else R.color.text_secondary
+            trackingTrackNameText.setTextColor(ContextCompat.getColor(requireContext(), colorRes))
         }
     }
 
@@ -315,7 +299,10 @@ class HomeFragment : Fragment() {
         )
         startStopButton.text = getString(if (running) R.string.stop_tracking else R.string.start_tracking)
         updateTrackingTrackName()
-        updateDebugTrackMode()
+        if (::trackingParamsButton.isInitialized) {
+            trackingParamsButton.visibility =
+                if (running && runtime.selectedTrackerId.isNotBlank()) View.VISIBLE else View.GONE
+        }
 
         // Change radar dish color based on tracking state
         if (running) {
@@ -353,6 +340,12 @@ class HomeFragment : Fragment() {
         val startMs = runtime.sessionStartTimeMs
         val durationStr = if (startMs > 0) formatDurationMs(System.currentTimeMillis() - startMs) else "00:00:00"
         trackingDurationText.text = durationStr
+        if (runtime.lastTrackedLatitude != null && runtime.lastTrackedLongitude != null) {
+            currentLocationText.text =
+                "Last point: ${String.format("%.6f", runtime.lastTrackedLatitude)}, ${String.format("%.6f", runtime.lastTrackedLongitude)}"
+        } else {
+            currentLocationText.text = "Last point: —"
+        }
         val lastAgo = formatTimeAgo(runtime.lastPointSentAtMs)
         lastPointSentText.text = if (lastAgo == "now") lastAgo else "-$lastAgo"
         pointsSentSessionText.text = runtime.pointsSentThisSession.toString()
@@ -401,8 +394,7 @@ class HomeFragment : Fragment() {
             queueCountText.text = "—"
             return
         }
-        val mainActivity = navHost() ?: return
-        mainActivity.updateQueueCountFromFragment(queueCountText)
+        queueCountText.text = trackingSnapshot().queuedPointsVisible.toString()
     }
 
     private fun trackingSnapshot() = TrackingRuntimeStateStore.state.value

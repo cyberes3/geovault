@@ -19,11 +19,11 @@ interface LocationDao {
     @Query("SELECT * FROM queued_locations ORDER BY time ASC LIMIT :limit")
     fun getOldest(limit: Int): List<QueuedLocation>
 
-    @Query("SELECT * FROM queued_locations WHERE time < :sessionBoundaryMs ORDER BY time ASC LIMIT :limit")
-    fun getOldestBacklog(sessionBoundaryMs: Long, limit: Int): List<QueuedLocation>
+    @Query("SELECT * FROM queued_locations WHERE id <= :sessionBoundaryId ORDER BY id ASC LIMIT :limit")
+    fun getOldestBacklogById(sessionBoundaryId: Long, limit: Int): List<QueuedLocation>
 
-    @Query("SELECT * FROM queued_locations WHERE time >= :sessionBoundaryMs ORDER BY time ASC LIMIT :limit")
-    fun getOldestCurrentSession(sessionBoundaryMs: Long, limit: Int): List<QueuedLocation>
+    @Query("SELECT * FROM queued_locations WHERE id > :sessionBoundaryId ORDER BY id ASC LIMIT :limit")
+    fun getOldestCurrentSessionById(sessionBoundaryId: Long, limit: Int): List<QueuedLocation>
 
     @Delete
     fun delete(locations: List<QueuedLocation>)
@@ -31,11 +31,14 @@ interface LocationDao {
     @Query("SELECT COUNT(*) FROM queued_locations")
     fun getCount(): Int
 
-    @Query("SELECT COUNT(*) FROM queued_locations WHERE time >= :sessionBoundaryMs")
-    fun getCurrentSessionCount(sessionBoundaryMs: Long): Int
+    @Query("SELECT COALESCE(MAX(id), 0) FROM queued_locations")
+    fun getMaxId(): Long
 
-    @Query("SELECT COUNT(*) FROM queued_locations WHERE time < :sessionBoundaryMs")
-    fun getBacklogCount(sessionBoundaryMs: Long): Int
+    @Query("SELECT COUNT(*) FROM queued_locations WHERE id > :sessionBoundaryId")
+    fun getCurrentSessionCountById(sessionBoundaryId: Long): Int
+
+    @Query("SELECT COUNT(*) FROM queued_locations WHERE id <= :sessionBoundaryId")
+    fun getBacklogCountById(sessionBoundaryId: Long): Int
 
     @Query("DELETE FROM queued_locations WHERE time < :cutoffTimeMs")
     fun deleteOlderThan(cutoffTimeMs: Long): Int

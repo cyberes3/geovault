@@ -198,6 +198,24 @@ class TrackingServiceFallbackBehaviorTest {
     }
 
     @Test
+    fun visibleSentCountForBatchIds_countsOnlyCurrentSessionRows() {
+        val count = TrackingService.visibleSentCountForBatchIds(
+            batchIds = listOf(9L, 10L, 11L, 12L),
+            sessionBoundaryId = 9L
+        )
+        assertEquals(3, count)
+    }
+
+    @Test
+    fun visibleSentCountForBatchIds_excludesBacklogRowsFromSentMetrics() {
+        val count = TrackingService.visibleSentCountForBatchIds(
+            batchIds = listOf(1L, 2L, 3L),
+            sessionBoundaryId = 10L
+        )
+        assertEquals(0, count)
+    }
+
+    @Test
     fun hasRecoveredFastGpsLock_requiresHighConfidenceAndAccuracyAtOrBelowFilter() {
         assertTrue(
             TrackingService.hasRecoveredFastGpsLock(

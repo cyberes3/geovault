@@ -3,7 +3,6 @@ package com.geovault.tracker.navigation
 import androidx.fragment.app.Fragment
 import com.geovault.tracker.Group
 import com.geovault.tracker.Tracker
-import android.widget.TextView
 
 interface TrackerNavHost {
     val hasPendingInitialTrackForMap: Boolean
@@ -46,7 +45,6 @@ interface TrackerNavHost {
     fun requestNotificationPermission()
     fun requestBatteryOptimizationExemption()
     fun requestExactAlarmPermission()
-    fun updateQueueCountFromFragment(textView: TextView)
     fun toggleTracking()
 }
 

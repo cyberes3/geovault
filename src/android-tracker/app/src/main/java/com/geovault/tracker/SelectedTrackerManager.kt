@@ -24,6 +24,7 @@ object SelectedTrackerManager {
         if (!persisted) {
             Log.w(TAG, "Failed to persist selected tracker id=$trackerId before tracking restart")
         }
+        syncRuntimeSelectedTracker(context)
         if (restartTrackingIfRunning) {
             restartTrackingIfRunning(context)
         }
@@ -32,6 +33,8 @@ object SelectedTrackerManager {
     fun clearSelectedTracker(context: Context) {
         cancelPendingRestart()
         SelectedTrackerPrefs.clearSelectedTracker(context)
+        syncRuntimeSelectedTracker(context)
+        stopTrackingIfRunning(context)
     }
 
     fun clearSelectedTrackerAndInvalidateCaches(
@@ -64,6 +67,25 @@ object SelectedTrackerManager {
         }
         pendingRestart = restartRunnable
         restartHandler.postDelayed(restartRunnable, delayMs)
+    }
+
+    fun syncRuntimeSelectedTracker(context: Context) {
+        val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(context)
+        val selectedTrackerName = SelectedTrackerPrefs.selectedTrackerName(context)
+        TrackingRuntimeStateStore.update {
+            it.copy(
+                selectedTrackerId = selectedTrackerId,
+                selectedTrackerName = selectedTrackerName
+            )
+        }
+    }
+
+    private fun stopTrackingIfRunning(context: Context) {
+        if (!TrackingRuntimeStateStore.state.value.isRunning) return
+        val appContext = context.applicationContext
+        appContext.startService(Intent(appContext, TrackingService::class.java).apply {
+            action = TrackingService.ACTION_STOP
+        })
     }
 
     private fun cancelPendingRestart() {
