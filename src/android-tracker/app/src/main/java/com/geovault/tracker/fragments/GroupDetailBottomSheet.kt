@@ -166,12 +166,18 @@ class GroupDetailFragment : Fragment() {
                         setAllInputsEnabled(true)
                         val failedAction = pendingAction
                         pendingAction = null
-                        val failureMessageRes = when (failedAction) {
-                            PendingAction.SAVE -> R.string.failed_to_save_tracker
-                            PendingAction.DELETE -> R.string.failed_to_delete_tracker
-                            PendingAction.ENABLE_WORLD_SHARE -> R.string.failed_to_enable_world_share
-                            PendingAction.DISABLE_WORLD_SHARE -> R.string.failed_to_disable_world_share
-                            null -> R.string.failed_to_load_tracker
+                        val failureMessageRes = when {
+                            failedAction == PendingAction.SAVE &&
+                                state.errorMessage == GroupDetailViewModel.SAVE_PERSISTENCE_MISMATCH -> {
+                                R.string.failed_to_save_group_persistence_mismatch
+                            }
+                            else -> when (failedAction) {
+                                PendingAction.SAVE -> R.string.failed_to_save_group
+                                PendingAction.DELETE -> R.string.failed_to_delete_tracker
+                                PendingAction.ENABLE_WORLD_SHARE -> R.string.failed_to_enable_world_share
+                                PendingAction.DISABLE_WORLD_SHARE -> R.string.failed_to_disable_world_share
+                                null -> R.string.failed_to_load_tracker
+                            }
                         }
                         navHost()?.showSnackbar(getString(failureMessageRes))
                     }

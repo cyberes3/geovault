@@ -79,9 +79,6 @@ class EditTrackerFragment : Fragment() {
     /** After clear history succeeds, keep the clear button disabled until this fragment is closed. */
     private var historyClearedThisSession = false
 
-    /** Values for recent data spinner: empty = All, then 1min, 1h, 1d, 1w, 1m, session */
-    private val recentDataValues = arrayOf("", "1min", "1h", "1d", "1w", "1m", "session")
-
     private val visibilityValues = arrayOf("private", "shared", "public")
 
     /** Selected indices for dropdowns (since AutoCompleteTextView has no selectedItemPosition). */
@@ -225,22 +222,14 @@ class EditTrackerFragment : Fragment() {
             }
         }
 
-        val recentDataLabels = arrayOf(
-            getString(R.string.recent_data_all),
-            getString(R.string.recent_data_1min),
-            getString(R.string.recent_data_1h),
-            getString(R.string.recent_data_1d),
-            getString(R.string.recent_data_1w),
-            getString(R.string.recent_data_1m),
-            getString(R.string.recent_data_session)
-        )
+        val recentDataLabels = RecentDataWindowOptions.labels(requireContext())
         val spinnerAdapter = ArrayAdapter(requireContext(), CommonR.layout.gv_common_item_dropdown, recentDataLabels)
         recentDataWindowSpinner.setAdapter(spinnerAdapter)
         recentDataWindowSpinner.setText(recentDataLabels[0], false)
         recentDataWindowSpinner.setOnItemClickListener { _, _, position, _ ->
             selectedRecentDataIndex = position
             if (!isRenderingState) {
-                val recentDataWindow = if (position in recentDataValues.indices) recentDataValues[position] else ""
+                val recentDataWindow = RecentDataWindowOptions.valueForIndex(position)
                 viewModel.onRecentDataWindowChanged(recentDataWindow)
             }
         }
@@ -312,6 +301,15 @@ class EditTrackerFragment : Fragment() {
                 navHost()?.showSnackbar(getString(R.string.name_required))
                 return@setOnClickListener
             }
+            val resolvedRecentDataWindow = RecentDataWindowOptions.resolveValueFromInput(
+                context = requireContext(),
+                rawInput = recentDataWindowSpinner.text?.toString().orEmpty()
+            )
+            if (resolvedRecentDataWindow == null) {
+                navHost()?.showSnackbar(getString(R.string.invalid_recent_data_window_selection))
+                return@setOnClickListener
+            }
+            viewModel.onRecentDataWindowChanged(resolvedRecentDataWindow)
             val hiddenInList = hideOnMapSwitch.isChecked
             pendingAction = PendingAction.SAVE
             pendingHiddenInListAfterSave = hiddenInList
@@ -362,17 +360,9 @@ class EditTrackerFragment : Fragment() {
         if (selectedTrackSwitch.isChecked != form.isDefaultTrack) {
             selectedTrackSwitch.isChecked = form.isDefaultTrack
         }
-        val idx = recentDataValues.indexOf(form.recentDataWindow).coerceAtLeast(0)
+        val idx = RecentDataWindowOptions.indexForValue(form.recentDataWindow)
         selectedRecentDataIndex = idx
-        val recentDataLabels = arrayOf(
-            getString(R.string.recent_data_all),
-            getString(R.string.recent_data_1min),
-            getString(R.string.recent_data_1h),
-            getString(R.string.recent_data_1d),
-            getString(R.string.recent_data_1w),
-            getString(R.string.recent_data_1m),
-            getString(R.string.recent_data_session)
-        )
+        val recentDataLabels = RecentDataWindowOptions.labels(requireContext())
         if ((recentDataWindowSpinner.text?.toString() ?: "") != recentDataLabels[idx]) {
             recentDataWindowSpinner.setText(recentDataLabels[idx], false)
         }
@@ -513,13 +503,19 @@ class EditTrackerFragment : Fragment() {
                         val failedAction = pendingAction
                         setAllInputsEnabled(true)
                         pendingAction = null
-                        val failureMessageRes = when (failedAction) {
-                            PendingAction.SAVE -> R.string.failed_to_save_tracker
-                            PendingAction.CLEAR_HISTORY -> R.string.failed_to_clear_history
-                            PendingAction.DELETE -> R.string.failed_to_delete_tracker
-                            PendingAction.ENABLE_WORLD_SHARE -> R.string.failed_to_enable_world_share
-                            PendingAction.DISABLE_WORLD_SHARE -> R.string.failed_to_disable_world_share
-                            null -> R.string.failed_to_load_tracker
+                        val failureMessageRes = when {
+                            failedAction == PendingAction.SAVE &&
+                                state.errorMessage == EditTrackerViewModel.SAVE_PERSISTENCE_MISMATCH -> {
+                                R.string.failed_to_save_tracker_persistence_mismatch
+                            }
+                            else -> when (failedAction) {
+                                PendingAction.SAVE -> R.string.failed_to_save_tracker
+                                PendingAction.CLEAR_HISTORY -> R.string.failed_to_clear_history
+                                PendingAction.DELETE -> R.string.failed_to_delete_tracker
+                                PendingAction.ENABLE_WORLD_SHARE -> R.string.failed_to_enable_world_share
+                                PendingAction.DISABLE_WORLD_SHARE -> R.string.failed_to_disable_world_share
+                                null -> R.string.failed_to_load_tracker
+                            }
                         }
                         navHost()?.showSnackbar(getString(failureMessageRes))
                     }

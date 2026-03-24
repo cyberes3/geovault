@@ -229,11 +229,15 @@
     <string name="name_required">Name is required</string>
     <string name="failed_to_save_kml">Failed to save KML</string>
     <string name="failed_to_save_tracker">Failed to save tracker</string>
+    <string name="failed_to_save_tracker_persistence_mismatch">Save did not persist after verification. Please try again.</string>
+    <string name="failed_to_save_group">Failed to save group</string>
+    <string name="failed_to_save_group_persistence_mismatch">Group save did not persist after verification. Please try again.</string>
     <string name="failed_to_clear_history">Failed to clear history</string>
     <string name="failed_to_delete_tracker">Failed to delete tracker</string>
     <string name="failed_to_enable_world_share">Failed to enable world link</string>
     <string name="failed_to_disable_world_share">Failed to disable world link</string>
     <string name="failed_to_update_visibility">Failed to update visibility</string>
+    <string name="failed_to_update_visibility_persistence_mismatch">Visibility update did not persist after verification. Please try again.</string>
     <string name="failed_to_unsubscribe">Failed to unsubscribe tracker</string>
     <string name="failed_to_remove_from_share">Failed to remove from share</string>
     <string name="failed_to_leave_group">Failed to leave group</string>
@@ -247,6 +251,7 @@
     <string name="recent_data_1w">1 week</string>
     <string name="recent_data_1m">1 month</string>
     <string name="recent_data_session">Last Session</string>
+    <string name="invalid_recent_data_window_selection">Invalid recent data selection</string>
     <string name="choose_color">Choose color</string>
 
     <!-- Live track streaming status -->

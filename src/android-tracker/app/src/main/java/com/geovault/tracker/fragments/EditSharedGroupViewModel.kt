@@ -28,6 +28,10 @@ class EditSharedGroupViewModel @Inject constructor(
     private val trackerRepository: TrackerManagementRepository,
     private val groupRepository: GroupManagementRepository
 ) : ViewModel() {
+    companion object {
+        const val VISIBILITY_PERSISTENCE_MISMATCH = "group_visibility_persistence_mismatch"
+    }
+
     private val _uiState = MutableStateFlow(EditSharedGroupUiState())
     val uiState: StateFlow<EditSharedGroupUiState> = _uiState.asStateFlow()
 
@@ -67,12 +71,35 @@ class EditSharedGroupViewModel @Inject constructor(
                 )
             ) {
                 is RepositoryResult.Success -> {
-                    _uiState.update {
-                        it.copy(
-                            mapVisibility = result.data,
-                            pendingHiddenGroupId = null,
-                            errorMessage = null
-                        )
+                    when (val refreshed = trackerRepository.loadMapVisibility(forceRefresh = true)) {
+                        is RepositoryResult.Success -> {
+                            val persistedHidden = refreshed.data.hidden_group_ids.contains(groupId)
+                            if (persistedHidden != hidden) {
+                                _uiState.update {
+                                    it.copy(
+                                        mapVisibility = refreshed.data,
+                                        pendingHiddenGroupId = null,
+                                        errorMessage = VISIBILITY_PERSISTENCE_MISMATCH
+                                    )
+                                }
+                                return@launch
+                            }
+                            _uiState.update {
+                                it.copy(
+                                    mapVisibility = refreshed.data,
+                                    pendingHiddenGroupId = null,
+                                    errorMessage = null
+                                )
+                            }
+                        }
+                        is RepositoryResult.Failure -> {
+                            _uiState.update {
+                                it.copy(
+                                    pendingHiddenGroupId = null,
+                                    errorMessage = VISIBILITY_PERSISTENCE_MISMATCH
+                                )
+                            }
+                        }
                     }
                 }
                 is RepositoryResult.Failure -> {

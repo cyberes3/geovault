@@ -82,10 +82,16 @@ class EditSharedGroupFragment : Fragment() {
                     state.errorMessage?.takeIf { it.isNotBlank() }?.let {
                         val failedAction = pendingAction
                         pendingAction = null
-                        val failureMessageRes = when (failedAction) {
-                            PendingAction.HIDE -> R.string.failed_to_update_visibility
-                            PendingAction.LEAVE_GROUP -> R.string.failed_to_leave_group
-                            PendingAction.LOAD, null -> R.string.failed_to_load_tracker
+                        val failureMessageRes = when {
+                            failedAction == PendingAction.HIDE &&
+                                state.errorMessage == EditSharedGroupViewModel.VISIBILITY_PERSISTENCE_MISMATCH -> {
+                                R.string.failed_to_update_visibility_persistence_mismatch
+                            }
+                            else -> when (failedAction) {
+                                PendingAction.HIDE -> R.string.failed_to_update_visibility
+                                PendingAction.LEAVE_GROUP -> R.string.failed_to_leave_group
+                                PendingAction.LOAD, null -> R.string.failed_to_load_tracker
+                            }
                         }
                         navHost()?.showSnackbar(getString(failureMessageRes))
                         viewModel.consumeError()

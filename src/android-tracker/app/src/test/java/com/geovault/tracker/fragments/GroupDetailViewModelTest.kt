@@ -118,6 +118,37 @@ class GroupDetailViewModelTest {
     }
 
     @Test
+    fun saveGroup_roundTripMismatch_keepsReadyAndSetsMismatchError() = runTest {
+        val stateStore = TrackerManagementStateStore()
+        val initialGroup = group(trackIds = listOf("t1"))
+        val trackers = listOf(
+            tracker("t1", owner = true),
+            tracker("t2", owner = true)
+        )
+        val groupRepo = FakeGroupManagementRepository(
+            group = initialGroup,
+            stateStore = stateStore,
+            staleAfterPatch = true
+        )
+        val vm = GroupDetailViewModel(
+            groupRepository = groupRepo,
+            trackerRepository = FakeTrackerManagementRepository(trackers, stateStore),
+            eligibilityUseCase = DefaultGroupTrackerEligibilityUseCase(),
+            stateStore = stateStore
+        )
+
+        vm.load(initialGroup.id)
+        advanceUntilIdle()
+        vm.addDraftTracker("t2")
+        advanceUntilIdle()
+        vm.saveGroup()
+        advanceUntilIdle()
+
+        assertEquals(GroupDetailPhase.Ready, vm.uiState.value.phase)
+        assertEquals(GroupDetailViewModel.SAVE_PERSISTENCE_MISMATCH, vm.uiState.value.errorMessage)
+    }
+
+    @Test
     fun discardDraftMembership_restoresInitialTrackIds() = runTest {
         val stateStore = TrackerManagementStateStore()
         val initialGroup = group(trackIds = listOf("t1"))
@@ -289,7 +320,8 @@ class GroupDetailViewModelTest {
 
     private class FakeGroupManagementRepository(
         private var group: Group,
-        private val stateStore: TrackerManagementStateStore
+        private val stateStore: TrackerManagementStateStore,
+        private val staleAfterPatch: Boolean = false
     ) : GroupManagementRepository {
         val patchCalls = mutableListOf<GroupPatchRequest>()
         val patchPublishFlags = mutableListOf<Boolean>()
@@ -317,7 +349,7 @@ class GroupDetailViewModelTest {
             val nextTrackIds = group.track_ids.orEmpty().toMutableSet()
             request.remove_track_ids.orEmpty().forEach { nextTrackIds.remove(it) }
             request.add_track_ids.orEmpty().forEach { nextTrackIds.add(it) }
-            group = group.copy(
+            val updated = group.copy(
                 name = request.name ?: group.name,
                 hidden_in_list = request.hidden_in_list ?: group.hidden_in_list,
                 visibility = request.visibility ?: group.visibility,
@@ -334,8 +366,11 @@ class GroupDetailViewModelTest {
                 },
                 track_ids = nextTrackIds.toList()
             )
-            stateStore.publishGroup(group, emitEvent = publishToStore)
-            return RepositoryResult.Success(group)
+            if (!staleAfterPatch) {
+                group = updated
+                stateStore.publishGroup(group, emitEvent = publishToStore)
+            }
+            return RepositoryResult.Success(updated)
         }
 
         override suspend fun deleteGroup(groupId: String): RepositoryResult<Unit> =

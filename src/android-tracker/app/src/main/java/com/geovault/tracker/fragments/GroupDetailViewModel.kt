@@ -76,9 +76,21 @@ class GroupDetailViewModel @Inject constructor(
     private val eligibilityUseCase: GroupTrackerEligibilityUseCase,
     private val stateStore: TrackerManagementStateStore
 ) : ViewModel() {
+    companion object {
+        const val SAVE_PERSISTENCE_MISMATCH = "group_save_persistence_mismatch"
+    }
+
     private val _uiState = MutableStateFlow(GroupDetailUiState())
     val uiState: StateFlow<GroupDetailUiState> = _uiState.asStateFlow()
     private var currentGroupId: String? = null
+
+    private data class PersistedSnapshot(
+        val name: String,
+        val visibility: String,
+        val sharedWithEmails: List<String>,
+        val hiddenInList: Boolean,
+        val trackIds: Set<String>
+    )
 
     init {
         viewModelScope.launch {
@@ -116,6 +128,38 @@ class GroupDetailViewModel @Inject constructor(
             worldShareEnabled = !group.world_share_id.isNullOrBlank(),
             worldShareUrl = group.world_share_url,
             hiddenInList = group.hidden_in_list == true
+        )
+    }
+
+    private fun requestSnapshot(state: GroupDetailUiState): PersistedSnapshot {
+        val form = state.form
+        val normalizedShared = if (form.visibility == "shared") {
+            form.sharedWithEmails
+        } else {
+            emptyList()
+        }.map { it.trim() }.filter { it.isNotBlank() }.sorted()
+        return PersistedSnapshot(
+            name = form.name.trim(),
+            visibility = form.visibility,
+            sharedWithEmails = normalizedShared,
+            hiddenInList = form.hiddenInList,
+            trackIds = state.draftTrackIds
+        )
+    }
+
+    private fun groupSnapshot(group: Group): PersistedSnapshot {
+        val visibility = group.visibility ?: "private"
+        val normalizedShared = if (visibility == "shared") {
+            group.shared_with_emails.orEmpty()
+        } else {
+            emptyList()
+        }.map { it.trim() }.filter { it.isNotBlank() }.sorted()
+        return PersistedSnapshot(
+            name = group.name.trim(),
+            visibility = visibility,
+            sharedWithEmails = normalizedShared,
+            hiddenInList = group.hidden_in_list == true,
+            trackIds = group.track_ids.orEmpty().toSet()
         )
     }
 
@@ -208,6 +252,7 @@ class GroupDetailViewModel @Inject constructor(
         val groupId = _uiState.value.form.groupId
         if (groupId.isBlank()) return
         val state = _uiState.value
+        val expectedSnapshot = requestSnapshot(state)
         val addTrackIds = state.draftTrackIds.minus(state.initialTrackIds).toList()
         val removeTrackIds = state.initialTrackIds.minus(state.draftTrackIds).toList()
         val request = state.form.toRequest(
@@ -218,25 +263,47 @@ class GroupDetailViewModel @Inject constructor(
         viewModelScope.launch {
             when (val result = groupRepository.patchGroup(groupId, request, publishToStore = true)) {
                 is RepositoryResult.Success -> {
-                    val trackers = _uiState.value.allTrackers
-                    val savedTrackIds = result.data.track_ids.orEmpty().toSet()
-                    val derived = deriveDraftLists(
-                        baseGroup = result.data,
-                        allTrackers = trackers,
-                        draftTrackIds = savedTrackIds
-                    )
-                    val form = toFormState(result.data)
-                    _uiState.update {
-                        it.copy(
-                            phase = GroupDetailPhase.Saved,
-                            group = result.data,
-                            form = form,
-                            initialSnapshot = form,
-                            initialTrackIds = savedTrackIds,
-                            draftTrackIds = savedTrackIds,
-                            draftGroupTrackers = derived.groupTrackers,
-                            addableTrackers = derived.addableTrackers
-                        )
+                    when (val persisted = groupRepository.loadGroup(groupId)) {
+                        is RepositoryResult.Success -> {
+                            if (groupSnapshot(persisted.data) != expectedSnapshot) {
+                                _uiState.update {
+                                    it.copy(
+                                        phase = GroupDetailPhase.Ready,
+                                        errorMessage = SAVE_PERSISTENCE_MISMATCH
+                                    )
+                                }
+                                return@launch
+                            }
+                            val trackers = _uiState.value.allTrackers
+                            val savedTrackIds = persisted.data.track_ids.orEmpty().toSet()
+                            val derived = deriveDraftLists(
+                                baseGroup = persisted.data,
+                                allTrackers = trackers,
+                                draftTrackIds = savedTrackIds
+                            )
+                            val form = toFormState(persisted.data)
+                            _uiState.update {
+                                it.copy(
+                                    phase = GroupDetailPhase.Saved,
+                                    group = persisted.data,
+                                    form = form,
+                                    initialSnapshot = form,
+                                    initialTrackIds = savedTrackIds,
+                                    draftTrackIds = savedTrackIds,
+                                    draftGroupTrackers = derived.groupTrackers,
+                                    addableTrackers = derived.addableTrackers,
+                                    errorMessage = null
+                                )
+                            }
+                        }
+                        is RepositoryResult.Failure -> {
+                            _uiState.update {
+                                it.copy(
+                                    phase = GroupDetailPhase.Ready,
+                                    errorMessage = SAVE_PERSISTENCE_MISMATCH
+                                )
+                            }
+                        }
                     }
                 }
                 is RepositoryResult.Failure -> {

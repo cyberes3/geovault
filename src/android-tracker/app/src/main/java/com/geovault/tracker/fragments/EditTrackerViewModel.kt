@@ -69,8 +69,61 @@ data class EditTrackerUiState(
 class EditTrackerViewModel @Inject constructor(
     private val trackerRepository: TrackerManagementRepository
 ) : ViewModel() {
+    companion object {
+        const val SAVE_PERSISTENCE_MISMATCH = "save_persistence_mismatch"
+    }
+
     private val _uiState = MutableStateFlow(EditTrackerUiState())
     val uiState: StateFlow<EditTrackerUiState> = _uiState.asStateFlow()
+
+    private data class PersistedSnapshot(
+        val name: String,
+        val color: String?,
+        val recentDataWindow: String?,
+        val hiddenInList: Boolean,
+        val visibility: String?,
+        val shareParamsWithRecipients: Boolean?,
+        val shareParamsWithWorld: Boolean?,
+        val allowGroupReshare: Boolean?,
+        val sharedWithEmails: List<String>?
+    )
+
+    private fun requestSnapshot(form: EditTrackerFormState): PersistedSnapshot {
+        return PersistedSnapshot(
+            name = form.name.trim(),
+            color = form.color.trim().ifBlank { null },
+            recentDataWindow = form.recentDataWindow.trim().ifBlank { null },
+            hiddenInList = form.hiddenInList,
+            visibility = if (form.isOwner) form.visibility else null,
+            shareParamsWithRecipients = if (form.isOwner) form.shareParamsWithRecipients else null,
+            shareParamsWithWorld = if (form.isOwner) form.shareParamsWithWorld else null,
+            allowGroupReshare = if (form.isOwner) form.allowGroupReshare else null,
+            sharedWithEmails = if (form.isOwner && form.visibility == "shared") {
+                form.sharedWithEmails.map { it.trim() }.filter { it.isNotBlank() }.sorted()
+            } else {
+                null
+            }
+        )
+    }
+
+    private fun trackerSnapshot(tracker: Tracker): PersistedSnapshot {
+        val settings = tracker.settings
+        return PersistedSnapshot(
+            name = tracker.name.trim(),
+            color = tracker.color?.trim()?.ifBlank { null },
+            recentDataWindow = (settings?.get("recent_data_window") as? String)?.trim()?.ifBlank { null },
+            hiddenInList = (settings?.get("hidden_in_list") as? Boolean) == true,
+            visibility = if (tracker.isOwner()) tracker.visibility else null,
+            shareParamsWithRecipients = if (tracker.isOwner()) tracker.share_params_with_recipients == true else null,
+            shareParamsWithWorld = if (tracker.isOwner()) tracker.share_params_with_world == true else null,
+            allowGroupReshare = if (tracker.isOwner()) (settings?.get("allow_group_reshare") == true) else null,
+            sharedWithEmails = if (tracker.isOwner() && tracker.visibility == "shared") {
+                tracker.shared_with_emails.orEmpty().map { it.trim() }.filter { it.isNotBlank() }.sorted()
+            } else {
+                null
+            }
+        )
+    }
 
     private fun toFormState(
         tracker: Tracker,
@@ -165,24 +218,47 @@ class EditTrackerViewModel @Inject constructor(
     fun save() {
         val trackerId = _uiState.value.form.trackerId
         if (trackerId.isBlank()) return
-        val request = _uiState.value.form.toRequest()
+        val form = _uiState.value.form
+        val request = form.toRequest()
+        val requestedSnapshot = requestSnapshot(form)
         _uiState.update { it.copy(phase = EditTrackerPhase.Saving, errorMessage = null) }
         viewModelScope.launch {
             when (val result = trackerRepository.updateTrackerSettings(trackerId, request, publishToStore = false)) {
                 is RepositoryResult.Success -> {
-                    val prior = _uiState.value
-                    val form = toFormState(
-                        tracker = result.data,
-                        defaultColorHex = prior.form.color.ifBlank { "#1E88E5" },
-                        isDefaultTrack = prior.form.isDefaultTrack
-                    )
-                    _uiState.update {
-                        it.copy(
-                            phase = EditTrackerPhase.Saved,
-                            form = form,
-                            initialSnapshot = form,
-                            errorMessage = null
-                        )
+                    when (val persisted = trackerRepository.loadTracker(trackerId)) {
+                        is RepositoryResult.Success -> {
+                            if (trackerSnapshot(persisted.data) != requestedSnapshot) {
+                                _uiState.update {
+                                    it.copy(
+                                        phase = EditTrackerPhase.Ready,
+                                        errorMessage = SAVE_PERSISTENCE_MISMATCH
+                                    )
+                                }
+                                return@launch
+                            }
+                            val prior = _uiState.value
+                            val refreshedForm = toFormState(
+                                tracker = persisted.data,
+                                defaultColorHex = prior.form.color.ifBlank { "#1E88E5" },
+                                isDefaultTrack = prior.form.isDefaultTrack
+                            )
+                            _uiState.update {
+                                it.copy(
+                                    phase = EditTrackerPhase.Saved,
+                                    form = refreshedForm,
+                                    initialSnapshot = refreshedForm,
+                                    errorMessage = null
+                                )
+                            }
+                        }
+                        is RepositoryResult.Failure -> {
+                            _uiState.update {
+                                it.copy(
+                                    phase = EditTrackerPhase.Ready,
+                                    errorMessage = SAVE_PERSISTENCE_MISMATCH
+                                )
+                            }
+                        }
                     }
                 }
                 is RepositoryResult.Failure -> {
