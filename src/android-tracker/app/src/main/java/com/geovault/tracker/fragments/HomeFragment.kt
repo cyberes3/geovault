@@ -35,7 +35,6 @@ class HomeFragment : Fragment() {
     private lateinit var lastPointSentText: TextView
     private lateinit var pointsSentSessionText: TextView
     private lateinit var startStopButton: MaterialButton
-    private lateinit var currentLocationText: TextView
     private lateinit var distanceText: TextView
     private lateinit var accuracyText: TextView
 
@@ -90,7 +89,6 @@ class HomeFragment : Fragment() {
         lastPointSentText = view.findViewById(R.id.lastPointSentText)
         pointsSentSessionText = view.findViewById(R.id.pointsSentSessionText)
         startStopButton = view.findViewById(R.id.startStopButton)
-        currentLocationText = view.findViewById(R.id.currentLocationText)
         distanceText = view.findViewById(R.id.distanceText)
         accuracyText = view.findViewById(R.id.accuracyText)
 
@@ -340,12 +338,6 @@ class HomeFragment : Fragment() {
         val startMs = runtime.sessionStartTimeMs
         val durationStr = if (startMs > 0) formatDurationMs(System.currentTimeMillis() - startMs) else "00:00:00"
         trackingDurationText.text = durationStr
-        if (runtime.lastTrackedLatitude != null && runtime.lastTrackedLongitude != null) {
-            currentLocationText.text =
-                "Last point: ${String.format("%.6f", runtime.lastTrackedLatitude)}, ${String.format("%.6f", runtime.lastTrackedLongitude)}"
-        } else {
-            currentLocationText.text = "Last point: —"
-        }
         val lastAgo = formatTimeAgo(runtime.lastPointSentAtMs)
         lastPointSentText.text = if (lastAgo == "now") lastAgo else "-$lastAgo"
         pointsSentSessionText.text = runtime.pointsSentThisSession.toString()

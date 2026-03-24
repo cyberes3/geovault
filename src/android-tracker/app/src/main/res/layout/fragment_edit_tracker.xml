@@ -119,7 +119,7 @@
                         android:id="@+id/editTrackerColor"
                         android:layout_width="100dp"
                         android:layout_height="48dp"
-                        android:inputType="text"
+                        android:inputType="text|textNoSuggestions"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:gravity="center"

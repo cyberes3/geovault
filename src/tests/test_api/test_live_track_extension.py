@@ -2291,6 +2291,56 @@ class TestLiveTrackAPI(TestCase):
         data = response.json()
         self.assertEqual(data["settings"]["recent_data_window"], "current_session")
 
+    def test_post_settings_accepts_camel_case_aliases(self):
+        """POST settings accepts camelCase aliases used by older/mobile clients."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "color": "#A7DE00",
+                    "recentDataWindow": "current_session",
+                    "allowGroupReshare": True,
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["color"], "#A7DE00")
+        self.assertEqual(data["settings"]["recent_data_window"], "current_session")
+        self.assertTrue(data["settings"]["allow_group_reshare"])
+
+    def test_post_settings_accepts_nested_settings_payload(self):
+        """POST settings accepts color/window values nested under a settings object."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "settings": {
+                        "color": "#DE0038",
+                        "recentDataWindow": "session",
+                    }
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["color"], "#DE0038")
+        self.assertEqual(data["settings"]["recent_data_window"], "session")
+
     def test_post_settings_409_duplicate_name(self):
         """POST settings with name that another track of same user has returns 409."""
         with _patch_live_track_enabled():

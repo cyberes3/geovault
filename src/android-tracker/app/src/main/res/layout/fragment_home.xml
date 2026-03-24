@@ -418,16 +418,6 @@
             android:text="@string/start_tracking"
             android:textSize="18sp" />
 
-        <TextView
-            android:id="@+id/currentLocationText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
-            android:text=""
-            android:textSize="14sp"
-            android:textColor="@color/text_secondary"
-            android:gravity="center" />
-
         </LinearLayout>
 
     </FrameLayout>

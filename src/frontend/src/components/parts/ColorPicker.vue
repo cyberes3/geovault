@@ -32,7 +32,7 @@
         <!-- Content -->
         <div class="flex-1 bg-white p-4 overflow-y-auto">
           <!-- Vue Color SketchPicker -->
-          <div class="color-picker-wrapper">
+          <div ref="colorPickerWrapper" class="color-picker-wrapper">
             <sketch-picker
               :key="pickerKey"
               :model-value="colorValue"
@@ -106,6 +106,10 @@ export default {
         document.body.style.overflow = 'hidden'
         // Add escape key listener
         document.addEventListener('keydown', this.handleEscapeKey)
+        this.$nextTick(() => {
+          this.disableHexInputSpellcheck()
+          setTimeout(() => this.disableHexInputSpellcheck(), 150)
+        })
       } else {
         document.body.style.overflow = ''
         // Remove escape key listener
@@ -115,6 +119,11 @@ export default {
     modelValue(newVal) {
       if (this.isOpen) {
         this.initializeFromColor(newVal)
+      }
+    },
+    pickerKey() {
+      if (this.isOpen) {
+        this.$nextTick(() => this.disableHexInputSpellcheck())
       }
     }
   },
@@ -169,6 +178,16 @@ export default {
       // Reset to original color
       this.initializeFromColor(this.modelValue)
       this.$emit('close')
+    },
+    disableHexInputSpellcheck() {
+      const wrapper = this.$refs.colorPickerWrapper
+      if (!wrapper) return
+      const hexInput = wrapper.querySelector('.field_double input')
+      if (hexInput) {
+        hexInput.setAttribute('spellcheck', 'false')
+        hexInput.setAttribute('autocorrect', 'off')
+        hexInput.setAttribute('autocapitalize', 'off')
+      }
     },
     handleBackdropMouseDown(event) {
       if (event.target === event.currentTarget) {
