@@ -76,6 +76,10 @@ def getGitCommitDate() {
     return project.ext.gitCommitDate ?: new Date().format('yyyy-MM-dd')
 }
 
+def getEpochVersionCode() {
+    return (int) (System.currentTimeMillis() / 1000L)
+}
+
 android {
     namespace = 'com.geovault.uploader'
     compileSdk = 36
@@ -85,6 +89,7 @@ android {
         minSdk = 34
         targetSdk = 36
         versionName = "${getGitCommitDate()}-${getGitCommitHash()}"
+        versionCode = getEpochVersionCode()
 
         // Only arm64-v8a: minSdk 34 = Android 14, all devices are 64-bit.
         ndk {
