@@ -1,17 +1,17 @@
+/** Single slot so repeated right-clicks do not stack; same ToastContainer + TransitionGroup as other toasts. */
+export const MAP_COPY_COORDINATES_TOAST_REPLACE_KEY = 'map-copy-coordinates'
+
 /**
- * Right-click / context menu: copy lat, lng to clipboard and show the same toast as the main map.
+ * Right-click / context menu: copy lat, lng to clipboard and show an info toast (GeoVault ToastContainer styling).
  *
  * @param {import('maplibre-gl').Map} map
- * @param {{ toast?: object, ClipboardDocumentIcon?: object }} [deps]
+ * @param {{ toast?: object }} [deps]
  * @returns {() => void} Teardown (removes the listener)
  */
 export function setupCopyMapCoordinatesOnContextMenu(map, deps = {}) {
   const toastApi =
     deps.toast ??
     (typeof window !== 'undefined' ? window.gv_core?.GeoVault?.toast : null)
-  const ClipboardIcon =
-    deps.ClipboardDocumentIcon ??
-    (typeof window !== 'undefined' ? window.HeroiconsOutline?.ClipboardDocumentIcon : null)
 
   function onContextMenu(e) {
     e.preventDefault()
@@ -23,19 +23,18 @@ export function setupCopyMapCoordinatesOnContextMenu(map, deps = {}) {
     navigator.clipboard.writeText(coordinateString).then(() => {
       if (!toastApi) return
       const html = `Coordinates copied! <a href="${caltopoUrl}" target="_blank" rel="noopener noreferrer">Open in CalTopo</a>`
-      const opts = {
+      toastApi.show('Coordinates copied!', 'info', {
         html,
         duration: 5000,
-        plain: true
-      }
-      if (ClipboardIcon) {
-        opts.icon = ClipboardIcon
-      }
-      toastApi.show('Coordinates copied!', 'info', opts)
+        dismissible: false,
+        replaceKey: MAP_COPY_COORDINATES_TOAST_REPLACE_KEY
+      })
     }).catch((err) => {
       console.error('Failed to copy coordinates:', err)
       if (toastApi?.error) {
-        toastApi.error('Failed to copy coordinates')
+        toastApi.error('Failed to copy coordinates', {
+          replaceKey: MAP_COPY_COORDINATES_TOAST_REPLACE_KEY
+        })
       }
     })
   }

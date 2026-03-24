@@ -237,7 +237,7 @@ const ElevationProfileDialog = defineAsyncComponent(() => import('./ElevationPro
 const QuickPointDialog = defineAsyncComponent(() => import('./QuickPointDialog.vue'))
 const ShareDialog = defineAsyncComponent(() => import('@/components/parts/ShareDialog.vue'))
 
-import {ExclamationCircleIcon, ShareIcon, FolderIcon, ListBulletIcon, Cog6ToothIcon, ClipboardDocumentIcon} from '@heroicons/vue/24/outline'
+import {ExclamationCircleIcon, ShareIcon, FolderIcon, ListBulletIcon, Cog6ToothIcon} from '@heroicons/vue/24/outline'
 import {
   getBoundingBoxKey,
   getBoundingBoxString,
@@ -744,10 +744,7 @@ export default {
       this.mapInteractionHandlers = {
         onMove,
         onZoom,
-        teardownCopyCoords: setupCopyMapCoordinatesOnContextMenu(this.map, {
-          toast,
-          ClipboardDocumentIcon
-        })
+        teardownCopyCoords: setupCopyMapCoordinatesOnContextMenu(this.map, { toast })
       }
 
       // Setup basic event listeners (moveend, zoomend, click)

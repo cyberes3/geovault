@@ -132,11 +132,23 @@ def _filter_coords_by_latest_session_start(coords, point_params):
     kept_coords = []
     kept_params = []
     for i, params in enumerate(point_params):
-        if not isinstance(params, dict):
-            continue
-        start_ms = _timestamp_to_ms(params.get("starttimestamp"))
+        start_ms = (
+            _timestamp_to_ms(params.get("starttimestamp"))
+            if isinstance(params, dict)
+            else None
+        )
         if start_ms == latest_start_ms:
             kept_coords.append(coords[i])
+            kept_params.append(params)
+            continue
+
+        # Some clients/data paths can miss starttimestamp on subset points.
+        # Keep those points when their coordinate timestamp is within the latest
+        # session window so session filtering does not collapse to one point.
+        coord = coords[i]
+        coord_ts_ms = _timestamp_to_ms(coord[2]) if len(coord) >= 3 else None
+        if start_ms is None and coord_ts_ms is not None and coord_ts_ms >= latest_start_ms:
+            kept_coords.append(coord)
             kept_params.append(params)
     return kept_coords, kept_params
 

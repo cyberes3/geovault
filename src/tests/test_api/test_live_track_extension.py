@@ -1477,6 +1477,80 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(coords[0][0], -121.0)
         self.assertEqual(coords[0][1], 38.0)
 
+    def test_geometry_filtered_by_recent_data_window_session_keeps_latest_points_without_starttimestamp(self):
+        """GET geometry with recent_data_window=session keeps latest session points even if some are missing starttimestamp."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Session Missing Starttimestamp In Latest"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        tracker_secret = create_resp.json()["tracker_secret"]
+        auth = _basic_auth_header("trackuser@example.com", tracker_secret)
+        now_sec = int(time.time())
+        older_start = now_sec - 5000
+        latest_start = now_sec - 900
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                # Older session points (explicit older starttimestamp).
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps(
+                        {"lat": 37.0, "lon": -122.0, "timestamp": now_sec - 4700, "starttimestamp": older_start}
+                    ),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps(
+                        {"lat": 37.2, "lon": -121.8, "timestamp": now_sec - 4600, "starttimestamp": older_start}
+                    ),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+                # Latest session first point includes starttimestamp.
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps(
+                        {"lat": 38.0, "lon": -121.0, "timestamp": now_sec - 800, "starttimestamp": latest_start}
+                    ),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+                # Latest session follow-up points can miss starttimestamp on some clients/paths.
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps({"lat": 38.1, "lon": -120.9, "timestamp": now_sec - 700}),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps({"lat": 38.2, "lon": -120.8, "timestamp": now_sec - 600}),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"recent_data_window": "session"}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/geometry/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        coords = data["geometry"].get("coordinates", [])
+        params = data.get("point_params", [])
+        self.assertEqual(len(coords), 3, "Latest session points should be preserved")
+        self.assertEqual([coords[0][0], coords[0][1]], [-121.0, 38.0])
+        self.assertEqual([coords[1][0], coords[1][1]], [-120.9, 38.1])
+        self.assertEqual([coords[2][0], coords[2][1]], [-120.8, 38.2])
+        self.assertEqual(params[0].get("starttimestamp"), latest_start)
+
     def test_geometry_all_true_bypasses_recent_filter_session(self):
         """GET geometry?all=true bypasses recent_data_window=session."""
         with _patch_live_track_enabled():

@@ -14,7 +14,8 @@
  *     icon: ClipboardDocumentIcon, // Custom icon component
  *     duration: 5000,           // Auto-dismiss duration (ms)
  *     dismissible: true,        // Show close button
- *     html: '<b>HTML</b>'       // HTML content instead of message
+ *     html: '<b>HTML</b>',      // HTML content instead of message
+ *     replaceKey: 'my-slot'     // Replace any existing toast with this key (one visible per key)
  *   })
  */
 
@@ -49,6 +50,7 @@ class ToastManager {
    * @param {string} options.html - HTML content to display instead of message
    * @param {boolean} options.plain - Use plain white styling instead of type-based colors
    * @param {Component} options.icon - Custom icon component to display (e.g., ClipboardDocumentIcon)
+   * @param {string} [options.replaceKey] - If set, removes any existing toast with the same key before showing (one visible toast per key; same TransitionGroup animations as other toasts)
    * @returns {number} Toast ID
    */
   show(message, type = 'info', options = {}) {

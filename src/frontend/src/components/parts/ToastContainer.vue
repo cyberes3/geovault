@@ -100,8 +100,11 @@ export default {
       this.removeToast(id);
     },
     addToast(toastData) {
+      if (toastData.replaceKey != null) {
+        this.toasts = this.toasts.filter((t) => t.replaceKey !== toastData.replaceKey)
+      }
       this.toasts.push(toastData)
-      
+
       // Auto-dismiss if duration is set
       if (toastData.duration) {
         setTimeout(() => {
