@@ -23,6 +23,30 @@ enum class TrackingMotionMode(val profileIndex: Int) {
     }
 }
 
+enum class TrackingUiStatus {
+    NOT_TRACKING,
+    WAITING_FOR_GPS,
+    LOCKING,
+    TRACKING_ACTIVE
+}
+
+object TrackingUiStatusResolver {
+    @JvmStatic
+    fun resolve(
+        isRunning: Boolean,
+        gpsProviderEnabled: Boolean,
+        gpsPaused: Boolean,
+        lastAccuracyMeters: Float?,
+        effectiveAccuracyThresholdMeters: Float
+    ): TrackingUiStatus {
+        if (!isRunning) return TrackingUiStatus.NOT_TRACKING
+        if (!gpsProviderEnabled) return TrackingUiStatus.WAITING_FOR_GPS
+        if (gpsPaused) return TrackingUiStatus.TRACKING_ACTIVE
+        val noGoodFix = lastAccuracyMeters == null || lastAccuracyMeters > effectiveAccuracyThresholdMeters
+        return if (noGoodFix) TrackingUiStatus.LOCKING else TrackingUiStatus.TRACKING_ACTIVE
+    }
+}
+
 data class TrackingRuntimeSnapshot(
     val isRunning: Boolean = false,
     val lifecycleState: TrackingLifecycleState = TrackingLifecycleState.STOPPED,
@@ -32,6 +56,9 @@ data class TrackingRuntimeSnapshot(
     val gpsProviderEnabled: Boolean = true,
     val autoTrackingEnabled: Boolean = false,
     val activeMotionMode: TrackingMotionMode = TrackingMotionMode.WALKING,
+    val uiStatus: TrackingUiStatus = TrackingUiStatus.NOT_TRACKING,
+    val gpsPaused: Boolean = false,
+    val effectiveAccuracyThresholdMeters: Float = 0f,
     val sessionStartTimeMs: Long = 0L,
     val pointsSentThisSession: Int = 0,
     val lastPointSentAtMs: Long = 0L,

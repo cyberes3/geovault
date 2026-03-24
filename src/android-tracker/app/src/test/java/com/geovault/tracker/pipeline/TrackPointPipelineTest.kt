@@ -195,6 +195,98 @@ class TrackPointPipelineTest {
     }
 
     @Test
+    fun processLocalGps_longGapLargeDisplacement_reanchorsInsteadOfStickingOnJump() {
+        val nowMs = 1_800_000_000_000L
+        val trackId = "long-gap-reanchor"
+        val baseline = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -104.8000,
+            lat = 38.9000,
+            timestampMs = nowMs - (10 * 60 * 1000L),
+            accuracyMeters = 8f
+        )
+        assertTrue(
+            TrackPointPipeline.processLocalGps(
+                event = baseline,
+                maxAccuracyMeters = 50f,
+                freshnessTtlMs = 120_000L,
+                nowMs = baseline.timestampMs
+            ).accepted
+        )
+
+        val farAfterGap = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -104.7200,
+            lat = 38.9800,
+            timestampMs = nowMs,
+            accuracyMeters = 12f
+        )
+        val decision = TrackPointPipeline.processLocalGps(
+            event = farAfterGap,
+            maxAccuracyMeters = 50f,
+            freshnessTtlMs = 120_000L,
+            nowMs = nowMs
+        )
+
+        assertTrue(decision.accepted)
+    }
+
+    @Test
+    fun processLocalGps_jumpRejectStreak_reanchorsWhenAnchorIsStaleButDtStaysShort() {
+        val trackId = "jump-streak-reanchor"
+        val baselineNowMs = 1_800_000_000_000L
+        val baseline = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -104.8000,
+            lat = 38.9000,
+            timestampMs = baselineNowMs - 1_000L,
+            accuracyMeters = 6f,
+            elapsedRealtimeNanos = 1_000_000_000L
+        )
+        assertTrue(
+            TrackPointPipeline.processLocalGps(
+                event = baseline,
+                maxAccuracyMeters = 50f,
+                freshnessTtlMs = 120_000L,
+                nowMs = baselineNowMs,
+                nowElapsedRealtimeNanos = 1_001_000_000L
+            ).accepted
+        )
+
+        val stalledNowMs = baselineNowMs + (10 * 60 * 1000L)
+        var accepted = false
+        for (attempt in 1..6) {
+            val farEvent = TrackPointEvent(
+                source = TrackPointSource.LOCAL_GPS,
+                trackId = trackId,
+                lon = -104.7000,
+                lat = 39.0000,
+                timestampMs = stalledNowMs + attempt,
+                accuracyMeters = 8f,
+                elapsedRealtimeNanos = 1_001_000_000L + (attempt * 1_000_000_000L)
+            )
+            val decision = TrackPointPipeline.processLocalGps(
+                event = farEvent,
+                maxAccuracyMeters = 50f,
+                freshnessTtlMs = 120_000L,
+                nowMs = stalledNowMs + attempt,
+                nowElapsedRealtimeNanos = 1_002_000_000L + (attempt * 1_000_000_000L)
+            )
+            if (attempt < 6) {
+                assertFalse(decision.accepted)
+                assertEquals(TrackPointRejectReason.JUMP, decision.rejectReason)
+            } else {
+                accepted = decision.accepted
+            }
+        }
+
+        assertTrue("Expected pipeline to recover from jump reject streak", accepted)
+    }
+
+    @Test
     fun processLocalGps_mockTimestampSkew_isCanonicalizedToNow() {
         val nowMs = 1_800_000_000_000L
         val staleMockTs = nowMs - (2 * 60 * 60 * 1000L)

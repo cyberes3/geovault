@@ -53,6 +53,7 @@ data class TrackPointDecision(
 object TrackPointPolicyEngine {
     private const val EARTH_RADIUS_M = 6_371_000.0
     private const val DEFAULT_ROLLING_STEP_FALLBACK_METERS = 6.0
+    private const val LONG_GAP_REANCHOR_SECONDS = 180.0
 
     fun evaluate(
         event: TrackPointEvent,
@@ -148,12 +149,15 @@ object TrackPointPolicyEngine {
                 rollingAverageStepMeters * config.rollingDistanceMultiplier
             )
             val compositeCapMeters = kinematicCapMeters
+            // After a long sampling gap, allow a clean re-anchor instead of permanently
+            // rejecting every new fix against a stale previous point.
+            val allowLongGapReanchor = dtSeconds >= LONG_GAP_REANCHOR_SECONDS
             val speedSpike = config.maxJumpSpeedMps != null && impliedSpeedMps > config.maxJumpSpeedMps
             val burstSpike = distanceMeters > config.maxBurstDistanceMeters &&
                 dtSeconds <= config.burstWindowSeconds.coerceAtLeast(0.2)
             val capSpike = distanceMeters > (compositeCapMeters * config.outlierDistanceMultiplier.coerceAtLeast(1.0))
             val isOutlier = speedSpike || burstSpike || capSpike
-            if (isOutlier && config.outlierPolicy != TrackPointOutlierPolicy.OFF) {
+            if (!allowLongGapReanchor && isOutlier && config.outlierPolicy != TrackPointOutlierPolicy.OFF) {
                 return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.JUMP)
             }
         }

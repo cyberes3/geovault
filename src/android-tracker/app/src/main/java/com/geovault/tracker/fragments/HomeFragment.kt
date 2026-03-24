@@ -16,17 +16,13 @@ import androidx.fragment.app.Fragment
 import com.geovault.tracker.navigation.navHost
 import com.geovault.tracker.R
 import com.geovault.tracker.TrackingService
-import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.services.TrackingRuntimeStateStore
+import com.geovault.tracker.status.TrackingStatusPresentation
 import com.google.android.material.button.MaterialButton
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 
 @AndroidEntryPoint
 class HomeFragment : Fragment() {
-    @Inject
-    lateinit var settingsRepository: TrackerSettingsRepository
-
     private lateinit var trackingStatusText: TextView
     private lateinit var trackingTrackNameText: TextView
     private lateinit var queueCountText: TextView
@@ -50,6 +46,7 @@ class HomeFragment : Fragment() {
     private val sessionStatsTicker = object : Runnable {
         override fun run() {
             if (!trackingSnapshot().isRunning) return
+            updateTrackingStatusHeader()
             updateSessionStats()
             updateQueueCount()
             sessionStatsHandler.postDelayed(this, sessionStatsTickerIntervalMs)
@@ -271,30 +268,9 @@ class HomeFragment : Fragment() {
 
     fun updateTrackingUi() {
         if (!::trackingStatusText.isInitialized) return
+        updateTrackingStatusHeader()
         val runtime = trackingSnapshot()
         val running = runtime.isRunning
-        val waitingForGpsProvider = running && !runtime.gpsProviderEnabled
-        val acc = runtime.lastAccuracyMeters
-        val noGoodFix = acc == null || acc > trackingAccuracyThresholdMeters()
-        val isLocking = running && !waitingForGpsProvider && noGoodFix
-
-        trackingStatusText.text = getString(when {
-            waitingForGpsProvider -> R.string.waiting_for_gps_reenabled
-            isLocking -> R.string.waiting_for_high_accuracy_fix
-            running -> R.string.tracking_active
-            else -> R.string.not_tracking
-        })
-        trackingStatusText.setTextColor(
-            ContextCompat.getColor(
-                requireContext(),
-                when {
-                    waitingForGpsProvider -> R.color.error_red
-                    isLocking -> R.color.warning_yellow
-                    running -> R.color.warning_yellow
-                    else -> R.color.primary_blue
-                }
-            )
-        )
         startStopButton.text = getString(if (running) R.string.stop_tracking else R.string.start_tracking)
         updateTrackingTrackName()
         if (::trackingParamsButton.isInitialized) {
@@ -317,8 +293,21 @@ class HomeFragment : Fragment() {
             )
             sessionStatsHandler.removeCallbacks(sessionStatsTicker)
         }
-        
+
         updateSessionStats()
+    }
+
+    private fun updateTrackingStatusHeader() {
+        if (!::trackingStatusText.isInitialized) return
+        val runtime = trackingSnapshot()
+        val status = runtime.uiStatus
+        trackingStatusText.text = getString(TrackingStatusPresentation.statusTextRes(status))
+        trackingStatusText.setTextColor(
+            ContextCompat.getColor(
+                requireContext(),
+                TrackingStatusPresentation.statusColorRes(status)
+            )
+        )
     }
 
     private fun updateSessionStats() {
@@ -351,7 +340,7 @@ class HomeFragment : Fragment() {
         }
 
         accuracyText.text = formatAccuracy(acc, useImperial)
-        val accuracyFilter = settingsRepository.getSettings().accuracyFilterMeters
+        val accuracyFilter = runtime.effectiveAccuracyThresholdMeters
         val accuracyColor = if (acc > accuracyFilter) R.color.error_red else R.color.text_primary
         accuracyText.setTextColor(ContextCompat.getColor(requireContext(), accuracyColor))
     }
@@ -390,10 +379,6 @@ class HomeFragment : Fragment() {
     }
 
     private fun trackingSnapshot() = TrackingRuntimeStateStore.state.value
-
-    private fun trackingAccuracyThresholdMeters(): Float {
-        return settingsRepository.getSettings().accuracyFilterMeters
-    }
 
     private fun formatDurationMs(ms: Long): String {
         val totalSec = (ms / 1000).toInt().coerceAtLeast(0)

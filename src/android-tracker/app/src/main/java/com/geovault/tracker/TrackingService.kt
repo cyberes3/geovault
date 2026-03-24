@@ -44,8 +44,11 @@ import com.geovault.tracker.pipeline.TrackPointQuality
 import com.geovault.tracker.pipeline.TrackPointRejectReason
 import com.geovault.tracker.pipeline.TrackPointSource
 import com.geovault.tracker.pipeline.TrackPointServiceBase
+import com.geovault.tracker.services.TrackingUiStatusResolver
+import com.geovault.tracker.services.TrackingUiStatus
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.status.TrackingStatusPresentation
 import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
 import com.geovault.tracker.sensor.SignificantMotionResumeBridge
 import com.geovault.tracker.settings.TrackerSettings
@@ -1206,6 +1209,8 @@ class TrackingService : TrackPointServiceBase() {
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         val selectedTrackerName = SelectedTrackerPrefs.selectedTrackerName(this)
         val motionMode = resolveRuntimeMotionMode()
+        val effectiveAccuracyThreshold = resolveCurrentAccuracyFilter()
+        val uiStatus = resolveRuntimeUiStatus(effectiveAccuracyThreshold)
         if (isTracking) {
             val previous = lastLoggedTrackingMotionMode
             if (previous != null && previous != motionMode) {
@@ -1233,6 +1238,9 @@ class TrackingService : TrackPointServiceBase() {
                 gpsProviderEnabled = unifiedLocationClient.isGpsProviderEnabled(),
                 autoTrackingEnabled = currentSettings.autoTrackingMode,
                 activeMotionMode = motionMode,
+                uiStatus = uiStatus,
+                gpsPaused = isGpsPaused,
+                effectiveAccuracyThresholdMeters = effectiveAccuracyThreshold,
                 sessionStartTimeMs = sessionStartTimeMs,
                 pointsSentThisSession = pointsSentThisSession,
                 lastPointSentAtMs = lastPointSentAtMs,
@@ -1263,13 +1271,11 @@ class TrackingService : TrackPointServiceBase() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val noGoodFix = lastAccuracyMeters == null || lastAccuracyMeters!! > resolveCurrentAccuracyFilter()
-        val status = when {
-            isWaitingForGpsProvider -> getString(R.string.status_waiting_for_gps_reenabled)
-            isGpsPaused -> getString(R.string.status_tracking)
-            noGoodFix -> getString(R.string.locking)
-            else -> getString(R.string.status_tracking)
-        }
+        val status = getString(
+            TrackingStatusPresentation.statusTextRes(
+                resolveRuntimeUiStatus(resolveCurrentAccuracyFilter())
+            )
+        )
         val counts = getString(R.string.stat_label_sent_queued, sentCount, queuedCount)
         val text = "$status\n$counts"
 
@@ -1572,6 +1578,16 @@ class TrackingService : TrackPointServiceBase() {
 
     private fun resolveCurrentAccuracyFilter(): Float =
         resolveCurrentProfileParams().third
+
+    private fun resolveRuntimeUiStatus(effectiveAccuracyThreshold: Float): TrackingUiStatus {
+        return TrackingUiStatusResolver.resolve(
+            isRunning = isRunning,
+            gpsProviderEnabled = unifiedLocationClient.isGpsProviderEnabled(),
+            gpsPaused = isGpsPaused,
+            lastAccuracyMeters = lastAccuracyMeters,
+            effectiveAccuracyThresholdMeters = effectiveAccuracyThreshold
+        )
+    }
 
     private fun buildLocationRequest(intervalSec: Long, distanceFilter: Float): LocationRequest {
         val (intervalMs, minUpdateMs) = TrackingLocationPolicy.locationRequestIntervalFromSec(intervalSec)

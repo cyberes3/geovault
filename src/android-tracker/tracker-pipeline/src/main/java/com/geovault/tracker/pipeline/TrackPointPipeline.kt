@@ -32,6 +32,8 @@ object TrackPointPipeline {
     private const val LOCAL_MOCK_MAX_BURST_DISTANCE_METERS = 20_000.0
     private const val LOCAL_MOCK_BURST_WINDOW_SECONDS = 120.0
     private const val ACCEPT_LOG_SAMPLE_INTERVAL = 250L
+    private const val LOCAL_STALL_REJECT_STREAK_THRESHOLD = 6L
+    private const val LOCAL_STALL_REANCHOR_MIN_ANCHOR_AGE_MS = 3 * 60 * 1000L
     private val logger = Logger.getLogger(TrackPointPipeline::class.java.name)
 
     private val localProfile = TrackPointSourceProfile(
@@ -76,6 +78,7 @@ object TrackPointPipeline {
     private val rejectedJump = AtomicLong(0L)
     private val rejectedStale = AtomicLong(0L)
     private val orderingCounter = AtomicLong(0L)
+    private val localJumpRejectStreakByStream = ConcurrentHashMap<String, AtomicLong>()
 
     fun process(event: TrackPointEvent, nowMs: Long = System.currentTimeMillis()): TrackPointDecision {
         val profile = when (event.source) {
@@ -145,10 +148,10 @@ object TrackPointPipeline {
     ): TrackPointDecision {
         val sanitizedConfig = TrackPointPolicyCoercion.sanitize(config)
         val streamKey = "${event.source}:${event.trackId}"
-        val previousByStream = lastAcceptedByStream[streamKey]
-        val historyByStream = acceptedHistoryByStream[streamKey]?.toList() ?: emptyList()
-        val previousByTrack = lastAcceptedByTrack[event.trackId]
-        val decision = TrackPointPolicyEngine.evaluate(
+        var previousByStream = lastAcceptedByStream[streamKey]
+        var historyByStream = acceptedHistoryByStream[streamKey]?.toList() ?: emptyList()
+        var previousByTrack = lastAcceptedByTrack[event.trackId]
+        var decision = TrackPointPolicyEngine.evaluate(
             event = event,
             previous = previousByStream,
             history = historyByStream,
@@ -156,8 +159,40 @@ object TrackPointPipeline {
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
             rawConfig = sanitizedConfig
         )
+        if (!decision.accepted &&
+            shouldForceLocalStallReanchor(
+                event = event,
+                reason = decision.rejectReason,
+                previousByTrack = previousByTrack,
+                nowMs = nowMs,
+                streamKey = streamKey
+            )
+        ) {
+            logger.warning(
+                "Ingress stall recovery: resetting local session anchor " +
+                    "trackId=${event.trackId} reason=${decision.rejectReason} " +
+                    "anchorAgeMs=${nowMs - (previousByTrack?.timestampMs ?: 0L)}"
+            )
+            resetLocalSession(event.trackId)
+            previousByStream = null
+            historyByStream = emptyList()
+            previousByTrack = null
+            decision = TrackPointPolicyEngine.evaluate(
+                event = event,
+                previous = null,
+                history = emptyList(),
+                nowMs = nowMs,
+                nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+                rawConfig = sanitizedConfig
+            )
+        }
         if (!decision.accepted || decision.canonicalEvent == null) {
             reject(decision.rejectReason)
+            updateLocalRejectStreak(
+                streamKey = streamKey,
+                source = event.source,
+                reason = decision.rejectReason
+            )
             logRejection(
                 event = event,
                 nowMs = nowMs,
@@ -211,6 +246,7 @@ object TrackPointPipeline {
         lastAcceptedByStream[streamKey] = canonical
         appendHistory(streamKey = streamKey, event = canonical, windowSize = sanitizedConfig.rollingWindowSize)
         lastAcceptedByTrack[event.trackId] = canonical
+        clearLocalRejectStreak(streamKey, event.source)
         acceptedCount.incrementAndGet()
         logAccepted(
             event = event,
@@ -240,6 +276,7 @@ object TrackPointPipeline {
         lastAcceptedByStream.remove(streamKey)
         acceptedHistoryByStream.remove(streamKey)
         lastAcceptedByTrack.remove(trackId)
+        localJumpRejectStreakByStream.remove(streamKey)
     }
 
     fun resetForTests() {
@@ -256,6 +293,41 @@ object TrackPointPipeline {
         rejectedJump.set(0L)
         rejectedStale.set(0L)
         orderingCounter.set(0L)
+        localJumpRejectStreakByStream.clear()
+    }
+
+    private fun shouldForceLocalStallReanchor(
+        event: TrackPointEvent,
+        reason: TrackPointRejectReason?,
+        previousByTrack: TrackPointEvent?,
+        nowMs: Long,
+        streamKey: String
+    ): Boolean {
+        if (event.source != TrackPointSource.LOCAL_GPS) return false
+        if (reason != TrackPointRejectReason.JUMP) return false
+        val previous = previousByTrack ?: return false
+        val anchorAgeMs = nowMs - previous.timestampMs
+        if (anchorAgeMs < LOCAL_STALL_REANCHOR_MIN_ANCHOR_AGE_MS) return false
+        val nextStreak = (localJumpRejectStreakByStream[streamKey]?.get() ?: 0L) + 1L
+        return nextStreak >= LOCAL_STALL_REJECT_STREAK_THRESHOLD
+    }
+
+    private fun updateLocalRejectStreak(
+        streamKey: String,
+        source: TrackPointSource,
+        reason: TrackPointRejectReason?
+    ) {
+        if (source != TrackPointSource.LOCAL_GPS) return
+        if (reason == TrackPointRejectReason.JUMP) {
+            localJumpRejectStreakByStream.getOrPut(streamKey) { AtomicLong(0L) }.incrementAndGet()
+            return
+        }
+        localJumpRejectStreakByStream.remove(streamKey)
+    }
+
+    private fun clearLocalRejectStreak(streamKey: String, source: TrackPointSource) {
+        if (source != TrackPointSource.LOCAL_GPS) return
+        localJumpRejectStreakByStream.remove(streamKey)
     }
 
     private fun isOutOfOrderAgainstTrack(previousByTrack: TrackPointEvent?, canonical: TrackPointEvent): Boolean {
