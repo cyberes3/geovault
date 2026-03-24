@@ -59,17 +59,32 @@ export default defineConfig({
                 if (id.startsWith('@heroicons/vue')) {
                     return true;
                 }
+                // Externalize shared UI parts provided by core globals
+                if (id.startsWith('platform/components/parts/')) {
+                    return true;
+                }
                 return false;
             },
             output: {
                 // Map externalized imports to the global window variables provided by the platform
-                globals: {
-                    vue: 'Vue',
-                    'vue-router': 'VueRouter',
-                    vuex: 'Vuex',
-                    axios: 'axios',
-                    '@heroicons/vue/24/outline': 'HeroiconsOutline',
-                    '@heroicons/vue/24/solid': 'HeroiconsSolid'
+                globals: (id) => {
+                    const baseGlobals = {
+                        vue: 'Vue',
+                        'vue-router': 'VueRouter',
+                        vuex: 'Vuex',
+                        axios: 'axios',
+                        '@heroicons/vue/24/outline': 'HeroiconsOutline',
+                        '@heroicons/vue/24/solid': 'HeroiconsSolid'
+                    };
+                    if (baseGlobals[id]) {
+                        return baseGlobals[id];
+                    }
+                    const sharedPartGlobals = {
+                        'platform/components/parts/BaseButton.vue': 'BaseButton',
+                        'platform/components/parts/Loader.vue': 'Loader',
+                        'platform/components/parts/BaseModal.vue': 'BaseModal'
+                    };
+                    return sharedPartGlobals[id];
                 },
                 // Ensure the setup function is appended to the global object rather than overwriting it
                 extend: true
