@@ -248,6 +248,41 @@ class TrackingServiceFallbackBehaviorTest {
     }
 
     @Test
+    fun computeElasticitySpeedBucket_quantizesInFiveMpsSteps() {
+        assertEquals(0, TrackingService.computeElasticitySpeedBucket(null))
+        assertEquals(0, TrackingService.computeElasticitySpeedBucket(0f))
+        assertEquals(0, TrackingService.computeElasticitySpeedBucket(4.9f))
+        assertEquals(1, TrackingService.computeElasticitySpeedBucket(5.0f))
+        assertEquals(2, TrackingService.computeElasticitySpeedBucket(10.0f))
+    }
+
+    @Test
+    fun computeElasticDistanceFilterMeters_scalesFromBaseAndCapsAtSettingsMax() {
+        assertEquals(
+            30f,
+            TrackingService.computeElasticDistanceFilterMeters(baseDistanceMeters = 30f, speedBucket = 0)
+        )
+        assertEquals(
+            40.5f,
+            TrackingService.computeElasticDistanceFilterMeters(baseDistanceMeters = 30f, speedBucket = 1)
+        )
+        assertEquals(
+            TrackerSettings.MAX_DISTANCE_FILTER_METERS,
+            TrackingService.computeElasticDistanceFilterMeters(
+                baseDistanceMeters = TrackerSettings.MAX_DISTANCE_FILTER_METERS,
+                speedBucket = 8
+            )
+        )
+    }
+
+    @Test
+    fun computeNormalRequestMaxDelayMs_scalesWithIntervalAndRespectsCeiling() {
+        assertEquals(3_000L, TrackingService.computeNormalRequestMaxDelayMs(intervalSec = 1L))
+        assertEquals(45_000L, TrackingService.computeNormalRequestMaxDelayMs(intervalSec = 15L))
+        assertEquals(60_000L, TrackingService.computeNormalRequestMaxDelayMs(intervalSec = 60L))
+    }
+
+    @Test
     fun selectPreferredFastGpsSample_prefersValidAccurateOverInvalid() {
         val nowMs = 1_800_000_100_000L
         val invalid = location(

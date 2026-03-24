@@ -386,7 +386,7 @@ class TrackPointPipelineTest {
     }
 
     @Test
-    fun processLocalGps_rejectsWalkingScaleSpikeEvenWithReasonableImpliedSpeed() {
+    fun processLocalGps_capsWalkingScaleSpikeInsteadOfRejecting() {
         val nowMs = 1_800_000_000_000L
         val trackId = "walking-spike"
         val baseline = TrackPointEvent(
@@ -419,8 +419,9 @@ class TrackPointPipelineTest {
             freshnessTtlMs = 120_000L,
             nowMs = nowMs
         )
-        assertFalse(spikeDecision.accepted)
-        assertEquals(TrackPointRejectReason.JUMP, spikeDecision.rejectReason)
+        assertTrue(spikeDecision.accepted)
+        assertTrue(spikeDecision.adjusted)
+        assertEquals("OUTLIER_CAPPED", spikeDecision.adjustmentReason)
     }
 
     @Test
@@ -460,6 +461,125 @@ class TrackPointPipelineTest {
         )
         assertFalse(teleportDecision.accepted)
         assertEquals(TrackPointRejectReason.JUMP, teleportDecision.rejectReason)
+    }
+
+    @Test
+    fun processWithConfig_adjustPolicy_capsOutlierAndAccepts() {
+        val nowMs = 1_800_000_000_000L
+        val trackId = "adjust-policy-cap"
+        val baseline = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -104.8000,
+            lat = 38.9000,
+            timestampMs = nowMs - 5_000L,
+            accuracyMeters = 8f
+        )
+        assertTrue(
+            TrackPointPipeline.processWithConfig(
+                event = baseline,
+                config = TrackPointPolicyConfig(
+                    maxAccuracyMeters = 50f,
+                    allowDegradedAccuracy = false,
+                    requireAccuracyForAcceptance = true,
+                    maxFutureSkewMs = 5 * 60 * 1000L,
+                    maxJumpSpeedMps = 60.0,
+                    maxBurstDistanceMeters = 80.0,
+                    burstWindowSeconds = 10.0,
+                    rollingWindowSize = 5,
+                    outlierPolicy = TrackPointOutlierPolicy.ADJUST,
+                    freshnessTtlMs = 120_000L
+                ),
+                nowMs = nowMs
+            ).accepted
+        )
+
+        val spike = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -104.7992,
+            lat = 38.9010,
+            timestampMs = nowMs,
+            accuracyMeters = 10f
+        )
+        val decision = TrackPointPipeline.processWithConfig(
+            event = spike,
+            config = TrackPointPolicyConfig(
+                maxAccuracyMeters = 50f,
+                allowDegradedAccuracy = false,
+                requireAccuracyForAcceptance = true,
+                maxFutureSkewMs = 5 * 60 * 1000L,
+                maxJumpSpeedMps = 60.0,
+                maxBurstDistanceMeters = 80.0,
+                burstWindowSeconds = 10.0,
+                rollingWindowSize = 5,
+                outlierPolicy = TrackPointOutlierPolicy.ADJUST,
+                freshnessTtlMs = 120_000L
+            ),
+            nowMs = nowMs
+        )
+        assertTrue(decision.accepted)
+        assertTrue(decision.adjusted)
+        assertEquals("OUTLIER_CAPPED", decision.adjustmentReason)
+    }
+
+    @Test
+    fun processWithConfig_adjustPolicy_stillRejectsExtremeShortGapTeleport() {
+        val nowMs = 1_800_000_000_000L
+        val trackId = "adjust-policy-hard-reject"
+        val baseline = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -104.8000,
+            lat = 38.9000,
+            timestampMs = nowMs - 1_000L,
+            accuracyMeters = 8f
+        )
+        assertTrue(
+            TrackPointPipeline.processWithConfig(
+                event = baseline,
+                config = TrackPointPolicyConfig(
+                    maxAccuracyMeters = 50f,
+                    allowDegradedAccuracy = false,
+                    requireAccuracyForAcceptance = true,
+                    maxFutureSkewMs = 5 * 60 * 1000L,
+                    maxJumpSpeedMps = 60.0,
+                    maxBurstDistanceMeters = 80.0,
+                    burstWindowSeconds = 10.0,
+                    rollingWindowSize = 5,
+                    outlierPolicy = TrackPointOutlierPolicy.ADJUST,
+                    freshnessTtlMs = 120_000L
+                ),
+                nowMs = nowMs
+            ).accepted
+        )
+
+        val teleport = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -103.5000,
+            lat = 40.5000,
+            timestampMs = nowMs,
+            accuracyMeters = 8f
+        )
+        val decision = TrackPointPipeline.processWithConfig(
+            event = teleport,
+            config = TrackPointPolicyConfig(
+                maxAccuracyMeters = 50f,
+                allowDegradedAccuracy = false,
+                requireAccuracyForAcceptance = true,
+                maxFutureSkewMs = 5 * 60 * 1000L,
+                maxJumpSpeedMps = 60.0,
+                maxBurstDistanceMeters = 80.0,
+                burstWindowSeconds = 10.0,
+                rollingWindowSize = 5,
+                outlierPolicy = TrackPointOutlierPolicy.ADJUST,
+                freshnessTtlMs = 120_000L
+            ),
+            nowMs = nowMs
+        )
+        assertFalse(decision.accepted)
+        assertEquals(TrackPointRejectReason.JUMP, decision.rejectReason)
     }
 
     @Test

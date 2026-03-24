@@ -131,7 +131,7 @@ object TrackPointPipeline {
                 maxBurstDistanceMeters = maxBurstDistanceMeters,
                 burstWindowSeconds = burstWindowSeconds,
                 rollingWindowSize = 5,
-                outlierPolicy = if (isMockLocation) TrackPointOutlierPolicy.OFF else TrackPointOutlierPolicy.STRICT,
+                outlierPolicy = if (isMockLocation) TrackPointOutlierPolicy.OFF else TrackPointOutlierPolicy.ADJUST,
                 freshnessTtlMs = freshnessTtlMs,
                 normalizeSecondsTimestamps = false
             ),
@@ -251,6 +251,7 @@ object TrackPointPipeline {
         logAccepted(
             event = event,
             canonical = canonical,
+            decision = decision,
             previousByStream = previousByStream,
             previousByTrack = previousByTrack
         )
@@ -354,6 +355,7 @@ object TrackPointPipeline {
     private fun logAccepted(
         event: TrackPointEvent,
         canonical: TrackPointEvent,
+        decision: TrackPointDecision,
         previousByStream: TrackPointEvent?,
         previousByTrack: TrackPointEvent?
     ) {
@@ -368,7 +370,8 @@ object TrackPointPipeline {
                 "rawTs=${event.timestampMs} normalizedTs=${canonical.timestampMs} " +
                 "prevStreamTs=${previousByStream?.timestampMs ?: 0L} " +
                 "prevTrackTs=${previousByTrack?.timestampMs ?: 0L} quality=${canonical.quality} " +
-                "orderingKey=${canonical.orderingKey}"
+                "orderingKey=${canonical.orderingKey} adjusted=${decision.adjusted} " +
+                "adjustReason=${decision.adjustmentReason ?: "none"}"
         )
     }
 

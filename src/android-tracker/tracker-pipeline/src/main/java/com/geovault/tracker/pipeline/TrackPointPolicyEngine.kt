@@ -47,13 +47,16 @@ data class TrackPointDecision(
     val accepted: Boolean,
     val canonicalEvent: TrackPointEvent?,
     val quality: TrackPointQuality = TrackPointQuality.HIGH_CONFIDENCE,
-    val rejectReason: TrackPointRejectReason? = null
+    val rejectReason: TrackPointRejectReason? = null,
+    val adjusted: Boolean = false,
+    val adjustmentReason: String? = null
 )
 
 object TrackPointPolicyEngine {
     private const val EARTH_RADIUS_M = 6_371_000.0
     private const val DEFAULT_ROLLING_STEP_FALLBACK_METERS = 6.0
     private const val LONG_GAP_REANCHOR_SECONDS = 180.0
+    private const val MAX_ADJUST_DISTANCE_RATIO = 8.0
 
     fun evaluate(
         event: TrackPointEvent,
@@ -157,8 +160,63 @@ object TrackPointPolicyEngine {
                 dtSeconds <= config.burstWindowSeconds.coerceAtLeast(0.2)
             val capSpike = distanceMeters > (compositeCapMeters * config.outlierDistanceMultiplier.coerceAtLeast(1.0))
             val isOutlier = speedSpike || burstSpike || capSpike
-            if (!allowLongGapReanchor && isOutlier && config.outlierPolicy != TrackPointOutlierPolicy.OFF) {
-                return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.JUMP)
+            if (!allowLongGapReanchor && isOutlier) {
+                when (config.outlierPolicy) {
+                    TrackPointOutlierPolicy.OFF -> Unit
+                    TrackPointOutlierPolicy.STRICT -> {
+                        return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.JUMP)
+                    }
+                    TrackPointOutlierPolicy.ADJUST -> {
+                        if (dtSeconds <= 0.0 || distanceMeters <= 0.0) {
+                            return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.JUMP)
+                        }
+                        val speedCapMeters = if (config.maxJumpSpeedMps != null) {
+                            (config.maxJumpSpeedMps * dtSeconds).coerceAtLeast(0.0)
+                        } else {
+                            Double.POSITIVE_INFINITY
+                        }
+                        val burstCapMeters = if (dtSeconds <= config.burstWindowSeconds.coerceAtLeast(0.2)) {
+                            config.maxBurstDistanceMeters.coerceAtLeast(0.0)
+                        } else {
+                            Double.POSITIVE_INFINITY
+                        }
+                        val kinematicCapForAdjust = (
+                            compositeCapMeters * config.outlierDistanceMultiplier.coerceAtLeast(1.0)
+                            ).coerceAtLeast(0.0)
+                        val hardCapMeters = minOf(speedCapMeters, burstCapMeters, kinematicCapForAdjust)
+                        if (!hardCapMeters.isFinite() || hardCapMeters <= 0.0) {
+                            return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.JUMP)
+                        }
+                        // Keep hard protection against extreme teleports in very short windows.
+                        if (distanceMeters > hardCapMeters * MAX_ADJUST_DISTANCE_RATIO) {
+                            return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.JUMP)
+                        }
+                        val scale = (hardCapMeters / distanceMeters).coerceIn(0.0, 1.0)
+                        if (scale <= 0.0 || scale >= 1.0) {
+                            return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.JUMP)
+                        }
+                        val adjustedLat = previous.lat + ((event.lat - previous.lat) * scale)
+                        val adjustedLon = previous.lon + ((event.lon - previous.lon) * scale)
+                        val quality = when {
+                            accuracyMeters == null -> TrackPointQuality.DEGRADED
+                            config.maxAccuracyMeters != null && accuracyMeters > config.maxAccuracyMeters ->
+                                TrackPointQuality.DEGRADED
+                            else -> TrackPointQuality.HIGH_CONFIDENCE
+                        }
+                        return TrackPointDecision(
+                            accepted = true,
+                            canonicalEvent = event.copy(
+                                lat = adjustedLat,
+                                lon = adjustedLon,
+                                timestampMs = normalizedTimestampMs,
+                                quality = quality
+                            ),
+                            quality = quality,
+                            adjusted = true,
+                            adjustmentReason = "OUTLIER_CAPPED"
+                        )
+                    }
+                }
             }
         }
 

@@ -195,6 +195,11 @@ class TrackingService : TrackPointServiceBase() {
         private const val FALLBACK_MAX_JUMP_SPEED_MPS = 60.0
         private const val FALLBACK_MAX_BURST_DISTANCE_METERS = 300.0
         private const val FALLBACK_BURST_WINDOW_SECONDS = 10.0
+        private const val ELASTICITY_SPEED_BUCKET_SIZE_MPS = 5f
+        private const val ELASTICITY_MULTIPLIER = 0.35f
+        private const val ELASTICITY_MAX_SPEED_BUCKET = 8
+        private const val ELASTICITY_REAPPLY_DISTANCE_DELTA_METERS = 0.5f
+        private const val MAX_NORMAL_REQUEST_DEFER_MS = 60_000L
 
         internal enum class StartupCommandPath {
             StartTracking,
@@ -296,6 +301,28 @@ class TrackingService : TrackPointServiceBase() {
             if (quality != TrackPointQuality.HIGH_CONFIDENCE) return false
             val measuredAccuracy = measuredAccuracyMeters ?: return false
             return measuredAccuracy <= accuracyFilterMeters
+        }
+
+        @JvmStatic
+        internal fun computeElasticitySpeedBucket(speedMps: Float?): Int {
+            if (speedMps == null || !speedMps.isFinite() || speedMps <= 0f) return 0
+            val bucket = kotlin.math.floor(speedMps / ELASTICITY_SPEED_BUCKET_SIZE_MPS).toInt()
+            return bucket.coerceIn(0, ELASTICITY_MAX_SPEED_BUCKET)
+        }
+
+        @JvmStatic
+        internal fun computeElasticDistanceFilterMeters(baseDistanceMeters: Float, speedBucket: Int): Float {
+            val base = baseDistanceMeters.coerceAtLeast(0f)
+            if (speedBucket <= 0 || base <= 0f) return base
+            val extra = base * ELASTICITY_MULTIPLIER * speedBucket.toFloat()
+            return (base + extra).coerceAtMost(TrackerSettings.MAX_DISTANCE_FILTER_METERS)
+        }
+
+        @JvmStatic
+        internal fun computeNormalRequestMaxDelayMs(intervalSec: Long): Long {
+            val (intervalMs, _) = TrackingLocationPolicy.locationRequestIntervalFromSec(intervalSec)
+            val candidate = intervalMs * 3L
+            return candidate.coerceIn(intervalMs, MAX_NORMAL_REQUEST_DEFER_MS)
         }
 
         @JvmStatic
@@ -466,6 +493,8 @@ class TrackingService : TrackPointServiceBase() {
     private var lastSpeedReferenceLocation: Location? = null
     private var autoModeTickJob: Job? = null
     private var currentSettings: TrackerSettings = TrackerSettings()
+    private var elasticDistanceOverrideMeters: Float? = null
+    private var elasticitySpeedBucket: Int = 0
     private var lowAccuracyFallbackJob: Job? = null
     private var lowAccuracyFallbackCandidate: Location? = null
     private val lowAccuracyFallbackCoordinator = LowAccuracyFallbackCoordinator()
@@ -708,6 +737,7 @@ class TrackingService : TrackPointServiceBase() {
         stopFastGpsLockWindow(reason = "session_reset")
         resetFastGpsLockSamples()
         TrackPointPipeline.resetLocalSession(selectedTrackerId)
+        resetElasticDistanceOverride(reason = "start_tracking", reapplyRequest = false)
         syncRuntimeStateStore()
         broadcastSessionStats()
 
@@ -773,6 +803,7 @@ class TrackingService : TrackPointServiceBase() {
         Log.d(TAG, "Stopping tracking")
         isTracking = false
         isRunning = false
+        resetElasticDistanceOverride(reason = "stop_tracking", reapplyRequest = false)
         sessionStartTimeMs = 0
         resetRunVisibleMetrics()
         sessionTotalDistanceMeters = 0f
@@ -886,6 +917,13 @@ class TrackingService : TrackPointServiceBase() {
         }
 
         val canonicalEvent = decision.canonicalEvent ?: return
+        if (decision.adjusted) {
+            Log.i(
+                TAG,
+                "Accepted adjusted fix reason=${decision.adjustmentReason ?: "unknown"} " +
+                    "trackId=$selectedTrackerId acc=${canonicalEvent.accuracyMeters}"
+            )
+        }
         onAcceptedFixWithLock(
             lockRecovered = hasRecoveredFastGpsLock(
                 quality = canonicalEvent.quality,
@@ -929,6 +967,10 @@ class TrackingService : TrackPointServiceBase() {
                 reason = "accepted_fix"
             )
         }
+        maybeApplyElasticDistanceFilter(
+            observedSpeedMps = observedSpeedMps,
+            measuredAccuracyMeters = canonicalEvent.accuracyMeters
+        )
 
         lastLocation = smoothedLocation
         lastSpeedReferenceLocation = Location(location)
@@ -1445,6 +1487,7 @@ class TrackingService : TrackPointServiceBase() {
     private fun enterWaitingForGpsProvider(reason: String) {
         if (!isTracking || isWaitingForGpsProvider) return
         isWaitingForGpsProvider = true
+        resetElasticDistanceOverride(reason = "gps_provider_disabled", reapplyRequest = false)
         stopFastGpsLockWindow(reason = "gps_provider_disabled")
         cancelLowAccuracyFallbackTimer(clearCandidate = true, reason = "gps_provider_disabled")
         unifiedLocationClient.stopSession()
@@ -1477,6 +1520,7 @@ class TrackingService : TrackPointServiceBase() {
     private fun pauseGps() {
         if (!isGpsPaused && isTracking) {
             isGpsPaused = true
+            resetElasticDistanceOverride(reason = "gps_paused", reapplyRequest = false)
             if (currentSettings.autoTrackingMode) {
                 autoTrackingMotionEngine.onGpsPaused(System.currentTimeMillis())
             }
@@ -1509,6 +1553,7 @@ class TrackingService : TrackPointServiceBase() {
     private fun resumeGps() {
         if (isGpsPaused && isTracking) {
             isGpsPaused = false
+            resetElasticDistanceOverride(reason = "gps_resumed", reapplyRequest = false)
             isWaitingForGpsLock = false
             consecutiveStationaryPoints = 0
             stopFastGpsLockWindow(reason = "gps_resumed")
@@ -1573,7 +1618,8 @@ class TrackingService : TrackPointServiceBase() {
 
     private fun resolveCurrentIntervalAndDistance(): Pair<Long, Float> {
         val (interval, distance, _) = resolveCurrentProfileParams()
-        return interval to distance
+        val effectiveDistance = elasticDistanceOverrideMeters ?: distance
+        return interval to effectiveDistance
     }
 
     private fun resolveCurrentAccuracyFilter(): Float =
@@ -1591,9 +1637,11 @@ class TrackingService : TrackPointServiceBase() {
 
     private fun buildLocationRequest(intervalSec: Long, distanceFilter: Float): LocationRequest {
         val (intervalMs, minUpdateMs) = TrackingLocationPolicy.locationRequestIntervalFromSec(intervalSec)
+        val maxUpdateDelayMs = computeNormalRequestMaxDelayMs(intervalSec)
         return LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
             .setMinUpdateDistanceMeters(distanceFilter)
             .setMinUpdateIntervalMillis(minUpdateMs)
+            .setMaxUpdateDelayMillis(maxUpdateDelayMs)
             .build()
     }
 
@@ -1611,6 +1659,7 @@ class TrackingService : TrackPointServiceBase() {
             return false
         }
         val (intervalSec, distanceFilter) = resolveCurrentIntervalAndDistance()
+        val baseDistance = resolveCurrentProfileParams().second
         val request = if (isFastGpsLockWindowActive) {
             buildFastGpsLockLocationRequest()
         } else {
@@ -1627,7 +1676,10 @@ class TrackingService : TrackPointServiceBase() {
         val accuracyFilter = resolveCurrentAccuracyFilter()
         Log.d(
             TAG,
-            "Applied LocationRequest ($reason): interval=${intervalSec}s, distance=${distanceFilter}m, accuracy=${accuracyFilter}m, mode=${autoTrackingMotionEngine.snapshot().mode}, auto=${currentSettings.autoTrackingMode}, fastLock=$isFastGpsLockWindowActive"
+            "Applied LocationRequest ($reason): interval=${intervalSec}s, distance=${distanceFilter}m, " +
+                "baseDistance=${baseDistance}m, elasticityBucket=$elasticitySpeedBucket, " +
+                "accuracy=${accuracyFilter}m, mode=${autoTrackingMotionEngine.snapshot().mode}, " +
+                "auto=${currentSettings.autoTrackingMode}, fastLock=$isFastGpsLockWindowActive"
         )
         return true
     }
@@ -1664,9 +1716,47 @@ class TrackingService : TrackPointServiceBase() {
         reason: String
     ) {
         if (output.modeChanged) {
+            resetElasticDistanceOverride(reason = "auto_mode_changed_$reason", reapplyRequest = false)
             reapplyLocationRequestIfActive("auto_mode_$reason")
         }
         syncRuntimeStateStore()
+    }
+
+    private fun maybeApplyElasticDistanceFilter(
+        observedSpeedMps: Float?,
+        measuredAccuracyMeters: Float?
+    ) {
+        if (!isTracking || isGpsPaused || isWaitingForGpsProvider || isFastGpsLockWindowActive) return
+        if (!currentSettings.autoTrackingMode) return
+        val (_, baseDistanceMeters, accuracyThresholdMeters) = resolveCurrentProfileParams()
+        if (baseDistanceMeters <= 0f) return
+        if (measuredAccuracyMeters == null || measuredAccuracyMeters > accuracyThresholdMeters) return
+        val nextBucket = computeElasticitySpeedBucket(observedSpeedMps)
+        val nextDistance = computeElasticDistanceFilterMeters(baseDistanceMeters, nextBucket)
+        val currentDistance = elasticDistanceOverrideMeters ?: baseDistanceMeters
+        val distanceDelta = kotlin.math.abs(nextDistance - currentDistance)
+        if (nextBucket == elasticitySpeedBucket && distanceDelta < ELASTICITY_REAPPLY_DISTANCE_DELTA_METERS) {
+            return
+        }
+        elasticitySpeedBucket = nextBucket
+        elasticDistanceOverrideMeters = if (nextBucket > 0) nextDistance else null
+        Log.i(
+            TAG,
+            "Elasticity update speed=${observedSpeedMps ?: -1f}mps bucket=$nextBucket " +
+                "baseDistance=${baseDistanceMeters}m effectiveDistance=${elasticDistanceOverrideMeters ?: baseDistanceMeters}m"
+        )
+        reapplyLocationRequestIfActive("elasticity_bucket_$nextBucket")
+    }
+
+    private fun resetElasticDistanceOverride(reason: String, reapplyRequest: Boolean) {
+        val hadOverride = elasticDistanceOverrideMeters != null || elasticitySpeedBucket != 0
+        elasticDistanceOverrideMeters = null
+        elasticitySpeedBucket = 0
+        if (!hadOverride) return
+        Log.i(TAG, "Elasticity reset reason=$reason")
+        if (reapplyRequest) {
+            reapplyLocationRequestIfActive("elasticity_reset_$reason")
+        }
     }
 
     private fun resolveRuntimeMotionMode(): TrackingMotionMode {
@@ -1874,6 +1964,7 @@ class TrackingService : TrackPointServiceBase() {
         accuracyFilterMeters: Float
     ) {
         if (!isTracking || isGpsPaused || isFastGpsLockWindowActive) return
+        resetElasticDistanceOverride(reason = "fast_gps_lock_start", reapplyRequest = false)
         resetFastGpsLockSamples()
         isFastGpsLockWindowActive = true
         if (!applyCurrentLocationRequest("fast_gps_lock_start")) {
