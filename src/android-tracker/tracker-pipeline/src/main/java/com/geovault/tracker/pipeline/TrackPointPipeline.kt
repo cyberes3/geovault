@@ -25,10 +25,12 @@ internal data class TrackPointSourceProfile(
 object TrackPointPipeline {
     private const val REMOTE_FRESHNESS_TTL_MS = 30 * 60 * 1000L
     private const val MOCK_TIMESTAMP_SKEW_TOLERANCE_MS = 5 * 60 * 1000L
-    private const val LOCAL_REAL_MAX_JUMP_SPEED_MPS = 60.0
+    private const val LOCAL_REAL_MAX_JUMP_SPEED_MPS = 45.0
     private const val LOCAL_MOCK_MAX_JUMP_SPEED_MPS = 10_000.0
-    private const val LOCAL_REAL_MAX_BURST_DISTANCE_METERS = 300.0
-    private const val LOCAL_REAL_BURST_WINDOW_SECONDS = 10.0
+    private const val LOCAL_REAL_MAX_BURST_DISTANCE_METERS = 220.0
+    private const val LOCAL_REAL_BURST_WINDOW_SECONDS = 8.0
+    private const val LOCAL_REAL_OUTLIER_DISTANCE_MULTIPLIER = 1.3
+    private const val LOCAL_REAL_ROLLING_DISTANCE_MULTIPLIER = 2.5
     private const val LOCAL_MOCK_MAX_BURST_DISTANCE_METERS = 20_000.0
     private const val LOCAL_MOCK_BURST_WINDOW_SECONDS = 120.0
     private const val ACCEPT_LOG_SAMPLE_INTERVAL = 250L
@@ -131,6 +133,8 @@ object TrackPointPipeline {
                 maxBurstDistanceMeters = maxBurstDistanceMeters,
                 burstWindowSeconds = burstWindowSeconds,
                 rollingWindowSize = 5,
+                outlierDistanceMultiplier = if (isMockLocation) 1.5 else LOCAL_REAL_OUTLIER_DISTANCE_MULTIPLIER,
+                rollingDistanceMultiplier = if (isMockLocation) 3.0 else LOCAL_REAL_ROLLING_DISTANCE_MULTIPLIER,
                 outlierPolicy = if (isMockLocation) TrackPointOutlierPolicy.OFF else TrackPointOutlierPolicy.ADJUST,
                 freshnessTtlMs = freshnessTtlMs,
                 normalizeSecondsTimestamps = false

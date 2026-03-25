@@ -421,7 +421,7 @@ class TrackPointPipelineTest {
         )
         assertTrue(spikeDecision.accepted)
         assertTrue(spikeDecision.adjusted)
-        assertEquals("OUTLIER_CAPPED", spikeDecision.adjustmentReason)
+        assertEquals("UNCERTAINTY_AWARE_OUTLIER_CAPPED", spikeDecision.adjustmentReason)
     }
 
     @Test
@@ -520,7 +520,7 @@ class TrackPointPipelineTest {
         )
         assertTrue(decision.accepted)
         assertTrue(decision.adjusted)
-        assertEquals("OUTLIER_CAPPED", decision.adjustmentReason)
+        assertEquals("UNCERTAINTY_AWARE_OUTLIER_CAPPED", decision.adjustmentReason)
     }
 
     @Test
@@ -580,6 +580,93 @@ class TrackPointPipelineTest {
         )
         assertFalse(decision.accepted)
         assertEquals(TrackPointRejectReason.JUMP, decision.rejectReason)
+    }
+
+    @Test
+    fun processLocalGps_stationaryJitterWithinAccuracyEnvelope_isSuppressedToAnchor() {
+        val nowMs = 1_800_000_000_000L
+        val trackId = "stationary-envelope-suppression"
+        val baseline = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -104.8000,
+            lat = 38.9000,
+            timestampMs = nowMs - 15_000L,
+            accuracyMeters = 40f
+        )
+        assertTrue(
+            TrackPointPipeline.processLocalGps(
+                event = baseline,
+                maxAccuracyMeters = 50f,
+                freshnessTtlMs = 120_000L,
+                nowMs = nowMs
+            ).accepted
+        )
+
+        val jitter = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -104.7997,
+            lat = 38.9003,
+            timestampMs = nowMs,
+            accuracyMeters = 42f
+        )
+        val jitterDecision = TrackPointPipeline.processLocalGps(
+            event = jitter,
+            maxAccuracyMeters = 50f,
+            freshnessTtlMs = 120_000L,
+            nowMs = nowMs
+        )
+
+        assertTrue(jitterDecision.accepted)
+        assertTrue(jitterDecision.adjusted)
+        assertEquals("UNCERTAINTY_SUPPRESSED", jitterDecision.adjustmentReason)
+        val jitterCanonical = requireNotNull(jitterDecision.canonicalEvent)
+        assertEquals(baseline.lat, jitterCanonical.lat, 0.0000001)
+        assertEquals(baseline.lon, jitterCanonical.lon, 0.0000001)
+    }
+
+    @Test
+    fun processLocalGps_displacementBeyondAccuracyEnvelope_isAcceptedAsMovement() {
+        val nowMs = 1_800_000_000_000L
+        val trackId = "movement-beyond-envelope"
+        val baseline = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -104.8000,
+            lat = 38.9000,
+            timestampMs = nowMs - 60_000L,
+            accuracyMeters = 35f
+        )
+        assertTrue(
+            TrackPointPipeline.processLocalGps(
+                event = baseline,
+                maxAccuracyMeters = 50f,
+                freshnessTtlMs = 120_000L,
+                nowMs = nowMs
+            ).accepted
+        )
+
+        val moved = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -104.7984,
+            lat = 38.9012,
+            timestampMs = nowMs,
+            accuracyMeters = 32f
+        )
+        val moveDecision = TrackPointPipeline.processLocalGps(
+            event = moved,
+            maxAccuracyMeters = 50f,
+            freshnessTtlMs = 120_000L,
+            nowMs = nowMs
+        )
+
+        assertTrue(moveDecision.accepted)
+        assertFalse(moveDecision.adjusted)
+        val movedCanonical = requireNotNull(moveDecision.canonicalEvent)
+        assertEquals(moved.lat, movedCanonical.lat, 0.0000001)
+        assertEquals(moved.lon, movedCanonical.lon, 0.0000001)
     }
 
     @Test

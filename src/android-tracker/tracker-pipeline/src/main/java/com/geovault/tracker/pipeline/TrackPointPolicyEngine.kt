@@ -57,6 +57,8 @@ object TrackPointPolicyEngine {
     private const val DEFAULT_ROLLING_STEP_FALLBACK_METERS = 6.0
     private const val LONG_GAP_REANCHOR_SECONDS = 180.0
     private const val MAX_ADJUST_DISTANCE_RATIO = 8.0
+    const val ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED = "UNCERTAINTY_SUPPRESSED"
+    const val ADJUSTMENT_REASON_UNCERTAINTY_AWARE_OUTLIER_CAPPED = "UNCERTAINTY_AWARE_OUTLIER_CAPPED"
 
     fun evaluate(
         event: TrackPointEvent,
@@ -131,13 +133,15 @@ object TrackPointPolicyEngine {
                 previousElapsedRealtimeNanos = previous.elapsedRealtimeNanos,
                 currentElapsedRealtimeNanos = event.elapsedRealtimeNanos
             )
-            val impliedSpeedMps = when {
-                dtSeconds > 0.0 -> distanceMeters / dtSeconds
-                distanceMeters > 0.0 -> Double.POSITIVE_INFINITY
-                else -> 0.0
-            }
             val previousAccuracy = previous.accuracyMeters?.toDouble()?.coerceAtLeast(0.0) ?: 0.0
             val currentAccuracy = accuracyMeters?.toDouble()?.coerceAtLeast(0.0) ?: 0.0
+            val uncertaintyAllowanceMeters = previousAccuracy + currentAccuracy
+            val effectiveDistanceMeters = (distanceMeters - uncertaintyAllowanceMeters).coerceAtLeast(0.0)
+            val impliedEffectiveSpeedMps = when {
+                dtSeconds > 0.0 -> effectiveDistanceMeters / dtSeconds
+                effectiveDistanceMeters > 0.0 -> Double.POSITIVE_INFINITY
+                else -> 0.0
+            }
             val accuracyEnvelopeMeters =
                 ((previousAccuracy + currentAccuracy) * config.accuracyEnvelopeMultiplier) +
                     config.accuracyEnvelopePaddingMeters
@@ -155,10 +159,35 @@ object TrackPointPolicyEngine {
             // After a long sampling gap, allow a clean re-anchor instead of permanently
             // rejecting every new fix against a stale previous point.
             val allowLongGapReanchor = dtSeconds >= LONG_GAP_REANCHOR_SECONDS
-            val speedSpike = config.maxJumpSpeedMps != null && impliedSpeedMps > config.maxJumpSpeedMps
-            val burstSpike = distanceMeters > config.maxBurstDistanceMeters &&
+            if (!allowLongGapReanchor &&
+                distanceMeters > 0.0 &&
+                effectiveDistanceMeters <= 0.0
+            ) {
+                val quality = when {
+                    accuracyMeters == null -> TrackPointQuality.DEGRADED
+                    config.maxAccuracyMeters != null && accuracyMeters > config.maxAccuracyMeters ->
+                        TrackPointQuality.DEGRADED
+                    else -> TrackPointQuality.HIGH_CONFIDENCE
+                }
+                // Preserve timestamp ordering while suppressing jitter that is fully explained
+                // by the overlapping uncertainty of the two fixes.
+                return TrackPointDecision(
+                    accepted = true,
+                    canonicalEvent = event.copy(
+                        lat = previous.lat,
+                        lon = previous.lon,
+                        timestampMs = normalizedTimestampMs,
+                        quality = quality
+                    ),
+                    quality = quality,
+                    adjusted = true,
+                    adjustmentReason = ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED
+                )
+            }
+            val speedSpike = config.maxJumpSpeedMps != null && impliedEffectiveSpeedMps > config.maxJumpSpeedMps
+            val burstSpike = effectiveDistanceMeters > config.maxBurstDistanceMeters &&
                 dtSeconds <= config.burstWindowSeconds.coerceAtLeast(0.2)
-            val capSpike = distanceMeters > (compositeCapMeters * config.outlierDistanceMultiplier.coerceAtLeast(1.0))
+            val capSpike = effectiveDistanceMeters > (compositeCapMeters * config.outlierDistanceMultiplier.coerceAtLeast(1.0))
             val isOutlier = speedSpike || burstSpike || capSpike
             if (!allowLongGapReanchor && isOutlier) {
                 when (config.outlierPolicy) {
@@ -167,7 +196,7 @@ object TrackPointPolicyEngine {
                         return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.JUMP)
                     }
                     TrackPointOutlierPolicy.ADJUST -> {
-                        if (dtSeconds <= 0.0 || distanceMeters <= 0.0) {
+                        if (dtSeconds <= 0.0 || distanceMeters <= 0.0 || effectiveDistanceMeters <= 0.0) {
                             return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.JUMP)
                         }
                         val speedCapMeters = if (config.maxJumpSpeedMps != null) {
@@ -187,11 +216,12 @@ object TrackPointPolicyEngine {
                         if (!hardCapMeters.isFinite() || hardCapMeters <= 0.0) {
                             return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.JUMP)
                         }
+                        val hardCapRawMeters = hardCapMeters + uncertaintyAllowanceMeters
                         // Keep hard protection against extreme teleports in very short windows.
-                        if (distanceMeters > hardCapMeters * MAX_ADJUST_DISTANCE_RATIO) {
+                        if (distanceMeters > hardCapRawMeters * MAX_ADJUST_DISTANCE_RATIO) {
                             return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.JUMP)
                         }
-                        val scale = (hardCapMeters / distanceMeters).coerceIn(0.0, 1.0)
+                        val scale = (hardCapRawMeters / distanceMeters).coerceIn(0.0, 1.0)
                         if (scale <= 0.0 || scale >= 1.0) {
                             return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.JUMP)
                         }
@@ -213,7 +243,7 @@ object TrackPointPolicyEngine {
                             ),
                             quality = quality,
                             adjusted = true,
-                            adjustmentReason = "OUTLIER_CAPPED"
+                            adjustmentReason = ADJUSTMENT_REASON_UNCERTAINTY_AWARE_OUTLIER_CAPPED
                         )
                     }
                 }

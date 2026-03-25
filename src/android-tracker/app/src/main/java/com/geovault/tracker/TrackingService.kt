@@ -976,7 +976,17 @@ class TrackingService : TrackPointServiceBase() {
         lastSpeedReferenceLocation = Location(location)
 
         broadcastTrackPoint(smoothedLocation, canonicalEvent)
-        enqueueAndPushLocation(smoothedLocation, totalDistanceMeters)
+        val shouldPersistPoint = decision.adjustmentReason !=
+            TrackPointPolicyEngine.ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED
+        if (shouldPersistPoint) {
+            enqueueAndPushLocation(smoothedLocation, totalDistanceMeters)
+        } else {
+            Log.d(
+                TAG,
+                "Skipping queue/push for uncertainty-suppressed fix " +
+                    "trackId=$selectedTrackerId ts=${canonicalEvent.timestampMs}"
+            )
+        }
     }
 
     private suspend fun pushLocations(
@@ -2229,7 +2239,11 @@ class TrackingService : TrackPointServiceBase() {
                 "samples=$fastGpsLockSampleCount acc=${if (fallbackLocation.hasAccuracy()) fallbackLocation.accuracy else null}"
         )
         broadcastTrackPoint(fallbackLocation, fallbackEvent)
-        enqueueAndPushLocation(fallbackLocation, totalDistanceMeters)
+        if (shouldPersistFallbackPoint(lastLocation, fallbackLocation)) {
+            enqueueAndPushLocation(fallbackLocation, totalDistanceMeters)
+        } else {
+            Log.d(TAG, "Skipping fast-lock fallback queue/push for uncertainty-only displacement")
+        }
     }
 
     private fun ensureLowAccuracyFallbackTimerRunning() {
@@ -2323,8 +2337,40 @@ class TrackingService : TrackPointServiceBase() {
         )
         lowAccuracyFallbackTimerArmedAtMs = System.currentTimeMillis()
         broadcastTrackPoint(fallbackLocation, fallbackEvent)
-        enqueueAndPushLocation(fallbackLocation, totalDistanceMeters)
+        if (shouldPersistFallbackPoint(lastLocation, fallbackLocation)) {
+            enqueueAndPushLocation(fallbackLocation, totalDistanceMeters)
+        } else {
+            Log.d(TAG, "Skipping low-accuracy fallback queue/push for uncertainty-only displacement")
+        }
         return true
+    }
+
+    private fun shouldPersistFallbackPoint(
+        previousAcceptedLocation: Location?,
+        fallbackLocation: Location
+    ): Boolean {
+        return !isWithinCombinedAccuracyUncertainty(previousAcceptedLocation, fallbackLocation)
+    }
+
+    private fun isWithinCombinedAccuracyUncertainty(
+        previousAcceptedLocation: Location?,
+        candidateLocation: Location
+    ): Boolean {
+        val previous = previousAcceptedLocation ?: return false
+        val distanceMeters = previous.distanceTo(candidateLocation).toDouble()
+        if (distanceMeters <= 0.0) return true
+        val previousAccuracyMeters = if (previous.hasAccuracy()) {
+            previous.accuracy.toDouble().coerceAtLeast(0.0)
+        } else {
+            0.0
+        }
+        val candidateAccuracyMeters = if (candidateLocation.hasAccuracy()) {
+            candidateLocation.accuracy.toDouble().coerceAtLeast(0.0)
+        } else {
+            0.0
+        }
+        val effectiveDistanceMeters = distanceMeters - previousAccuracyMeters - candidateAccuracyMeters
+        return effectiveDistanceMeters <= 0.0
     }
 
     private fun enqueueAndPushLocation(location: Location, distanceMeters: Float) {
