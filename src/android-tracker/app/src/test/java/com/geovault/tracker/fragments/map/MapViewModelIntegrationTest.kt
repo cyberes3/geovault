@@ -220,6 +220,44 @@ class MapViewModelIntegrationTest {
     }
 
     @Test
+    fun streamEvent_runtimeFalseInSingleMode_stillAcceptsDisplayedLocalGps() = runTest {
+        val stream = MutableSharedFlow<TrackPointEvent>(extraBufferCapacity = 8)
+        val viewModel = createViewModel(stream)
+        val commands = mutableListOf<MapCommand>()
+        val job = launch {
+            viewModel.commands.collect { commands.add(it) }
+        }
+
+        TrackingRuntimeStateStore.update { it.copy(isRunning = false) }
+        LiveStreamRuntimeStateStore.update {
+            it.copy(isRunning = false, activeTrackerIds = emptySet())
+        }
+        viewModel.updateUiState {
+            it.copy(
+                mode = MapScreenMode.Single,
+                showAllTrackers = false,
+                displayedTrackerId = "selected-tracker"
+            )
+        }
+        viewModel.startTrackPointStream()
+        advanceUntilIdle()
+
+        stream.emit(
+            TrackPointEvent(
+                source = TrackPointSource.LOCAL_GPS,
+                trackId = "selected-tracker",
+                lon = 10.0,
+                lat = 20.0,
+                timestampMs = 1_000L
+            )
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, commands.count { it is MapCommand.ApplyTrackPoint })
+        job.cancel()
+    }
+
+    @Test
     fun singleTracker_runtimeDoesNotCallGeometry_bootstrapDoes() = runTest {
         val stream = MutableSharedFlow<TrackPointEvent>(extraBufferCapacity = 8)
         val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<Application>()

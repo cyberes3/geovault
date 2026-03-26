@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import com.geovault.tracker.pipeline.TrackPointSource
 
 @HiltViewModel
 class MapViewModel @Inject constructor(
@@ -194,9 +195,17 @@ class MapViewModel @Inject constructor(
                 val state = _uiState.value
                 val effectiveDisplayedTrackerId = state.displayedTrackerId
                     ?: SelectedTrackerPrefs.selectedTrackerId(getApplication())
+                val runtimeTrackingRunning = TrackingRuntimeStateStore.state.value.isRunning
+                val effectiveTrackingRunning = runtimeTrackingRunning ||
+                    (
+                        event.source == TrackPointSource.LOCAL_GPS &&
+                            state.mode is MapScreenMode.Single &&
+                            !effectiveDisplayedTrackerId.isNullOrEmpty() &&
+                            event.trackId == effectiveDisplayedTrackerId
+                        )
                 val accepted = handleTrackPointUseCase.shouldAccept(
                     event = event,
-                    trackingRunning = TrackingRuntimeStateStore.state.value.isRunning,
+                    trackingRunning = effectiveTrackingRunning,
                     showAllTrackers = state.showAllTrackers,
                     mapViewContext = when (state.mode) {
                         is MapScreenMode.GroupMode -> MapViewContext.GROUP
@@ -211,7 +220,8 @@ class MapViewModel @Inject constructor(
                     Log.d(
                         TAG,
                         "Dropped local GPS point trackId=${event.trackId} displayed=${state.displayedTrackerId} " +
-                            "mode=${state.mode} trackingRunning=${TrackingRuntimeStateStore.state.value.isRunning}"
+                            "mode=${state.mode} trackingRunning=$runtimeTrackingRunning " +
+                            "effectiveTrackingRunning=$effectiveTrackingRunning"
                     )
                 }
             }

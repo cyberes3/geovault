@@ -49,6 +49,10 @@ import com.geovault.tracker.services.TrackingUiStatus
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.status.TrackingStatusPresentation
+import com.geovault.tracker.runtime.RuntimeCommand
+import com.geovault.tracker.runtime.RuntimeCommandType
+import com.geovault.tracker.runtime.RuntimeTrigger
+import com.geovault.tracker.runtime.TrackingRuntimeController
 import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
 import com.geovault.tracker.sensor.SignificantMotionResumeBridge
 import com.geovault.tracker.settings.TrackerSettings
@@ -708,6 +712,7 @@ class TrackingService : TrackPointServiceBase() {
         Log.d(TAG, "Starting tracking")
         settingsRepository.setWasTrackingBeforeExit(true)
         TrackingRecoveryCoordinator.markTrackingStarted(applicationContext)
+        TrackingRuntimeController.get(applicationContext).markTrackingStarted(mapRuntimeTrigger(trigger))
         startRecoveryHeartbeat()
 
         sessionStartTimeMs = System.currentTimeMillis()
@@ -1353,6 +1358,17 @@ class TrackingService : TrackPointServiceBase() {
         return null
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        TrackingRuntimeController.get(applicationContext).handle(
+            RuntimeCommand(
+                type = RuntimeCommandType.TASK_REMOVED,
+                trigger = RuntimeTrigger.TASK_REMOVED,
+                reason = "task_removed"
+            )
+        )
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         Log.d(TAG, "onDestroy called isTracking=$isTracking", Exception("onDestroy stacktrace"))
         if (isTracking) {
@@ -1874,6 +1890,17 @@ class TrackingService : TrackPointServiceBase() {
         }
         Log.d(TAG, "Stopping service after startup path reason=$reason")
         stopSelf()
+    }
+
+    private fun mapRuntimeTrigger(trigger: String): RuntimeTrigger {
+        return when (trigger) {
+            "explicit_start" -> RuntimeTrigger.EXPLICIT_START
+            "process_restart" -> RuntimeTrigger.PROCESS_RESTART
+            "watchdog_tick" -> RuntimeTrigger.WATCHDOG_TICK
+            "main_resume_after_kill" -> RuntimeTrigger.MAIN_RESUME_AFTER_KILL
+            "main_start_on_launch" -> RuntimeTrigger.MAIN_START_ON_LAUNCH
+            else -> RuntimeTrigger.UNKNOWN
+        }
     }
 
     private fun logStartupOutcome(

@@ -8,6 +8,10 @@ import android.content.Intent
 import android.os.SystemClock
 import android.util.Log
 import com.geovault.tracker.TrackingService
+import com.geovault.tracker.runtime.RuntimeCommand
+import com.geovault.tracker.runtime.RuntimeCommandType
+import com.geovault.tracker.runtime.RuntimeTrigger
+import com.geovault.tracker.runtime.TrackingRuntimeController
 import kotlin.math.min
 
 object TrackingServiceLaunchGate {
@@ -63,6 +67,29 @@ object TrackingServiceLaunchGate {
 
     @JvmStatic
     fun dispatchStart(context: Context, trigger: String): LaunchDecision {
+        val runtimeResult = TrackingRuntimeController.get(context).handle(
+            RuntimeCommand(
+                type = RuntimeCommandType.START,
+                trigger = mapTrigger(trigger),
+                reason = trigger
+            )
+        )
+        val runtimeGate = runtimeResult.startGateDecision
+        if (runtimeResult.action == com.geovault.tracker.runtime.RuntimeActionType.DISPATCH_START && runtimeGate != null) {
+            return LaunchDecision(
+                allowed = runtimeGate.allowed,
+                retryInMs = runtimeGate.retryInMs,
+                reason = runtimeGate.reason
+            )
+        }
+        if (runtimeResult.action == com.geovault.tracker.runtime.RuntimeActionType.NOOP) {
+            return LaunchDecision(
+                allowed = false,
+                retryInMs = 0L,
+                reason = runtimeResult.reason
+            )
+        }
+
         val appContext = context.applicationContext
         val decision = beforeLaunchAttempt(appContext, trigger)
         if (!decision.allowed) {
@@ -92,6 +119,16 @@ object TrackingServiceLaunchGate {
                 retryInMs = retryDelayMs,
                 reason = "start_failed_${error::class.java.simpleName}"
             )
+        }
+    }
+
+    private fun mapTrigger(trigger: String): RuntimeTrigger {
+        return when {
+            trigger.startsWith("boot:") -> RuntimeTrigger.BOOT
+            trigger.contains("watchdog") -> RuntimeTrigger.WATCHDOG_TICK
+            trigger.contains("resume_after_kill") -> RuntimeTrigger.MAIN_RESUME_AFTER_KILL
+            trigger.contains("start_on_launch") -> RuntimeTrigger.MAIN_START_ON_LAUNCH
+            else -> RuntimeTrigger.EXPLICIT_START
         }
     }
 

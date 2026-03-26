@@ -74,6 +74,7 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
     private var connectJob: Job? = null
     private val connectionSessionId = AtomicLong(0L)
     private var lifecycle = StreamingLifecycleState()
+    private val sessionGuard = StreamingSessionGuard.createDefault()
 
     override fun onCreate() {
         super.onCreate()
@@ -107,14 +108,27 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
 
                 if (trackerIds.isNotEmpty()) {
-                    // Debounce: If already streaming this exact tracker set, don't restart WebSocket.
-                    if (trackerIds == currentTrackerIds && webSocket != null) {
+                    val sessionAssessment = sessionGuard.assess(
+                        requestedTrackerIds = trackerIds,
+                        currentTrackerIds = currentTrackerIds,
+                        hasSocket = webSocket != null,
+                        lifecycleState = lifecycle.lifecycleState
+                    )
+                    if (sessionAssessment.decision == StreamingSessionReuseDecision.REUSE) {
+                        // Debounce only when an active session is healthy.
                         Log.d(TAG, "Already streaming tracker set (${trackerIds.size}), skipping reset")
                         applyLifecycleEvent(
                             event = StreamingLifecycleEvent.Connected,
                             activeTrackerIds = trackerIds
                         )
                         return START_STICKY
+                    }
+                    if (trackerIds == currentTrackerIds) {
+                        Log.w(
+                            TAG,
+                            "Existing streaming session not reusable; forcing reconnect " +
+                                "decision=${sessionAssessment.decision} activityAgeMs=${sessionAssessment.activityAgeMs}"
+                        )
                     }
                     applyLifecycleEvent(
                         event = StreamingLifecycleEvent.StartRequested,
@@ -296,7 +310,9 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
         val listener = TrackersWebSocketListener(
             trackerIdsSnapshot,
             onPoint = { bufferAndBroadcast(it) },
+            onActivity = { sessionGuard.markMessageReceived() },
             onDisconnect = {
+                sessionGuard.markDisconnected()
                 scheduleReconnect(
                     sessionId = sessionId,
                     failureClass = StreamingFailureClass.TRANSIENT,
@@ -317,6 +333,7 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
                 return
             }
             webSocket = socket
+            sessionGuard.markConnected()
             applyLifecycleEvent(
                 event = StreamingLifecycleEvent.Connected,
                 activeTrackerIds = currentTrackerIds
@@ -385,6 +402,7 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
             Log.w(TAG, "Failed to close streaming websocket cleanly", e)
         }
         webSocket = null
+        sessionGuard.markDisconnected()
         currentTrackerIds = emptySet()
         currentTrackerName = null
     }
@@ -461,11 +479,13 @@ class LiveTrackStreamingService : TrackPointServiceBase() {
     private class TrackersWebSocketListener(
         private val filterTrackIds: Set<String>,
         private val onPoint: (StreamingTrackPoint) -> Unit,
+        private val onActivity: () -> Unit = {},
         private val onDisconnect: () -> Unit = {}
     ) : WebSocketListener() {
 
         override fun onMessage(webSocket: WebSocket, text: String) {
             try {
+                onActivity()
                 val parsed = StreamingTrackPointParser.parseTrackUpdatedMessage(text) ?: return
                 if (parsed.trackId !in filterTrackIds) return
                 onPoint(parsed)

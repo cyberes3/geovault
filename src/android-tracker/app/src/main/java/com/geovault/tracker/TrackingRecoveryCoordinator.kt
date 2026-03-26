@@ -14,6 +14,8 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.geovault.tracker.location.TrackingPermissionGate
+import com.geovault.tracker.runtime.RuntimeTrigger
+import com.geovault.tracker.runtime.TrackingRuntimeController
 import com.geovault.tracker.startup.TrackingServiceLaunchGate
 
 object TrackingRecoveryCoordinator {
@@ -137,6 +139,7 @@ object TrackingRecoveryCoordinator {
 
     @JvmStatic
     fun markTrackingStarted(context: Context) {
+        TrackingRuntimeController.get(context).markTrackingStarted(RuntimeTrigger.EXPLICIT_START)
         val now = System.currentTimeMillis()
         Log.i(TAG, "markTrackingStarted at=$now")
         recordTelemetry(context, "markTrackingStarted at=$now")
@@ -155,6 +158,7 @@ object TrackingRecoveryCoordinator {
 
     @JvmStatic
     fun markHeartbeat(context: Context) {
+        TrackingRuntimeController.get(context).markHeartbeat()
         prefs(context).edit()
             .putLong(KEY_LAST_HEARTBEAT_MS, System.currentTimeMillis())
             .apply()
@@ -162,6 +166,7 @@ object TrackingRecoveryCoordinator {
 
     @JvmStatic
     fun markIntentionalStop(context: Context, reason: String = "intentional_stop") {
+        TrackingRuntimeController.get(context).markIntentionalStop(reason)
         Log.i(TAG, "markIntentionalStop reason=$reason")
         recordTelemetry(context, "markIntentionalStop reason=$reason")
         prefs(context).edit()
@@ -179,6 +184,7 @@ object TrackingRecoveryCoordinator {
 
     @JvmStatic
     fun markUnexpectedDestroy(context: Context, wasTracking: Boolean) {
+        TrackingRuntimeController.get(context).markUnexpectedDestroy(wasTracking)
         if (!wasTracking) {
             Log.d(TAG, "markUnexpectedDestroy ignored (wasTracking=false)")
             recordTelemetry(context, "markUnexpectedDestroy ignored wasTracking=false")
@@ -200,6 +206,7 @@ object TrackingRecoveryCoordinator {
 
     @JvmStatic
     fun ensureWatchdogScheduled(context: Context) {
+        TrackingRuntimeController.get(context).ensureWatchdogScheduled()
         val triggerAt = SystemClock.elapsedRealtime() + RECOVERY_INTERVAL_MS
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pendingIntent = recoveryPendingIntent(context)
@@ -224,6 +231,7 @@ object TrackingRecoveryCoordinator {
 
     @JvmStatic
     fun cancelWatchdog(context: Context) {
+        TrackingRuntimeController.get(context).cancelWatchdog()
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         alarmManager.cancel(recoveryPendingIntent(context))
         Log.d(TAG, "Watchdog canceled")
@@ -320,6 +328,16 @@ object TrackingRecoveryCoordinator {
         restartTrackingIfKilled: Boolean,
         wasTrackingBeforeExit: Boolean
     ) {
+        val runtimeResult = TrackingRuntimeController.get(context).handleWatchdogTick(
+            restartTrackingIfKilled = restartTrackingIfKilled,
+            wasTrackingBeforeExit = wasTrackingBeforeExit
+        )
+        Log.i(
+            TAG,
+            "Runtime watchdog decision action=${runtimeResult.action} reason=${runtimeResult.reason} gate=${runtimeResult.startGateDecision}"
+        )
+        return
+
         val now = System.currentTimeMillis()
         val strictStatus = evaluateStrictPrerequisites(context)
         val lastStopWasIntentional = prefs(context).getBoolean(KEY_LAST_STOP_WAS_INTENTIONAL, false)

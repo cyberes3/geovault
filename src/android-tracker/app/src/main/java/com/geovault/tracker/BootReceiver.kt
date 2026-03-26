@@ -7,10 +7,13 @@ import android.location.LocationManager
 import android.os.UserManager
 import android.util.Log
 import com.geovault.tracker.location.TrackingPermissionGate
+import com.geovault.tracker.runtime.RuntimeCommand
+import com.geovault.tracker.runtime.RuntimeCommandType
+import com.geovault.tracker.runtime.RuntimeTrigger
+import com.geovault.tracker.runtime.TrackingRuntimeController
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.startup.BootStartupPolicy
 import com.geovault.tracker.startup.BootStartupSnapshot
-import com.geovault.tracker.startup.TrackingServiceLaunchGate
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -70,13 +73,16 @@ class BootReceiver : BroadcastReceiver() {
         }
 
         Log.i(TAG, "Starting TrackingService from action=$bootAction")
-        val launchDecision = TrackingServiceLaunchGate.dispatchStart(
-            context = context,
-            trigger = "boot:${bootAction ?: "unknown"}"
+        val launchDecision = TrackingRuntimeController.get(context).handle(
+            RuntimeCommand(
+                type = RuntimeCommandType.START,
+                trigger = RuntimeTrigger.BOOT,
+                reason = "boot:${bootAction ?: "unknown"}"
+            )
         )
         Log.i(
             TAG,
-            "Boot launch decision allowed=${launchDecision.allowed} retryInMs=${launchDecision.retryInMs} reason=${launchDecision.reason}"
+            "Boot launch decision action=${launchDecision.action} reason=${launchDecision.reason} gate=${launchDecision.startGateDecision}"
         )
     }
 

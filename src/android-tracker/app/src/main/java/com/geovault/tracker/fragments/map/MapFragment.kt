@@ -216,6 +216,8 @@ class MapFragment : Fragment() {
     private var lastPausedElapsedRealtimeMs: Long? = null
     private var pendingResumeCameraZoom: Double? = null
     private var pendingLockReapplyAfterMapReady: Boolean = false
+    private var lastObservedTrackingRunning: Boolean? = null
+    private val runtimeResyncPolicy = MapTrackingRuntimeResyncPolicy()
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -910,6 +912,7 @@ class MapFragment : Fragment() {
         mapManager = null
         maplibreMap = null
         mapReady = false
+        lastObservedTrackingRunning = null
         geometryFetchToken = InFlightRequestToken()
         coordinatesFetchToken = InFlightRequestToken()
         // Preserve deferred group handoff across view teardown so onMapReady can still apply it.
@@ -3053,6 +3056,44 @@ class MapFragment : Fragment() {
         updateStreamingUi()
     }
 
+    private fun handleTrackingRuntimeSnapshot(isRunning: Boolean) {
+        val decision = runtimeResyncPolicy.decide(
+            previousIsRunning = lastObservedTrackingRunning,
+            currentIsRunning = isRunning,
+            mapReady = mapReady,
+            mapViewContext = mapViewContext
+        )
+        lastObservedTrackingRunning = isRunning
+        when (decision.transition) {
+            MapTrackingRuntimeTransition.NONE -> Unit
+            MapTrackingRuntimeTransition.STARTED -> {
+                if (showMyLocationEnabled) {
+                    showMyLocationEnabled = false
+                    reduceLock(MapLockEvent.DisableGpsFollow)
+                    restoreTrackerLocationStyle()
+                    lastStandaloneLocation = null
+                    waitingForStandaloneFix = false
+                    pendingAutoZoomToStandaloneFix = false
+                }
+                stopStandaloneLocationUpdates(clearGpsFix = true)
+                if (decision.restartTrackPointStream) {
+                    mapFlowViewModel.startTrackPointStream()
+                }
+                if (decision.restartDisplayedStreaming) {
+                    startLiveTrackStreamingForDisplayedTracker()
+                }
+            }
+            MapTrackingRuntimeTransition.STOPPED -> {
+                if (showMyLocationEnabled) {
+                    applyStandaloneLocationStyle()
+                    waitingForStandaloneFix = true
+                    pendingAutoZoomToStandaloneFix = true
+                }
+                startStandaloneLocationUpdates()
+            }
+        }
+    }
+
     private fun updateTrackLine() {
         val style = maplibreMap?.style ?: return
         val lineColor = currentTrackerColor ?: defaultTrackerColorHex(requireContext())
@@ -3205,9 +3246,10 @@ class MapFragment : Fragment() {
                 }
             }
             launch {
-                TrackingRuntimeStateStore.state.collect {
+                TrackingRuntimeStateStore.state.collect { snapshot ->
                     if (isAdded) {
                         updateBottomRightSpinner()
+                        handleTrackingRuntimeSnapshot(snapshot.isRunning)
                     }
                 }
             }
