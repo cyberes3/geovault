@@ -4,6 +4,9 @@ import android.content.Context
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ImportantMessageSnackbar
 import com.geovault.common.RetrofitClient
+import com.geovault.common.update.AppVersionChecker
+import com.geovault.common.update.VersionCheckRequest
+import com.geovault.common.update.VersionCheckSnackbarHelper
 import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
@@ -20,6 +23,10 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -53,6 +60,7 @@ class MainActivity : AppCompatActivity() {
 
     private var fileUri: Uri? = null
     private var originalFilename: String? = null
+    private var hasStartedVersionCheck = false
     
     private val prefs: SharedPreferences by lazy {
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
@@ -67,11 +75,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
-    companion object {
-        private const val PREF_ADD_SUFFIX = "add_suffix"
-        const val EXTRA_OAUTH_ERROR = "oauth_error"
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -81,9 +84,11 @@ class MainActivity : AppCompatActivity() {
         val headerView = findViewById<View>(R.id.headerLayout)
         
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            // Apply top padding to header
-            headerView.updatePadding(top = insets.top + 20)
+            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
+            val bottomInset = if (ime.bottom > systemBars.bottom) ime.bottom else systemBars.bottom
+            headerView.updatePadding(top = systemBars.top + 20)
+            view.findViewById<View>(R.id.importantMessageSnackbar)?.updatePadding(bottom = bottomInset)
             WindowInsetsCompat.CONSUMED
         }
         
@@ -102,6 +107,7 @@ class MainActivity : AppCompatActivity() {
         settingsButton = findViewById(R.id.settingsButton)
         menuButton = findViewById(R.id.menuButton)
         importantMessageSnackbar = findViewById(R.id.importantMessageSnackbar)
+        startVersionCheckIfNeeded()
 
         intent?.getStringExtra(EXTRA_OAUTH_ERROR)?.let { message ->
             rootView.post { showSnackbar(message) }
@@ -484,9 +490,40 @@ class MainActivity : AppCompatActivity() {
         safeNoAnimation()
     }
 
+    private fun startVersionCheckIfNeeded() {
+        if (hasStartedVersionCheck) return
+        hasStartedVersionCheck = true
+        lifecycleScope.launch {
+            val checker = AppVersionChecker()
+            val result = withContext(Dispatchers.IO) {
+                checker.checkForUpdate(
+                    VersionCheckRequest(
+                        codeRepoPath = "cyberes/geovault",
+                        releasesRepoPath = "cyberes/geovault-app-release",
+                        apkNameRegex = APK_NAME_REGEX,
+                        localFullCommitSha = BuildConfig.GIT_COMMIT_SHA,
+                        expectedAppName = EXPECTED_APP_NAME
+                    )
+                )
+            }
+            VersionCheckSnackbarHelper.showIfUpdateAvailable(
+                context = this@MainActivity,
+                snackbar = importantMessageSnackbar,
+                result = result
+            )
+        }
+    }
+
     private fun safeNoAnimation() {
         overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
         overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
+    }
+
+    companion object {
+        private const val PREF_ADD_SUFFIX = "add_suffix"
+        const val EXTRA_OAUTH_ERROR = "oauth_error"
+        private const val EXPECTED_APP_NAME = "GeoVault Uploader"
+        private val APK_NAME_REGEX = Regex("^(.+?)\\s(\\d{4}-\\d{2}-\\d{2}\\s[0-9a-fA-F]{10})\\.apk$")
     }
 }
 

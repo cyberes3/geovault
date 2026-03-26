@@ -30,6 +30,9 @@ import androidx.viewpager2.widget.ViewPager2
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ImportantMessageSnackbar
 import com.geovault.common.ServerUrlContract
+import com.geovault.common.update.AppVersionChecker
+import com.geovault.common.update.VersionCheckRequest
+import com.geovault.common.update.VersionCheckSnackbarHelper
 import com.geovault.tracker.Group
 import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.navigation.TrackerNavHost
@@ -77,6 +80,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     private var isHandlingTabBack = false
     private val startupRefreshOrchestrator by lazy { StartupRefreshOrchestrator(startupRefreshGateway) }
     private var startupRefreshJob: Job? = null
+    private var hasStartedVersionCheck = false
     private var isBottomNavTransitionInFlight = false
     private var lastBottomNavTransitionAtMs: Long = 0L
     override var isServerAccessible = true
@@ -175,6 +179,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             WindowInsetsCompat.CONSUMED
         }
         importantMessageSnackbar = findViewById(R.id.importantMessageSnackbar)
+        startVersionCheckIfNeeded()
         val serverUrlEdit = findViewById<EditText>(R.id.guestServerUrlEdit)
         val serverUrl = GeovaultAuthManager.getServerUrl(this)
         if (serverUrl.isNotEmpty()) {
@@ -250,6 +255,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         ViewCompat.requestApplyInsets(rootView)
 
         importantMessageSnackbar = findViewById(R.id.importantMessageSnackbar)
+        startVersionCheckIfNeeded()
         database = AppDatabase.getDatabase(this)
         SelectedTrackerManager.syncRuntimeSelectedTracker(this)
 
@@ -1180,6 +1186,30 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         }
     }
 
+    private fun startVersionCheckIfNeeded() {
+        if (hasStartedVersionCheck) return
+        hasStartedVersionCheck = true
+        lifecycleScope.launch {
+            val checker = AppVersionChecker()
+            val result = withContext(Dispatchers.IO) {
+                checker.checkForUpdate(
+                    VersionCheckRequest(
+                        codeRepoPath = "cyberes/geovault",
+                        releasesRepoPath = "cyberes/geovault-app-release",
+                        apkNameRegex = APK_NAME_REGEX,
+                        localFullCommitSha = BuildConfig.GIT_COMMIT_SHA,
+                        expectedAppName = EXPECTED_APP_NAME
+                    )
+                )
+            }
+            VersionCheckSnackbarHelper.showIfUpdateAvailable(
+                context = this@MainActivity,
+                snackbar = importantMessageSnackbar,
+                result = result
+            )
+        }
+    }
+
     companion object {
         private const val APP_OP_SCHEDULE_EXACT_ALARM = "android:schedule_exact_alarm"
         const val ACTION_DUMP_RECOVERY_TELEMETRY = "com.geovault.tracker.ACTION_DUMP_RECOVERY_TELEMETRY"
@@ -1193,6 +1223,8 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         private const val KEY_GROUP_MAP_OPENED_FROM_TAB = "group_map_opened_from_tab"
         const val EXTRA_SIGNED_IN_EMAIL = "signed_in_email"
         const val EXTRA_OAUTH_ERROR = "oauth_error"
+        private const val EXPECTED_APP_NAME = "GeoVault Live Tracker"
+        private val APK_NAME_REGEX = Regex("^(.+?)\\s(\\d{4}-\\d{2}-\\d{2}\\s[0-9a-fA-F]{10})\\.apk$")
 
         internal fun extractStreamingErrorMessage(intent: Intent?): String? {
             if (intent?.action != LiveTrackStreamingService.ACTION_STREAMING_ERROR) return null

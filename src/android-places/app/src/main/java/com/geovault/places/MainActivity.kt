@@ -5,6 +5,9 @@ import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ImportantMessageSnackbar
 import com.geovault.common.LoadingOverlayView
 import com.geovault.common.RetrofitClient
+import com.geovault.common.update.AppVersionChecker
+import com.geovault.common.update.VersionCheckRequest
+import com.geovault.common.update.VersionCheckSnackbarHelper
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -34,6 +37,9 @@ import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import com.geovault.common.ClipboardCopyHelper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
 
@@ -42,6 +48,8 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_SELECTED_ID_FROM_MAP = "selected_id_from_map"
         const val EXTRA_SHOW_EXPORT_SAVED_MESSAGE = "show_export_saved_message"
         const val EXTRA_OAUTH_ERROR = "oauth_error"
+        private const val EXPECTED_APP_NAME = "GeoVault Places"
+        private val APK_NAME_REGEX = Regex("^(.+?)\\s(\\d{4}-\\d{2}-\\d{2}\\s[0-9a-fA-F]{10})\\.apk$")
     }
 
     private lateinit var recyclerView: RecyclerView
@@ -57,6 +65,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var adapter: PlacesAdapter
     private var refreshCall: Call<FeatureCollection>? = null
     private var initialLoadDone = false
+    private var hasStartedVersionCheck = false
     private var searchQuery: String = ""
     private val handler = Handler(Looper.getMainLooper())
     private val timeoutRunnable = Runnable {
@@ -172,6 +181,7 @@ class MainActivity : AppCompatActivity() {
         fabAdd = findViewById(R.id.fab_add)
         fabMap = findViewById(R.id.fab_map)
         importantMessageSnackbar = findViewById(R.id.importantMessageSnackbar)
+        startVersionCheckIfNeeded()
         val copyHelper = ClipboardCopyHelper(this)
         copyHelper.prewarm(recyclerView)
         adapter = PlacesAdapter(
@@ -725,6 +735,30 @@ class MainActivity : AppCompatActivity() {
 
     fun showSnackbar(message: String) {
         importantMessageSnackbar.showMessage(message)
+    }
+
+    private fun startVersionCheckIfNeeded() {
+        if (hasStartedVersionCheck) return
+        hasStartedVersionCheck = true
+        lifecycleScope.launch {
+            val checker = AppVersionChecker()
+            val result = withContext(Dispatchers.IO) {
+                checker.checkForUpdate(
+                    VersionCheckRequest(
+                        codeRepoPath = "cyberes/geovault",
+                        releasesRepoPath = "cyberes/geovault-app-release",
+                        apkNameRegex = APK_NAME_REGEX,
+                        localFullCommitSha = BuildConfig.GIT_COMMIT_SHA,
+                        expectedAppName = EXPECTED_APP_NAME
+                    )
+                )
+            }
+            VersionCheckSnackbarHelper.showIfUpdateAvailable(
+                context = this@MainActivity,
+                snackbar = importantMessageSnackbar,
+                result = result
+            )
+        }
     }
 
     /** Parse API error body (e.g. {"error": "..."}) for a user-facing sync failure message. */

@@ -16,7 +16,7 @@ Do not re-export modules or use __all__. Instead, do direct imports.
 Don't pile Django routes in the base views.py file. Instead, create new files to organize them in a manageable way.
 
 You do not need custom try/catch logic for the sole purpose of logging errors. Our Django site has built-in error logging and will automatically generate 500 code responses.
-All try/catch logging needs to explicitily print the full traceback. DO NOT swallow the exception and hide it!! 
+All try/catch logging needs to explicitily print the full traceback. DO NOT swallow the exception and hide it!!
 
 DO NOT MANUALLY CREATE OR EDIT DJANGO MIGRATIONS!!!!! Use `manage.py` to generate them.
 
@@ -36,7 +36,7 @@ YOU ARE NOT ALLOWED TO DO `@Suppress("DEPRECATION")`!!!!!! YOU MUST FIX IT!!!!!!
 We are using Material Design 2 only.
 We have preset color pallets in `android-common`. Please prioritize using those instead of hard-coding hex colors.
 No shadows on anything.
-The "survey app" is symlinked in to `src/android-survey-data-viewer`. It may not show up correctly in your tools.
+The "survey app" is symlinked in to `src/android-survey-data-viewer`. It may not show up correctly in your tools so use `ls`.
 `android-common` also has a lot of common UI components that you should use.
 DO NOT DO MEGA FILES! Logically put code in separate files rather than in one giant file.
 Additional code style instructions are in `src/android-tracker/CODE_STYLE.md`. These are tracker app-specific but good pointers for general Android development.

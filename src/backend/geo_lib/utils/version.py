@@ -20,7 +20,7 @@ def get_git_commit_hash() -> str:
         
         # Run git command to get short commit hash
         result = subprocess.run(
-            ['git', 'rev-parse', '--short', 'HEAD'],
+            ['git', 'rev-parse', '--short=10', 'HEAD'],
             cwd=project_root,
             capture_output=True,
             text=True,

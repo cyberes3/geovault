@@ -136,10 +136,12 @@ if [ -n "$APK_PATH" ]; then
     echo "Build successful!"
     echo "APK location: $SCRIPT_DIR/$APK_PATH"
 
-    # Copy release builds to script directory (dated name only)
+    # Copy release builds to script directory (dated name only).
+    # Use the same git commit date and short hash as app/build.gradle versionName
+    # (${getGitCommitDate()}-${getGitCommitHash()}) so the filename matches the APK.
     if [ "$BUILD_TYPE" = "release" ]; then
-        BUILD_DATE=$(date +%Y-%m-%d)
-        COMMIT_HASH=$(git rev-parse --short=10 HEAD 2>/dev/null || echo "norepo")
+        BUILD_DATE=$(git -C "$SCRIPT_DIR/.." log -1 --format=%cd --date=short 2>/dev/null || date +%Y-%m-%d)
+        COMMIT_HASH=$(git -C "$SCRIPT_DIR/.." rev-parse --short=10 HEAD 2>/dev/null || echo "norepo")
         DATED_NAME="GeoVault Live Tracker ${BUILD_DATE} ${COMMIT_HASH}.apk"
         DATED_DEST="$SCRIPT_DIR/$DATED_NAME"
         cp "$APK_PATH" "$DATED_DEST"
