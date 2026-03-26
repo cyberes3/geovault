@@ -282,6 +282,7 @@ class PlaceEditActivity : AppCompatActivity() {
             val bottomInset = if (searchPlaceInput.hasFocus()) systemBars.bottom
                 else if (ime.bottom > systemBars.bottom) ime.bottom else systemBars.bottom
             view.updatePadding(bottom = bottomInset)
+            view.findViewById<View>(R.id.importantMessageSnackbar)?.updatePadding(bottom = bottomInset)
             
             windowInsets
         }

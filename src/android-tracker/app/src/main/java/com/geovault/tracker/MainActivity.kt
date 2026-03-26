@@ -250,6 +250,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             val bottomInset = if (ime.bottom > systemBars.bottom) ime.bottom else systemBars.bottom
             headerLayout.updatePadding(top = systemBars.top + 20)
             mainContentLayout.updatePadding(bottom = bottomInset)
+            view.findViewById<View>(R.id.importantMessageSnackbar)?.updatePadding(bottom = bottomInset)
             WindowInsetsCompat.CONSUMED
         }
         ViewCompat.requestApplyInsets(rootView)
