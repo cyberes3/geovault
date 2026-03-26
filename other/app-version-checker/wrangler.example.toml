@@ -1,0 +1,31 @@
+# Copy to wrangler.toml and set `name` / routes as needed.
+name = "app-version-checker"
+main = "src/index.js"
+compatibility_date = "2025-12-01"
+
+# Set false if you only use a custom domain route and want no *.workers.dev URL.
+workers_dev = true
+# Branch preview URLs (requires workers_dev). Set false to disable.
+preview_urls = true
+
+# Required: JSON array of https://…/owner/repo release page URLs (passed through to the worker as a string).
+[vars]
+RELEASE_REPO_URLS = '["https://git.evulid.cc/cyberes/geovault-app-release","https://git.evulid.cc/cyberes/survey-data-viewer-android"]'
+# If [[routes]] uses a path prefix (e.g. example.com/my-worker/*), set the same prefix here (no trailing slash).
+# Omit or leave empty when using only *.workers.dev at /.
+# ROUTE_PREFIX = "/api/v1/geovault-app-releases"
+
+# Optional extras (uncomment in wrangler.toml as needed):
+# RELEASES_LIMIT = "20"
+# GITEA_TOKEN = "..."
+# CHECK_SECRET = "..."
+
+# Required secret (do not commit the value). Must match Android antibot User-Agent:
+#   src/android-common/.../GiteaReleaseApi.kt → REQUIRED_GITEA_USER_AGENT
+#   npx wrangler secret put GITEA_USER_AGENT
+#
+# Local dev: put the same key in .dev.vars as GITEA_USER_AGENT=...
+
+[[routes]]
+pattern = "git.example.com/api/v1/geovault-app-releases/*"
+zone_name = "example.com"

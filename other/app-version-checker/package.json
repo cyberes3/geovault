@@ -1,0 +1,14 @@
+{
+  "name": "app-version-checker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node bundle-assets.js",
+    "deploy": "npm run build && wrangler deploy",
+    "dev": "npm run build && wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "^4.65.0"
+  }
+}
