@@ -1,5 +1,6 @@
 package com.geovault.common.update
 
+import android.content.Context
 import android.util.Log
 
 class AppVersionChecker(
@@ -7,6 +8,31 @@ class AppVersionChecker(
     private val releaseAssetParser: ReleaseAssetParser = ReleaseAssetParser(),
     private val commitOrderResolver: CommitOrderResolver = CommitOrderResolver(giteaReleaseApi)
 ) {
+    fun checkForUpdateIfDue(
+        context: Context,
+        request: VersionCheckRequest,
+        rateLimitKey: String,
+        minIntervalMs: Long = ONE_HOUR_MS
+    ): VersionCheckResult {
+        val decision = VersionCheckRateLimiter.shouldRunAndMark(
+            context = context.applicationContext,
+            key = rateLimitKey,
+            minIntervalMs = minIntervalMs
+        )
+        if (!decision.shouldRun) {
+            Log.d(
+                UpdateCheckLog.TAG,
+                "checkForUpdate skipped by rate limiter: key=$rateLimitKey minIntervalMs=$minIntervalMs " +
+                    "lastCheckedAtMs=${decision.lastCheckedAtMs}"
+            )
+            return VersionCheckResult.Throttled(
+                detail = "Version check skipped by rate limiter",
+                lastCheckedAtMs = decision.lastCheckedAtMs
+            )
+        }
+        return checkForUpdate(request)
+    }
+
     fun checkForUpdate(request: VersionCheckRequest): VersionCheckResult {
         return try {
             val normalizedLocalSha = request.localFullCommitSha.trim().lowercase()
@@ -113,5 +139,6 @@ class AppVersionChecker(
 
     companion object {
         private val FULL_SHA_REGEX = Regex("^[0-9a-f]{40}$")
+        const val ONE_HOUR_MS: Long = 60L * 60L * 1000L
     }
 }

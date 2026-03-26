@@ -1193,8 +1193,10 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         lifecycleScope.launch {
             val checker = AppVersionChecker()
             val result = withContext(Dispatchers.IO) {
-                checker.checkForUpdate(
-                    VersionCheckRequest(
+                checker.checkForUpdateIfDue(
+                    context = this@MainActivity,
+                    rateLimitKey = "tracker",
+                    request = VersionCheckRequest(
                         codeRepoPath = "cyberes/geovault",
                         releasesRepoPath = "cyberes/geovault-app-release",
                         apkNameRegex = APK_NAME_REGEX,
