@@ -24,6 +24,7 @@ class HandleTrackPointUseCaseTest {
             showAllTrackers = true,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = null,
+            selectedTrackerId = null,
             activeStreamedTrackerIds = setOf("t1")
         )
 
@@ -47,6 +48,7 @@ class HandleTrackPointUseCaseTest {
             showAllTrackers = false,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = "t1",
+            selectedTrackerId = null,
             activeStreamedTrackerIds = setOf("t1")
         )
 
@@ -68,6 +70,7 @@ class HandleTrackPointUseCaseTest {
             showAllTrackers = false,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = "t1",
+            selectedTrackerId = "t1",
             activeStreamedTrackerIds = emptySet()
         )
         assertTrue(accepted)
@@ -88,6 +91,7 @@ class HandleTrackPointUseCaseTest {
             showAllTrackers = false,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = "t1",
+            selectedTrackerId = "t1",
             activeStreamedTrackerIds = setOf("t1")
         )
         assertFalse(accepted)

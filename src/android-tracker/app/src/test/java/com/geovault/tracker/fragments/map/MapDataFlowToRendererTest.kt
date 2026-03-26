@@ -16,6 +16,8 @@ class MapDataFlowToRendererTest {
         val mapViewContext: MapViewContext = MapViewContext.SINGLE_TRACKER,
         val activeStreamedTrackerIds: Set<String> = emptySet(),
         val displayedTrackerId: String? = null,
+        val selectedTrackerId: String? = null,
+        val trackingRunning: Boolean = false,
         val isAdded: Boolean = true,
         val showMyLocationEnabled: Boolean = false,
         val lockMode: MapLockMode = MapLockMode.NONE,
@@ -55,7 +57,6 @@ class MapDataFlowToRendererTest {
             getLockMode = { harness.lockMode },
             scheduleDebouncedMultiTrackRender = { harness.debouncedMultiRenderCount++ },
             updateMapSelectionUi = { harness.mapSelectionUiUpdateCount++ },
-            getDisplayedTrackerId = { harness.displayedTrackerId },
             getIsAdded = { harness.isAdded },
             getLastStreamedPointTimeMs = { harness.lastStreamedPointTimeMs },
             setLastStreamedPointTimeMs = { harness.lastStreamedPointTimeMs = it },
@@ -93,6 +94,7 @@ class MapDataFlowToRendererTest {
             showAllTrackers = false,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = "tracker-1",
+            selectedTrackerId = null,
             activeStreamedTrackerIds = emptySet()
         )
         val event = TrackPointEvent(
@@ -122,6 +124,7 @@ class MapDataFlowToRendererTest {
             showAllTrackers = false,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = "tracker-1",
+            selectedTrackerId = null,
             activeStreamedTrackerIds = emptySet()
         )
         val event = TrackPointEvent(
@@ -145,6 +148,35 @@ class MapDataFlowToRendererTest {
     }
 
     @Test
+    fun localTrackingEvent_displayedDiffers_butSelectedMatches_stillFlowsToRenderer() {
+        val harness = RendererHarness(
+            displayedTrackerId = "other-tracker",
+            selectedTrackerId = "selected-tracker",
+            trackingRunning = true
+        )
+        val context = MapTrackPointContext(
+            trackingRunning = true,
+            showAllTrackers = false,
+            mapViewContext = MapViewContext.SINGLE_TRACKER,
+            displayedTrackerId = "other-tracker",
+            selectedTrackerId = "selected-tracker",
+            activeStreamedTrackerIds = emptySet()
+        )
+        val event = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = "selected-tracker",
+            lon = 10.0,
+            lat = 20.0,
+            timestampMs = 1_700_000_000_777L
+        )
+
+        runPipeline(context, event, harness)
+
+        assertEquals(1, harness.appendedTrackPoints.size)
+        assertEquals(1, harness.trackLineUpdateCount)
+    }
+
+    @Test
     fun remoteSingleTrackerEvent_doesNotRecenterWhenMyLocationEnabled() {
         val harness = RendererHarness(
             displayedTrackerId = "tracker-1",
@@ -156,6 +188,7 @@ class MapDataFlowToRendererTest {
             showAllTrackers = false,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = "tracker-1",
+            selectedTrackerId = null,
             activeStreamedTrackerIds = emptySet()
         )
         val event = TrackPointEvent(
@@ -182,6 +215,7 @@ class MapDataFlowToRendererTest {
             showAllTrackers = false,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = "tracker-1",
+            selectedTrackerId = null,
             activeStreamedTrackerIds = emptySet()
         )
         val staleEvent = TrackPointEvent(
@@ -210,6 +244,7 @@ class MapDataFlowToRendererTest {
             showAllTrackers = false,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = "tracker-1",
+            selectedTrackerId = null,
             activeStreamedTrackerIds = emptySet()
         )
         val event = TrackPointEvent(
@@ -249,6 +284,7 @@ class MapDataFlowToRendererTest {
             showAllTrackers = true,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = null,
+            selectedTrackerId = null,
             activeStreamedTrackerIds = setOf("tracker-2")
         )
         val event = TrackPointEvent(
@@ -288,6 +324,7 @@ class MapDataFlowToRendererTest {
             showAllTrackers = true,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = null,
+            selectedTrackerId = null,
             activeStreamedTrackerIds = setOf("tracker-2")
         )
         val event = TrackPointEvent(
@@ -337,6 +374,7 @@ class MapDataFlowToRendererTest {
             showAllTrackers = true,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = null,
+            selectedTrackerId = null,
             activeStreamedTrackerIds = setOf("tracker-2")
         )
         val event = TrackPointEvent(

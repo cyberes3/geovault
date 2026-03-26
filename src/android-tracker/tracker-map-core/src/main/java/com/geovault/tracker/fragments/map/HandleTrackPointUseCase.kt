@@ -9,6 +9,7 @@ class HandleTrackPointUseCase {
         showAllTrackers: Boolean,
         mapViewContext: MapViewContext,
         displayedTrackerId: String?,
+        selectedTrackerId: String?,
         activeStreamedTrackerIds: Set<String>
     ): Boolean {
         val state = MapTrackPointReducer.stateFromContext(
@@ -17,6 +18,7 @@ class HandleTrackPointUseCase {
                 showAllTrackers = showAllTrackers,
                 mapViewContext = mapViewContext,
                 displayedTrackerId = displayedTrackerId,
+                selectedTrackerId = selectedTrackerId,
                 activeStreamedTrackerIds = activeStreamedTrackerIds
             )
         )

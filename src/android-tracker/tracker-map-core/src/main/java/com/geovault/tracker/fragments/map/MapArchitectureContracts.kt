@@ -80,6 +80,19 @@ sealed class MapCommand {
     data class RenderAllTrackers(val snapshot: MapAllTrackersSnapshot) : MapCommand()
     data class ApplyTrackPoint(val event: TrackPointEvent) : MapCommand()
     data class ApplyCameraPolicy(val command: MapCameraCommand) : MapCommand()
+    data class RuntimeResync(val command: MapRuntimeResyncCommand) : MapCommand()
     data class ShowError(val message: String) : MapCommand()
 }
+
+enum class MapRuntimeTransition {
+    NONE,
+    STARTED,
+    STOPPED
+}
+
+data class MapRuntimeResyncCommand(
+    val transition: MapRuntimeTransition,
+    val restartTrackPointStream: Boolean,
+    val restartDisplayedStreaming: Boolean
+)
 

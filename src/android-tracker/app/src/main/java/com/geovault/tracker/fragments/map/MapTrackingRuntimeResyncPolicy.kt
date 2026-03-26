@@ -1,17 +1,5 @@
 package com.geovault.tracker.fragments.map
 
-internal enum class MapTrackingRuntimeTransition {
-    NONE,
-    STARTED,
-    STOPPED
-}
-
-internal data class MapTrackingRuntimeResyncDecision(
-    val transition: MapTrackingRuntimeTransition,
-    val restartTrackPointStream: Boolean,
-    val restartDisplayedStreaming: Boolean
-)
-
 /**
  * Determines when the map should proactively re-sync runtime-dependent streams.
  */
@@ -21,21 +9,21 @@ internal class MapTrackingRuntimeResyncPolicy {
         currentIsRunning: Boolean,
         mapReady: Boolean,
         mapViewContext: MapViewContext
-    ): MapTrackingRuntimeResyncDecision {
+    ): MapRuntimeResyncCommand {
         val transition = when {
-            previousIsRunning == null -> MapTrackingRuntimeTransition.NONE
-            !previousIsRunning && currentIsRunning -> MapTrackingRuntimeTransition.STARTED
-            previousIsRunning && !currentIsRunning -> MapTrackingRuntimeTransition.STOPPED
-            else -> MapTrackingRuntimeTransition.NONE
+            previousIsRunning == null -> MapRuntimeTransition.NONE
+            !previousIsRunning && currentIsRunning -> MapRuntimeTransition.STARTED
+            previousIsRunning && !currentIsRunning -> MapRuntimeTransition.STOPPED
+            else -> MapRuntimeTransition.NONE
         }
         return when (transition) {
-            MapTrackingRuntimeTransition.STARTED -> MapTrackingRuntimeResyncDecision(
+            MapRuntimeTransition.STARTED -> MapRuntimeResyncCommand(
                 transition = transition,
                 restartTrackPointStream = true,
                 restartDisplayedStreaming = mapReady && mapViewContext == MapViewContext.SINGLE_TRACKER
             )
-            MapTrackingRuntimeTransition.STOPPED,
-            MapTrackingRuntimeTransition.NONE -> MapTrackingRuntimeResyncDecision(
+            MapRuntimeTransition.STOPPED,
+            MapRuntimeTransition.NONE -> MapRuntimeResyncCommand(
                 transition = transition,
                 restartTrackPointStream = false,
                 restartDisplayedStreaming = false

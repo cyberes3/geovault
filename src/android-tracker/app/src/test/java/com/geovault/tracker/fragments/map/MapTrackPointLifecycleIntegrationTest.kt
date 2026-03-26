@@ -28,6 +28,8 @@ class MapTrackPointLifecycleIntegrationTest {
 
     private data class Harness(
         val displayedTrackerId: String?,
+        val selectedTrackerId: String? = null,
+        val trackingRunning: Boolean = false,
         val showAllTrackers: Boolean = false,
         val mapViewContext: MapViewContext = MapViewContext.SINGLE_TRACKER,
         val activeStreamedTrackerIds: Set<String> = emptySet(),
@@ -57,7 +59,6 @@ class MapTrackPointLifecycleIntegrationTest {
             getLockMode = { MapLockMode.NONE },
             scheduleDebouncedMultiTrackRender = { h.debouncedMultiRenderCount++ },
             updateMapSelectionUi = { },
-            getDisplayedTrackerId = { h.displayedTrackerId },
             getIsAdded = { true },
             getLastStreamedPointTimeMs = { h.lastStreamedPointTimeMs },
             setLastStreamedPointTimeMs = { h.lastStreamedPointTimeMs = it },
@@ -108,6 +109,7 @@ class MapTrackPointLifecycleIntegrationTest {
             showAllTrackers = false,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = trackerId,
+            selectedTrackerId = null,
             activeStreamedTrackerIds = emptySet()
         )
         val harness = Harness(displayedTrackerId = trackerId)
@@ -167,6 +169,7 @@ class MapTrackPointLifecycleIntegrationTest {
             showAllTrackers = true,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = null,
+            selectedTrackerId = null,
             activeStreamedTrackerIds = setOf(activeTrackerId)
         )
         val harness = Harness(

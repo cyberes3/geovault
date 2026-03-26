@@ -51,7 +51,10 @@ import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.status.TrackingStatusPresentation
 import com.geovault.tracker.runtime.RuntimeCommand
 import com.geovault.tracker.runtime.RuntimeCommandType
+import com.geovault.tracker.runtime.RuntimeServiceEvent
+import com.geovault.tracker.runtime.RuntimeServiceEventType
 import com.geovault.tracker.runtime.RuntimeTrigger
+import com.geovault.tracker.runtime.TrackingSessionOrchestrator
 import com.geovault.tracker.runtime.TrackingRuntimeController
 import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
 import com.geovault.tracker.sensor.SignificantMotionResumeBridge
@@ -541,6 +544,10 @@ class TrackingService : TrackPointServiceBase() {
         super.onCreate()
         Log.d(TAG, "onCreate")
         TrackingRecoveryCoordinator.markHeartbeat(applicationContext)
+        emitRuntimeServiceEvent(
+            type = RuntimeServiceEventType.HEARTBEAT,
+            reason = "service_created"
+        )
         database = AppDatabase.getDatabase(this)
         unifiedLocationClient = UnifiedLocationClient(this)
         SelectedTrackerManager.syncRuntimeSelectedTracker(applicationContext)
@@ -712,7 +719,11 @@ class TrackingService : TrackPointServiceBase() {
         Log.d(TAG, "Starting tracking")
         settingsRepository.setWasTrackingBeforeExit(true)
         TrackingRecoveryCoordinator.markTrackingStarted(applicationContext)
-        TrackingRuntimeController.get(applicationContext).markTrackingStarted(mapRuntimeTrigger(trigger))
+        emitRuntimeServiceEvent(
+            type = RuntimeServiceEventType.TRACKING_STARTED,
+            reason = "start_tracking",
+            trigger = mapRuntimeTrigger(trigger)
+        )
         startRecoveryHeartbeat()
 
         sessionStartTimeMs = System.currentTimeMillis()
@@ -822,6 +833,11 @@ class TrackingService : TrackPointServiceBase() {
         settingsRepository.clearWasTrackingBeforeExit()
         stopRecoveryHeartbeat()
         TrackingRecoveryCoordinator.markIntentionalStop(applicationContext, reason = reason)
+        emitRuntimeServiceEvent(
+            type = RuntimeServiceEventType.TRACKING_STOPPED,
+            reason = reason,
+            trigger = RuntimeTrigger.EXPLICIT_STOP
+        )
         isWaitingForGpsProvider = false
         cancelLowAccuracyFallbackTimer(clearCandidate = true, reason = "stop_tracking")
         stopFastGpsLockWindow(reason = "stop_tracking")
@@ -1373,6 +1389,10 @@ class TrackingService : TrackPointServiceBase() {
         Log.d(TAG, "onDestroy called isTracking=$isTracking", Exception("onDestroy stacktrace"))
         if (isTracking) {
             TrackingRecoveryCoordinator.markUnexpectedDestroy(applicationContext, wasTracking = true)
+            emitRuntimeServiceEvent(
+                type = RuntimeServiceEventType.UNEXPECTED_DESTROY,
+                reason = "on_destroy_while_tracking"
+            )
         }
         stopRecoveryHeartbeat()
         super.onDestroy()
@@ -1391,6 +1411,10 @@ class TrackingService : TrackPointServiceBase() {
         recoveryHeartbeatJob = serviceScope.launch {
             while (isActive && isTracking) {
                 TrackingRecoveryCoordinator.markHeartbeat(applicationContext)
+                emitRuntimeServiceEvent(
+                    type = RuntimeServiceEventType.HEARTBEAT,
+                    reason = "service_heartbeat"
+                )
                 delay(1_000L)
             }
         }
@@ -1845,6 +1869,11 @@ class TrackingService : TrackPointServiceBase() {
         Log.w(TAG, "Tracking start failed: message=$message reason=$reason path=$path trigger=$trigger")
         settingsRepository.clearWasTrackingBeforeExit()
         TrackingRecoveryCoordinator.markIntentionalStop(applicationContext, reason = "startup_failed")
+        emitRuntimeServiceEvent(
+            type = RuntimeServiceEventType.STARTUP_FAILED,
+            reason = reason,
+            trigger = mapRuntimeTrigger(trigger)
+        )
         transitionControlState(TrackingControlEvent.StartFailed, message)
         syncRuntimeStateStore()
         broadcastTrackingError(message)
@@ -1901,6 +1930,20 @@ class TrackingService : TrackPointServiceBase() {
             "main_start_on_launch" -> RuntimeTrigger.MAIN_START_ON_LAUNCH
             else -> RuntimeTrigger.UNKNOWN
         }
+    }
+
+    private fun emitRuntimeServiceEvent(
+        type: RuntimeServiceEventType,
+        reason: String,
+        trigger: RuntimeTrigger = RuntimeTrigger.UNKNOWN
+    ) {
+        TrackingSessionOrchestrator.get(applicationContext).handleServiceEvent(
+            RuntimeServiceEvent(
+                type = type,
+                trigger = trigger,
+                reason = reason
+            )
+        )
     }
 
     private fun logStartupOutcome(

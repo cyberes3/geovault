@@ -11,7 +11,7 @@ import com.geovault.tracker.TrackingService
 import com.geovault.tracker.runtime.RuntimeCommand
 import com.geovault.tracker.runtime.RuntimeCommandType
 import com.geovault.tracker.runtime.RuntimeTrigger
-import com.geovault.tracker.runtime.TrackingRuntimeController
+import com.geovault.tracker.runtime.TrackingSessionOrchestrator
 import kotlin.math.min
 
 object TrackingServiceLaunchGate {
@@ -67,59 +67,40 @@ object TrackingServiceLaunchGate {
 
     @JvmStatic
     fun dispatchStart(context: Context, trigger: String): LaunchDecision {
-        val runtimeResult = TrackingRuntimeController.get(context).handle(
+        val runtimeResult = TrackingSessionOrchestrator.get(context).handleCommand(
             RuntimeCommand(
                 type = RuntimeCommandType.START,
                 trigger = mapTrigger(trigger),
                 reason = trigger
             )
+        ).commandResult ?: return LaunchDecision(
+            allowed = false,
+            retryInMs = 0L,
+            reason = "orchestrator_no_result"
         )
         val runtimeGate = runtimeResult.startGateDecision
         if (runtimeResult.action == com.geovault.tracker.runtime.RuntimeActionType.DISPATCH_START && runtimeGate != null) {
+            if (!runtimeGate.allowed && runtimeGate.retryInMs > 0L) {
+                scheduleRetry(context.applicationContext, runtimeGate.retryInMs)
+            }
             return LaunchDecision(
                 allowed = runtimeGate.allowed,
                 retryInMs = runtimeGate.retryInMs,
                 reason = runtimeGate.reason
             )
         }
-        if (runtimeResult.action == com.geovault.tracker.runtime.RuntimeActionType.NOOP) {
+        if (runtimeResult.action == com.geovault.tracker.runtime.RuntimeActionType.DISPATCH_START) {
             return LaunchDecision(
-                allowed = false,
+                allowed = true,
                 retryInMs = 0L,
                 reason = runtimeResult.reason
             )
         }
-
-        val appContext = context.applicationContext
-        val decision = beforeLaunchAttempt(appContext, trigger)
-        if (!decision.allowed) {
-            if (decision.retryInMs > 0L) {
-                scheduleRetry(appContext, decision.retryInMs)
-            }
-            return decision
-        }
-        val intent = Intent(appContext, TrackingService::class.java).apply {
-            action = TrackingService.ACTION_START
-            setPackage(appContext.packageName)
-        }
-        return try {
-            appContext.startForegroundService(intent)
-            onLaunchSuccess(appContext)
-            LaunchDecision(
-                allowed = true,
-                reason = "start_dispatched"
-            )
-        } catch (error: Exception) {
-            val retryDelayMs = onLaunchFailure(appContext, trigger, error)
-            if (retryDelayMs > 0L) {
-                scheduleRetry(appContext, retryDelayMs)
-            }
-            LaunchDecision(
-                allowed = false,
-                retryInMs = retryDelayMs,
-                reason = "start_failed_${error::class.java.simpleName}"
-            )
-        }
+        return LaunchDecision(
+            allowed = false,
+            retryInMs = runtimeGate?.retryInMs ?: 0L,
+            reason = runtimeResult.reason
+        )
     }
 
     private fun mapTrigger(trigger: String): RuntimeTrigger {

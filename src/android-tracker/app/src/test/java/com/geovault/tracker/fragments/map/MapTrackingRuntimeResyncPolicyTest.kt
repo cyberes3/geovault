@@ -15,7 +15,7 @@ class MapTrackingRuntimeResyncPolicyTest {
             mapViewContext = MapViewContext.SINGLE_TRACKER
         )
 
-        assertEquals(MapTrackingRuntimeTransition.STARTED, decision.transition)
+        assertEquals(MapRuntimeTransition.STARTED, decision.transition)
         assertEquals(true, decision.restartTrackPointStream)
         assertEquals(true, decision.restartDisplayedStreaming)
     }
@@ -29,7 +29,7 @@ class MapTrackingRuntimeResyncPolicyTest {
             mapViewContext = MapViewContext.GROUP
         )
 
-        assertEquals(MapTrackingRuntimeTransition.STARTED, decision.transition)
+        assertEquals(MapRuntimeTransition.STARTED, decision.transition)
         assertEquals(true, decision.restartTrackPointStream)
         assertEquals(false, decision.restartDisplayedStreaming)
     }
@@ -43,7 +43,7 @@ class MapTrackingRuntimeResyncPolicyTest {
             mapViewContext = MapViewContext.SINGLE_TRACKER
         )
 
-        assertEquals(MapTrackingRuntimeTransition.STOPPED, decision.transition)
+        assertEquals(MapRuntimeTransition.STOPPED, decision.transition)
         assertEquals(false, decision.restartTrackPointStream)
         assertEquals(false, decision.restartDisplayedStreaming)
     }

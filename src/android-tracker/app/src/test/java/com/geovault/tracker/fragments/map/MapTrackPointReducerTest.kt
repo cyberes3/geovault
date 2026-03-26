@@ -25,13 +25,14 @@ class MapTrackPointReducerTest {
             showAllTrackers = false,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = "t1",
+            selectedTrackerId = "t1",
             activeStreamedTrackerIds = emptySet()
         )
         assertTrue(MapTrackPointReducer.shouldAcceptPoint(event, stateFromContext(context)))
     }
 
     @Test
-    fun acceptsRemoteStreamWhileTrackingWhenSingleTrackerMatchesDisplayed() {
+    fun rejectsRemoteStreamWhileTrackingEvenWhenSingleTrackerMatchesDisplayed() {
         val event = TrackPointEvent(
             source = TrackPointSource.REMOTE_STREAM,
             trackId = "t1",
@@ -44,9 +45,10 @@ class MapTrackPointReducerTest {
             showAllTrackers = false,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = "t1",
+            selectedTrackerId = "t1",
             activeStreamedTrackerIds = emptySet()
         )
-        assertTrue(MapTrackPointReducer.shouldAcceptPoint(event, stateFromContext(context)))
+        assertFalse(MapTrackPointReducer.shouldAcceptPoint(event, stateFromContext(context)))
     }
 
     @Test
@@ -64,6 +66,7 @@ class MapTrackPointReducerTest {
             showAllTrackers = true,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = null,
+            selectedTrackerId = null,
             activeStreamedTrackerIds = setOf("t2")
         )
         val state = stateFromContext(context)
@@ -85,6 +88,7 @@ class MapTrackPointReducerTest {
             showAllTrackers = false,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = "t1",
+            selectedTrackerId = "t1",
             activeStreamedTrackerIds = emptySet()
         )
         assertFalse(MapTrackPointReducer.shouldAcceptPoint(event, stateFromContext(context)))
@@ -104,6 +108,7 @@ class MapTrackPointReducerTest {
             showAllTrackers = false,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = "t1",
+            selectedTrackerId = "t1",
             activeStreamedTrackerIds = emptySet()
         )
         assertFalse(MapTrackPointReducer.shouldAcceptPoint(event, stateFromContext(context)))
@@ -124,6 +129,7 @@ class MapTrackPointReducerTest {
             showAllTrackers = false,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = "track-a",
+            selectedTrackerId = null,
             activeStreamedTrackerIds = emptySet()
         )
         val groupContext = MapTrackPointContext(
@@ -131,6 +137,7 @@ class MapTrackPointReducerTest {
             showAllTrackers = false,
             mapViewContext = MapViewContext.GROUP,
             displayedTrackerId = null,
+            selectedTrackerId = null,
             activeStreamedTrackerIds = setOf("track-a")
         )
         val allContext = MapTrackPointContext(
@@ -138,6 +145,7 @@ class MapTrackPointReducerTest {
             showAllTrackers = true,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = null,
+            selectedTrackerId = null,
             activeStreamedTrackerIds = setOf("track-a")
         )
 
@@ -147,7 +155,7 @@ class MapTrackPointReducerTest {
     }
 
     @Test
-    fun acceptsRemoteStreamInTrackingMultiContextOnlyForActiveTrackerIds() {
+    fun rejectsRemoteStreamInTrackingModeEvenWhenTrackerIsActive() {
         val acceptedEvent = TrackPointEvent(
             source = TrackPointSource.REMOTE_STREAM,
             trackId = "remote-a",
@@ -161,10 +169,11 @@ class MapTrackPointReducerTest {
             showAllTrackers = true,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = "selected-tracker",
+            selectedTrackerId = "selected-tracker",
             activeStreamedTrackerIds = setOf("remote-a")
         )
         val state = stateFromContext(context)
-        assertTrue(MapTrackPointReducer.shouldAcceptPoint(acceptedEvent, state))
+        assertFalse(MapTrackPointReducer.shouldAcceptPoint(acceptedEvent, state))
         assertFalse(MapTrackPointReducer.shouldAcceptPoint(rejectedEvent, state))
     }
 
@@ -182,8 +191,29 @@ class MapTrackPointReducerTest {
             showAllTrackers = true,
             mapViewContext = MapViewContext.SINGLE_TRACKER,
             displayedTrackerId = "selected-tracker",
+            selectedTrackerId = "selected-tracker",
             activeStreamedTrackerIds = setOf("remote-a")
         )
         assertTrue(MapTrackPointReducer.shouldAcceptPoint(event, stateFromContext(context)))
+    }
+
+    @Test
+    fun rejectsLocalGpsInTrackingStateWhenSelectedTrackerDiffers() {
+        val event = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = "different-tracker",
+            lon = 10.0,
+            lat = 20.0,
+            timestampMs = 1000L
+        )
+        val context = MapTrackPointContext(
+            trackingRunning = true,
+            showAllTrackers = false,
+            mapViewContext = MapViewContext.SINGLE_TRACKER,
+            displayedTrackerId = "displayed-tracker",
+            selectedTrackerId = "selected-tracker",
+            activeStreamedTrackerIds = emptySet()
+        )
+        assertFalse(MapTrackPointReducer.shouldAcceptPoint(event, stateFromContext(context)))
     }
 }

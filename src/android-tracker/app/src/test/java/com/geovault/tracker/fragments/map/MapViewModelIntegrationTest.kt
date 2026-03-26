@@ -146,7 +146,7 @@ class MapViewModelIntegrationTest {
     }
 
     @Test
-    fun streamEvent_trackingRunning_acceptsRemoteStreamWhenRouted() = runTest {
+    fun streamEvent_trackingRunning_rejectsRemoteStream() = runTest {
         val stream = MutableSharedFlow<TrackPointEvent>(extraBufferCapacity = 8)
         val viewModel = createViewModel(stream)
         val commands = mutableListOf<MapCommand>()
@@ -178,7 +178,7 @@ class MapViewModelIntegrationTest {
             )
         )
         advanceUntilIdle()
-        assertEquals(1, commands.count { it is MapCommand.ApplyTrackPoint })
+        assertEquals(0, commands.count { it is MapCommand.ApplyTrackPoint })
         job.cancel()
     }
 
@@ -220,7 +220,7 @@ class MapViewModelIntegrationTest {
     }
 
     @Test
-    fun streamEvent_runtimeFalseInSingleMode_stillAcceptsDisplayedLocalGps() = runTest {
+    fun streamEvent_runtimeFalseInSingleMode_rejectsLocalGpsUntilRuntimeRunning() = runTest {
         val stream = MutableSharedFlow<TrackPointEvent>(extraBufferCapacity = 8)
         val viewModel = createViewModel(stream)
         val commands = mutableListOf<MapCommand>()
@@ -253,7 +253,7 @@ class MapViewModelIntegrationTest {
         )
         advanceUntilIdle()
 
-        assertEquals(1, commands.count { it is MapCommand.ApplyTrackPoint })
+        assertEquals(0, commands.count { it is MapCommand.ApplyTrackPoint })
         job.cancel()
     }
 

@@ -10,7 +10,7 @@ import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.runtime.RuntimeCommand
 import com.geovault.tracker.runtime.RuntimeCommandType
 import com.geovault.tracker.runtime.RuntimeTrigger
-import com.geovault.tracker.runtime.TrackingRuntimeController
+import com.geovault.tracker.runtime.TrackingSessionOrchestrator
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.startup.BootStartupPolicy
 import com.geovault.tracker.startup.BootStartupSnapshot
@@ -73,16 +73,16 @@ class BootReceiver : BroadcastReceiver() {
         }
 
         Log.i(TAG, "Starting TrackingService from action=$bootAction")
-        val launchDecision = TrackingRuntimeController.get(context).handle(
+        val launchDecision = TrackingSessionOrchestrator.get(context).handleCommand(
             RuntimeCommand(
                 type = RuntimeCommandType.START,
                 trigger = RuntimeTrigger.BOOT,
                 reason = "boot:${bootAction ?: "unknown"}"
             )
-        )
+        ).commandResult
         Log.i(
             TAG,
-            "Boot launch decision action=${launchDecision.action} reason=${launchDecision.reason} gate=${launchDecision.startGateDecision}"
+            "Boot launch decision action=${launchDecision?.action} reason=${launchDecision?.reason} gate=${launchDecision?.startGateDecision}"
         )
     }
 

@@ -10,7 +10,8 @@ sealed class MapTrackPointMode {
 
 data class MapTrackPointState(
     val mode: MapTrackPointMode,
-    val modeState: MapModeState
+    val modeState: MapModeState,
+    val selectedTrackerId: String?
 )
 
 data class MapTrackPointContext(
@@ -18,6 +19,7 @@ data class MapTrackPointContext(
     val showAllTrackers: Boolean,
     val mapViewContext: MapViewContext,
     val displayedTrackerId: String?,
+    val selectedTrackerId: String?,
     val activeStreamedTrackerIds: Set<String>
 )
 
@@ -37,17 +39,20 @@ object MapTrackPointReducer {
         }
         return MapTrackPointState(
             mode = mode,
-            modeState = modeState
+            modeState = modeState,
+            selectedTrackerId = context.selectedTrackerId
         )
     }
 
     fun shouldAcceptPoint(event: TrackPointEvent, state: MapTrackPointState): Boolean {
         if (!MapModeStateMachine.acceptsSource(state.modeState, event.source)) return false
-        if (event.source == TrackPointSource.LOCAL_GPS &&
-            state.modeState == MapModeState.TRACKING_SINGLE
-        ) {
-            // Local tracking must continue even when browsing multi-context streams during tracking.
-            return true
+        if (event.source == TrackPointSource.LOCAL_GPS && state.modeState == MapModeState.TRACKING_SINGLE) {
+            val selectedTrackerId = state.selectedTrackerId
+            return if (selectedTrackerId.isNullOrBlank()) {
+                true
+            } else {
+                event.trackId == selectedTrackerId
+            }
         }
 
         return when (val mode = state.mode) {

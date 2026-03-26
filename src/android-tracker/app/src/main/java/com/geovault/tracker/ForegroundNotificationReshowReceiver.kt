@@ -6,7 +6,7 @@ import android.content.Intent
 import com.geovault.tracker.runtime.RuntimeCommand
 import com.geovault.tracker.runtime.RuntimeCommandType
 import com.geovault.tracker.runtime.RuntimeTrigger
-import com.geovault.tracker.runtime.TrackingRuntimeController
+import com.geovault.tracker.runtime.TrackingSessionOrchestrator
 
 /**
  * When the user dismisses a foreground service notification, re-starts the service so it can
@@ -17,7 +17,7 @@ class ForegroundNotificationReshowReceiver : BroadcastReceiver() {
         val pkg = context.packageName
         when (intent?.action) {
             TrackingService.NOTIFICATION_DISMISSED_ACTION -> {
-                TrackingRuntimeController.get(context).handle(
+                TrackingSessionOrchestrator.get(context).handleCommand(
                     RuntimeCommand(
                         type = RuntimeCommandType.RESHOW_FOREGROUND,
                         trigger = RuntimeTrigger.RESHOW_FOREGROUND,

@@ -21,7 +21,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import com.geovault.tracker.pipeline.TrackPointSource
 
 @HiltViewModel
 class MapViewModel @Inject constructor(
@@ -56,6 +55,8 @@ class MapViewModel @Inject constructor(
     private var managementEventsJob: Job? = null
     private var mapLoadJob: Job? = null
     private var latestMapLoadRequestId: Long = 0L
+    private var lastObservedTrackingRunning: Boolean? = null
+    private val runtimeResyncPolicy = MapTrackingRuntimeResyncPolicy()
 
     init {
         streamRuntimeJob = viewModelScope.launch {
@@ -188,6 +189,23 @@ class MapViewModel @Inject constructor(
         return resolveMapResumeUseCase.resolve(input)
     }
 
+    fun onTrackingRuntimeSnapshot(
+        isRunning: Boolean,
+        mapReady: Boolean,
+        mapViewContext: MapViewContext
+    ) {
+        val decision = runtimeResyncPolicy.decide(
+            previousIsRunning = lastObservedTrackingRunning,
+            currentIsRunning = isRunning,
+            mapReady = mapReady,
+            mapViewContext = mapViewContext
+        )
+        lastObservedTrackingRunning = isRunning
+        if (decision.transition != MapRuntimeTransition.NONE) {
+            _commands.tryEmit(MapCommand.RuntimeResync(decision))
+        }
+    }
+
     fun startTrackPointStream() {
         if (streamJob?.isActive == true) return
         streamJob = viewModelScope.launch {
@@ -196,22 +214,17 @@ class MapViewModel @Inject constructor(
                 val effectiveDisplayedTrackerId = state.displayedTrackerId
                     ?: SelectedTrackerPrefs.selectedTrackerId(getApplication())
                 val runtimeTrackingRunning = TrackingRuntimeStateStore.state.value.isRunning
-                val effectiveTrackingRunning = runtimeTrackingRunning ||
-                    (
-                        event.source == TrackPointSource.LOCAL_GPS &&
-                            state.mode is MapScreenMode.Single &&
-                            !effectiveDisplayedTrackerId.isNullOrEmpty() &&
-                            event.trackId == effectiveDisplayedTrackerId
-                        )
+                val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(getApplication())
                 val accepted = handleTrackPointUseCase.shouldAccept(
                     event = event,
-                    trackingRunning = effectiveTrackingRunning,
+                    trackingRunning = runtimeTrackingRunning,
                     showAllTrackers = state.showAllTrackers,
                     mapViewContext = when (state.mode) {
                         is MapScreenMode.GroupMode -> MapViewContext.GROUP
                         else -> MapViewContext.SINGLE_TRACKER
                     },
                     displayedTrackerId = effectiveDisplayedTrackerId,
+                    selectedTrackerId = selectedTrackerId.takeIf { it.isNotBlank() },
                     activeStreamedTrackerIds = LiveStreamRuntimeStateStore.state.value.activeTrackerIds
                 )
                 if (accepted) {
@@ -220,8 +233,7 @@ class MapViewModel @Inject constructor(
                     Log.d(
                         TAG,
                         "Dropped local GPS point trackId=${event.trackId} displayed=${state.displayedTrackerId} " +
-                            "mode=${state.mode} trackingRunning=$runtimeTrackingRunning " +
-                            "effectiveTrackingRunning=$effectiveTrackingRunning"
+                            "mode=${state.mode} trackingRunning=$runtimeTrackingRunning selectedTrackerId=$selectedTrackerId"
                     )
                 }
             }
