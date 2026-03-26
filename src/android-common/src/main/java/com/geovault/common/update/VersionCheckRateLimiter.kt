@@ -1,10 +1,10 @@
 package com.geovault.common.update
 
 import android.content.Context
+import java.io.File
 
 object VersionCheckRateLimiter {
-    private const val PREFS_NAME = "gv_common_version_check_rate_limiter"
-    private const val KEY_PREFIX = "last_check_ms:"
+    private const val CACHE_DIR_NAME = "gv_common_version_check_rate_limiter"
 
     @Synchronized
     fun shouldRunAndMark(
@@ -17,14 +17,40 @@ object VersionCheckRateLimiter {
         if (normalizedKey.isEmpty()) {
             return RateLimitDecision(shouldRun = true, lastCheckedAtMs = null)
         }
-        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val storageKey = KEY_PREFIX + normalizedKey
-        val last = prefs.getLong(storageKey, -1L).takeIf { it >= 0L }
+        val markerFile = markerFile(context.applicationContext, normalizedKey)
+        val last = readLastCheckedAtMs(markerFile)
         val shouldRun = last == null || nowMs - last >= minIntervalMs
         if (shouldRun) {
-            prefs.edit().putLong(storageKey, nowMs).apply()
+            writeLastCheckedAtMs(markerFile, nowMs)
         }
         return RateLimitDecision(shouldRun = shouldRun, lastCheckedAtMs = last)
+    }
+
+    private fun markerFile(context: Context, key: String): File {
+        val dir = File(context.cacheDir, CACHE_DIR_NAME)
+        if (!dir.exists()) {
+            dir.mkdirs()
+        }
+        // Keep filename portable and predictable.
+        val safeKey = key.lowercase().replace(Regex("[^a-z0-9._-]"), "_")
+        return File(dir, "$safeKey.ts")
+    }
+
+    private fun readLastCheckedAtMs(file: File): Long? {
+        if (!file.exists()) return null
+        return try {
+            file.readText().trim().toLongOrNull()?.takeIf { it >= 0L }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun writeLastCheckedAtMs(file: File, timestampMs: Long) {
+        try {
+            file.writeText(timestampMs.toString())
+        } catch (_: Exception) {
+            // Best effort only; failures just disable persistence for this run.
+        }
     }
 
     data class RateLimitDecision(

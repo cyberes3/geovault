@@ -9,6 +9,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 
 /**
  * Dismissable message bar for important messages (errors, confirmations).
@@ -25,6 +27,7 @@ class ImportantMessageSnackbar @JvmOverloads constructor(
     private val actionButton: TextView
     private val handler = Handler(Looper.getMainLooper())
     private val dismissRunnable = Runnable { visibility = View.GONE }
+    private var baseBottomMarginPx: Int? = null
 
     init {
         val root = LayoutInflater.from(context).inflate(R.layout.gv_common_view_important_message_snackbar, this, true)
@@ -81,6 +84,8 @@ class ImportantMessageSnackbar @JvmOverloads constructor(
      */
     fun showMessage(message: CharSequence, actionLabel: CharSequence?, action: (() -> Unit)?) {
         handler.removeCallbacks(dismissRunnable)
+        // Ensure position is corrected at display time based on current root insets.
+        applyCurrentBottomInset()
         messageText.text = message
         if (!actionLabel.isNullOrBlank() && action != null) {
             actionButton.text = actionLabel
@@ -96,6 +101,27 @@ class ImportantMessageSnackbar @JvmOverloads constructor(
         }
         visibility = View.VISIBLE
         handler.postDelayed(dismissRunnable, DISMISS_DELAY_MS)
+    }
+
+    /**
+     * Applies system bottom inset as external margin so this bottom-anchored view
+     * sits above nav/gesture bars and IME.
+     */
+    fun setBottomInset(bottomInsetPx: Int) {
+        val lp = layoutParams as? ViewGroup.MarginLayoutParams ?: return
+        val base = baseBottomMarginPx ?: lp.bottomMargin.also { baseBottomMarginPx = it }
+        val desired = base + bottomInsetPx.coerceAtLeast(0)
+        if (lp.bottomMargin == desired) return
+        lp.bottomMargin = desired
+        layoutParams = lp
+    }
+
+    private fun applyCurrentBottomInset() {
+        val wi = ViewCompat.getRootWindowInsets(this) ?: return
+        val systemBars = wi.getInsets(WindowInsetsCompat.Type.systemBars())
+        val ime = wi.getInsets(WindowInsetsCompat.Type.ime())
+        val bottomInset = if (ime.bottom > systemBars.bottom) ime.bottom else systemBars.bottom
+        setBottomInset(bottomInset)
     }
 
     companion object {

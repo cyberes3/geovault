@@ -153,7 +153,8 @@ class MainActivity : AppCompatActivity() {
             headerView.updatePadding(top = systemBars.top + 20)
             // Keep bottom content above nav bar and keyboard.
             view.updatePadding(bottom = bottomInset)
-            view.findViewById<View>(R.id.importantMessageSnackbar)?.updatePadding(bottom = bottomInset)
+            (view.findViewById<View>(R.id.importantMessageSnackbar) as? ImportantMessageSnackbar)
+                ?.setBottomInset(bottomInset)
             WindowInsetsCompat.CONSUMED
         }
 

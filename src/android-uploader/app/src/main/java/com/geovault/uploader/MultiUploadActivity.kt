@@ -91,7 +91,7 @@ class MultiUploadActivity : AppCompatActivity() {
             headerView.updatePadding(top = systemBars.top + 20)
             // Apply bottom padding to bottom action area
             bottomView.updatePadding(bottom = bottomInset + 20)
-            importantMessageSnackbar.updatePadding(bottom = bottomInset)
+            importantMessageSnackbar.setBottomInset(bottomInset)
             WindowInsetsCompat.CONSUMED
         }
         uploadProgressBar = findViewById(R.id.uploadProgressBar)

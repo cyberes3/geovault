@@ -88,7 +88,8 @@ class MainActivity : AppCompatActivity() {
             val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
             val bottomInset = if (ime.bottom > systemBars.bottom) ime.bottom else systemBars.bottom
             headerView.updatePadding(top = systemBars.top + 20)
-            view.findViewById<View>(R.id.importantMessageSnackbar)?.updatePadding(bottom = bottomInset)
+            (view.findViewById<View>(R.id.importantMessageSnackbar) as? ImportantMessageSnackbar)
+                ?.setBottomInset(bottomInset)
             WindowInsetsCompat.CONSUMED
         }
         
