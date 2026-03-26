@@ -11,11 +11,20 @@ from pathlib import Path
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+_SURVEY_RELEASE = (
+    "survey",
+    "Survey",
+    "GeoVault Survey Data Viewer",
+    "survey-data-viewer-android",
+)
+
 APP_CONFIG = {
     "android-tracker": ("tracker", "Tracker", "GeoVault Live Tracker", "geovault-app-release"),
     "android-uploader": ("uploader", "Uploader", "GeoVault Uploader", "geovault-app-release"),
     "android-places": ("places", "Places", "GeoVault Places", "geovault-app-release"),
-    "android-survey-data-viewer": ("survey", "Survey", "GeoVault Survey Data Viewer", "survey-data-viewer-android"),
+    # Symlink name in geovault vs real repo folder name (resolve() follows the link)
+    "android-survey-data-viewer": _SURVEY_RELEASE,
+    "survey-data-viewer-android": _SURVEY_RELEASE,
 }
 
 GITEA_BASE_URL = "https://git.evulid.cc"
@@ -106,9 +115,12 @@ def main() -> None:
     if not token:
         die(f"GITEA_RELEASE_TOKEN is required in {script_dir / '.env'}")
 
-    app_dir = Path(args.app_folder)
-    if not app_dir.is_absolute():
-        app_dir = (script_dir / app_dir).resolve()
+    app_arg = Path(args.app_folder)
+    app_dir = app_arg if app_arg.is_absolute() else script_dir / app_arg
+    # Basename before resolve() so a symlink (e.g. android-survey-data-viewer) keeps
+    # the geovault folder name for APP_CONFIG, not the target directory name.
+    app_config_key = app_dir.name
+    app_dir = app_dir.resolve()
 
     if not app_dir.is_dir():
         die(f"App folder not found: {app_dir}")
@@ -117,15 +129,14 @@ def main() -> None:
     if not (app_dir / "app").is_dir():
         die(f"Expected Android app module at: {app_dir / 'app'}")
 
-    app_basename = app_dir.name
-    if app_basename not in APP_CONFIG:
+    if app_config_key not in APP_CONFIG:
         die(
-            "Unsupported app folder '\{}'. Supported: {}".format(
-                app_basename, ", ".join(APP_CONFIG.keys())
+            "Unsupported app folder '{}'. Supported: {}".format(
+                app_config_key, ", ".join(sorted(APP_CONFIG.keys()))
             )
         )
 
-    app_slug, release_title_name, asset_title_name, release_repo = APP_CONFIG[app_basename]
+    app_slug, release_title_name, asset_title_name, release_repo = APP_CONFIG[app_config_key]
 
     full_hash = run(["git", "rev-parse", "HEAD"], cwd=app_dir)
     short_hash = full_hash[:10]
@@ -135,7 +146,7 @@ def main() -> None:
     title = f"{release_title_name} {date_short} {short_hash}"
     asset_name = f"{asset_title_name} {date_short} {short_hash}.apk"
 
-    print(f"Building release APK for {app_basename}...")
+    print(f"Building release APK for {app_config_key}...")
     build_script = app_dir / "build-android.sh"
     if not build_script.exists():
         die(f"Missing build script: {build_script}")
