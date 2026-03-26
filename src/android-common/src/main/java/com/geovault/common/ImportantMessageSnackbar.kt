@@ -5,12 +5,16 @@ import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
 import android.view.LayoutInflater
+import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewConfiguration
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import kotlin.math.abs
 
 /**
  * Dismissable message bar for important messages (errors, confirmations).
@@ -28,6 +32,12 @@ class ImportantMessageSnackbar @JvmOverloads constructor(
     private val handler = Handler(Looper.getMainLooper())
     private val dismissRunnable = Runnable { visibility = View.GONE }
     private var baseBottomMarginPx: Int? = null
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+    private val minFlingVelocity = ViewConfiguration.get(context).scaledMinimumFlingVelocity
+    private var downX = 0f
+    private var downY = 0f
+    private var swiping = false
+    private var velocityTracker: VelocityTracker? = null
 
     init {
         val root = LayoutInflater.from(context).inflate(R.layout.gv_common_view_important_message_snackbar, this, true)
@@ -38,10 +48,6 @@ class ImportantMessageSnackbar @JvmOverloads constructor(
         isFocusable = true
         minimumHeight = 0
         setPadding(0, 0, 0, 0)
-        setOnClickListener {
-            handler.removeCallbacks(dismissRunnable)
-            visibility = View.GONE
-        }
         actionButton.setOnClickListener {
             // Don't propagate to parent; action callback is set in showMessage
             handler.removeCallbacks(dismissRunnable)
@@ -124,8 +130,87 @@ class ImportantMessageSnackbar @JvmOverloads constructor(
         setBottomInset(bottomInset)
     }
 
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (visibility != View.VISIBLE) return super.onTouchEvent(event)
+        if (isTouchOnActionButton(event)) return super.onTouchEvent(event)
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.rawX
+                downY = event.rawY
+                swiping = false
+                velocityTracker?.recycle()
+                velocityTracker = VelocityTracker.obtain().also { it.addMovement(event) }
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                velocityTracker?.addMovement(event)
+                val dx = event.rawX - downX
+                val dy = event.rawY - downY
+                if (!swiping && abs(dx) > touchSlop && abs(dx) > abs(dy)) {
+                    swiping = true
+                }
+                if (swiping) {
+                    translationX = dx
+                    val fraction = (abs(dx) / width.coerceAtLeast(1)).coerceIn(0f, 1f)
+                    alpha = 1f - (fraction * 0.35f)
+                    return true
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                velocityTracker?.addMovement(event)
+                val dx = event.rawX - downX
+                val dismissByDistance = abs(dx) > width * DISMISS_DISTANCE_FRACTION
+                val dismissByVelocity = velocityTracker?.let { tracker ->
+                    tracker.computeCurrentVelocity(1000)
+                    val vx = tracker.xVelocity
+                    abs(vx) > minFlingVelocity && abs(vx) > abs(tracker.yVelocity)
+                } == true
+                val shouldDismiss = swiping && (dismissByDistance || dismissByVelocity)
+                velocityTracker?.recycle()
+                velocityTracker = null
+                swiping = false
+                if (shouldDismiss) {
+                    dismissWithSwipe(dx)
+                } else {
+                    animate().translationX(0f).alpha(1f).setDuration(160L).start()
+                }
+                return true
+            }
+        }
+        return super.onTouchEvent(event)
+    }
+
+    private fun dismissWithSwipe(dx: Float) {
+        handler.removeCallbacks(dismissRunnable)
+        val widthPx = width.coerceAtLeast(1).toFloat()
+        val targetX = if (dx < 0f) -widthPx else widthPx
+        animate()
+            .translationX(targetX)
+            .alpha(0f)
+            .setDuration(180L)
+            .withEndAction {
+                translationX = 0f
+                alpha = 1f
+                visibility = View.GONE
+            }
+            .start()
+    }
+
+    private fun isTouchOnActionButton(event: MotionEvent): Boolean {
+        if (actionButton.visibility != View.VISIBLE) return false
+        val actionLoc = IntArray(2)
+        actionButton.getLocationOnScreen(actionLoc)
+        val x = event.rawX
+        val y = event.rawY
+        return x >= actionLoc[0] &&
+            x <= actionLoc[0] + actionButton.width &&
+            y >= actionLoc[1] &&
+            y <= actionLoc[1] + actionButton.height
+    }
+
     companion object {
         private const val DISMISS_DELAY_MS = 15_000L
         private const val MAX_HEIGHT_DP = 64f
+        private const val DISMISS_DISTANCE_FRACTION = 0.35f
     }
 }
