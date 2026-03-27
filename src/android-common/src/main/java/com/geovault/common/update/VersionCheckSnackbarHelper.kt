@@ -13,7 +13,19 @@ object VersionCheckSnackbarHelper {
         snackbar: ImportantMessageSnackbar?,
         result: VersionCheckResult
     ): Boolean {
-        val updateResult = result as? VersionCheckResult.UpdateAvailable ?: return false
+        when (result) {
+            is VersionCheckResult.CheckFailed -> {
+                Log.i(UpdateCheckLog.TAG, "snackbar: version check unavailable (${result.detail}); no user prompt shown")
+                return false
+            }
+
+            is VersionCheckResult.UpdateAvailable -> {
+                // continue below
+            }
+
+            else -> return false
+        }
+        val updateResult = result as VersionCheckResult.UpdateAvailable
         val targetSnackbar = snackbar ?: run {
             Log.w(UpdateCheckLog.TAG, "snackbar: update available but snackbar view is null")
             return false

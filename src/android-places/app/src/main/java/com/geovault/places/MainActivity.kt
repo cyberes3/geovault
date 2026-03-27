@@ -49,7 +49,6 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_SHOW_EXPORT_SAVED_MESSAGE = "show_export_saved_message"
         const val EXTRA_OAUTH_ERROR = "oauth_error"
         private const val EXPECTED_APP_NAME = "GeoVault Places"
-        private val APK_NAME_REGEX = Regex("^(.+?)\\s(\\d{4}-\\d{2}-\\d{2}\\s[0-9a-fA-F]{10})\\.apk$")
     }
 
     private lateinit var recyclerView: RecyclerView
@@ -749,11 +748,8 @@ class MainActivity : AppCompatActivity() {
                     context = this@MainActivity,
                     rateLimitKey = "places",
                     request = VersionCheckRequest(
-                        codeRepoPath = "cyberes/geovault",
-                        releasesRepoPath = "cyberes/geovault-app-release",
-                        apkNameRegex = APK_NAME_REGEX,
+                        appName = EXPECTED_APP_NAME,
                         localFullCommitSha = BuildConfig.GIT_COMMIT_SHA,
-                        expectedAppName = EXPECTED_APP_NAME
                     )
                 )
             }

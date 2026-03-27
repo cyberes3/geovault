@@ -20,10 +20,10 @@ RELEASE_REPO_URLS = '["https://git.evulid.cc/cyberes/geovault-app-release","http
 # GITEA_TOKEN = "..."
 # CHECK_SECRET = "..."
 
-# Required secret (do not commit the value). Must match Android antibot User-Agent:
-#   src/android-common/.../GiteaReleaseApi.kt → REQUIRED_GITEA_USER_AGENT
+# Required secret (do not commit the value):
 #   npx wrangler secret put GITEA_USER_AGENT
 #
+# Use a normal, descriptive service user-agent value.
 # Local dev: put the same key in .dev.vars as GITEA_USER_AGENT=...
 
 [[routes]]

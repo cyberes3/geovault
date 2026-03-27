@@ -501,11 +501,8 @@ class MainActivity : AppCompatActivity() {
                     context = this@MainActivity,
                     rateLimitKey = "uploader",
                     request = VersionCheckRequest(
-                        codeRepoPath = "cyberes/geovault",
-                        releasesRepoPath = "cyberes/geovault-app-release",
-                        apkNameRegex = APK_NAME_REGEX,
+                        appName = EXPECTED_APP_NAME,
                         localFullCommitSha = BuildConfig.GIT_COMMIT_SHA,
-                        expectedAppName = EXPECTED_APP_NAME
                     )
                 )
             }
@@ -526,7 +523,6 @@ class MainActivity : AppCompatActivity() {
         private const val PREF_ADD_SUFFIX = "add_suffix"
         const val EXTRA_OAUTH_ERROR = "oauth_error"
         private const val EXPECTED_APP_NAME = "GeoVault Uploader"
-        private val APK_NAME_REGEX = Regex("^(.+?)\\s(\\d{4}-\\d{2}-\\d{2}\\s[0-9a-fA-F]{10})\\.apk$")
     }
 }
 

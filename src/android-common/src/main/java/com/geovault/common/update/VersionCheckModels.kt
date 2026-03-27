@@ -1,12 +1,8 @@
 package com.geovault.common.update
 
 data class VersionCheckRequest(
-    val codeRepoPath: String,
-    val releasesRepoPath: String? = null,
-    val apkNameRegex: Regex,
-    val localFullCommitSha: String,
-    val expectedAppName: String? = null,
-    val maxReleasesToScan: Int = 20
+    val appName: String,
+    val localFullCommitSha: String
 )
 
 data class MatchedReleaseAsset(

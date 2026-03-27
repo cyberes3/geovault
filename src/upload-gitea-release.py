@@ -30,7 +30,7 @@ APP_CONFIG = {
 GITEA_BASE_URL = "https://git.evulid.cc"
 GITEA_OWNER = "cyberes"
 TARGET_COMMITISH = "master"
-USER_AGENT = "Gitea-Cloudflare-Antibot-Bypass eichaithahk9ietaGhohxeeg2ahriuG3"
+USER_AGENT = os.environ.get("GITEA_UPLOAD_USER_AGENT", "GeoVault-ReleaseUploader/1.0").strip() or "GeoVault-ReleaseUploader/1.0"
 
 
 def die(msg: str) -> None:
