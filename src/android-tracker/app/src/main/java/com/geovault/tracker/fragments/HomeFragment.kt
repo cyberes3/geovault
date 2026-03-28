@@ -323,7 +323,7 @@ class HomeFragment : Fragment() {
         updateTrackingTrackName()
         if (::trackingParamsButton.isInitialized) {
             trackingParamsButton.visibility =
-                if (running && runtime.selectedTrackerId.isNotBlank()) View.VISIBLE else View.GONE
+                if (running && runtime.selectedTrackerId.isNotBlank()) View.VISIBLE else View.INVISIBLE
         }
 
         // Change radar dish color based on tracking state

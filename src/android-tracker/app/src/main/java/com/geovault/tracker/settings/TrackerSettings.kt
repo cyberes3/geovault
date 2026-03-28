@@ -8,7 +8,6 @@ data class TrackerSettings(
     val lowAccuracyFallbackTimeoutSec: Long = DEFAULT_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC,
     val sendExtendedData: Boolean = true,
     val significantDataOnly: Boolean = true,
-    val resetTrackingIfKilled: Boolean = true,
     val autoTrackingMode: Boolean = true,
     val trackingProfile: TrackerTrackingProfile = TrackerTrackingProfile.BIKING,
     val startOnBoot: Boolean = false,

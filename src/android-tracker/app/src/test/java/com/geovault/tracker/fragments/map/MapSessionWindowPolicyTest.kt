@@ -56,6 +56,18 @@ class MapSessionWindowPolicyTest {
     }
 
     @Test
+    fun decide_supportsCaseInsensitiveCurrentSessionWindow() {
+        val decision = MapSessionWindowPolicy.decide(
+            recentDataWindow = " Current_Session ",
+            currentSessionStartMs = 1_700_000_600_000L,
+            incomingPropsJson = """{"starttimestamp":1700000000}"""
+        )
+        assertFalse("decision=$decision", decision.shouldResetTrackGeometry)
+        assertTrue("decision=$decision", decision.shouldIgnorePoint)
+        assertEquals("decision=$decision", 1_700_000_600_000L, decision.nextSessionStartMs)
+    }
+
+    @Test
     fun resolveLatestSessionStartMs_handlesMixedUnitsAndInvalidValues() {
         val resolved = MapSessionWindowPolicy.resolveLatestSessionStartMs(
             pointParams = listOf(

@@ -41,6 +41,9 @@ class ToggleHelpCardView @JvmOverloads constructor(
             typedArray.recycle()
         }
 
+        // Settings UI state is hydrated from repository state, not Android view-state restore.
+        toggle.isSaveEnabled = false
+
         // Allow tapping the whole card to toggle.
         setOnClickListener { if (isEnabled) toggle.toggle() }
     }

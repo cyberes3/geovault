@@ -6,9 +6,16 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.geovault.tracker.runtime.TrackingSessionOrchestrator
-import com.geovault.tracker.settings.TrackerSettingsRepositoryImpl
+import com.geovault.tracker.settings.TrackerSettingsLoadState
+import com.geovault.tracker.settings.TrackerSettingsRepository
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class TrackingRecoveryReceiver : BroadcastReceiver() {
+    @Inject
+    lateinit var settingsRepository: TrackerSettingsRepository
+
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
         if (action != TrackingRecoveryCoordinator.ACTION_RECOVERY_TICK &&
@@ -16,29 +23,32 @@ class TrackingRecoveryReceiver : BroadcastReceiver() {
         ) {
             return
         }
-        val prefs = context.applicationContext.getSharedPreferences(
-            TrackerSettingsRepositoryImpl.PREFS_NAME,
-            Context.MODE_PRIVATE
-        )
-        val restartTrackingIfKilled = prefs.getBoolean(
-            TrackerSettingsRepositoryImpl.KEY_RESTART_TRACKING_IF_KILLED,
-            true
-        )
-        val wasTrackingBeforeExit = prefs.getBoolean(
-            TrackerSettingsRepositoryImpl.KEY_WAS_TRACKING_BEFORE_EXIT,
-            false
-        )
+        val settingsState = settingsRepository.getState()
+        if (!shouldProcessSettingsState(settingsState.loadState)) {
+            Log.w(
+                "TrackingRecovery",
+                "Recovery receiver skipped action=$action reason=settings_${settingsState.loadState.name.lowercase()}"
+            )
+            return
+        }
+        val wasTrackingBeforeExit = settingsState.wasTrackingBeforeExit
         Log.d(
             "TrackingRecovery",
-            "Recovery receiver action=$action restartTrackingIfKilled=$restartTrackingIfKilled wasTrackingBeforeExit=$wasTrackingBeforeExit"
+            "Recovery receiver action=$action restartTrackingIfKilled=false wasTrackingBeforeExit=$wasTrackingBeforeExit"
         )
         val result = TrackingSessionOrchestrator.get(context.applicationContext).handleWatchdogTick(
-            restartTrackingIfKilled = restartTrackingIfKilled,
+            restartTrackingIfKilled = false,
             wasTrackingBeforeExit = wasTrackingBeforeExit
         ).commandResult
         Log.i(
             "TrackingRecovery",
             "Runtime recovery decision action=${result?.action} reason=${result?.reason} gate=${result?.startGateDecision}"
         )
+    }
+
+    companion object {
+        internal fun shouldProcessSettingsState(loadState: TrackerSettingsLoadState): Boolean {
+            return loadState == TrackerSettingsLoadState.Ready
+        }
     }
 }

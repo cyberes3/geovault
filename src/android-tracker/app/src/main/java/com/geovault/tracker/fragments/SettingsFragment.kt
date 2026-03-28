@@ -4,6 +4,7 @@ import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -51,7 +52,6 @@ class SettingsFragment : Fragment() {
     private lateinit var significantMotionSwitch: ToggleHelpCardView
     private lateinit var significantMotionRow: View
     private lateinit var startOnBootSwitch: ToggleHelpCardView
-    private lateinit var restartTrackingIfKilledSwitch: ToggleHelpCardView
     private lateinit var startTrackingOnLaunchSwitch: ToggleHelpCardView
     private lateinit var keepScreenOnWhileViewingMapSwitch: ToggleHelpCardView
     private lateinit var autoTrackingSwitch: ToggleHelpCardView
@@ -61,7 +61,8 @@ class SettingsFragment : Fragment() {
     private lateinit var distanceLabel: TextView
     private lateinit var accuracyLabel: TextView
     private lateinit var settingsScrollView: NestedScrollView
-    private var isBindingSettings = false
+    private var isBindingSettings = true
+    private var hasHydratedSettings = false
     private var lastRenderedSettings: TrackerSettings? = null
 
     override fun onCreateView(
@@ -88,7 +89,6 @@ class SettingsFragment : Fragment() {
         significantMotionRow = view.findViewById(R.id.significantMotionRow)
         significantMotionSwitch = view.findViewById(R.id.significantMotionRow)
         startOnBootSwitch = view.findViewById(R.id.startOnBootSwitch)
-        restartTrackingIfKilledSwitch = view.findViewById(R.id.restartTrackingIfKilledSwitch)
         startTrackingOnLaunchSwitch = view.findViewById(R.id.startTrackingOnLaunchSwitch)
         keepScreenOnWhileViewingMapSwitch = view.findViewById(R.id.keepScreenOnWhileViewingMapSwitch)
         autoTrackingSwitch = view.findViewById(R.id.autoTrackingSwitch)
@@ -238,9 +238,17 @@ class SettingsFragment : Fragment() {
 
     private fun bindSettingsState() {
         loadServerUrlField()
+        viewModel.dumpDebugState("settings_fragment_bind_start")
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.uiState.collect { uiState ->
+                if (uiState.phase != SettingsPhase.Ready) {
+                    Log.d(TAG, "ui_state_not_ready phase=${uiState.phase}")
+                    return@collect
+                }
                 if (lastRenderedSettings != uiState.settings) {
+                    Log.i(TAG, "ui_apply_settings settings=${
+                        summary(uiState.settings)
+                    }")
                     applySettingsToUi(uiState.settings)
                     lastRenderedSettings = uiState.settings
                 }
@@ -296,10 +304,10 @@ class SettingsFragment : Fragment() {
             settings.lowAccuracyFallbackTimeoutSec.toString()
         )
         setSwitchCheckedIfChanged(startOnBootSwitch, settings.startOnBoot)
-        setSwitchCheckedIfChanged(restartTrackingIfKilledSwitch, settings.resetTrackingIfKilled)
         setSwitchCheckedIfChanged(startTrackingOnLaunchSwitch, settings.startTrackingOnLaunch)
         setSwitchCheckedIfChanged(keepScreenOnWhileViewingMapSwitch, settings.keepScreenOnWhileViewingMap)
 
+        hasHydratedSettings = true
         isBindingSettings = false
     }
 
@@ -323,45 +331,47 @@ class SettingsFragment : Fragment() {
 
     private fun setupSettingsListeners() {
         extendedParamsSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (isBindingSettings) return@setOnCheckedChangeListener
+            if (shouldIgnoreSettingChange()) return@setOnCheckedChangeListener
+            Log.i(TAG, "user_toggle key=extendedParams value=$isChecked")
             viewModel.setSendExtendedData(isChecked)
         }
 
         significantMotionSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (isBindingSettings) return@setOnCheckedChangeListener
+            if (shouldIgnoreSettingChange()) return@setOnCheckedChangeListener
             if (significantMotionSwitch.isEnabled) {
+                Log.i(TAG, "user_toggle key=significantMotion value=$isChecked")
                 viewModel.setSignificantDataOnly(isChecked)
             }
         }
 
         startOnBootSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (isBindingSettings) return@setOnCheckedChangeListener
+            if (shouldIgnoreSettingChange()) return@setOnCheckedChangeListener
+            Log.i(TAG, "user_toggle key=startOnBoot value=$isChecked")
             viewModel.setStartOnBoot(isChecked)
         }
 
-        restartTrackingIfKilledSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (isBindingSettings) return@setOnCheckedChangeListener
-            viewModel.setResetTrackingIfKilled(isChecked)
-        }
-
         startTrackingOnLaunchSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (isBindingSettings) return@setOnCheckedChangeListener
+            if (shouldIgnoreSettingChange()) return@setOnCheckedChangeListener
+            Log.i(TAG, "user_toggle key=startTrackingOnLaunch value=$isChecked")
             viewModel.setStartTrackingOnLaunch(isChecked)
         }
 
         keepScreenOnWhileViewingMapSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (isBindingSettings) return@setOnCheckedChangeListener
+            if (shouldIgnoreSettingChange()) return@setOnCheckedChangeListener
+            Log.i(TAG, "user_toggle key=keepScreenOnWhileViewingMap value=$isChecked")
             viewModel.setKeepScreenOnWhileViewingMap(isChecked)
         }
 
         autoTrackingSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (isBindingSettings) return@setOnCheckedChangeListener
+            if (shouldIgnoreSettingChange()) return@setOnCheckedChangeListener
+            Log.i(TAG, "user_toggle key=autoTracking value=$isChecked")
             viewModel.setAutoTrackingMode(isChecked)
             updateAutoTrackingUi(isChecked)
         }
 
         lowAccuracyFallbackSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (isBindingSettings) return@setOnCheckedChangeListener
+            if (shouldIgnoreSettingChange()) return@setOnCheckedChangeListener
+            Log.i(TAG, "user_toggle key=lowAccuracyFallback value=$isChecked")
             viewModel.setLowAccuracyFallbackEnabled(isChecked)
             updateLowAccuracyFallbackUi(isChecked)
         }
@@ -618,15 +628,34 @@ class SettingsFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        viewModel.dumpDebugState("settings_fragment_onResume")
     }
 
     override fun onPause() {
         // When settings view loses focus, normalize invalid logging inputs to defaults.
         applyDefaultsForInvalidInputs()
+        viewModel.dumpDebugState("settings_fragment_onPause")
         super.onPause()
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
+    }
+
+    private fun summary(settings: TrackerSettings): String {
+        return "auto=${settings.autoTrackingMode},startOnBoot=${settings.startOnBoot},startOnLaunch=${settings.startTrackingOnLaunch},extended=${settings.sendExtendedData},sigMotion=${settings.significantDataOnly},lowAccFallback=${settings.lowAccuracyFallbackEnabled},keepScreenOn=${settings.keepScreenOnWhileViewingMap},profile=${settings.trackingProfile}"
+    }
+
+    private fun shouldIgnoreSettingChange(): Boolean {
+        if (isBindingSettings) return true
+        if (!hasHydratedSettings) {
+            Log.d(TAG, "ignored_toggle_change reason=pre_hydration")
+            return true
+        }
+        return false
+    }
+
+    companion object {
+        private const val TAG = "SettingsDebug"
     }
 }

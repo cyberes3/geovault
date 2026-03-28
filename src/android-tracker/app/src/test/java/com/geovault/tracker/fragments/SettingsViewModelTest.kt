@@ -1,11 +1,14 @@
 package com.geovault.tracker.fragments
 
 import com.geovault.tracker.settings.TrackerSettings
+import com.geovault.tracker.settings.TrackerSettingsLoadState
 import com.geovault.tracker.settings.TrackerSettingsRepository
+import com.geovault.tracker.settings.TrackerSettingsState
 import com.geovault.tracker.settings.TrackerTrackingProfile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -42,66 +45,110 @@ class SettingsViewModelTest {
         assertFalse(viewModel.uiState.value.settings.sendExtendedData)
     }
 
-    private class FakeTrackerSettingsRepository : TrackerSettingsRepository {
-        private val flow = MutableStateFlow(TrackerSettings(sendExtendedData = false))
+    @Test
+    fun uiState_phaseTracksRepositoryLoadState() {
+        val fakeRepository = FakeTrackerSettingsRepository(
+            initialLoadState = TrackerSettingsLoadState.Loading
+        )
+        val viewModel = SettingsViewModel(fakeRepository)
+        assertEquals(SettingsPhase.Syncing, viewModel.uiState.value.phase)
 
-        override fun getSettings(): TrackerSettings = flow.value
-        override fun observeSettings(): Flow<TrackerSettings> = flow.asStateFlow()
+        fakeRepository.markReady()
+
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < 2_000L) {
+            if (viewModel.uiState.value.phase == SettingsPhase.Ready) break
+            Thread.sleep(10L)
+        }
+        assertEquals(SettingsPhase.Ready, viewModel.uiState.value.phase)
+    }
+
+    private class FakeTrackerSettingsRepository(
+        initialLoadState: TrackerSettingsLoadState = TrackerSettingsLoadState.Ready
+    ) : TrackerSettingsRepository {
+        private val stateFlow = MutableStateFlow(
+            TrackerSettingsState(
+                loadState = initialLoadState,
+                settings = TrackerSettings(sendExtendedData = false),
+                wasTrackingBeforeExit = false,
+                schemaVersion = 2,
+                revision = 1L
+            )
+        )
+
+        override fun isReady(): Boolean = stateFlow.value.isReady
+        override fun getState(): TrackerSettingsState = stateFlow.value
+        override fun observeState(): Flow<TrackerSettingsState> = stateFlow.asStateFlow()
+        override fun getSettings(): TrackerSettings = stateFlow.value.settings
+        override fun observeSettings(): Flow<TrackerSettings> = stateFlow.asStateFlow().map { it.settings }
+        override fun dumpDebugState(reason: String) = Unit
 
         override fun setSendExtendedData(enabled: Boolean) {
-            flow.value = flow.value.copy(sendExtendedData = enabled)
+            mutate { it.copy(sendExtendedData = enabled) }
         }
 
         override fun setSignificantDataOnly(enabled: Boolean) {
-            flow.value = flow.value.copy(significantDataOnly = enabled)
-        }
-
-        override fun setResetTrackingIfKilled(enabled: Boolean) {
-            flow.value = flow.value.copy(resetTrackingIfKilled = enabled)
+            mutate { it.copy(significantDataOnly = enabled) }
         }
 
         override fun setAutoTrackingMode(enabled: Boolean) {
-            flow.value = flow.value.copy(autoTrackingMode = enabled)
+            mutate { it.copy(autoTrackingMode = enabled) }
         }
 
         override fun setTrackingProfile(profile: TrackerTrackingProfile) {
-            flow.value = flow.value.copy(trackingProfile = profile)
+            mutate { it.copy(trackingProfile = profile) }
         }
 
         override fun setLoggingIntervalSec(value: Long) {
-            flow.value = flow.value.copy(loggingIntervalSec = value)
+            mutate { it.copy(loggingIntervalSec = value) }
         }
 
         override fun setDistanceFilterMeters(value: Float) {
-            flow.value = flow.value.copy(distanceFilterMeters = value)
+            mutate { it.copy(distanceFilterMeters = value) }
         }
 
         override fun setAccuracyFilterMeters(value: Float) {
-            flow.value = flow.value.copy(accuracyFilterMeters = value)
+            mutate { it.copy(accuracyFilterMeters = value) }
         }
 
         override fun setLowAccuracyFallbackEnabled(enabled: Boolean) {
-            flow.value = flow.value.copy(lowAccuracyFallbackEnabled = enabled)
+            mutate { it.copy(lowAccuracyFallbackEnabled = enabled) }
         }
 
         override fun setLowAccuracyFallbackTimeoutSec(value: Long) {
-            flow.value = flow.value.copy(lowAccuracyFallbackTimeoutSec = value)
+            mutate { it.copy(lowAccuracyFallbackTimeoutSec = value) }
         }
 
         override fun setStartOnBoot(enabled: Boolean) {
-            flow.value = flow.value.copy(startOnBoot = enabled)
+            mutate { it.copy(startOnBoot = enabled) }
         }
 
         override fun setStartTrackingOnLaunch(enabled: Boolean) {
-            flow.value = flow.value.copy(startTrackingOnLaunch = enabled)
+            mutate { it.copy(startTrackingOnLaunch = enabled) }
         }
 
         override fun setKeepScreenOnWhileViewingMap(enabled: Boolean) {
-            flow.value = flow.value.copy(keepScreenOnWhileViewingMap = enabled)
+            mutate { it.copy(keepScreenOnWhileViewingMap = enabled) }
         }
 
         override fun wasTrackingBeforeExit(): Boolean = false
         override fun setWasTrackingBeforeExit(value: Boolean) = Unit
         override fun clearWasTrackingBeforeExit() = Unit
+
+        private fun mutate(transform: (TrackerSettings) -> TrackerSettings) {
+            val previous = stateFlow.value
+            stateFlow.value = previous.copy(
+                settings = transform(previous.settings),
+                revision = previous.revision + 1L
+            )
+        }
+
+        fun markReady() {
+            val previous = stateFlow.value
+            stateFlow.value = previous.copy(
+                loadState = TrackerSettingsLoadState.Ready,
+                revision = previous.revision + 1L
+            )
+        }
     }
 }

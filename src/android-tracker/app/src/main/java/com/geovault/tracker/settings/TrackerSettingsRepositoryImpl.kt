@@ -1,207 +1,262 @@
 package com.geovault.tracker.settings
 
-import android.content.Context
-import android.content.SharedPreferences
-import dagger.hilt.android.qualifiers.ApplicationContext
+import android.util.Log
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 @Singleton
 class TrackerSettingsRepositoryImpl @Inject constructor(
-    @param:ApplicationContext private val appContext: Context
+    private val dataStore: TrackerSettingsDataStore,
+    private val writePolicy: TrackerSettingsWritePolicy
 ) : TrackerSettingsRepository {
 
-    companion object {
-        const val PREFS_NAME = "geovault_prefs"
-
-        const val KEY_LOGGING_INTERVAL = "logging_interval"
-        const val KEY_LOGGING_DISTANCE = "logging_distance"
-        const val KEY_LOGGING_ACCURACY = "logging_accuracy"
-        const val KEY_LOW_ACCURACY_FALLBACK_ENABLED = "low_accuracy_fallback_enabled"
-        const val KEY_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC = "low_accuracy_fallback_timeout_sec"
-        const val KEY_EXTENDED_PARAMS = "extended_params"
-        const val KEY_SIGNIFICANT_MOTION_ONLY = "significant_motion_only"
-        const val KEY_AUTO_TRACKING_ENABLED = "auto_tracking_enabled"
-        const val KEY_TRACKING_PROFILE = "tracking_profile"
-        const val KEY_WAS_TRACKING_BEFORE_EXIT = "was_tracking_before_exit"
-        const val KEY_RESTART_TRACKING_IF_KILLED = "restart_tracking_if_killed"
-        const val KEY_START_ON_BOOT = "start_on_boot"
-        const val KEY_START_TRACKING_ON_LAUNCH = "start_tracking_on_launch"
-        const val KEY_KEEP_SCREEN_ON_WHILE_VIEWING_MAP = "keep_screen_on_while_viewing_map"
-    }
-
-    private val prefs: SharedPreferences =
-        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-
-    private val settingsState = MutableStateFlow(readSettingsFromPrefs())
-
-    private val prefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key in trackedSettingsKeys) {
-            settingsState.value = readSettingsFromPrefs()
-        }
-    }
-
-    private val trackedSettingsKeys = setOf(
-        KEY_LOGGING_INTERVAL,
-        KEY_LOGGING_DISTANCE,
-        KEY_LOGGING_ACCURACY,
-        KEY_LOW_ACCURACY_FALLBACK_ENABLED,
-        KEY_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC,
-        KEY_EXTENDED_PARAMS,
-        KEY_SIGNIFICANT_MOTION_ONLY,
-        KEY_AUTO_TRACKING_ENABLED,
-        KEY_TRACKING_PROFILE,
-        KEY_RESTART_TRACKING_IF_KILLED,
-        KEY_START_ON_BOOT,
-        KEY_START_TRACKING_ON_LAUNCH,
-        KEY_KEEP_SCREEN_ON_WHILE_VIEWING_MAP
-    )
+    private val repoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val initializationComplete = CompletableDeferred<Unit>()
+    private val commandQueue = Channel<SettingsCommand>(capacity = Channel.UNLIMITED)
+    private val opSequence = AtomicLong(0L)
+    private val state = MutableStateFlow(TrackerSettingsState.loading())
 
     init {
-        prefs.registerOnSharedPreferenceChangeListener(prefChangeListener)
+        logEvent("repo_init", "startup")
+        repoScope.launch { observeStore() }
+        repoScope.launch { processCommands() }
     }
 
-    override fun getSettings(): TrackerSettings = settingsState.value
+    override fun isReady(): Boolean = state.value.isReady
 
-    override fun observeSettings(): Flow<TrackerSettings> = settingsState.asStateFlow()
+    override fun getState(): TrackerSettingsState = state.value
 
-    override fun setSendExtendedData(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_EXTENDED_PARAMS, enabled).apply()
-    }
+    override fun observeState(): Flow<TrackerSettingsState> = state.asStateFlow()
 
-    override fun setSignificantDataOnly(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_SIGNIFICANT_MOTION_ONLY, enabled).apply()
-    }
+    override fun getSettings(): TrackerSettings = state.value.settings
 
-    override fun setResetTrackingIfKilled(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_RESTART_TRACKING_IF_KILLED, enabled).apply()
-    }
+    override fun observeSettings(): Flow<TrackerSettings> = state.asStateFlow().map { it.settings }
 
-    override fun setAutoTrackingMode(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_AUTO_TRACKING_ENABLED, enabled).apply()
-    }
+    override fun wasTrackingBeforeExit(): Boolean = state.value.wasTrackingBeforeExit
 
-    override fun setTrackingProfile(profile: TrackerTrackingProfile) {
-        val editor = prefs.edit()
-            .putString(KEY_TRACKING_PROFILE, profile.index.toString())
-        when (profile) {
-            TrackerTrackingProfile.WALKING -> {
-                editor
-                    .putString(KEY_LOGGING_INTERVAL, "30")
-                    .putString(KEY_LOGGING_DISTANCE, "10")
-                    .putString(KEY_LOGGING_ACCURACY, "50")
-            }
-            TrackerTrackingProfile.BIKING -> {
-                editor
-                    .putString(KEY_LOGGING_INTERVAL, "15")
-                    .putString(KEY_LOGGING_DISTANCE, "30")
-                    .putString(KEY_LOGGING_ACCURACY, "100")
-            }
-            TrackerTrackingProfile.DRIVING -> {
-                editor
-                    .putString(KEY_LOGGING_INTERVAL, "10")
-                    .putString(KEY_LOGGING_DISTANCE, "100")
-                    .putString(KEY_LOGGING_ACCURACY, "200")
-            }
-            TrackerTrackingProfile.CUSTOM -> {
-                // Preserve custom numeric values when switching to Custom.
-            }
+    override fun dumpDebugState(reason: String) {
+        val current = state.value
+        logEvent(
+            name = "debug_dump",
+            reason = reason,
+            opId = null,
+            extra = "loadState=${current.loadState} schema=${current.schemaVersion} revision=${current.revision} wasTrackingBeforeExit=${current.wasTrackingBeforeExit} settings=${settingsSummary(current.settings)}"
+        )
+        repoScope.launch {
+            runCatching { dataStore.readRecord() }
+                .onSuccess { record ->
+                    logEvent(
+                        name = "debug_dump_durable",
+                        reason = reason,
+                        opId = null,
+                        extra = "schema=${record.schemaVersion} wasTrackingBeforeExit=${record.wasTrackingBeforeExit} settings=${settingsSummary(record.settings)}"
+                    )
+                }
+                .onFailure { error ->
+                    Log.e(TAG, "settings_event name=debug_dump_durable_failed reason=$reason", error)
+                }
         }
-        editor.apply()
     }
 
-    override fun setLoggingIntervalSec(value: Long) {
-        val clamped = TrackerSettings.clampLoggingIntervalSec(value)
-        prefs.edit().putString(KEY_LOGGING_INTERVAL, clamped.toString()).apply()
-    }
+    override fun setSendExtendedData(enabled: Boolean) =
+        enqueueMutation("set_send_extended_data") { it.copy(sendExtendedData = enabled) }
 
-    override fun setDistanceFilterMeters(value: Float) {
-        val clamped = TrackerSettings.clampDistanceFilterMeters(value)
-        prefs.edit().putString(KEY_LOGGING_DISTANCE, clamped.toString()).apply()
-    }
+    override fun setSignificantDataOnly(enabled: Boolean) =
+        enqueueMutation("set_significant_data_only") { it.copy(significantDataOnly = enabled) }
 
-    override fun setAccuracyFilterMeters(value: Float) {
-        val clamped = TrackerSettings.clampAccuracyFilterMeters(value)
-        prefs.edit().putString(KEY_LOGGING_ACCURACY, clamped.toString()).apply()
-    }
+    override fun setAutoTrackingMode(enabled: Boolean) =
+        enqueueMutation("set_auto_tracking_mode") { it.copy(autoTrackingMode = enabled) }
 
-    override fun setLowAccuracyFallbackEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_LOW_ACCURACY_FALLBACK_ENABLED, enabled).apply()
-    }
+    override fun setTrackingProfile(profile: TrackerTrackingProfile) =
+        enqueueMutation("set_tracking_profile") { current ->
+            writePolicy.applyProfile(current, profile)
+        }
 
-    override fun setLowAccuracyFallbackTimeoutSec(value: Long) {
-        val clamped = TrackerSettings.clampLowAccuracyFallbackTimeoutSec(value)
-        prefs.edit().putString(KEY_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC, clamped.toString()).apply()
-    }
+    override fun setLoggingIntervalSec(value: Long) =
+        enqueueMutation("set_logging_interval_sec") { it.copy(loggingIntervalSec = value) }
 
-    override fun setStartOnBoot(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_START_ON_BOOT, enabled).apply()
-    }
+    override fun setDistanceFilterMeters(value: Float) =
+        enqueueMutation("set_distance_filter_meters") { it.copy(distanceFilterMeters = value) }
 
-    override fun setStartTrackingOnLaunch(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_START_TRACKING_ON_LAUNCH, enabled).apply()
-    }
+    override fun setAccuracyFilterMeters(value: Float) =
+        enqueueMutation("set_accuracy_filter_meters") { it.copy(accuracyFilterMeters = value) }
 
-    override fun setKeepScreenOnWhileViewingMap(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_KEEP_SCREEN_ON_WHILE_VIEWING_MAP, enabled).apply()
-    }
+    override fun setLowAccuracyFallbackEnabled(enabled: Boolean) =
+        enqueueMutation("set_low_accuracy_fallback_enabled") { it.copy(lowAccuracyFallbackEnabled = enabled) }
 
-    override fun wasTrackingBeforeExit(): Boolean {
-        return prefs.getBoolean(KEY_WAS_TRACKING_BEFORE_EXIT, false)
-    }
+    override fun setLowAccuracyFallbackTimeoutSec(value: Long) =
+        enqueueMutation("set_low_accuracy_fallback_timeout_sec") { it.copy(lowAccuracyFallbackTimeoutSec = value) }
+
+    override fun setStartOnBoot(enabled: Boolean) =
+        enqueueMutation("set_start_on_boot") { it.copy(startOnBoot = enabled) }
+
+    override fun setStartTrackingOnLaunch(enabled: Boolean) =
+        enqueueMutation("set_start_tracking_on_launch") { it.copy(startTrackingOnLaunch = enabled) }
+
+    override fun setKeepScreenOnWhileViewingMap(enabled: Boolean) =
+        enqueueMutation("set_keep_screen_on_while_viewing_map") { it.copy(keepScreenOnWhileViewingMap = enabled) }
 
     override fun setWasTrackingBeforeExit(value: Boolean) {
-        prefs.edit().putBoolean(KEY_WAS_TRACKING_BEFORE_EXIT, value).apply()
+        val opId = nextOpId()
+        enqueueCommand(
+            SettingsCommand(
+                name = "set_was_tracking_before_exit",
+                opId = opId,
+                operation = {
+                    dataStore.updateRecord(reason = "set_was_tracking_before_exit") { current ->
+                        current.copy(wasTrackingBeforeExit = value)
+                    }
+                }
+            )
+        )
     }
 
     override fun clearWasTrackingBeforeExit() {
-        prefs.edit().remove(KEY_WAS_TRACKING_BEFORE_EXIT).commit()
-    }
-
-    private fun readSettingsFromPrefs(): TrackerSettings {
-        val intervalSecRaw = prefs.getString(
-            KEY_LOGGING_INTERVAL,
-            TrackerSettings.DEFAULT_LOGGING_INTERVAL_SEC.toString()
-        )?.toLongOrNull() ?: TrackerSettings.DEFAULT_LOGGING_INTERVAL_SEC
-        val distanceRaw = prefs.getString(
-            KEY_LOGGING_DISTANCE,
-            TrackerSettings.DEFAULT_DISTANCE_FILTER_METERS.toString()
-        )?.toFloatOrNull() ?: TrackerSettings.DEFAULT_DISTANCE_FILTER_METERS
-        val accuracyRaw = prefs.getString(
-            KEY_LOGGING_ACCURACY,
-            TrackerSettings.DEFAULT_ACCURACY_FILTER_METERS.toString()
-        )?.toFloatOrNull() ?: TrackerSettings.DEFAULT_ACCURACY_FILTER_METERS
-        val lowAccuracyFallbackTimeoutSecRaw = prefs.getString(
-            KEY_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC,
-            TrackerSettings.DEFAULT_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC.toString()
-        )?.toLongOrNull() ?: TrackerSettings.DEFAULT_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC
-        val profileIndex = prefs.getString(KEY_TRACKING_PROFILE, "1")?.toIntOrNull() ?: 1
-
-        return TrackerSettings(
-            loggingIntervalSec = TrackerSettings.clampLoggingIntervalSec(intervalSecRaw),
-            distanceFilterMeters = TrackerSettings.clampDistanceFilterMeters(distanceRaw),
-            accuracyFilterMeters = TrackerSettings.clampAccuracyFilterMeters(accuracyRaw),
-            lowAccuracyFallbackEnabled = prefs.getBoolean(
-                KEY_LOW_ACCURACY_FALLBACK_ENABLED,
-                TrackerSettings.DEFAULT_LOW_ACCURACY_FALLBACK_ENABLED
-            ),
-            lowAccuracyFallbackTimeoutSec = TrackerSettings.clampLowAccuracyFallbackTimeoutSec(
-                lowAccuracyFallbackTimeoutSecRaw
-            ),
-            sendExtendedData = prefs.getBoolean(KEY_EXTENDED_PARAMS, true),
-            significantDataOnly = prefs.getBoolean(KEY_SIGNIFICANT_MOTION_ONLY, true),
-            resetTrackingIfKilled = prefs.getBoolean(KEY_RESTART_TRACKING_IF_KILLED, true),
-            autoTrackingMode = prefs.getBoolean(KEY_AUTO_TRACKING_ENABLED, true),
-            trackingProfile = TrackerTrackingProfile.fromIndex(profileIndex),
-            startOnBoot = prefs.getBoolean(KEY_START_ON_BOOT, false),
-            startTrackingOnLaunch = prefs.getBoolean(KEY_START_TRACKING_ON_LAUNCH, false),
-            keepScreenOnWhileViewingMap = prefs.getBoolean(
-                KEY_KEEP_SCREEN_ON_WHILE_VIEWING_MAP,
-                TrackerSettings.DEFAULT_KEEP_SCREEN_ON_WHILE_VIEWING_MAP
+        val opId = nextOpId()
+        enqueueCommand(
+            SettingsCommand(
+                name = "clear_was_tracking_before_exit",
+                opId = opId,
+                operation = {
+                    dataStore.updateRecord(reason = "clear_was_tracking_before_exit") { current ->
+                        current.copy(wasTrackingBeforeExit = false)
+                    }
+                }
             )
         )
+    }
+
+    private fun enqueueMutation(
+        name: String,
+        transform: (TrackerSettings) -> TrackerSettings
+    ) {
+        val opId = nextOpId()
+        enqueueCommand(
+            SettingsCommand(
+                name = name,
+                opId = opId,
+                operation = {
+                    dataStore.updateRecord(reason = name) { current ->
+                        val nextSettings = writePolicy.sanitize(transform(current.settings))
+                        current.copy(settings = nextSettings)
+                    }
+                }
+            )
+        )
+    }
+
+    private fun enqueueCommand(command: SettingsCommand) {
+        logEvent(name = "intent_received", reason = command.name, opId = command.opId)
+        val queued = commandQueue.trySend(command)
+        if (queued.isFailure) {
+            logEvent(name = "intent_rejected", reason = command.name, opId = command.opId)
+        } else {
+            logEvent(name = "intent_enqueued", reason = command.name, opId = command.opId)
+        }
+    }
+
+    private suspend fun processCommands() {
+        initializationComplete.await()
+        for (command in commandQueue) {
+            logEvent(name = "command_apply_begin", reason = command.name, opId = command.opId)
+            runCatching { command.operation() }
+                .onSuccess {
+                    logEvent(name = "command_persisted", reason = command.name, opId = command.opId)
+                }
+                .onFailure { error ->
+                    logEvent(name = "command_failed", reason = command.name, opId = command.opId)
+                    Log.e(TAG, "settings_event name=command_failed reason=${command.name} opId=${command.opId}", error)
+                }
+        }
+    }
+
+    private suspend fun observeStore() {
+        runCatching {
+            initializeStorage()
+            dataStore.observeRecord().collect { record ->
+                val normalized = writePolicy.sanitize(record.settings)
+                val nextState = TrackerSettingsState(
+                    loadState = TrackerSettingsLoadState.Ready,
+                    settings = normalized,
+                    wasTrackingBeforeExit = record.wasTrackingBeforeExit,
+                    schemaVersion = record.schemaVersion,
+                    revision = state.value.revision + 1L
+                )
+                state.value = nextState
+                logEvent(
+                    name = "state_observed",
+                    reason = "datastore_record",
+                    extra = "loadState=${nextState.loadState} schema=${nextState.schemaVersion} revision=${nextState.revision} wasTrackingBeforeExit=${nextState.wasTrackingBeforeExit} settings=${settingsSummary(nextState.settings)}"
+                )
+                if (!initializationComplete.isCompleted) {
+                    initializationComplete.complete(Unit)
+                    logEvent(name = "ready_transition", reason = "first_observation")
+                }
+            }
+        }.onFailure { error ->
+            state.value = state.value.copy(
+                loadState = TrackerSettingsLoadState.Error,
+                revision = state.value.revision + 1L
+            )
+            if (!initializationComplete.isCompleted) {
+                initializationComplete.complete(Unit)
+            }
+            Log.e(TAG, "settings_event name=observer_failed reason=observe_store", error)
+        }
+    }
+
+    private suspend fun initializeStorage() {
+        val record = dataStore.readRecord()
+        logEvent(
+            name = "initialize_storage",
+            reason = "schema_check",
+            extra = "currentSchema=${record.schemaVersion} requiredSchema=${TrackerSettingsDefaults.schemaVersion}"
+        )
+        if (record.schemaVersion == TrackerSettingsDefaults.schemaVersion) return
+        dataStore.resetToDefaults(TrackerSettingsDefaults.schemaVersion)
+        logEvent(
+            name = "initialize_storage_reset_applied",
+            reason = "schema_mismatch",
+            extra = "previousSchema=${record.schemaVersion} newSchema=${TrackerSettingsDefaults.schemaVersion}"
+        )
+    }
+
+    private fun nextOpId(): Long = opSequence.incrementAndGet()
+
+    private fun logEvent(
+        name: String,
+        reason: String,
+        opId: Long? = null,
+        extra: String = ""
+    ) {
+        val opPart = if (opId == null) "" else " opId=$opId"
+        val extraPart = if (extra.isBlank()) "" else " $extra"
+        Log.i(TAG, "settings_event name=$name reason=$reason$opPart$extraPart")
+    }
+
+    private fun settingsSummary(settings: TrackerSettings): String {
+        return "auto=${settings.autoTrackingMode},startOnBoot=${settings.startOnBoot},startOnLaunch=${settings.startTrackingOnLaunch},extended=${settings.sendExtendedData},sigMotion=${settings.significantDataOnly},lowAccFallback=${settings.lowAccuracyFallbackEnabled},keepScreenOn=${settings.keepScreenOnWhileViewingMap},profile=${settings.trackingProfile},interval=${settings.loggingIntervalSec},distance=${settings.distanceFilterMeters},accuracy=${settings.accuracyFilterMeters},lowAccTimeout=${settings.lowAccuracyFallbackTimeoutSec}"
+    }
+
+    private data class SettingsCommand(
+        val name: String,
+        val opId: Long,
+        val operation: suspend () -> Unit
+    )
+
+    companion object {
+        private const val TAG = "TrackerSettingsRepo"
     }
 }

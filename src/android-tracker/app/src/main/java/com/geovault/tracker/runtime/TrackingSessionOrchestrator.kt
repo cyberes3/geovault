@@ -126,25 +126,11 @@ class TrackingSessionOrchestrator private constructor(context: Context) {
             "restartTrackingIfKilled=$restartTrackingIfKilled wasTrackingBeforeExit=$wasTrackingBeforeExit desiredRunning=$desiredRunning"
         )
         if (!desiredRunning) {
-            val after = stateStore.update {
-                it.copy(
-                    shouldBeRunning = false,
-                    lifecycleState = RuntimeLifecycleState.IDLE,
-                    lastIntentionalStop = true,
-                    lastTransitionAtMs = System.currentTimeMillis()
-                )
-            }
-            val next = _state.value.copy(
-                runtime = after,
-                trackingRunning = false,
-                trackingLifecycleState = TrackingLifecycleState.STOPPED
-            )
-            _state.value = next
             val effects = listOf(RuntimeEffect(RuntimeEffectType.CANCEL_WATCHDOG, "watchdog_disabled"))
             applyEffects(effects)
             telemetry.event("watchdog", "disabled restartTrackingIfKilled=$restartTrackingIfKilled wasTrackingBeforeExit=$wasTrackingBeforeExit")
             return TrackingSessionUpdateResult(
-                state = next,
+                state = _state.value,
                 effects = effects,
                 commandResult = RuntimeCommandResult(action = RuntimeActionType.NOOP, reason = "watchdog_disabled")
             )

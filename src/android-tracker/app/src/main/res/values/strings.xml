@@ -162,7 +162,6 @@
     <string name="significant_motion_help_text">Only record points after your device detects meaningful movement.</string>
     <string name="start_on_boot_label">Start tracking on boot</string>
     <string name="start_on_boot_help_text">Automatically begin tracking after the device restarts, post first unlock.</string>
-    <string name="restart_tracking_if_killed_help_text">Start tracking again if Android stops the app while tracking is active.</string>
     <string name="start_tracking_on_launch_help_text">Begin tracking automatically when you open the app.</string>
     <string name="logging_interval_label">Logging Interval (seconds)</string>
     <string name="logging_interval_help_text">Set how often a point can be recorded; lower values use more battery.</string>
@@ -174,11 +173,9 @@
     <string name="low_accuracy_fallback_timeout_help_text">How long to wait for a good GPS fix before sending a fallback point.</string>
 
     <!-- Restart / start on launch -->
-    <string name="restart_tracking_if_killed_label">Restart tracking if app killed while tracking</string>
     <string name="start_tracking_on_launch_label">Start tracking when app is launched</string>
     <string name="keep_screen_on_while_viewing_map_label">Keep Screen On While Viewing Map</string>
     <string name="keep_screen_on_while_viewing_map_help_text">When enabled, the display stays on while the map is open. Turn off to save battery and use the normal screen timeout.</string>
-    <string name="resuming_tracking">Resuming tracking</string>
     <string name="tracking_started">Tracking started</string>
     <string name="status_tracking">Tracking location</string>
     <string name="status_waiting_for_gps_reenabled">Waiting for GPS to be enabled</string>

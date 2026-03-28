@@ -11,45 +11,29 @@ class TrackingServiceStartupCommandPathTest {
         assertEquals(
             TrackingService.Companion.StartupCommandPath.StartTracking,
             TrackingService.resolveStartupCommandPath(
-                action = TrackingService.ACTION_START,
-                wasTrackingBeforeExit = false,
-                restartTrackingIfKilled = false
+                action = TrackingService.ACTION_START
             )
         )
         assertEquals(
             TrackingService.Companion.StartupCommandPath.StopUnknown,
             TrackingService.resolveStartupCommandPath(
-                action = TrackingService.ACTION_STOP,
-                wasTrackingBeforeExit = true,
-                restartTrackingIfKilled = true
+                action = TrackingService.ACTION_STOP
             )
         )
         assertEquals(
             TrackingService.Companion.StartupCommandPath.ReshowForeground,
             TrackingService.resolveStartupCommandPath(
-                action = TrackingService.ACTION_RESHOW_FOREGROUND,
-                wasTrackingBeforeExit = true,
-                restartTrackingIfKilled = true
+                action = TrackingService.ACTION_RESHOW_FOREGROUND
             )
         )
     }
 
     @Test
-    fun resolveStartupCommandPath_mapsNullActionBasedOnRestartPolicy() {
-        assertEquals(
-            TrackingService.Companion.StartupCommandPath.StartTracking,
-            TrackingService.resolveStartupCommandPath(
-                action = null,
-                wasTrackingBeforeExit = true,
-                restartTrackingIfKilled = true
-            )
-        )
+    fun resolveStartupCommandPath_mapsNullActionToStopNoRestart() {
         assertEquals(
             TrackingService.Companion.StartupCommandPath.StopNoRestart,
             TrackingService.resolveStartupCommandPath(
-                action = null,
-                wasTrackingBeforeExit = true,
-                restartTrackingIfKilled = false
+                action = null
             )
         )
     }

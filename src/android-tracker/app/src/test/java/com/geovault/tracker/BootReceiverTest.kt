@@ -1,5 +1,6 @@
 package com.geovault.tracker
 
+import com.geovault.tracker.settings.TrackerSettingsLoadState
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -47,5 +48,12 @@ class BootReceiverTest {
                 selectedTrackerId = "00000000-0000-0000-0000-000000000001"
             )
         )
+    }
+
+    @Test
+    fun shouldProcessSettingsState_onlyWhenReady() {
+        assertFalse(BootReceiver.shouldProcessSettingsState(TrackerSettingsLoadState.Loading))
+        assertFalse(BootReceiver.shouldProcessSettingsState(TrackerSettingsLoadState.Error))
+        assertTrue(BootReceiver.shouldProcessSettingsState(TrackerSettingsLoadState.Ready))
     }
 }

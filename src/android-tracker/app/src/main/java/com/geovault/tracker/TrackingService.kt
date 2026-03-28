@@ -216,25 +216,18 @@ class TrackingService : TrackPointServiceBase() {
         }
 
         @JvmStatic
-        fun shouldRestartTrackingAfterProcessDeath(
-            wasTrackingBeforeExit: Boolean,
-            restartTrackingIfKilled: Boolean
-        ): Boolean {
-            return wasTrackingBeforeExit && restartTrackingIfKilled
+        fun shouldRestartTrackingAfterProcessDeath(): Boolean {
+            return false
         }
 
         @JvmStatic
-        internal fun resolveStartupCommandPath(
-            action: String?,
-            wasTrackingBeforeExit: Boolean,
-            restartTrackingIfKilled: Boolean
-        ): StartupCommandPath {
+        internal fun resolveStartupCommandPath(action: String?): StartupCommandPath {
             return when (action) {
                 ACTION_START -> StartupCommandPath.StartTracking
                 ACTION_STOP -> StartupCommandPath.StopUnknown
                 ACTION_RESHOW_FOREGROUND -> StartupCommandPath.ReshowForeground
                 null -> {
-                    if (shouldRestartTrackingAfterProcessDeath(wasTrackingBeforeExit, restartTrackingIfKilled)) {
+                    if (shouldRestartTrackingAfterProcessDeath()) {
                         StartupCommandPath.StartTracking
                     } else {
                         StartupCommandPath.StopNoRestart
@@ -566,13 +559,8 @@ class TrackingService : TrackPointServiceBase() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val wasTrackingBeforeExit = settingsRepository.wasTrackingBeforeExit()
-        val restartIfKilled = currentSettings.resetTrackingIfKilled
         val startupTrigger = resolveStartupTrigger(intent?.action)
-        val commandPath = resolveStartupCommandPath(
-            action = intent?.action,
-            wasTrackingBeforeExit = wasTrackingBeforeExit,
-            restartTrackingIfKilled = restartIfKilled
-        )
+        val commandPath = resolveStartupCommandPath(action = intent?.action)
         logNotificationSurfaceDiagnostics(
             trigger = startupTrigger,
             action = intent?.action,
@@ -582,7 +570,7 @@ class TrackingService : TrackPointServiceBase() {
         Log.i(
             TAG,
             "onStartCommand action=${intent?.action} path=$commandPath startId=$startId " +
-                "wasTrackingBeforeExit=$wasTrackingBeforeExit restartIfKilled=$restartIfKilled trigger=$startupTrigger " +
+                "wasTrackingBeforeExit=$wasTrackingBeforeExit restartIfKilled=false trigger=$startupTrigger " +
                 "isTracking=$isTracking fgsPromoted=$startupForegroundPromoted"
         )
         if (requiresForegroundPromotion(commandPath) &&
@@ -602,7 +590,6 @@ class TrackingService : TrackPointServiceBase() {
             StartupCommandPath.StartTracking -> {
                 val started = startTracking(commandPath, startupTrigger)
                 if (started) {
-                    TrackingRecoveryCoordinator.ensureWatchdogScheduled(applicationContext)
                     START_STICKY
                 } else {
                     START_NOT_STICKY

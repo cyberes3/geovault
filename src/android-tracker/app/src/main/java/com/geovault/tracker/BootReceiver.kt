@@ -11,6 +11,7 @@ import com.geovault.tracker.runtime.RuntimeCommand
 import com.geovault.tracker.runtime.RuntimeCommandType
 import com.geovault.tracker.runtime.RuntimeTrigger
 import com.geovault.tracker.runtime.TrackingSessionOrchestrator
+import com.geovault.tracker.settings.TrackerSettingsLoadState
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.startup.BootStartupPolicy
 import com.geovault.tracker.startup.BootStartupSnapshot
@@ -24,14 +25,20 @@ class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val bootAction = intent.action
-        val appContext = context.applicationContext
-        val settings = settingsRepository.getSettings()
+        val settingsState = settingsRepository.getState()
+        if (!shouldProcessSettingsState(settingsState.loadState)) {
+            Log.w(
+                TAG,
+                "Boot handling skipped action=$bootAction reason=settings_${settingsState.loadState.name.lowercase()}"
+            )
+            return
+        }
+        val settings = settingsState.settings
         val startOnBoot = settings.startOnBoot
-        val wasTrackingBeforeExit = settingsRepository.wasTrackingBeforeExit()
+        val wasTrackingBeforeExit = settingsState.wasTrackingBeforeExit
         val trackerId = SelectedTrackerPrefs.selectedTrackerId(context)
         val hasRequiredPermissions = TrackingPermissionGate.hasRequiredPermissionsForTracking(context)
         val gpsProviderEnabled = isGpsProviderEnabled(context)
-        val strictPrereqs = TrackingRecoveryCoordinator.evaluateStrictPrerequisites(appContext)
         val userUnlocked = isUserUnlocked(context)
         Log.i(
             TAG,
@@ -50,19 +57,6 @@ class BootReceiver : BroadcastReceiver() {
                 selectedTrackerId = trackerId
             )
         )
-
-        if (settings.resetTrackingIfKilled && wasTrackingBeforeExit) {
-            if (!strictPrereqs.isReady) {
-                Log.w(
-                    TAG,
-                    "Strict recovery prerequisites missing at boot: " +
-                        "exactAlarm=${strictPrereqs.hasExactAlarmAccess} " +
-                        "batteryExempt=${strictPrereqs.hasBatteryOptimizationExemption}"
-                )
-            }
-            TrackingRecoveryCoordinator.ensureWatchdogScheduled(appContext)
-            Log.i(TAG, "Recovery watchdog ensured at boot")
-        }
 
         if (!decision.shouldStartTracking) {
             Log.w(
@@ -88,6 +82,10 @@ class BootReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "BootReceiver"
+
+        internal fun shouldProcessSettingsState(loadState: TrackerSettingsLoadState): Boolean {
+            return loadState == TrackerSettingsLoadState.Ready
+        }
 
         fun shouldStartTrackingOnBoot(
             startOnBoot: Boolean,

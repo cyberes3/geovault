@@ -50,15 +50,6 @@
                 android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
 
             <com.geovault.common.ToggleHelpCardView
-                android:id="@+id/restartTrackingIfKilledSwitch"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:toggleTitleText="@string/restart_tracking_if_killed_label"
-                app:toggleHelpText="@string/restart_tracking_if_killed_help_text"
-                android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
-                android:layout_marginBottom="@dimen/gv_common_toggle_help_card_margin_vertical" />
-
-            <com.geovault.common.ToggleHelpCardView
                 android:id="@+id/startTrackingOnLaunchSwitch"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -71,7 +62,6 @@
                 android:id="@+id/keepScreenOnWhileViewingMapSwitch"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:toggleChecked="true"
                 app:toggleTitleText="@string/keep_screen_on_while_viewing_map_label"
                 app:toggleHelpText="@string/keep_screen_on_while_viewing_map_help_text"
                 android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"

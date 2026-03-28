@@ -37,7 +37,9 @@ import com.geovault.tracker.Group
 import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.navigation.TrackerNavHost
 import com.geovault.tracker.data.TrackerManagementRepository
+import com.geovault.tracker.settings.TrackerSettingsLoadState
 import com.geovault.tracker.settings.TrackerSettingsRepository
+import com.geovault.tracker.settings.TrackerSettingsState
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.startup.StartupRefreshInput
@@ -80,6 +82,8 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     private var isHandlingTabBack = false
     private val startupRefreshOrchestrator by lazy { StartupRefreshOrchestrator(startupRefreshGateway) }
     private var startupRefreshJob: Job? = null
+    private var startupTrackingAutomationJob: Job? = null
+    private var startupTrackingAutomationHandled = false
     private var hasStartedVersionCheck = false
     private var isBottomNavTransitionInFlight = false
     private var lastBottomNavTransitionAtMs: Long = 0L
@@ -373,61 +377,43 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             intent.removeExtra(EXTRA_OAUTH_ERROR)
         }
 
-        // Restart-if-killed and start-on-launch
-        val settings = settingsRepository.getSettings()
-        val restartIfKilled = settings.resetTrackingIfKilled
-        val wasTrackingBeforeExit = settingsRepository.wasTrackingBeforeExit()
-        if (restartIfKilled && wasTrackingBeforeExit) {
-            maybePromptStrictRecoveryRequirements()
-            TrackingRecoveryCoordinator.ensureWatchdogScheduled(applicationContext)
-        }
-        if (!restartIfKilled || TrackingRuntimeStateStore.state.value.isRunning) {
-            if (wasTrackingBeforeExit) {
-                settingsRepository.clearWasTrackingBeforeExit()
+        launchStartupTrackingAutomationIfNeeded()
+    }
+
+    private fun launchStartupTrackingAutomationIfNeeded() {
+        if (startupTrackingAutomationHandled || startupTrackingAutomationJob?.isActive == true) return
+        startupTrackingAutomationJob = lifecycleScope.launch {
+            settingsRepository.observeState().collect { settingsState ->
+                when (settingsState.loadState) {
+                    TrackerSettingsLoadState.Loading -> {
+                        Log.i("MainActivity", "startup_automation_waiting reason=settings_loading")
+                    }
+
+                    TrackerSettingsLoadState.Error -> {
+                        Log.w("MainActivity", "startup_automation_aborted reason=settings_error")
+                        startupTrackingAutomationHandled = true
+                        this.cancel()
+                    }
+
+                    TrackerSettingsLoadState.Ready -> {
+                        applyStartupTrackingAutomation(settingsState)
+                        startupTrackingAutomationHandled = true
+                        this.cancel()
+                    }
+                }
             }
-        } else if (wasTrackingBeforeExit) {
-            tryResumeTrackingAfterKill()
-            return
+        }
+    }
+
+    private fun applyStartupTrackingAutomation(settingsState: TrackerSettingsState) {
+        val settings = settingsState.settings
+        val wasTrackingBeforeExit = settingsState.wasTrackingBeforeExit
+        if (wasTrackingBeforeExit) {
+            settingsRepository.clearWasTrackingBeforeExit()
         }
         if (!TrackingRuntimeStateStore.state.value.isRunning && settings.startTrackingOnLaunch) {
             tryStartTrackingOnLaunch()
         }
-    }
-
-    private fun tryResumeTrackingAfterKill() {
-        if (!ensureTrackingStartReadiness(requestMissingPermissions = false)) {
-            settingsRepository.clearWasTrackingBeforeExit()
-            return
-        }
-        val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
-        if (trackerId.isEmpty()) {
-            settingsRepository.clearWasTrackingBeforeExit()
-            return
-        }
-        tryStartTrackingSilently(
-            onInvalid = {
-                SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(this, clearTrackersListCache = true)
-                settingsRepository.clearWasTrackingBeforeExit()
-                lifecycleScope.launch {
-                    val trackersResult = trackerManagementRepository.loadTrackers(forceRefresh = true)
-                    setServerAccessibility(trackersResult is RepositoryResult.Success)
-                }
-                showSnackbar(getString(R.string.tracker_validation_failed_go_to_settings))
-                val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
-                hf?.updateTrackingUi()
-            },
-            onValid = {
-                TrackingServiceLaunchGate.dispatchStart(
-                    context = this,
-                    trigger = "main_resume_after_kill"
-                )
-                Handler(Looper.getMainLooper()).postDelayed({
-                    val hf = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
-                    hf?.updateTrackingUi()
-                }, 300)
-                Toast.makeText(this, getString(R.string.resuming_tracking), Toast.LENGTH_SHORT).show()
-            }
-        )
     }
 
     private fun tryStartTrackingOnLaunch() {
@@ -1011,15 +997,6 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
         startActivity(intent)
     }
 
-    private fun maybePromptStrictRecoveryRequirements() {
-        if (!hasExactAlarmPermission()) {
-            showSnackbar(getString(R.string.exact_alarm_permission_required))
-        }
-        if (!hasBatteryOptimizationExemption()) {
-            showSnackbar(getString(R.string.battery_optimization_exemption_required))
-        }
-    }
-    
     private fun updatePermissionsState() {
         val homeFragment = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
         homeFragment?.updatePermissionsUi()

@@ -19,7 +19,7 @@ internal object MapSessionWindowPolicy {
         incomingPropsJson: String?,
         allowResetOnNewSession: Boolean = true
     ): MapSessionWindowDecision {
-        val normalizedWindow = recentDataWindow?.trim()
+        val normalizedWindow = recentDataWindow?.trim()?.lowercase()
         if (normalizedWindow !in SESSION_WINDOWS) {
             return MapSessionWindowDecision(
                 shouldResetTrackGeometry = false,

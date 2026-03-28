@@ -217,6 +217,8 @@ class MapFragment : Fragment() {
     private var pendingResumeCameraZoom: Double? = null
     private var pendingLockReapplyAfterMapReady: Boolean = false
     private var pendingReopenSingleTrackerLoadId: String? = null
+    /** Session-window filtering is suspended briefly while a force-replace resync is in flight. */
+    private var pendingSessionAnchorResyncUntilMs: Long? = null
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -1492,6 +1494,7 @@ class MapFragment : Fragment() {
         if (showAllTrackers || mapViewContext == MapViewContext.GROUP) return true
         val activeTrackerId = displayedTrackerId ?: return true
         if (event.trackId != activeTrackerId) return true
+        if (isSessionAnchorResyncPending()) return true
         val allowSessionReset = pendingReopenSingleTrackerLoadId.isNullOrEmpty()
         val decision = MapSessionWindowPolicy.decide(
             recentDataWindow = displayedTrackerRecentDataWindow(),
@@ -1916,33 +1919,13 @@ class MapFragment : Fragment() {
         clearAllTrackSources()
         setAllTrackLayersVisibility(false)
         setAnnotationLayersVisibility(true)
+        clearPendingSessionAnchorResync()
         updateFollowLockButton()
     }
 
     private fun clearSingleTrackerDataAndRender() {
         trackPoints.clear()
         trackTimestamps.clear()
-        updateTrackLine()
-    }
-
-    private fun clearSingleTrackerDataKeepingLatestPointAndRender() {
-        val latestPoint = trackPoints.lastOrNull()
-        val latestTimestamp = trackTimestamps.lastOrNull() ?: System.currentTimeMillis()
-        val fallbackLastPoint = displayedTracker?.last_point?.takeIf { it.size >= 2 }?.let {
-            LatLng(it[1], it[0])
-        }
-        trackPoints.clear()
-        trackTimestamps.clear()
-        when {
-            latestPoint != null -> {
-                trackPoints.add(latestPoint)
-                trackTimestamps.add(latestTimestamp)
-            }
-            fallbackLastPoint != null -> {
-                trackPoints.add(fallbackLastPoint)
-                trackTimestamps.add(System.currentTimeMillis())
-            }
-        }
         updateTrackLine()
     }
 
@@ -2773,7 +2756,7 @@ class MapFragment : Fragment() {
             (tracker.point_params?.lastOrNull()?.get("acc") as? Number)?.toFloat()?.takeIf { it > 0f }
                 ?.let { lastStreamedAccuracyMeters = it }
         }
-        displayedTrackerSessionStartMs = MapSessionWindowPolicy.resolveLatestSessionStartMs(tracker?.point_params)
+        val resolvedSessionStartMs = MapSessionWindowPolicy.resolveLatestSessionStartMs(tracker?.point_params)
         val coords = tracker?.geometry?.coordinates
         if (coords != null) {
             val normalizedCoords = MapCoordinateUtils.normalizeRawCoordinates(coords)
@@ -2850,6 +2833,8 @@ class MapFragment : Fragment() {
                 updateFollowLockButton()
             }
         }
+        displayedTrackerSessionStartMs = resolvedSessionStartMs
+        clearPendingSessionAnchorResync()
         updateZoomToLatestButtonState()
         updateTrackerLabel()
         startLiveTrackStreamingForDisplayedTracker()
@@ -2958,7 +2943,7 @@ class MapFragment : Fragment() {
         }
 
         pendingDisplayedTrackerIdOverride = normalizedId
-        fetchHistory(forceReplace = true)
+        fetchHistory(forceReplace = true, trigger = MapSingleTrackerRefreshTrigger.SETTINGS_CHANGE)
     }
 
     /**
@@ -2981,11 +2966,25 @@ class MapFragment : Fragment() {
         )
     }
 
-    private fun fetchHistory(forceReplace: Boolean = false) {
+    private fun fetchHistory(
+        forceReplace: Boolean = false,
+        trigger: MapSingleTrackerRefreshTrigger = MapSingleTrackerRefreshTrigger.STANDARD
+    ) {
         reduceLock(MapLockEvent.DisableLiveFit)
         updateShowMyLocationButtonVisibility()
-        if (trackingRuntimeSnapshot().isRunning && trackPoints.isNotEmpty()) {
+        val refreshDecision = MapSingleTrackerRefreshPolicy.resolve(
+            MapSingleTrackerRefreshInput(
+                trackingActive = trackingRuntimeSnapshot().isRunning,
+                hasTrackPoints = trackPoints.isNotEmpty(),
+                forceReplace = forceReplace,
+                trigger = trigger
+            )
+        )
+        if (!refreshDecision.shouldFetch) {
             return
+        }
+        if (refreshDecision.shouldPrimeSessionAnchorResync) {
+            primeSessionAnchorResync()
         }
         if (mapViewContext == MapViewContext.GROUP) {
             updateZoomToLatestButtonState()
@@ -3039,15 +3038,7 @@ class MapFragment : Fragment() {
                 loadAllTrackersAndApply()
             }
             MapHistoryClearAction.REFRESH_DISPLAYED_SINGLE_FORCE_REPLACE -> {
-                if (trackingRuntimeSnapshot().isRunning) {
-                    // During active local tracking, fetchHistory() intentionally no-ops.
-                    // Keep only the newest point to match backend clear-history semantics.
-                    clearSingleTrackerDataKeepingLatestPointAndRender()
-                    updateZoomToLatestButtonState()
-                    updateTrackerLabel()
-                } else {
-                    fetchHistory(forceReplace = true)
-                }
+                fetchHistory(forceReplace = true, trigger = MapSingleTrackerRefreshTrigger.HISTORY_CLEAR)
             }
             MapHistoryClearAction.REFRESH_SELECTED_SINGLE_FORCE_REPLACE -> {
                 fetchSingleTrackerHistoryAndApply(trackerId, forceReplace = true)
@@ -3268,6 +3259,7 @@ class MapFragment : Fragment() {
                             handleRuntimeResyncCommand(command.command)
                         }
                         is MapCommand.ShowError -> {
+                            clearPendingSessionAnchorResync()
                             navHost()?.showSnackbar(command.message)
                         }
                     }
@@ -3294,6 +3286,25 @@ class MapFragment : Fragment() {
         val root = view ?: return
         root.contentDescription = message
         root.sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED)
+    }
+
+    private fun primeSessionAnchorResync() {
+        displayedTrackerSessionStartMs = null
+        pendingSessionAnchorResyncUntilMs = SystemClock.elapsedRealtime() + 15_000L
+    }
+
+    private fun clearPendingSessionAnchorResync() {
+        pendingSessionAnchorResyncUntilMs = null
+    }
+
+    private fun isSessionAnchorResyncPending(): Boolean {
+        val pendingUntil = pendingSessionAnchorResyncUntilMs ?: return false
+        val now = SystemClock.elapsedRealtime()
+        if (now > pendingUntil) {
+            pendingSessionAnchorResyncUntilMs = null
+            return false
+        }
+        return true
     }
 
     private fun trackingRuntimeSnapshot() = TrackingRuntimeStateStore.state.value

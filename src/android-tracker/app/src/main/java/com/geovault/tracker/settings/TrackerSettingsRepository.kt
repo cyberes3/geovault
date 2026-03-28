@@ -3,12 +3,15 @@ package com.geovault.tracker.settings
 import kotlinx.coroutines.flow.Flow
 
 interface TrackerSettingsRepository {
+    fun isReady(): Boolean
+    fun getState(): TrackerSettingsState
+    fun observeState(): Flow<TrackerSettingsState>
     fun getSettings(): TrackerSettings
     fun observeSettings(): Flow<TrackerSettings>
+    fun dumpDebugState(reason: String = "manual")
 
     fun setSendExtendedData(enabled: Boolean)
     fun setSignificantDataOnly(enabled: Boolean)
-    fun setResetTrackingIfKilled(enabled: Boolean)
     fun setAutoTrackingMode(enabled: Boolean)
     fun setTrackingProfile(profile: TrackerTrackingProfile)
     fun setLoggingIntervalSec(value: Long)

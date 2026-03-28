@@ -89,4 +89,21 @@ class MapSingleTrackerHistoryPolicyTest {
         assertFalse(decision.shouldClearForEmptyForceReplace)
         assertTrue(decision.shouldApplyGeometry)
     }
+
+    @Test
+    fun decide_appliesGeometryForForceReplaceDuringTracking() {
+        val decision = MapSingleTrackerHistoryPolicy.decide(
+            SingleTrackerHistoryApplyInput(
+                forceReplace = true,
+                normalizedCoordCount = 5,
+                hasTrackPoints = true,
+                trackingActive = true,
+                isExternalStreaming = false,
+                isSelectedDefaultTrackerMode = false
+            )
+        )
+
+        assertFalse(decision.shouldClearForEmptyForceReplace)
+        assertTrue(decision.shouldApplyGeometry)
+    }
 }
