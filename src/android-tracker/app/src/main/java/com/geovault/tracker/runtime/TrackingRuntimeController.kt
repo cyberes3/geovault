@@ -20,15 +20,15 @@ data class StrictPrereqStatus(
 class TrackingRuntimeController private constructor(context: Context) {
     private val appContext = context.applicationContext
     private val telemetry = RuntimeTelemetry(appContext)
-    private val orchestrator = TrackingSessionOrchestrator.get(appContext)
+    private val runtimeFacade = TrackingRuntimeFacade.get(appContext)
 
     fun handle(command: RuntimeCommand): RuntimeCommandResult {
-        return orchestrator.handleCommand(command).commandResult
+        return runtimeFacade.handleCommand(command).commandResult
             ?: RuntimeCommandResult(action = RuntimeActionType.NOOP, reason = "orchestrator_no_result")
     }
 
     fun handleWatchdogTick(restartTrackingIfKilled: Boolean, wasTrackingBeforeExit: Boolean): RuntimeCommandResult {
-        return orchestrator
+        return runtimeFacade
             .handleWatchdogTick(
                 restartTrackingIfKilled = restartTrackingIfKilled,
                 wasTrackingBeforeExit = wasTrackingBeforeExit
@@ -38,7 +38,7 @@ class TrackingRuntimeController private constructor(context: Context) {
     }
 
     fun markHeartbeat() {
-        orchestrator.handleServiceEvent(
+        runtimeFacade.handleServiceEvent(
             RuntimeServiceEvent(
                 type = RuntimeServiceEventType.HEARTBEAT,
                 trigger = RuntimeTrigger.UNKNOWN,
@@ -48,7 +48,7 @@ class TrackingRuntimeController private constructor(context: Context) {
     }
 
     fun markTrackingStarted(trigger: RuntimeTrigger) {
-        orchestrator.handleServiceEvent(
+        runtimeFacade.handleServiceEvent(
             RuntimeServiceEvent(
                 type = RuntimeServiceEventType.TRACKING_STARTED,
                 trigger = trigger,
@@ -58,7 +58,7 @@ class TrackingRuntimeController private constructor(context: Context) {
     }
 
     fun markIntentionalStop(reason: String) {
-        orchestrator.handleServiceEvent(
+        runtimeFacade.handleServiceEvent(
             RuntimeServiceEvent(
                 type = RuntimeServiceEventType.TRACKING_STOPPED,
                 trigger = RuntimeTrigger.EXPLICIT_STOP,
@@ -69,7 +69,7 @@ class TrackingRuntimeController private constructor(context: Context) {
 
     fun markUnexpectedDestroy(wasTracking: Boolean) {
         if (!wasTracking) return
-        orchestrator.handleServiceEvent(
+        runtimeFacade.handleServiceEvent(
             RuntimeServiceEvent(
                 type = RuntimeServiceEventType.UNEXPECTED_DESTROY,
                 trigger = RuntimeTrigger.UNKNOWN,
@@ -78,13 +78,17 @@ class TrackingRuntimeController private constructor(context: Context) {
         )
     }
 
+    fun recordServiceEvent(event: RuntimeServiceEvent) {
+        runtimeFacade.handleServiceEvent(event)
+    }
+
     fun ensureWatchdogScheduled() {
-        orchestrator.scheduleWatchdog(reason = "ensure_watchdog")
+        runtimeFacade.scheduleWatchdog(reason = "ensure_watchdog")
         telemetry.decision("ensure_watchdog", "scheduled=true")
     }
 
     fun cancelWatchdog() {
-        orchestrator.cancelWatchdog(reason = "cancel_watchdog")
+        runtimeFacade.cancelWatchdog(reason = "cancel_watchdog")
         telemetry.decision("cancel_watchdog", "scheduled=false")
     }
 

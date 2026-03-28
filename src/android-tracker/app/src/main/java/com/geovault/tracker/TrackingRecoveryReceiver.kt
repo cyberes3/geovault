@@ -5,7 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.geovault.tracker.runtime.TrackingSessionOrchestrator
+import com.geovault.tracker.runtime.TrackingRuntimeController
 import com.geovault.tracker.settings.TrackerSettingsLoadState
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import dagger.hilt.android.AndroidEntryPoint
@@ -36,10 +36,10 @@ class TrackingRecoveryReceiver : BroadcastReceiver() {
             "TrackingRecovery",
             "Recovery receiver action=$action restartTrackingIfKilled=false wasTrackingBeforeExit=$wasTrackingBeforeExit"
         )
-        val result = TrackingSessionOrchestrator.get(context.applicationContext).handleWatchdogTick(
+        val result = TrackingRuntimeController.get(context.applicationContext).handleWatchdogTick(
             restartTrackingIfKilled = false,
             wasTrackingBeforeExit = wasTrackingBeforeExit
-        ).commandResult
+        )
         Log.i(
             "TrackingRecovery",
             "Runtime recovery decision action=${result?.action} reason=${result?.reason} gate=${result?.startGateDecision}"

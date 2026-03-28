@@ -54,7 +54,6 @@ import com.geovault.tracker.runtime.RuntimeCommandType
 import com.geovault.tracker.runtime.RuntimeServiceEvent
 import com.geovault.tracker.runtime.RuntimeServiceEventType
 import com.geovault.tracker.runtime.RuntimeTrigger
-import com.geovault.tracker.runtime.TrackingSessionOrchestrator
 import com.geovault.tracker.runtime.TrackingRuntimeController
 import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
 import com.geovault.tracker.sensor.SignificantMotionResumeBridge
@@ -1924,7 +1923,7 @@ class TrackingService : TrackPointServiceBase() {
         reason: String,
         trigger: RuntimeTrigger = RuntimeTrigger.UNKNOWN
     ) {
-        TrackingSessionOrchestrator.get(applicationContext).handleServiceEvent(
+        TrackingRuntimeController.get(applicationContext).recordServiceEvent(
             RuntimeServiceEvent(
                 type = type,
                 trigger = trigger,

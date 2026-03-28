@@ -11,7 +11,7 @@ import com.geovault.tracker.TrackingService
 import com.geovault.tracker.runtime.RuntimeCommand
 import com.geovault.tracker.runtime.RuntimeCommandType
 import com.geovault.tracker.runtime.RuntimeTrigger
-import com.geovault.tracker.runtime.TrackingSessionOrchestrator
+import com.geovault.tracker.runtime.TrackingRuntimeController
 import kotlin.math.min
 
 object TrackingServiceLaunchGate {
@@ -75,16 +75,12 @@ object TrackingServiceLaunchGate {
 
     @JvmStatic
     fun dispatchStart(context: Context, trigger: String): LaunchDecision {
-        val runtimeResult = TrackingSessionOrchestrator.get(context).handleCommand(
+        val runtimeResult = TrackingRuntimeController.get(context).handle(
             RuntimeCommand(
                 type = RuntimeCommandType.START,
                 trigger = mapTrigger(trigger),
                 reason = trigger
             )
-        ).commandResult ?: return LaunchDecision(
-            allowed = false,
-            retryInMs = 0L,
-            reason = "orchestrator_no_result"
         )
         val runtimeGate = runtimeResult.startGateDecision
         if (runtimeResult.action == com.geovault.tracker.runtime.RuntimeActionType.DISPATCH_START && runtimeGate != null) {
