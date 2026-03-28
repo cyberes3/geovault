@@ -15,6 +15,7 @@ import com.geovault.tracker.services.TrackingRuntimeStateStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -258,7 +259,30 @@ class MapViewModelIntegrationTest {
     }
 
     @Test
-    fun singleTracker_runtimeDoesNotCallGeometry_bootstrapDoes() = runTest {
+    fun duplicateSingleLoadIntent_isDeduplicated() = runTest {
+        val stream = MutableSharedFlow<TrackPointEvent>(extraBufferCapacity = 8)
+        val runtimeRepo = SlowCountingTrackRepository()
+        val bootstrapRepo = SlowCountingTrackRepository()
+        val viewModel = createViewModel(
+            stream = stream,
+            runtimeRepo = runtimeRepo,
+            bootstrapRepo = bootstrapRepo
+        )
+        val commands = mutableListOf<MapCommand>()
+        val job = launch {
+            viewModel.commands.collect { commands.add(it) }
+        }
+
+        viewModel.handleIntent(MapIntent.LoadSingleTrackerRuntime(trackerId = "t1", forceReplace = false))
+        viewModel.handleIntent(MapIntent.LoadSingleTrackerRuntime(trackerId = "t1", forceReplace = false))
+        advanceUntilIdle()
+        job.cancel()
+
+        assertEquals(1, commands.count { it is MapCommand.RenderSingleTracker })
+    }
+
+    @Test
+    fun singleTracker_runtimeAndBootstrapBothUseUnifiedGeometryHydration() = runTest {
         val stream = MutableSharedFlow<TrackPointEvent>(extraBufferCapacity = 8)
         val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<Application>()
         val countingRepo = CountingTrackRepository()
@@ -275,11 +299,12 @@ class MapViewModelIntegrationTest {
 
         viewModel.handleIntent(MapIntent.LoadSingleTrackerRuntime(trackerId = "t1"))
         advanceUntilIdle()
-        assertEquals(0, countingRepo.getTrackerGeometryCalls)
+        val runtimeCalls = countingRepo.getTrackerGeometryCalls
+        assertTrue(runtimeCalls > 0)
 
         viewModel.handleIntent(MapIntent.LoadSingleTrackerBootstrap(trackerId = "t1"))
         advanceUntilIdle()
-        assertTrue(countingRepo.getTrackerGeometryCalls > 0)
+        assertTrue(countingRepo.getTrackerGeometryCalls > runtimeCalls)
     }
 
     @Test
@@ -377,12 +402,16 @@ class MapViewModelIntegrationTest {
         job.cancel()
     }
 
-    private fun createViewModel(stream: MutableSharedFlow<TrackPointEvent>): MapViewModel {
+    private fun createViewModel(
+        stream: MutableSharedFlow<TrackPointEvent>,
+        runtimeRepo: RuntimeMapTrackRepository = FakeTrackRepository(),
+        bootstrapRepo: BootstrapMapTrackRepository = FakeTrackRepository()
+    ): MapViewModel {
         val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<Application>()
         return MapViewModel(
             application = app,
-            runtimeTrackRepository = FakeTrackRepository(),
-            bootstrapTrackRepository = FakeTrackRepository(),
+            runtimeTrackRepository = runtimeRepo,
+            bootstrapTrackRepository = bootstrapRepo,
             groupRepository = FakeGroupRepository(),
             streamingRepository = object : MapStreamingRepository {
                 override val events: Flow<TrackPointEvent> = stream
@@ -469,6 +498,61 @@ class MapViewModelIntegrationTest {
                 coordinates = listOf(listOf(1.0, 2.0), listOf(3.0, 4.0))
             )
         )
+
+        override suspend fun getTrackersCoordinates(
+            trackerIds: List<String>
+        ): RepositoryResult<Map<String, TrackerCoordinatesResponse>> = RepositoryResult.Success(
+            trackerIds.associateWith {
+                TrackerCoordinatesResponse(
+                    coordinates = listOf(listOf(1.0, 2.0), listOf(3.0, 4.0))
+                )
+            }
+        )
+
+        override fun getTrackerFromCache(id: String): Tracker? = null
+    }
+
+    private class SlowCountingTrackRepository : MapTrackRepository {
+        var getTrackerGeometryCalls: Int = 0
+        var getTrackerCalls: Int = 0
+        var getCoordinatesCalls: Int = 0
+
+        override suspend fun getTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> =
+            RepositoryResult.Success(emptyList())
+
+        override suspend fun getTracker(id: String, forceRefresh: Boolean): RepositoryResult<Tracker> {
+            getTrackerCalls += 1
+            delay(25L)
+            return RepositoryResult.Success(Tracker(id = id, name = id, color = null))
+        }
+
+        override suspend fun getTrackerGeometry(id: String): RepositoryResult<Tracker> {
+            getTrackerGeometryCalls += 1
+            delay(25L)
+            return RepositoryResult.Success(
+                Tracker(
+                    id = id,
+                    name = id,
+                    color = null,
+                    geometry = GeoJsonLineString(
+                        type = "LineString",
+                        coordinates = listOf(listOf(1.0, 2.0), listOf(3.0, 4.0))
+                    )
+                )
+            )
+        }
+
+        override suspend fun getTrackerCoordinates(
+            id: String
+        ): RepositoryResult<TrackerCoordinatesResponse> {
+            getCoordinatesCalls += 1
+            delay(25L)
+            return RepositoryResult.Success(
+                TrackerCoordinatesResponse(
+                    coordinates = listOf(listOf(1.0, 2.0), listOf(3.0, 4.0))
+                )
+            )
+        }
 
         override suspend fun getTrackersCoordinates(
             trackerIds: List<String>

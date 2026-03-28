@@ -216,6 +216,7 @@ class MapFragment : Fragment() {
     private var lastPausedElapsedRealtimeMs: Long? = null
     private var pendingResumeCameraZoom: Double? = null
     private var pendingLockReapplyAfterMapReady: Boolean = false
+    private var pendingReopenSingleTrackerLoadId: String? = null
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -255,6 +256,13 @@ class MapFragment : Fragment() {
                 gpsLocationLockActive = false
                 liveActiveFitEnabled = false
             }
+            is MapLockState.TrackerFollowPending -> {
+                followLockEnabled = true
+                followLockNeedsInitialZoom = newState.needsInitialZoom
+                lockTarget = null
+                gpsLocationLockActive = false
+                liveActiveFitEnabled = false
+            }
             MapLockState.GpsFollow -> {
                 followLockEnabled = false
                 followLockNeedsInitialZoom = false
@@ -277,6 +285,11 @@ class MapFragment : Fragment() {
             followLockEnabled && lockTarget != null -> {
                 MapLockState.TrackerFollow(
                     target = requireNotNull(lockTarget),
+                    needsInitialZoom = followLockNeedsInitialZoom
+                )
+            }
+            followLockEnabled -> {
+                MapLockState.TrackerFollowPending(
                     needsInitialZoom = followLockNeedsInitialZoom
                 )
             }
@@ -311,7 +324,9 @@ class MapFragment : Fragment() {
                     else -> resolveSingleTrackerCameraTarget()
                 }
                 if (target == null) {
-                    MapLockState.None
+                    MapLockState.TrackerFollowPending(
+                        needsInitialZoom = command.lockNeedsInitialZoom
+                    )
                 } else {
                     MapLockState.TrackerFollow(
                         target = target,
@@ -603,6 +618,15 @@ class MapFragment : Fragment() {
                     maybeReapplyLockStateAfterMapReady()
                     return
                 }
+                val pendingReopenLoadId = pendingReopenSingleTrackerLoadId
+                if (!pendingReopenLoadId.isNullOrEmpty() &&
+                    (displayedTrackerId.isNullOrEmpty() || displayedTrackerId == pendingReopenLoadId)
+                ) {
+                    // Reopen orchestrator already kicked a single-tracker load; avoid duplicate
+                    // fetchHistory dispatch from map-ready path.
+                    maybeReapplyLockStateAfterMapReady()
+                    return
+                }
                 if (displayedTrackerId.isNullOrEmpty()) {
                     val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
                     val selectedTrackerName = SelectedTrackerPrefs.selectedTrackerName(requireContext())
@@ -813,7 +837,7 @@ class MapFragment : Fragment() {
         }
 
         if (mapReady) {
-            val decision = mapFlowViewModel.resolveResumeDecision(
+            val outcome = mapFlowViewModel.resolveReopenOutcome(
                 MapResumeInput(
                     trackingRunning = trackingRuntimeSnapshot().isRunning,
                     mapReady = mapReady,
@@ -828,13 +852,13 @@ class MapFragment : Fragment() {
                     backgroundedDurationMs = backgroundedDurationMs
                 )
             )
-            when (decision) {
-                MapResumeDecision.NoOp -> Unit
-                MapResumeDecision.MultiContextNoStreaming -> Unit
-                is MapResumeDecision.StartMultiContextStreaming -> {
-                    startLiveTrackStreamingForTrackerSet(decision.trackerIds)
+            when (val command = outcome.command) {
+                MapReopenCommand.NoOp -> Unit
+                MapReopenCommand.MultiContextNoStreaming -> Unit
+                is MapReopenCommand.StartMultiContextStreaming -> {
+                    startLiveTrackStreamingForTrackerSet(command.trackerIds)
                 }
-                MapResumeDecision.ClearSingleTrackerState -> {
+                MapReopenCommand.ClearSingleTrackerState -> {
                     trackPoints.clear()
                     displayedTracker = null
                     displayedTrackerId = null
@@ -843,31 +867,33 @@ class MapFragment : Fragment() {
                     updateTrackLine()
                     updateZoomToLatestButtonState()
                 }
-                is MapResumeDecision.LoadSingleTrackerRuntime -> {
-                    if (displayedTrackerId != decision.trackerId || mapViewContext != MapViewContext.SINGLE_TRACKER) {
-                        displayedTrackerId = decision.trackerId
+                is MapReopenCommand.LoadSingleTrackerRuntime -> {
+                    if (displayedTrackerId != command.trackerId || mapViewContext != MapViewContext.SINGLE_TRACKER) {
+                        displayedTrackerId = command.trackerId
                         mapViewContext = MapViewContext.SINGLE_TRACKER
                     }
+                    pendingReopenSingleTrackerLoadId = command.trackerId
                     mapFlowViewModel.handleIntent(
                         MapIntent.LoadSingleTrackerRuntime(
-                            trackerId = decision.trackerId,
+                            trackerId = command.trackerId,
                             forceReplace = false
                         )
                     )
                 }
-                is MapResumeDecision.LoadSingleTrackerBootstrap -> {
-                    if (displayedTrackerId != decision.trackerId || mapViewContext != MapViewContext.SINGLE_TRACKER) {
-                        displayedTrackerId = decision.trackerId
+                is MapReopenCommand.LoadSingleTrackerBootstrap -> {
+                    if (displayedTrackerId != command.trackerId || mapViewContext != MapViewContext.SINGLE_TRACKER) {
+                        displayedTrackerId = command.trackerId
                         mapViewContext = MapViewContext.SINGLE_TRACKER
                     }
+                    pendingReopenSingleTrackerLoadId = command.trackerId
                     mapFlowViewModel.handleIntent(
                         MapIntent.LoadSingleTrackerBootstrap(
-                            trackerId = decision.trackerId,
+                            trackerId = command.trackerId,
                             forceReplace = false
                         )
                     )
                 }
-                MapResumeDecision.RestartDisplayedTrackerStreaming -> {
+                MapReopenCommand.RestartDisplayedTrackerStreaming -> {
                     // Re-start streaming when returning to Map (e.g. after closing Params overlay).
                     startLiveTrackStreamingForDisplayedTracker()
                 }
@@ -909,6 +935,7 @@ class MapFragment : Fragment() {
         mapManager = null
         maplibreMap = null
         mapReady = false
+        pendingReopenSingleTrackerLoadId = null
         geometryFetchToken = InFlightRequestToken()
         coordinatesFetchToken = InFlightRequestToken()
         // Preserve deferred group handoff across view teardown so onMapReady can still apply it.
@@ -942,6 +969,7 @@ class MapFragment : Fragment() {
         val normalized = when (mapLockState) {
             MapLockState.None -> MapLockState.None
             is MapLockState.TrackerFollow -> mapLockState
+            is MapLockState.TrackerFollowPending -> mapLockState
             MapLockState.GpsFollow -> if (showMyLocationEnabled) MapLockState.GpsFollow else MapLockState.None
             // Keep live-fit lock intent sticky; camera fit is deferred until data becomes available.
             MapLockState.LiveFit -> MapLockState.LiveFit
@@ -1020,7 +1048,7 @@ class MapFragment : Fragment() {
         mapFragment?.mapViewOrNull?.onLowMemory()
     }
 
-    private fun isFollowLockActive(): Boolean = mapLockState is MapLockState.TrackerFollow
+    private fun isFollowLockActive(): Boolean = mapLockState.mode == MapLockMode.TRACKER_FOLLOW
 
     private fun isSelectedDefaultTrackerMode(): Boolean {
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(requireContext())
@@ -1104,7 +1132,7 @@ class MapFragment : Fragment() {
                 showMyLocationEnabledIntent = showMyLocationEnabled,
                 isSelectedDefaultTracker = isSelectedDefaultTrackerMode(),
                 gpsLockRequested = gpsLocationLockActive,
-                trackerOrLiveLockActive = mapLockState is MapLockState.TrackerFollow || mapLockState is MapLockState.LiveFit
+                trackerOrLiveLockActive = isFollowLockActive() || mapLockState is MapLockState.LiveFit
             )
         )
     }
@@ -1464,10 +1492,12 @@ class MapFragment : Fragment() {
         if (showAllTrackers || mapViewContext == MapViewContext.GROUP) return true
         val activeTrackerId = displayedTrackerId ?: return true
         if (event.trackId != activeTrackerId) return true
+        val allowSessionReset = pendingReopenSingleTrackerLoadId.isNullOrEmpty()
         val decision = MapSessionWindowPolicy.decide(
             recentDataWindow = displayedTrackerRecentDataWindow(),
             currentSessionStartMs = displayedTrackerSessionStartMs,
-            incomingPropsJson = event.propsJson
+            incomingPropsJson = event.propsJson,
+            allowResetOnNewSession = allowSessionReset
         )
         displayedTrackerSessionStartMs = decision.nextSessionStartMs
         if (decision.shouldIgnorePoint) return false
@@ -2220,7 +2250,7 @@ class MapFragment : Fragment() {
     }
 
     private fun disableFollowLockForLiveActiveFit() {
-        if (mapLockState !is MapLockState.TrackerFollow) return
+        if (!isFollowLockActive()) return
         reduceLock(MapLockEvent.DisableTrackerFollow)
         maplibreMap?.let { LocationComponentHelper.setCameraTracking(it, enabled = false) }
         updateFollowLockButton()
@@ -2500,7 +2530,7 @@ class MapFragment : Fragment() {
     private fun clearMapSelection() {
         if (selectedMapTracker == null) return
         selectedMapTracker = null
-        if (mapLockState is MapLockState.TrackerFollow) {
+        if (isFollowLockActive()) {
             reduceLock(MapLockEvent.DisableTrackerFollow)
         }
         updateMapSelectionUi()
@@ -2802,7 +2832,10 @@ class MapFragment : Fragment() {
             if (!showAllTrackers && singleTrackerTarget != null && !showMyLocationEnabled) {
                 disableLiveActiveFitForFollowLock()
                 val existingFollow = mapLockState as? MapLockState.TrackerFollow
-                val needsInitialZoom = existingFollow?.needsInitialZoom ?: true
+                val pendingFollow = mapLockState as? MapLockState.TrackerFollowPending
+                val needsInitialZoom = existingFollow?.needsInitialZoom
+                    ?: pendingFollow?.needsInitialZoom
+                    ?: true
                 if (existingFollow != null) {
                     reduceLock(MapLockEvent.RecenterTrackerFollow(singleTrackerTarget))
                 } else {
@@ -3180,6 +3213,9 @@ class MapFragment : Fragment() {
                 mapFlowViewModel.commands.collect { command ->
                     when (command) {
                         is MapCommand.RenderSingleTracker -> {
+                            if (pendingReopenSingleTrackerLoadId == command.snapshot.tracker.id) {
+                                pendingReopenSingleTrackerLoadId = null
+                            }
                             // Always render from snapshot coordinates so stale tracker.geometry
                             // from cache cannot repopulate a cleared history line.
                             val trackerWithGeometry = command.snapshot.tracker.copy(

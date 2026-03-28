@@ -42,7 +42,7 @@ class MapViewModel @Inject constructor(
     private val loadGroupMapUseCase = LoadGroupMapUseCase(runtimeTrackRepository)
     private val handleTrackPointUseCase = HandleTrackPointUseCase()
     private val applyCameraPolicyUseCase = ApplyCameraPolicyUseCase()
-    private val resolveMapResumeUseCase = ResolveMapResumeUseCase()
+    private val reopenMapOrchestrator = ReopenMapOrchestrator()
 
     private val _uiState = MutableStateFlow(MapUiState())
     val uiState: StateFlow<MapUiState> = _uiState.asStateFlow()
@@ -55,6 +55,9 @@ class MapViewModel @Inject constructor(
     private var managementEventsJob: Job? = null
     private var mapLoadJob: Job? = null
     private var latestMapLoadRequestId: Long = 0L
+    private var activeSingleLoadKey: String? = null
+    private var lastCompletedSingleLoadKey: String? = null
+    private var lastCompletedSingleLoadAtMs: Long = 0L
     private var lastObservedTrackingRunning: Boolean? = null
     private val runtimeResyncPolicy = MapTrackingRuntimeResyncPolicy()
 
@@ -150,7 +153,6 @@ class MapViewModel @Inject constructor(
     }
 
     private fun emitCameraPolicy(command: MapCameraCommand) {
-        _uiState.value = _uiState.value.copy(lockMode = command.lockMode)
         _commands.tryEmit(MapCommand.ApplyCameraPolicy(command))
     }
 
@@ -186,7 +188,20 @@ class MapViewModel @Inject constructor(
     }
 
     internal fun resolveResumeDecision(input: MapResumeInput): MapResumeDecision {
-        return resolveMapResumeUseCase.resolve(input)
+        return resolveReopenOutcome(input).command.toResumeDecision()
+    }
+
+    internal fun resolveReopenOutcome(input: MapResumeInput): MapReopenOutcome {
+        val outcome = reopenMapOrchestrator.resolve(input)
+        outcome.invariants
+            .filter { !it.satisfied }
+            .forEach { invariant ->
+                Log.w(
+                    TAG,
+                    "Reopen invariant violation ${invariant.invariant}: ${invariant.details}"
+                )
+            }
+        return outcome
     }
 
     fun onTrackingRuntimeSnapshot(
@@ -317,31 +332,58 @@ class MapViewModel @Inject constructor(
         forceReplace: Boolean,
         mode: SingleTrackerLoadMode
     ) {
+        val loadKey = buildSingleLoadKey(
+            trackerId = trackerId,
+            forceReplace = forceReplace,
+            mode = mode
+        )
+        val nowMs = System.currentTimeMillis()
+        if (mapLoadJob?.isActive == true && activeSingleLoadKey == loadKey) {
+            Log.d(TAG, "Skipping duplicate single-tracker load key=$loadKey")
+            return
+        }
+        if (!forceReplace &&
+            lastCompletedSingleLoadKey == loadKey &&
+            nowMs - lastCompletedSingleLoadAtMs <= 750L
+        ) {
+            Log.d(TAG, "Skipping recently completed duplicate single-tracker load key=$loadKey")
+            return
+        }
+        activeSingleLoadKey = loadKey
         launchLatestMapLoad { requestId ->
-            _uiState.value = _uiState.value.copy(loading = true, mode = MapScreenMode.Single)
-            val snapshot = loadSingleTrackerUseCase.execute(
-                context = getApplication(),
-                trackerId = trackerId,
-                displayedTrackerId = _uiState.value.displayedTrackerId,
-                forceReplace = forceReplace,
-                mode = mode
-            )
-            if (!isLatestMapLoad(requestId)) return@launchLatestMapLoad
-            if (snapshot == null) {
-                _uiState.value = _uiState.value.copy(loading = false)
-                return@launchLatestMapLoad
-            }
+            try {
+                _uiState.value = _uiState.value.copy(loading = true, mode = MapScreenMode.Single)
+                val snapshot = loadSingleTrackerUseCase.execute(
+                    context = getApplication(),
+                    trackerId = trackerId,
+                    displayedTrackerId = _uiState.value.displayedTrackerId,
+                    forceReplace = forceReplace,
+                    trackingRunning = TrackingRuntimeStateStore.state.value.isRunning,
+                    mode = mode
+                )
+                if (!isLatestMapLoad(requestId)) return@launchLatestMapLoad
+                if (snapshot == null) {
+                    _uiState.value = _uiState.value.copy(loading = false)
+                    return@launchLatestMapLoad
+                }
 
-            _uiState.value = _uiState.value.copy(
-                loading = false,
-                displayedTrackerId = snapshot.tracker.id,
-                displayedTrackerName = snapshot.tracker.name,
-                displayedGroupName = null,
-                showAllTrackers = false,
-                mode = MapScreenMode.Single
-            )
-            _commands.tryEmit(MapCommand.RenderSingleTracker(snapshot))
-            emitCameraPolicy(applyCameraPolicyUseCase.forMode(MapScreenMode.Single, null, enableFollowLock = true))
+                _uiState.value = _uiState.value.copy(
+                    loading = false,
+                    displayedTrackerId = snapshot.tracker.id,
+                    displayedTrackerName = snapshot.tracker.name,
+                    displayedGroupName = null,
+                    showAllTrackers = false,
+                    mode = MapScreenMode.Single
+                )
+                _commands.tryEmit(MapCommand.RenderSingleTracker(snapshot))
+                emitCameraPolicy(applyCameraPolicyUseCase.forMode(MapScreenMode.Single, null, enableFollowLock = true))
+            } finally {
+                if (activeSingleLoadKey == loadKey) {
+                    activeSingleLoadKey = null
+                }
+                lastCompletedSingleLoadKey = loadKey
+                lastCompletedSingleLoadAtMs = System.currentTimeMillis()
+            }
         }
     }
 
@@ -380,6 +422,35 @@ class MapViewModel @Inject constructor(
                 _commands.tryEmit(MapCommand.ShowError(LOAD_GROUP_ERROR))
             }
             emitCameraPolicy(applyCameraPolicyUseCase.forMode(MapScreenMode.GroupMode(group), null, enableFollowLock = false))
+        }
+    }
+
+    private fun buildSingleLoadKey(
+        trackerId: String?,
+        forceReplace: Boolean,
+        mode: SingleTrackerLoadMode
+    ): String {
+        return listOf(
+            mode.name,
+            trackerId ?: "",
+            forceReplace.toString(),
+            TrackingRuntimeStateStore.state.value.isRunning.toString()
+        ).joinToString("|")
+    }
+
+    private fun MapReopenCommand.toResumeDecision(): MapResumeDecision {
+        return when (this) {
+            MapReopenCommand.NoOp -> MapResumeDecision.NoOp
+            MapReopenCommand.MultiContextNoStreaming -> MapResumeDecision.MultiContextNoStreaming
+            is MapReopenCommand.StartMultiContextStreaming ->
+                MapResumeDecision.StartMultiContextStreaming(trackerIds)
+            MapReopenCommand.ClearSingleTrackerState -> MapResumeDecision.ClearSingleTrackerState
+            is MapReopenCommand.LoadSingleTrackerRuntime ->
+                MapResumeDecision.LoadSingleTrackerRuntime(trackerId)
+            is MapReopenCommand.LoadSingleTrackerBootstrap ->
+                MapResumeDecision.LoadSingleTrackerBootstrap(trackerId)
+            MapReopenCommand.RestartDisplayedTrackerStreaming ->
+                MapResumeDecision.RestartDisplayedTrackerStreaming
         }
     }
 }

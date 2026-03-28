@@ -13,14 +13,26 @@ internal object MapSingleTrackerLoadUtils {
         val normalizedResponse = MapCoordinateUtils.normalizeRawCoordinates(responseCoords)
         if (normalizedGeometry.isEmpty()) return sanitizeHistory(normalizedResponse)
         if (normalizedResponse.isEmpty()) return sanitizeHistory(normalizedGeometry)
-        val base = if (normalizedGeometry.size >= normalizedResponse.size) {
-            normalizedGeometry
-        } else {
-            normalizedResponse
+        val geometryLatestTs = latestTimestampMs(normalizedGeometry)
+        val responseLatestTs = latestTimestampMs(normalizedResponse)
+        val base = when {
+            geometryLatestTs != null && responseLatestTs != null -> {
+                if (geometryLatestTs >= responseLatestTs) normalizedGeometry else normalizedResponse
+            }
+            responseLatestTs != null -> normalizedResponse
+            geometryLatestTs != null -> normalizedGeometry
+            else -> normalizedResponse
         }
         val other = if (base === normalizedGeometry) normalizedResponse else normalizedGeometry
         MapCoordinateUtils.mergeNewerPointsInto(base, other)
         // Keep single-point histories so backend fallback-to-latest remains visible on map.
         return sanitizeHistory(base)
+    }
+
+    private fun latestTimestampMs(coords: List<List<Double>>): Long? {
+        return coords.asReversed()
+            .asSequence()
+            .mapNotNull { MapCoordinateUtils.timestampFromCoordinateMs(it) }
+            .firstOrNull()
     }
 }

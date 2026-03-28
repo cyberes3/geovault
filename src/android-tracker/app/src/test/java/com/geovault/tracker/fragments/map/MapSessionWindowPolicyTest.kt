@@ -31,6 +31,19 @@ class MapSessionWindowPolicyTest {
     }
 
     @Test
+    fun decide_newerSessionDoesNotResetWhenResetSuppressed() {
+        val decision = MapSessionWindowPolicy.decide(
+            recentDataWindow = "current_session",
+            currentSessionStartMs = 1_700_000_000_000L,
+            incomingPropsJson = """{"starttimestamp":1700000600}""",
+            allowResetOnNewSession = false
+        )
+        assertFalse("decision=$decision", decision.shouldResetTrackGeometry)
+        assertFalse("decision=$decision", decision.shouldIgnorePoint)
+        assertEquals("decision=$decision", 1_700_000_600_000L, decision.nextSessionStartMs)
+    }
+
+    @Test
     fun decide_ignoresOlderSessionPointAfterBoundary() {
         val decision = MapSessionWindowPolicy.decide(
             recentDataWindow = "session",

@@ -6,7 +6,8 @@ import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 
 internal class MapSingleTrackerRuntimeUseCase(
-    private val trackRepository: RuntimeMapTrackRepository
+    private val trackRepository: RuntimeMapTrackRepository,
+    private val geometryRepository: BootstrapMapTrackRepository
 ) {
     suspend fun execute(
         context: Context,
@@ -25,10 +26,14 @@ internal class MapSingleTrackerRuntimeUseCase(
         }
             ?: trackRepository.getTrackerFromCache(trackerId)
             ?: Tracker(id = trackerId, name = SelectedTrackerPrefs.selectedTrackerName(context), color = null)
+        val geometryCoords = when (val result = geometryRepository.getTrackerGeometry(trackerId)) {
+            is RepositoryResult.Success -> result.data.geometry?.coordinates ?: emptyList()
+            is RepositoryResult.Failure -> tracker.geometry?.coordinates ?: emptyList()
+        }
         return MapTrackSnapshot(
             tracker = tracker,
             coordinates = MapSingleTrackerLoadUtils.mergedCoordinates(
-                geometryCoords = emptyList(),
+                geometryCoords = geometryCoords,
                 responseCoords = coordinatesResponse?.coordinates ?: emptyList()
             ),
             forceReplace = forceReplace

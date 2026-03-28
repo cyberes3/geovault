@@ -12,7 +12,7 @@ class LoadSingleTrackerMapUseCase(
     runtimeRepository: RuntimeMapTrackRepository,
     bootstrapRepository: BootstrapMapTrackRepository
 ) {
-    private val runtimeUseCase = MapSingleTrackerRuntimeUseCase(runtimeRepository)
+    private val runtimeUseCase = MapSingleTrackerRuntimeUseCase(runtimeRepository, bootstrapRepository)
     private val bootstrapUseCase = MapSingleTrackerBootstrapUseCase(bootstrapRepository)
 
     suspend fun execute(
@@ -20,11 +20,12 @@ class LoadSingleTrackerMapUseCase(
         trackerId: String?,
         displayedTrackerId: String?,
         forceReplace: Boolean,
+        trackingRunning: Boolean = false,
         mode: SingleTrackerLoadMode = SingleTrackerLoadMode.RUNTIME
     ): MapTrackSnapshot? {
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(context)
         val resolvedId = trackerId ?: MapDataLoader.resolveActiveSingleTrackerId(
-            trackingRunning = false,
+            trackingRunning = trackingRunning,
             displayedTrackerId = displayedTrackerId,
             selectedTrackerId = selectedTrackerId
         )

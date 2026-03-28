@@ -96,3 +96,31 @@ data class MapRuntimeResyncCommand(
     val restartDisplayedStreaming: Boolean
 )
 
+enum class MapRuntimeInvariant {
+    TRACKING_REQUIRES_SELECTED_TRACKER,
+    TRACKING_WITH_POINTS_MUST_NOT_FORCE_DESTRUCTIVE_RELOAD,
+    SINGLE_LOAD_COMMANDS_MUST_BE_IDEMPOTENT,
+    FOLLOW_LOCK_MUST_NOT_DEGRADE_ON_MISSING_TARGET
+}
+
+data class MapRuntimeInvariantStatus(
+    val invariant: MapRuntimeInvariant,
+    val satisfied: Boolean,
+    val details: String
+)
+
+sealed class MapReopenCommand {
+    data object NoOp : MapReopenCommand()
+    data object MultiContextNoStreaming : MapReopenCommand()
+    data class StartMultiContextStreaming(val trackerIds: Set<String>) : MapReopenCommand()
+    data object ClearSingleTrackerState : MapReopenCommand()
+    data class LoadSingleTrackerRuntime(val trackerId: String) : MapReopenCommand()
+    data class LoadSingleTrackerBootstrap(val trackerId: String) : MapReopenCommand()
+    data object RestartDisplayedTrackerStreaming : MapReopenCommand()
+}
+
+data class MapReopenOutcome(
+    val command: MapReopenCommand,
+    val invariants: List<MapRuntimeInvariantStatus>
+)
+

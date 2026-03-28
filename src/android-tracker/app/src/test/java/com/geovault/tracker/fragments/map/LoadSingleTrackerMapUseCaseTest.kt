@@ -173,7 +173,7 @@ class LoadSingleTrackerMapUseCaseTest {
     }
 
     @Test
-    fun execute_runtime_skipsGeometryEndpoint() {
+    fun execute_runtime_loadsGeometryForUnifiedHydration() {
         val repository = FakeTrackRepository(
             geometryById = mapOf(
                 "t5" to Tracker(
@@ -215,7 +215,7 @@ class LoadSingleTrackerMapUseCaseTest {
         assertNotNull(snapshot)
         assertEquals("t5", snapshot?.tracker?.id)
         assertEquals(2, snapshot?.coordinates?.size)
-        assertEquals(emptyList<Boolean>(), repository.geometryAllDataRequests)
+        assertEquals(listOf(false), repository.geometryAllDataRequests)
         assertEquals(listOf(false), repository.coordinatesAllDataRequests)
     }
 

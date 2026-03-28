@@ -23,6 +23,16 @@ sealed interface MapLockState {
         override val mode: MapLockMode = MapLockMode.TRACKER_FOLLOW
     }
 
+    /**
+     * Keeps tracker-follow intent sticky when the target is temporarily unavailable during
+     * lifecycle/hydration transitions.
+     */
+    data class TrackerFollowPending(
+        val needsInitialZoom: Boolean
+    ) : MapLockState {
+        override val mode: MapLockMode = MapLockMode.TRACKER_FOLLOW
+    }
+
     data object GpsFollow : MapLockState {
         override val mode: MapLockMode = MapLockMode.GPS_FOLLOW
     }
@@ -49,6 +59,12 @@ object MapLockStateCodec {
                 targetLon = state.target.longitude,
                 needsInitialZoom = state.needsInitialZoom
             )
+            is MapLockState.TrackerFollowPending -> PersistedMapLockState(
+                mode = MapLockMode.TRACKER_FOLLOW,
+                targetLat = null,
+                targetLon = null,
+                needsInitialZoom = state.needsInitialZoom
+            )
             MapLockState.GpsFollow -> PersistedMapLockState(mode = MapLockMode.GPS_FOLLOW)
             MapLockState.LiveFit -> PersistedMapLockState(mode = MapLockMode.LIVE_FIT)
         }
@@ -61,7 +77,9 @@ object MapLockStateCodec {
                 val lat = persisted.targetLat
                 val lon = persisted.targetLon
                 if (lat == null || lon == null) {
-                    MapLockState.None
+                    MapLockState.TrackerFollowPending(
+                        needsInitialZoom = persisted.needsInitialZoom
+                    )
                 } else {
                     MapLockState.TrackerFollow(
                         target = LatLng(lat, lon),

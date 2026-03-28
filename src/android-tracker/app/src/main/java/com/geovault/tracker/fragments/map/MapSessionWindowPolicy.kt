@@ -16,7 +16,8 @@ internal object MapSessionWindowPolicy {
     fun decide(
         recentDataWindow: String?,
         currentSessionStartMs: Long?,
-        incomingPropsJson: String?
+        incomingPropsJson: String?,
+        allowResetOnNewSession: Boolean = true
     ): MapSessionWindowDecision {
         val normalizedWindow = recentDataWindow?.trim()
         if (normalizedWindow !in SESSION_WINDOWS) {
@@ -41,7 +42,7 @@ internal object MapSessionWindowPolicy {
         }
         if (incomingSessionStartMs > currentSessionStartMs) {
             return MapSessionWindowDecision(
-                shouldResetTrackGeometry = true,
+                shouldResetTrackGeometry = allowResetOnNewSession,
                 shouldIgnorePoint = false,
                 nextSessionStartMs = incomingSessionStartMs
             )

@@ -59,6 +59,14 @@ class ResolveMapResumeUseCase {
             if (activeSingleTrackerId.isEmpty() && !input.hasPendingInitialTracker) {
                 return MapResumeDecision.ClearSingleTrackerState
             }
+            if (input.hasTrackPoints &&
+                displayedTrackerId == null &&
+                !selectedTrackerId.isNullOrEmpty()
+            ) {
+                // Reopen with active local points should preserve in-memory tail even if displayed
+                // tracker metadata has not been re-hydrated yet.
+                return MapResumeDecision.NoOp
+            }
             if (input.hasTrackPoints && displayedTrackerId == activeSingleTrackerId) {
                 // Keep in-memory track state when returning to the same tracker context.
                 return MapResumeDecision.NoOp

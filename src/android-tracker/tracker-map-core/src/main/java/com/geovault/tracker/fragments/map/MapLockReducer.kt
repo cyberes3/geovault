@@ -39,6 +39,10 @@ object MapLockReducer {
 
             is MapLockEvent.RecenterTrackerFollow -> when (current) {
                 is MapLockState.TrackerFollow -> current.copy(target = event.target)
+                is MapLockState.TrackerFollowPending -> MapLockState.TrackerFollow(
+                    target = event.target,
+                    needsInitialZoom = current.needsInitialZoom
+                )
                 else -> current
             }
 
@@ -46,6 +50,7 @@ object MapLockReducer {
                 if (!event.reachedTargetZoom) return current
                 when (current) {
                     is MapLockState.TrackerFollow -> current.copy(needsInitialZoom = false)
+                    is MapLockState.TrackerFollowPending -> current.copy(needsInitialZoom = false)
                     else -> current
                 }
             }
@@ -57,7 +62,7 @@ object MapLockReducer {
             MapLockEvent.DisableAll -> MapLockState.None
 
             MapLockEvent.DisableTrackerFollow -> {
-                if (current is MapLockState.TrackerFollow) MapLockState.None else current
+                if (current.mode == MapLockMode.TRACKER_FOLLOW) MapLockState.None else current
             }
 
             MapLockEvent.DisableGpsFollow -> {
@@ -105,6 +110,27 @@ object MapLockResumeResolver {
                     shouldTrackGpsCamera = false,
                     shouldApplyLiveFit = false
                 )
+            }
+            is MapLockState.TrackerFollowPending -> {
+                val target = input.fallbackTrackPoint
+                if (target == null) {
+                    MapLockResumeDecision(
+                        lockState = state,
+                        followTarget = null,
+                        shouldTrackGpsCamera = false,
+                        shouldApplyLiveFit = false
+                    )
+                } else {
+                    MapLockResumeDecision(
+                        lockState = MapLockState.TrackerFollow(
+                            target = target,
+                            needsInitialZoom = state.needsInitialZoom
+                        ),
+                        followTarget = target,
+                        shouldTrackGpsCamera = false,
+                        shouldApplyLiveFit = false
+                    )
+                }
             }
 
             MapLockState.GpsFollow -> {
