@@ -421,8 +421,24 @@ object TrackingRecoveryCoordinator {
     }
 
     private fun maybeStartTrackingService(context: Context, nowMs: Long) {
-        val lastStartRequestMs = prefs(context).getLong(KEY_LAST_START_REQUEST_MS, 0L)
-        if (nowMs - lastStartRequestMs < START_REQUEST_MIN_GAP_MS) {
+        val prefs = prefs(context)
+        val persistedLastStartRequestMs = prefs.getLong(KEY_LAST_START_REQUEST_MS, 0L)
+        val lastStartRequestMs = sanitizeLastStartRequestMs(
+            nowMs = nowMs,
+            persistedLastStartRequestMs = persistedLastStartRequestMs
+        )
+        if (lastStartRequestMs != persistedLastStartRequestMs) {
+            prefs.edit().putLong(KEY_LAST_START_REQUEST_MS, lastStartRequestMs).apply()
+            Log.w(
+                TAG,
+                "Reset invalid recovery start request timestamp now=$nowMs lastStartRequestMs=$persistedLastStartRequestMs"
+            )
+            recordTelemetry(
+                context,
+                "reset invalid lastStartRequestMs now=$nowMs persistedLastStartRequestMs=$persistedLastStartRequestMs"
+            )
+        }
+        if (shouldThrottleRestartRequest(nowMs = nowMs, lastStartRequestMs = lastStartRequestMs)) {
             Log.d(
                 TAG,
                 "Skipping restart request due to min gap: sinceLastMs=${nowMs - lastStartRequestMs} minGapMs=$START_REQUEST_MIN_GAP_MS"
@@ -434,7 +450,7 @@ object TrackingRecoveryCoordinator {
             return
         }
 
-        prefs(context).edit().putLong(KEY_LAST_START_REQUEST_MS, nowMs).apply()
+        prefs.edit().putLong(KEY_LAST_START_REQUEST_MS, nowMs).apply()
         val launchDecision = TrackingServiceLaunchGate.dispatchStart(
             context = context,
             trigger = "watchdog_tick"
@@ -447,6 +463,18 @@ object TrackingRecoveryCoordinator {
             context,
             "watchdog launch allowed=${launchDecision.allowed} retryInMs=${launchDecision.retryInMs} reason=${launchDecision.reason}"
         )
+    }
+
+    internal fun shouldThrottleRestartRequest(nowMs: Long, lastStartRequestMs: Long): Boolean {
+        return nowMs - lastStartRequestMs < START_REQUEST_MIN_GAP_MS
+    }
+
+    internal fun sanitizeLastStartRequestMs(nowMs: Long, persistedLastStartRequestMs: Long): Long {
+        return if (persistedLastStartRequestMs < 0L || persistedLastStartRequestMs > nowMs) {
+            0L
+        } else {
+            persistedLastStartRequestMs
+        }
     }
 
     private fun startRecoveryWindow(context: Context, nowMs: Long) {

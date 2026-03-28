@@ -46,4 +46,16 @@ class TrackingServiceLaunchGateTest {
         assertTrue(allowed.allowed)
         assertEquals("allowed", allowed.reason)
     }
+
+    @Test
+    fun evaluateDispatchEligibility_ignoresFutureElapsedState_afterReboot() {
+        val decision = TrackingServiceLaunchGate.evaluateDispatchEligibility(
+            nowElapsedMs = 50_000L,
+            lastAttemptElapsedMs = 500_000L,
+            blockedUntilElapsedMs = 530_000L
+        )
+        assertTrue(decision.allowed)
+        assertEquals("allowed", decision.reason)
+        assertEquals(0L, decision.retryInMs)
+    }
 }

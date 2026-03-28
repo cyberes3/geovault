@@ -22,8 +22,13 @@ class ServiceStartGate(private val context: Context) {
 
     fun dispatchStart(trigger: RuntimeTrigger, reason: String): StartGateDecision {
         val now = SystemClock.elapsedRealtime()
-        val blockedUntil = prefs.getLong(KEY_BLOCKED_UNTIL_ELAPSED_MS, 0L)
-        val lastAttempt = prefs.getLong(KEY_LAST_ATTEMPT_ELAPSED_MS, 0L)
+        val persistedBlockedUntil = prefs.getLong(KEY_BLOCKED_UNTIL_ELAPSED_MS, 0L)
+        val persistedLastAttempt = prefs.getLong(KEY_LAST_ATTEMPT_ELAPSED_MS, 0L)
+        val (blockedUntil, lastAttempt) = sanitizePersistedElapsedState(
+            now = now,
+            blockedUntil = persistedBlockedUntil,
+            lastAttempt = persistedLastAttempt
+        )
         Log.i(
             TAG,
             "dispatchStart trigger=$trigger reason=$reason now=$now blockedUntil=$blockedUntil lastAttempt=$lastAttempt"
@@ -81,6 +86,42 @@ class ServiceStartGate(private val context: Context) {
                 reason = "start_failed_$suffix"
             )
         }
+    }
+
+    private fun sanitizePersistedElapsedState(
+        now: Long,
+        blockedUntil: Long,
+        lastAttempt: Long
+    ): Pair<Long, Long> {
+        var sanitizedBlockedUntil = blockedUntil
+        var sanitizedLastAttempt = lastAttempt
+        var changed = false
+
+        // elapsedRealtime resets at reboot; persisted values from previous boot become invalid.
+        if (sanitizedLastAttempt < 0L || sanitizedLastAttempt > now) {
+            sanitizedLastAttempt = 0L
+            changed = true
+        }
+        if (
+            sanitizedBlockedUntil < 0L ||
+            sanitizedBlockedUntil > now + MAX_RETRY_BACKOFF_MS
+        ) {
+            sanitizedBlockedUntil = 0L
+            changed = true
+        }
+
+        if (changed) {
+            prefs.edit()
+                .putLong(KEY_LAST_ATTEMPT_ELAPSED_MS, sanitizedLastAttempt)
+                .putLong(KEY_BLOCKED_UNTIL_ELAPSED_MS, sanitizedBlockedUntil)
+                .putInt(KEY_FAILURE_COUNT, 0)
+                .apply()
+            Log.w(
+                TAG,
+                "reset invalid elapsed state now=$now blockedUntil=$blockedUntil lastAttempt=$lastAttempt"
+            )
+        }
+        return sanitizedBlockedUntil to sanitizedLastAttempt
     }
 
     private fun computeRetryDelay(failureCount: Int): Long {

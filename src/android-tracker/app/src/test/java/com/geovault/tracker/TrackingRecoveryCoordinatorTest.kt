@@ -224,4 +224,28 @@ class TrackingRecoveryCoordinatorTest {
         assertFalse(decision.shouldShowFailureNotification)
         assertEquals(TrackingRecoveryCoordinator.RecoveryState.BLOCKED_PREREQ, decision.state)
     }
+
+    @Test
+    fun sanitizeLastStartRequestMs_resetsFutureTimestamp() {
+        val now = 10_000L
+        val sanitized = TrackingRecoveryCoordinator.sanitizeLastStartRequestMs(
+            nowMs = now,
+            persistedLastStartRequestMs = now + 20_000L
+        )
+        assertEquals(0L, sanitized)
+    }
+
+    @Test
+    fun shouldThrottleRestartRequest_notThrottledAfterSanitizedFutureTimestamp() {
+        val now = 10_000L
+        val sanitized = TrackingRecoveryCoordinator.sanitizeLastStartRequestMs(
+            nowMs = now,
+            persistedLastStartRequestMs = now + 20_000L
+        )
+        val throttled = TrackingRecoveryCoordinator.shouldThrottleRestartRequest(
+            nowMs = now,
+            lastStartRequestMs = sanitized
+        )
+        assertFalse(throttled)
+    }
 }

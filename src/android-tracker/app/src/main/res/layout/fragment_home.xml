@@ -6,6 +6,7 @@
     android:background="@color/surface">
 
     <LinearLayout
+        android:id="@+id/homeContentRoot"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
@@ -88,14 +89,16 @@
         <LinearLayout
             android:id="@+id/trackingContentContainer"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="0dp"
+            android:layout_weight="1"
             android:orientation="vertical"
-            android:gravity="center"
+            android:gravity="bottom|center_horizontal"
             android:padding="32dp"
             android:visibility="visible">
 
         <!-- Radar Dish Visualization -->
         <FrameLayout
+            android:id="@+id/radarDishContainer"
             android:layout_width="180dp"
             android:layout_height="180dp"
             android:layout_marginBottom="24dp">
@@ -420,17 +423,13 @@
 
         </LinearLayout>
 
-        <Space
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
-
         <com.google.android.material.button.MaterialButton
             android:id="@+id/trackingParamsButton"
             style="@style/gv_common_ButtonText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="8dp"
             android:minWidth="0dp"
             android:gravity="center"
             android:paddingHorizontal="16dp"
@@ -441,11 +440,6 @@
             android:textSize="14sp"
             android:contentDescription="@string/map_tracker_info_view_params_content_description"
             android:visibility="gone" />
-
-        <Space
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
 
     </LinearLayout>
 

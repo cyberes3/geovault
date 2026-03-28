@@ -7,9 +7,12 @@ import android.content.IntentFilter
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -20,9 +23,11 @@ import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.status.TrackingStatusPresentation
 import com.google.android.material.button.MaterialButton
 import dagger.hilt.android.AndroidEntryPoint
+import kotlin.math.roundToInt
 
 @AndroidEntryPoint
 class HomeFragment : Fragment() {
+    private lateinit var homeContentRoot: LinearLayout
     private lateinit var trackingStatusText: TextView
     private lateinit var trackingTrackNameText: TextView
     private lateinit var queueCountText: TextView
@@ -35,10 +40,23 @@ class HomeFragment : Fragment() {
     private lateinit var accuracyText: TextView
 
     private lateinit var trackingParamsButton: MaterialButton
-    private lateinit var trackingContentContainer: View
+    private lateinit var trackingContentContainer: LinearLayout
     private lateinit var permissionsContainer: View
+    private lateinit var radarDishContainer: FrameLayout
     private lateinit var radarDishIcon: android.widget.ImageView
     private lateinit var serverFailureOverlay: View
+
+    private var defaultRadarContainerSizePx = 0
+    private var defaultRadarIconSizePx = 0
+    private var defaultRadarContainerBottomMarginPx = 0
+    private var defaultTrackingPaddingTopPx = 0
+    private var defaultTrackingPaddingBottomPx = 0
+    private var minRadarContainerSizePx = 0
+    private var minRadarIconSizePx = 0
+    private var minRadarContainerBottomMarginPx = 0
+    private var minTrackingPaddingTopPx = 0
+    private var minTrackingPaddingBottomPx = 0
+    private var homeLayoutChangeListener: View.OnLayoutChangeListener? = null
 
     private val sessionStatsHandler = Handler(Looper.getMainLooper())
     private val sessionStatsTickerIntervalMs = 1000L
@@ -72,8 +90,10 @@ class HomeFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        homeContentRoot = view.findViewById(R.id.homeContentRoot)
         trackingContentContainer = view.findViewById(R.id.trackingContentContainer)
         permissionsContainer = view.findViewById(R.id.permissionsContainer)
+        radarDishContainer = view.findViewById(R.id.radarDishContainer)
         radarDishIcon = view.findViewById(R.id.radarDishIcon)
         serverFailureOverlay = view.findViewById(R.id.serverFailureOverlay)
         
@@ -88,6 +108,23 @@ class HomeFragment : Fragment() {
         startStopButton = view.findViewById(R.id.startStopButton)
         distanceText = view.findViewById(R.id.distanceText)
         accuracyText = view.findViewById(R.id.accuracyText)
+
+        defaultRadarContainerSizePx = radarDishContainer.layoutParams.height
+        defaultRadarIconSizePx = radarDishIcon.layoutParams.height
+        defaultRadarContainerBottomMarginPx =
+            (radarDishContainer.layoutParams as? LinearLayout.LayoutParams)?.bottomMargin ?: 0
+        defaultTrackingPaddingTopPx = trackingContentContainer.paddingTop
+        defaultTrackingPaddingBottomPx = trackingContentContainer.paddingBottom
+        minRadarContainerSizePx = dpToPx(72f)
+        minRadarIconSizePx = dpToPx(52f)
+        minRadarContainerBottomMarginPx = 0
+        minTrackingPaddingTopPx = dpToPx(10f)
+        minTrackingPaddingBottomPx = dpToPx(10f)
+        homeLayoutChangeListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            applyDynamicRadarSizing()
+        }
+        homeContentRoot.addOnLayoutChangeListener(homeLayoutChangeListener)
+        homeContentRoot.post { applyDynamicRadarSizing() }
 
         startStopButton.setOnClickListener {
             navHost()?.toggleTracking()
@@ -197,6 +234,10 @@ class HomeFragment : Fragment() {
                 }
             }
         }
+
+        if (::homeContentRoot.isInitialized) {
+            homeContentRoot.post { applyDynamicRadarSizing() }
+        }
     }
 
     override fun onResume() {
@@ -213,6 +254,7 @@ class HomeFragment : Fragment() {
         updatePermissionsUi()
         updateTrackingUi()
         updateQueueCount()
+        homeContentRoot.post { applyDynamicRadarSizing() }
         
         if (trackingSnapshot().isRunning) {
             sessionStatsHandler.removeCallbacks(sessionStatsTicker)
@@ -233,6 +275,12 @@ class HomeFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        homeLayoutChangeListener?.let { listener ->
+            if (::homeContentRoot.isInitialized) {
+                homeContentRoot.removeOnLayoutChangeListener(listener)
+            }
+        }
+        homeLayoutChangeListener = null
         super.onDestroyView()
     }
 
@@ -295,6 +343,9 @@ class HomeFragment : Fragment() {
         }
 
         updateSessionStats()
+        if (::homeContentRoot.isInitialized) {
+            homeContentRoot.post { applyDynamicRadarSizing() }
+        }
     }
 
     private fun updateTrackingStatusHeader() {
@@ -379,6 +430,106 @@ class HomeFragment : Fragment() {
     }
 
     private fun trackingSnapshot() = TrackingRuntimeStateStore.state.value
+
+    private fun applyDynamicRadarSizing() {
+        if (!::homeContentRoot.isInitialized || !::trackingContentContainer.isInitialized || !::radarDishContainer.isInitialized) {
+            return
+        }
+        if (trackingContentContainer.visibility != View.VISIBLE) {
+            applyRadarSizing(defaultRadarContainerSizePx, defaultRadarIconSizePx, defaultRadarContainerBottomMarginPx)
+            applyTrackingContainerPadding(defaultTrackingPaddingTopPx, defaultTrackingPaddingBottomPx)
+            return
+        }
+
+        var requiredHeight = 0
+        for (index in 0 until trackingContentContainer.childCount) {
+            val child = trackingContentContainer.getChildAt(index)
+            if (child.visibility == View.GONE) continue
+
+            val params = child.layoutParams as? LinearLayout.LayoutParams
+            if ((params?.weight ?: 0f) > 0f) continue
+
+            val childHeight = child.height.takeIf { it > 0 } ?: child.measuredHeight
+            requiredHeight += childHeight + (params?.verticalMargins() ?: 0)
+        }
+
+        val availableHeight = trackingContentContainer.height
+        if (availableHeight <= 0) return
+
+        val overflow = requiredHeight + trackingContentContainer.paddingTop + trackingContentContainer.paddingBottom - availableHeight
+        if (overflow <= 0) {
+            applyRadarSizing(defaultRadarContainerSizePx, defaultRadarIconSizePx, defaultRadarContainerBottomMarginPx)
+            applyTrackingContainerPadding(defaultTrackingPaddingTopPx, defaultTrackingPaddingBottomPx)
+            return
+        }
+
+        var remainingOverflow = overflow
+        val maxContainerReduction = defaultRadarContainerSizePx - minRadarContainerSizePx
+        val containerReduction = remainingOverflow.coerceAtMost(maxContainerReduction)
+        val containerSizePx = defaultRadarContainerSizePx - containerReduction
+        remainingOverflow -= containerReduction
+
+        val maxMarginReduction = defaultRadarContainerBottomMarginPx - minRadarContainerBottomMarginPx
+        val marginReduction = remainingOverflow.coerceAtMost(maxMarginReduction)
+        val containerBottomMarginPx = defaultRadarContainerBottomMarginPx - marginReduction
+        remainingOverflow -= marginReduction
+
+        val maxTopPaddingReduction = defaultTrackingPaddingTopPx - minTrackingPaddingTopPx
+        val topPaddingReduction = remainingOverflow.coerceAtMost(maxTopPaddingReduction)
+        val trackingTopPaddingPx = defaultTrackingPaddingTopPx - topPaddingReduction
+        remainingOverflow -= topPaddingReduction
+
+        val maxBottomPaddingReduction = defaultTrackingPaddingBottomPx - minTrackingPaddingBottomPx
+        val bottomPaddingReduction = remainingOverflow.coerceAtMost(maxBottomPaddingReduction)
+        val trackingBottomPaddingPx = defaultTrackingPaddingBottomPx - bottomPaddingReduction
+        val scale = containerSizePx.toFloat() / defaultRadarContainerSizePx.toFloat()
+        val iconSizePx = (defaultRadarIconSizePx * scale)
+            .roundToInt()
+            .coerceIn(minRadarIconSizePx, defaultRadarIconSizePx)
+        applyRadarSizing(containerSizePx, iconSizePx, containerBottomMarginPx)
+        applyTrackingContainerPadding(trackingTopPaddingPx, trackingBottomPaddingPx)
+    }
+
+    private fun applyRadarSizing(containerSizePx: Int, iconSizePx: Int, bottomMarginPx: Int) {
+        updateSquareLayoutSize(radarDishContainer, containerSizePx)
+        updateBottomMargin(radarDishContainer, bottomMarginPx)
+        updateSquareLayoutSize(radarDishIcon, iconSizePx)
+    }
+
+    private fun applyTrackingContainerPadding(topPx: Int, bottomPx: Int) {
+        if (trackingContentContainer.paddingTop == topPx && trackingContentContainer.paddingBottom == bottomPx) return
+        trackingContentContainer.setPadding(
+            trackingContentContainer.paddingLeft,
+            topPx,
+            trackingContentContainer.paddingRight,
+            bottomPx
+        )
+    }
+
+    private fun updateSquareLayoutSize(view: View, sizePx: Int) {
+        val params = view.layoutParams ?: return
+        if (params.width == sizePx && params.height == sizePx) return
+        params.width = sizePx
+        params.height = sizePx
+        view.layoutParams = params
+    }
+
+    private fun updateBottomMargin(view: View, bottomMarginPx: Int) {
+        val params = view.layoutParams as? LinearLayout.LayoutParams ?: return
+        if (params.bottomMargin == bottomMarginPx) return
+        params.bottomMargin = bottomMarginPx
+        view.layoutParams = params
+    }
+
+    private fun LinearLayout.LayoutParams.verticalMargins(): Int = topMargin + bottomMargin
+
+    private fun dpToPx(dp: Float): Int {
+        return TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            dp,
+            resources.displayMetrics
+        ).roundToInt()
+    }
 
     private fun formatDurationMs(ms: Long): String {
         val totalSec = (ms / 1000).toInt().coerceAtLeast(0)

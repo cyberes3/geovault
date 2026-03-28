@@ -44,15 +44,23 @@ object TrackingServiceLaunchGate {
         lastAttemptElapsedMs: Long,
         blockedUntilElapsedMs: Long
     ): LaunchDecision {
-        if (blockedUntilElapsedMs > nowElapsedMs) {
+        val sanitizedLastAttemptElapsedMs = sanitizeLastAttemptElapsedMs(
+            nowElapsedMs = nowElapsedMs,
+            lastAttemptElapsedMs = lastAttemptElapsedMs
+        )
+        val sanitizedBlockedUntilElapsedMs = sanitizeBlockedUntilElapsedMs(
+            nowElapsedMs = nowElapsedMs,
+            blockedUntilElapsedMs = blockedUntilElapsedMs
+        )
+        if (sanitizedBlockedUntilElapsedMs > nowElapsedMs) {
             return LaunchDecision(
                 allowed = false,
-                retryInMs = blockedUntilElapsedMs - nowElapsedMs,
+                retryInMs = sanitizedBlockedUntilElapsedMs - nowElapsedMs,
                 reason = "blocked_backoff"
             )
         }
-        val sinceLastAttemptMs = nowElapsedMs - lastAttemptElapsedMs
-        if (lastAttemptElapsedMs > 0L && sinceLastAttemptMs < MIN_ATTEMPT_GAP_MS) {
+        val sinceLastAttemptMs = nowElapsedMs - sanitizedLastAttemptElapsedMs
+        if (sanitizedLastAttemptElapsedMs > 0L && sinceLastAttemptMs < MIN_ATTEMPT_GAP_MS) {
             return LaunchDecision(
                 allowed = false,
                 retryInMs = MIN_ATTEMPT_GAP_MS - sinceLastAttemptMs,
@@ -116,12 +124,34 @@ object TrackingServiceLaunchGate {
     private fun beforeLaunchAttempt(context: Context, trigger: String): LaunchDecision {
         val nowElapsedMs = SystemClock.elapsedRealtime()
         val prefs = prefs(context)
-        val blockedUntilElapsedMs = prefs.getLong(KEY_BLOCKED_UNTIL_ELAPSED_MS, 0L)
-        val lastAttemptElapsedMs = prefs.getLong(KEY_LAST_ATTEMPT_ELAPSED_MS, 0L)
+        val persistedBlockedUntilElapsedMs = prefs.getLong(KEY_BLOCKED_UNTIL_ELAPSED_MS, 0L)
+        val persistedLastAttemptElapsedMs = prefs.getLong(KEY_LAST_ATTEMPT_ELAPSED_MS, 0L)
+        val sanitizedBlockedUntilElapsedMs = sanitizeBlockedUntilElapsedMs(
+            nowElapsedMs = nowElapsedMs,
+            blockedUntilElapsedMs = persistedBlockedUntilElapsedMs
+        )
+        val sanitizedLastAttemptElapsedMs = sanitizeLastAttemptElapsedMs(
+            nowElapsedMs = nowElapsedMs,
+            lastAttemptElapsedMs = persistedLastAttemptElapsedMs
+        )
+        if (
+            sanitizedBlockedUntilElapsedMs != persistedBlockedUntilElapsedMs ||
+            sanitizedLastAttemptElapsedMs != persistedLastAttemptElapsedMs
+        ) {
+            prefs.edit()
+                .putLong(KEY_BLOCKED_UNTIL_ELAPSED_MS, sanitizedBlockedUntilElapsedMs)
+                .putLong(KEY_LAST_ATTEMPT_ELAPSED_MS, sanitizedLastAttemptElapsedMs)
+                .putInt(KEY_FAILURE_COUNT, 0)
+                .apply()
+            Log.w(
+                TAG,
+                "Reset invalid elapsed launch gate state now=$nowElapsedMs blockedUntil=$persistedBlockedUntilElapsedMs lastAttempt=$persistedLastAttemptElapsedMs"
+            )
+        }
         val decision = evaluateDispatchEligibility(
             nowElapsedMs = nowElapsedMs,
-            lastAttemptElapsedMs = lastAttemptElapsedMs,
-            blockedUntilElapsedMs = blockedUntilElapsedMs
+            lastAttemptElapsedMs = sanitizedLastAttemptElapsedMs,
+            blockedUntilElapsedMs = sanitizedBlockedUntilElapsedMs
         )
         if (!decision.allowed) {
             Log.w(
@@ -198,4 +228,19 @@ object TrackingServiceLaunchGate {
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private fun sanitizeLastAttemptElapsedMs(nowElapsedMs: Long, lastAttemptElapsedMs: Long): Long {
+        return if (lastAttemptElapsedMs < 0L || lastAttemptElapsedMs > nowElapsedMs) 0L else lastAttemptElapsedMs
+    }
+
+    private fun sanitizeBlockedUntilElapsedMs(nowElapsedMs: Long, blockedUntilElapsedMs: Long): Long {
+        return if (
+            blockedUntilElapsedMs < 0L ||
+            blockedUntilElapsedMs > nowElapsedMs + MAX_RETRY_BACKOFF_MS
+        ) {
+            0L
+        } else {
+            blockedUntilElapsedMs
+        }
+    }
 }
