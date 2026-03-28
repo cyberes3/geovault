@@ -425,6 +425,72 @@ class TrackPointPipelineTest {
     }
 
     @Test
+    fun processLocalGps_withWalkingOverrides_tightensOutlierCappingEnvelope() {
+        val nowMs = 1_800_000_000_000L
+        val trackId = "walking-overrides"
+        val baseline = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -104.8000,
+            lat = 38.9000,
+            timestampMs = nowMs - 30_000L,
+            accuracyMeters = 8f
+        )
+        val baselineDecision = TrackPointPipeline.processLocalGps(
+            event = baseline,
+            maxAccuracyMeters = 40f,
+            freshnessTtlMs = 120_000L,
+            nowMs = nowMs
+        )
+        assertTrue(baselineDecision.accepted)
+
+        val spike = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = -104.7992,
+            lat = 38.9018,
+            timestampMs = nowMs,
+            accuracyMeters = 10f
+        )
+        val defaultDecision = TrackPointPipeline.processLocalGps(
+            event = spike,
+            maxAccuracyMeters = 40f,
+            freshnessTtlMs = 120_000L,
+            nowMs = nowMs
+        )
+        assertTrue(defaultDecision.accepted)
+
+        TrackPointPipeline.resetLocalSession(trackId)
+        assertTrue(
+            TrackPointPipeline.processLocalGps(
+                event = baseline,
+                maxAccuracyMeters = 40f,
+                freshnessTtlMs = 120_000L,
+                nowMs = nowMs
+            ).accepted
+        )
+        val walkingDecision = TrackPointPipeline.processLocalGps(
+            event = spike,
+            maxAccuracyMeters = 40f,
+            freshnessTtlMs = 120_000L,
+            policyOverrides = LocalGpsPolicyOverrides(
+                maxBurstDistanceMeters = 140.0,
+                burstWindowSeconds = 8.0,
+                outlierDistanceMultiplier = 1.15,
+                rollingDistanceMultiplier = 2.0
+            ),
+            nowMs = nowMs
+        )
+        assertTrue(walkingDecision.accepted)
+        assertTrue(walkingDecision.adjusted)
+        assertEquals("UNCERTAINTY_AWARE_OUTLIER_CAPPED", walkingDecision.adjustmentReason)
+
+        val defaultLon = defaultDecision.canonicalEvent?.lon ?: 0.0
+        val walkingLon = walkingDecision.canonicalEvent?.lon ?: 0.0
+        assertTrue(kotlin.math.abs(walkingLon - baseline.lon) < kotlin.math.abs(defaultLon - baseline.lon))
+    }
+
+    @Test
     fun processLocalGps_shortDeltaLargeTeleport_isRejected() {
         val nowMs = 1_800_000_000_000L
         val trackId = "short-delta-teleport"

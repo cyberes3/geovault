@@ -34,6 +34,7 @@ import com.geovault.tracker.location.SyncFailureClass
 import com.geovault.tracker.location.UnifiedLocationClient
 import com.geovault.tracker.location.UnifiedLocationSessionRequest
 import com.geovault.tracker.pipeline.CanonicalTimeNormalizer
+import com.geovault.tracker.pipeline.LocalGpsPolicyOverrides
 import com.geovault.tracker.pipeline.TrackPointBus
 import com.geovault.tracker.pipeline.TrackPointEvent
 import com.geovault.tracker.pipeline.TrackPointOutlierPolicy
@@ -204,8 +205,13 @@ class TrackingService : TrackPointServiceBase() {
         private const val ELASTICITY_SPEED_BUCKET_SIZE_MPS = 5f
         private const val ELASTICITY_MULTIPLIER = 0.35f
         private const val ELASTICITY_MAX_SPEED_BUCKET = 8
+        private const val WALKING_ELASTICITY_MAX_SPEED_BUCKET = 2
         private const val ELASTICITY_REAPPLY_DISTANCE_DELTA_METERS = 0.5f
         private const val MAX_NORMAL_REQUEST_DEFER_MS = 60_000L
+        private const val WALKING_OVERRIDE_MAX_BURST_DISTANCE_METERS = 140.0
+        private const val WALKING_OVERRIDE_BURST_WINDOW_SECONDS = 8.0
+        private const val WALKING_OVERRIDE_OUTLIER_DISTANCE_MULTIPLIER = 1.15
+        private const val WALKING_OVERRIDE_ROLLING_DISTANCE_MULTIPLIER = 2.0
 
         internal enum class StartupCommandPath {
             StartTracking,
@@ -315,6 +321,33 @@ class TrackingService : TrackPointServiceBase() {
             if (speedBucket <= 0 || base <= 0f) return base
             val extra = base * ELASTICITY_MULTIPLIER * speedBucket.toFloat()
             return (base + extra).coerceAtMost(TrackerSettings.MAX_DISTANCE_FILTER_METERS)
+        }
+
+        @JvmStatic
+        internal fun computeElasticityModeBoundBucket(
+            speedBucket: Int,
+            motionMode: TrackingMotionMode
+        ): Int {
+            return when (motionMode) {
+                TrackingMotionMode.WALKING -> speedBucket.coerceIn(0, WALKING_ELASTICITY_MAX_SPEED_BUCKET)
+                TrackingMotionMode.BIKING, TrackingMotionMode.DRIVING ->
+                    speedBucket.coerceIn(0, ELASTICITY_MAX_SPEED_BUCKET)
+            }
+        }
+
+        @JvmStatic
+        internal fun resolveLocalGpsPolicyOverrides(
+            motionMode: TrackingMotionMode
+        ): LocalGpsPolicyOverrides {
+            return when (motionMode) {
+                TrackingMotionMode.WALKING -> LocalGpsPolicyOverrides(
+                    maxBurstDistanceMeters = WALKING_OVERRIDE_MAX_BURST_DISTANCE_METERS,
+                    burstWindowSeconds = WALKING_OVERRIDE_BURST_WINDOW_SECONDS,
+                    outlierDistanceMultiplier = WALKING_OVERRIDE_OUTLIER_DISTANCE_MULTIPLIER,
+                    rollingDistanceMultiplier = WALKING_OVERRIDE_ROLLING_DISTANCE_MULTIPLIER
+                )
+                TrackingMotionMode.BIKING, TrackingMotionMode.DRIVING -> LocalGpsPolicyOverrides()
+            }
         }
 
         @JvmStatic
@@ -489,6 +522,8 @@ class TrackingService : TrackPointServiceBase() {
 
     private val autoTrackingMotionEngine = AutoTrackingMotionEngine()
     private var lastLoggedTrackingMotionMode: TrackingMotionMode? = null
+    private var lastLoggedLocalGpsPolicySignature: String? = null
+    private var lastLoggedWalkingElasticityCapRawBucket: Int? = null
     private var lastSpeedReferenceLocation: Location? = null
     private var autoModeTickJob: Job? = null
     private var currentSettings: TrackerSettings = TrackerSettings()
@@ -868,6 +903,8 @@ class TrackingService : TrackPointServiceBase() {
         }
         val observedSpeedMps = resolveObservedSpeedMps(location, lastSpeedReferenceLocation)
         val isMockLocation = LocationCompat.isMock(location)
+        val motionMode = resolveRuntimeMotionMode()
+        logLocalGpsPolicyOverridesIfChanged(motionMode)
         val decision = TrackPointPipeline.processLocalGps(
             event = TrackPointEvent(
                 source = TrackPointSource.LOCAL_GPS,
@@ -880,6 +917,7 @@ class TrackingService : TrackPointServiceBase() {
             ),
             maxAccuracyMeters = resolveCurrentAccuracyFilter(),
             freshnessTtlMs = 120_000L,
+            policyOverrides = resolveLocalGpsPolicyOverrides(motionMode),
             isMockLocation = isMockLocation,
             nowMs = nowMs,
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos
@@ -1767,8 +1805,30 @@ class TrackingService : TrackPointServiceBase() {
         val (_, baseDistanceMeters, accuracyThresholdMeters) = resolveCurrentProfileParams()
         if (baseDistanceMeters <= 0f) return
         if (measuredAccuracyMeters == null || measuredAccuracyMeters > accuracyThresholdMeters) return
-        val nextBucket = computeElasticitySpeedBucket(observedSpeedMps)
+        val nextBucketRaw = computeElasticitySpeedBucket(observedSpeedMps)
+        val motionMode = resolveRuntimeMotionMode()
+        val nextBucket = computeElasticityModeBoundBucket(nextBucketRaw, motionMode)
+        if (motionMode == TrackingMotionMode.WALKING && nextBucketRaw > nextBucket) {
+            if (lastLoggedWalkingElasticityCapRawBucket != nextBucketRaw) {
+                Log.i(
+                    TAG,
+                    "Walking elasticity bucket capped rawBucket=$nextBucketRaw boundedBucket=$nextBucket " +
+                        "speed=${observedSpeedMps ?: -1f}mps"
+                )
+                lastLoggedWalkingElasticityCapRawBucket = nextBucketRaw
+            }
+        } else {
+            lastLoggedWalkingElasticityCapRawBucket = null
+        }
         val nextDistance = computeElasticDistanceFilterMeters(baseDistanceMeters, nextBucket)
+        if (!nextDistance.isFinite() || nextDistance < baseDistanceMeters) {
+            Log.w(
+                TAG,
+                "Elasticity invariant violation mode=$motionMode rawBucket=$nextBucketRaw boundedBucket=$nextBucket " +
+                    "baseDistance=${baseDistanceMeters}m nextDistance=${nextDistance}; skipping update"
+            )
+            return
+        }
         val currentDistance = elasticDistanceOverrideMeters ?: baseDistanceMeters
         val distanceDelta = kotlin.math.abs(nextDistance - currentDistance)
         if (nextBucket == elasticitySpeedBucket && distanceDelta < ELASTICITY_REAPPLY_DISTANCE_DELTA_METERS) {
@@ -1778,7 +1838,8 @@ class TrackingService : TrackPointServiceBase() {
         elasticDistanceOverrideMeters = if (nextBucket > 0) nextDistance else null
         Log.i(
             TAG,
-            "Elasticity update speed=${observedSpeedMps ?: -1f}mps bucket=$nextBucket " +
+            "Elasticity update speed=${observedSpeedMps ?: -1f}mps rawBucket=$nextBucketRaw " +
+                "bucket=$nextBucket mode=$motionMode " +
                 "baseDistance=${baseDistanceMeters}m effectiveDistance=${elasticDistanceOverrideMeters ?: baseDistanceMeters}m"
         )
         reapplyLocationRequestIfActive("elasticity_bucket_$nextBucket")
@@ -1793,6 +1854,31 @@ class TrackingService : TrackPointServiceBase() {
         if (reapplyRequest) {
             reapplyLocationRequestIfActive("elasticity_reset_$reason")
         }
+    }
+
+    private fun logLocalGpsPolicyOverridesIfChanged(motionMode: TrackingMotionMode) {
+        val overrides = resolveLocalGpsPolicyOverrides(motionMode)
+        val signature = buildString {
+            append(motionMode.name)
+            append('|')
+            append(overrides.maxBurstDistanceMeters ?: "default")
+            append('|')
+            append(overrides.burstWindowSeconds ?: "default")
+            append('|')
+            append(overrides.outlierDistanceMultiplier ?: "default")
+            append('|')
+            append(overrides.rollingDistanceMultiplier ?: "default")
+        }
+        if (signature == lastLoggedLocalGpsPolicySignature) return
+        lastLoggedLocalGpsPolicySignature = signature
+        Log.i(
+            TAG,
+            "Local GPS policy mode=$motionMode " +
+                "maxBurstDistance=${overrides.maxBurstDistanceMeters ?: "default"} " +
+                "burstWindow=${overrides.burstWindowSeconds ?: "default"} " +
+                "outlierDistanceMultiplier=${overrides.outlierDistanceMultiplier ?: "default"} " +
+                "rollingDistanceMultiplier=${overrides.rollingDistanceMultiplier ?: "default"}"
+        )
     }
 
     private fun resolveRuntimeMotionMode(): TrackingMotionMode {

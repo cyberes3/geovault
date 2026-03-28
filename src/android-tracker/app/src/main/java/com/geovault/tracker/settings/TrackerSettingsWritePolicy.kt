@@ -1,5 +1,6 @@
 package com.geovault.tracker.settings
 
+import com.geovault.tracker.TrackingLocationPolicy
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -19,31 +20,35 @@ class TrackerSettingsWritePolicy @Inject constructor() {
     }
 
     fun applyProfile(base: TrackerSettings, profile: TrackerTrackingProfile): TrackerSettings {
+        val resolved = TrackingLocationPolicy.getProfileParams(profile.index)
+        val intervalSec = resolved.first
+        val distanceMeters = resolved.second
+        val accuracyMeters = resolved.third
         return when (profile) {
             TrackerTrackingProfile.WALKING -> sanitize(
                 base.copy(
                     trackingProfile = profile,
-                    loggingIntervalSec = 30L,
-                    distanceFilterMeters = 10f,
-                    accuracyFilterMeters = 50f
+                    loggingIntervalSec = intervalSec,
+                    distanceFilterMeters = distanceMeters,
+                    accuracyFilterMeters = accuracyMeters
                 )
             )
 
             TrackerTrackingProfile.BIKING -> sanitize(
                 base.copy(
                     trackingProfile = profile,
-                    loggingIntervalSec = 15L,
-                    distanceFilterMeters = 30f,
-                    accuracyFilterMeters = 100f
+                    loggingIntervalSec = intervalSec,
+                    distanceFilterMeters = distanceMeters,
+                    accuracyFilterMeters = accuracyMeters
                 )
             )
 
             TrackerTrackingProfile.DRIVING -> sanitize(
                 base.copy(
                     trackingProfile = profile,
-                    loggingIntervalSec = 10L,
-                    distanceFilterMeters = 100f,
-                    accuracyFilterMeters = 200f
+                    loggingIntervalSec = intervalSec,
+                    distanceFilterMeters = distanceMeters,
+                    accuracyFilterMeters = accuracyMeters
                 )
             )
 

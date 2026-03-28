@@ -7,7 +7,7 @@ class TrackingLocationPolicyProfileTest {
 
     @Test
     fun getProfileParams_returnsExpectedPresets() {
-        assertEquals(Triple(30L, 10f, 50f), TrackingLocationPolicy.getProfileParams(0))
+        assertEquals(Triple(20L, 7f, 40f), TrackingLocationPolicy.getProfileParams(0))
         assertEquals(Triple(15L, 30f, 100f), TrackingLocationPolicy.getProfileParams(1))
         assertEquals(Triple(10L, 100f, 200f), TrackingLocationPolicy.getProfileParams(2))
     }

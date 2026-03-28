@@ -8,6 +8,15 @@ import android.location.Location
  */
 object TrackingLocationPolicy {
     const val AUTO_START_PROFILE_INDEX = 0
+    const val WALKING_INTERVAL_SEC = 20L
+    const val WALKING_DISTANCE_FILTER_METERS = 7f
+    const val WALKING_ACCURACY_FILTER_METERS = 40f
+    const val BIKING_INTERVAL_SEC = 15L
+    const val BIKING_DISTANCE_FILTER_METERS = 30f
+    const val BIKING_ACCURACY_FILTER_METERS = 100f
+    const val DRIVING_INTERVAL_SEC = 10L
+    const val DRIVING_DISTANCE_FILTER_METERS = 100f
+    const val DRIVING_ACCURACY_FILTER_METERS = 200f
 
     @JvmStatic
     fun getAutoStartProfileIndex(): Int = AUTO_START_PROFILE_INDEX
@@ -97,10 +106,10 @@ object TrackingLocationPolicy {
     @JvmStatic
     fun getProfileParams(profileIndex: Int): Triple<Long, Float, Float> {
         return when (profileIndex) {
-            0 -> Triple(30L, 10f, 50f)
-            1 -> Triple(15L, 30f, 100f)
-            2 -> Triple(10L, 100f, 200f)
-            else -> Triple(15L, 30f, 100f) // Default to Biking
+            0 -> Triple(WALKING_INTERVAL_SEC, WALKING_DISTANCE_FILTER_METERS, WALKING_ACCURACY_FILTER_METERS)
+            1 -> Triple(BIKING_INTERVAL_SEC, BIKING_DISTANCE_FILTER_METERS, BIKING_ACCURACY_FILTER_METERS)
+            2 -> Triple(DRIVING_INTERVAL_SEC, DRIVING_DISTANCE_FILTER_METERS, DRIVING_ACCURACY_FILTER_METERS)
+            else -> Triple(BIKING_INTERVAL_SEC, BIKING_DISTANCE_FILTER_METERS, BIKING_ACCURACY_FILTER_METERS)
         }
     }
 

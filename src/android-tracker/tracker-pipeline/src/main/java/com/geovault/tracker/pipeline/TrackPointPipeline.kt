@@ -22,6 +22,13 @@ internal data class TrackPointSourceProfile(
     val config: TrackPointPolicyConfig
 )
 
+data class LocalGpsPolicyOverrides(
+    val maxBurstDistanceMeters: Double? = null,
+    val burstWindowSeconds: Double? = null,
+    val outlierDistanceMultiplier: Double? = null,
+    val rollingDistanceMultiplier: Double? = null
+)
+
 object TrackPointPipeline {
     private const val REMOTE_FRESHNESS_TTL_MS = 30 * 60 * 1000L
     private const val MOCK_TIMESTAMP_SKEW_TOLERANCE_MS = 5 * 60 * 1000L
@@ -99,6 +106,7 @@ object TrackPointPipeline {
         event: TrackPointEvent,
         maxAccuracyMeters: Float,
         freshnessTtlMs: Long,
+        policyOverrides: LocalGpsPolicyOverrides = LocalGpsPolicyOverrides(),
         isMockLocation: Boolean = false,
         nowMs: Long = System.currentTimeMillis(),
         nowElapsedRealtimeNanos: Long? = null
@@ -114,12 +122,22 @@ object TrackPointPipeline {
         val maxBurstDistanceMeters = if (isMockLocation) {
             LOCAL_MOCK_MAX_BURST_DISTANCE_METERS
         } else {
-            LOCAL_REAL_MAX_BURST_DISTANCE_METERS
+            policyOverrides.maxBurstDistanceMeters?.coerceAtLeast(1.0) ?: LOCAL_REAL_MAX_BURST_DISTANCE_METERS
         }
         val burstWindowSeconds = if (isMockLocation) {
             LOCAL_MOCK_BURST_WINDOW_SECONDS
         } else {
-            LOCAL_REAL_BURST_WINDOW_SECONDS
+            policyOverrides.burstWindowSeconds?.coerceAtLeast(0.2) ?: LOCAL_REAL_BURST_WINDOW_SECONDS
+        }
+        val outlierDistanceMultiplier = if (isMockLocation) {
+            1.5
+        } else {
+            policyOverrides.outlierDistanceMultiplier?.coerceAtLeast(1.0) ?: LOCAL_REAL_OUTLIER_DISTANCE_MULTIPLIER
+        }
+        val rollingDistanceMultiplier = if (isMockLocation) {
+            3.0
+        } else {
+            policyOverrides.rollingDistanceMultiplier?.coerceAtLeast(1.0) ?: LOCAL_REAL_ROLLING_DISTANCE_MULTIPLIER
         }
         return processWithConfig(
             event = event.copy(timestampMs = timestampForPolicyMs),
@@ -133,8 +151,8 @@ object TrackPointPipeline {
                 maxBurstDistanceMeters = maxBurstDistanceMeters,
                 burstWindowSeconds = burstWindowSeconds,
                 rollingWindowSize = 5,
-                outlierDistanceMultiplier = if (isMockLocation) 1.5 else LOCAL_REAL_OUTLIER_DISTANCE_MULTIPLIER,
-                rollingDistanceMultiplier = if (isMockLocation) 3.0 else LOCAL_REAL_ROLLING_DISTANCE_MULTIPLIER,
+                outlierDistanceMultiplier = outlierDistanceMultiplier,
+                rollingDistanceMultiplier = rollingDistanceMultiplier,
                 outlierPolicy = if (isMockLocation) TrackPointOutlierPolicy.OFF else TrackPointOutlierPolicy.ADJUST,
                 freshnessTtlMs = freshnessTtlMs,
                 normalizeSecondsTimestamps = false

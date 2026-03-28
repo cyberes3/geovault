@@ -152,9 +152,9 @@ class TrackerSettingsRepositoryTest {
         waitUntil { repository.getSettings().trackingProfile == TrackerTrackingProfile.WALKING }
         var settings = repository.getSettings()
         assertEquals(TrackerTrackingProfile.WALKING, settings.trackingProfile)
-        assertEquals(30L, settings.loggingIntervalSec)
-        assertEquals(10f, settings.distanceFilterMeters, 0.0001f)
-        assertEquals(50f, settings.accuracyFilterMeters, 0.0001f)
+        assertEquals(20L, settings.loggingIntervalSec)
+        assertEquals(7f, settings.distanceFilterMeters, 0.0001f)
+        assertEquals(40f, settings.accuracyFilterMeters, 0.0001f)
 
         repository.setTrackingProfile(TrackerTrackingProfile.DRIVING)
         waitUntil { repository.getSettings().trackingProfile == TrackerTrackingProfile.DRIVING }

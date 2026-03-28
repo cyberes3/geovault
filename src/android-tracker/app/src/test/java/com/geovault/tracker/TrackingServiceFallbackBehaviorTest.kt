@@ -4,6 +4,7 @@ import android.location.Location
 import com.geovault.tracker.location.LowAccuracyFallbackCoordinator
 import com.geovault.tracker.pipeline.TrackPointQuality
 import com.geovault.tracker.pipeline.TrackPointRejectReason
+import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.settings.TrackerSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -273,6 +274,39 @@ class TrackingServiceFallbackBehaviorTest {
                 speedBucket = 8
             )
         )
+    }
+
+    @Test
+    fun computeElasticityModeBoundBucket_capsWalkingButNotDriving() {
+        assertEquals(
+            2,
+            TrackingService.computeElasticityModeBoundBucket(
+                speedBucket = 5,
+                motionMode = TrackingMotionMode.WALKING
+            )
+        )
+        assertEquals(
+            5,
+            TrackingService.computeElasticityModeBoundBucket(
+                speedBucket = 5,
+                motionMode = TrackingMotionMode.DRIVING
+            )
+        )
+    }
+
+    @Test
+    fun resolveLocalGpsPolicyOverrides_onlyTightensWalking() {
+        val walking = TrackingService.resolveLocalGpsPolicyOverrides(TrackingMotionMode.WALKING)
+        assertEquals(140.0, walking.maxBurstDistanceMeters)
+        assertEquals(8.0, walking.burstWindowSeconds)
+        assertEquals(1.15, walking.outlierDistanceMultiplier)
+        assertEquals(2.0, walking.rollingDistanceMultiplier)
+
+        val biking = TrackingService.resolveLocalGpsPolicyOverrides(TrackingMotionMode.BIKING)
+        assertEquals(null, biking.maxBurstDistanceMeters)
+        assertEquals(null, biking.burstWindowSeconds)
+        assertEquals(null, biking.outlierDistanceMultiplier)
+        assertEquals(null, biking.rollingDistanceMultiplier)
     }
 
     @Test
