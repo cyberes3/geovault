@@ -50,6 +50,7 @@ internal object MapTrackLineUpdater {
         currentTrackerColor: String?,
         lastStreamedAccuracyMeters: Float?,
         trackingServiceAccuracyMeters: Float?,
+        allowTrackingServiceAccuracyFallback: Boolean,
         trackPositionSourceId: String,
         trackPositionAccuracySourceId: String,
         ensureArrowImage: (Style, String) -> Unit
@@ -79,10 +80,13 @@ internal object MapTrackLineUpdater {
             symbolIconId = "track-direction-arrow"
         }
 
-        // Unify marker behavior for all trackers: use one symbol pipeline and prefer streamed accuracy
-        // while still falling back to tracking-service accuracy when needed.
-        val accuracyMeters = lastStreamedAccuracyMeters ?: trackingServiceAccuracyMeters
-        val accuracyValue = (accuracyMeters?.takeIf { it > 0f } ?: 0f).toDouble()
+        val accuracyValue = MapAccuracyRadiusPolicy.resolveAccuracyRadiusMeters(
+            AccuracyRadiusInput(
+                streamedAccuracyMeters = lastStreamedAccuracyMeters,
+                trackingServiceAccuracyMeters = trackingServiceAccuracyMeters,
+                allowTrackingServiceFallback = allowTrackingServiceAccuracyFallback
+            )
+        )
 
         val point = Point.fromLngLat(toLatLng.longitude, toLatLng.latitude)
         val feature = Feature.fromGeometry(point)

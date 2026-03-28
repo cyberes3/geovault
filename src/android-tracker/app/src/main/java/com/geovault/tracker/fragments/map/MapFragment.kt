@@ -2753,9 +2753,8 @@ class MapFragment : Fragment() {
             val resolvedColor = (tracker.color ?: defaultTrackerColorHex(requireContext())).let { if (it.startsWith("#")) it else "#$it" }
             currentTrackerColor = resolvedColor
             maplibreMap?.style?.let { ensureArrowImageInStyle(it, resolvedColor, chevronOnly = false) }
-            (tracker.point_params?.lastOrNull()?.get("acc") as? Number)?.toFloat()?.takeIf { it > 0f }
-                ?.let { lastStreamedAccuracyMeters = it }
         }
+        lastStreamedAccuracyMeters = resolveTrackerPointParamsAccuracyMeters(tracker?.point_params)
         val resolvedSessionStartMs = MapSessionWindowPolicy.resolveLatestSessionStartMs(tracker?.point_params)
         val coords = tracker?.geometry?.coordinates
         if (coords != null) {
@@ -2846,9 +2845,7 @@ class MapFragment : Fragment() {
         displayedGroupName = null
         mapViewContext = MapViewContext.SINGLE_TRACKER
         displayedTrackerSessionStartMs = MapSessionWindowPolicy.resolveLatestSessionStartMs(initial.point_params)
-        lastStreamedAccuracyMeters = (initial.point_params?.lastOrNull()?.get("acc") as? Number)
-            ?.toFloat()
-            ?.takeIf { it > 0f }
+        lastStreamedAccuracyMeters = resolveTrackerPointParamsAccuracyMeters(initial.point_params)
     }
 
     /**
@@ -3137,12 +3134,19 @@ class MapFragment : Fragment() {
             currentTrackerColor = currentTrackerColor,
             lastStreamedAccuracyMeters = lastStreamedAccuracyMeters,
             trackingServiceAccuracyMeters = trackingRuntimeSnapshot().lastAccuracyMeters,
+            allowTrackingServiceAccuracyFallback = isSelectedDefaultTrackerMode() && trackingRuntimeSnapshot().isRunning,
             trackPositionSourceId = MapConstants.TRACK_POSITION_SOURCE_ID,
             trackPositionAccuracySourceId = MapConstants.TRACK_POSITION_ACCURACY_SOURCE_ID,
             ensureArrowImage = { mapStyle, hexColor ->
                 ensureArrowImageInStyle(mapStyle, hexColor, chevronOnly = false)
             }
         )
+    }
+
+    private fun resolveTrackerPointParamsAccuracyMeters(pointParams: List<Map<String, Any?>>?): Float? {
+        return (pointParams?.lastOrNull()?.get("acc") as? Number)
+            ?.toFloat()
+            ?.takeIf { it.isFinite() && it > 0f }
     }
 
     /**
