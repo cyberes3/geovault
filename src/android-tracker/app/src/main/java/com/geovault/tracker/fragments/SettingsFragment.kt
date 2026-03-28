@@ -277,10 +277,7 @@ class SettingsFragment : Fragment() {
         updateAutoTrackingUi(autoTrackingSwitch.isChecked)
 
         if (settings.autoTrackingMode) {
-            setSpinnerTextIfChanged(profileSpinner, getString(R.string.profile_auto))
-            updateNumericEditFromState(intervalEdit, "")
-            updateNumericEditFromState(distanceEdit, "")
-            updateNumericEditFromState(accuracyEdit, "")
+            renderAutoTrackingFields(force = false)
         } else {
             updateNumericEditFromState(intervalEdit, settings.loggingIntervalSec.toString())
             updateNumericEditFromState(distanceEdit, toDisplay(settings.distanceFilterMeters, isImperial).toString())
@@ -311,15 +308,36 @@ class SettingsFragment : Fragment() {
         isBindingSettings = false
     }
 
-    private fun updateNumericEditFromState(editText: EditText, value: String) {
+    private fun renderAutoTrackingFields(force: Boolean) {
+        if (force) {
+            clearAutoTrackingFieldFocus()
+        }
+        setSpinnerTextIfChanged(
+            spinner = profileSpinner,
+            value = getString(R.string.profile_auto),
+            force = force
+        )
+        updateNumericEditFromState(intervalEdit, "", force = force)
+        updateNumericEditFromState(distanceEdit, "", force = force)
+        updateNumericEditFromState(accuracyEdit, "", force = force)
+    }
+
+    private fun clearAutoTrackingFieldFocus() {
+        profileSpinner.clearFocus()
+        intervalEdit.clearFocus()
+        distanceEdit.clearFocus()
+        accuracyEdit.clearFocus()
+    }
+
+    private fun updateNumericEditFromState(editText: EditText, value: String, force: Boolean = false) {
         // Avoid stomping active typing, which causes caret jumps.
-        if (editText.hasFocus()) return
+        if (!SettingsAutoModePolicy.shouldOverwriteUiField(editText.hasFocus(), force)) return
         if (editText.text?.toString() == value) return
         editText.setText(value)
     }
 
-    private fun setSpinnerTextIfChanged(spinner: AutoCompleteTextView, value: String) {
-        if (spinner.hasFocus()) return
+    private fun setSpinnerTextIfChanged(spinner: AutoCompleteTextView, value: String, force: Boolean = false) {
+        if (!SettingsAutoModePolicy.shouldOverwriteUiField(spinner.hasFocus(), force)) return
         if ((spinner.text?.toString() ?: "") == value) return
         spinner.setText(value, false)
     }
@@ -365,8 +383,14 @@ class SettingsFragment : Fragment() {
         autoTrackingSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (shouldIgnoreSettingChange()) return@setOnCheckedChangeListener
             Log.i(TAG, "user_toggle key=autoTracking value=$isChecked")
-            viewModel.setAutoTrackingMode(isChecked)
             updateAutoTrackingUi(isChecked)
+            if (isChecked) {
+                val previousBindingState = isBindingSettings
+                isBindingSettings = true
+                renderAutoTrackingFields(force = true)
+                isBindingSettings = previousBindingState
+            }
+            viewModel.setAutoTrackingMode(isChecked)
         }
 
         lowAccuracyFallbackSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -531,32 +555,35 @@ class SettingsFragment : Fragment() {
     private fun applyDefaultsForInvalidInputs() {
         if (isBindingSettings) return
         val isImperial = com.geovault.common.UnitUtils.usesImperialUnitsDefault(requireContext())
+        val autoTrackingEnabled = autoTrackingSwitch.isChecked || viewModel.uiState.value.settings.autoTrackingMode
 
-        val intervalParsed = intervalEdit.text?.toString()?.trim()?.toLongOrNull()
-        if (intervalParsed == null) {
-            val defaultInterval = TrackerSettings.DEFAULT_LOGGING_INTERVAL_SEC
-            viewModel.setLoggingIntervalSec(defaultInterval)
-            updateNumericEditFromState(intervalEdit, defaultInterval.toString())
-        } else {
-            viewModel.setLoggingIntervalSec(intervalParsed)
-        }
+        if (SettingsAutoModePolicy.shouldApplyManualDefaults(autoTrackingEnabled)) {
+            val intervalParsed = intervalEdit.text?.toString()?.trim()?.toLongOrNull()
+            if (intervalParsed == null) {
+                val defaultInterval = TrackerSettings.DEFAULT_LOGGING_INTERVAL_SEC
+                viewModel.setLoggingIntervalSec(defaultInterval)
+                updateNumericEditFromState(intervalEdit, defaultInterval.toString())
+            } else {
+                viewModel.setLoggingIntervalSec(intervalParsed)
+            }
 
-        val distanceParsed = distanceEdit.text?.toString()?.trim()?.toFloatOrNull()
-        if (distanceParsed == null) {
-            val defaultMeters = TrackerSettings.DEFAULT_DISTANCE_FILTER_METERS
-            viewModel.setDistanceFilterMeters(defaultMeters)
-            updateNumericEditFromState(distanceEdit, toDisplay(defaultMeters, isImperial).toString())
-        } else {
-            viewModel.setDistanceFilterMeters(fromDisplay(distanceParsed, isImperial))
-        }
+            val distanceParsed = distanceEdit.text?.toString()?.trim()?.toFloatOrNull()
+            if (distanceParsed == null) {
+                val defaultMeters = TrackerSettings.DEFAULT_DISTANCE_FILTER_METERS
+                viewModel.setDistanceFilterMeters(defaultMeters)
+                updateNumericEditFromState(distanceEdit, toDisplay(defaultMeters, isImperial).toString())
+            } else {
+                viewModel.setDistanceFilterMeters(fromDisplay(distanceParsed, isImperial))
+            }
 
-        val accuracyParsed = accuracyEdit.text?.toString()?.trim()?.toFloatOrNull()
-        if (accuracyParsed == null) {
-            val defaultMeters = TrackerSettings.DEFAULT_ACCURACY_FILTER_METERS
-            viewModel.setAccuracyFilterMeters(defaultMeters)
-            updateNumericEditFromState(accuracyEdit, toDisplay(defaultMeters, isImperial).toString())
-        } else {
-            viewModel.setAccuracyFilterMeters(fromDisplay(accuracyParsed, isImperial))
+            val accuracyParsed = accuracyEdit.text?.toString()?.trim()?.toFloatOrNull()
+            if (accuracyParsed == null) {
+                val defaultMeters = TrackerSettings.DEFAULT_ACCURACY_FILTER_METERS
+                viewModel.setAccuracyFilterMeters(defaultMeters)
+                updateNumericEditFromState(accuracyEdit, toDisplay(defaultMeters, isImperial).toString())
+            } else {
+                viewModel.setAccuracyFilterMeters(fromDisplay(accuracyParsed, isImperial))
+            }
         }
 
         val fallbackTimeoutParsed = lowAccuracyFallbackTimeoutEdit.text?.toString()?.trim()?.toLongOrNull()
@@ -640,6 +667,9 @@ class SettingsFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        isBindingSettings = true
+        hasHydratedSettings = false
+        lastRenderedSettings = null
     }
 
     private fun summary(settings: TrackerSettings): String {
