@@ -27,6 +27,13 @@ import kotlin.math.roundToInt
 
 @AndroidEntryPoint
 class HomeFragment : Fragment() {
+    companion object {
+        private const val FEET_PER_METER = 3.28084f
+        private const val MAX_DISPLAY_ACCURACY_FEET = 1500f
+        private const val TOO_LOW_ACCURACY_DISPLAY = "-"
+        private val MAX_DISPLAY_ACCURACY_METERS = MAX_DISPLAY_ACCURACY_FEET / FEET_PER_METER
+    }
+
     private lateinit var homeContentRoot: LinearLayout
     private lateinit var trackingStatusText: TextView
     private lateinit var trackingTrackNameText: TextView
@@ -385,7 +392,12 @@ class HomeFragment : Fragment() {
         distanceText.text = formatDistance(runtime.sessionTotalDistanceMeters, useImperial)
         val acc = runtime.lastAccuracyMeters
         if (acc == null) {
-            accuracyText.text = "—"
+            accuracyText.text = TOO_LOW_ACCURACY_DISPLAY
+            accuracyText.setTextColor(ContextCompat.getColor(requireContext(), R.color.error_red))
+            return
+        }
+        if (acc > MAX_DISPLAY_ACCURACY_METERS) {
+            accuracyText.text = TOO_LOW_ACCURACY_DISPLAY
             accuracyText.setTextColor(ContextCompat.getColor(requireContext(), R.color.error_red))
             return
         }
@@ -402,7 +414,7 @@ class HomeFragment : Fragment() {
 
     private fun formatDistance(meters: Float, imperial: Boolean): String {
         if (imperial) {
-            val feet = meters * 3.28084f
+            val feet = meters * FEET_PER_METER
             return if (feet < 5280f) {
                 getString(R.string.stat_distance_feet, feet.toInt())
             } else {
@@ -416,7 +428,7 @@ class HomeFragment : Fragment() {
     }
 
     private fun formatAccuracy(meters: Float, imperial: Boolean): String {
-        val value = if (imperial) (meters * 3.28084f).toInt() else meters.toInt()
+        val value = if (imperial) (meters * FEET_PER_METER).toInt() else meters.toInt()
         val resId = if (imperial) R.string.stat_accuracy_feet else R.string.stat_accuracy_meters
         return getString(resId, value)
     }

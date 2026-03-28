@@ -1549,12 +1549,11 @@ class MapFragment : Fragment() {
         val runtime = trackingRuntimeSnapshot()
         if (!runtime.isRunning) return false
         val accuracyMeters = runtime.lastAccuracyMeters
-        val thresholdMeters = trackingAccuracyThresholdMeters()
+        // Match HomeFragment and TrackingService: threshold comes from resolveCurrentAccuracyFilter()
+        // (runtime snapshot), not raw settings — e.g. auto mode driving uses profile accuracy (200m)
+        // while persisted settings may still reflect walking/biking.
+        val thresholdMeters = runtime.effectiveAccuracyThresholdMeters
         return accuracyMeters == null || accuracyMeters > thresholdMeters
-    }
-
-    private fun trackingAccuracyThresholdMeters(): Float {
-        return settingsRepository.getSettings().accuracyFilterMeters
     }
 
     private fun setGpsAccuracyWarningVisible(visible: Boolean) {
