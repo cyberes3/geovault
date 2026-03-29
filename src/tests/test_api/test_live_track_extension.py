@@ -4,10 +4,12 @@ Tests for the Live Track extension API and ingress.
 import base64
 import json
 import time
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
 from extensions.live_track.src.backend.helpers import DEFAULT_TRACK_COLOR
 from extensions.live_track.src.backend.models import (
@@ -178,6 +180,65 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(response.status_code, 200)
         names = [t["name"] for t in response.json()]
         self.assertEqual(names, ["Alpha", "Bravo", "Charlie"])
+
+    def test_list_trackers_orders_subscribed_oldest_first_and_returns_subscribed_at(self):
+        """GET trackers/ keeps owned name order and sorts subscribed tracks oldest-first with subscribed_at."""
+        with _patch_live_track_enabled():
+            # Owned tracks should stay name-sorted.
+            for name in ["Zulu", "Alpha"]:
+                self.client.post(
+                    "/api/extensions/live-track/trackers/",
+                    data=json.dumps({"name": name}),
+                    content_type="application/json",
+                )
+
+            # Create two public tracks owned by another user.
+            self.client.force_login(self.other_user)
+            first_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Other Track 1"}),
+                content_type="application/json",
+            )
+            second_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Other Track 2"}),
+                content_type="application/json",
+            )
+            first_track = LiveTrack.objects.get(id=first_resp.json()["id"])
+            second_track = LiveTrack.objects.get(id=second_resp.json()["id"])
+            first_track.visibility = "public"
+            second_track.visibility = "public"
+            first_track.save(update_fields=["visibility"])
+            second_track.save(update_fields=["visibility"])
+
+            # Subscribe from primary user, then force timestamps so second is older.
+            self.client.force_login(self.user)
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{first_track.id}/subscribe/",
+                content_type="application/json",
+            )
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{second_track.id}/subscribe/",
+                content_type="application/json",
+            )
+            now = timezone.now()
+            LiveTrackSubscription.objects.filter(user=self.user, track=first_track).update(
+                created_at=now
+            )
+            LiveTrackSubscription.objects.filter(user=self.user, track=second_track).update(
+                created_at=now - timedelta(hours=1)
+            )
+
+            response = self.client.get("/api/extensions/live-track/trackers/")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual([t["name"] for t in data[:2]], ["Alpha", "Zulu"])
+        subscribed = data[2:]
+        self.assertEqual([t["name"] for t in subscribed], ["Other Track 2", "Other Track 1"])
+        self.assertIn("subscribed_at", subscribed[0])
+        self.assertIn("subscribed_at", subscribed[1])
+        self.assertLess(subscribed[0]["subscribed_at"], subscribed[1]["subscribed_at"])
 
     def test_list_returns_is_owner_for_owned_tracks(self):
         """GET trackers/ includes is_owner true and no owner_email for owned tracks."""

@@ -32,7 +32,7 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class PublicTrackersFragment : Fragment() {
 
-    private enum class RowState { IDLE, ADDING, ADDED_CHECK, ADDED_DELETE }
+    private enum class RowState { IDLE, ADDING, ADDED_DELETE }
 
     companion object {
         private const val CHECK_DISPLAY_MS = 2500L
@@ -174,13 +174,6 @@ class PublicTrackersFragment : Fragment() {
                 checkBtn.visibility = View.GONE
                 deleteBtn.visibility = View.GONE
             }
-            RowState.ADDED_CHECK -> {
-                addBtn.visibility = View.GONE
-                spinnerView.visibility = View.GONE
-                spinnerView.stop(hide = true)
-                checkBtn.visibility = View.VISIBLE
-                deleteBtn.visibility = View.GONE
-            }
             RowState.ADDED_DELETE -> {
                 addBtn.visibility = View.GONE
                 spinnerView.visibility = View.GONE
@@ -227,8 +220,7 @@ class PublicTrackersFragment : Fragment() {
                 }
                 if (!isAdded) return@launch
                 if (tracker != null) {
-                    setRowState(row, key, RowState.ADDED_CHECK)
-                    transitionToDeleteAfterCheck(row, key)
+                    setRowState(row, key, RowState.ADDED_DELETE)
                 } else {
                     setRowState(row, key, RowState.IDLE)
                     navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
@@ -289,8 +281,7 @@ class PublicTrackersFragment : Fragment() {
                 }
                 if (!isAdded) return@launch
                 if (!failed) {
-                    setRowState(row, key, RowState.ADDED_CHECK)
-                    transitionToDeleteAfterCheck(row, key)
+                    setRowState(row, key, RowState.ADDED_DELETE)
                 } else {
                     setRowState(row, key, RowState.IDLE)
                     navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))

@@ -283,11 +283,15 @@ def tracker_list_create(request):
             .select_related("track", "track__user")
             .exclude(track__user=request.user)
         )
+        subscribed_at_by_track_id = {}
         visible_non_owned_by_id = {}
         for sub in subs:
             t = sub.track
             if can_user_see_track(request.user, t):
                 visible_non_owned_by_id[t.id] = t
+                subscribed_at_by_track_id[t.id] = (
+                    int(sub.created_at.timestamp()) if getattr(sub, "created_at", None) else None
+                )
         if accepted_group_track_ids:
             for t in (
                 LiveTrack.objects.filter(id__in=accepted_group_track_ids)
@@ -314,13 +318,16 @@ def tracker_list_create(request):
                 payload["world_share_id"] = world_share.share_id
                 payload["world_share_url"] = build_live_track_share_url(world_share.share_id)
             out.append(TrackerListItemResponse.model_validate(payload).model_dump(exclude_none=True))
+        non_owned_out = []
         for t in visible_non_owned_by_id.values():
             payload = track_to_response_metadata_only(t, include_secret=False, is_owner=False)
             payload["is_owner"] = False
             payload["owner_email"] = (t.user.email or "") if t.user_id else ""
             payload["visibility"] = t.visibility
-            out.append(TrackerListItemResponse.model_validate(payload).model_dump(exclude_none=True))
-        out.sort(key=lambda x: (x.get("name") or "").lower())
+            payload["subscribed_at"] = subscribed_at_by_track_id.get(t.id)
+            non_owned_out.append(TrackerListItemResponse.model_validate(payload).model_dump(exclude_none=True))
+        non_owned_out.sort(key=lambda x: (x.get("subscribed_at") is None, x.get("subscribed_at") or 0, (x.get("name") or "").lower()))
+        out.extend(non_owned_out)
         return JsonResponse(out, safe=False)
 
     data, err = get_json_body(request)

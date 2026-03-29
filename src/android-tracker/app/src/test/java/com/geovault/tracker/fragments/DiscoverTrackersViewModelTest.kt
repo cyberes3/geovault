@@ -104,7 +104,29 @@ class DiscoverTrackersViewModelTest {
         assertTrue(vm.uiState.value.errorMessage != null)
     }
 
-    private fun tracker(id: String, visibility: String): Tracker =
+    @Test
+    fun load_ordersOnMyMapSharedTrackersBySubscribedAtOldestFirst() = runTest {
+        val vm = DiscoverTrackersViewModel(
+            trackerManagementRepository = FakeTrackerManagementRepository(
+                trackers = listOf(
+                    tracker("t-late", "shared", subscribedAt = 200L),
+                    tracker("t-early", "shared", subscribedAt = 100L),
+                    tracker("t-null", "shared", subscribedAt = null)
+                ),
+                mapVisibility = MapVisibilityResponse(),
+                availableToAdd = AvailableToAddResponse()
+            ),
+            groupManagementRepository = FakeGroupManagementRepository(groups = emptyList()),
+            sharedSurfaceFilterUseCase = SharedSurfaceFilterUseCase()
+        )
+
+        vm.load(forceRefresh = true)
+        advanceUntilIdle()
+
+        assertEquals(listOf("t-early", "t-late", "t-null"), vm.uiState.value.onMyMapTrackers.map { it.id })
+    }
+
+    private fun tracker(id: String, visibility: String, subscribedAt: Long? = null): Tracker =
         Tracker(
             id = id,
             name = id,
@@ -112,6 +134,7 @@ class DiscoverTrackersViewModelTest {
             settings = emptyMap(),
             geometry = GeoJsonLineString(type = "LineString", coordinates = emptyList()),
             point_params = emptyList(),
+            subscribed_at = subscribedAt,
             is_owner = false,
             visibility = visibility
         )

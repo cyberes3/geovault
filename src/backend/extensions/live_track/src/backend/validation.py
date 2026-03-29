@@ -97,6 +97,7 @@ class TrackerListItemResponse(BaseModel):
     share_params_with_recipients: Optional[bool] = None
     share_params_with_world: Optional[bool] = None
     created_at: Optional[int] = None
+    subscribed_at: Optional[int] = None
     updated_at: Optional[int] = None
     last_point: Optional[list[float]] = None
     is_owner: bool

@@ -2,6 +2,7 @@ import uuid
 
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.utils import timezone
 
 User = get_user_model()
 
@@ -80,6 +81,7 @@ class LiveTrackSubscription(models.Model):
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="live_track_subscriptions")
     track = models.ForeignKey(LiveTrack, on_delete=models.CASCADE, related_name="subscribers")
+    created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         app_label = "live_track"

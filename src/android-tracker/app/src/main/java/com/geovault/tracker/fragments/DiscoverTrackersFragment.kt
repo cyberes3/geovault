@@ -41,7 +41,7 @@ import kotlinx.coroutines.launch
 class DiscoverTrackersFragment : Fragment() {
     private val viewModel: DiscoverTrackersViewModel by viewModels()
 
-    private enum class RowState { IDLE, ADDING, ADDED_CHECK, ADDED_DELETE }
+    private enum class RowState { IDLE, ADDING, ADDED_DELETE }
 
     companion object {
         private const val CHECK_DISPLAY_MS = 2500L
@@ -315,7 +315,7 @@ class DiscoverTrackersFragment : Fragment() {
         addBtn.visibility = if (state == RowState.IDLE) View.VISIBLE else View.GONE
         spinnerView.visibility = if (state == RowState.ADDING) View.VISIBLE else View.GONE
         if (state == RowState.ADDING) spinnerView.start() else spinnerView.stop(hide = true)
-        checkBtn.visibility = if (state == RowState.ADDED_CHECK) View.VISIBLE else View.GONE
+        checkBtn.visibility = View.GONE
         deleteBtn.visibility = if (state == RowState.ADDED_DELETE) View.VISIBLE else View.GONE
     }
 
@@ -381,7 +381,13 @@ class DiscoverTrackersFragment : Fragment() {
         row.findViewById<TextView>(R.id.availableTrackerOwner).text =
             group.owner_email?.takeIf { it.isNotBlank() } ?: ""
         val key = "g:${group.id}"
-        val initialState = rowStates[key] ?: if (initiallyAdded) RowState.ADDED_DELETE else RowState.IDLE
+        val persistedState = rowStates[key]
+        val initialState = if (acceptAsGroup) {
+            // Incoming rows should always present "+" unless this row is actively loading.
+            if (persistedState == RowState.ADDING) RowState.ADDING else RowState.IDLE
+        } else {
+            persistedState ?: if (initiallyAdded) RowState.ADDED_DELETE else RowState.IDLE
+        }
         rowStates[key] = initialState
         val addBtn = row.findViewById<ImageButton>(R.id.availableTrackerAdd)
         val spinnerView = row.findViewById<LoadingSpinner>(R.id.availableTrackerSpinner)
@@ -398,8 +404,7 @@ class DiscoverTrackersFragment : Fragment() {
                 }
                 if (accepted != null) {
                     moveIncomingGroupToOnMyMap(group, accepted.track_ids ?: emptyList())
-                    setRowState(row, key, RowState.ADDED_CHECK)
-                    transitionToDeleteAfterCheck(row, key)
+                    setRowState(row, key, RowState.ADDED_DELETE)
                     rerenderTabs()
                 } else {
                     setRowState(row, key, RowState.IDLE)
@@ -413,6 +418,7 @@ class DiscoverTrackersFragment : Fragment() {
                 val result = groupManagementRepository.leaveGroup(group.id)
                 if (result is RepositoryResult.Success) {
                     removeRowAndMaybeHideSection(parent, row, sectionHeader, sectionList)
+                    viewModel.load(forceRefresh = true, showLoading = false)
                 } else {
                     navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 }
@@ -431,7 +437,13 @@ class DiscoverTrackersFragment : Fragment() {
         row.findViewById<TextView>(R.id.availableTrackerOwner).text =
             item.owner_email?.takeIf { it.isNotBlank() } ?: ""
         val key = "t:${item.id}"
-        val initialState = rowStates[key] ?: if (isIncoming) RowState.IDLE else RowState.ADDED_DELETE
+        val persistedState = rowStates[key]
+        val initialState = if (isIncoming) {
+            // Incoming rows should always present "+" unless this row is actively loading.
+            if (persistedState == RowState.ADDING) RowState.ADDING else RowState.IDLE
+        } else {
+            persistedState ?: RowState.ADDED_DELETE
+        }
         rowStates[key] = initialState
         val addBtn = row.findViewById<ImageButton>(R.id.availableTrackerAdd)
         val spinnerView = row.findViewById<LoadingSpinner>(R.id.availableTrackerSpinner)
@@ -447,8 +459,7 @@ class DiscoverTrackersFragment : Fragment() {
                 }
                 if (tracker != null) {
                     moveIncomingTrackerToOnMyMap(item)
-                    setRowState(row, key, RowState.ADDED_CHECK)
-                    transitionToDeleteAfterCheck(row, key)
+                    setRowState(row, key, RowState.ADDED_DELETE)
                     rerenderTabs()
                 } else {
                     setRowState(row, key, RowState.IDLE)
@@ -462,6 +473,7 @@ class DiscoverTrackersFragment : Fragment() {
                 val result = trackerManagementRepository.unsubscribeTracker(item.id)
                 if (result is RepositoryResult.Success) {
                     removeRowAndMaybeHideSection(parent, row, sectionHeader, parent)
+                    viewModel.load(forceRefresh = true, showLoading = false)
                 } else {
                     navHost()?.showSnackbar(getString(R.string.failed_to_load_tracker))
                 }

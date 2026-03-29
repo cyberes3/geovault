@@ -33,8 +33,10 @@ class DiscoverTrackersViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(DiscoverTrackersUiState(isLoading = true))
     val uiState: StateFlow<DiscoverTrackersUiState> = _uiState.asStateFlow()
 
-    fun load(forceRefresh: Boolean) {
-        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+    fun load(forceRefresh: Boolean, showLoading: Boolean = true) {
+        if (showLoading) {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+        }
         viewModelScope.launch {
             val availableResult = trackerManagementRepository.loadAvailableToAdd(forceRefresh = forceRefresh)
             if (availableResult is RepositoryResult.Failure) {
@@ -58,7 +60,9 @@ class DiscoverTrackersViewModel @Inject constructor(
             val trackers = (trackersResult as? RepositoryResult.Success)?.data ?: emptyList()
 
             val filtered = sharedSurfaceFilterUseCase.filter(groups = groups, trackers = trackers)
-            val onMyMapTrackers = filtered.sharedTrackers.map {
+            val onMyMapTrackers = filtered.sharedTrackers
+                .sortedWith(compareBy({ it.subscribed_at ?: Long.MAX_VALUE }, { it.name.lowercase() }))
+                .map {
                 AvailableToAddItem(
                     id = it.id,
                     name = it.name,

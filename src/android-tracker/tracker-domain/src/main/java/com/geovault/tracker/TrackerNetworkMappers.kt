@@ -18,6 +18,7 @@ fun TrackerDto.toDomainModel(): Tracker {
         bbox = bbox,
         tracker_secret = tracker_secret,
         created_at = created_at,
+        subscribed_at = subscribed_at,
         updated_at = updated_at,
         is_owner = is_owner,
         visibility = visibility,
