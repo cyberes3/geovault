@@ -130,6 +130,8 @@ class AddGroupTrackersFragment : Fragment() {
             val spinnerView = row.findViewById<LoadingSpinner>(R.id.availableTrackerSpinner)
             val checkBtn = row.findViewById<ImageButton>(R.id.availableTrackerCheck)
             val deleteBtn = row.findViewById<ImageButton>(R.id.availableTrackerDelete)
+            addBtn.tooltipText = getString(R.string.tooltip_add_group_row_add)
+            checkBtn.tooltipText = getString(R.string.tooltip_add_group_row_check)
             checkBtn.visibility = View.GONE
             deleteBtn.visibility = View.GONE
 

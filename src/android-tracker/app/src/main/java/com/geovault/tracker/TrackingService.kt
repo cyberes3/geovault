@@ -5,6 +5,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.Manifest
+import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import android.os.IBinder
@@ -13,6 +15,8 @@ import android.os.BatteryManager
 import android.os.Bundle
 import android.os.SystemClock
 import android.os.UserManager
+import android.os.VibrationEffect
+import android.os.VibratorManager
 import android.util.Log
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
@@ -1347,7 +1351,18 @@ class TrackingService : TrackPointServiceBase() {
             getString(R.string.manual_send_point_sent),
             Toast.LENGTH_SHORT
         ).show()
+        triggerLightHaptic()
         return true
+    }
+
+    private fun triggerLightHaptic() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.VIBRATE) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
+        val vibratorManager = getSystemService(VibratorManager::class.java) ?: return
+        val vibrator = vibratorManager.defaultVibrator
+        if (!vibrator.hasVibrator()) return
+        vibrator.vibrate(VibrationEffect.createOneShot(20L, VibrationEffect.DEFAULT_AMPLITUDE))
     }
 
     private fun selectManualSendCandidateLocation(): ManualSendCandidate? {

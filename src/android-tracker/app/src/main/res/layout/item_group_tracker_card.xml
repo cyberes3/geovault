@@ -71,6 +71,7 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/tracker_options"
             android:src="@drawable/ic_more_vert"
+            android:tooltipText="@string/tooltip_group_tracker_menu"
             app:tint="@color/primary_blue" />
 
         <FrameLayout
@@ -87,6 +88,7 @@
                 android:contentDescription="@string/remove_from_share"
                 android:src="@drawable/ic_remove"
                 android:visibility="gone"
+                android:tooltipText="@string/tooltip_group_tracker_remove"
                 app:tint="@color/error_red" />
 
             <com.geovault.common.LoadingSpinner

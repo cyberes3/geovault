@@ -38,6 +38,7 @@
         android:layout_gravity="bottom|end"
         android:layout_margin="16dp"
         android:contentDescription="@string/create_new_tracker"
+        android:tooltipText="@string/tooltip_trackers_pager_fab"
         app:srcCompat="@drawable/ic_add"
         app:tint="@color/content_on_primary"
         app:backgroundTint="@color/primary_blue" />

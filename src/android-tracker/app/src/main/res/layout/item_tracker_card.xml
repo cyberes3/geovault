@@ -125,7 +125,8 @@
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="1"
-                android:text="@string/button_map" />
+                android:text="@string/button_map"
+                android:tooltipText="@string/tooltip_card_view_on_map" />
 
             <Space
                 android:layout_width="12dp"
@@ -137,7 +138,8 @@
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="1"
-                android:text="@string/button_params" />
+                android:text="@string/button_params"
+                android:tooltipText="@string/tooltip_card_view_params" />
 
             <Space
                 android:layout_width="12dp"
@@ -149,7 +151,8 @@
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="1"
-                android:text="@string/edit" />
+                android:text="@string/edit"
+                android:tooltipText="@string/tooltip_card_edit" />
         </LinearLayout>
 
         <LinearLayout
@@ -168,7 +171,8 @@
                 android:layout_weight="1"
                 android:layout_marginEnd="8dp"
                 android:text="@string/hide_on_map"
-                android:textSize="13sp" />
+                android:textSize="13sp"
+                android:tooltipText="@string/tooltip_card_hide_on_map" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnUnsubscribe"
@@ -178,7 +182,8 @@
                 android:layout_weight="1"
                 android:layout_marginEnd="8dp"
                 android:text="@string/unsubscribe"
-                android:textSize="13sp" />
+                android:textSize="13sp"
+                android:tooltipText="@string/tooltip_card_unsubscribe" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnRemoveFromShare"
@@ -187,7 +192,8 @@
                 android:layout_height="40dp"
                 android:layout_weight="1"
                 android:text="@string/remove_from_share"
-                android:textSize="13sp" />
+                android:textSize="13sp"
+                android:tooltipText="@string/tooltip_card_remove_from_share" />
         </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

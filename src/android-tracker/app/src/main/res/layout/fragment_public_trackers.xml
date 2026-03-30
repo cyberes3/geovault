@@ -37,6 +37,7 @@
             android:src="@drawable/ic_close"
             android:clickable="true"
             android:focusable="true"
+            android:tooltipText="@string/tooltip_public_close"
             app:tint="@color/text_primary" />
     </LinearLayout>
 

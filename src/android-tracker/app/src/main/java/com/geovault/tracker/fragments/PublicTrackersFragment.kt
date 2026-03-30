@@ -210,6 +210,8 @@ class PublicTrackersFragment : Fragment() {
         val spinnerView = row.findViewById<LoadingSpinner>(R.id.availableTrackerSpinner)
         val checkBtn = row.findViewById<ImageButton>(R.id.availableTrackerCheck)
         val deleteBtn = row.findViewById<ImageButton>(R.id.availableTrackerDelete)
+        addBtn.tooltipText = getString(R.string.tooltip_public_row_add)
+        deleteBtn.tooltipText = getString(R.string.tooltip_public_row_remove)
         addBtn.setOnClickListener {
             if (rowStates[key] != RowState.IDLE) return@setOnClickListener
             setRowState(row, key, RowState.ADDING)
@@ -261,6 +263,8 @@ class PublicTrackersFragment : Fragment() {
         val spinnerView = row.findViewById<LoadingSpinner>(R.id.availableTrackerSpinner)
         val checkBtn = row.findViewById<ImageButton>(R.id.availableTrackerCheck)
         val deleteBtn = row.findViewById<ImageButton>(R.id.availableTrackerDelete)
+        addBtn.tooltipText = getString(R.string.tooltip_public_row_add)
+        deleteBtn.tooltipText = getString(R.string.tooltip_public_row_remove)
         addBtn.setOnClickListener {
             if (rowStates[key] != RowState.IDLE) return@setOnClickListener
             setRowState(row, key, RowState.ADDING)

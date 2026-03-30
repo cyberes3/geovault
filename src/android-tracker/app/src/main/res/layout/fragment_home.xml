@@ -46,7 +46,8 @@
                 android:layout_height="wrap_content"
                 android:text="@string/grant_location_permission"
                 android:textSize="16sp"
-                android:layout_marginBottom="12dp" />
+                android:layout_marginBottom="12dp"
+                android:tooltipText="@string/tooltip_grant_location" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/grantBackgroundLocationButton"
@@ -55,7 +56,8 @@
                 android:layout_height="wrap_content"
                 android:text="@string/grant_background_location"
                 android:textSize="16sp"
-                android:layout_marginBottom="12dp" />
+                android:layout_marginBottom="12dp"
+                android:tooltipText="@string/tooltip_grant_background_location" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/grantNotificationButton"
@@ -64,7 +66,8 @@
                 android:layout_height="wrap_content"
                 android:text="@string/grant_notification_permission"
                 android:textSize="16sp"
-                android:layout_marginBottom="12dp" />
+                android:layout_marginBottom="12dp"
+                android:tooltipText="@string/tooltip_grant_notifications" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/grantBatteryButton"
@@ -73,7 +76,8 @@
                 android:layout_height="wrap_content"
                 android:text="@string/disable_battery_optimization"
                 android:textSize="16sp"
-                android:layout_marginBottom="12dp" />
+                android:layout_marginBottom="12dp"
+                android:tooltipText="@string/tooltip_grant_battery" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/grantExactAlarmButton"
@@ -81,7 +85,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/grant_exact_alarm_permission"
-                android:textSize="16sp" />
+                android:textSize="16sp"
+                android:tooltipText="@string/tooltip_grant_exact_alarm" />
 
         </LinearLayout>
 
@@ -422,7 +427,8 @@
             android:layout_width="200dp"
             android:layout_height="64dp"
             android:text="@string/start_tracking"
-            android:textSize="18sp" />
+            android:textSize="18sp"
+            android:tooltipText="@string/tooltip_start_stop_tracking" />
 
         <LinearLayout
             android:id="@+id/trackingInlineButtonsRow"
@@ -445,6 +451,7 @@
                 android:paddingStart="9dp"
                 android:paddingEnd="9dp"
                 android:contentDescription="@string/map_tracker_info_view_params_content_description"
+                android:tooltipText="@string/tooltip_tracking_params"
                 app:icon="@drawable/ic_params"
                 app:iconTint="@color/primary_blue"
                 app:iconSize="22dp"
@@ -464,6 +471,7 @@
                 android:paddingStart="9dp"
                 android:paddingEnd="9dp"
                 android:contentDescription="@string/home_manual_send_point_content_description"
+                android:tooltipText="@string/tooltip_manual_send_point"
                 app:icon="@drawable/ic_send_point"
                 app:iconTint="@color/primary_blue"
                 app:iconSize="22dp"

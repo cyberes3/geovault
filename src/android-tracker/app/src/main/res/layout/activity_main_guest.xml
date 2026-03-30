@@ -73,7 +73,8 @@
                 style="@style/gv_common_ButtonPrimary"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
-                android:text="@string/connect_account" />
+                android:text="@string/connect_account"
+                android:tooltipText="@string/tooltip_guest_connect" />
         </LinearLayout>
     </LinearLayout>
 

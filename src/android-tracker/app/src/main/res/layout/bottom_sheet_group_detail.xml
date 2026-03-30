@@ -33,7 +33,8 @@
         android:clickable="true"
         android:focusable="true"
         android:background="?attr/selectableItemBackground"
-        android:layout_marginBottom="4dp">
+        android:layout_marginBottom="4dp"
+        android:tooltipText="@string/tooltip_group_detail_tracks_row">
         <TextView
             android:id="@+id/groupDetailTracksCountText"
             android:layout_width="0dp"
@@ -76,7 +77,8 @@
             android:layout_width="match_parent"
             android:layout_height="36dp"
             android:text="@string/copy_world_share_link"
-            android:visibility="gone" />
+            android:visibility="gone"
+            android:tooltipText="@string/tooltip_group_detail_copy_world_link" />
         <com.geovault.common.LoadingSpinner
             android:id="@+id/groupDetailCopyWorldLinkSpinner"
             android:layout_width="wrap_content"
@@ -100,5 +102,6 @@
         style="@style/gv_common_ButtonOutlinedDestructive"
         android:layout_width="match_parent"
         android:layout_height="40dp"
-        android:text="@string/delete_group" />
+        android:text="@string/delete_group"
+        android:tooltipText="@string/tooltip_group_detail_delete" />
 </LinearLayout>

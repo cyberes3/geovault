@@ -37,6 +37,7 @@
             android:src="@drawable/ic_close"
             android:clickable="true"
             android:focusable="true"
+            android:tooltipText="@string/tooltip_group_trackers_list_close"
             app:tint="@color/text_primary" />
     </LinearLayout>
 
@@ -54,7 +55,8 @@
         android:layout_marginEnd="16dp"
         android:layout_marginTop="12dp"
         android:layout_marginBottom="8dp"
-        android:text="@string/add_trackers" />
+        android:text="@string/add_trackers"
+        android:tooltipText="@string/tooltip_group_trackers_list_add" />
 
     <FrameLayout
         android:layout_width="match_parent"

@@ -38,6 +38,7 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_delete"
             android:contentDescription="@string/delete_tracker"
+            android:tooltipText="@string/tooltip_recipient_remove"
             app:tint="@color/primary_blue" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

@@ -43,5 +43,7 @@
     <string name="close">Close</string>
     <string name="description">Description</string>
     <string name="no_description">No description</string>
+    <string name="parse_coordinates_button_description">Parse coordinates or address</string>
+    <string name="tooltip_parse_coordinates_button">Reformat coordinate text as decimal latitude and longitude, or geocode a street address into coordinates.</string>
 </resources>
 

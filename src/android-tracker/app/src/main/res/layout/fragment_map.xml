@@ -36,6 +36,7 @@
         android:layout_marginStart="16dp"
         android:minWidth="0dp"
         android:visibility="gone"
+        android:tooltipText="@string/tooltip_map_tracker_label_card"
         app:cardCornerRadius="22dp"
         app:cardElevation="0dp"
         app:cardBackgroundColor="@color/primary_blue">
@@ -82,6 +83,7 @@
                 android:padding="4dp"
                 android:src="@drawable/ic_close"
                 android:contentDescription="@string/recenter_to_tracker"
+                android:tooltipText="@string/tooltip_map_reset_tracker"
                 app:tint="@color/content_on_primary"
                 android:clickable="true"
                 android:focusable="true"
@@ -116,6 +118,7 @@
         android:layout_marginEnd="16dp"
         android:clickable="true"
         android:focusable="true"
+        android:tooltipText="@string/tooltip_map_zoom_latest"
         app:cardCornerRadius="22dp"
         app:cardElevation="0dp"
         app:cardBackgroundColor="@color/primary_blue">
@@ -172,6 +175,7 @@
         android:layout_marginEnd="16dp"
         android:clickable="true"
         android:focusable="true"
+        android:tooltipText="@string/tooltip_map_layers"
         app:cardCornerRadius="22dp"
         app:cardElevation="0dp"
         app:cardBackgroundColor="@color/primary_blue">
@@ -193,6 +197,7 @@
         android:layout_marginEnd="16dp"
         android:clickable="true"
         android:focusable="true"
+        android:tooltipText="@string/tooltip_map_zoom_in"
         app:cardCornerRadius="22dp"
         app:cardElevation="0dp"
         app:cardBackgroundColor="@color/primary_blue">
@@ -214,6 +219,7 @@
         android:layout_marginEnd="16dp"
         android:clickable="true"
         android:focusable="true"
+        android:tooltipText="@string/tooltip_map_zoom_out"
         app:cardCornerRadius="22dp"
         app:cardElevation="0dp"
         app:cardBackgroundColor="@color/primary_blue">
@@ -236,6 +242,7 @@
         android:visibility="gone"
         android:clickable="true"
         android:focusable="true"
+        android:tooltipText="@string/tooltip_map_live_active_fit"
         app:cardCornerRadius="22dp"
         app:cardElevation="0dp"
         app:cardBackgroundColor="@color/primary_blue">
@@ -291,6 +298,7 @@
                     android:layout_marginEnd="8dp"
                     android:src="@drawable/ic_crosshair"
                     android:contentDescription="@string/zoom_and_lock_tracker"
+                    android:tooltipText="@string/tooltip_map_selection_zoom_lock"
                     android:clickable="true"
                     android:focusable="true"
                     app:tint="@color/primary_blue" />
@@ -301,6 +309,7 @@
                     android:padding="4dp"
                     android:src="@drawable/ic_close"
                     android:contentDescription="@string/close"
+                    android:tooltipText="@string/tooltip_map_selection_close"
                     android:clickable="true"
                     android:focusable="true"
                     app:tint="@color/primary_blue" />
@@ -338,6 +347,7 @@
                     android:paddingStart="9dp"
                     android:paddingEnd="9dp"
                     android:contentDescription="@string/focus_tracker_on_map"
+                    android:tooltipText="@string/tooltip_map_selection_focus"
                     app:icon="@drawable/ic_focus_tracker"
                     app:iconTint="@color/primary_blue"
                     app:iconSize="22dp"
@@ -355,6 +365,7 @@
                     android:paddingStart="9dp"
                     android:paddingEnd="9dp"
                     android:contentDescription="@string/view_params"
+                    android:tooltipText="@string/tooltip_map_selection_view_params"
                     app:icon="@drawable/ic_params"
                     app:iconTint="@color/primary_blue"
                     app:iconSize="22dp"
@@ -372,6 +383,7 @@
                     android:paddingStart="9dp"
                     android:paddingEnd="9dp"
                     android:contentDescription="@string/view_in_trackers_list"
+                    android:tooltipText="@string/tooltip_map_selection_view_in_list"
                     app:icon="@drawable/ic_list_bullet"
                     app:iconTint="@color/primary_blue"
                     app:iconSize="22dp"

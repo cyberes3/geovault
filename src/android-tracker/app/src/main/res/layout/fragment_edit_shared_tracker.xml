@@ -34,6 +34,7 @@
             android:src="@drawable/ic_close"
             android:clickable="true"
             android:focusable="true"
+            android:tooltipText="@string/tooltip_edit_shared_tracker_close"
             android:tint="@color/text_primary" />
     </LinearLayout>
 
@@ -81,7 +82,8 @@
                     android:layout_height="48dp"
                     android:text="@string/unsubscribe"
                     android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
-                    android:layout_marginBottom="8dp" />
+                    android:layout_marginBottom="8dp"
+                    android:tooltipText="@string/tooltip_edit_shared_unsubscribe" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/editSharedTrackerRemoveFromShare"
@@ -89,7 +91,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
                     android:text="@string/remove_from_share"
-                    android:visibility="gone" />
+                    android:visibility="gone"
+                    android:tooltipText="@string/tooltip_edit_shared_remove_from_share" />
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>
 

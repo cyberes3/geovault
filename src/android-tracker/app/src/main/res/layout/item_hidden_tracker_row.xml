@@ -38,5 +38,6 @@
         android:background="?attr/selectableItemBackgroundBorderless"
         android:contentDescription="@string/show"
         android:src="@drawable/ic_eye"
+        android:tooltipText="@string/tooltip_hidden_show_one"
         app:tint="@color/primary_blue" />
 </LinearLayout>

@@ -12,6 +12,8 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
+import android.os.VibrationEffect
+import android.os.VibratorManager
 import android.provider.Settings
 import android.util.Log
 import android.view.View
@@ -312,11 +314,26 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
             }
         })
 
-        findViewById<View>(R.id.navHome).setOnClickListener { navigateToTabWithOverlayClear(0) }
-        findViewById<View>(R.id.navMap).setOnClickListener { openMapTabFromBottomNav() }
-        findViewById<View>(R.id.navTrackers).setOnClickListener { openTrackersTabFromBottomNav() }
-        findViewById<View>(R.id.navShared).setOnClickListener { navigateToTabWithOverlayClear(3) }
-        findViewById<View>(R.id.navSettings).setOnClickListener { navigateToTabWithOverlayClear(4) }
+        findViewById<View>(R.id.navHome).apply {
+            setOnClickListener { navigateToTabWithOverlayClear(0) }
+            tooltipText = getString(R.string.tooltip_nav_home)
+        }
+        findViewById<View>(R.id.navMap).apply {
+            setOnClickListener { openMapTabFromBottomNav() }
+            tooltipText = getString(R.string.tooltip_nav_map)
+        }
+        findViewById<View>(R.id.navTrackers).apply {
+            setOnClickListener { openTrackersTabFromBottomNav() }
+            tooltipText = getString(R.string.tooltip_nav_trackers)
+        }
+        findViewById<View>(R.id.navShared).apply {
+            setOnClickListener { navigateToTabWithOverlayClear(3) }
+            tooltipText = getString(R.string.tooltip_nav_shared)
+        }
+        findViewById<View>(R.id.navSettings).apply {
+            setOnClickListener { navigateToTabWithOverlayClear(4) }
+            tooltipText = getString(R.string.tooltip_nav_settings)
+        }
 
         updateNavTabBackground(savedTab)
         supportFragmentManager.addOnBackStackChangedListener { updateBottomNavForOverlay() }
@@ -1045,6 +1062,7 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     }
 
     override fun toggleTracking() {
+        triggerLightHaptic()
         val homeFragment = pagerAdapter.getFragment(0) as? com.geovault.tracker.fragments.HomeFragment
         if (isPreparingToTrack) {
             showStopTrackingConfirmation {
@@ -1105,6 +1123,16 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
                 hf?.updateTrackingUi()
             }, 300)
         }
+    }
+
+    private fun triggerLightHaptic() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.VIBRATE) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
+        val vibratorManager = getSystemService(VibratorManager::class.java) ?: return
+        val vibrator = vibratorManager.defaultVibrator
+        if (!vibrator.hasVibrator()) return
+        vibrator.vibrate(VibrationEffect.createOneShot(20L, VibrationEffect.DEFAULT_AMPLITUDE))
     }
 
     override fun onStart() {

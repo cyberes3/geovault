@@ -32,6 +32,7 @@
             android:src="@drawable/ic_close"
             android:clickable="true"
             android:focusable="true"
+            android:tooltipText="@string/tooltip_edit_tracker_close"
             app:tint="@color/text_primary" />
     </LinearLayout>
 
@@ -114,7 +115,8 @@
                         android:layout_width="wrap_content"
                         android:layout_height="48dp"
                         android:layout_marginEnd="12dp"
-                        android:text="@string/pick_color" />
+                        android:text="@string/pick_color"
+                        android:tooltipText="@string/tooltip_edit_tracker_pick_color" />
                     <android.widget.EditText
                         android:id="@+id/editTrackerColor"
                         android:layout_width="100dp"
@@ -244,7 +246,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="40dp"
                         android:text="@string/copy_world_share_link"
-                        android:visibility="gone" />
+                        android:visibility="gone"
+                        android:tooltipText="@string/tooltip_edit_tracker_copy_world_link" />
                     <com.geovault.common.LoadingSpinner
                         android:id="@+id/editTrackerCopyWorldLinkSpinner"
                         android:layout_width="wrap_content"
@@ -267,7 +270,8 @@
                     style="@style/gv_common_ButtonOutlined"
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
-                    android:text="@string/export_kml" />
+                    android:text="@string/export_kml"
+                    android:tooltipText="@string/tooltip_edit_tracker_export_kml" />
 
             </LinearLayout>
 
@@ -277,14 +281,16 @@
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:text="@string/clear_history_tracker"
-                android:layout_marginBottom="8dp" />
+                android:layout_marginBottom="8dp"
+                android:tooltipText="@string/tooltip_edit_tracker_clear_history" />
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/editTrackerDelete"
                 style="@style/gv_common_ButtonOutlinedDestructive"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:text="@string/delete_tracker"
-                android:layout_marginBottom="24dp" />
+                android:layout_marginBottom="24dp"
+                android:tooltipText="@string/tooltip_edit_tracker_delete" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 
@@ -340,6 +346,7 @@
             android:layout_height="44dp"
             android:elevation="0dp"
             android:stateListAnimator="@null"
-            android:text="@string/save" />
+            android:text="@string/save"
+            android:tooltipText="@string/tooltip_edit_tracker_save" />
     </LinearLayout>
 </LinearLayout>

@@ -83,6 +83,7 @@
             android:contentDescription="@string/edit_group_content_description"
             android:src="@drawable/ic_more_vert"
             android:visibility="gone"
+            android:tooltipText="@string/tooltip_group_card_menu"
             app:tint="@color/primary_blue" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

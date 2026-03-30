@@ -130,6 +130,7 @@
             android:layout_marginEnd="16dp"
             android:layout_marginBottom="88dp"
             android:contentDescription="@string/discover_public"
+            android:tooltipText="@string/tooltip_shared_fab_public"
             app:srcCompat="@drawable/ic_globe"
             app:tint="@color/content_on_primary"
             app:backgroundTint="@color/primary_blue" />
@@ -141,6 +142,7 @@
             android:layout_gravity="end|bottom"
             android:layout_margin="16dp"
             android:contentDescription="@string/add_tracker"
+            android:tooltipText="@string/tooltip_shared_fab_add"
             app:srcCompat="@drawable/ic_add"
             app:tint="@color/content_on_primary"
             app:backgroundTint="@color/primary_blue" />

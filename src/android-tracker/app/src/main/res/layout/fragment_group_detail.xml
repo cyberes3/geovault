@@ -37,6 +37,7 @@
             android:src="@drawable/ic_close"
             android:clickable="true"
             android:focusable="true"
+            android:tooltipText="@string/tooltip_group_detail_close"
             app:tint="@color/text_primary" />
     </LinearLayout>
 
@@ -112,6 +113,7 @@
             android:layout_height="40dp"
             android:elevation="0dp"
             android:stateListAnimator="@null"
-            android:text="@string/save" />
+            android:text="@string/save"
+            android:tooltipText="@string/tooltip_group_detail_save" />
     </LinearLayout>
 </LinearLayout>

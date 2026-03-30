@@ -782,6 +782,8 @@ class MapFragment : Fragment() {
         }
 
         showMyLocationButton.setOnClickListener { onShowMyLocationClick() }
+        // No android:tooltipText here: long-press exits my-location mode (see onShowMyLocationLongClick);
+        // a help tooltip would use the same gesture and conflict.
         showMyLocationButton.setOnLongClickListener {
             onShowMyLocationLongClick()
             true

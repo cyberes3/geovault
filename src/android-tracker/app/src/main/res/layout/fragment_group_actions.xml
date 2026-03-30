@@ -34,6 +34,7 @@
             android:src="@drawable/ic_close"
             android:clickable="true"
             android:focusable="true"
+            android:tooltipText="@string/tooltip_group_actions_close"
             app:tint="@color/text_primary" />
     </LinearLayout>
 
@@ -125,7 +126,8 @@
             android:layout_marginEnd="8dp"
             android:elevation="0dp"
             android:stateListAnimator="@null"
-            android:text="@string/edit_group" />
+            android:text="@string/edit_group"
+            android:tooltipText="@string/tooltip_group_action_edit" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/groupActionViewOnMap"
@@ -135,6 +137,7 @@
             android:layout_height="40dp"
             android:elevation="0dp"
             android:stateListAnimator="@null"
-            android:text="@string/view_group_on_map" />
+            android:text="@string/view_group_on_map"
+            android:tooltipText="@string/tooltip_group_action_view_map" />
     </LinearLayout>
 </LinearLayout>

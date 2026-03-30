@@ -34,6 +34,7 @@
             android:src="@drawable/ic_close"
             android:clickable="true"
             android:focusable="true"
+            android:tooltipText="@string/tooltip_edit_shared_group_close"
             android:tint="@color/text_primary" />
     </LinearLayout>
 
@@ -76,7 +77,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:layout_marginTop="@dimen/gv_common_toggle_help_card_margin_vertical"
-                android:text="@string/leave_group" />
+                android:text="@string/leave_group"
+                android:tooltipText="@string/tooltip_edit_shared_group_leave" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </LinearLayout>
