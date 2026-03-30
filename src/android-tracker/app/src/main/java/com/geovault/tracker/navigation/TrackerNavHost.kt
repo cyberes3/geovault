@@ -46,6 +46,7 @@ interface TrackerNavHost {
     fun requestBatteryOptimizationExemption()
     fun requestExactAlarmPermission()
     fun toggleTracking()
+    fun sendManualTrackingPoint()
 }
 
 fun Fragment.navHost(): TrackerNavHost? = activity as? TrackerNavHost

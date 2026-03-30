@@ -26,6 +26,12 @@ class TrackingServiceStartupCommandPathTest {
                 action = TrackingService.ACTION_RESHOW_FOREGROUND
             )
         )
+        assertEquals(
+            TrackingService.Companion.StartupCommandPath.ManualSendPoint,
+            TrackingService.resolveStartupCommandPath(
+                action = TrackingService.ACTION_SEND_MANUAL_POINT
+            )
+        )
     }
 
     @Test
@@ -43,6 +49,7 @@ class TrackingServiceStartupCommandPathTest {
         assertTrue(TrackingService.requiresForegroundPromotion(TrackingService.Companion.StartupCommandPath.StartTracking))
         assertFalse(TrackingService.requiresForegroundPromotion(TrackingService.Companion.StartupCommandPath.StopNoRestart))
         assertFalse(TrackingService.requiresForegroundPromotion(TrackingService.Companion.StartupCommandPath.ReshowForeground))
+        assertFalse(TrackingService.requiresForegroundPromotion(TrackingService.Companion.StartupCommandPath.ManualSendPoint))
         assertFalse(TrackingService.requiresForegroundPromotion(TrackingService.Companion.StartupCommandPath.StopUnknown))
     }
 
@@ -51,6 +58,7 @@ class TrackingServiceStartupCommandPathTest {
         assertEquals("explicit_start", TrackingService.resolveStartupTrigger(TrackingService.ACTION_START))
         assertEquals("explicit_stop", TrackingService.resolveStartupTrigger(TrackingService.ACTION_STOP))
         assertEquals("reshow_foreground", TrackingService.resolveStartupTrigger(TrackingService.ACTION_RESHOW_FOREGROUND))
+        assertEquals("manual_send_point", TrackingService.resolveStartupTrigger(TrackingService.ACTION_SEND_MANUAL_POINT))
         assertEquals("process_restart", TrackingService.resolveStartupTrigger(null))
         assertEquals("unknown_action", TrackingService.resolveStartupTrigger("com.geovault.tracker.ACTION_CUSTOM"))
     }

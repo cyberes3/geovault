@@ -4,9 +4,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
@@ -27,7 +29,14 @@ import kotlin.math.roundToInt
 
 @AndroidEntryPoint
 class HomeFragment : Fragment() {
+    private enum class HomeLayoutMode {
+        NORMAL,
+        TIGHT,
+        COMPACT_HIDE_RADAR
+    }
+
     companion object {
+        private const val TAG = "HomeFragment"
         private const val FEET_PER_METER = 3.28084f
         private const val MAX_DISPLAY_ACCURACY_FEET = 1500f
         private const val TOO_LOW_ACCURACY_DISPLAY = "-"
@@ -47,6 +56,8 @@ class HomeFragment : Fragment() {
     private lateinit var accuracyText: TextView
 
     private lateinit var trackingParamsButton: MaterialButton
+    private lateinit var manualSendPointButton: MaterialButton
+    private lateinit var trackingInlineButtonsRow: View
     private lateinit var trackingContentContainer: LinearLayout
     private lateinit var permissionsContainer: View
     private lateinit var radarDishContainer: FrameLayout
@@ -58,12 +69,19 @@ class HomeFragment : Fragment() {
     private var defaultRadarContainerBottomMarginPx = 0
     private var defaultTrackingPaddingTopPx = 0
     private var defaultTrackingPaddingBottomPx = 0
-    private var minRadarContainerSizePx = 0
-    private var minRadarIconSizePx = 0
-    private var minRadarContainerBottomMarginPx = 0
-    private var minTrackingPaddingTopPx = 0
-    private var minTrackingPaddingBottomPx = 0
+    private var defaultSessionStatsBottomMarginPx = 0
+    private var defaultInlineButtonsRowTopMarginPx = 0
+    private var tightRadarContainerSizePx = 0
+    private var tightRadarIconSizePx = 0
+    private var tightRadarContainerBottomMarginPx = 0
+    private var compactTrackingPaddingTopPx = 0
+    private var compactTrackingPaddingBottomPx = 0
+    private var compactSessionStatsBottomMarginPx = 0
+    private var compactInlineButtonsRowTopMarginPx = 0
     private var homeLayoutChangeListener: View.OnLayoutChangeListener? = null
+    private var layoutMode = HomeLayoutMode.NORMAL
+    private var compactExitBufferPx = 0
+    private var lastCompactDecisionLog: String? = null
 
     private val sessionStatsHandler = Handler(Looper.getMainLooper())
     private val sessionStatsTickerIntervalMs = 1000L
@@ -106,7 +124,9 @@ class HomeFragment : Fragment() {
         
         trackingStatusText = view.findViewById(R.id.trackingStatusText)
         trackingTrackNameText = view.findViewById(R.id.trackingTrackNameText)
+        trackingInlineButtonsRow = view.findViewById(R.id.trackingInlineButtonsRow)
         trackingParamsButton = view.findViewById(R.id.trackingParamsButton)
+        manualSendPointButton = view.findViewById(R.id.manualSendPointButton)
         queueCountText = view.findViewById(R.id.queueCountText)
         sessionStatsContainer = view.findViewById(R.id.sessionStatsContainer)
         trackingDurationText = view.findViewById(R.id.trackingDurationText)
@@ -116,17 +136,25 @@ class HomeFragment : Fragment() {
         distanceText = view.findViewById(R.id.distanceText)
         accuracyText = view.findViewById(R.id.accuracyText)
 
-        defaultRadarContainerSizePx = radarDishContainer.layoutParams.height
-        defaultRadarIconSizePx = radarDishIcon.layoutParams.height
+        defaultRadarContainerSizePx = radarDishContainer.layoutParams.height.takeIf { it > 0 } ?: dpToPx(180f)
+        defaultRadarIconSizePx = radarDishIcon.layoutParams.height.takeIf { it > 0 } ?: dpToPx(140f)
         defaultRadarContainerBottomMarginPx =
             (radarDishContainer.layoutParams as? LinearLayout.LayoutParams)?.bottomMargin ?: 0
         defaultTrackingPaddingTopPx = trackingContentContainer.paddingTop
         defaultTrackingPaddingBottomPx = trackingContentContainer.paddingBottom
-        minRadarContainerSizePx = dpToPx(72f)
-        minRadarIconSizePx = dpToPx(52f)
-        minRadarContainerBottomMarginPx = 0
-        minTrackingPaddingTopPx = dpToPx(10f)
-        minTrackingPaddingBottomPx = dpToPx(10f)
+        defaultSessionStatsBottomMarginPx =
+            (sessionStatsContainer.layoutParams as? LinearLayout.LayoutParams)?.bottomMargin ?: 0
+        defaultInlineButtonsRowTopMarginPx =
+            (trackingInlineButtonsRow.layoutParams as? LinearLayout.LayoutParams)?.topMargin ?: 0
+
+        tightRadarContainerSizePx = dpToPx(132f)
+        tightRadarIconSizePx = dpToPx(102f)
+        tightRadarContainerBottomMarginPx = dpToPx(8f)
+        compactTrackingPaddingTopPx = dpToPx(12f)
+        compactTrackingPaddingBottomPx = dpToPx(4f)
+        compactSessionStatsBottomMarginPx = dpToPx(16f)
+        compactInlineButtonsRowTopMarginPx = dpToPx(8f)
+        compactExitBufferPx = dpToPx(20f)
         homeLayoutChangeListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             applyDynamicRadarSizing()
         }
@@ -157,6 +185,9 @@ class HomeFragment : Fragment() {
                 positionLat = lat,
                 positionLon = lon
             )
+        }
+        manualSendPointButton.setOnClickListener {
+            navHost()?.sendManualTrackingPoint()
         }
 
         setupPermissionButtons(view)
@@ -328,9 +359,11 @@ class HomeFragment : Fragment() {
         val running = runtime.isRunning
         startStopButton.text = getString(if (running) R.string.stop_tracking else R.string.start_tracking)
         updateTrackingTrackName()
-        if (::trackingParamsButton.isInitialized) {
-            trackingParamsButton.visibility =
+        if (::trackingParamsButton.isInitialized && ::manualSendPointButton.isInitialized) {
+            val inlineControlsVisibility =
                 if (running && runtime.selectedTrackerId.isNotBlank()) View.VISIBLE else View.INVISIBLE
+            trackingParamsButton.visibility = inlineControlsVisibility
+            manualSendPointButton.visibility = inlineControlsVisibility
         }
 
         // Change radar dish color based on tracking state
@@ -448,58 +481,167 @@ class HomeFragment : Fragment() {
             return
         }
         if (trackingContentContainer.visibility != View.VISIBLE) {
-            applyRadarSizing(defaultRadarContainerSizePx, defaultRadarIconSizePx, defaultRadarContainerBottomMarginPx)
-            applyTrackingContainerPadding(defaultTrackingPaddingTopPx, defaultTrackingPaddingBottomPx)
+            applyHomeLayoutMode(HomeLayoutMode.NORMAL)
             return
         }
 
-        var requiredHeight = 0
-        for (index in 0 until trackingContentContainer.childCount) {
-            val child = trackingContentContainer.getChildAt(index)
-            if (child.visibility == View.GONE) continue
-
-            val params = child.layoutParams as? LinearLayout.LayoutParams
-            if ((params?.weight ?: 0f) > 0f) continue
-
-            val childHeight = child.height.takeIf { it > 0 } ?: child.measuredHeight
-            requiredHeight += childHeight + (params?.verticalMargins() ?: 0)
-        }
-
-        val availableHeight = trackingContentContainer.height
+        val availableHeight = trackingContentContainer.height.coerceAtLeast(0)
         if (availableHeight <= 0) return
 
-        val overflow = requiredHeight + trackingContentContainer.paddingTop + trackingContentContainer.paddingBottom - availableHeight
-        if (overflow <= 0) {
-            applyRadarSizing(defaultRadarContainerSizePx, defaultRadarIconSizePx, defaultRadarContainerBottomMarginPx)
-            applyTrackingContainerPadding(defaultTrackingPaddingTopPx, defaultTrackingPaddingBottomPx)
-            return
+        val requiredNormal = resolveRequiredTrackingHeight(
+            includeRadar = true,
+            radarHeightPx = defaultRadarContainerSizePx,
+            topPaddingPx = defaultTrackingPaddingTopPx,
+            bottomPaddingPx = defaultTrackingPaddingBottomPx,
+            sessionStatsBottomMarginPx = defaultSessionStatsBottomMarginPx,
+            inlineButtonsTopMarginPx = defaultInlineButtonsRowTopMarginPx
+        )
+        val requiredTight = resolveRequiredTrackingHeight(
+            includeRadar = true,
+            radarHeightPx = tightRadarContainerSizePx,
+            topPaddingPx = compactTrackingPaddingTopPx,
+            bottomPaddingPx = compactTrackingPaddingBottomPx,
+            sessionStatsBottomMarginPx = compactSessionStatsBottomMarginPx,
+            inlineButtonsTopMarginPx = compactInlineButtonsRowTopMarginPx
+        )
+        val requiredCompact = resolveRequiredTrackingHeight(
+            includeRadar = false,
+            radarHeightPx = tightRadarContainerSizePx,
+            topPaddingPx = compactTrackingPaddingTopPx,
+            bottomPaddingPx = compactTrackingPaddingBottomPx,
+            sessionStatsBottomMarginPx = compactSessionStatsBottomMarginPx,
+            inlineButtonsTopMarginPx = compactInlineButtonsRowTopMarginPx
+        )
+        val pressureNormal = requiredNormal - availableHeight
+        val pressureTight = requiredTight - availableHeight
+        val pressureCompact = requiredCompact - availableHeight
+        val occlusionPressure = resolveBottomOcclusionPx()
+        val targetMode = when (layoutMode) {
+            HomeLayoutMode.NORMAL -> {
+                when {
+                    pressureNormal + occlusionPressure <= 0 -> HomeLayoutMode.NORMAL
+                    pressureTight + occlusionPressure <= 0 -> HomeLayoutMode.TIGHT
+                    else -> HomeLayoutMode.COMPACT_HIDE_RADAR
+                }
+            }
+            HomeLayoutMode.TIGHT -> {
+                when {
+                    pressureNormal + occlusionPressure < -compactExitBufferPx -> HomeLayoutMode.NORMAL
+                    pressureTight + occlusionPressure <= 0 -> HomeLayoutMode.TIGHT
+                    else -> HomeLayoutMode.COMPACT_HIDE_RADAR
+                }
+            }
+            HomeLayoutMode.COMPACT_HIDE_RADAR -> {
+                if (pressureTight + occlusionPressure < -compactExitBufferPx) {
+                    HomeLayoutMode.TIGHT
+                } else {
+                    HomeLayoutMode.COMPACT_HIDE_RADAR
+                }
+            }
         }
+        logCompactDecision(
+            availableHeight = availableHeight,
+            requiredNormal = requiredNormal,
+            requiredTight = requiredTight,
+            requiredCompact = requiredCompact,
+            pressureNormal = pressureNormal,
+            pressureTight = pressureTight,
+            pressureCompact = pressureCompact,
+            occlusionPressure = occlusionPressure,
+            targetMode = targetMode
+        )
+        applyHomeLayoutMode(targetMode)
+    }
 
-        var remainingOverflow = overflow
-        val maxContainerReduction = defaultRadarContainerSizePx - minRadarContainerSizePx
-        val containerReduction = remainingOverflow.coerceAtMost(maxContainerReduction)
-        val containerSizePx = defaultRadarContainerSizePx - containerReduction
-        remainingOverflow -= containerReduction
+    private fun resolveRequiredTrackingHeight(
+        includeRadar: Boolean,
+        radarHeightPx: Int,
+        topPaddingPx: Int,
+        bottomPaddingPx: Int,
+        sessionStatsBottomMarginPx: Int,
+        inlineButtonsTopMarginPx: Int
+    ): Int {
+        var requiredHeight = topPaddingPx + bottomPaddingPx
+        for (index in 0 until trackingContentContainer.childCount) {
+            val child = trackingContentContainer.getChildAt(index)
+            if (!includeRadar && child.id == R.id.radarDishContainer) continue
+            val params = child.layoutParams as? LinearLayout.LayoutParams
+            if ((params?.weight ?: 0f) > 0f) continue
+            if (child.visibility == View.GONE && child.id != R.id.radarDishContainer) continue
+            val childHeight = when {
+                child.id == R.id.radarDishContainer && child.visibility == View.GONE -> {
+                    radarHeightPx
+                }
+                child.id == R.id.radarDishContainer -> {
+                    radarHeightPx
+                }
+                else -> child.height.takeIf { it > 0 } ?: child.measuredHeight
+            }
+            val verticalMargins = when (child.id) {
+                R.id.sessionStatsContainer -> {
+                    val top = params?.topMargin ?: 0
+                    top + sessionStatsBottomMarginPx
+                }
+                R.id.trackingInlineButtonsRow -> {
+                    val bottom = params?.bottomMargin ?: 0
+                    inlineButtonsTopMarginPx + bottom
+                }
+                else -> params?.verticalMargins() ?: 0
+            }
+            requiredHeight += childHeight + verticalMargins
+        }
+        return requiredHeight
+    }
 
-        val maxMarginReduction = defaultRadarContainerBottomMarginPx - minRadarContainerBottomMarginPx
-        val marginReduction = remainingOverflow.coerceAtMost(maxMarginReduction)
-        val containerBottomMarginPx = defaultRadarContainerBottomMarginPx - marginReduction
-        remainingOverflow -= marginReduction
-
-        val maxTopPaddingReduction = defaultTrackingPaddingTopPx - minTrackingPaddingTopPx
-        val topPaddingReduction = remainingOverflow.coerceAtMost(maxTopPaddingReduction)
-        val trackingTopPaddingPx = defaultTrackingPaddingTopPx - topPaddingReduction
-        remainingOverflow -= topPaddingReduction
-
-        val maxBottomPaddingReduction = defaultTrackingPaddingBottomPx - minTrackingPaddingBottomPx
-        val bottomPaddingReduction = remainingOverflow.coerceAtMost(maxBottomPaddingReduction)
-        val trackingBottomPaddingPx = defaultTrackingPaddingBottomPx - bottomPaddingReduction
-        val scale = containerSizePx.toFloat() / defaultRadarContainerSizePx.toFloat()
-        val iconSizePx = (defaultRadarIconSizePx * scale)
-            .roundToInt()
-            .coerceIn(minRadarIconSizePx, defaultRadarIconSizePx)
-        applyRadarSizing(containerSizePx, iconSizePx, containerBottomMarginPx)
-        applyTrackingContainerPadding(trackingTopPaddingPx, trackingBottomPaddingPx)
+    private fun applyHomeLayoutMode(mode: HomeLayoutMode) {
+        if (!::trackingInlineButtonsRow.isInitialized) return
+        if (mode == layoutMode) return
+        Log.i(TAG, "applyHomeLayoutMode $layoutMode -> $mode")
+        when (mode) {
+            HomeLayoutMode.NORMAL -> {
+                radarDishContainer.visibility = View.VISIBLE
+                applyRadarSizing(
+                    containerSizePx = defaultRadarContainerSizePx,
+                    iconSizePx = defaultRadarIconSizePx,
+                    bottomMarginPx = defaultRadarContainerBottomMarginPx
+                )
+                applyTrackingContainerPadding(
+                    topPx = defaultTrackingPaddingTopPx,
+                    bottomPx = defaultTrackingPaddingBottomPx
+                )
+                updateBottomMargin(sessionStatsContainer, defaultSessionStatsBottomMarginPx)
+                updateTopMargin(trackingInlineButtonsRow, defaultInlineButtonsRowTopMarginPx)
+            }
+            HomeLayoutMode.TIGHT -> {
+                radarDishContainer.visibility = View.VISIBLE
+                applyRadarSizing(
+                    containerSizePx = tightRadarContainerSizePx,
+                    iconSizePx = tightRadarIconSizePx,
+                    bottomMarginPx = tightRadarContainerBottomMarginPx
+                )
+                applyTrackingContainerPadding(
+                    topPx = compactTrackingPaddingTopPx,
+                    bottomPx = compactTrackingPaddingBottomPx
+                )
+                updateBottomMargin(sessionStatsContainer, compactSessionStatsBottomMarginPx)
+                updateTopMargin(trackingInlineButtonsRow, compactInlineButtonsRowTopMarginPx)
+            }
+            HomeLayoutMode.COMPACT_HIDE_RADAR -> {
+                radarDishContainer.visibility = View.GONE
+                applyRadarSizing(
+                    containerSizePx = tightRadarContainerSizePx,
+                    iconSizePx = tightRadarIconSizePx,
+                    bottomMarginPx = tightRadarContainerBottomMarginPx
+                )
+                applyTrackingContainerPadding(
+                    topPx = compactTrackingPaddingTopPx,
+                    bottomPx = compactTrackingPaddingBottomPx
+                )
+                updateBottomMargin(sessionStatsContainer, compactSessionStatsBottomMarginPx)
+                updateTopMargin(trackingInlineButtonsRow, compactInlineButtonsRowTopMarginPx)
+            }
+        }
+        layoutMode = mode
     }
 
     private fun applyRadarSizing(containerSizePx: Int, iconSizePx: Int, bottomMarginPx: Int) {
@@ -533,7 +675,53 @@ class HomeFragment : Fragment() {
         view.layoutParams = params
     }
 
+    private fun updateTopMargin(view: View, topMarginPx: Int) {
+        val params = view.layoutParams as? LinearLayout.LayoutParams ?: return
+        if (params.topMargin == topMarginPx) return
+        params.topMargin = topMarginPx
+        view.layoutParams = params
+    }
+
     private fun LinearLayout.LayoutParams.verticalMargins(): Int = topMargin + bottomMargin
+
+    private fun resolveBottomOcclusionPx(): Int {
+        if (!::trackingInlineButtonsRow.isInitialized || trackingInlineButtonsRow.height <= 0) return 0
+        val rowLocationOnScreen = IntArray(2)
+        trackingInlineButtonsRow.getLocationOnScreen(rowLocationOnScreen)
+        val rowBottom = rowLocationOnScreen[1] + trackingInlineButtonsRow.height
+
+        val visibleFrame = Rect()
+        homeContentRoot.getWindowVisibleDisplayFrame(visibleFrame)
+        if (visibleFrame.bottom <= 0) return 0
+        val occlusion = (rowBottom - visibleFrame.bottom).coerceAtLeast(0)
+        if (occlusion > 0) {
+            Log.i(
+                TAG,
+                "resolveBottomOcclusionPx occlusion=$occlusion rowBottom=$rowBottom visibleBottom=${visibleFrame.bottom}"
+            )
+        }
+        return occlusion
+    }
+
+    private fun logCompactDecision(
+        availableHeight: Int,
+        requiredNormal: Int,
+        requiredTight: Int,
+        requiredCompact: Int,
+        pressureNormal: Int,
+        pressureTight: Int,
+        pressureCompact: Int,
+        occlusionPressure: Int,
+        targetMode: HomeLayoutMode
+    ) {
+        val signature =
+            "mode=$layoutMode->$targetMode avail=$availableHeight " +
+                "reqN=$requiredNormal reqT=$requiredTight reqC=$requiredCompact " +
+                "pN=$pressureNormal pT=$pressureTight pC=$pressureCompact occlusion=$occlusionPressure"
+        if (signature == lastCompactDecisionLog) return
+        lastCompactDecisionLog = signature
+        Log.i(TAG, "compactDecision $signature")
+    }
 
     private fun dpToPx(dp: Float): Int {
         return TypedValue.applyDimension(

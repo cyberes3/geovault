@@ -194,6 +194,9 @@
     <string name="focus_tracker_on_map">Show only this tracker on map</string>
     <string name="tracker_options">Tracker Options</string>
     <string name="button_params">Params</string>
+    <string name="home_manual_send_point_content_description">Manually send a tracking point with your current location</string>
+    <string name="manual_send_point_sent">Manual point sent</string>
+    <string name="manual_send_point_requires_active_tracking">Start tracking to send a manual point</string>
     <string name="button_map">Map</string>
     <string name="edit">Edit</string>
     <string name="edit_group">Edit Group</string>

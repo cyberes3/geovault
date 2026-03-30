@@ -92,8 +92,11 @@
             android:layout_height="0dp"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:gravity="bottom|center_horizontal"
-            android:padding="32dp"
+            android:gravity="top|center_horizontal"
+            android:paddingStart="32dp"
+            android:paddingEnd="32dp"
+            android:paddingTop="32dp"
+            android:paddingBottom="16dp"
             android:visibility="visible">
 
         <!-- Radar Dish Visualization -->
@@ -138,7 +141,7 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:visibility="visible"
-            android:layout_marginBottom="32dp">
+            android:layout_marginBottom="24dp">
 
             <!-- Row 1: Elapsed, Sent -->
             <LinearLayout
@@ -421,26 +424,54 @@
             android:text="@string/start_tracking"
             android:textSize="18sp" />
 
-        </LinearLayout>
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/trackingParamsButton"
-            style="@style/gv_common_ButtonText"
+        <LinearLayout
+            android:id="@+id/trackingInlineButtonsRow"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="0dp"
-            android:layout_marginBottom="2dp"
-            android:minWidth="0dp"
-            android:gravity="center"
-            android:paddingHorizontal="16dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="8dp"
-            android:includeFontPadding="false"
-            android:text="@string/button_params"
-            android:textSize="14sp"
-            android:contentDescription="@string/map_tracker_info_view_params_content_description"
-            android:visibility="invisible" />
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/trackingParamsButton"
+                style="@style/gv_common_ButtonOutlined"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginEnd="6dp"
+                android:insetLeft="0dp"
+                android:insetTop="0dp"
+                android:insetRight="0dp"
+                android:insetBottom="0dp"
+                android:paddingStart="9dp"
+                android:paddingEnd="9dp"
+                android:contentDescription="@string/map_tracker_info_view_params_content_description"
+                app:icon="@drawable/ic_params"
+                app:iconTint="@color/primary_blue"
+                app:iconSize="22dp"
+                app:iconPadding="0dp"
+                android:visibility="invisible" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/manualSendPointButton"
+                style="@style/gv_common_ButtonOutlined"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="6dp"
+                android:insetLeft="0dp"
+                android:insetTop="0dp"
+                android:insetRight="0dp"
+                android:insetBottom="0dp"
+                android:paddingStart="9dp"
+                android:paddingEnd="9dp"
+                android:contentDescription="@string/home_manual_send_point_content_description"
+                app:icon="@drawable/ic_send_point"
+                app:iconTint="@color/primary_blue"
+                app:iconSize="22dp"
+                app:iconPadding="0dp"
+                android:visibility="invisible" />
+        </LinearLayout>
+
+        </LinearLayout>
 
     </LinearLayout>
 

@@ -14,6 +14,7 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.os.UserManager
 import android.util.Log
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationCompat
@@ -80,6 +81,11 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class TrackingService : TrackPointServiceBase() {
+    private data class ManualSendCandidate(
+        val location: Location,
+        val source: String
+    )
+
     internal class QueueInFlightClaimSet {
         private val mutex = Mutex()
         private val claimedIds = mutableSetOf<Long>()
@@ -130,6 +136,7 @@ class TrackingService : TrackPointServiceBase() {
         const val ACTION_START = "com.geovault.tracker.ACTION_START"
         const val ACTION_STOP = "com.geovault.tracker.ACTION_STOP"
         const val ACTION_RESHOW_FOREGROUND = "com.geovault.tracker.ACTION_RESHOW_FOREGROUND"
+        const val ACTION_SEND_MANUAL_POINT = "com.geovault.tracker.ACTION_SEND_MANUAL_POINT"
         const val ACTION_TRACKING_ERROR = "com.geovault.tracker.ACTION_TRACKING_ERROR"
         const val EXTRA_TRACKING_ERROR_MESSAGE = "extra_tracking_error_message"
         const val NOTIFICATION_DISMISSED_ACTION = "com.geovault.tracker.TRACKING_NOTIFICATION_DISMISSED"
@@ -188,7 +195,9 @@ class TrackingService : TrackPointServiceBase() {
         private const val MAX_QUEUE_AGE_MS = 7L * 24L * 60L * 60L * 1000L
         private const val EXTRAS_KEY_LOW_ACCURACY_FALLBACK = "low_accuracy_fallback"
         private const val EXTRAS_KEY_FALLBACK_SOURCE_PROVIDER = "fallback_source_provider"
+        private const val EXTRAS_KEY_MANUAL_SEND = "manual_send"
         private const val FALLBACK_PROVIDER_PREFIX = "low_accuracy_fallback:"
+        private const val MANUAL_PROVIDER_PREFIX = "manual_send:"
         private const val FALLBACK_REJECT_SUMMARY_INTERVAL_MS = 30_000L
         private const val FAST_GPS_LOCK_INTERVAL_MS = 0L
         private const val FAST_GPS_LOCK_MIN_UPDATE_INTERVAL_MS = 0L
@@ -217,6 +226,7 @@ class TrackingService : TrackPointServiceBase() {
             StartTracking,
             StopNoRestart,
             ReshowForeground,
+            ManualSendPoint,
             StopUnknown
         }
 
@@ -231,6 +241,7 @@ class TrackingService : TrackPointServiceBase() {
                 ACTION_START -> StartupCommandPath.StartTracking
                 ACTION_STOP -> StartupCommandPath.StopUnknown
                 ACTION_RESHOW_FOREGROUND -> StartupCommandPath.ReshowForeground
+                ACTION_SEND_MANUAL_POINT -> StartupCommandPath.ManualSendPoint
                 null -> {
                     if (shouldRestartTrackingAfterProcessDeath()) {
                         StartupCommandPath.StartTracking
@@ -253,6 +264,7 @@ class TrackingService : TrackPointServiceBase() {
                 ACTION_START -> "explicit_start"
                 ACTION_STOP -> "explicit_stop"
                 ACTION_RESHOW_FOREGROUND -> "reshow_foreground"
+                ACTION_SEND_MANUAL_POINT -> "manual_send_point"
                 null -> "process_restart"
                 else -> "unknown_action"
             }
@@ -531,6 +543,7 @@ class TrackingService : TrackPointServiceBase() {
     private var elasticitySpeedBucket: Int = 0
     private var lowAccuracyFallbackJob: Job? = null
     private var lowAccuracyFallbackCandidate: Location? = null
+    private var latestObservedRawLocation: Location? = null
     private val lowAccuracyFallbackCoordinator = LowAccuracyFallbackCoordinator()
     private var lowAccuracyFallbackTimerArmedAtMs: Long = 0L
     private var lowAccuracyFallbackEmitCountThisSession: Int = 0
@@ -662,6 +675,16 @@ class TrackingService : TrackPointServiceBase() {
                     reason = if (isTracking) "foreground_reshown" else "ignored_not_tracking"
                 )
                 START_STICKY
+            }
+            StartupCommandPath.ManualSendPoint -> {
+                val accepted = handleManualSendPointCommand()
+                logStartupOutcome(
+                    path = commandPath,
+                    trigger = startupTrigger,
+                    result = if (accepted) "handled" else "ignored",
+                    reason = if (accepted) "manual_point_emitted" else "manual_point_rejected"
+                )
+                if (isTracking) START_STICKY else START_NOT_STICKY
             }
             StartupCommandPath.StopUnknown -> {
                 if (intent?.action == ACTION_STOP) {
@@ -879,6 +902,7 @@ class TrackingService : TrackPointServiceBase() {
     }
 
     private fun onLocationReceived(location: Location) {
+        latestObservedRawLocation = Location(location)
         if (!unifiedLocationClient.isGpsProviderEnabled()) {
             enterWaitingForGpsProvider(reason = "location_callback")
             return
@@ -1265,6 +1289,89 @@ class TrackingService : TrackPointServiceBase() {
         )
     }
 
+    private fun handleManualSendPointCommand(): Boolean {
+        if (!isTracking) {
+            Log.w(TAG, "Manual send ignored: tracking is not active")
+            return false
+        }
+        val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
+        if (!hasValidSelectedTrackerId(trackerId)) {
+            Log.w(TAG, "Manual send ignored: invalid selected tracker")
+            return false
+        }
+        val candidate = selectManualSendCandidateLocation() ?: run {
+            Log.w(
+                TAG,
+                "Manual send ignored: no candidate location available " +
+                    "latestObservedRaw=${latestObservedRawLocation != null} " +
+                    "fallbackCandidate=${lowAccuracyFallbackCandidate != null} " +
+                    "lastAccepted=${lastLocation != null}"
+            )
+            return false
+        }
+        val manualLocation = buildManualSendLocation(candidate.location)
+        val priorLocation = lastLocation
+        val distanceDeltaMeters = priorLocation?.distanceTo(manualLocation) ?: 0f
+        totalDistanceMeters += distanceDeltaMeters
+        sessionTotalDistanceMeters = totalDistanceMeters
+        lastLocation = manualLocation
+        lastSpeedReferenceLocation = Location(manualLocation)
+        syncRuntimeStateStore()
+        val manualEvent = TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackerId,
+            lon = manualLocation.longitude,
+            lat = manualLocation.latitude,
+            timestampMs = manualLocation.time,
+            accuracyMeters = if (manualLocation.hasAccuracy()) manualLocation.accuracy else null,
+            quality = TrackPointQuality.DEGRADED,
+            orderingKey = manualLocation.time,
+            elapsedRealtimeNanos = manualLocation.elapsedRealtimeNanos
+        )
+        broadcastTrackPoint(manualLocation, manualEvent)
+        enqueueAndPushLocation(manualLocation, totalDistanceMeters)
+        Log.i(
+            TAG,
+            "Manual send queued for upload source=${candidate.source} " +
+                "distanceDeltaMeters=$distanceDeltaMeters totalDistanceMeters=$totalDistanceMeters"
+        )
+        broadcastSessionStats()
+        Log.i(
+            TAG,
+            "Manual send emitted provider=${candidate.location.provider} " +
+                "source=${candidate.source} " +
+                "acc=${if (manualLocation.hasAccuracy()) manualLocation.accuracy else null}"
+        )
+        Toast.makeText(
+            applicationContext,
+            getString(R.string.manual_send_point_sent),
+            Toast.LENGTH_SHORT
+        ).show()
+        return true
+    }
+
+    private fun selectManualSendCandidateLocation(): ManualSendCandidate? {
+        latestObservedRawLocation?.let { return ManualSendCandidate(location = Location(it), source = "latest_observed_raw") }
+        lowAccuracyFallbackCandidate?.let { return ManualSendCandidate(location = Location(it), source = "low_accuracy_fallback_candidate") }
+        lastLocation?.let { return ManualSendCandidate(location = Location(it), source = "last_accepted_location") }
+        return null
+    }
+
+    private fun buildManualSendLocation(source: Location): Location {
+        val nowMs = System.currentTimeMillis()
+        val sourceProvider = source.provider?.takeIf { it.isNotBlank() } ?: "fused"
+        return Location(source).apply {
+            time = nowMs
+            elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+            provider = "$MANUAL_PROVIDER_PREFIX$sourceProvider"
+            val mergedExtras = Bundle().apply {
+                source.extras?.let { putAll(it) }
+                putBoolean(EXTRAS_KEY_MANUAL_SEND, true)
+            }
+            extras = mergedExtras
+        }
+    }
+
     private fun buildLocalPointPropsJson(location: Location, distanceMeters: Float): String? {
         val useExtendedParams = currentSettings.sendExtendedData
         if (!useExtendedParams) return null
@@ -1285,6 +1392,9 @@ class TrackingService : TrackPointServiceBase() {
                 location.extras?.getString(EXTRAS_KEY_FALLBACK_SOURCE_PROVIDER)?.let { sourceProvider ->
                     props.put("fallback_source_provider", sourceProvider)
                 }
+            }
+            if (location.extras?.getBoolean(EXTRAS_KEY_MANUAL_SEND, false) == true) {
+                props.put("manual_send", true)
             }
             val sat = location.extras?.getInt("satellites", 0)?.takeIf { it > 0 }
             if (sat != null) props.put("sat", sat)

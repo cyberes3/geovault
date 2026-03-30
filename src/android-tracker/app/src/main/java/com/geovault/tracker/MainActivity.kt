@@ -896,6 +896,28 @@ class MainActivity : AppCompatActivity(), TrackerNavHost {
     override fun showSnackbar(message: String) {
         importantMessageSnackbar?.showMessage(message)
     }
+
+    override fun sendManualTrackingPoint() {
+        val runtime = TrackingRuntimeStateStore.state.value
+        if (!runtime.isRunning) {
+            Log.w("MainActivity", "Manual send blocked: tracking not active")
+            showSnackbar(getString(R.string.manual_send_point_requires_active_tracking))
+            return
+        }
+        val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
+        if (trackerId.isEmpty()) {
+            Log.w("MainActivity", "Manual send blocked: selected tracker missing")
+            showSnackbar(getString(R.string.no_tracker_selected_go_to_settings))
+            return
+        }
+        Log.i(
+            "MainActivity",
+            "Dispatching manual send action trackerId=$trackerId queuedVisible=${runtime.queuedPointsVisible}"
+        )
+        startService(Intent(this, TrackingService::class.java).apply {
+            action = TrackingService.ACTION_SEND_MANUAL_POINT
+        })
+    }
     
     override fun hasLocationPermission(): Boolean {
         return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
