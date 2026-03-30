@@ -193,17 +193,18 @@
 
             </LinearLayout>
 
-            <!-- Important message bar: vertically centered in nav bar -->
-            <com.geovault.common.ImportantMessageSnackbar
-                android:id="@+id/importantMessageSnackbar"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:layout_marginStart="16dp"
-                android:layout_marginEnd="16dp" />
-
         </FrameLayout>
 
     </LinearLayout>
+
+    <!-- Important message bar: above bottom nav so multi-line/action variants are not clipped -->
+    <com.geovault.common.ImportantMessageSnackbar
+        android:id="@+id/importantMessageSnackbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="60dp" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

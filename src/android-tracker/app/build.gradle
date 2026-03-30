@@ -43,6 +43,10 @@ def getGitCommitHash() {
 }
 
 def getGitCommitHashFull() {
+    def override = (project.findProperty('GIT_COMMIT_SHA_OVERRIDE') ?: '').toString().trim().toLowerCase()
+    if (override ==~ /[0-9a-f]{40}/) {
+        return override
+    }
     if (!project.hasProperty('gitCommitHashFull')) {
         try {
             def rootDir = project.rootProject.projectDir.parentFile

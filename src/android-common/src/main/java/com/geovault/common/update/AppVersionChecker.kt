@@ -12,12 +12,22 @@ class AppVersionChecker(
         rateLimitKey: String,
         minIntervalMs: Long = ONE_HOUR_MS
     ): VersionCheckResult {
+        val normalizedLocalSha = request.localFullCommitSha.trim().lowercase()
         val decision = VersionCheckRateLimiter.shouldRunAndMark(
             context = context.applicationContext,
             key = rateLimitKey,
             minIntervalMs = minIntervalMs
         )
         if (!decision.shouldRun) {
+            val cachedUpdate = cachedUpdateOrNull(context, rateLimitKey, normalizedLocalSha)
+            if (cachedUpdate != null) {
+                Log.i(
+                    UpdateCheckLog.TAG,
+                    "checkForUpdate throttled; reusing cached UpdateAvailable app=${cachedUpdate.appName} " +
+                        "version=${cachedUpdate.versionLabel}"
+                )
+                return cachedUpdate
+            }
             Log.d(
                 UpdateCheckLog.TAG,
                 "checkForUpdate skipped by rate limiter: key=$rateLimitKey minIntervalMs=$minIntervalMs " +
@@ -28,7 +38,11 @@ class AppVersionChecker(
                 lastCheckedAtMs = decision.lastCheckedAtMs
             )
         }
-        return checkForUpdate(request)
+        return persistAndReturn(
+            context = context,
+            rateLimitKey = rateLimitKey,
+            result = checkForUpdate(request)
+        )
     }
 
     fun checkForUpdate(request: VersionCheckRequest): VersionCheckResult {
@@ -103,5 +117,50 @@ class AppVersionChecker(
     companion object {
         private val FULL_SHA_REGEX = Regex("^[0-9a-f]{40}$")
         const val ONE_HOUR_MS: Long = 60L * 60L * 1000L
+    }
+
+    private fun cachedUpdateOrNull(
+        context: Context,
+        rateLimitKey: String,
+        normalizedLocalSha: String
+    ): VersionCheckResult.UpdateAvailable? {
+        if (!FULL_SHA_REGEX.matches(normalizedLocalSha)) {
+            return null
+        }
+        return try {
+            UpdateAvailableCacheStore.read(
+                context = context,
+                key = rateLimitKey,
+                normalizedLocalSha = normalizedLocalSha
+            )
+        } catch (e: Exception) {
+            Log.w(UpdateCheckLog.TAG, "failed reading cached UpdateAvailable", e)
+            null
+        }
+    }
+
+    private fun persistAndReturn(
+        context: Context,
+        rateLimitKey: String,
+        result: VersionCheckResult
+    ): VersionCheckResult {
+        try {
+            when (result) {
+                is VersionCheckResult.UpdateAvailable -> {
+                    UpdateAvailableCacheStore.write(context, rateLimitKey, result)
+                }
+
+                is VersionCheckResult.UpToDate -> {
+                    UpdateAvailableCacheStore.clear(context, rateLimitKey)
+                }
+
+                else -> {
+                    // Keep cached update on temporary API failures so it can be re-shown on launch.
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(UpdateCheckLog.TAG, "failed updating cached UpdateAvailable state", e)
+        }
+        return result
     }
 }

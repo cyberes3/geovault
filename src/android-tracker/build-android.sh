@@ -65,15 +65,18 @@ if [ -f "app/src/main/res/drawable/ic_launcher_foreground.xml" ]; then
     rm -f app/src/main/res/drawable/ic_launcher_foreground.xml
 fi
 
-# Parse arguments: [debug|release|clean] and optional --skip-minify/--install
+# Parse arguments: [debug|release|clean] and optional --skip-minify/--install/--old-version
 BUILD_TYPE=""
 SKIP_MINIFY=false
 INSTALL=false
+OLD_VERSION=false
 for arg in "$@"; do
     if [ "$arg" = "--skip-minify" ]; then
         SKIP_MINIFY=true
     elif [ "$arg" = "--install" ]; then
         INSTALL=true
+    elif [ "$arg" = "--old-version" ]; then
+        OLD_VERSION=true
     elif [ -z "$BUILD_TYPE" ] && { [ "$arg" = "debug" ] || [ "$arg" = "release" ] || [ "$arg" = "clean" ]; }; then
         BUILD_TYPE="$arg"
     fi
@@ -89,7 +92,7 @@ fi
 
 if [ "$BUILD_TYPE" != "debug" ] && [ "$BUILD_TYPE" != "release" ]; then
     echo "Error: Build type must be 'debug', 'release', or 'clean'"
-    echo "Usage: ./build-android.sh [debug|release|clean] [--skip-minify] [--install]"
+    echo "Usage: ./build-android.sh [debug|release|clean] [--skip-minify] [--install] [--old-version]"
     exit 1
 fi
 
@@ -124,6 +127,25 @@ if [ "$BUILD_TYPE" = "release" ]; then
     GRADLE_ARGS+=("-PRELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD")
 fi
 
+OLD_VERSION_SHA=""
+OLD_VERSION_DATE=""
+if [ "$OLD_VERSION" = true ]; then
+    LOOKBACK_DAYS=30
+    REPO_DIR="$SCRIPT_DIR/.."
+    OLD_VERSION_SHA=$(git -C "$REPO_DIR" log --before="$LOOKBACK_DAYS days ago" --format=%H -n 1 2>/dev/null || true)
+    if [ -z "$OLD_VERSION_SHA" ]; then
+        echo "Error: unable to find a commit from about $LOOKBACK_DAYS days ago."
+        exit 1
+    fi
+    OLD_VERSION_DATE=$(git -C "$REPO_DIR" show -s --format=%cd --date=short "$OLD_VERSION_SHA" 2>/dev/null || true)
+    echo "Using old version commit for BuildConfig.GIT_COMMIT_SHA:"
+    echo "  commit: $OLD_VERSION_SHA"
+    if [ -n "$OLD_VERSION_DATE" ]; then
+        echo "  date:   $OLD_VERSION_DATE"
+    fi
+    GRADLE_ARGS+=("-PGIT_COMMIT_SHA_OVERRIDE=$OLD_VERSION_SHA")
+fi
+
 # Build the APK
 echo "Building Android app ($BUILD_TYPE)..."
 ./gradlew assemble"${BUILD_TYPE^}" "${GRADLE_ARGS[@]}"  # Capitalize first letter: debug -> Debug, release -> Release
@@ -140,8 +162,13 @@ if [ -n "$APK_PATH" ]; then
     # Use the same git commit date and short hash as app/build.gradle versionName
     # (${getGitCommitDate()}-${getGitCommitHash()}) so the filename matches the APK.
     if [ "$BUILD_TYPE" = "release" ]; then
-        BUILD_DATE=$(git -C "$SCRIPT_DIR/.." log -1 --format=%cd --date=short 2>/dev/null || date +%Y-%m-%d)
-        COMMIT_HASH=$(git -C "$SCRIPT_DIR/.." rev-parse --short=10 HEAD 2>/dev/null || echo "norepo")
+        if [ "$OLD_VERSION" = true ] && [ -n "$OLD_VERSION_SHA" ]; then
+            BUILD_DATE=${OLD_VERSION_DATE:-$(date +%Y-%m-%d)}
+            COMMIT_HASH=$(printf "%s" "$OLD_VERSION_SHA" | cut -c1-10)
+        else
+            BUILD_DATE=$(git -C "$SCRIPT_DIR/.." log -1 --format=%cd --date=short 2>/dev/null || date +%Y-%m-%d)
+            COMMIT_HASH=$(git -C "$SCRIPT_DIR/.." rev-parse --short=10 HEAD 2>/dev/null || echo "norepo")
+        fi
         DATED_NAME="GeoVault Live Tracker ${BUILD_DATE} ${COMMIT_HASH}.apk"
         DATED_DEST="$SCRIPT_DIR/$DATED_NAME"
         cp "$APK_PATH" "$DATED_DEST"
