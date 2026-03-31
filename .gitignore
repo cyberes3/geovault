@@ -8,8 +8,8 @@ failures.txt
 *.apk
 .kotlin
 *.swp
-todo.txt
-build_log.txt
+*.txt
+!requirements.txt
 
 celerybeat-schedule
 celerybeat-schedule-shm

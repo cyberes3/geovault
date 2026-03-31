@@ -36,9 +36,12 @@ YOU ARE NOT ALLOWED TO DO `@Suppress("DEPRECATION")`!!!!!! YOU MUST FIX IT!!!!!!
 We are using Material Design 2 only.
 We have preset color pallets in `android-common`. Please prioritize using those instead of hard-coding hex colors.
 No shadows on anything.
-The "survey app" is symlinked in to `src/android-survey-data-viewer`. It may not show up correctly in your tools so use `ls`.
 `android-common` also has a lot of common UI components that you should use.
 DO NOT DO MEGA FILES! Logically put code in separate files rather than in one giant file.
 Additional code style instructions are in `src/android-tracker/CODE_STYLE.md`. These are tracker app-specific but good pointers for general Android development.
+DO NOT FALL BACK TO DESTRUCTIVE DB MIGRATIONS!!!!!!!!!!!!! YOU MUST MIGRATE THEM CORRECTLY!!!!!!!!
+
+We have a few external apps symlinked into the `src/` directory that may not show up correctly in your tools. Use `ls` to find them. List:
+- `android-survey-data-viewer`
 
 External repos are provided for you in the `external sources/` directory. This folder is read-only. If you need to reference the source code of a library please check here before fetching GitHub.
