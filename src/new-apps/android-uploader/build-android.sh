@@ -21,6 +21,7 @@ fi
 BUILD_TYPE="debug"
 SKIP_MINIFY=false
 INSTALL=false
+OLD_VERSION=false
 
 for arg in "$@"; do
     case "$arg" in
@@ -33,9 +34,12 @@ for arg in "$@"; do
         --install)
             INSTALL=true
             ;;
+        --old-version)
+            OLD_VERSION=true
+            ;;
         *)
             echo "Unknown argument: $arg"
-            echo "Usage: ./build-android.sh [debug|release|clean] [--skip-minify] [--install]"
+            echo "Usage: ./build-android.sh [debug|release|clean] [--skip-minify] [--install] [--old-version]"
             exit 1
             ;;
     esac
@@ -76,6 +80,25 @@ if [ "$BUILD_TYPE" = "release" ]; then
     GRADLE_ARGS+=("-PRELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD")
 fi
 
+OLD_VERSION_SHA=""
+OLD_VERSION_DATE=""
+if [ "$OLD_VERSION" = true ]; then
+    LOOKBACK_DAYS=30
+    REPO_DIR="$SCRIPT_DIR/.."
+    OLD_VERSION_SHA=$(git -C "$REPO_DIR" log --before="$LOOKBACK_DAYS days ago" --format=%H -n 1 2>/dev/null || true)
+    if [ -z "$OLD_VERSION_SHA" ]; then
+        echo "Error: unable to find a commit from about $LOOKBACK_DAYS days ago."
+        exit 1
+    fi
+    OLD_VERSION_DATE=$(git -C "$REPO_DIR" show -s --format=%cd --date=short "$OLD_VERSION_SHA" 2>/dev/null || true)
+    echo "Using old version commit for BuildConfig.GIT_COMMIT_SHA:"
+    echo "  commit: $OLD_VERSION_SHA"
+    if [ -n "$OLD_VERSION_DATE" ]; then
+        echo "  date:   $OLD_VERSION_DATE"
+    fi
+    GRADLE_ARGS+=("-PGIT_COMMIT_SHA_OVERRIDE=$OLD_VERSION_SHA")
+fi
+
 echo "Building Android app ($BUILD_TYPE)..."
 ./gradlew "assemble${BUILD_TYPE^}" "${GRADLE_ARGS[@]}"
 
@@ -94,8 +117,13 @@ echo "Build successful!"
 echo "APK location: $SCRIPT_DIR/$APK_PATH"
 
 if [ "$BUILD_TYPE" = "release" ]; then
-    BUILD_DATE="$(git -C "$SCRIPT_DIR/.." log -1 --format=%cd --date=short 2>/dev/null || date +%Y-%m-%d)"
-    COMMIT_HASH="$(git -C "$SCRIPT_DIR/.." rev-parse --short=10 HEAD 2>/dev/null || echo "norepo")"
+    if [ "$OLD_VERSION" = true ] && [ -n "$OLD_VERSION_SHA" ]; then
+        BUILD_DATE=${OLD_VERSION_DATE:-$(date +%Y-%m-%d)}
+        COMMIT_HASH=$(printf "%s" "$OLD_VERSION_SHA" | cut -c1-10)
+    else
+        BUILD_DATE="$(git -C "$SCRIPT_DIR/.." log -1 --format=%cd --date=short 2>/dev/null || date +%Y-%m-%d)"
+        COMMIT_HASH="$(git -C "$SCRIPT_DIR/.." rev-parse --short=10 HEAD 2>/dev/null || echo "norepo")"
+    fi
     DEST_NAME="GeoVault Uploader ${BUILD_DATE} ${COMMIT_HASH}.apk"
     cp "$APK_PATH" "$SCRIPT_DIR/$DEST_NAME"
     echo "Copied release APK to: $SCRIPT_DIR/$DEST_NAME"

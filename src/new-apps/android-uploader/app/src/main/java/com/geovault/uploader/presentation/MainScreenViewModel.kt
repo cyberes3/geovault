@@ -7,9 +7,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ServerUrlContract
+import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.update.AppVersionChecker
 import com.geovault.common.update.VersionCheckRequest
-import com.geovault.common.update.VersionCheckSnackbarHelper
+import com.geovault.common.update.VersionCheckSnackbarPresenter
 import com.geovault.uploader.BuildConfig
 import com.geovault.uploader.MainActivity
 import com.geovault.uploader.data.AuthRepository
@@ -20,12 +21,15 @@ import com.geovault.uploader.data.ValidationRepository
 import com.geovault.uploader.data.ValidationOutcome
 import com.geovault.uploader.domain.FilenamePolicy
 import com.geovault.uploader.model.UploadResult
+import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
 data class MainScreenState(
@@ -44,9 +48,9 @@ data class MainScreenState(
     val suffixPreview: String = "",
     val isUploading: Boolean = false,
     val statusMessage: String = "",
-    val importantMessage: String? = null,
-    val updatePromptMessage: String? = null,
-    val updatePromptUrl: String? = null
+    val importantSnackbar: GeoVaultSnackbarModel? = null,
+    val updateSnackbar: GeoVaultSnackbarModel? = null,
+    val updateReleaseUrl: String? = null
 )
 
 class MainScreenViewModel(application: Application) : AndroidViewModel(application) {
@@ -76,7 +80,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         refreshAuthState()
         handleIntent(intent)
         intent?.getStringExtra(MainActivity.EXTRA_OAUTH_ERROR)?.let { msg ->
-            _state.update { it.copy(importantMessage = msg) }
+            _state.update {
+                it.copy(importantSnackbar = GeoVaultSnackbarModel(id = newImportantId(), message = msg))
+            }
         }
         if (_state.value.isAuthenticated && _state.value.isValidationMode) {
             validate()
@@ -91,7 +97,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         refreshAuthState()
         val isAuthenticated = _state.value.isAuthenticated
         if (!wasAuthenticated && isAuthenticated) {
-            _state.update { it.copy(isConnecting = false, oauthUrl = null, importantMessage = null) }
+            _state.update { it.copy(isConnecting = false, oauthUrl = null, importantSnackbar = null) }
             if (_state.value.isValidationMode) {
                 validate()
             }
@@ -107,10 +113,22 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     fun connectAuth() {
         val normalized = GeovaultAuthManager.normalizeServerUrl(_state.value.serverUrl)
         if (normalized.isBlank()) {
-            _state.update { it.copy(importantMessage = "Server URL is required. Connect your account to sign in.") }
+            _state.update {
+                it.copy(
+                    importantSnackbar = GeoVaultSnackbarModel(
+                        id = newImportantId(),
+                        message = "Server URL is required. Connect your account to sign in."
+                    )
+                )
+            }
             return
         }
-        _state.update { it.copy(isConnecting = true, importantMessage = "Connecting to server…") }
+        _state.update {
+            it.copy(
+                isConnecting = true,
+                importantSnackbar = GeoVaultSnackbarModel(id = newImportantId(), message = "Connecting to server…")
+            )
+        }
         GeovaultAuthManager.resolveServerUrlToCanonical(normalized) { result ->
             result.fold(
                 onSuccess = { resolved ->
@@ -119,14 +137,17 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     val state = (1..16).map { "abcdef0123456789"[Random.nextInt(16)] }.joinToString("")
                     GeovaultAuthManager.savePkceState(appContext, verifier, state)
                     val url = GeovaultAuthManager.buildAuthorizeUrl(resolved, challenge, state)
-                    _state.update { it.copy(oauthUrl = url, importantMessage = null) }
+                    _state.update { it.copy(oauthUrl = url, importantSnackbar = null) }
                 },
                 onFailure = {
                     _state.update {
                         it.copy(
-                        isConnecting = false,
-                        importantMessage = "Could not reach server. Check URL and connection."
-                    )
+                            isConnecting = false,
+                            importantSnackbar = GeoVaultSnackbarModel(
+                                id = newImportantId(),
+                                message = "Could not reach server. Check URL and connection."
+                            )
+                        )
                     }
                 }
             )
@@ -140,9 +161,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     fun onFilenameChanged(newName: String) {
         _state.update {
             it.copy(
-            editedFilename = newName,
-            suffixPreview = buildSuffixPreview(newName, preferences.isSuffixEnabled())
-        )
+                editedFilename = newName,
+                suffixPreview = buildSuffixPreview(newName, preferences.isSuffixEnabled())
+            )
         }
     }
 
@@ -151,31 +172,31 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun clearImportantMessage() {
-        _state.update { it.copy(importantMessage = null) }
+        _state.update { it.copy(importantSnackbar = null) }
     }
 
     fun clearUpdatePrompt() {
-        _state.update { it.copy(updatePromptMessage = null, updatePromptUrl = null) }
+        _state.update { it.copy(updateSnackbar = null, updateReleaseUrl = null) }
     }
 
     fun validate() {
         viewModelScope.launch {
             _state.update {
                 it.copy(
-                validationTitle = "Validating API Key…",
-                validationMessage = "Connecting to server…",
-                isValidationLoading = true,
-                validationOutcome = ValidationOutcome.Loading
-            )
+                    validationTitle = "Validating API Key…",
+                    validationMessage = "Connecting to server…",
+                    isValidationLoading = true,
+                    validationOutcome = ValidationOutcome.Loading
+                )
             }
             val result = validationRepository.validateConnection()
             _state.update {
                 it.copy(
-                validationTitle = result.title,
-                validationMessage = result.message,
-                isValidationLoading = false,
-                validationOutcome = result.outcome
-            )
+                    validationTitle = result.title,
+                    validationMessage = result.message,
+                    isValidationLoading = false,
+                    validationOutcome = result.outcome
+                )
             }
         }
     }
@@ -199,10 +220,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 _state.value = _state.value.copy(isUploading = false, statusMessage = "Upload successful!")
                 onSuccessClose()
             } else {
+                val err = result.errorMessage ?: "Upload failed"
                 _state.value = _state.value.copy(
                     isUploading = false,
-                    statusMessage = result.errorMessage ?: "Upload failed",
-                    importantMessage = result.errorMessage ?: "Upload failed"
+                    statusMessage = err,
+                    importantSnackbar = GeoVaultSnackbarModel(id = newImportantId(), message = err)
                 )
             }
         }
@@ -223,14 +245,14 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         val originalName = fileMetadataRepository.filenameFromUri(fileUri)
         _state.update {
             it.copy(
-            isValidationMode = false,
-            fileUri = fileUri,
-            originalFilename = originalName,
-            editedFilename = originalName,
-            suffixPreview = buildSuffixPreview(originalName, preferences.isSuffixEnabled()),
-            statusMessage = "",
-            importantMessage = null
-        )
+                isValidationMode = false,
+                fileUri = fileUri,
+                originalFilename = originalName,
+                editedFilename = originalName,
+                suffixPreview = buildSuffixPreview(originalName, preferences.isSuffixEnabled()),
+                statusMessage = "",
+                importantSnackbar = null
+            )
         }
     }
 
@@ -241,22 +263,19 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun checkForUpdate() {
         viewModelScope.launch {
-            val result = AppVersionChecker().checkForUpdateIfDue(
-                context = appContext,
-                rateLimitKey = "uploader",
-                request = VersionCheckRequest(
-                    appName = "GeoVault Uploader",
-                    localFullCommitSha = BuildConfig.GIT_COMMIT_SHA
+            val result = withContext(Dispatchers.IO) {
+                AppVersionChecker().checkForUpdateIfDue(
+                    context = appContext,
+                    rateLimitKey = "uploader",
+                    request = VersionCheckRequest(
+                        appName = "GeoVault Uploader",
+                        localFullCommitSha = BuildConfig.GIT_COMMIT_SHA
+                    )
                 )
-            )
-            val prompt = VersionCheckSnackbarHelper.buildPrompt(result)
-            if (prompt != null) {
-                _state.update {
-                    it.copy(
-                    updatePromptMessage = prompt.message,
-                    updatePromptUrl = prompt.releaseUrl
-                )
-                }
+            }
+            val (model, url) = VersionCheckSnackbarPresenter.snackbarAndReleaseUrl(result)
+            if (model != null && url != null) {
+                _state.update { it.copy(updateSnackbar = model, updateReleaseUrl = url) }
             }
         }
     }
@@ -267,9 +286,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
         _state.update {
             it.copy(
-            isAuthenticated = authRepository.isLoggedIn(),
-            serverUrl = resolvedServer
-        )
+                isAuthenticated = authRepository.isLoggedIn(),
+                serverUrl = resolvedServer
+            )
         }
     }
+
+    private fun newImportantId(): String = UUID.randomUUID().toString()
 }

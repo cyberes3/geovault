@@ -66,11 +66,7 @@ class MainActivity : ComponentActivity() {
                     onCloseClick = { finish() },
                     onDismissImportant = viewModel::clearImportantMessage,
                     onDismissInvalidFiles = { invalidFilesDialogNamesState.value = null },
-                    onDismissUpdatePrompt = viewModel::clearUpdatePrompt,
-                    onOpenUpdateUrl = {
-                        val url = state.updatePromptUrl ?: return@MainScreen
-                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                    }
+                    onDismissUpdatePrompt = viewModel::clearUpdatePrompt
                 )
             }
         }

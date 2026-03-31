@@ -7,17 +7,17 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -30,9 +30,10 @@ import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultStatusPane
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
-import com.geovault.common.ui.components.ImportantMessage
-import com.geovault.common.ui.components.ImportantMessageHost
+import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
 import com.geovault.common.ui.theme.GeoVaultLayoutTokens
+import com.geovault.common.update.CustomTabReleasePageLauncher
+import com.geovault.common.update.UpdateAvailablePromptComposer
 import com.geovault.uploader.presentation.MainScreenState
 
 @Composable
@@ -48,9 +49,11 @@ fun MainScreen(
     onCloseClick: () -> Unit,
     onDismissImportant: () -> Unit,
     onDismissInvalidFiles: () -> Unit,
-    onDismissUpdatePrompt: () -> Unit,
-    onOpenUpdateUrl: () -> Unit
+    onDismissUpdatePrompt: () -> Unit
 ) {
+    val context = LocalContext.current
+    val releaseLauncher = remember(context) { CustomTabReleasePageLauncher(context) }
+
     Scaffold(
         topBar = {
             GeoVaultTopTitleBar(
@@ -93,22 +96,25 @@ fun MainScreen(
                     )
                 }
 
-                val important = state.importantMessage?.let { ImportantMessage(it) }
-                ImportantMessageHost(
-                    message = important,
+                GeoVaultSnackbarHost(
+                    model = state.importantSnackbar,
                     onDismiss = onDismissImportant,
+                    onAction = { },
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )
-                val updateMessage = state.updatePromptMessage
-                if (!updateMessage.isNullOrBlank()) {
-                    ImportantMessageHost(
-                        message = ImportantMessage(
-                            text = updateMessage,
-                            actionLabel = "Open",
-                            onAction = onOpenUpdateUrl
-                        ),
+                val updateModel = state.updateSnackbar
+                if (updateModel != null) {
+                    val stackInset = if (state.importantSnackbar != null) 72.dp else 0.dp
+                    GeoVaultSnackbarHost(
+                        model = updateModel,
                         onDismiss = onDismissUpdatePrompt,
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 72.dp)
+                        onAction = { actionId ->
+                            if (actionId == UpdateAvailablePromptComposer.ACTION_OPEN_RELEASE) {
+                                state.updateReleaseUrl?.let { releaseLauncher.openReleasePage(it) }
+                            }
+                        },
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                        stackBottomInset = stackInset
                     )
                 }
                 invalidFilesDialogNames?.let { names ->

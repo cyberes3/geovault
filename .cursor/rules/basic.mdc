@@ -2,7 +2,7 @@
 alwaysApply: true
 ---
 
-# The following are extremely relevant and important instructions. It would behoove you to follow them.
+**The following are extremely relevant and important instructions. It would behoove you to follow them.**
 
 Always use top-level imports in Python, not lazy/local/function level!
 
@@ -29,7 +29,7 @@ We have a bunch of common frontend components in the `parts/` folder. Please use
 
 We like titles like `Example Title` in this case instead of `Example title`.
 
-These apps share visual styles so make sure that changes are made in all apps.
+Android apps should be built with `./build-android.sh` located in the root of each app src dir.
 Apps only target the latest Android version and SDK so do not do things like `if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)`.
 YOU ARE NOT ALLOWED TO DO `@Suppress("DEPRECATION")`!!!!!! YOU MUST FIX IT!!!!!!!
 We are using Material Design 2 only.

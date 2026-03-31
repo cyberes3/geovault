@@ -17,6 +17,28 @@ fun runGit(vararg args: String): String {
     }
 }
 
+private val fullShaRegex = Regex("^[0-9a-f]{40}$")
+
+fun gitCommitShaOverride(): String? {
+    val raw = (project.findProperty("GIT_COMMIT_SHA_OVERRIDE") ?: "").toString().trim().lowercase()
+    return raw.takeIf { fullShaRegex.matches(it) }
+}
+
+fun gitCommitFullForBuild(): String {
+    return gitCommitShaOverride() ?: runGit("rev-parse", "HEAD")
+}
+
+fun versionNameForBuild(): String {
+    val sha = gitCommitShaOverride()
+    return if (sha != null) {
+        val date = runGit("show", "-s", "--format=%cd", "--date=short", sha)
+        val short = runGit("rev-parse", "--short=10", sha).ifBlank { sha.take(10) }
+        "$date-$short"
+    } else {
+        "${runGit("log", "-1", "--format=%cd", "--date=short")}-${runGit("rev-parse", "--short=10", "HEAD")}"
+    }
+}
+
 fun epochVersionCode(): Int {
     return (System.currentTimeMillis() / 1000L).toInt()
 }
@@ -30,8 +52,8 @@ android {
         minSdk = 34
         targetSdk = 36
         versionCode = epochVersionCode()
-        versionName = "${runGit("log", "-1", "--format=%cd", "--date=short")}-${runGit("rev-parse", "--short=10", "HEAD")}"
-        buildConfigField("String", "GIT_COMMIT_SHA", "\"${runGit("rev-parse", "HEAD")}\"")
+        versionName = versionNameForBuild()
+        buildConfigField("String", "GIT_COMMIT_SHA", "\"${gitCommitFullForBuild()}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
