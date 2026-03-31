@@ -1,5 +1,7 @@
 package com.geovault.uploader.domain
 
+import com.geovault.common.files.GeoVaultUploadFileTypes
+
 object FilenamePolicy {
     private const val UPLOAD_SUFFIX = "_android_upload"
 
@@ -23,7 +25,6 @@ object FilenamePolicy {
     }
 
     fun isSupportedImportType(filename: String): Boolean {
-        val extension = splitFilename(filename).second.lowercase()
-        return extension in setOf("kmz", "kml", "gpx")
+        return GeoVaultUploadFileTypes.isSupportedFilename(filename)
     }
 }

@@ -3,7 +3,6 @@ package com.geovault.uploader.presentation
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.GeovaultAuthManager
@@ -18,12 +17,14 @@ import com.geovault.uploader.data.FileMetadataRepository
 import com.geovault.uploader.data.UploaderPreferences
 import com.geovault.uploader.data.UploadRepository
 import com.geovault.uploader.data.ValidationRepository
+import com.geovault.uploader.data.ValidationOutcome
 import com.geovault.uploader.domain.FilenamePolicy
 import com.geovault.uploader.model.UploadResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 
@@ -36,6 +37,7 @@ data class MainScreenState(
     val validationTitle: String = "Configuration Required",
     val validationMessage: String = "Please configure settings first",
     val isValidationLoading: Boolean = false,
+    val validationOutcome: ValidationOutcome = ValidationOutcome.Info,
     val fileUri: Uri? = null,
     val originalFilename: String = "",
     val editedFilename: String = "",
@@ -48,9 +50,6 @@ data class MainScreenState(
 )
 
 class MainScreenViewModel(application: Application) : AndroidViewModel(application) {
-    private companion object {
-        const val TAG = "MainScreenViewModel"
-    }
     private val appContext = application.applicationContext
     private val preferences = UploaderPreferences.getInstance(appContext)
     private val fileMetadataRepository = FileMetadataRepository(appContext.contentResolver)
@@ -64,10 +63,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     init {
         viewModelScope.launch {
             preferences.settings.collect { settings ->
-                val current = _state.value
-                _state.value = current.copy(
-                    suffixPreview = buildSuffixPreview(current.editedFilename, settings.suffixEnabled)
-                )
+                _state.update { current ->
+                    current.copy(
+                        suffixPreview = buildSuffixPreview(current.editedFilename, settings.suffixEnabled)
+                    )
+                }
             }
         }
     }
@@ -76,7 +76,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         refreshAuthState()
         handleIntent(intent)
         intent?.getStringExtra(MainActivity.EXTRA_OAUTH_ERROR)?.let { msg ->
-            _state.value = _state.value.copy(importantMessage = msg)
+            _state.update { it.copy(importantMessage = msg) }
         }
         if (_state.value.isAuthenticated && _state.value.isValidationMode) {
             validate()
@@ -91,7 +91,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         refreshAuthState()
         val isAuthenticated = _state.value.isAuthenticated
         if (!wasAuthenticated && isAuthenticated) {
-            _state.value = _state.value.copy(isConnecting = false, oauthUrl = null, importantMessage = null)
+            _state.update { it.copy(isConnecting = false, oauthUrl = null, importantMessage = null) }
             if (_state.value.isValidationMode) {
                 validate()
             }
@@ -100,17 +100,17 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun onAuthServerUrlChanged(url: String) {
-        _state.value = _state.value.copy(serverUrl = url)
+        _state.update { it.copy(serverUrl = url) }
         GeovaultAuthManager.setServerUrl(appContext, url)
     }
 
     fun connectAuth() {
         val normalized = GeovaultAuthManager.normalizeServerUrl(_state.value.serverUrl)
         if (normalized.isBlank()) {
-            _state.value = _state.value.copy(importantMessage = "Server URL is required. Connect your account to sign in.")
+            _state.update { it.copy(importantMessage = "Server URL is required. Connect your account to sign in.") }
             return
         }
-        _state.value = _state.value.copy(isConnecting = true, importantMessage = "Connecting to server…")
+        _state.update { it.copy(isConnecting = true, importantMessage = "Connecting to server…") }
         GeovaultAuthManager.resolveServerUrlToCanonical(normalized) { result ->
             result.fold(
                 onSuccess = { resolved ->
@@ -119,27 +119,31 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     val state = (1..16).map { "abcdef0123456789"[Random.nextInt(16)] }.joinToString("")
                     GeovaultAuthManager.savePkceState(appContext, verifier, state)
                     val url = GeovaultAuthManager.buildAuthorizeUrl(resolved, challenge, state)
-                    _state.value = _state.value.copy(oauthUrl = url, importantMessage = null)
+                    _state.update { it.copy(oauthUrl = url, importantMessage = null) }
                 },
                 onFailure = {
-                    _state.value = _state.value.copy(
+                    _state.update {
+                        it.copy(
                         isConnecting = false,
                         importantMessage = "Could not reach server. Check URL and connection."
                     )
+                    }
                 }
             )
         }
     }
 
     fun onOauthUrlConsumed() {
-        _state.value = _state.value.copy(oauthUrl = null, isConnecting = false)
+        _state.update { it.copy(oauthUrl = null, isConnecting = false) }
     }
 
     fun onFilenameChanged(newName: String) {
-        _state.value = _state.value.copy(
+        _state.update {
+            it.copy(
             editedFilename = newName,
             suffixPreview = buildSuffixPreview(newName, preferences.isSuffixEnabled())
         )
+        }
     }
 
     fun onFileChosen(fileUri: Uri) {
@@ -147,27 +151,32 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun clearImportantMessage() {
-        _state.value = _state.value.copy(importantMessage = null)
+        _state.update { it.copy(importantMessage = null) }
     }
 
     fun clearUpdatePrompt() {
-        _state.value = _state.value.copy(updatePromptMessage = null, updatePromptUrl = null)
+        _state.update { it.copy(updatePromptMessage = null, updatePromptUrl = null) }
     }
 
     fun validate() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(
+            _state.update {
+                it.copy(
                 validationTitle = "Validating API Key…",
                 validationMessage = "Connecting to server…",
-                isValidationLoading = true
+                isValidationLoading = true,
+                validationOutcome = ValidationOutcome.Loading
             )
+            }
             val result = validationRepository.validateConnection()
-            val title = if (result.startsWith("✓")) "Connected" else "Validation Failed"
-            _state.value = _state.value.copy(
-                validationTitle = title,
-                validationMessage = result,
-                isValidationLoading = false
+            _state.update {
+                it.copy(
+                validationTitle = result.title,
+                validationMessage = result.message,
+                isValidationLoading = false,
+                validationOutcome = result.outcome
             )
+            }
         }
     }
 
@@ -207,12 +216,13 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 return
             }
         }
-        _state.value = _state.value.copy(isValidationMode = true, fileUri = null)
+        _state.update { it.copy(isValidationMode = true, fileUri = null) }
     }
 
     private fun populateUploadState(fileUri: Uri) {
         val originalName = fileMetadataRepository.filenameFromUri(fileUri)
-        _state.value = _state.value.copy(
+        _state.update {
+            it.copy(
             isValidationMode = false,
             fileUri = fileUri,
             originalFilename = originalName,
@@ -221,6 +231,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             statusMessage = "",
             importantMessage = null
         )
+        }
     }
 
     private fun buildSuffixPreview(filename: String, suffixEnabled: Boolean): String {
@@ -240,10 +251,12 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             )
             val prompt = VersionCheckSnackbarHelper.buildPrompt(result)
             if (prompt != null) {
-                _state.value = _state.value.copy(
+                _state.update {
+                    it.copy(
                     updatePromptMessage = prompt.message,
                     updatePromptUrl = prompt.releaseUrl
                 )
+                }
             }
         }
     }
@@ -252,11 +265,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         val resolvedServer = GeovaultAuthManager.getServerUrl(appContext).ifBlank {
             ServerUrlContract.getServerUrlsFromOtherApps(appContext).singleOrNull().orEmpty()
         }
-        Log.i(TAG, GeovaultAuthManager.getAuthDebugSnapshot(appContext))
-        _state.value = _state.value.copy(
+        _state.update {
+            it.copy(
             isAuthenticated = authRepository.isLoggedIn(),
             serverUrl = resolvedServer
         )
-        Log.i(TAG, "refreshAuthState isAuthenticated=${_state.value.isAuthenticated} serverBlank=${resolvedServer.isBlank()}")
+        }
     }
 }

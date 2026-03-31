@@ -13,6 +13,7 @@ data class FileQueueItem(
     val uri: Uri,
     val filename: String,
     val sizeBytes: Long,
+    val modifiedAtMs: Long? = null,
     val status: FileStatus = FileStatus.PENDING,
     val errorMessage: String? = null
 )

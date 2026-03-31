@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.NaturalSort
+import com.geovault.common.messages.GeoVaultUploadMessageFormatter
 import com.geovault.uploader.data.FileMetadataRepository
 import com.geovault.uploader.data.UploaderPreferences
 import com.geovault.uploader.data.UploadRepository
@@ -21,6 +22,8 @@ import java.util.Locale
 data class QueueUploadState(
     val items: List<FileQueueItem> = emptyList(),
     val isUploading: Boolean = false,
+    /** After the user cancels a batch upload, queue rows stay non-removable until a new upload starts. */
+    val uploadCancelled: Boolean = false,
     val progressCurrent: Int = 0,
     val progressMax: Int = 0,
     val statusMessage: String = "",
@@ -51,11 +54,13 @@ class QueueUploadViewModel(application: Application) : AndroidViewModel(applicat
         }.sortedWith(NaturalSort.naturalOrderBy { it.filename.lowercase(Locale.getDefault()) })
         _state.value = _state.value.copy(
             items = items,
-            fileCountLabel = "${items.size} file${if (items.size != 1) "s" else ""}"
+            fileCountLabel = "${items.size} file${if (items.size != 1) "s" else ""}",
+            uploadCancelled = false
         )
     }
 
     fun rename(index: Int, baseName: String) {
+        if (_state.value.uploadCancelled) return
         val items = _state.value.items.toMutableList()
         if (index !in items.indices) return
         val original = items[index]
@@ -66,14 +71,34 @@ class QueueUploadViewModel(application: Application) : AndroidViewModel(applicat
         _state.value = _state.value.copy(items = items)
     }
 
+    fun removeItemAt(index: Int) {
+        if (_state.value.isUploading || _state.value.uploadCancelled) return
+        val items = _state.value.items.toMutableList()
+        if (index !in items.indices) return
+        if (items[index].status != FileStatus.PENDING) return
+        items.removeAt(index)
+        val n = items.size
+        _state.value = _state.value.copy(
+            items = items,
+            fileCountLabel = "$n file${if (n != 1) "s" else ""}"
+        )
+    }
+
     fun cancelUpload() {
         cancelled = true
-        _state.value = _state.value.copy(isUploading = false, statusMessage = "Upload cancelled")
+        _state.value = _state.value.copy(
+            isUploading = false,
+            uploadCancelled = true,
+            progressCurrent = 0,
+            progressMax = 0,
+            statusMessage = "Upload cancelled"
+        )
     }
 
     fun startUpload() {
         if (_state.value.isUploading) return
         cancelled = false
+        _state.value = _state.value.copy(uploadCancelled = false)
         viewModelScope.launch {
             val allItems = _state.value.items.toMutableList()
             val validIndexes = allItems.indices.filter { idx ->
@@ -98,7 +123,7 @@ class QueueUploadViewModel(application: Application) : AndroidViewModel(applicat
                 _state.value = _state.value.copy(
                     items = allItems.toList(),
                     progressCurrent = progress,
-                    statusMessage = "Uploading ${progress + 1}/${validIndexes.size}..."
+                    statusMessage = GeoVaultUploadMessageFormatter.uploadProgress(progress + 1, validIndexes.size)
                 )
                 val finalName = FilenamePolicy.withOptionalSuffix(allItems[index].filename, prefs.isSuffixEnabled())
                 val result = uploader.upload(allItems[index].uri, finalName)
@@ -118,31 +143,40 @@ class QueueUploadViewModel(application: Application) : AndroidViewModel(applicat
                 )
             }
 
-            val summary = if (cancelled) {
-                "Upload cancelled"
-            } else if (failed == 0) {
-                "✓ All $succeeded files uploaded successfully!"
-            } else if (succeeded == 0) {
-                "✗ All $failed files failed to upload"
-            } else {
-                "Upload complete: $succeeded succeeded, $failed failed"
-            }
-            _state.value = _state.value.copy(isUploading = false, statusMessage = summary, items = allItems)
+            val summary = GeoVaultUploadMessageFormatter.uploadSummary(
+                succeeded = succeeded,
+                failed = failed,
+                cancelled = cancelled
+            )
+            _state.value = _state.value.copy(
+                isUploading = false,
+                progressCurrent = if (cancelled) 0 else _state.value.progressCurrent,
+                progressMax = if (cancelled) 0 else _state.value.progressMax,
+                statusMessage = summary,
+                items = allItems
+            )
         }
     }
 
     private fun buildItem(uri: Uri): FileQueueItem {
         val filename = metadata.filenameFromUri(uri)
         val size = metadata.fileSizeFromUri(uri)
+        val modifiedAt = metadata.fileModifiedAtFromUri(uri)
         if (!FilenamePolicy.isSupportedImportType(filename)) {
             return FileQueueItem(
                 uri = uri,
                 filename = filename,
                 sizeBytes = size,
+                modifiedAtMs = modifiedAt,
                 status = FileStatus.ERROR,
                 errorMessage = "Invalid file type. Only KMZ, KML, and GPX files are allowed."
             )
         }
-        return FileQueueItem(uri = uri, filename = filename, sizeBytes = size)
+        return FileQueueItem(
+            uri = uri,
+            filename = filename,
+            sizeBytes = size,
+            modifiedAtMs = modifiedAt
+        )
     }
 }

@@ -11,6 +11,8 @@ failures.txt
 *.txt
 !requirements.txt
 
+android cleanup.md
+
 celerybeat-schedule
 celerybeat-schedule-shm
 celerybeat-schedule-wal

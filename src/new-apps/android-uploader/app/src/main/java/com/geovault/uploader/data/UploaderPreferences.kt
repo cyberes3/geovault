@@ -27,9 +27,7 @@ class UploaderPreferences private constructor(context: Context) {
     val settings: StateFlow<UploaderSettings> = _settings.asStateFlow()
 
     init {
-        appScope.launch {
-            store.normalize()
-        }
+        preloadOnLaunch()
         appScope.launch {
             store.observe(KEY_ADD_SUFFIX).collect { enabled ->
                 _settings.value = _settings.value.copy(suffixEnabled = enabled)
@@ -45,6 +43,12 @@ class UploaderPreferences private constructor(context: Context) {
 
     fun clearAll() {
         store.clearBlocking()
+    }
+
+    fun preloadOnLaunch() {
+        appScope.launch {
+            store.preloadAllData()
+        }
     }
 
     companion object {

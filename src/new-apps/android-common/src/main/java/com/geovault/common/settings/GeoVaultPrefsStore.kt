@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -42,6 +43,15 @@ class GeoVaultPrefsStore(
         dataStore.updateData { current ->
             restoreHelper.normalize(current)
         }
+    }
+
+    /**
+     * Eagerly loads and normalizes the full settings payload so DataStore is hot
+     * before UI/state observers depend on it during app startup.
+     */
+    suspend fun preloadAllData() {
+        normalize()
+        dataStore.data.take(1).first()
     }
 
     suspend fun <T> get(key: PrefKey<T>): T {
@@ -104,6 +114,17 @@ class GeoVaultPrefsStore(
         return runCatching {
             runBlocking(Dispatchers.IO) {
                 clear()
+            }
+            true
+        }.getOrElse {
+            false
+        }
+    }
+
+    fun preloadAllDataBlocking(): Boolean {
+        return runCatching {
+            runBlocking(Dispatchers.IO) {
+                preloadAllData()
             }
             true
         }.getOrElse {

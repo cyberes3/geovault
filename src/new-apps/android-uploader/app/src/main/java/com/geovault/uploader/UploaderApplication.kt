@@ -13,6 +13,7 @@ class UploaderApplication : Application(), GeovaultAuthManager.AuthFailureListen
             redirectUri = "com.geovault.uploader://oauth/callback",
             clientId = GeovaultAuthManager.OAUTH_CLIENT_ID_UPLOADER
         )
+        UploaderPreferences.getInstance(this).preloadOnLaunch()
         AppResetFlow.registerHook(
             key = "uploader_clear_prefs",
             phase = AppResetFlow.Phase.AFTER_TOKEN_CLEAR

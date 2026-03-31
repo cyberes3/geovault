@@ -3,38 +3,42 @@ package com.geovault.uploader.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.Icon
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.geovault.common.ui.components.GeoVaultAuthGate
+import com.geovault.common.ui.components.GeoVaultFormSection
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
+import com.geovault.common.ui.components.GeoVaultStatusPane
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.components.ImportantMessage
 import com.geovault.common.ui.components.ImportantMessageHost
-import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.GeoVaultLayoutTokens
 import com.geovault.uploader.presentation.MainScreenState
 
 @Composable
 fun MainScreen(
     state: MainScreenState,
+    invalidFilesDialogNames: List<String>?,
     onOpenSettings: () -> Unit,
     onAuthServerUrlChanged: (String) -> Unit,
     onAuthConnect: () -> Unit,
@@ -43,6 +47,7 @@ fun MainScreen(
     onUploadClick: () -> Unit,
     onCloseClick: () -> Unit,
     onDismissImportant: () -> Unit,
+    onDismissInvalidFiles: () -> Unit,
     onDismissUpdatePrompt: () -> Unit,
     onOpenUpdateUrl: () -> Unit
 ) {
@@ -67,15 +72,14 @@ fun MainScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .navigationBarsPadding()
-                .padding(20.dp)
+                .padding(GeoVaultLayoutTokens.ScreenPadding)
         ) {
-            Box(modifier = Modifier.fillMaxSize().padding(padding).navigationBarsPadding()) {
+            Box(modifier = Modifier.fillMaxSize()) {
                 if (state.isValidationMode) {
-                    ValidationContent(
-                        title = state.validationTitle,
-                        message = state.validationMessage,
-                        isLoading = state.isValidationLoading,
-                        onChooseFileClick = onChooseFileClick
+                    GeoVaultStatusPane(
+                        model = MainScreenStatusMapper.toValidationStatusModel(state),
+                        onPrimaryActionClick = onChooseFileClick,
+                        onSecondaryActionClick = onOpenSettings
                     )
                 } else {
                     UploadContent(
@@ -107,52 +111,13 @@ fun MainScreen(
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 72.dp)
                     )
                 }
+                invalidFilesDialogNames?.let { names ->
+                    UnsupportedFilesDialog(
+                        fileNames = names,
+                        onDismissRequest = onDismissInvalidFiles
+                    )
+                }
             }
-        }
-    }
-}
-
-@Composable
-private fun ValidationContent(
-    title: String,
-    message: String,
-    isLoading: Boolean,
-    onChooseFileClick: () -> Unit
-) {
-    val isSuccess = message.startsWith("✓")
-    val cleanMessage = if (isSuccess) message.removePrefix("✓").trimStart() else message
-
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        if (isLoading) {
-            GeoVaultLoadingSpinner()
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-        if (!isSuccess) {
-            Text(title)
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-        if (isSuccess && !isLoading) {
-            Icon(
-                imageVector = Icons.Filled.CheckCircle,
-                contentDescription = "Connected",
-                tint = GeoVaultColorTokens.PrimaryBlue
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-        }
-        Text(
-            text = cleanMessage,
-            textAlign = TextAlign.Center
-        )
-        if (isSuccess && !isLoading) {
-            Spacer(modifier = Modifier.height(16.dp))
-            GeoVaultPrimaryButton(
-                text = "Choose File",
-                onClick = onChooseFileClick
-            )
         }
     }
 }
@@ -167,36 +132,59 @@ private fun UploadContent(
     onUploadClick: () -> Unit,
     onCloseClick: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
-        Text("Filename", style = MaterialTheme.typography.subtitle1)
-        Spacer(modifier = Modifier.height(8.dp))
+    val isUploadSuccess = statusMessage.startsWith("Upload successful", ignoreCase = true)
+    GeoVaultFormSection(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        verticalGap = GeoVaultLayoutTokens.SectionGap
+    ) {
+        Text(
+            text = "Filename",
+            style = MaterialTheme.typography.body1.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp
+            )
+        )
         GeoVaultInput(
             value = filename,
             onValueChange = onFilenameChanged,
             label = "Filename",
             modifier = Modifier.fillMaxWidth()
         )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(suffixPreview, style = MaterialTheme.typography.body2)
-        Spacer(modifier = Modifier.height(20.dp))
+        Text(
+            text = suffixPreview,
+            style = MaterialTheme.typography.body2
+        )
         GeoVaultPrimaryButton(
             text = "Upload",
-            enabled = !isUploading,
+            enabled = !isUploading && !isUploadSuccess,
             onClick = onUploadClick,
             modifier = Modifier.fillMaxWidth()
         )
-        Spacer(modifier = Modifier.height(12.dp))
         GeoVaultSecondaryButton(
             text = "Cancel",
             enabled = !isUploading,
             onClick = onCloseClick,
             modifier = Modifier.fillMaxWidth()
         )
-        Spacer(modifier = Modifier.height(16.dp))
-        if (isUploading) GeoVaultLoadingSpinner()
-        if (statusMessage.isNotBlank()) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(statusMessage)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 120.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(GeoVaultLayoutTokens.TightGap)
+            ) {
+                if (isUploading) {
+                    GeoVaultLoadingSpinner()
+                }
+                if (statusMessage.isNotBlank()) {
+                    Text(statusMessage)
+                }
+            }
         }
     }
 }
