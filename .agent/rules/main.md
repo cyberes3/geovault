@@ -34,7 +34,7 @@ These apps share visual styles so make sure that changes are made in all apps.
 Apps only target the latest Android version and SDK so do not do things like `if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)`.
 YOU ARE NOT ALLOWED TO DO `@Suppress("DEPRECATION")`!!!!!! YOU MUST FIX IT!!!!!!!
 We are using Material Design 2 only.
-We have preset color pallets in `android-common`. Please prioritize using those instead of hard-coding hex colors.
+We have preset colors in `android-common`. DO NOT hard-code colors!
 No shadows on anything.
 `android-common` also has a lot of common UI components that you should use.
 DO NOT DO MEGA FILES! Logically put code in separate files rather than in one giant file.

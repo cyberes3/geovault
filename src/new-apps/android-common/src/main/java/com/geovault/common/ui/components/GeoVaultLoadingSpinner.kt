@@ -1,0 +1,64 @@
+package com.geovault.common.ui.components
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.geovault.common.ui.theme.GeoVaultColorTokens
+import kotlinx.coroutines.delay
+
+@Composable
+fun GeoVaultLoadingSpinner(
+    modifier: Modifier = Modifier,
+    spinnerSize: Dp = 28.dp,
+    strokeWidth: Dp = 2.5.dp
+) {
+    var rotationDegrees by androidx.compose.runtime.remember { mutableFloatStateOf(0f) }
+
+    // Manual tick-based rotation to bypass system animator scale settings.
+    LaunchedEffect(Unit) {
+        while (true) {
+            rotationDegrees = (rotationDegrees + 10f) % 360f
+            delay(30L)
+        }
+    }
+
+    Canvas(
+        modifier = modifier
+            .size(spinnerSize)
+            .rotate(rotationDegrees)
+    )
+    {
+        val strokePx = strokeWidth.toPx()
+        val legacyArcDiameter = size.minDimension * (24f / 28f)
+        val radiusInset = strokePx / 2f
+        val arcSize = Size(
+            width = legacyArcDiameter - strokePx,
+            height = legacyArcDiameter - strokePx
+        )
+        val arcTopLeft = Offset(
+            x = (size.width - legacyArcDiameter) / 2f + radiusInset,
+            y = (size.height - legacyArcDiameter) / 2f + radiusInset
+        )
+        drawArc(
+            color = GeoVaultColorTokens.PrimaryBlue,
+            startAngle = -90f,
+            sweepAngle = 90f,
+            useCenter = false,
+            topLeft = arcTopLeft,
+            size = arcSize,
+            style = Stroke(width = strokePx, cap = StrokeCap.Butt)
+        )
+    }
+}

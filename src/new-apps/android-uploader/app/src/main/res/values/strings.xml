@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">Uploader</string>
+    <string name="app_title">GeoVault Uploader</string>
+    <string name="settings_title">Settings</string>
+    <string name="upload_button">Upload</string>
+    <string name="cancel_button">Cancel</string>
+    <string name="close_button">Close</string>
+    <string name="connect_account">Connect Account</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="save_settings">Save Settings</string>
+    <string name="settings_required">Server URL is required. Connect your account to sign in.</string>
+    <string name="settings_saved">Settings Saved</string>
+    <string name="oauth_connected">Connected successfully</string>
+</resources>
