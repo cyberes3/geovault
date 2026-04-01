@@ -59,15 +59,22 @@ write a test for each bug I fix.
 
 ## Android Apps
 
-Uploader app that allows you to quickly upload KML/KMZ/GPX files to your GeoVault server via
-Android's share intent.
+Compiled APKs available here: <https://git.evulid.cc/cyberes/geovault-app-release/releases>
+
+Uploader app that allows you to quickly upload KML/KMZ/GPX files to your GeoVault server via Android's share intent from
+your GPS app.
 
 Places app to make it easy to manage and navigate to your bookmarked places. Supports offline usage.
 
-The website also supports PWA installation and can even be set up for the automated compilation of
-WebView APKs without Google's minting service (useful for GrapheneOS).
+The Tracker app can stream your live location to the server to share with friends and family. Supports groups and
+sharing.
 
-Compiled APKs available here: <https://git.evulid.cc/cyberes/geovault-app-release/releases>
+The [Survey](https://git.evulid.cc/cyberes/survey-data-viewer-android)
+and [NGS Navigator](https://git.evulid.cc/cyberes/ngs-navigator-android) apps are for surveyors and use the common
+GeoVault Android UI library and pull resources from the GeoVault server.
+
+The website also supports PWA installation and can even be set up for the automated compilation of WebView APKs without
+Google's minting service (useful for GrapheneOS).
 
 ## This software is distributed under the following terms
 

@@ -1,29 +1,6 @@
 # GeoVault Android Tracker
 
-Native Android live-tracking app for GeoVault.
-
-
-
-## Recovery Telemetry Dump
-
-The tracker app keeps a persistent in-app recovery telemetry ring buffer so you can inspect recovery behavior after returning home.
-
-### Trigger a telemetry dump to logcat
-
-```bash
-adb shell am start -n com.geovault.tracker.debug/com.geovault.tracker.MainActivity -a com.geovault.tracker.ACTION_DUMP_RECOVERY_TELEMETRY
-```
-
-### Read dumped telemetry
-
-```bash
-adb logcat -d -v time -s TrackingRecovery
-```
-
-Look for:
-
-- `Telemetry dump requested ...`
-- `Telemetry[1/N] ...` through `Telemetry[N/N] ...`
+Android collaborative live-tracking app for GeoVault.
 
 
 
@@ -37,7 +14,7 @@ By default, `Settings → Apps → Sandboxed Google Play → Reroute location re
 
 For Wi‑Fi/cell–assisted fixes without relying on Google’s network location, enable `Settings → Location → Location services → Network location` per GrapheneOS ([network location](https://grapheneos.org/features#network-location)). GrapheneOS notes that rerouting without this can use more power than using Play’s geolocation path unless network location is enabled.
 
-### If you want to use Google’s Location Services instead
+##### If you want to use Google’s Location Services instead
 
 Google Play Location Services is more accurate and battery-efficient than what GrapheneOS's implementation provides.
 
