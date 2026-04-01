@@ -18,4 +18,10 @@ class AccuracyGeometryBuilderTest {
         assertTrue(ring.first().lat.isFinite())
         assertTrue(ring.last().lon.isFinite())
     }
+
+    @Test
+    fun `returns empty when steps less than minimum`() {
+        val ring = AccuracyGeometryBuilder.buildAccuracyRing(LatLon(10.0, 20.0), 50.0, steps = 7)
+        assertTrue(ring.isEmpty())
+    }
 }

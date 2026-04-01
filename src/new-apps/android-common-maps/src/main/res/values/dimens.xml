@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="gv_common_overlapping_popup_item_height">44dp</dimen>
+    <dimen name="gv_common_overlapping_popup_max_height">176dp</dimen>
+</resources>

@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
 }
 
@@ -18,7 +19,7 @@ android {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro",
             )
         }
     }
@@ -28,22 +29,35 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    buildFeatures {
+        compose = true
+    }
+
     resourcePrefix = "gv_common_"
 }
 
 dependencies {
-    implementation(project(":android-common"))
+    api(project(":android-common"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.ktx)
+    implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
     implementation(libs.androidx.browser)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.compose.material)
+    implementation(libs.androidx.compose.material.icons)
 
-    implementation("org.maplibre.gl:android-sdk:11.11.0")
-    implementation("org.maplibre.gl:android-plugin-annotation-v9:3.0.2")
-    implementation("com.google.android.gms:play-services-location:21.3.0")
+    api("org.maplibre.gl:android-sdk:11.11.0")
+    api("org.maplibre.gl:android-plugin-annotation-v9:3.0.2")
 
     testImplementation(libs.junit)
 }
