@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Scaffold
@@ -49,6 +50,7 @@ private fun DescriptionScreen(title: String, body: String, onClose: () -> Unit) 
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
+                    .navigationBarsPadding()
                     .padding(16.dp)
             ) {
                 Text(body)

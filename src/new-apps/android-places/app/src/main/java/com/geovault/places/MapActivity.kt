@@ -2,13 +2,13 @@ package com.geovault.places
 
 import android.os.Bundle
 import android.view.ViewGroup
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.commit
 import com.geovault.common.maps.core.GeoVaultMapFragment
 
-class MapActivity : AppCompatActivity() {
+class MapActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val container = androidx.fragment.app.FragmentContainerView(this).apply {

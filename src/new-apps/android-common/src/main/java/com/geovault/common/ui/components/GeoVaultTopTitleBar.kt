@@ -1,6 +1,7 @@
 package com.geovault.common.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -31,7 +32,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.activity.ComponentActivity
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ui.system.GeoVaultSystemBars
@@ -170,6 +173,7 @@ private fun RowScope.GeoVaultTopBarOverflowMenu(
 @Composable
 fun GeoVaultTopTitleBar(
     title: String,
+    subtitle: String? = null,
     backgroundColor: Color = MaterialTheme.colors.primary,
     contentColor: Color = Color.White,
     syncSystemStatusBarColor: Boolean = true,
@@ -196,7 +200,28 @@ fun GeoVaultTopTitleBar(
                 .background(backgroundColor)
         )
         TopAppBar(
-            title = { Text(text = title, color = contentColor) },
+            title = {
+                if (subtitle.isNullOrBlank()) {
+                    Text(text = title, color = contentColor)
+                } else {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(1.dp)
+                    ) {
+                        Text(
+                            text = title,
+                            color = contentColor,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = subtitle,
+                            color = contentColor.copy(alpha = 0.82f),
+                            fontSize = 11.sp,
+                            lineHeight = 11.sp,
+                        )
+                    }
+                }
+            },
             backgroundColor = backgroundColor,
             contentColor = contentColor,
             elevation = 0.dp,

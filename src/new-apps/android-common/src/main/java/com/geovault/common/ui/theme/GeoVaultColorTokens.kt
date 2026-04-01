@@ -34,6 +34,7 @@ object GeoVaultColorTokens {
 
     @ColorInt const val SNACKBAR_BACKGROUND_INT: Int = 0xFF323232.toInt()
     @ColorInt const val SNACKBAR_MESSAGE_INT: Int = 0xFFFFFFFF.toInt()
+    @ColorInt const val PURPLE_100_INT: Int = 0xFFF4E6F2.toInt()
     @ColorInt const val PURPLE_500_INT: Int = 0xFFCB48B7.toInt()
 
     /** Frontend `--main-yellow` / `--color-yellow-500` (#F4AC45). */
@@ -74,5 +75,6 @@ object GeoVaultColorTokens {
     val Yellow500: Color = Color(YELLOW_500_INT)
     val SnackbarAction: Color = Yellow500
     val SnackbarMessage: Color = Color(SNACKBAR_MESSAGE_INT)
+    val Purple100: Color = Color(PURPLE_100_INT)
     val Purple500: Color = Color(PURPLE_500_INT)
 }

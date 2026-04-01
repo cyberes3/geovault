@@ -42,7 +42,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.components.GeoVaultInput
-import com.geovault.common.ui.modifier.dismissKeyboardOnOutsideTap
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
@@ -88,7 +87,6 @@ fun MultiUploadScreen(
                 .padding(padding)
                 .navigationBarsPadding()
                 .imePadding()
-                .dismissKeyboardOnOutsideTap()
                 .padding(bottom = 16.dp)
         ) {
             LazyColumn(

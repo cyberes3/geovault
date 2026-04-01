@@ -1,8 +1,13 @@
 package com.geovault.places.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,23 +15,71 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Card
 import androidx.compose.material.Divider
-import androidx.compose.material.MaterialTheme
+import androidx.compose.material.FloatingActionButton
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.material.Scaffold
+import androidx.compose.material.Surface
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.outlined.Map
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.material.AlertDialog
 import com.geovault.common.ui.components.GeoVaultAuthGate
 import com.geovault.common.ui.components.GeoVaultInput
+import com.geovault.common.ui.components.GeoVaultLoadingOverlay
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
+import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
+import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.places.model.Feature
+import com.geovault.places.model.OfflineFeature
 import com.geovault.places.presentation.MainScreenState
+
+private const val HEADER_WAITING_TO_SYNC = "WAITING TO SYNC"
+
+private sealed interface PlaceListItem {
+    data class Header(val title: String) : PlaceListItem
+    data class Row(
+        val feature: Feature,
+        val isOffline: Boolean,
+        val offlineFeature: OfflineFeature? = null,
+        val offlineIndex: Int = -1,
+    ) : PlaceListItem
+}
 
 @Composable
 fun MainScreen(
@@ -38,26 +91,44 @@ fun MainScreen(
     onRefresh: () -> Unit,
     onAddPlace: () -> Unit,
     onOpenMap: () -> Unit,
-    onEditPlace: (Feature) -> Unit,
+    onEditSavedPlace: (Feature) -> Unit,
+    onEditOfflinePlace: (OfflineFeature, Int) -> Unit,
     onNavigatePlace: (Feature) -> Unit,
+    onDeleteSavedPlace: (Feature) -> Unit,
+    onRevertOffline: (OfflineFeature) -> Unit,
+    onViewDescription: (Feature) -> Unit,
+    onOpenMapToPlace: (Feature) -> Unit,
+    onCopyCoordinates: (String) -> Unit,
+    onCancelRefresh: () -> Unit,
     onDismissSnackbar: () -> Unit,
 ) {
+    val listState = rememberLazyListState()
+    val showSearchDivider by remember(listState) {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
+        }
+    }
+
     Scaffold(
         topBar = {
             GeoVaultTopTitleBar(
                 title = "Places",
+                subtitle = state.lastSyncLabel,
                 actionsContent = {
-                    GeoVaultTopBarSettingsMenuAction(onOpenSettings = onOpenSettings)
+                    GeoVaultTopBarSettingsMenuAction(
+                        onOpenSettings = onOpenSettings,
+                        isAuthenticated = state.isAuthenticated
+                    )
                 }
             )
         }
-    ) { padding ->
-        Column(
+    ) { scaffoldPadding ->
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(scaffoldPadding)
                 .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .background(GeoVaultColorTokens.ListBackground)
         ) {
             GeoVaultAuthGate(
                 isAuthenticated = state.isAuthenticated,
@@ -65,55 +136,51 @@ fun MainScreen(
                 onServerUrlChanged = onAuthServerUrlChanged,
                 onConnect = onAuthConnect,
                 isConnecting = state.isConnecting,
+                modifier = Modifier.fillMaxSize()
             ) {
-                GeoVaultInput(
-                    value = state.searchQuery,
-                    onValueChange = onSearchChanged,
-                    label = "Search Places",
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    GeoVaultPrimaryButton(
-                        text = if (state.isRefreshing) "Syncing..." else "Sync",
-                        enabled = !state.isRefreshing,
-                        onClick = onRefresh,
-                        modifier = Modifier.weight(1f)
+                Column(modifier = Modifier.fillMaxSize()) {
+                    SearchBlock(
+                        query = state.searchQuery,
+                        onSearchChanged = onSearchChanged
                     )
-                    GeoVaultPrimaryButton(
-                        text = "Add",
-                        onClick = onAddPlace,
-                        modifier = Modifier.weight(1f)
-                    )
-                    GeoVaultPrimaryButton(
-                        text = "Map",
-                        onClick = onOpenMap,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-                if (state.offline.isNotEmpty()) {
-                    SectionHeader("Waiting To Sync")
-                    FeatureList(
-                        features = state.offline,
-                        onEditPlace = onEditPlace,
+                    if (showSearchDivider) {
+                        Divider(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = GeoVaultColorTokens.BorderLight,
+                            thickness = 1.dp
+                        )
+                    }
+                    PlacesBody(
+                        state = state,
+                        listState = listState,
+                        onRefresh = onRefresh,
                         onNavigatePlace = onNavigatePlace,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
-                SectionHeader("Saved Places")
-                if (state.saved.isEmpty() && state.offline.isEmpty()) {
-                    Text("No places yet.", style = MaterialTheme.typography.body2)
-                } else {
-                    FeatureList(
-                        features = state.saved,
-                        onEditPlace = onEditPlace,
-                        onNavigatePlace = onNavigatePlace,
+                        onEditSavedPlace = onEditSavedPlace,
+                        onEditOfflinePlace = onEditOfflinePlace,
+                        onDeleteSavedPlace = onDeleteSavedPlace,
+                        onRevertOffline = onRevertOffline,
+                        onViewDescription = onViewDescription,
+                        onOpenMapToPlace = onOpenMapToPlace,
+                        onCopyCoordinates = onCopyCoordinates,
                     )
                 }
             }
+
+            if (state.isAuthenticated) {
+                FabStack(
+                    modifier = Modifier.align(Alignment.BottomEnd),
+                    onAddPlace = onAddPlace,
+                    onOpenMap = onOpenMap,
+                    enabled = !state.isRefreshing
+                )
+            }
+
+            GeoVaultLoadingOverlay(
+                isVisible = state.showSyncOverlay,
+                title = state.syncOverlayTitle,
+                subtext = state.syncOverlaySubtext,
+                onTap = onCancelRefresh
+            )
         }
     }
 
@@ -125,38 +192,433 @@ fun MainScreen(
 }
 
 @Composable
-private fun SectionHeader(text: String) {
-    Text(text = text, style = MaterialTheme.typography.subtitle1)
-    Divider(modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
-}
-
-@Composable
-private fun FeatureList(
-    features: List<Feature>,
-    onEditPlace: (Feature) -> Unit,
-    onNavigatePlace: (Feature) -> Unit,
+private fun SearchBlock(
+    query: String,
+    onSearchChanged: (String) -> Unit,
 ) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        items(features) { feature ->
-            val title = feature.properties.name ?: "(unnamed)"
-            val desc = feature.properties.description.orEmpty()
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onEditPlace(feature) }
-                    .padding(vertical = 4.dp)
-            ) {
-                Text(title, style = MaterialTheme.typography.subtitle1)
-                if (desc.isNotBlank()) {
-                    Text(desc, style = MaterialTheme.typography.body2)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(GeoVaultColorTokens.ListBackground)
+            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            GeoVaultInput(
+                value = query,
+                onValueChange = onSearchChanged,
+                label = null,
+                placeholder = "Search places...",
+                modifier = Modifier.fillMaxWidth()
+            )
+            if (query.isNotBlank()) {
+                IconButton(
+                    onClick = { onSearchChanged("") },
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Clear search",
+                        tint = GeoVaultColorTokens.TextSecondary,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
-                Text(
-                    text = "Navigate",
-                    style = MaterialTheme.typography.caption,
-                    modifier = Modifier.clickable { onNavigatePlace(feature) }
-                )
             }
-            Divider()
         }
     }
 }
+
+@OptIn(ExperimentalMaterialApi::class)
+@Composable
+private fun PlacesBody(
+    state: MainScreenState,
+    listState: LazyListState,
+    onRefresh: () -> Unit,
+    onNavigatePlace: (Feature) -> Unit,
+    onEditSavedPlace: (Feature) -> Unit,
+    onEditOfflinePlace: (OfflineFeature, Int) -> Unit,
+    onDeleteSavedPlace: (Feature) -> Unit,
+    onRevertOffline: (OfflineFeature) -> Unit,
+    onViewDescription: (Feature) -> Unit,
+    onOpenMapToPlace: (Feature) -> Unit,
+    onCopyCoordinates: (String) -> Unit,
+) {
+    val listItems = remember(state.saved, state.offlineItems) {
+        buildList {
+            if (state.offlineItems.isNotEmpty()) {
+                add(PlaceListItem.Header(HEADER_WAITING_TO_SYNC))
+                state.offlineItems.forEachIndexed { index, offline ->
+                    add(
+                        PlaceListItem.Row(
+                            feature = offline.feature,
+                            isOffline = true,
+                            offlineFeature = offline,
+                            offlineIndex = index
+                        )
+                    )
+                }
+            }
+            state.saved.forEach { feature ->
+                add(PlaceListItem.Row(feature = feature, isOffline = false))
+            }
+        }
+    }
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = state.isRefreshing,
+        onRefresh = onRefresh
+    )
+    val selectedIndex = remember(state.selectedPlaceId, listItems) {
+        val selectedId = state.selectedPlaceId ?: return@remember -1
+        listItems.indexOfFirst { listItem ->
+            listItem is PlaceListItem.Row && listItem.feature.properties.database_id == selectedId
+        }
+    }
+    LaunchedEffect(selectedIndex, state.selectedPlaceId) {
+        if (state.selectedPlaceId != null && selectedIndex >= 0) {
+            listState.animateScrollToItem(index = selectedIndex)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(GeoVaultColorTokens.ListBackground)
+            .pullRefresh(pullRefreshState)
+    ) {
+        if (state.saved.isEmpty() && state.offlineItems.isEmpty()) {
+            EmptyState()
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 0.dp, bottom = 8.dp)
+            ) {
+                items(listItems) { item ->
+                    when (item) {
+                        is PlaceListItem.Header -> SectionHeader(text = item.title)
+                        is PlaceListItem.Row -> PlaceRow(
+                            item = item,
+                            isSelected = item.feature.properties.database_id != null &&
+                                item.feature.properties.database_id == state.selectedPlaceId,
+                            actionsEnabled = !state.isRefreshing,
+                            onNavigatePlace = onNavigatePlace,
+                            onEditSavedPlace = onEditSavedPlace,
+                            onEditOfflinePlace = onEditOfflinePlace,
+                            onDeleteSavedPlace = onDeleteSavedPlace,
+                            onRevertOffline = onRevertOffline,
+                            onViewDescription = onViewDescription,
+                            onOpenMapToPlace = onOpenMapToPlace,
+                            onCopyCoordinates = onCopyCoordinates,
+                        )
+                    }
+                }
+            }
+        }
+        PullRefreshIndicator(
+            refreshing = state.isRefreshing,
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
+    }
+}
+
+@Composable
+private fun SectionHeader(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier.padding(start = 32.dp, top = 32.dp, end = 32.dp, bottom = 8.dp),
+        color = GeoVaultColorTokens.TextSecondary,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Medium
+    )
+}
+
+@Composable
+private fun PlaceRow(
+    item: PlaceListItem.Row,
+    isSelected: Boolean,
+    actionsEnabled: Boolean,
+    onNavigatePlace: (Feature) -> Unit,
+    onEditSavedPlace: (Feature) -> Unit,
+    onEditOfflinePlace: (OfflineFeature, Int) -> Unit,
+    onDeleteSavedPlace: (Feature) -> Unit,
+    onRevertOffline: (OfflineFeature) -> Unit,
+    onViewDescription: (Feature) -> Unit,
+    onOpenMapToPlace: (Feature) -> Unit,
+    onCopyCoordinates: (String) -> Unit,
+) {
+    var showDeleteDialog by rememberSaveable(item.feature.properties.database_id, item.isOffline) {
+        mutableStateOf(false)
+    }
+    val feature = item.feature
+    val addressOrCoordinates = feature.properties.address?.takeIf { it.isNotBlank() } ?: run {
+        val coords = feature.geometry.coordinates
+        if (coords.size >= 2) {
+            String.format("%.6f, %.6f", coords[1], coords[0])
+        } else {
+            ""
+        }
+    }
+    val rawDate = feature.properties.created_at.orEmpty()
+    val formattedDate = if (rawDate.length >= 10) rawDate.substring(0, 10) else rawDate
+    val dateLabel = if (item.isOffline) "$formattedDate (offline)" else formattedDate
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
+        shape = RoundedCornerShape(12.dp),
+        backgroundColor = GeoVaultColorTokens.Surface,
+        elevation = 0.dp,
+        border = BorderStroke(
+            width = 2.dp,
+            color = when {
+                isSelected -> GeoVaultColorTokens.PrimaryBlue
+                item.isOffline -> GeoVaultColorTokens.MainYellow
+                else -> GeoVaultColorTokens.PrimaryBlue
+            }
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    when {
+                        isSelected -> GeoVaultColorTokens.Purple100
+                        else -> Color.Transparent
+                    }
+                )
+                .padding(20.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clickable(enabled = actionsEnabled) { onOpenMapToPlace(feature) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Map,
+                        contentDescription = "Open map",
+                        tint = GeoVaultColorTokens.PrimaryBlue
+                    )
+                }
+                Spacer(modifier = Modifier.size(12.dp))
+                Text(
+                    text = feature.properties.name ?: "Unnamed Place",
+                    color = GeoVaultColorTokens.TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = dateLabel,
+                    color = if (item.isOffline) {
+                        GeoVaultColorTokens.MainYellow
+                    } else {
+                        GeoVaultColorTokens.TextSecondary.copy(alpha = 0.8f)
+                    },
+                    fontSize = 12.sp
+                )
+                Text(
+                    text = " • ",
+                    color = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.5f),
+                    fontSize = 12.sp
+                )
+                Text(
+                    text = addressOrCoordinates,
+                    modifier = Modifier
+                        .clickable(enabled = addressOrCoordinates.isNotBlank()) {
+                            if (!actionsEnabled) return@clickable
+                            onCopyCoordinates(addressOrCoordinates)
+                        }
+                        .padding(2.dp),
+                    color = GeoVaultColorTokens.TextSecondary,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            feature.properties.description?.takeIf { it.isNotBlank() }?.let { description ->
+                Text(
+                    text = description,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 20.dp)
+                        .clickable { onViewDescription(feature) },
+                    color = GeoVaultColorTokens.TextSecondary,
+                    fontSize = 14.sp,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                GeoVaultPrimaryButton(
+                    text = "Navigate",
+                    onClick = { onNavigatePlace(feature) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
+                    enabled = actionsEnabled
+                )
+                GeoVaultSecondaryButton(
+                    text = "Edit",
+                    onClick = {
+                        if (item.isOffline && item.offlineFeature != null) {
+                            onEditOfflinePlace(item.offlineFeature, item.offlineIndex)
+                        } else {
+                            onEditSavedPlace(feature)
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
+                    enabled = actionsEnabled
+                )
+                GeoVaultSecondaryButton(
+                    text = if (item.isOffline && feature.properties.database_id != null) "Revert" else if (item.isOffline) "Discard" else "Delete",
+                    onClick = { showDeleteDialog = true },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
+                    enabled = actionsEnabled,
+                    accentColor = GeoVaultColorTokens.Error
+                )
+            }
+        }
+    }
+
+    if (showDeleteDialog) {
+        val isRevert = item.isOffline
+        val isOfflineUpdate = feature.properties.database_id != null
+        val actionLabel = if (isRevert) {
+            if (isOfflineUpdate) "Revert" else "Discard"
+        } else {
+            "Delete"
+        }
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("$actionLabel Changes") },
+            text = {
+                Text(
+                    if (isRevert) {
+                        val action = if (isOfflineUpdate) "revert your changes to" else "discard"
+                        "Are you sure you want to $action '${feature.properties.name ?: "this place"}'?"
+                    } else {
+                        "Are you sure you want to delete '${feature.properties.name ?: "this place"}'? This cannot be undone."
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (isRevert) {
+                            item.offlineFeature?.let(onRevertOffline)
+                        } else {
+                            onDeleteSavedPlace(feature)
+                        }
+                        showDeleteDialog = false
+                    }
+                ) {
+                    Text(actionLabel, color = GeoVaultColorTokens.Error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun EmptyState() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = Icons.Default.Map,
+            contentDescription = null,
+            tint = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.2f),
+            modifier = Modifier.size(64.dp)
+        )
+        Text(
+            text = "No places",
+            modifier = Modifier.padding(top = 16.dp),
+            color = GeoVaultColorTokens.TextSecondary,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "Tap the + button to add your first place",
+            modifier = Modifier.padding(top = 8.dp),
+            color = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.7f),
+            fontSize = 14.sp
+        )
+    }
+}
+
+@Composable
+private fun FabStack(
+    modifier: Modifier = Modifier,
+    onAddPlace: () -> Unit,
+    onOpenMap: () -> Unit,
+    enabled: Boolean = true,
+) {
+    Column(
+        modifier = modifier
+            .padding(end = 16.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.End
+    ) {
+        FloatingActionButton(
+            onClick = { if (enabled) onAddPlace() },
+            shape = CircleShape,
+            backgroundColor = GeoVaultColorTokens.PrimaryBlue.copy(alpha = if (enabled) 1f else 0.6f),
+            contentColor = Color.White,
+            elevation = androidx.compose.material.FloatingActionButtonDefaults.elevation(
+                defaultElevation = 0.dp,
+                pressedElevation = 0.dp
+            )
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "Create Place")
+        }
+        FloatingActionButton(
+            onClick = { if (enabled) onOpenMap() },
+            shape = CircleShape,
+            backgroundColor = GeoVaultColorTokens.PrimaryBlue.copy(alpha = if (enabled) 1f else 0.6f),
+            contentColor = Color.White,
+            elevation = androidx.compose.material.FloatingActionButtonDefaults.elevation(
+                defaultElevation = 0.dp,
+                pressedElevation = 0.dp
+            )
+        ) {
+            Icon(Icons.Default.Map, contentDescription = "Map View")
+        }
+    }
+}
+

@@ -58,19 +58,20 @@ fun GeoVaultSecondaryButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    accentColor: Color = GeoVaultColorTokens.PrimaryBlue
 ) {
     Button(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier,
         colors = ButtonDefaults.buttonColors(
-            backgroundColor = MaterialTheme.colors.background,
-            contentColor = GeoVaultColorTokens.PrimaryBlue,
-            disabledBackgroundColor = MaterialTheme.colors.background,
-            disabledContentColor = GeoVaultColorTokens.PrimaryBlue.copy(alpha = 0.5f)
+            backgroundColor = Color.Transparent,
+            contentColor = accentColor,
+            disabledBackgroundColor = Color.Transparent,
+            disabledContentColor = accentColor.copy(alpha = 0.5f)
         ),
-        border = BorderStroke(1.dp, GeoVaultColorTokens.PrimaryBlue),
+        border = BorderStroke(1.dp, accentColor),
         elevation = ButtonDefaults.elevation(
             defaultElevation = 0.dp,
             pressedElevation = 0.dp,
@@ -141,16 +142,15 @@ fun GeoVaultToggle(
 /**
  * Shared outlined text field styled for GeoVault.
  *
- * To dismiss the keyboard when the user taps outside the field, apply
- * [com.geovault.common.ui.modifier.dismissKeyboardOnOutsideTap] on a suitable ancestor
- * (for example the screen or form [Column] / [com.geovault.common.ui.components.GeoVaultFormSection]).
- * [com.geovault.common.ui.components.GeoVaultInitialAuthView] applies this automatically.
+ * Outside-tap keyboard dismissal is applied at the shared [com.geovault.common.ui.theme.GeoVaultTheme]
+ * root, so screens using common theme wrappers get full-screen dismissal behavior automatically.
  */
 @Composable
 fun GeoVaultInput(
     value: String,
     onValueChange: (String) -> Unit,
-    label: String,
+    label: String? = null,
+    placeholder: String? = null,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     readOnly: Boolean = false,
@@ -166,7 +166,12 @@ fun GeoVaultInput(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(label, color = GeoVaultColorTokens.PrimaryBlue) },
+        label = label?.let {
+            { Text(it, color = GeoVaultColorTokens.PrimaryBlue) }
+        },
+        placeholder = placeholder?.let {
+            { Text(it, color = GeoVaultColorTokens.TextSecondary) }
+        },
         modifier = modifier,
         enabled = enabled,
         readOnly = readOnly,

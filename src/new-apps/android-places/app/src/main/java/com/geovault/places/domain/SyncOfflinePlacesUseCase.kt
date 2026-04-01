@@ -4,18 +4,21 @@ import com.geovault.places.data.PlacesCacheStore
 import com.geovault.places.data.PlacesRepository
 import com.geovault.places.model.Feature
 import com.geovault.places.model.OfflineFeature
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 
 class SyncOfflinePlacesUseCase(
     private val repository: PlacesRepository,
     private val cacheStore: PlacesCacheStore,
 ) {
-    fun runSync(): SyncResult {
+    suspend fun runSync(): SyncResult {
         val offline = cacheStore.getOfflineFeatures()
         if (offline.isEmpty()) return SyncResult(0, 0)
 
         var success = 0
         var failed = 0
         offline.forEach { item ->
+            coroutineContext.ensureActive()
             val synced = syncOne(item)
             if (synced) {
                 cacheStore.removeOffline(item)

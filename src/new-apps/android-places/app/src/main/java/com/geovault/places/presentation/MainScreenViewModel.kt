@@ -7,7 +7,10 @@ import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.places.di.PlacesAppServices
 import com.geovault.places.model.Feature
+import com.geovault.places.model.OfflineFeature
+import java.util.concurrent.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,7 +27,13 @@ data class MainScreenState(
     val searchQuery: String = "",
     val saved: List<Feature> = emptyList(),
     val offline: List<Feature> = emptyList(),
+    val offlineItems: List<OfflineFeature> = emptyList(),
+    val selectedPlaceId: Int? = null,
     val lastSyncMillis: Long = 0L,
+    val lastSyncLabel: String = "Not synced",
+    val showSyncOverlay: Boolean = false,
+    val syncOverlayTitle: String = "Syncing...",
+    val syncOverlaySubtext: String = "Tap to cancel",
     val snackbar: GeoVaultSnackbarModel? = null,
 )
 
@@ -36,12 +45,18 @@ class MainScreenViewModel(
     private val repository = services.placesRepository()
     private val syncUseCase = services.syncOfflinePlacesUseCase()
     private val authController = services.initialAuthController()
+    private var refreshJob: Job? = null
+    private var initialRefreshTriggered: Boolean = false
 
     private val _state = MutableStateFlow(MainScreenState())
     val state: StateFlow<MainScreenState> = _state.asStateFlow()
 
     fun initialize() {
         refreshAuthAndCache()
+        if (_state.value.isAuthenticated && !initialRefreshTriggered) {
+            initialRefreshTriggered = true
+            refreshNow()
+        }
     }
 
     fun onHostResumed() {
@@ -111,26 +126,92 @@ class MainScreenViewModel(
         _state.update { it.copy(oauthUrl = null, isConnecting = false) }
     }
 
-    fun refreshNow() {
-        if (_state.value.isRefreshing) return
-        viewModelScope.launch {
-            _state.update { it.copy(isRefreshing = true) }
-            val result = withContext(Dispatchers.IO) { repository.fetchPlaces() }
-            result.onSuccess { collection ->
-                cache.setCached(collection)
-                withContext(Dispatchers.IO) { syncUseCase.runSync() }
+    fun refreshNow(
+        statusText: String = "Syncing...",
+        tapHintText: String = "Tap to cancel"
+    ) {
+        if (refreshJob?.isActive == true || _state.value.isRefreshing) return
+        refreshJob = viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    isRefreshing = true,
+                    showSyncOverlay = true,
+                    syncOverlayTitle = statusText,
+                    syncOverlaySubtext = tapHintText
+                )
+            }
+            try {
+                val result = withContext(Dispatchers.IO) { repository.fetchPlacesCancellable() }
+                result.onSuccess { collection ->
+                    cache.setCached(collection)
+                    withContext(Dispatchers.IO) { syncUseCase.runSync() }
+                    publishFromCache()
+                }.onFailure { err ->
+                    _state.update {
+                        it.copy(
+                            snackbar = GeoVaultSnackbarModel(
+                                id = "main_error_${System.currentTimeMillis()}",
+                                message = "Network failed: ${err.message ?: "Unknown error"}"
+                            )
+                        )
+                    }
+                }
+            } catch (_: CancellationException) {
                 publishFromCache()
+            } finally {
+                _state.update {
+                    it.copy(
+                        isRefreshing = false,
+                        showSyncOverlay = false,
+                        syncOverlayTitle = statusText,
+                        syncOverlaySubtext = tapHintText
+                    )
+                }
+            }
+        }
+    }
+
+    fun cancelRefresh() {
+        refreshJob?.cancel(CancellationException("Cancelled by user"))
+    }
+
+    fun deleteSavedPlace(feature: Feature) {
+        val dbId = feature.properties.database_id ?: return
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { repository.deletePlace(dbId) }
+            result.onSuccess {
+                val offlineItem = cache.getOfflineFeatures().find { it.feature.properties.database_id == dbId }
+                if (offlineItem != null) {
+                    cache.removeOffline(offlineItem)
+                }
+                refreshNow()
             }.onFailure { err ->
                 _state.update {
                     it.copy(
                         snackbar = GeoVaultSnackbarModel(
-                            id = "main_error_${System.currentTimeMillis()}",
-                            message = "Network failed: ${err.message ?: "Unknown error"}"
+                            id = "delete_error_${System.currentTimeMillis()}",
+                            message = err.message ?: "Failed to delete place"
                         )
                     )
                 }
             }
-            _state.update { it.copy(isRefreshing = false) }
+        }
+    }
+
+    fun revertOfflineChanges(item: OfflineFeature) {
+        cache.removeOffline(item)
+        publishFromCache()
+        _state.update {
+            it.copy(
+                snackbar = GeoVaultSnackbarModel(
+                    id = "offline_revert_${System.currentTimeMillis()}",
+                    message = if (item.feature.properties.database_id != null) {
+                        "Changes reverted."
+                    } else {
+                        "Offline place discarded."
+                    }
+                )
+            )
         }
     }
 
@@ -147,8 +228,18 @@ class MainScreenViewModel(
         }
     }
 
+    fun applyUpdatedFeature(updated: Feature) {
+        cache.updateCachedFeature(updated)
+        _state.update { it.copy(searchQuery = "") }
+        publishFromCache()
+    }
+
     fun clearSnackbar() {
         _state.update { it.copy(snackbar = null) }
+    }
+
+    fun setSelectedPlaceId(id: Int?) {
+        _state.update { it.copy(selectedPlaceId = id) }
     }
 
     private fun refreshAuthAndCache() {
@@ -161,6 +252,7 @@ class MainScreenViewModel(
                 isConnecting = if (loggedIn) false else it.isConnecting,
                 oauthUrl = if (loggedIn) null else it.oauthUrl,
                 lastSyncMillis = cache.getLastSyncTime(),
+                lastSyncLabel = formatLastSyncLabel(cache.getLastSyncTime()),
             )
         }
         publishFromCache()
@@ -188,7 +280,9 @@ class MainScreenViewModel(
             it.copy(
                 saved = saved,
                 offline = filteredOffline.map { item -> item.feature },
+                offlineItems = filteredOffline,
                 lastSyncMillis = cache.getLastSyncTime(),
+                lastSyncLabel = formatLastSyncLabel(cache.getLastSyncTime()),
             )
         }
     }
@@ -197,5 +291,11 @@ class MainScreenViewModel(
         val name = feature.properties.name.orEmpty()
         val desc = feature.properties.description.orEmpty()
         return name.contains(query, ignoreCase = true) || desc.contains(query, ignoreCase = true)
+    }
+
+    private fun formatLastSyncLabel(lastSyncMillis: Long): String {
+        if (lastSyncMillis == 0L) return "Not synced"
+        val format = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+        return "Last synced: ${format.format(java.util.Date(lastSyncMillis))}"
     }
 }
