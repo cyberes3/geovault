@@ -1,6 +1,7 @@
 package com.geovault.common.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -136,6 +137,14 @@ fun GeoVaultToggle(
     }
 }
 
+/**
+ * Shared outlined text field styled for GeoVault.
+ *
+ * To dismiss the keyboard when the user taps outside the field, apply
+ * [com.geovault.common.ui.modifier.dismissKeyboardOnOutsideTap] on a suitable ancestor
+ * (for example the screen or form [Column] / [com.geovault.common.ui.components.GeoVaultFormSection]).
+ * [com.geovault.common.ui.components.GeoVaultInitialAuthView] applies this automatically.
+ */
 @Composable
 fun GeoVaultInput(
     value: String,
@@ -143,6 +152,7 @@ fun GeoVaultInput(
     label: String,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    readOnly: Boolean = false,
     singleLine: Boolean = true,
     visualTransformation: VisualTransformation = VisualTransformation.None
 ) {
@@ -152,6 +162,7 @@ fun GeoVaultInput(
         label = { Text(label, color = GeoVaultColorTokens.PrimaryBlue) },
         modifier = modifier,
         enabled = enabled,
+        readOnly = readOnly,
         singleLine = singleLine,
         visualTransformation = visualTransformation,
         colors = TextFieldDefaults.outlinedTextFieldColors(

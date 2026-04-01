@@ -6,11 +6,11 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.NaturalSort
-import com.geovault.common.messages.GeoVaultUploadMessageFormatter
 import com.geovault.uploader.data.FileMetadataRepository
 import com.geovault.uploader.data.UploaderPreferences
 import com.geovault.uploader.data.UploadRepository
 import com.geovault.uploader.domain.FilenamePolicy
+import com.geovault.uploader.domain.QueueUploadStateMachine
 import com.geovault.uploader.model.FileQueueItem
 import com.geovault.uploader.model.FileStatus
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -86,13 +86,8 @@ class QueueUploadViewModel(application: Application) : AndroidViewModel(applicat
 
     fun cancelUpload() {
         cancelled = true
-        _state.value = _state.value.copy(
-            isUploading = false,
-            uploadCancelled = true,
-            progressCurrent = 0,
-            progressMax = 0,
-            statusMessage = "Upload cancelled"
-        )
+        uploader.cancelActiveUpload()
+        _state.value = QueueUploadStateMachine.cancelUpload(_state.value)
     }
 
     fun startUpload() {
@@ -104,12 +99,7 @@ class QueueUploadViewModel(application: Application) : AndroidViewModel(applicat
             val validIndexes = allItems.indices.filter { idx ->
                 FilenamePolicy.isSupportedImportType(allItems[idx].filename)
             }
-            _state.value = _state.value.copy(
-                isUploading = true,
-                progressCurrent = 0,
-                progressMax = validIndexes.size,
-                statusMessage = if (validIndexes.isEmpty()) "No valid files to upload" else ""
-            )
+            _state.value = QueueUploadStateMachine.startUpload(_state.value, validIndexes.size)
             if (validIndexes.isEmpty()) {
                 _state.value = _state.value.copy(isUploading = false)
                 return@launch
@@ -120,10 +110,11 @@ class QueueUploadViewModel(application: Application) : AndroidViewModel(applicat
             validIndexes.forEachIndexed { progress, index ->
                 if (cancelled) return@forEachIndexed
                 allItems[index] = allItems[index].copy(status = FileStatus.UPLOADING, errorMessage = null)
-                _state.value = _state.value.copy(
+                _state.value = QueueUploadStateMachine.onProgress(
+                    state = _state.value,
                     items = allItems.toList(),
                     progressCurrent = progress,
-                    statusMessage = GeoVaultUploadMessageFormatter.uploadProgress(progress + 1, validIndexes.size)
+                    progressMax = validIndexes.size
                 )
                 val finalName = FilenamePolicy.withOptionalSuffix(allItems[index].filename, prefs.isSuffixEnabled())
                 val result = uploader.upload(allItems[index].uri, finalName)
@@ -142,18 +133,12 @@ class QueueUploadViewModel(application: Application) : AndroidViewModel(applicat
                     progressCurrent = progress + 1
                 )
             }
-
-            val summary = GeoVaultUploadMessageFormatter.uploadSummary(
+            _state.value = QueueUploadStateMachine.finishUpload(
+                state = _state.value,
+                items = allItems,
                 succeeded = succeeded,
                 failed = failed,
                 cancelled = cancelled
-            )
-            _state.value = _state.value.copy(
-                isUploading = false,
-                progressCurrent = if (cancelled) 0 else _state.value.progressCurrent,
-                progressMax = if (cancelled) 0 else _state.value.progressMax,
-                statusMessage = summary,
-                items = allItems
             )
         }
     }

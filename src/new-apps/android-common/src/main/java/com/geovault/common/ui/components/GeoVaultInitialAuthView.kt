@@ -10,6 +10,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import com.geovault.common.ui.modifier.dismissKeyboardOnOutsideTap
 import androidx.compose.ui.unit.dp
 
 enum class GeoVaultAuthExtraActionStyle {
@@ -41,7 +42,7 @@ fun GeoVaultInitialAuthView(
     extraActions: List<GeoVaultAuthExtraAction> = emptyList()
 ) {
     Column(
-        modifier = modifier,
+        modifier = modifier.then(Modifier.dismissKeyboardOnOutsideTap()),
         verticalArrangement = Arrangement.Top
     ) {
         Text(

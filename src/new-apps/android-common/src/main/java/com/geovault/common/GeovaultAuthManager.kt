@@ -241,6 +241,12 @@ object GeovaultAuthManager {
             })
     }
 
+    fun revokeCurrentSession(context: Context) {
+        // Revoke both tokens to mirror legacy sign-out semantics and reduce stale session risk.
+        revokeToken(context, getAccessToken(context))
+        revokeToken(context, getRefreshToken())
+    }
+
     fun generatePkcePair(): Pair<String, String> {
         val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
         val verifier = (1..64).map { chars.random() }.joinToString("")
@@ -434,6 +440,9 @@ object GeovaultAuthManager {
                     } catch (_: Exception) {
                         callback?.invoke(null)
                     }
+                } else if (statusCode == 401) {
+                    clearTokens(context)
+                    callback?.invoke(null)
                 } else {
                     callback?.invoke(null)
                 }

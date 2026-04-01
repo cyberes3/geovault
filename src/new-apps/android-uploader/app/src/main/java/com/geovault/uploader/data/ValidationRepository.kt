@@ -42,6 +42,7 @@ class ValidationRepository(private val context: Context) {
                         message = GeoVaultUploadMessageFormatter.validationConnected()
                     )
                 } else if (response.code == 401) {
+                    GeovaultAuthManager.handleAuthFailure(context)
                     ValidationResult(
                         outcome = ValidationOutcome.Error,
                         title = "Validation Failed",

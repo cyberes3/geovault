@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
+import com.geovault.common.ui.modifier.dismissKeyboardOnOutsideTap
 import com.geovault.common.ui.theme.GeoVaultLayoutTokens
 
 @Composable
@@ -16,7 +17,9 @@ fun GeoVaultFormSection(
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .dismissKeyboardOnOutsideTap(),
         verticalArrangement = Arrangement.spacedBy(verticalGap),
         content = content
     )

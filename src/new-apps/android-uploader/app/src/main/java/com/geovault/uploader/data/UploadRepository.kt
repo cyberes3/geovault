@@ -6,31 +6,44 @@ import android.net.Uri
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
 import com.geovault.uploader.model.UploadResult
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.Response
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 class UploadRepository(
     private val context: Context,
     private val contentResolver: ContentResolver
 ) {
-    suspend fun upload(uri: Uri, finalFilename: String): UploadResult = withContext(Dispatchers.IO) {
+    private val callLock = Any()
+    private var activeCall: Call? = null
+
+    fun cancelActiveUpload() {
+        synchronized(callLock) {
+            activeCall?.cancel()
+            activeCall = null
+        }
+    }
+
+    suspend fun upload(uri: Uri, finalFilename: String): UploadResult {
         val serverUrl = GeovaultAuthManager.normalizeServerUrl(GeovaultAuthManager.getServerUrl(context))
-        if (serverUrl.isBlank()) return@withContext UploadResult(false, errorMessage = "Missing server URL")
-        if (!GeovaultAuthManager.isLoggedIn(context)) return@withContext UploadResult(false, errorMessage = "Not signed in")
+        if (serverUrl.isBlank()) return UploadResult(false, errorMessage = "Missing server URL")
+        if (!GeovaultAuthManager.isLoggedIn(context)) return UploadResult(false, errorMessage = "Not signed in")
 
         val tmpFile = File(context.cacheDir, finalFilename)
-        return@withContext try {
+        return try {
             contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(tmpFile).use { output -> input.copyTo(output) }
-            } ?: return@withContext UploadResult(false, errorMessage = "Could not read file")
+            } ?: return UploadResult(false, errorMessage = "Could not read file")
 
             val requestBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
@@ -51,33 +64,72 @@ class UploadRepository(
                 .writeTimeout(60, TimeUnit.SECONDS)
                 .build()
 
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    UploadResult(success = true, statusCode = response.code)
-                } else {
-                    if (response.code == 401) {
-                        GeovaultAuthManager.handleAuthFailure(context)
-                    }
-                    val payload = try { response.body.string() } catch (_: Exception) { "" }
-                    val serverMessage = try {
-                        if (payload.trimStart().startsWith("{")) {
-                            JSONObject(payload).optString("error", JSONObject(payload).optString("message", ""))
-                        } else {
-                            ""
-                        }
-                    } catch (_: Exception) {
-                        ""
-                    }
-                    UploadResult(
-                        success = false,
-                        statusCode = response.code,
-                        errorMessage = buildErrorMessage(response.code, serverMessage)
-                    )
+            suspendCancellableCoroutine { continuation ->
+                val call = client.newCall(request)
+                synchronized(callLock) {
+                    activeCall = call
                 }
+                continuation.invokeOnCancellation {
+                    call.cancel()
+                }
+                call.enqueue(object : Callback {
+                    override fun onFailure(call: Call, e: java.io.IOException) {
+                        synchronized(callLock) {
+                            if (activeCall === call) activeCall = null
+                        }
+                        val message = if (call.isCanceled()) {
+                            "Upload cancelled"
+                        } else {
+                            "Connection failed\n${e.message ?: "Unknown error"}"
+                        }
+                        if (continuation.isActive) {
+                            continuation.resume(UploadResult(success = false, errorMessage = message))
+                        }
+                    }
+
+                    override fun onResponse(call: Call, response: Response) {
+                        synchronized(callLock) {
+                            if (activeCall === call) activeCall = null
+                        }
+                        response.use {
+                            if (it.isSuccessful) {
+                                if (continuation.isActive) {
+                                    continuation.resume(UploadResult(success = true, statusCode = it.code))
+                                }
+                                return
+                            }
+                            if (it.code == 401) {
+                                GeovaultAuthManager.handleAuthFailure(context)
+                            }
+                            val payload = try { it.body.string() } catch (_: Exception) { "" }
+                            val serverMessage = try {
+                                if (payload.trimStart().startsWith("{")) {
+                                    JSONObject(payload).optString("error", JSONObject(payload).optString("message", ""))
+                                } else {
+                                    ""
+                                }
+                            } catch (_: Exception) {
+                                ""
+                            }
+                            if (continuation.isActive) {
+                                continuation.resume(
+                                    UploadResult(
+                                        success = false,
+                                        statusCode = it.code,
+                                        errorMessage = buildErrorMessage(it.code, serverMessage)
+                                    )
+                                )
+                            }
+                        }
+                    }
+                })
             }
         } catch (e: Exception) {
             UploadResult(success = false, errorMessage = "Connection failed\n${e.message ?: "Unknown error"}")
         } finally {
+            synchronized(callLock) {
+                activeCall = null
+            }
             if (tmpFile.exists()) {
                 tmpFile.delete()
             }

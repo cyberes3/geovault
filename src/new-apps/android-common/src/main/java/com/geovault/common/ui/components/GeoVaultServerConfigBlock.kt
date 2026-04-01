@@ -1,10 +1,8 @@
 package com.geovault.common.ui.components
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material.Divider
@@ -18,7 +16,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 
 @Composable
@@ -43,23 +40,16 @@ fun GeoVaultServerConfigBlock(
             style = MaterialTheme.typography.subtitle1
         )
         Spacer(modifier = Modifier.height(8.dp))
-        Box(modifier = Modifier.fillMaxWidth()) {
-            GeoVaultInput(
-                value = serverUrl,
-                onValueChange = {},
-                label = "Server URL",
-                enabled = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { }
-            )
-        }
+        GeoVaultInput(
+            value = serverUrl,
+            onValueChange = {},
+            label = "Server URL",
+            enabled = true,
+            readOnly = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusable(false)
+        )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = "Logged in as $loggedInEmail",

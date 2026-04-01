@@ -5,8 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.geovault.common.GeovaultAuthManager
-import com.geovault.common.ServerUrlContract
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.update.AppVersionChecker
 import com.geovault.common.update.VersionCheckRequest
@@ -14,6 +12,7 @@ import com.geovault.common.update.VersionCheckSnackbarPresenter
 import com.geovault.uploader.BuildConfig
 import com.geovault.uploader.MainActivity
 import com.geovault.uploader.data.AuthRepository
+import com.geovault.uploader.data.AuthRepository.OAuthPreparationResult
 import com.geovault.uploader.data.FileMetadataRepository
 import com.geovault.uploader.data.UploaderPreferences
 import com.geovault.uploader.data.UploadRepository
@@ -30,7 +29,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.random.Random
 
 data class MainScreenState(
     val isAuthenticated: Boolean = false,
@@ -107,50 +105,46 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     fun onAuthServerUrlChanged(url: String) {
         _state.update { it.copy(serverUrl = url) }
-        GeovaultAuthManager.setServerUrl(appContext, url)
+        authRepository.setServerUrl(url)
     }
 
     fun connectAuth() {
-        val normalized = GeovaultAuthManager.normalizeServerUrl(_state.value.serverUrl)
-        if (normalized.isBlank()) {
-            _state.update {
-                it.copy(
-                    importantSnackbar = GeoVaultSnackbarModel(
-                        id = newImportantId(),
-                        message = "Server URL is required. Connect your account to sign in."
-                    )
-                )
-            }
-            return
-        }
         _state.update {
             it.copy(
                 isConnecting = true,
                 importantSnackbar = GeoVaultSnackbarModel(id = newImportantId(), message = "Connecting to server…")
             )
         }
-        GeovaultAuthManager.resolveServerUrlToCanonical(normalized) { result ->
-            result.fold(
-                onSuccess = { resolved ->
-                    GeovaultAuthManager.setServerUrl(appContext, resolved, commit = true)
-                    val (verifier, challenge) = GeovaultAuthManager.generatePkcePair()
-                    val state = (1..16).map { "abcdef0123456789"[Random.nextInt(16)] }.joinToString("")
-                    GeovaultAuthManager.savePkceState(appContext, verifier, state)
-                    val url = GeovaultAuthManager.buildAuthorizeUrl(resolved, challenge, state)
-                    _state.update { it.copy(oauthUrl = url, importantSnackbar = null) }
-                },
-                onFailure = {
+        viewModelScope.launch {
+            when (val result = authRepository.prepareOAuthConnection(_state.value.serverUrl)) {
+                is OAuthPreparationResult.Ready -> {
+                    _state.update { it.copy(oauthUrl = result.oauthUrl, importantSnackbar = null) }
+                }
+
+                is OAuthPreparationResult.InvalidServerUrl -> {
                     _state.update {
                         it.copy(
                             isConnecting = false,
                             importantSnackbar = GeoVaultSnackbarModel(
                                 id = newImportantId(),
-                                message = "Could not reach server. Check URL and connection."
+                                message = result.message
                             )
                         )
                     }
                 }
-            )
+
+                is OAuthPreparationResult.UnreachableServer -> {
+                    _state.update {
+                        it.copy(
+                            isConnecting = false,
+                            importantSnackbar = GeoVaultSnackbarModel(
+                                id = newImportantId(),
+                                message = result.message
+                            )
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -281,9 +275,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun refreshAuthState() {
-        val resolvedServer = GeovaultAuthManager.getServerUrl(appContext).ifBlank {
-            ServerUrlContract.getServerUrlsFromOtherApps(appContext).singleOrNull().orEmpty()
-        }
+        val resolvedServer = authRepository.getConfiguredServerUrlOrPeerDefault()
         _state.update {
             it.copy(
                 isAuthenticated = authRepository.isLoggedIn(),

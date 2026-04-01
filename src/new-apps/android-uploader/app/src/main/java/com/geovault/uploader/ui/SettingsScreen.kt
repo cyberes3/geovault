@@ -19,6 +19,7 @@ import com.geovault.common.ui.components.GeoVaultTopTitleBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.geovault.common.ui.modifier.dismissKeyboardOnOutsideTap
 import com.geovault.uploader.presentation.SettingsState
 
 @Composable
@@ -46,6 +47,7 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .navigationBarsPadding()
+                .dismissKeyboardOnOutsideTap()
                 .verticalScroll(rememberScrollState())
                 .padding(20.dp)
         ) {

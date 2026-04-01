@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material.Card
@@ -39,12 +38,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusEvent
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.components.GeoVaultInput
+import com.geovault.common.ui.modifier.dismissKeyboardOnOutsideTap
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
@@ -74,7 +72,6 @@ fun MultiUploadScreen(
     onUploadClick: () -> Unit,
     onCancelClick: () -> Unit
 ) {
-    val focusManager = LocalFocusManager.current
     Scaffold(
         topBar = {
             GeoVaultTopTitleBar(
@@ -91,9 +88,7 @@ fun MultiUploadScreen(
                 .padding(padding)
                 .navigationBarsPadding()
                 .imePadding()
-                .pointerInput(Unit) {
-                    detectTapGestures(onTap = { focusManager.clearFocus(force = true) })
-                }
+                .dismissKeyboardOnOutsideTap()
                 .padding(bottom = 16.dp)
         ) {
             LazyColumn(
