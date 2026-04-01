@@ -201,6 +201,8 @@ class GeoVaultMapController(context: Context) : MapView.OnDidFailLoadingMapListe
         maplibreMap?.removeOnCameraMoveStartedListener(listener)
     }
 
+    fun getMapViewOrNull(): MapView? = mapView
+
     fun onDestroy() {
         pluginRegistry.clearAndDestroy()
         mapClickListeners.clear()

@@ -4,6 +4,8 @@ data class GeoJsonRenderConfig(
     val belowLayerId: String? = null,
     val showPointCircles: Boolean = true,
     val showPointLabelsAndIcons: Boolean = true,
+    val showPointTextLabels: Boolean = true,
+    val markerStyles: Map<String, MapMarkerStyle> = emptyMap(),
     val showPolygonFill: Boolean = true,
     val showPolygonOutline: Boolean = true,
     val defaultPointRadius: Float = 6f,

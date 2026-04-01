@@ -1,5 +1,7 @@
 package com.geovault.common.maps.render
 
+import android.content.Context
+import com.geovault.common.maps.core.MapMarkerUtils
 import com.geovault.common.maps.core.GeoVaultMapPlugin
 import com.geovault.common.maps.core.OutlinedGeoJsonLineLayers
 import org.maplibre.android.maps.MapLibreMap
@@ -20,6 +22,7 @@ import org.maplibre.geojson.Polygon
 class GeoJsonRenderPlugin(
     private val sourceIdPrefix: String = "gv-common-render",
     private val config: GeoJsonRenderConfig = GeoJsonRenderConfig(),
+    private val context: Context? = null,
 ) : GeoVaultMapPlugin {
     private var renderState: MapRenderState = MapRenderState()
     private var map: MapLibreMap? = null
@@ -36,6 +39,7 @@ class GeoJsonRenderPlugin(
 
     override fun onStyleLoaded(map: MapLibreMap, style: Style) {
         this.map = map
+        ensureCommonPlacemarkImages(style)
         ensureLayers(style)
         applyState(style, renderState)
     }
@@ -80,7 +84,13 @@ class GeoJsonRenderPlugin(
             addLayerWithPlacement(
                 style,
                 SymbolLayer(pointsSymbolLayerId, pointsSourceId).withProperties(
-                    PropertyFactory.textField(Expression.get("title")),
+                    PropertyFactory.textField(
+                        if (config.showPointTextLabels) {
+                            Expression.get("title")
+                        } else {
+                            Expression.literal("")
+                        },
+                    ),
                     PropertyFactory.textSize(
                         Expression.coalesce(
                             Expression.get("labelTextSize"),
@@ -184,6 +194,24 @@ class GeoJsonRenderPlugin(
         if (style.getSource(id) == null) {
             style.addSource(GeoJsonSource(id, FeatureCollection.fromFeatures(emptyList())))
         }
+    }
+
+    private fun ensureCommonPlacemarkImages(style: Style) {
+        val appContext = context?.applicationContext ?: return
+        val resolvedStyles = buildResolvedMarkerStyles(appContext)
+        resolvedStyles.forEach { (imageId, markerStyle) ->
+            if (style.getImage(imageId) == null) {
+                val bitmap = MapMarkerUtils.buildMarkerBitmap(appContext, markerStyle)
+                style.addImage(imageId, bitmap, false)
+            }
+        }
+    }
+
+    private fun buildResolvedMarkerStyles(context: Context): Map<String, MapMarkerStyle> {
+        return mapOf(
+            CommonMapIconIds.MARKER_DEFAULT to CommonMapMarkerStyles.default(context),
+            CommonMapIconIds.MARKER_SELECTED to CommonMapMarkerStyles.selected(context),
+        ) + config.markerStyles
     }
 
     private fun addLayerWithPlacement(style: Style, layer: org.maplibre.android.style.layers.Layer) {
