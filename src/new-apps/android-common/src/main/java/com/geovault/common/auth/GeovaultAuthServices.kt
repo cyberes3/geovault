@@ -13,6 +13,7 @@ interface ServerConfigService {
 
 interface OAuthPreparationService {
     fun generatePkcePair(): Pair<String, String>
+    fun generateOAuthStateNonce(length: Int = 16): String
     fun savePkceState(verifier: String, state: String)
     fun buildAuthorizeUrl(serverUrl: String, codeChallenge: String, state: String): String
 }
@@ -57,6 +58,10 @@ class GeovaultAuthServices(context: Context) :
     }
 
     override fun generatePkcePair(): Pair<String, String> = GeovaultAuthManager.generatePkcePair()
+
+    override fun generateOAuthStateNonce(length: Int): String {
+        return GeovaultAuthManager.generateOAuthStateNonce(length = length)
+    }
 
     override fun savePkceState(verifier: String, state: String) {
         GeovaultAuthManager.savePkceState(appContext, verifier, state)

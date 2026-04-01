@@ -1,0 +1,1 @@
+-keep class com.geovault.common.maps.** { *; }

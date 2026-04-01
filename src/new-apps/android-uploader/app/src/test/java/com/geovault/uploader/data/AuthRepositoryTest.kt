@@ -93,6 +93,8 @@ class AuthRepositoryTest {
 
         override fun generatePkcePair(): Pair<String, String> = "verifier" to "challenge"
 
+        override fun generateOAuthStateNonce(length: Int): String = "a".repeat(length)
+
         override fun savePkceState(verifier: String, state: String) {
             savedVerifier = verifier
             savedState = state

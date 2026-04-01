@@ -58,7 +58,6 @@ fun MainScreen(
         topBar = {
             GeoVaultTopTitleBar(
                 title = "GeoVault Uploader",
-                hideIconActions = !state.isAuthenticated,
                 actionsContent = {
                     GeoVaultTopBarSettingsMenuAction(onOpenSettings = onOpenSettings)
                 }

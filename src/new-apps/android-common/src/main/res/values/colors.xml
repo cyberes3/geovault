@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Frontend main colors -->
+    <color name="gv_common_main_blue">#163D8A</color>
+    <color name="gv_common_main_red">#FF3E41</color>
+    <color name="gv_common_main_green">#5B8A3C</color>
+    <color name="gv_common_main_yellow">#F4AC45</color>
+    <color name="gv_common_main_purple">#CB48B7</color>
+    <color name="gv_common_main_gray">#6B7280</color>
+
+    <!-- Frontend tint scales: blue -->
+    <color name="gv_common_color_blue_50">#F3F6FA</color>
+    <color name="gv_common_color_blue_100">#E4EAF5</color>
+    <color name="gv_common_color_blue_200">#C4D2ED</color>
+    <color name="gv_common_color_blue_300">#99B2E4</color>
+    <color name="gv_common_color_blue_400">#6C93DE</color>
+    <color name="gv_common_color_blue_500">#163D8A</color>
+    <color name="gv_common_color_blue_600">#063288</color>
+    <color name="gv_common_color_blue_700">#052055</color>
+    <color name="gv_common_color_blue_800">#061D4A</color>
+    <color name="gv_common_color_blue_900">#051638</color>
+
+    <!-- Frontend tint scales: red -->
+    <color name="gv_common_color_red_50">#FCF2F2</color>
+    <color name="gv_common_color_red_100">#F9E1E1</color>
+    <color name="gv_common_color_red_200">#F5BCBD</color>
+    <color name="gv_common_color_red_300">#F28B8D</color>
+    <color name="gv_common_color_red_400">#F45759</color>
+    <color name="gv_common_color_red_500">#FF3E41</color>
+    <color name="gv_common_color_red_600">#ED0003</color>
+    <color name="gv_common_color_red_700">#9E0002</color>
+    <color name="gv_common_color_red_800">#760001</color>
+    <color name="gv_common_color_red_900">#590001</color>
+
+    <!-- Frontend tint scales: green -->
+    <color name="gv_common_color_green_50">#F6FAF4</color>
+    <color name="gv_common_color_green_100">#EBF4E6</color>
+    <color name="gv_common_color_green_200">#D5E8C9</color>
+    <color name="gv_common_color_green_300">#BAD8A5</color>
+    <color name="gv_common_color_green_400">#9EC982</color>
+    <color name="gv_common_color_green_500">#5B8A3C</color>
+    <color name="gv_common_color_green_600">#4D802B</color>
+    <color name="gv_common_color_green_700">#2B4619</color>
+    <color name="gv_common_color_green_800">#253B16</color>
+    <color name="gv_common_color_green_900">#1B2C10</color>
+
+    <!-- Frontend tint scales: yellow -->
+    <color name="gv_common_color_yellow_50">#FBF8F3</color>
+    <color name="gv_common_color_yellow_100">#F7EFE2</color>
+    <color name="gv_common_color_yellow_200">#F1DDBF</color>
+    <color name="gv_common_color_yellow_300">#EDC791</color>
+    <color name="gv_common_color_yellow_400">#EBB25F</color>
+    <color name="gv_common_color_yellow_500">#F4AC45</color>
+    <color name="gv_common_color_yellow_600">#EA8A00</color>
+    <color name="gv_common_color_yellow_700">#9C5C00</color>
+    <color name="gv_common_color_yellow_800">#754500</color>
+    <color name="gv_common_color_yellow_900">#583300</color>
+
+    <!-- Frontend tint scales: purple -->
+    <color name="gv_common_color_purple_50">#FAF4F9</color>
+    <color name="gv_common_color_purple_100">#F4E6F2</color>
+    <color name="gv_common_color_purple_200">#E8C8E3</color>
+    <color name="gv_common_color_purple_300">#DCA2D3</color>
+    <color name="gv_common_color_purple_400">#D179C4</color>
+    <color name="gv_common_color_purple_500">#CB48B7</color>
+    <color name="gv_common_color_purple_600">#AE1F99</color>
+    <color name="gv_common_color_purple_700">#721664</color>
+    <color name="gv_common_color_purple_800">#54124A</color>
+    <color name="gv_common_color_purple_900">#3F0D37</color>
+
+    <!-- Frontend tint scales: gray -->
+    <color name="gv_common_color_gray_50">#F9FAFB</color>
+    <color name="gv_common_color_gray_100">#F3F4F6</color>
+    <color name="gv_common_color_gray_200">#E5E7EB</color>
+    <color name="gv_common_color_gray_300">#D1D5DB</color>
+    <color name="gv_common_color_gray_400">#9CA3AF</color>
+    <color name="gv_common_color_gray_500">#6B7280</color>
+    <color name="gv_common_color_gray_600">#4B5563</color>
+    <color name="gv_common_color_gray_700">#374151</color>
+    <color name="gv_common_color_gray_800">#1F2937</color>
+    <color name="gv_common_color_gray_900">#111827</color>
+
+    <!-- Semantic tokens -->
+    <color name="gv_common_surface">#FFFFFFFF</color>
+    <color name="gv_common_list_background">#F3F6FA</color>
+    <color name="gv_common_text_primary">#061D4A</color>
+    <color name="gv_common_text_secondary">#4B5563</color>
+    <color name="gv_common_border_light">#C4D2ED</color>
+    <color name="gv_common_success">#5B8A3C</color>
+    <color name="gv_common_error">#FF3E41</color>
+    <color name="gv_common_snackbar_background">#323232</color>
+    <color name="gv_common_snackbar_message">#FFFFFFFF</color>
+
+    <!-- Map/feature tokens -->
+    <color name="gv_common_feature_point">#93C5FD</color>
+    <color name="gv_common_feature_linestring">#86EFAC</color>
+    <color name="gv_common_feature_polygon">#FBBF24</color>
+    <color name="gv_common_feature_default">#D1D5DB</color>
+</resources>

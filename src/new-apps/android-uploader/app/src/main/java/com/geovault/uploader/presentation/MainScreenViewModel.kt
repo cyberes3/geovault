@@ -5,14 +5,13 @@ import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.update.AppVersionChecker
 import com.geovault.common.update.VersionCheckRequest
 import com.geovault.common.update.VersionCheckSnackbarPresenter
 import com.geovault.uploader.BuildConfig
 import com.geovault.uploader.MainActivity
-import com.geovault.uploader.data.AuthRepository
-import com.geovault.uploader.data.AuthRepository.OAuthPreparationResult
 import com.geovault.uploader.data.ValidationOutcome
 import com.geovault.uploader.di.UploaderAppServices
 import com.geovault.uploader.domain.FilenamePolicy
@@ -57,7 +56,7 @@ class MainScreenViewModel(
     private val fileMetadataRepository = services.fileMetadataRepository()
     private val validationRepository = services.validationRepository()
     private val uploadRepository = services.uploadRepository()
-    private val authRepository: AuthRepository = services.authRepository()
+    private val authController: CommonInitialAuthController = services.initialAuthController()
 
     private val _state = MutableStateFlow(MainScreenState())
     val state: StateFlow<MainScreenState> = _state.asStateFlow()
@@ -105,7 +104,7 @@ class MainScreenViewModel(
 
     fun onAuthServerUrlChanged(url: String) {
         _state.update { it.copy(serverUrl = url) }
-        authRepository.setServerUrl(url)
+        authController.setServerUrl(url)
     }
 
     fun connectAuth() {
@@ -116,12 +115,12 @@ class MainScreenViewModel(
             )
         }
         viewModelScope.launch {
-            when (val result = authRepository.prepareOAuthConnection(_state.value.serverUrl)) {
-                is OAuthPreparationResult.Ready -> {
+            when (val result = authController.prepareOAuthConnection(_state.value.serverUrl)) {
+                is CommonInitialAuthController.OAuthPreparationResult.Ready -> {
                     _state.update { it.copy(oauthUrl = result.oauthUrl, importantSnackbar = null) }
                 }
 
-                is OAuthPreparationResult.InvalidServerUrl -> {
+                is CommonInitialAuthController.OAuthPreparationResult.InvalidServerUrl -> {
                     _state.update {
                         it.copy(
                             isConnecting = false,
@@ -133,7 +132,7 @@ class MainScreenViewModel(
                     }
                 }
 
-                is OAuthPreparationResult.UnreachableServer -> {
+                is CommonInitialAuthController.OAuthPreparationResult.UnreachableServer -> {
                     _state.update {
                         it.copy(
                             isConnecting = false,
@@ -275,10 +274,10 @@ class MainScreenViewModel(
     }
 
     private fun refreshAuthState() {
-        val resolvedServer = authRepository.getConfiguredServerUrlOrPeerDefault()
+        val resolvedServer = authController.getConfiguredServerUrlOrPeerDefault()
         _state.update {
             it.copy(
-                isAuthenticated = authRepository.isLoggedIn(),
+                isAuthenticated = authController.isLoggedIn(),
                 serverUrl = resolvedServer
             )
         }

@@ -30,6 +30,7 @@ object GeovaultAuthManager {
     private const val PREF_USER_EMAIL = "cached_user_email"
 
     const val OAUTH_CLIENT_ID_UPLOADER = "geovault-android-uploader"
+    const val OAUTH_CLIENT_ID_PLACES = "geovault-android-places"
     private const val OAUTH_SCOPE = "api"
     private const val TOKEN_ENDPOINT_PATH = "/api/oauth/token/"
     private const val AUTHORIZE_PATH = "/api/oauth/authorize/"
@@ -264,6 +265,11 @@ object GeovaultAuthManager {
             .replace('/', '_')
             .replace("=", "")
         return verifier to challenge
+    }
+
+    fun generateOAuthStateNonce(length: Int = 16): String {
+        val chars = "abcdef0123456789"
+        return (1..length).map { chars.random() }.joinToString("")
     }
 
     fun savePkceState(context: Context, verifier: String, state: String) {

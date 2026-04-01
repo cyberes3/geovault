@@ -1,13 +1,10 @@
 package com.geovault.uploader.presentation
 
 import android.app.Application
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.AppResetFlow
-import com.geovault.common.GeovaultAuthManager
-import com.geovault.uploader.data.AuthRepository
-import com.geovault.uploader.data.AuthRepository.OAuthPreparationResult
+import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.uploader.di.UploaderAppServices
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,12 +26,9 @@ class SettingsViewModel(
     application: Application,
     services: UploaderAppServices = UploaderAppServices.from(application)
 ) : AndroidViewModel(application) {
-    private companion object {
-        const val TAG = "SettingsViewModel"
-    }
     private val appContext = application.applicationContext
     private val prefs = services.uploaderPreferences()
-    private val auth: AuthRepository = services.authRepository()
+    private val authController: CommonInitialAuthController = services.initialAuthController()
 
     private val _state = MutableStateFlow(SettingsState())
     val state: StateFlow<SettingsState> = _state.asStateFlow()
@@ -58,21 +52,19 @@ class SettingsViewModel(
     }
 
     private fun refreshAuthState() {
-        val server = auth.getConfiguredServerUrlOrPeerDefault()
-        Log.i(TAG, GeovaultAuthManager.getAuthDebugSnapshot(appContext))
-        val loggedIn = auth.isLoggedIn()
+        val server = authController.getConfiguredServerUrlOrPeerDefault()
+        val loggedIn = authController.isLoggedIn()
         _state.value = _state.value.copy(
             serverUrl = server,
             isLoggedIn = loggedIn,
             loggedInText = if (loggedIn) {
-                auth.getCachedUserEmail()?.takeIf { it.isNotBlank() }?.let { "Logged in as $it" } ?: "Logged in"
+                authController.getCachedUserEmail()?.takeIf { it.isNotBlank() }?.let { "Logged in as $it" } ?: "Logged in"
             } else {
                 ""
             }
         )
-        Log.i(TAG, "refreshAuthState isLoggedIn=$loggedIn serverBlank=${server.isBlank()} cachedEmailBlank=${auth.getCachedUserEmail().isNullOrBlank()}")
-        if (loggedIn && auth.getCachedUserEmail().isNullOrBlank()) {
-            auth.fetchUserEmail { email ->
+        if (loggedIn && authController.getCachedUserEmail().isNullOrBlank()) {
+            authController.fetchUserEmail { email ->
                 val text = if (!email.isNullOrBlank()) "Logged in as $email" else ""
                 _state.value = _state.value.copy(loggedInText = text)
             }
@@ -81,7 +73,7 @@ class SettingsViewModel(
 
     fun onServerUrlChanged(url: String) {
         _state.value = _state.value.copy(serverUrl = url)
-        auth.setServerUrl(url)
+        authController.setServerUrl(url)
     }
 
     fun onSuffixChanged(enabled: Boolean) {
@@ -94,19 +86,19 @@ class SettingsViewModel(
     fun connect() {
         _state.value = _state.value.copy(isConnecting = true, infoMessage = "Connecting to server…")
         viewModelScope.launch {
-            when (val result = auth.prepareOAuthConnection(_state.value.serverUrl)) {
-                is OAuthPreparationResult.Ready -> {
+            when (val result = authController.prepareOAuthConnection(_state.value.serverUrl)) {
+                is CommonInitialAuthController.OAuthPreparationResult.Ready -> {
                     _state.value = _state.value.copy(oauthUrl = result.oauthUrl, infoMessage = null)
                 }
 
-                is OAuthPreparationResult.InvalidServerUrl -> {
+                is CommonInitialAuthController.OAuthPreparationResult.InvalidServerUrl -> {
                     _state.value = _state.value.copy(
                         isConnecting = false,
                         infoMessage = result.message
                     )
                 }
 
-                is OAuthPreparationResult.UnreachableServer -> {
+                is CommonInitialAuthController.OAuthPreparationResult.UnreachableServer -> {
                     _state.value = _state.value.copy(
                         isConnecting = false,
                         infoMessage = result.message
@@ -122,7 +114,7 @@ class SettingsViewModel(
 
     fun disconnect(mainActivityClass: Class<*>) {
         viewModelScope.launch {
-            auth.revokeCurrentSessionTokens()
+            authController.revokeCurrentSessionTokens()
             AppResetFlow.execute(
                 context = appContext,
                 reason = AppResetFlow.Reason.MANUAL_SIGN_OUT,

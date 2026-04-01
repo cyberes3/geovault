@@ -1,15 +1,18 @@
 package com.geovault.uploader
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import com.geovault.common.GeovaultAuthManager
-import java.util.concurrent.Executors
+import com.geovault.common.auth.OAuthCallbackHandler
 
 class OAuthCallbackActivity : ComponentActivity() {
-    private val executor = Executors.newSingleThreadExecutor()
+    private val callbackHandler by lazy {
+        OAuthCallbackHandler(
+            context = this,
+            postToMain = { block -> runOnUiThread(block) },
+        )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -23,48 +26,18 @@ class OAuthCallbackActivity : ComponentActivity() {
     }
 
     private fun handleRedirect(intent: Intent?) {
-        val uri: Uri = intent?.data ?: run {
-            finishWithError("No redirect data")
-            return
-        }
-        val code = uri.getQueryParameter("code")
-        val state = uri.getQueryParameter("state")
-        if (code.isNullOrBlank()) {
-            finishWithError(uri.getQueryParameter("error") ?: "No authorization code")
-            return
-        }
-        val pkce = GeovaultAuthManager.getAndClearPkceState(this)
-        if (pkce == null || pkce.second != state) {
-            finishWithError("Invalid state")
-            return
-        }
-        val serverUrl = GeovaultAuthManager.getServerUrl(this)
-        if (serverUrl.isBlank()) {
-            finishWithError("Server URL not set")
-            return
-        }
-
-        executor.execute {
-            GeovaultAuthManager.exchangeCodeForTokens(
-                serverUrl = serverUrl,
-                code = code,
-                codeVerifier = pkce.first,
-                onSuccess = { accessToken, refreshToken, expiresIn ->
-                    runOnUiThread {
-                        if (isDestroyed) return@runOnUiThread
-                        GeovaultAuthManager.saveTokens(this, accessToken, refreshToken, expiresIn)
-                        Toast.makeText(this, "Connected successfully", Toast.LENGTH_SHORT).show()
-                        finish()
-                    }
-                },
-                onError = { message ->
-                    runOnUiThread {
-                        if (isDestroyed) return@runOnUiThread
-                        finishWithError(message)
-                    }
-                }
-            )
-        }
+        callbackHandler.handleIntent(
+            intent = intent,
+            onSuccess = {
+                if (isDestroyed) return@handleIntent
+                Toast.makeText(this, "Connected successfully", Toast.LENGTH_SHORT).show()
+                finish()
+            },
+            onError = { message ->
+                if (isDestroyed) return@handleIntent
+                finishWithError(message)
+            }
+        )
     }
 
     private fun finishWithError(message: String) {

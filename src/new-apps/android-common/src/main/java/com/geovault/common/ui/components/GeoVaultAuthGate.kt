@@ -1,5 +1,7 @@
 package com.geovault.common.ui.components
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
@@ -14,16 +16,18 @@ fun GeoVaultAuthGate(
     extraActions: List<GeoVaultAuthExtraAction> = emptyList(),
     authenticatedContent: @Composable () -> Unit
 ) {
-    if (isAuthenticated) {
-        authenticatedContent()
-    } else {
-        GeoVaultInitialAuthView(
-            serverUrl = serverUrl,
-            onServerUrlChanged = onServerUrlChanged,
-            onConnect = onConnect,
-            isConnecting = isConnecting,
-            extraActions = extraActions,
-            modifier = modifier
-        )
+    Box(modifier = modifier) {
+        if (isAuthenticated) {
+            authenticatedContent()
+        } else {
+            GeoVaultInitialAuthView(
+                serverUrl = serverUrl,
+                onServerUrlChanged = onServerUrlChanged,
+                onConnect = onConnect,
+                isConnecting = isConnecting,
+                extraActions = extraActions,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
     }
 }

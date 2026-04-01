@@ -35,7 +35,6 @@ fun SettingsScreen(
         topBar = {
             GeoVaultTopTitleBar(
                 title = "Settings",
-                hideIconActions = !state.isLoggedIn,
                 rightActions = listOf(
                     GeoVaultTopTitleBarDefaults.closeAction(onClick = onClose)
                 )

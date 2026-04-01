@@ -4,6 +4,8 @@ trigger: always_on
 
 **The following are extremely relevant and important instructions. It would behoove you to follow them.**
 
+When creating plans in planning mode, do not make a "plan to make a plan". All planning should be done in the planning stage.
+
 Always use top-level imports in Python, not lazy/local/function level!
 
 The backend venv is at src/backend/venv

@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.activity.ComponentActivity
+import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ui.system.GeoVaultSystemBars
 
 data class TopBarIconAction(
@@ -89,10 +90,16 @@ fun RowScope.GeoVaultTopBarSettingsMenuAction(
     modifier: Modifier = Modifier,
     extraEntries: List<TopBarMenuEntry> = emptyList(),
     settingsLabel: String = "Settings",
+    isAuthenticated: Boolean? = null,
     iconTint: Color = Color.White,
     iconContentDescription: String = "More options",
     enabled: Boolean = true
 ) {
+    val context = LocalContext.current
+    val resolvedIsAuthenticated = isAuthenticated ?: GeovaultAuthManager.isLoggedIn(context)
+    if (!resolvedIsAuthenticated) {
+        return
+    }
     var expanded by remember { mutableStateOf(false) }
     val entries = remember(onOpenSettings, extraEntries, settingsLabel) {
         GeoVaultTopTitleBarDefaults.settingsMenuEntries(
