@@ -8,7 +8,7 @@ import com.geovault.common.AppResetFlow
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.uploader.data.AuthRepository
 import com.geovault.uploader.data.AuthRepository.OAuthPreparationResult
-import com.geovault.uploader.data.UploaderPreferences
+import com.geovault.uploader.di.UploaderAppServices
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,13 +25,16 @@ data class SettingsState(
     val oauthUrl: String? = null
 )
 
-class SettingsViewModel(application: Application) : AndroidViewModel(application) {
+class SettingsViewModel(
+    application: Application,
+    services: UploaderAppServices = UploaderAppServices.from(application)
+) : AndroidViewModel(application) {
     private companion object {
         const val TAG = "SettingsViewModel"
     }
     private val appContext = application.applicationContext
-    private val prefs = UploaderPreferences.getInstance(appContext)
-    private val auth = AuthRepository(appContext)
+    private val prefs = services.uploaderPreferences()
+    private val auth: AuthRepository = services.authRepository()
 
     private val _state = MutableStateFlow(SettingsState())
     val state: StateFlow<SettingsState> = _state.asStateFlow()

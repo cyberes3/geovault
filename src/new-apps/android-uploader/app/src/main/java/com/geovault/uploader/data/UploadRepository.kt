@@ -3,8 +3,10 @@ package com.geovault.uploader.data
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
-import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
+import com.geovault.common.auth.AuthSessionService
+import com.geovault.common.auth.GeovaultAuthServices
+import com.geovault.common.auth.ServerConfigService
 import com.geovault.uploader.model.UploadResult
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
@@ -22,7 +24,9 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 class UploadRepository(
     private val context: Context,
-    private val contentResolver: ContentResolver
+    private val contentResolver: ContentResolver,
+    private val serverConfigService: ServerConfigService = GeovaultAuthServices(context),
+    private val authSessionService: AuthSessionService = GeovaultAuthServices(context)
 ) {
     private val callLock = Any()
     private var activeCall: Call? = null
@@ -35,9 +39,9 @@ class UploadRepository(
     }
 
     suspend fun upload(uri: Uri, finalFilename: String): UploadResult {
-        val serverUrl = GeovaultAuthManager.normalizeServerUrl(GeovaultAuthManager.getServerUrl(context))
+        val serverUrl = serverConfigService.getNormalizedServerUrl()
         if (serverUrl.isBlank()) return UploadResult(false, errorMessage = "Missing server URL")
-        if (!GeovaultAuthManager.isLoggedIn(context)) return UploadResult(false, errorMessage = "Not signed in")
+        if (!authSessionService.isLoggedIn()) return UploadResult(false, errorMessage = "Not signed in")
 
         val tmpFile = File(context.cacheDir, finalFilename)
         return try {
@@ -99,7 +103,7 @@ class UploadRepository(
                                 return
                             }
                             if (it.code == 401) {
-                                GeovaultAuthManager.handleAuthFailure(context)
+                                authSessionService.handleAuthFailure()
                             }
                             val payload = try { it.body.string() } catch (_: Exception) { "" }
                             val serverMessage = try {
@@ -116,7 +120,7 @@ class UploadRepository(
                                     UploadResult(
                                         success = false,
                                         statusCode = it.code,
-                                        errorMessage = buildErrorMessage(it.code, serverMessage)
+                                        errorMessage = UploadErrorMessageFormatter.fromStatusCode(it.code, serverMessage)
                                     )
                                 )
                             }
@@ -134,17 +138,5 @@ class UploadRepository(
                 tmpFile.delete()
             }
         }
-    }
-
-    private fun buildErrorMessage(statusCode: Int, serverMessage: String): String {
-        val base = when (statusCode) {
-            400 -> "Upload failed (400)\nInvalid request. Check your file format."
-            401 -> "Upload failed (401)\nAPI key is invalid or expired.\nCheck Settings."
-            403 -> "Upload failed (403)\nAccess denied. Check API key permissions."
-            404 -> "Upload failed (404)\nServer endpoint not found.\nCheck your server URL in Settings."
-            500 -> "Upload failed (500)\nServer error. Try again later."
-            else -> "Upload failed ($statusCode)"
-        }
-        return if (serverMessage.isNotBlank()) "$base\n\n${serverMessage.take(100)}" else base
     }
 }

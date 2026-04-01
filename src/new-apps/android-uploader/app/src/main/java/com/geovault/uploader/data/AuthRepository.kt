@@ -1,13 +1,30 @@
 package com.geovault.uploader.data
 
 import android.content.Context
-import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ServerUrlContract
+import com.geovault.common.auth.AuthSessionService
+import com.geovault.common.auth.GeovaultAuthServices
+import com.geovault.common.auth.OAuthPreparationService
+import com.geovault.common.auth.ServerConfigService
 import kotlin.random.Random
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
-class AuthRepository(private val context: Context) {
+class AuthRepository(
+    private val serverConfigService: ServerConfigService,
+    private val authSessionService: AuthSessionService,
+    private val oauthPreparationService: OAuthPreparationService,
+    private val peerServerUrlsProvider: () -> Set<String>
+) {
+    constructor(context: Context) : this(
+        serverConfigService = GeovaultAuthServices(context),
+        authSessionService = GeovaultAuthServices(context),
+        oauthPreparationService = GeovaultAuthServices(context),
+        peerServerUrlsProvider = {
+            ServerUrlContract.getServerUrlsFromOtherApps(context.applicationContext)
+        }
+    )
+
     sealed interface OAuthPreparationResult {
         data class Ready(val oauthUrl: String) : OAuthPreparationResult
         data class InvalidServerUrl(val message: String) : OAuthPreparationResult
@@ -15,35 +32,35 @@ class AuthRepository(private val context: Context) {
     }
 
     fun getNormalizedServerUrl(): String =
-        GeovaultAuthManager.normalizeServerUrl(GeovaultAuthManager.getServerUrl(context))
+        serverConfigService.getNormalizedServerUrl()
 
     fun getConfiguredServerUrlOrPeerDefault(): String {
-        return GeovaultAuthManager.getServerUrl(context).ifBlank {
-            ServerUrlContract.getServerUrlsFromOtherApps(context).singleOrNull().orEmpty()
+        return serverConfigService.getServerUrl().ifBlank {
+            peerServerUrlsProvider().singleOrNull().orEmpty()
         }
     }
 
     fun setServerUrl(url: String, commit: Boolean = false) {
-        GeovaultAuthManager.setServerUrl(context, url, commit = commit)
+        serverConfigService.setServerUrl(url, commit = commit)
     }
 
-    fun isLoggedIn(): Boolean = GeovaultAuthManager.isLoggedIn(context)
+    fun isLoggedIn(): Boolean = authSessionService.isLoggedIn()
 
-    fun getCachedUserEmail(): String? = GeovaultAuthManager.getCachedUserEmail(context)
+    fun getCachedUserEmail(): String? = authSessionService.getCachedUserEmail()
 
     fun fetchUserEmail(callback: (String?) -> Unit) {
-        GeovaultAuthManager.fetchUserStatus(context, callback)
+        authSessionService.fetchUserStatus(callback)
     }
 
     suspend fun prepareOAuthConnection(rawServerUrl: String): OAuthPreparationResult {
-        val normalized = GeovaultAuthManager.normalizeServerUrl(rawServerUrl)
+        val normalized = serverConfigService.normalizeServerUrl(rawServerUrl)
         if (normalized.isBlank()) {
             return OAuthPreparationResult.InvalidServerUrl(
                 message = "Server URL is required. Connect your account to sign in."
             )
         }
         val resolvedResult = suspendCancellableCoroutine<Result<String>> { continuation ->
-            GeovaultAuthManager.resolveServerUrlToCanonical(normalized) { result ->
+            serverConfigService.resolveServerUrlToCanonical(normalized) { result ->
                 if (continuation.isActive) {
                     continuation.resume(result)
                 }
@@ -51,11 +68,11 @@ class AuthRepository(private val context: Context) {
         }
         return resolvedResult.fold(
             onSuccess = { resolved ->
-                GeovaultAuthManager.setServerUrl(context, resolved, commit = true)
-                val (verifier, challenge) = GeovaultAuthManager.generatePkcePair()
+                serverConfigService.setServerUrl(resolved, commit = true)
+                val (verifier, challenge) = oauthPreparationService.generatePkcePair()
                 val state = (1..16).map { "abcdef0123456789"[Random.nextInt(16)] }.joinToString("")
-                GeovaultAuthManager.savePkceState(context, verifier, state)
-                val oauthUrl = GeovaultAuthManager.buildAuthorizeUrl(resolved, challenge, state)
+                oauthPreparationService.savePkceState(verifier, state)
+                val oauthUrl = oauthPreparationService.buildAuthorizeUrl(resolved, challenge, state)
                 OAuthPreparationResult.Ready(oauthUrl = oauthUrl)
             },
             onFailure = {
@@ -67,6 +84,6 @@ class AuthRepository(private val context: Context) {
     }
 
     fun revokeCurrentSessionTokens() {
-        GeovaultAuthManager.revokeCurrentSession(context)
+        authSessionService.revokeCurrentSession()
     }
 }

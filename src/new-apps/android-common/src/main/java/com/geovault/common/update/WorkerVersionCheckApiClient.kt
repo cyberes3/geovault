@@ -1,10 +1,13 @@
 package com.geovault.common.update
 
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 interface VersionCheckApiClient {
@@ -35,13 +38,20 @@ open class WorkerVersionCheckApiClient(
         .writeTimeout(15, TimeUnit.SECONDS)
         .build()
 ) : VersionCheckApiClient {
+    private val networkJson = Json {
+        ignoreUnknownKeys = true
+        explicitNulls = false
+        isLenient = true
+    }
 
     override fun checkForUpdate(request: VersionCheckRequest): WorkerCheckApiResult {
         if (checkUrl.isBlank()) return WorkerCheckApiResult.Failed("Version-check endpoint URL is blank")
-        val body = JSONObject()
-            .put("appName", request.appName)
-            .put("localFullCommitSha", request.localFullCommitSha)
-            .toString()
+        val body = networkJson.encodeToString(
+            WorkerCheckRequestPayload(
+                appName = request.appName,
+                localFullCommitSha = request.localFullCommitSha
+            )
+        )
         val response = try {
             executePost(checkUrl.trim(), body)
         } catch (e: Exception) {
@@ -72,16 +82,16 @@ open class WorkerVersionCheckApiClient(
     private fun parseSuccessPayload(body: String?): WorkerCheckApiResult {
         if (body.isNullOrBlank()) return WorkerCheckApiResult.Failed("Worker check returned empty body")
         return try {
-            val json = JSONObject(body)
+            val payload = networkJson.decodeFromString<WorkerCheckSuccessPayload>(body)
             WorkerCheckApiResult.Success(
                 WorkerCheckPayload(
-                    isLatest = json.optBoolean("isLatest"),
-                    appName = json.optString("appName").trim(),
-                    versionLabel = json.optString("versionLabel").trim(),
-                    releasePageUrl = json.optString("releasePageUrl").trim(),
-                    releaseTag = json.optString("releaseTag").trim(),
-                    releaseCommitSha = json.optString("releaseCommitSha").trim().lowercase(),
-                    localCommitSha = json.optString("localCommitSha").trim().lowercase()
+                    isLatest = payload.isLatest,
+                    appName = payload.appName.trim(),
+                    versionLabel = payload.versionLabel.trim(),
+                    releasePageUrl = payload.releasePageUrl.trim(),
+                    releaseTag = payload.releaseTag.trim(),
+                    releaseCommitSha = payload.releaseCommitSha.trim().lowercase(),
+                    localCommitSha = payload.localCommitSha.trim().lowercase()
                 )
             )
         } catch (e: Exception) {
@@ -91,14 +101,13 @@ open class WorkerVersionCheckApiClient(
 
     private fun parseErrorDetail(body: String?): String {
         if (body.isNullOrBlank()) return ""
-        return try {
-            val json = JSONObject(body)
-            val error = json.optString("error").trim()
-            val detail = json.optString("detail").trim()
-            listOf(error, detail).filter { it.isNotBlank() }.joinToString(": ")
-        } catch (_: Exception) {
-            body.take(250).replace('\n', ' ')
+        val parsed = runCatching { networkJson.decodeFromString<WorkerCheckErrorPayload>(body) }.getOrNull()
+        if (parsed != null) {
+            val parts = listOf(parsed.error?.trim().orEmpty(), parsed.detail?.trim().orEmpty())
+                .filter { it.isNotBlank() }
+            if (parts.isNotEmpty()) return parts.joinToString(": ")
         }
+        return body.take(250).replace('\n', ' ')
     }
 
     data class HttpResult(
@@ -114,4 +123,27 @@ open class WorkerVersionCheckApiClient(
         const val DEFAULT_CHECK_URL = "https://git.evulid.cc/api/v1/geovault-app-releases/check"
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()
     }
+
+    @Serializable
+    private data class WorkerCheckRequestPayload(
+        val appName: String,
+        val localFullCommitSha: String
+    )
+
+    @Serializable
+    private data class WorkerCheckSuccessPayload(
+        val isLatest: Boolean = false,
+        val appName: String = "",
+        val versionLabel: String = "",
+        val releasePageUrl: String = "",
+        val releaseTag: String = "",
+        val releaseCommitSha: String = "",
+        val localCommitSha: String = ""
+    )
+
+    @Serializable
+    private data class WorkerCheckErrorPayload(
+        val error: String? = null,
+        val detail: String? = null
+    )
 }

@@ -1,25 +1,13 @@
 package com.geovault.common
 
 import android.content.Context
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.json.Json
 import okhttp3.Authenticator
 import okhttp3.Interceptor
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Route
-import retrofit2.Retrofit
-import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
-    private val networkJson = Json {
-        ignoreUnknownKeys = true
-        explicitNulls = false
-        encodeDefaults = false
-        isLenient = true
-    }
-
     private fun authTokenInterceptor(appContext: Context): Interceptor = Interceptor { chain ->
         val token = GeovaultAuthManager.getAccessToken(appContext)
         val request = if (!token.isNullOrBlank()) {
@@ -74,15 +62,6 @@ object RetrofitClient {
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
-            .build()
-    }
-
-    @OptIn(ExperimentalSerializationApi::class)
-    fun getClient(context: Context, baseUrl: String): Retrofit {
-        return Retrofit.Builder()
-            .baseUrl(baseUrl)
-            .client(getAuthenticatedOkHttpClient(context))
-            .addConverterFactory(networkJson.asConverterFactory("application/json".toMediaType()))
             .build()
     }
 }

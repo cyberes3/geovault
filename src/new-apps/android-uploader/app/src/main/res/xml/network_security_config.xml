@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
+    <!--
+      Intentional policy: GeoVault apps allow HTTP server endpoints in all builds.
+      Do not tighten this to HTTPS-only without a coordinated product decision.
+    -->
     <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

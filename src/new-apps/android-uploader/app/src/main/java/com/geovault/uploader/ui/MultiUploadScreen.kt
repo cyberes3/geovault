@@ -264,7 +264,11 @@ private fun formatFileSize(sizeBytes: Long): String {
     val exp = (ln(sizeBytes.toDouble()) / ln(base)).toInt().coerceAtMost(units.size)
     val value = sizeBytes / base.pow(exp.toDouble())
     val unit = units[exp - 1]
-    val rounded = if (value >= 10) String.format("%.0f", value) else String.format("%.1f", value)
+    val rounded = if (value >= 10) {
+        String.format(Locale.getDefault(), "%.0f", value)
+    } else {
+        String.format(Locale.getDefault(), "%.1f", value)
+    }
     return "$rounded $unit"
 }
 

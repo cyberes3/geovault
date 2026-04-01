@@ -13,11 +13,8 @@ import com.geovault.uploader.BuildConfig
 import com.geovault.uploader.MainActivity
 import com.geovault.uploader.data.AuthRepository
 import com.geovault.uploader.data.AuthRepository.OAuthPreparationResult
-import com.geovault.uploader.data.FileMetadataRepository
-import com.geovault.uploader.data.UploaderPreferences
-import com.geovault.uploader.data.UploadRepository
-import com.geovault.uploader.data.ValidationRepository
 import com.geovault.uploader.data.ValidationOutcome
+import com.geovault.uploader.di.UploaderAppServices
 import com.geovault.uploader.domain.FilenamePolicy
 import com.geovault.uploader.model.UploadResult
 import java.util.UUID
@@ -51,13 +48,16 @@ data class MainScreenState(
     val updateReleaseUrl: String? = null
 )
 
-class MainScreenViewModel(application: Application) : AndroidViewModel(application) {
+class MainScreenViewModel(
+    application: Application,
+    services: UploaderAppServices = UploaderAppServices.from(application)
+) : AndroidViewModel(application) {
     private val appContext = application.applicationContext
-    private val preferences = UploaderPreferences.getInstance(appContext)
-    private val fileMetadataRepository = FileMetadataRepository(appContext.contentResolver)
-    private val validationRepository = ValidationRepository(appContext)
-    private val uploadRepository = UploadRepository(appContext, appContext.contentResolver)
-    private val authRepository = AuthRepository(appContext)
+    private val preferences = services.uploaderPreferences()
+    private val fileMetadataRepository = services.fileMetadataRepository()
+    private val validationRepository = services.validationRepository()
+    private val uploadRepository = services.uploadRepository()
+    private val authRepository: AuthRepository = services.authRepository()
 
     private val _state = MutableStateFlow(MainScreenState())
     val state: StateFlow<MainScreenState> = _state.asStateFlow()

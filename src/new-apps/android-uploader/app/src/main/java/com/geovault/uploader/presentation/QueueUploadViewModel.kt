@@ -6,9 +6,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.NaturalSort
-import com.geovault.uploader.data.FileMetadataRepository
-import com.geovault.uploader.data.UploaderPreferences
-import com.geovault.uploader.data.UploadRepository
+import com.geovault.uploader.di.UploaderAppServices
 import com.geovault.uploader.domain.FilenamePolicy
 import com.geovault.uploader.domain.QueueUploadStateMachine
 import com.geovault.uploader.model.FileQueueItem
@@ -30,11 +28,13 @@ data class QueueUploadState(
     val fileCountLabel: String = "0 files"
 )
 
-class QueueUploadViewModel(application: Application) : AndroidViewModel(application) {
-    private val appContext = application.applicationContext
-    private val metadata = FileMetadataRepository(appContext.contentResolver)
-    private val prefs = UploaderPreferences.getInstance(appContext)
-    private val uploader = UploadRepository(appContext, appContext.contentResolver)
+class QueueUploadViewModel(
+    application: Application,
+    services: UploaderAppServices = UploaderAppServices.from(application)
+) : AndroidViewModel(application) {
+    private val metadata = services.fileMetadataRepository()
+    private val prefs = services.uploaderPreferences()
+    private val uploader = services.uploadRepository()
 
     private val _state = MutableStateFlow(QueueUploadState())
     val state: StateFlow<QueueUploadState> = _state.asStateFlow()

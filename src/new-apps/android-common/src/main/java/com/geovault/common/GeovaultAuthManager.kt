@@ -6,10 +6,13 @@ import android.net.Uri
 import android.util.Base64
 import android.util.Log
 import androidx.browser.customtabs.CustomTabsIntent
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.decodeFromString
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONObject
 import java.security.MessageDigest
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -31,6 +34,11 @@ object GeovaultAuthManager {
     private const val TOKEN_ENDPOINT_PATH = "/api/oauth/token/"
     private const val AUTHORIZE_PATH = "/api/oauth/authorize/"
     private const val TOKEN_BUFFER_SECONDS = 60L
+    private val authJson = Json {
+        ignoreUnknownKeys = true
+        explicitNulls = false
+        isLenient = true
+    }
 
     @Volatile
     private var clientId: String = OAUTH_CLIENT_ID_UPLOADER
@@ -314,18 +322,17 @@ object GeovaultAuthManager {
         client.newCall(request).execute().use { response ->
             val payload = response.body.string()
             if (!response.isSuccessful) {
-                val message = try {
-                    JSONObject(payload).optString("error_description", payload)
-                } catch (e: Exception) {
-                    payload.ifBlank { "HTTP ${response.code}" }
-                }
+                val parsed = decodeAuthTokenPayload(payload)
+                val message = parsed?.errorDescription
+                    ?.takeIf { it.isNotBlank() }
+                    ?: payload.ifBlank { "HTTP ${response.code}" }
                 onError(message)
                 return
             }
-            val json = JSONObject(payload)
-            val accessToken = json.optString("access_token")
-            val refreshToken = json.optString("refresh_token").takeIf { it.isNotBlank() }
-            val expiresIn = json.optLong("expires_in", 43200L)
+            val tokenPayload = decodeAuthTokenPayload(payload)
+            val accessToken = tokenPayload?.accessToken?.trim().orEmpty()
+            val refreshToken = tokenPayload?.refreshToken?.trim().orEmpty().takeIf { it.isNotBlank() }
+            val expiresIn = tokenPayload?.expiresInSeconds ?: 43200L
             if (accessToken.isBlank()) {
                 onError("No access_token in response")
                 return
@@ -374,10 +381,10 @@ object GeovaultAuthManager {
                     if (response.code in 400..499) return null
                     throw java.io.IOException("Server returned ${response.code}")
                 }
-                val json = JSONObject(payload)
-                val accessToken = json.optString("access_token")
-                val rotatedRefresh = json.optString("refresh_token").takeIf { it.isNotBlank() }
-                val expiresIn = json.optLong("expires_in", 43200L)
+                val tokenPayload = decodeAuthTokenPayload(payload)
+                val accessToken = tokenPayload?.accessToken?.trim().orEmpty()
+                val rotatedRefresh = tokenPayload?.refreshToken?.trim().orEmpty().takeIf { it.isNotBlank() }
+                val expiresIn = tokenPayload?.expiresInSeconds ?: 43200L
                 if (accessToken.isBlank()) throw java.io.IOException("Missing access_token in response")
                 saveTokens(context, accessToken, rotatedRefresh ?: refreshToken, expiresIn)
                 return accessToken
@@ -429,15 +436,12 @@ object GeovaultAuthManager {
                 val statusCode = response.code
                 response.close()
                 if (statusCode == 200 && body.isNotEmpty()) {
-                    try {
-                        val email = JSONObject(body).optString("email", "").trim()
-                        if (email.isNotEmpty()) {
-                            setCachedUserEmail(context, email)
-                            callback?.invoke(email)
-                        } else {
-                            callback?.invoke(null)
-                        }
-                    } catch (_: Exception) {
+                    val statusPayload = decodeUserStatusPayload(body)
+                    val email = statusPayload?.email?.trim().orEmpty()
+                    if (email.isNotEmpty()) {
+                        setCachedUserEmail(context, email)
+                        callback?.invoke(email)
+                    } else {
                         callback?.invoke(null)
                     }
                 } else if (statusCode == 401) {
@@ -450,6 +454,16 @@ object GeovaultAuthManager {
         })
     }
 
+    private fun decodeAuthTokenPayload(payload: String): AuthTokenPayload? {
+        if (payload.isBlank()) return null
+        return runCatching { authJson.decodeFromString<AuthTokenPayload>(payload) }.getOrNull()
+    }
+
+    private fun decodeUserStatusPayload(payload: String): UserStatusPayload? {
+        if (payload.isBlank()) return null
+        return runCatching { authJson.decodeFromString<UserStatusPayload>(payload) }.getOrNull()
+    }
+
     fun launchOAuthInBrowser(context: Context, authorizeUrl: String) {
         val uri = Uri.parse(authorizeUrl)
         try {
@@ -460,4 +474,21 @@ object GeovaultAuthManager {
             context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
     }
+
+    @Serializable
+    private data class AuthTokenPayload(
+        @SerialName("access_token")
+        val accessToken: String? = null,
+        @SerialName("refresh_token")
+        val refreshToken: String? = null,
+        @SerialName("expires_in")
+        val expiresInSeconds: Long? = null,
+        @SerialName("error_description")
+        val errorDescription: String? = null
+    )
+
+    @Serializable
+    private data class UserStatusPayload(
+        val email: String? = null
+    )
 }
