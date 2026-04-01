@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
+import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Checkbox
 import androidx.compose.material.CheckboxDefaults
 import androidx.compose.material.OutlinedTextField
@@ -64,9 +65,9 @@ fun GeoVaultSecondaryButton(
         enabled = enabled,
         modifier = modifier,
         colors = ButtonDefaults.buttonColors(
-            backgroundColor = Color.White,
+            backgroundColor = MaterialTheme.colors.background,
             contentColor = GeoVaultColorTokens.PrimaryBlue,
-            disabledBackgroundColor = Color.White,
+            disabledBackgroundColor = MaterialTheme.colors.background,
             disabledContentColor = GeoVaultColorTokens.PrimaryBlue.copy(alpha = 0.5f)
         ),
         border = BorderStroke(1.dp, GeoVaultColorTokens.PrimaryBlue),
@@ -156,6 +157,12 @@ fun GeoVaultInput(
     singleLine: Boolean = true,
     visualTransformation: VisualTransformation = VisualTransformation.None
 ) {
+    val fieldBackground =
+        if (MaterialTheme.colors.isLight) {
+            GeoVaultColorTokens.Surface
+        } else {
+            MaterialTheme.colors.surface
+        }
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -166,6 +173,7 @@ fun GeoVaultInput(
         singleLine = singleLine,
         visualTransformation = visualTransformation,
         colors = TextFieldDefaults.outlinedTextFieldColors(
+            backgroundColor = fieldBackground,
             focusedBorderColor = GeoVaultColorTokens.PrimaryBlue,
             unfocusedBorderColor = GeoVaultColorTokens.PrimaryBlue,
             focusedLabelColor = GeoVaultColorTokens.PrimaryBlue,
