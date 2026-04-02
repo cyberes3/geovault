@@ -96,7 +96,7 @@ fun PlacesMapScreen(
         MapLocationRendererPlugin(
             context = context,
             config = LocationComponentHelper.Config(
-                accuracyColor = android.graphics.Color.parseColor("#163D8A"),
+                accuracyColor = GeoVaultColorTokens.PRIMARY_BLUE_INT,
                 accuracyAlpha = 0.25f,
             ),
             autoEnableLocationComponent = true,

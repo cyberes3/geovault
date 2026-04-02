@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
 import android.util.Log
 import android.view.ViewGroup
 import com.geovault.common.maps.location.MapLocationRendererPlugin
@@ -33,8 +32,6 @@ class GeoVaultMapController(context: Context) : MapView.OnDidFailLoadingMapListe
     private var styleLoadWatchdog: Runnable? = null
     private var styleLoadGeneration: Long = 0L
     private var styleDeliveredForGeneration = false
-    private var preloadTargetViewHash: Int? = null
-    private var preloadStartedAtMs: Long = 0L
     private val pluginRegistry = GeoVaultMapPluginRegistry()
     private val mapClickListeners = linkedSetOf<MapLibreMap.OnMapClickListener>()
     private val mapLongClickListeners = linkedSetOf<MapLibreMap.OnMapLongClickListener>()
@@ -63,10 +60,8 @@ class GeoVaultMapController(context: Context) : MapView.OnDidFailLoadingMapListe
 
     fun attachMapView(view: MapView) {
         if (mapView === view && _mapManager != null) {
-            Log.d(TAG, "attachMapView: reusing existing attachment for view=${view.hashCode()}")
             return
         }
-        Log.d(TAG, "attachMapView: attaching view=${view.hashCode()} retained=${retainedMapView === view}")
         MapLibreInitializer.init(appContext)
         detachMapView()
         mapView = view
@@ -77,14 +72,6 @@ class GeoVaultMapController(context: Context) : MapView.OnDidFailLoadingMapListe
                     styleDeliveredForGeneration = true
                     clearStyleLoadWatchdog()
                     _phase.value = GeoVaultMapPhase.Ready
-                    Log.d(TAG, "onStyleLoaded: view=${view.hashCode()} phase=Ready")
-                    val targetHash = preloadTargetViewHash
-                    if (targetHash != null && targetHash == view.hashCode()) {
-                        val elapsed = SystemClock.elapsedRealtime() - preloadStartedAtMs
-                        Log.d(TAG, "preloadMainMap: style ready for view=$targetHash elapsedMs=$elapsed")
-                        preloadTargetViewHash = null
-                        preloadStartedAtMs = 0L
-                    }
                     onStyleLoaded?.invoke(map, style)
                     onMapReady?.invoke(map, style)
                     pluginRegistry.forEach { it.onStyleLoaded(map, style) }
@@ -126,13 +113,11 @@ class GeoVaultMapController(context: Context) : MapView.OnDidFailLoadingMapListe
         val existing = retainedMapView
         if (existing != null) {
             (existing.parent as? ViewGroup)?.removeView(existing)
-            Log.d(TAG, "acquireRetainedMapView: reuse view=${existing.hashCode()}")
             return existing
         }
         return createMapView(stateBundle = stateBundle, mainMode = true).also { created ->
             created.onCreate(stateBundle)
             retainedMapView = created
-            Log.d(TAG, "acquireRetainedMapView: create view=${created.hashCode()}")
         }
     }
 
@@ -141,19 +126,14 @@ class GeoVaultMapController(context: Context) : MapView.OnDidFailLoadingMapListe
      */
     fun preloadMainMap() {
         val view = acquireRetainedMapView(Bundle())
-        preloadTargetViewHash = view.hashCode()
-        preloadStartedAtMs = SystemClock.elapsedRealtime()
-        Log.d(TAG, "preloadMainMap: begin view=${view.hashCode()}")
         attachMapView(view)
         view.onStart()
         view.onResume()
-        Log.d(TAG, "preloadMainMap: warmed view=${view.hashCode()} to STARTED/RESUMED")
     }
 
     fun createTransientMapView(stateBundle: Bundle): MapView {
         return createMapView(stateBundle = stateBundle, mainMode = false).also { created ->
             created.onCreate(stateBundle)
-            Log.d(TAG, "createTransientMapView: create view=${created.hashCode()}")
         }
     }
 
@@ -167,9 +147,6 @@ class GeoVaultMapController(context: Context) : MapView.OnDidFailLoadingMapListe
     }
 
     fun detachMapView() {
-        mapView?.let {
-            Log.d(TAG, "detachMapView: detaching view=${it.hashCode()} retained=${retainedMapView === it}")
-        }
         clearStyleLoadWatchdog()
         mapView?.removeOnDidFailLoadingMapListener(this)
         mapView = null
@@ -183,7 +160,6 @@ class GeoVaultMapController(context: Context) : MapView.OnDidFailLoadingMapListe
     }
 
     fun releaseRetainedMapView() {
-        retainedMapView?.let { Log.d(TAG, "releaseRetainedMapView: destroying view=${it.hashCode()}") }
         retainedMapView?.onDestroy()
         retainedMapView = null
     }

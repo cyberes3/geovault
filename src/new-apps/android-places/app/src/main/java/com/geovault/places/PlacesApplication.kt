@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.geovault.common.AppResetFlow
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.maps.core.GeoVaultMainMapControllerStore
 import com.geovault.places.di.PlacesAppServices
 import com.geovault.common.maps.core.MapLibreInitializer
 
@@ -25,6 +26,7 @@ class PlacesApplication : Application(), GeovaultAuthManager.AuthFailureListener
             key = "places_clear_local",
             phase = AppResetFlow.Phase.AFTER_TOKEN_CLEAR,
         ) { hookContext ->
+            GeoVaultMainMapControllerStore.forceReleaseKeyForReset(PLACES_MAIN_MAP_KEY)
             PlacesAppServices.from(this).cacheStore().clear()
             PlacesAppServices.from(this).navigationRepository().clearPending()
         }

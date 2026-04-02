@@ -3,7 +3,7 @@ package com.geovault.common.maps.core
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.Button
@@ -23,6 +23,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.maplibre.android.maps.MapView
+import java.util.concurrent.atomic.AtomicLong
 
 enum class GeoVaultMapMode {
     Standard,
@@ -49,13 +50,28 @@ fun GeoVaultMap(
     val currentController by rememberUpdatedState(controller)
     val mapStateBundle = remember { Bundle() }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
-    val deferredPauseStop = remember {
-        Runnable {
-            val activeMapView = mapView
-            activeMapView?.onPause()
-            activeMapView?.onStop()
-            Log.d(TAG, "GeoVaultMap.mainHotHold: applied deferred pause/stop view=${activeMapView?.hashCode()}")
+    val hotHoldGeneration = remember { AtomicLong(0L) }
+
+    fun cancelMainHotHold() {
+        hotHoldGeneration.incrementAndGet()
+        mainHandler.removeCallbacksAndMessages(HOT_HOLD_TOKEN)
+    }
+
+    fun scheduleMainHotHold(view: MapView?) {
+        if (view == null) return
+        val generation = hotHoldGeneration.incrementAndGet()
+        val runnable = Runnable {
+            if (hotHoldGeneration.get() != generation) return@Runnable
+            if (currentController.getMapViewOrNull() !== view) return@Runnable
+            view.onPause()
+            view.onStop()
         }
+        mainHandler.removeCallbacksAndMessages(HOT_HOLD_TOKEN)
+        mainHandler.postAtTime(
+            runnable,
+            HOT_HOLD_TOKEN,
+            SystemClock.uptimeMillis() + DEFAULT_MAIN_MAP_HOT_HOLD_MS,
+        )
     }
 
     Box(modifier = modifier) {
@@ -66,17 +82,12 @@ fun GeoVaultMap(
                     GeoVaultMapMode.Standard -> currentController.createTransientMapView(mapStateBundle)
                     GeoVaultMapMode.Main -> currentController.acquireRetainedMapView(mapStateBundle)
                 }
-                Log.d(
-                    TAG,
-                    "GeoVaultMap.factory: mapMode=$mapMode view=${acquiredMapView.hashCode()}",
-                )
                 mapView = acquiredMapView
                 currentController.attachMapView(acquiredMapView)
                 acquiredMapView
             },
             update = {
                 if (mapView !== it) {
-                    Log.d(TAG, "GeoVaultMap.update: rebinding view=${it.hashCode()}")
                     mapView = it
                     currentController.attachMapView(it)
                 }
@@ -97,23 +108,21 @@ fun GeoVaultMap(
         val observer = object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
                 if (mapMode == GeoVaultMapMode.Main) {
-                    mainHandler.removeCallbacks(deferredPauseStop)
+                    cancelMainHotHold()
                 }
                 mapView?.onStart()
             }
 
             override fun onResume(owner: LifecycleOwner) {
                 if (mapMode == GeoVaultMapMode.Main) {
-                    mainHandler.removeCallbacks(deferredPauseStop)
+                    cancelMainHotHold()
                 }
                 mapView?.onResume()
             }
 
             override fun onPause(owner: LifecycleOwner) {
                 if (mapMode == GeoVaultMapMode.Main) {
-                    mainHandler.removeCallbacks(deferredPauseStop)
-                    mainHandler.postDelayed(deferredPauseStop, MAIN_MAP_HOT_HOLD_MS)
-                    Log.d(TAG, "GeoVaultMap.mainHotHold: scheduled deferred pause/stop")
+                    scheduleMainHotHold(mapView)
                 } else {
                     mapView?.onPause()
                 }
@@ -121,9 +130,7 @@ fun GeoVaultMap(
 
             override fun onStop(owner: LifecycleOwner) {
                 if (mapMode == GeoVaultMapMode.Main) {
-                    mainHandler.removeCallbacks(deferredPauseStop)
-                    mainHandler.postDelayed(deferredPauseStop, MAIN_MAP_HOT_HOLD_MS)
-                    Log.d(TAG, "GeoVaultMap.mainHotHold: rescheduled deferred pause/stop onStop")
+                    scheduleMainHotHold(mapView)
                 } else {
                     mapView?.onStop()
                 }
@@ -140,15 +147,13 @@ fun GeoVaultMap(
 
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
-            Log.d(TAG, "GeoVaultMap.onDispose: mapMode=$mapMode view=${mapView?.hashCode()}")
             lifecycleOwner.lifecycle.removeObserver(observer)
             val activeMapView = mapView
             if (mapMode == GeoVaultMapMode.Main) {
-                mainHandler.removeCallbacks(deferredPauseStop)
-                mainHandler.postDelayed(deferredPauseStop, MAIN_MAP_HOT_HOLD_MS)
+                scheduleMainHotHold(activeMapView)
                 activeMapView?.onSaveInstanceState(mapStateBundle)
-                Log.d(TAG, "GeoVaultMap.mainHotHold: kept hot on dispose")
             } else {
+                cancelMainHotHold()
                 activeMapView?.onPause()
                 activeMapView?.onStop()
                 activeMapView?.onSaveInstanceState(mapStateBundle)
@@ -161,6 +166,5 @@ fun GeoVaultMap(
     }
 
 }
-
-private const val TAG = "GeoVaultMap"
-private const val MAIN_MAP_HOT_HOLD_MS = 30_000L
+private const val DEFAULT_MAIN_MAP_HOT_HOLD_MS = 30_000L
+private val HOT_HOLD_TOKEN = Any()
