@@ -34,6 +34,17 @@ class SettingsActivity : ComponentActivity() {
                     onServerUrlChanged = viewModel::onServerUrlChanged,
                     onConnect = viewModel::connect,
                     onDisconnect = { viewModel.disconnect(MainActivity::class.java) },
+                    onTrackingProfileSelected = viewModel::setTrackingProfile,
+                    onLoggingIntervalInput = viewModel::setLoggingIntervalSecFromInput,
+                    onDistanceFilterInput = viewModel::setDistanceFilterMetersFromInput,
+                    onAccuracyFilterInput = viewModel::setAccuracyFilterMetersFromInput,
+                    onLowAccuracyFallbackEnabled = viewModel::setLowAccuracyFallbackEnabled,
+                    onLowAccuracyTimeoutInput = viewModel::setLowAccuracyFallbackTimeoutSecFromInput,
+                    onStartOnBoot = viewModel::setStartOnBoot,
+                    onStartOnLaunch = viewModel::setStartTrackingOnLaunch,
+                    onSendExtendedData = viewModel::setSendExtendedData,
+                    onSignificantMotionOnly = viewModel::setSignificantDataOnly,
+                    onKeepScreenOnMap = viewModel::setKeepScreenOnWhileViewingMap,
                 )
             }
         }

@@ -48,6 +48,9 @@ class MainActivity : ComponentActivity() {
                     onOpenSettings = { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) },
                     onAuthServerUrlChanged = viewModel::onAuthServerUrlChanged,
                     onAuthConnect = viewModel::connectAuth,
+                    onClearInfoMessage = viewModel::clearInfoMessage,
+                    onRequestStartTracking = viewModel::requestStartTracking,
+                    onRequestStopTracking = viewModel::requestStopTracking,
                 )
             }
         }

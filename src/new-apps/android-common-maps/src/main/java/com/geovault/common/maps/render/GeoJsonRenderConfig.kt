@@ -2,6 +2,12 @@ package com.geovault.common.maps.render
 
 data class GeoJsonRenderConfig(
     val belowLayerId: String? = null,
+    /**
+     * When true, [GeoJsonRenderPlugin.setRenderState] must be invoked on the main looper and
+     * GeoJSON sources are updated immediately on that call. When false, updates posted from
+     * background threads are marshaled to the main looper (still async relative to the caller).
+     */
+    val synchronousGeoJsonApplication: Boolean = false,
     val showPointCircles: Boolean = true,
     val showPointLabelsAndIcons: Boolean = true,
     val showPointTextLabels: Boolean = true,

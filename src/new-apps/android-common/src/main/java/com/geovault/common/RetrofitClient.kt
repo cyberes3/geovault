@@ -1,13 +1,19 @@
 package com.geovault.common
 
 import android.content.Context
+import com.google.gson.GsonBuilder
 import okhttp3.Authenticator
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Route
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
+    private val networkGson = GsonBuilder()
+        .serializeNulls()
+        .create()
     private fun authTokenInterceptor(appContext: Context): Interceptor = Interceptor { chain ->
         val token = GeovaultAuthManager.getAccessToken(appContext)
         val request = if (!token.isNullOrBlank()) {
@@ -62,6 +68,23 @@ object RetrofitClient {
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
+
+    fun getClient(context: Context, baseUrl: String): Retrofit {
+        val appContext = context.applicationContext
+        val client = OkHttpClient.Builder()
+            .addInterceptor(authTokenInterceptor(appContext))
+            .addInterceptor(authFailureInterceptor(appContext))
+            .authenticator(tokenAuthenticator(appContext))
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+        return Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create(networkGson))
             .build()
     }
 }

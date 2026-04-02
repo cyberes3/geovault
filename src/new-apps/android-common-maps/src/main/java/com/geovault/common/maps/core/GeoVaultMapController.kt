@@ -47,6 +47,10 @@ sealed class GeoVaultBaseMap(
 
     var onMapReady: ((MapLibreMap, Style) -> Unit)? = null
     var onStyleLoaded: ((MapLibreMap, Style) -> Unit)? = null
+    /** Fired for [MapView.OnDidFailLoadingMapListener] and recoverable style fetch failures from [MapLibreManager]. */
+    var onStyleLoadFailed: ((errorMessage: String) -> Unit)? = null
+    /** Invoked after the style is loaded and all registered plugins have run [GeoVaultMapPlugin.onStyleLoaded]. */
+    var onStyleReady: ((MapLibreMap, Style) -> Unit)? = null
     var forceOsmOnly: Boolean = false
         set(value) {
             field = value
@@ -72,6 +76,11 @@ sealed class GeoVaultBaseMap(
         mapView = view
         val attachedManager = MapLibreManager(appContext, view).also { manager ->
             manager.defaultPadding = defaultCameraPadding
+            manager.onStyleLoadFailed = { message ->
+                if (_mapManager === manager && mapView === view) {
+                    onStyleLoadFailed?.invoke(message)
+                }
+            }
             manager.onStyleLoaded = { map, style ->
                 // Ignore late style callbacks from stale attach cycles.
                 if (_mapManager === manager && mapView === view) {
@@ -81,6 +90,7 @@ sealed class GeoVaultBaseMap(
                     onStyleLoaded?.invoke(map, style)
                     onMapReady?.invoke(map, style)
                     pluginRegistry.onStyleLoaded(map, style)
+                    onStyleReady?.invoke(map, style)
                 }
             }
             if (forceOsmOnly) {
@@ -256,6 +266,7 @@ sealed class GeoVaultBaseMap(
         val map = maplibreMap ?: return
         val manager = _mapManager ?: return
         Log.e(TAG, "Map style load failed: $errorMessage")
+        onStyleLoadFailed?.invoke(errorMessage)
         styleDeliveredForGeneration = true
         clearStyleLoadWatchdog()
         _phase.value = GeoVaultMapPhase.Recovering

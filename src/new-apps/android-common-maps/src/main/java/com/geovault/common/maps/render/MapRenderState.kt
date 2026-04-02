@@ -6,6 +6,8 @@ data class MapRenderPoint(
     val longitude: Double,
     val title: String? = null,
     val iconImageId: String? = null,
+    /** Clockwise degrees for [org.maplibre.android.style.layers.PropertyFactory.iconRotate]. */
+    val iconRotationDegrees: Float? = null,
     val pointRadius: Float? = null,
     val pointFillColorHex: String? = null,
     val pointStrokeColorHex: String? = null,

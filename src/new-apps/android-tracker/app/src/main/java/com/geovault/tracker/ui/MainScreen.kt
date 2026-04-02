@@ -22,6 +22,9 @@ fun MainScreen(
     onOpenSettings: () -> Unit,
     onAuthServerUrlChanged: (String) -> Unit,
     onAuthConnect: () -> Unit,
+    onClearInfoMessage: () -> Unit = {},
+    onRequestStartTracking: () -> Unit = {},
+    onRequestStopTracking: () -> Unit = {},
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(TrackerTab.HOME.name) }
     val bottomDestinations = remember {
@@ -64,6 +67,10 @@ fun MainScreen(
                     onAuthConnect = onAuthConnect,
                     isConnecting = state.isConnecting,
                     onOpenSettings = onOpenSettings,
+                    infoMessage = state.infoMessage,
+                    onClearInfoMessage = onClearInfoMessage,
+                    onRequestStartTracking = onRequestStartTracking,
+                    onRequestStopTracking = onRequestStopTracking,
                 )
             }
 

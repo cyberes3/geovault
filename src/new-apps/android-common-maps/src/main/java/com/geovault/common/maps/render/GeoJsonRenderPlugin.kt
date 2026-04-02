@@ -1,6 +1,8 @@
 package com.geovault.common.maps.render
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import com.geovault.common.maps.core.MapMarkerUtils
 import com.geovault.common.maps.core.GeoVaultMapPlugin
 import com.geovault.common.maps.core.OutlinedGeoJsonLineLayers
@@ -26,11 +28,31 @@ class GeoJsonRenderPlugin(
 ) : GeoVaultMapPlugin, GeoVaultRenderCapability {
     private var renderState: MapRenderState = MapRenderState()
     private var map: MapLibreMap? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var marshaledApply: Runnable? = null
 
     override fun setRenderState(newState: MapRenderState) {
         renderState = newState
-        val style = map?.style ?: return
-        applyState(style, newState)
+        fun applyNow() {
+            marshaledApply = null
+            val style = map?.style ?: return
+            applyState(style, renderState)
+        }
+        if (config.synchronousGeoJsonApplication) {
+            check(Looper.myLooper() == Looper.getMainLooper()) {
+                "GeoJsonRenderPlugin: synchronousGeoJsonApplication requires main thread"
+            }
+            applyNow()
+            return
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            applyNow()
+        } else {
+            marshaledApply?.let { mainHandler.removeCallbacks(it) }
+            val runnable = Runnable { applyNow() }
+            marshaledApply = runnable
+            mainHandler.post(runnable)
+        }
     }
 
     override fun onMapAttached(map: MapLibreMap) {
@@ -39,6 +61,11 @@ class GeoJsonRenderPlugin(
 
     override fun onMapDetached() {
         map = null
+    }
+
+    override fun onPluginDestroyed() {
+        marshaledApply?.let { mainHandler.removeCallbacks(it) }
+        marshaledApply = null
     }
 
     override fun onStyleLoaded(map: MapLibreMap, style: Style) {
@@ -115,6 +142,12 @@ class GeoJsonRenderPlugin(
                             Expression.literal(config.defaultIconSize),
                         ),
                     ),
+                    PropertyFactory.iconRotate(
+                        Expression.coalesce(
+                            Expression.toNumber(Expression.get("iconRotationDegrees")),
+                            Expression.literal(0.0),
+                        ),
+                    ),
                     PropertyFactory.iconAllowOverlap(true),
                 ),
             )
@@ -161,6 +194,7 @@ class GeoJsonRenderPlugin(
                 point.labelTextColorHex?.let { feature.addStringProperty("labelTextColorHex", it) }
                 point.labelTextSize?.let { feature.addNumberProperty("labelTextSize", it) }
                 point.iconSize?.let { feature.addNumberProperty("iconSize", it) }
+                point.iconRotationDegrees?.let { feature.addNumberProperty("iconRotationDegrees", it.toDouble()) }
             }
         }
         val lineFeatures = state.lines.map { line ->

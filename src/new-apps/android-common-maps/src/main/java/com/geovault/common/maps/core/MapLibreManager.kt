@@ -27,6 +27,8 @@ class MapLibreManager(
     private var lastAppliedSourceKey: String? = null
     private var pendingSourceKey: String? = null
     var onStyleLoaded: ((MapLibreMap, Style) -> Unit)? = null
+    /** Invoked when a remote/vector style cannot be applied (network/cache miss, parse errors, etc.). */
+    var onStyleLoadFailed: ((String) -> Unit)? = null
     var defaultPadding: DoubleArray? = null
 
     fun setupBaseMapSettings(map: MapLibreMap) {
@@ -121,8 +123,9 @@ class MapLibreManager(
                     }
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             pendingSourceKey = null
+            onStyleLoadFailed?.invoke(e.message ?: e.javaClass.simpleName)
             map.setStyle(Style.Builder()) { style ->
                 lastAppliedSourceKey = requestedSourceKey
                 onStyleLoaded?.invoke(map, style)
@@ -155,6 +158,7 @@ class MapLibreManager(
                 }
             } else {
                 pendingSourceKey = null
+                onStyleLoadFailed?.invoke("Map style unavailable for $styleUrl")
                 Toast.makeText(context, "Map style unavailable, falling back to basic map.", Toast.LENGTH_SHORT).show()
                 loadOsmFallback(map, restoreCamera)
             }

@@ -6,6 +6,10 @@ import androidx.lifecycle.viewModelScope
 import com.geovault.common.AppResetFlow
 import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.tracker.di.TrackerAppServices
+import com.geovault.tracker.settings.TrackerSettings
+import com.geovault.tracker.settings.TrackerSettingsLoadState
+import com.geovault.tracker.settings.TrackerSettingsRepository
+import com.geovault.tracker.settings.TrackerTrackingProfile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,16 +23,37 @@ data class SettingsState(
     val isConnecting: Boolean = false,
     val infoMessage: String? = null,
     val oauthUrl: String? = null,
+    val trackerLoadState: TrackerSettingsLoadState = TrackerSettingsLoadState.Loading,
+    val trackerSettings: TrackerSettings = TrackerSettings(),
+    val trackerRevision: Long = 0L,
 )
 
-class SettingsViewModel(application: Application) : AndroidViewModel(application) {
+class SettingsViewModel(
+    application: Application,
+    private val authController: CommonInitialAuthController =
+        TrackerAppServices.from(application).initialAuthController(),
+    private val trackerSettingsRepository: TrackerSettingsRepository =
+        TrackerAppServices.from(application).trackerSettingsRepository(),
+) : AndroidViewModel(application) {
+
+    constructor(application: Application) : this(
+        application,
+        TrackerAppServices.from(application).initialAuthController(),
+        TrackerAppServices.from(application).trackerSettingsRepository(),
+    )
 
     private val appContext = application.applicationContext
-    private val authController: CommonInitialAuthController =
-        TrackerAppServices.from(application).initialAuthController()
 
     private val _state = MutableStateFlow(SettingsState())
     val state: StateFlow<SettingsState> = _state.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            trackerSettingsRepository.observeState().collect { tracker ->
+                _state.update { current -> current.withTrackerState(tracker) }
+            }
+        }
+    }
 
     fun initialize() {
         refreshAuthState()
@@ -80,6 +105,54 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 mainActivityClass = mainActivityClass,
             )
         }
+    }
+
+    fun setTrackingProfile(profile: TrackerTrackingProfile) {
+        trackerSettingsRepository.setTrackingProfile(profile)
+    }
+
+    fun setLoggingIntervalSecFromInput(raw: String) {
+        val value = raw.toLongOrNull() ?: return
+        trackerSettingsRepository.setLoggingIntervalSec(value)
+    }
+
+    fun setDistanceFilterMetersFromInput(raw: String) {
+        val value = raw.toFloatOrNull() ?: return
+        trackerSettingsRepository.setDistanceFilterMeters(value)
+    }
+
+    fun setAccuracyFilterMetersFromInput(raw: String) {
+        val value = raw.toFloatOrNull() ?: return
+        trackerSettingsRepository.setAccuracyFilterMeters(value)
+    }
+
+    fun setLowAccuracyFallbackTimeoutSecFromInput(raw: String) {
+        val value = raw.toLongOrNull() ?: return
+        trackerSettingsRepository.setLowAccuracyFallbackTimeoutSec(value)
+    }
+
+    fun setLowAccuracyFallbackEnabled(enabled: Boolean) {
+        trackerSettingsRepository.setLowAccuracyFallbackEnabled(enabled)
+    }
+
+    fun setStartOnBoot(enabled: Boolean) {
+        trackerSettingsRepository.setStartOnBoot(enabled)
+    }
+
+    fun setStartTrackingOnLaunch(enabled: Boolean) {
+        trackerSettingsRepository.setStartTrackingOnLaunch(enabled)
+    }
+
+    fun setSendExtendedData(enabled: Boolean) {
+        trackerSettingsRepository.setSendExtendedData(enabled)
+    }
+
+    fun setSignificantDataOnly(enabled: Boolean) {
+        trackerSettingsRepository.setSignificantDataOnly(enabled)
+    }
+
+    fun setKeepScreenOnWhileViewingMap(enabled: Boolean) {
+        trackerSettingsRepository.setKeepScreenOnWhileViewingMap(enabled)
     }
 
     fun clearMessage() {

@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.tracker.di.TrackerAppServices
+import com.geovault.tracker.runtime.RuntimeTrigger
+import com.geovault.tracker.TrackingCommandFacade
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,6 +31,18 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     fun initialize() {
         refreshAuthState()
+    }
+
+    fun requestStartTracking() {
+        TrackingCommandFacade.requestStart(
+            getApplication(),
+            trigger = RuntimeTrigger.EXPLICIT_START,
+            reason = "home_debug_start"
+        )
+    }
+
+    fun requestStopTracking() {
+        TrackingCommandFacade.requestStop(getApplication(), reason = "home_debug_stop")
     }
 
     fun onHostResumed() {

@@ -6,6 +6,14 @@ import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ServerUrlContract
 import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.common.auth.GeovaultAuthServices
+import com.geovault.tracker.settings.TrackerSettingsDataStore
+import com.geovault.tracker.data.ApiTrackerManagementRepository
+import com.geovault.tracker.data.GroupManagementRepository
+import com.geovault.tracker.data.TrackerManagementRepository
+import com.geovault.tracker.data.TrackerManagementStateStore
+import com.geovault.tracker.settings.TrackerSettingsRepository
+import com.geovault.tracker.settings.TrackerSettingsRepositoryImpl
+import com.geovault.tracker.settings.TrackerSettingsWritePolicy
 
 class TrackerAppServices private constructor(private val appContext: Context) {
 
@@ -20,7 +28,28 @@ class TrackerAppServices private constructor(private val appContext: Context) {
         )
     }
 
+    private val trackerSettingsRepository by lazy {
+        TrackerSettingsRepositoryImpl(
+            dataStore = TrackerSettingsDataStore(appContext),
+            writePolicy = TrackerSettingsWritePolicy()
+        )
+    }
+
+    private val trackerManagementStateStore by lazy { TrackerManagementStateStore() }
+
+    private val trackerAndGroupManagementRepository by lazy {
+        ApiTrackerManagementRepository(appContext, trackerManagementStateStore)
+    }
+
     fun initialAuthController(): CommonInitialAuthController = authController
+
+    fun trackerSettingsRepository(): TrackerSettingsRepository = trackerSettingsRepository
+
+    fun trackerManagementRepository(): TrackerManagementRepository = trackerAndGroupManagementRepository
+
+    fun groupManagementRepository(): GroupManagementRepository = trackerAndGroupManagementRepository
+
+    fun trackerManagementStateStore(): TrackerManagementStateStore = trackerManagementStateStore
 
     companion object {
         @Volatile

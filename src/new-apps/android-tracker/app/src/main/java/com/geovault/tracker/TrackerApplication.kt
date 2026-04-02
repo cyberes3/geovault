@@ -27,6 +27,9 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
         }
 
         GeovaultAuthManager.fetchUserStatus(this)
+
+        TrackingNotificationChannels.ensureTrackingChannel(this)
+        TrackingRecoveryCoordinator.createRecoveryChannel(this)
     }
 
     override fun onAuthFailure(context: Context) {
