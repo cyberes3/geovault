@@ -1,41 +1,50 @@
 package com.geovault.places
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
+import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.IntentCompat
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.AlertDialog
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
-import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,7 +54,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
-import com.geovault.common.CoordinateParser
+import com.geovault.common.maps.core.GeoVaultMap
+import com.geovault.common.maps.core.GeoVaultMapPhase
+import com.geovault.common.maps.core.rememberGeoVaultMapController
+import com.geovault.common.maps.location.LocationUpdates
+import com.geovault.common.maps.render.CommonMapIconIds
+import com.geovault.common.maps.render.GeoJsonRenderConfig
+import com.geovault.common.maps.render.GeoJsonRenderPlugin
+import com.geovault.common.maps.render.MapRenderPoint
+import com.geovault.common.maps.render.MapRenderState
+import com.geovault.common.maps.ui.GeoVaultMapFabColumn
+import com.geovault.common.maps.ui.GeoVaultMapFabIcon
+import com.geovault.common.maps.ui.buildGeoVaultMapFabActions
+import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
@@ -57,11 +78,16 @@ import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.places.di.PlacesAppServices
 import com.geovault.places.model.AddressSearchResult
 import com.geovault.places.model.Feature
-import com.geovault.places.model.Geometry
-import com.geovault.places.model.Properties
+import com.geovault.places.model.OfflineFeature
+import com.geovault.places.presentation.PlaceEditScreenState
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.maplibre.android.camera.CameraUpdateFactory
+import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.maps.MapLibreMap
 
 class PlaceEditActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,13 +96,47 @@ class PlaceEditActivity : ComponentActivity() {
         val originalFeature = intent.serializableExtraCompat<Feature>("original_feature")
         val isOfflineEdit = intent.getBooleanExtra("is_offline_edit", false)
         val offlineEditIndex = intent.getIntExtra("offline_edit_index", -1)
+        val locationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
 
         setContent {
             GeoVaultTheme {
                 PlaceEditScreen(
                     initial = editFeature,
                     isOfflineEdit = isOfflineEdit,
+                    requestLocationPermission = {
+                        locationPermissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION,
+                            ),
+                        )
+                    },
+                    hasLocationPermission = {
+                        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                    },
                     onClose = { finish() },
+                    onDeleteOrRevert = {
+                        lifecycleScope.launch {
+                            if (isOfflineEdit) {
+                                val featureToRevert = editFeature ?: return@launch
+                                val offline = OfflineFeature(
+                                    feature = featureToRevert,
+                                    original = originalFeature,
+                                )
+                                setResult(RESULT_OK, Intent().putExtra("revert_offline_feature", offline))
+                                finish()
+                                return@launch
+                            }
+                            val dbId = editFeature?.properties?.database_id ?: return@launch
+                            val repo = PlacesAppServices.from(application).placesRepository()
+                            val deleted = withContext(Dispatchers.IO) { repo.deletePlace(dbId).isSuccess }
+                            if (deleted) {
+                                setResult(RESULT_OK, Intent().putExtra("deleted_feature", editFeature))
+                                finish()
+                            }
+                        }
+                    },
                     onGeocodeSearch = { query ->
                         withContext(Dispatchers.IO) {
                             PlacesAppServices.from(application).placesRepository().geocodingSearch(query).getOrDefault(emptyList())
@@ -127,283 +187,361 @@ class PlaceEditActivity : ComponentActivity() {
 private fun PlaceEditScreen(
     initial: Feature?,
     isOfflineEdit: Boolean,
+    requestLocationPermission: () -> Unit,
+    hasLocationPermission: () -> Boolean,
     onClose: () -> Unit,
+    onDeleteOrRevert: () -> Unit,
     onGeocodeSearch: suspend (String) -> List<AddressSearchResult>,
     onSave: (Feature) -> Unit,
 ) {
-    var name by remember { mutableStateOf(initial?.properties?.name.orEmpty()) }
-    var description by remember { mutableStateOf(initial?.properties?.description.orEmpty()) }
-    var coordinatesInput by remember {
-        mutableStateOf(
-            initial?.properties?.address
-                ?: initial?.geometry?.coordinates?.takeIf { it.size >= 2 }?.let {
-                    String.format("%.6f, %.6f", it[1], it[0])
-                }.orEmpty()
+    val state = remember(initial, isOfflineEdit) { PlaceEditScreenState(initial = initial, isOfflineEdit = isOfflineEdit) }
+    val controller = rememberGeoVaultMapController()
+    val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val renderPlugin = remember(context) {
+        GeoJsonRenderPlugin(
+            sourceIdPrefix = "places-edit-map",
+            config = GeoJsonRenderConfig(
+                showPointCircles = false,
+                showPointLabelsAndIcons = true,
+                showPointTextLabels = false,
+            ),
+            context = context,
         )
     }
-    var selectedLat by remember { mutableStateOf(initial?.geometry?.coordinates?.getOrNull(1)) }
-    var selectedLon by remember { mutableStateOf(initial?.geometry?.coordinates?.getOrNull(0)) }
-    var selectedAddress by remember { mutableStateOf(initial?.properties?.address) }
-    var searchResults by remember { mutableStateOf<List<AddressSearchResult>>(emptyList()) }
-    var isSearching by remember { mutableStateOf(false) }
-    var coordinatesError by remember { mutableStateOf<String?>(null) }
-    var showDiscardDialog by remember { mutableStateOf(false) }
+    var geocodeJob by remember { mutableStateOf<Job?>(null) }
 
-    val title = when {
-        initial == null -> "New Place"
-        isOfflineEdit -> "Edit Place (Offline)"
-        else -> "Edit Place"
+    BackHandler {
+        if (state.hasUnsavedChanges) state.showDiscardDialog = true else onClose()
     }
-    val initialName = initial?.properties?.name.orEmpty()
-    val initialDescription = initial?.properties?.description.orEmpty()
-    val initialCoordinates = initial?.properties?.address
-        ?: initial?.geometry?.coordinates?.takeIf { it.size >= 2 }?.let {
-            String.format("%.6f, %.6f", it[1], it[0])
-        }.orEmpty()
-    val isDirty = name.trim() != initialName.trim() ||
-        description.trim() != initialDescription.trim() ||
-        coordinatesInput.trim() != initialCoordinates.trim()
 
-    LaunchedEffect(coordinatesInput) {
-        val query = coordinatesInput.trim()
-        if (query.isEmpty()) {
-            searchResults = emptyList()
-            coordinatesError = null
+    LaunchedEffect(controller) {
+        controller.registerPlugin(renderPlugin)
+        controller.fetchSources()
+    }
+
+    DisposableEffect(controller) {
+        val listener = MapLibreMap.OnMapClickListener { clicked ->
+            state.setFromMapPoint(clicked.latitude, clicked.longitude)
+            true
+        }
+        controller.addOnMapClickListener(listener)
+        onDispose {
+            controller.removeOnMapClickListener(listener)
+            controller.unregisterPlugin(renderPlugin)
+        }
+    }
+
+    LaunchedEffect(state.selectedLat, state.selectedLon) {
+        val lat = state.selectedLat ?: return@LaunchedEffect
+        val lon = state.selectedLon ?: return@LaunchedEffect
+        renderPlugin.setRenderState(
+            MapRenderState(
+                points = listOf(
+                    MapRenderPoint(
+                        id = "edit-selected-point",
+                        latitude = lat,
+                        longitude = lon,
+                        iconImageId = CommonMapIconIds.MARKER_DEFAULT,
+                        iconSize = 1f,
+                    ),
+                ),
+            ),
+        )
+        if (controller.phase.value == GeoVaultMapPhase.Ready) {
+            controller.animateCameraWithPadding(CameraUpdateFactory.newLatLng(LatLng(lat, lon)))
+        }
+    }
+
+    LaunchedEffect(state.mapSearchQuery, state.showSearchPanel) {
+        if (!state.showSearchPanel) {
+            state.clearMapSearch()
             return@LaunchedEffect
         }
-        kotlinx.coroutines.delay(300)
-        val parsed = CoordinateParser.parse(query)
-        if (parsed != null) {
-            val (lat, lon) = parsed
-            searchResults = listOf(
-                AddressSearchResult(
-                    coordinates = listOf(lon, lat),
-                    place_name = "Coordinates: ${String.format("%.6f", lat)}°, ${String.format("%.6f", lon)}°",
-                    text = null
-                )
-            )
-            coordinatesError = null
+        val query = state.mapSearchQuery.trim()
+        if (query.length < 2) {
+            state.mapSearchResults = emptyList()
+            state.isSearching = false
             return@LaunchedEffect
         }
-        if (query.any { it.isLetter() && it.lowercaseChar() !in "nsewd" }) {
-            isSearching = true
-            searchResults = runCatching { onGeocodeSearch(query) }.getOrDefault(emptyList())
-            isSearching = false
-        } else {
-            searchResults = emptyList()
+        geocodeJob?.cancel()
+        geocodeJob = scope.launch {
+            delay(280)
+            state.isSearching = true
+            state.mapSearchResults = runCatching { onGeocodeSearch(query) }.getOrDefault(emptyList())
+            state.isSearching = false
         }
     }
 
     Scaffold(
+        backgroundColor = GeoVaultColorTokens.Background,
         topBar = {
             GeoVaultTopTitleBar(
-                title = title,
+                title = state.title,
+                backgroundColor = GeoVaultColorTokens.PrimaryBlue,
                 rightActions = listOf(
                     GeoVaultTopTitleBarDefaults.closeAction(
                         onClick = {
-                            if (isDirty) showDiscardDialog = true else onClose()
-                        }
-                    )
-                )
+                            if (state.hasUnsavedChanges) state.showDiscardDialog = true else onClose()
+                        },
+                    ),
+                ),
             )
-        }
+        },
     ) { padding ->
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
-                .background(GeoVaultColorTokens.Surface)
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .background(GeoVaultColorTokens.Background),
         ) {
-            Text("Name *", color = GeoVaultColorTokens.TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            GeoVaultInput(
-                value = name,
-                onValueChange = { name = it },
-                label = null,
-                placeholder = "Place name",
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Description", color = GeoVaultColorTokens.TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            GeoVaultInput(
-                value = description,
-                onValueChange = { description = it },
-                label = null,
-                placeholder = "Optional description",
-                singleLine = false,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "Coordinates or Address *",
-                    modifier = Modifier.weight(1f),
-                    color = GeoVaultColorTokens.TextSecondary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                coordinatesError?.let {
-                    Text(it, color = GeoVaultColorTokens.Error, fontSize = 12.sp)
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                GeoVaultInput(
-                    value = coordinatesInput,
-                    onValueChange = {
-                        coordinatesInput = it
-                        coordinatesError = null
-                    },
-                    label = null,
-                    placeholder = "37.7749, -122.4194",
-                    modifier = Modifier.weight(1f)
-                )
-                IconButton(
-                    onClick = {
-                        val parsed = CoordinateParser.parse(coordinatesInput.trim())
-                        if (parsed != null) {
-                            selectedLat = parsed.first
-                            selectedLon = parsed.second
-                            selectedAddress = null
-                            coordinatesInput = String.format("%.6f, %.6f", parsed.first, parsed.second)
-                            coordinatesError = null
-                        } else {
-                            coordinatesError = "Invalid coordinate format"
-                        }
-                    },
+            val mapMinHeight = maxHeight * 0.30f
+            val formMinHeight = maxHeight * 0.56f
+            val formMaxHeight = maxHeight * 0.64f
+            Column(modifier = Modifier.fillMaxSize()) {
+                Box(
                     modifier = Modifier
-                        .padding(start = 8.dp)
-                        .size(40.dp)
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .heightIn(min = mapMinHeight),
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Parse coordinates",
-                        tint = GeoVaultColorTokens.TextSecondary
+                    GeoVaultMap(
+                        controller = controller,
+                        modifier = Modifier.fillMaxSize(),
                     )
-                }
-            }
-
-            if (isSearching) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    GeoVaultLoadingSpinner(spinnerSize = 20.dp)
-                }
-            }
-            if (searchResults.isNotEmpty()) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    color = GeoVaultColorTokens.Surface,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, GeoVaultColorTokens.BorderLight),
-                    elevation = 0.dp
-                ) {
-                    Column {
-                        searchResults.forEach { result ->
-                            val titleText = result.text ?: result.place_name.orEmpty()
-                            val subtitleText = result.place_name?.takeIf { it != titleText }
-                            SearchResultRow(
-                                title = titleText,
-                                subtitle = subtitleText,
-                                onClick = {
-                                    val coords = result.coordinates
-                                    if (coords != null && coords.size >= 2) {
-                                        selectedLon = coords[0]
-                                        selectedLat = coords[1]
-                                        selectedAddress = result.place_name ?: result.text
-                                        coordinatesInput = selectedAddress ?: String.format("%.6f, %.6f", coords[1], coords[0])
-                                        searchResults = emptyList()
-                                        coordinatesError = null
+                    GeoVaultMapFabColumn(
+                        actions = buildGeoVaultMapFabActions {
+                            action(
+                                id = "search",
+                                order = 0,
+                                icon = GeoVaultMapFabIcon.Vector(Icons.Default.Search),
+                                contentDescription = "Search location",
+                                onTap = { state.showSearchPanel = !state.showSearchPanel },
+                                emphasized = state.showSearchPanel,
+                            )
+                            action(
+                                id = "layers",
+                                order = 1,
+                                icon = GeoVaultMapFabIcon.Vector(Icons.Default.Layers),
+                                contentDescription = "Switch map layer",
+                                onTap = { controller.cycleSource() },
+                            )
+                            action(
+                                id = "location",
+                                order = 2,
+                                icon = GeoVaultMapFabIcon.Vector(Icons.Default.GpsFixed),
+                                contentDescription = "Use current location",
+                                onTap = {
+                                    if (!hasLocationPermission()) {
+                                        requestLocationPermission()
+                                    } else {
+                                        LocationUpdates.getCurrentLocation(context) { latLng ->
+                                            latLng ?: return@getCurrentLocation
+                                            state.setFromMapPoint(latLng.latitude, latLng.longitude)
+                                        }
+                                    }
+                                },
+                            )
+                        },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 16.dp, end = 16.dp),
+                    )
+                    if (state.showSearchPanel) {
+                        Surface(
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(12.dp)
+                                .fillMaxWidth()
+                                .height(240.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            color = GeoVaultColorTokens.Surface,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, GeoVaultColorTokens.BorderLight),
+                            elevation = 0.dp,
+                        ) {
+                            Column(modifier = Modifier.fillMaxSize().padding(10.dp)) {
+                                GeoVaultInput(
+                                    value = state.mapSearchQuery,
+                                    onValueChange = { state.mapSearchQuery = it },
+                                    label = null,
+                                    placeholder = "Search address",
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                if (state.isSearching) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.Center,
+                                    ) {
+                                        GeoVaultLoadingSpinner(spinnerSize = 18.dp)
+                                    }
+                                } else {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .verticalScroll(rememberScrollState()),
+                                    ) {
+                                        state.mapSearchResults.forEach { result ->
+                                            SearchResultRow(
+                                                title = result.text ?: result.place_name.orEmpty(),
+                                                subtitle = result.place_name?.takeIf { it != result.text },
+                                                onClick = { state.setFromSearchResult(result) },
+                                            )
+                                        }
                                     }
                                 }
-                            )
+                            }
                         }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                GeoVaultPrimaryButton(
-                    text = "Save Place",
-                    onClick = {
-                        val normalizedName = name.trim()
-                        if (normalizedName.isEmpty()) return@GeoVaultPrimaryButton
-                        val lat = selectedLat
-                        val lon = selectedLon
-                        val parsed = if (lat != null && lon != null) null else CoordinateParser.parse(coordinatesInput.trim())
-                        val finalLat = lat ?: parsed?.first
-                        val finalLon = lon ?: parsed?.second
-                        if (finalLat == null || finalLon == null) {
-                            coordinatesError = "Invalid coordinates"
-                            return@GeoVaultPrimaryButton
-                        }
-                        onSave(
-                            Feature(
-                                geometry = Geometry(coordinates = listOf(finalLon, finalLat)),
-                                properties = Properties(
-                                    database_id = initial?.properties?.database_id,
-                                    name = normalizedName,
-                                    description = description.trim(),
-                                    created_at = initial?.properties?.created_at,
-                                    address = selectedAddress
-                                )
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight(align = Alignment.Bottom)
+                        .heightIn(min = formMinHeight)
+                        .heightIn(max = formMaxHeight),
+                    shape = androidx.compose.ui.graphics.RectangleShape,
+                    color = GeoVaultColorTokens.Surface,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, GeoVaultColorTokens.BorderLight),
+                    elevation = 0.dp,
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text("Name *", color = GeoVaultColorTokens.TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            GeoVaultInput(
+                                value = state.name,
+                                onValueChange = { state.name = it },
+                                label = null,
+                                placeholder = "Place name",
+                                modifier = Modifier.fillMaxWidth(),
                             )
-                        )
-                    },
-                    enabled = name.trim().isNotEmpty() && coordinatesInput.trim().isNotEmpty(),
-                    modifier = Modifier.weight(1f)
-                )
-                GeoVaultSecondaryButton(
-                    text = "Cancel",
-                    onClick = {
-                        if (isDirty) showDiscardDialog = true else onClose()
-                    },
-                    accentColor = GeoVaultColorTokens.TextSecondary,
-                    modifier = Modifier.weight(1f)
-                )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Description", color = GeoVaultColorTokens.TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            GeoVaultInput(
+                                value = state.description,
+                                onValueChange = { state.description = it },
+                                label = null,
+                                placeholder = "Optional description",
+                                singleLine = false,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    "Coordinates or Address *",
+                                    modifier = Modifier.weight(1f),
+                                    color = GeoVaultColorTokens.TextSecondary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                state.coordinatesError?.let {
+                                    Text(it, color = GeoVaultColorTokens.Error, fontSize = 12.sp)
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                GeoVaultInput(
+                                    value = state.coordinatesInput,
+                                    onValueChange = state::onCoordinatesEdited,
+                                    label = null,
+                                    placeholder = "37.7749, -122.4194",
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                GeoVaultSecondaryButton(
+                                    text = "{ }",
+                                    onClick = { state.parseCoordinatesFromInput() },
+                                    tooltip = "Parse coordinates",
+                                    fitToContent = true,
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                GeoVaultPrimaryButton(
+                                    text = "Save Place",
+                                    onClick = {
+                                        val built = state.buildFeatureOrNull() ?: return@GeoVaultPrimaryButton
+                                        onSave(built)
+                                    },
+                                    enabled = state.name.trim().isNotEmpty() && state.coordinatesInput.trim().isNotEmpty(),
+                                    modifier = Modifier.weight(1f),
+                                )
+                                GeoVaultSecondaryButton(
+                                    text = "Cancel",
+                                    onClick = {
+                                        if (state.hasUnsavedChanges) state.showDiscardDialog = true else onClose()
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+
+                            if (initial != null) {
+                                GeoVaultSecondaryButton(
+                                    text = state.deleteActionLabel(),
+                                    onClick = { state.showDeleteDialog = true },
+                                    accentColor = GeoVaultColorTokens.Error,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 
-    if (showDiscardDialog) {
-        AlertDialog(
-            onDismissRequest = { showDiscardDialog = false },
-            title = { Text("Discard changes?") },
-            text = { Text("You have unsaved changes. Are you sure you want to leave?") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDiscardDialog = false
-                        onClose()
-                    }
-                ) {
-                    Text("Discard", color = GeoVaultColorTokens.Error)
-                }
+    if (state.showDiscardDialog) {
+        GeoVaultConfirmationDialog(
+            title = "Discard Changes?",
+            message = "You have unsaved changes. Are you sure you want to leave?",
+            onConfirm = {
+                state.showDiscardDialog = false
+                onClose()
             },
-            dismissButton = {
-                TextButton(onClick = { showDiscardDialog = false }) {
-                    Text("Cancel")
-                }
+            onCancel = { state.showDiscardDialog = false },
+            confirmText = "Discard",
+            cancelText = "Cancel",
+        )
+    }
+
+    if (state.showDeleteDialog && initial != null) {
+        val actionLabel = state.deleteActionLabel()
+        val message = if (state.isOfflineEdit) {
+            if (initial.properties.database_id != null) {
+                "Are you sure you want to revert your changes to '${initial.properties.name ?: "this place"}'?"
+            } else {
+                "Are you sure you want to discard '${initial.properties.name ?: "this place"}'?"
             }
+        } else {
+            "Are you sure you want to delete '${initial.properties.name ?: "this place"}'? This cannot be undone."
+        }
+        GeoVaultConfirmationDialog(
+            title = "$actionLabel Place",
+            message = message,
+            onConfirm = {
+                state.showDeleteDialog = false
+                onDeleteOrRevert()
+            },
+            onCancel = { state.showDeleteDialog = false },
+            confirmText = actionLabel,
+            cancelText = "Cancel",
         )
     }
 }
@@ -418,26 +556,25 @@ private fun SearchResultRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 10.dp)
-            .height(48.dp),
-        verticalArrangement = Arrangement.Center
+            .padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
+        verticalArrangement = Arrangement.Center,
     ) {
         Text(
             text = title,
             color = GeoVaultColorTokens.TextSecondary,
             fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.SemiBold,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
         )
         if (!subtitle.isNullOrBlank()) {
             Text(
                 text = subtitle,
-                modifier = Modifier.padding(top = 2.dp),
+                modifier = Modifier.padding(top = 1.dp),
                 color = GeoVaultColorTokens.TextSecondary,
                 fontSize = 12.sp,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

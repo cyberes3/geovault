@@ -3,7 +3,7 @@ package com.geovault.common.maps.ui
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.FloatingActionButton
 import androidx.compose.material.Icon
@@ -75,6 +75,8 @@ fun GeoVaultMapFabColumn(
     actions: List<GeoVaultMapFabAction>,
     modifier: Modifier = Modifier,
     verticalSpacing: Dp = 10.dp,
+    fabSize: Dp = 44.dp,
+    iconSize: Dp = 24.dp,
     onActionTap: ((GeoVaultMapFabAction) -> Unit)? = null,
 ) {
     Column(
@@ -93,6 +95,7 @@ fun GeoVaultMapFabColumn(
                     action.onTap?.invoke()
                     onActionTap?.invoke(action)
                 },
+                modifier = Modifier.size(fabSize),
                 shape = CircleShape,
                 backgroundColor = if (action.enabled) backgroundColor else backgroundColor.copy(alpha = 0.55f),
                 contentColor = if (action.enabled) action.contentColor else action.contentColor.copy(alpha = 0.75f),
@@ -103,13 +106,14 @@ fun GeoVaultMapFabColumn(
                         Icon(
                             imageVector = icon.imageVector,
                             contentDescription = action.contentDescription,
+                            modifier = Modifier.size(iconSize),
                         )
                     }
                     is GeoVaultMapFabIcon.Drawable -> {
                         Icon(
                             painter = painterResource(id = icon.drawableResId),
                             contentDescription = action.contentDescription,
-                            modifier = Modifier.padding(1.dp),
+                            modifier = Modifier.size(iconSize),
                         )
                     }
                 }

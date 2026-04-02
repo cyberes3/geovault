@@ -28,10 +28,12 @@ data class TileSourceResponse(
 )
 
 const val SOURCE_OSM = "osm"
-const val SOURCE_OSM_DARK = "maptiler-openstreetmap-dark"
+const val SOURCE_MAPTILER_STREETS_DARK = "maptiler-openstreetmap-dark"
 const val SOURCE_MAPTILER_STREETS = "maptiler-streets"
 const val SOURCE_MAPTILER_HYBRID = "maptiler-hybrid-v4"
 const val SOURCE_MAPTILER_TOPO = "maptiler-topo-v4"
+const val SOURCE_GOOGLE_HYBRID_FALLBACK = "google-hybrid-fallback"
 const val OPTION_STREET = "street"
+const val OPTION_STREET_DARK = "street_dark"
 const val OPTION_SATELLITE = "satellite"
 const val OPTION_TOPO = "topo"

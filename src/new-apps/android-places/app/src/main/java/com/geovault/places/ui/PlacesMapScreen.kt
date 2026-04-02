@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.geovault.common.maps.core.GeoVaultMap
 import com.geovault.common.maps.core.GeoVaultMapController
+import com.geovault.common.maps.core.GeoVaultMapMode
 import com.geovault.common.maps.location.LocationComponentHelper
 import com.geovault.common.maps.location.LocationUpdates
 import com.geovault.common.maps.location.MapLocationRendererPlugin
@@ -208,12 +210,13 @@ fun PlacesMapScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(scaffoldPadding)
-                .background(GeoVaultColorTokens.ListBackground),
+                .background(GeoVaultColorTokens.Background),
         ) {
             GeoVaultMap(
                 modifier = Modifier.fillMaxSize(),
                 controller = controller,
                 showDefaultSourceToggle = false,
+                mapMode = GeoVaultMapMode.Main,
             )
 
             val mapFabActions = buildGeoVaultMapFabActions {
@@ -297,7 +300,7 @@ fun PlacesMapScreen(
             GeoVaultMapFabColumn(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 72.dp, end = 16.dp),
+                    .padding(top = 16.dp, end = 16.dp),
                 actions = mapFabActions,
             )
 
@@ -306,8 +309,9 @@ fun PlacesMapScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth(),
-                shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
+                shape = androidx.compose.ui.graphics.RectangleShape,
                 backgroundColor = GeoVaultColorTokens.Surface,
+                border = BorderStroke(1.dp, GeoVaultColorTokens.BorderLight),
                 elevation = 0.dp,
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {

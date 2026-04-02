@@ -1,12 +1,16 @@
 package com.geovault.common.maps.core
 
 import android.content.Context
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
+import android.view.ViewGroup
 import com.geovault.common.maps.location.MapLocationRendererPlugin
 import org.maplibre.android.camera.CameraUpdate
 import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,9 +29,12 @@ class GeoVaultMapController(context: Context) : MapView.OnDidFailLoadingMapListe
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private var mapView: MapView? = null
+    private var retainedMapView: MapView? = null
     private var styleLoadWatchdog: Runnable? = null
     private var styleLoadGeneration: Long = 0L
     private var styleDeliveredForGeneration = false
+    private var preloadTargetViewHash: Int? = null
+    private var preloadStartedAtMs: Long = 0L
     private val pluginRegistry = GeoVaultMapPluginRegistry()
     private val mapClickListeners = linkedSetOf<MapLibreMap.OnMapClickListener>()
     private val mapLongClickListeners = linkedSetOf<MapLibreMap.OnMapLongClickListener>()
@@ -55,47 +62,114 @@ class GeoVaultMapController(context: Context) : MapView.OnDidFailLoadingMapListe
         get() = requireNotNull(_mapManager) { "Map manager unavailable until map view is attached." }
 
     fun attachMapView(view: MapView) {
+        if (mapView === view && _mapManager != null) {
+            Log.d(TAG, "attachMapView: reusing existing attachment for view=${view.hashCode()}")
+            return
+        }
+        Log.d(TAG, "attachMapView: attaching view=${view.hashCode()} retained=${retainedMapView === view}")
         MapLibreInitializer.init(appContext)
         detachMapView()
         mapView = view
-        _mapManager = MapLibreManager(appContext, view).also { manager ->
+        val attachedManager = MapLibreManager(appContext, view).also { manager ->
             manager.onStyleLoaded = { map, style ->
-                styleDeliveredForGeneration = true
-                clearStyleLoadWatchdog()
-                _phase.value = GeoVaultMapPhase.Ready
-                onStyleLoaded?.invoke(map, style)
-                onMapReady?.invoke(map, style)
-                pluginRegistry.forEach { it.onStyleLoaded(map, style) }
+                // Ignore late style callbacks from stale attach cycles.
+                if (_mapManager === manager && mapView === view) {
+                    styleDeliveredForGeneration = true
+                    clearStyleLoadWatchdog()
+                    _phase.value = GeoVaultMapPhase.Ready
+                    Log.d(TAG, "onStyleLoaded: view=${view.hashCode()} phase=Ready")
+                    val targetHash = preloadTargetViewHash
+                    if (targetHash != null && targetHash == view.hashCode()) {
+                        val elapsed = SystemClock.elapsedRealtime() - preloadStartedAtMs
+                        Log.d(TAG, "preloadMainMap: style ready for view=$targetHash elapsedMs=$elapsed")
+                        preloadTargetViewHash = null
+                        preloadStartedAtMs = 0L
+                    }
+                    onStyleLoaded?.invoke(map, style)
+                    onMapReady?.invoke(map, style)
+                    pluginRegistry.forEach { it.onStyleLoaded(map, style) }
+                }
             }
             if (forceOsmOnly) {
                 manager.sourceManager.setOsmOnly()
             }
         }
+        _mapManager = attachedManager
         view.addOnDidFailLoadingMapListener(this)
         view.getMapAsync { map ->
+            // getMapAsync can return after detach/re-attach; ignore stale callbacks.
+            if (_mapManager !== attachedManager || mapView !== view) return@getMapAsync
             maplibreMap = map
             mapClickListeners.forEach { map.addOnMapClickListener(it) }
             mapLongClickListeners.forEach { map.addOnMapLongClickListener(it) }
             cameraMoveStartedListeners.forEach { map.addOnCameraMoveStartedListener(it) }
             _phase.value = GeoVaultMapPhase.StyleLoading
-            manager.setupBaseMapSettings(map)
+            attachedManager.setupBaseMapSettings(map)
             pluginRegistry.forEach { it.onMapReady(map) }
             styleLoadGeneration += 1L
             styleDeliveredForGeneration = false
             scheduleStyleLoadWatchdog(map, styleLoadGeneration)
             if (forceOsmOnly) {
-                manager.applySelectedSource(map)
+                attachedManager.applySelectedSource(map)
             } else {
-                manager.fetchMapSources {
-                    if (!manager.isCurrentSourceApplied(map)) {
-                        manager.applySelectedSource(map)
+                attachedManager.fetchMapSources {
+                    if (_mapManager !== attachedManager || mapView !== view) return@fetchMapSources
+                    if (!attachedManager.isCurrentSourceApplied(map)) {
+                        attachedManager.applySelectedSource(map)
                     }
                 }
             }
         }
     }
 
+    fun acquireRetainedMapView(stateBundle: Bundle): MapView {
+        val existing = retainedMapView
+        if (existing != null) {
+            (existing.parent as? ViewGroup)?.removeView(existing)
+            Log.d(TAG, "acquireRetainedMapView: reuse view=${existing.hashCode()}")
+            return existing
+        }
+        return createMapView(stateBundle = stateBundle, mainMode = true).also { created ->
+            created.onCreate(stateBundle)
+            retainedMapView = created
+            Log.d(TAG, "acquireRetainedMapView: create view=${created.hashCode()}")
+        }
+    }
+
+    /**
+     * Preloads the main map instance in the background so it is warm when first opened.
+     */
+    fun preloadMainMap() {
+        val view = acquireRetainedMapView(Bundle())
+        preloadTargetViewHash = view.hashCode()
+        preloadStartedAtMs = SystemClock.elapsedRealtime()
+        Log.d(TAG, "preloadMainMap: begin view=${view.hashCode()}")
+        attachMapView(view)
+        view.onStart()
+        view.onResume()
+        Log.d(TAG, "preloadMainMap: warmed view=${view.hashCode()} to STARTED/RESUMED")
+    }
+
+    fun createTransientMapView(stateBundle: Bundle): MapView {
+        return createMapView(stateBundle = stateBundle, mainMode = false).also { created ->
+            created.onCreate(stateBundle)
+            Log.d(TAG, "createTransientMapView: create view=${created.hashCode()}")
+        }
+    }
+
+    private fun createMapView(stateBundle: Bundle, mainMode: Boolean): MapView {
+        val options = MapLibreMapOptions.createFromAttributes(appContext).apply {
+            if (mainMode) {
+                textureMode(true)
+            }
+        }
+        return MapView(appContext, options)
+    }
+
     fun detachMapView() {
+        mapView?.let {
+            Log.d(TAG, "detachMapView: detaching view=${it.hashCode()} retained=${retainedMapView === it}")
+        }
         clearStyleLoadWatchdog()
         mapView?.removeOnDidFailLoadingMapListener(this)
         mapView = null
@@ -106,6 +180,12 @@ class GeoVaultMapController(context: Context) : MapView.OnDidFailLoadingMapListe
         }
         maplibreMap = null
         _mapManager = null
+    }
+
+    fun releaseRetainedMapView() {
+        retainedMapView?.let { Log.d(TAG, "releaseRetainedMapView: destroying view=${it.hashCode()}") }
+        retainedMapView?.onDestroy()
+        retainedMapView = null
     }
 
     fun registerPlugin(plugin: GeoVaultMapPlugin) {
@@ -210,6 +290,7 @@ class GeoVaultMapController(context: Context) : MapView.OnDidFailLoadingMapListe
         cameraMoveStartedListeners.clear()
         clearStyleLoadWatchdog()
         detachMapView()
+        releaseRetainedMapView()
     }
 
     override fun onDidFailLoadingMap(errorMessage: String) {

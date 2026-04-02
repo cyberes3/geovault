@@ -30,7 +30,6 @@ import androidx.compose.material.IconButton
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
-import androidx.compose.material.TextButton
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
@@ -44,10 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -55,7 +51,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material.AlertDialog
 import com.geovault.common.ui.components.GeoVaultAuthGate
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingOverlay
@@ -94,8 +89,6 @@ fun MainScreen(
     onEditSavedPlace: (Feature) -> Unit,
     onEditOfflinePlace: (OfflineFeature, Int) -> Unit,
     onNavigatePlace: (Feature) -> Unit,
-    onDeleteSavedPlace: (Feature) -> Unit,
-    onRevertOffline: (OfflineFeature) -> Unit,
     onViewDescription: (Feature) -> Unit,
     onOpenMapToPlace: (Feature) -> Unit,
     onCopyCoordinates: (String) -> Unit,
@@ -128,7 +121,7 @@ fun MainScreen(
                 .fillMaxSize()
                 .padding(scaffoldPadding)
                 .navigationBarsPadding()
-                .background(GeoVaultColorTokens.ListBackground)
+                .background(GeoVaultColorTokens.Background)
         ) {
             GeoVaultAuthGate(
                 isAuthenticated = state.isAuthenticated,
@@ -157,8 +150,6 @@ fun MainScreen(
                         onNavigatePlace = onNavigatePlace,
                         onEditSavedPlace = onEditSavedPlace,
                         onEditOfflinePlace = onEditOfflinePlace,
-                        onDeleteSavedPlace = onDeleteSavedPlace,
-                        onRevertOffline = onRevertOffline,
                         onViewDescription = onViewDescription,
                         onOpenMapToPlace = onOpenMapToPlace,
                         onCopyCoordinates = onCopyCoordinates,
@@ -199,7 +190,7 @@ private fun SearchBlock(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(GeoVaultColorTokens.ListBackground)
+            .background(GeoVaultColorTokens.Background)
             .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -239,8 +230,6 @@ private fun PlacesBody(
     onNavigatePlace: (Feature) -> Unit,
     onEditSavedPlace: (Feature) -> Unit,
     onEditOfflinePlace: (OfflineFeature, Int) -> Unit,
-    onDeleteSavedPlace: (Feature) -> Unit,
-    onRevertOffline: (OfflineFeature) -> Unit,
     onViewDescription: (Feature) -> Unit,
     onOpenMapToPlace: (Feature) -> Unit,
     onCopyCoordinates: (String) -> Unit,
@@ -284,7 +273,7 @@ private fun PlacesBody(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(GeoVaultColorTokens.ListBackground)
+            .background(GeoVaultColorTokens.Background)
             .pullRefresh(pullRefreshState)
     ) {
         if (state.saved.isEmpty() && state.offlineItems.isEmpty()) {
@@ -306,8 +295,6 @@ private fun PlacesBody(
                             onNavigatePlace = onNavigatePlace,
                             onEditSavedPlace = onEditSavedPlace,
                             onEditOfflinePlace = onEditOfflinePlace,
-                            onDeleteSavedPlace = onDeleteSavedPlace,
-                            onRevertOffline = onRevertOffline,
                             onViewDescription = onViewDescription,
                             onOpenMapToPlace = onOpenMapToPlace,
                             onCopyCoordinates = onCopyCoordinates,
@@ -343,15 +330,10 @@ private fun PlaceRow(
     onNavigatePlace: (Feature) -> Unit,
     onEditSavedPlace: (Feature) -> Unit,
     onEditOfflinePlace: (OfflineFeature, Int) -> Unit,
-    onDeleteSavedPlace: (Feature) -> Unit,
-    onRevertOffline: (OfflineFeature) -> Unit,
     onViewDescription: (Feature) -> Unit,
     onOpenMapToPlace: (Feature) -> Unit,
     onCopyCoordinates: (String) -> Unit,
 ) {
-    var showDeleteDialog by rememberSaveable(item.feature.properties.database_id, item.isOffline) {
-        mutableStateOf(false)
-    }
     val feature = item.feature
     val addressOrCoordinates = feature.properties.address?.takeIf { it.isNotBlank() } ?: run {
         val coords = feature.geometry.coordinates
@@ -494,60 +476,8 @@ private fun PlaceRow(
                         .height(48.dp),
                     enabled = actionsEnabled
                 )
-                GeoVaultSecondaryButton(
-                    text = if (item.isOffline && feature.properties.database_id != null) "Revert" else if (item.isOffline) "Discard" else "Delete",
-                    onClick = { showDeleteDialog = true },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp),
-                    enabled = actionsEnabled,
-                    accentColor = GeoVaultColorTokens.Error
-                )
             }
         }
-    }
-
-    if (showDeleteDialog) {
-        val isRevert = item.isOffline
-        val isOfflineUpdate = feature.properties.database_id != null
-        val actionLabel = if (isRevert) {
-            if (isOfflineUpdate) "Revert" else "Discard"
-        } else {
-            "Delete"
-        }
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("$actionLabel Changes") },
-            text = {
-                Text(
-                    if (isRevert) {
-                        val action = if (isOfflineUpdate) "revert your changes to" else "discard"
-                        "Are you sure you want to $action '${feature.properties.name ?: "this place"}'?"
-                    } else {
-                        "Are you sure you want to delete '${feature.properties.name ?: "this place"}'? This cannot be undone."
-                    }
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (isRevert) {
-                            item.offlineFeature?.let(onRevertOffline)
-                        } else {
-                            onDeleteSavedPlace(feature)
-                        }
-                        showDeleteDialog = false
-                    }
-                ) {
-                    Text(actionLabel, color = GeoVaultColorTokens.Error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
     }
 }
 
@@ -598,7 +528,7 @@ private fun FabStack(
         FloatingActionButton(
             onClick = { if (enabled) onAddPlace() },
             shape = CircleShape,
-            backgroundColor = GeoVaultColorTokens.PrimaryBlue.copy(alpha = if (enabled) 1f else 0.6f),
+            backgroundColor = GeoVaultColorTokens.PrimaryBlue,
             contentColor = Color.White,
             elevation = androidx.compose.material.FloatingActionButtonDefaults.elevation(
                 defaultElevation = 0.dp,
@@ -610,7 +540,7 @@ private fun FabStack(
         FloatingActionButton(
             onClick = { if (enabled) onOpenMap() },
             shape = CircleShape,
-            backgroundColor = GeoVaultColorTokens.PrimaryBlue.copy(alpha = if (enabled) 1f else 0.6f),
+            backgroundColor = GeoVaultColorTokens.PrimaryBlue,
             contentColor = Color.White,
             elevation = androidx.compose.material.FloatingActionButtonDefaults.elevation(
                 defaultElevation = 0.dp,

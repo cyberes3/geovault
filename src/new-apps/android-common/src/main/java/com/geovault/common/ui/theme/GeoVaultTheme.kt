@@ -2,6 +2,7 @@ package com.geovault.common.ui.theme
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.Colors
 import androidx.compose.material.MaterialTheme
@@ -17,7 +18,7 @@ private fun lightScheme(): Colors = lightColors(
     primaryVariant = GeoVaultColorTokens.PrimaryBlueDark,
     secondary = GeoVaultColorTokens.PrimaryBlue,
     surface = GeoVaultColorTokens.Surface,
-    background = GeoVaultColorTokens.ListBackground,
+    background = GeoVaultColorTokens.Background,
     onPrimary = Color.White,
     onSecondary = Color.White,
     onSurface = GeoVaultColorTokens.TextPrimary,
@@ -49,6 +50,7 @@ fun GeoVaultTheme(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .navigationBarsPadding()
                 .dismissKeyboardOnOutsideTap()
         ) {
             content()

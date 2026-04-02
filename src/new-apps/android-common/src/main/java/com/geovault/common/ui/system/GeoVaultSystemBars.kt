@@ -8,7 +8,7 @@ import com.geovault.common.ui.theme.GeoVaultColorTokens
 
 object GeoVaultSystemBars {
     @ColorInt const val PRIMARY_BLUE: Int = GeoVaultColorTokens.PRIMARY_BLUE_INT
-    @ColorInt const val DEFAULT_NAV_BG: Int = GeoVaultColorTokens.LIST_BACKGROUND_INT
+    @ColorInt const val DEFAULT_NAV_BG: Int = GeoVaultColorTokens.BACKGROUND_INT
 
     fun applyAppChrome(
         activity: ComponentActivity,

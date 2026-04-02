@@ -87,6 +87,39 @@ class PlacesCacheStore(context: Context) {
         prefs.edit().putString(KEY_OFFLINE_PLACES, gson.toJson(list)).commit()
     }
 
+    fun removeOfflineByFeature(feature: Feature) {
+        val targetId = feature.properties.database_id
+        val targetName = feature.properties.name
+        val targetCoords = feature.geometry.coordinates
+        val list = getOfflineFeatures().toMutableList()
+        val filtered = list.filterNot { offline ->
+            val offlineFeature = offline.feature
+            val offlineId = offlineFeature.properties.database_id
+            when {
+                targetId != null && offlineId != null -> targetId == offlineId
+                else -> offlineFeature.properties.name == targetName &&
+                    offlineFeature.geometry.coordinates == targetCoords
+            }
+        }
+        prefs.edit().putString(KEY_OFFLINE_PLACES, gson.toJson(filtered)).commit()
+    }
+
+    fun removeCachedFeature(feature: Feature) {
+        val targetId = feature.properties.database_id
+        val targetName = feature.properties.name
+        val targetCoords = feature.geometry.coordinates
+        val list = getCachedFeatures()
+            .filterNot { cached ->
+                val cachedId = cached.properties.database_id
+                when {
+                    targetId != null && cachedId != null -> targetId == cachedId
+                    else -> cached.properties.name == targetName &&
+                        cached.geometry.coordinates == targetCoords
+                }
+            }
+        prefs.edit().putString(KEY_CACHED_PLACES, gson.toJson(FeatureCollection(features = list))).commit()
+    }
+
     fun clear() {
         prefs.edit()
             .remove(KEY_CACHED_PLACES)
