@@ -13,6 +13,7 @@ object AppResetFlow {
     }
 
     enum class Phase {
+        BEFORE_EMERGENCY_EXPORT,
         BEFORE_TOKEN_CLEAR,
         AFTER_TOKEN_CLEAR,
         BEFORE_RELAUNCH
@@ -47,6 +48,7 @@ object AppResetFlow {
         configureRelaunchIntent: (Intent) -> Unit = {}
     ) {
         val appContext = context.applicationContext
+        runPhaseHooks(appContext, reason, Phase.BEFORE_EMERGENCY_EXPORT)
         runPhaseHooks(appContext, reason, Phase.BEFORE_TOKEN_CLEAR)
         GeovaultAuthManager.clearTokens(appContext)
         runPhaseHooks(appContext, reason, Phase.AFTER_TOKEN_CLEAR)

@@ -1,6 +1,7 @@
 package com.geovault.places.data
 
 import android.content.Context
+import com.geovault.places.domain.NavigationRetryFlusher
 import com.geovault.places.model.Feature
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -11,7 +12,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 
-class NavigationTrackingRepository(private val context: Context) {
+class NavigationTrackingRepository(private val context: Context) : NavigationRetryFlusher {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val gson = Gson()
     private val intListType = TypeToken.getParameterized(List::class.java, Int::class.javaObjectType).type
@@ -40,7 +41,7 @@ class NavigationTrackingRepository(private val context: Context) {
         })
     }
 
-    fun flushPending(serverUrl: String) {
+    override fun flushPending(serverUrl: String) {
         if (serverUrl.isBlank()) return
         val api = PlacesApiFactory.create(context, serverUrl)
         getPending().forEach { id ->

@@ -2,6 +2,7 @@ package com.geovault.places.data
 
 import android.content.Context
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.places.domain.PlacesRemoteDataSource
 import com.geovault.places.model.AddressSearchResult
 import com.geovault.places.model.Feature
 import com.geovault.places.model.FeatureCollection
@@ -11,8 +12,9 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import org.json.JSONObject
 
-class PlacesRepository(private val context: Context) {
+class PlacesRepository(private val context: Context) : PlacesRemoteDataSource {
     private fun api(): PlacesApi {
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
         return PlacesApiFactory.create(context, serverUrl)
@@ -26,7 +28,7 @@ class PlacesRepository(private val context: Context) {
         }
     }
 
-    suspend fun fetchPlacesCancellable(): Result<FeatureCollection> {
+    override suspend fun fetchPlacesCancellable(): Result<FeatureCollection> {
         return runCatching {
             val call = api().getPlaces()
             executeCancellable(call) { response ->
@@ -38,26 +40,26 @@ class PlacesRepository(private val context: Context) {
         }
     }
 
-    fun fetchPlace(id: Int): Result<Feature> {
+    override fun fetchPlace(id: Int): Result<Feature> {
         return runCatching {
             val response = api().getPlace(id).execute()
-            if (!response.isSuccessful) error("Failed to fetch place: ${response.code()}")
+            if (!response.isSuccessful) error(parseApiError(response, "Sync failed: server error ${response.code()}"))
             response.body() ?: error("Server returned no data")
         }
     }
 
-    fun createPlace(feature: Feature): Result<Feature> {
+    override fun createPlace(feature: Feature): Result<Feature> {
         return runCatching {
             val response = api().createPlace(feature).execute()
-            if (!response.isSuccessful) error("Failed to create place: ${response.code()}")
+            if (!response.isSuccessful) error(parseApiError(response, "Sync failed: server error ${response.code()}"))
             response.body() ?: error("Server returned no data")
         }
     }
 
-    fun updatePlace(id: Int, feature: Feature): Result<Feature> {
+    override fun updatePlace(id: Int, feature: Feature): Result<Feature> {
         return runCatching {
             val response = api().updatePlace(id, feature).execute()
-            if (!response.isSuccessful) error("Failed to update place: ${response.code()}")
+            if (!response.isSuccessful) error(parseApiError(response, "Sync failed: server error ${response.code()}"))
             response.body() ?: error("Server returned no data")
         }
     }
@@ -96,5 +98,16 @@ class PlacesRepository(private val context: Context) {
                 continuation.resumeWithException(t)
             }
         })
+    }
+
+    private fun parseApiError(response: Response<*>, fallback: String): String {
+        val body = response.errorBody()?.string() ?: return fallback
+        return try {
+            val json = JSONObject(body)
+            val message = json.optString("error", "").trim()
+            if (message.isNotEmpty()) message else fallback
+        } catch (_: Exception) {
+            fallback
+        }
     }
 }

@@ -4,18 +4,27 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.auth.CommonInitialAuthController
+import com.geovault.common.sync.GeoVaultQueuedSyncMessageFormatter
+import com.geovault.common.sync.GeoVaultQueuedSyncOutcome
+import com.geovault.common.sync.GeoVaultRefreshTimeoutPolicy
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.places.di.PlacesAppServices
+import com.geovault.places.domain.SnapshotFetchResult
+import com.geovault.places.domain.SyncEvent
+import com.geovault.places.domain.SyncFailureReason
+import com.geovault.places.domain.SyncResult
 import com.geovault.places.model.Feature
 import com.geovault.places.model.OfflineFeature
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
 
 data class MainScreenState(
@@ -43,9 +52,11 @@ class MainScreenViewModel(
     private val services = PlacesAppServices.from(application)
     private val cache = services.cacheStore()
     private val repository = services.placesRepository()
-    private val syncUseCase = services.syncOfflinePlacesUseCase()
+    private val offlineSyncCoordinator = services.offlineSyncCoordinator()
     private val authController = services.initialAuthController()
     private var refreshJob: Job? = null
+    private var refreshCancelMessage: String? = null
+    private var refreshPhase: RefreshPhase = RefreshPhase.IDLE
     private var initialRefreshTriggered: Boolean = false
 
     private val _state = MutableStateFlow(MainScreenState())
@@ -131,6 +142,7 @@ class MainScreenViewModel(
         tapHintText: String = "Tap to cancel"
     ) {
         if (refreshJob?.isActive == true || _state.value.isRefreshing) return
+        refreshCancelMessage = null
         refreshJob = viewModelScope.launch {
             _state.update {
                 it.copy(
@@ -141,24 +153,33 @@ class MainScreenViewModel(
                 )
             }
             try {
-                val result = withContext(Dispatchers.IO) { repository.fetchPlacesCancellable() }
-                result.onSuccess { collection ->
-                    cache.setCached(collection)
-                    withContext(Dispatchers.IO) { syncUseCase.runSync() }
-                    publishFromCache()
-                }.onFailure { err ->
-                    _state.update {
-                        it.copy(
-                            snackbar = GeoVaultSnackbarModel(
-                                id = "main_error_${System.currentTimeMillis()}",
-                                message = "Network failed: ${err.message ?: "Unknown error"}"
-                            )
-                        )
+                refreshPhase = RefreshPhase.FETCHING
+                val fetchResult = withContext(Dispatchers.IO) {
+                    withTimeout(GeoVaultRefreshTimeoutPolicy.DEFAULT_TIMEOUT_MS) {
+                        offlineSyncCoordinator.fetchAndCacheServerSnapshot()
                     }
                 }
+                when (fetchResult) {
+                    is SnapshotFetchResult.Failed -> {
+                        showSnackbar(fetchResult.message, "main_error")
+                    }
+                    SnapshotFetchResult.Success -> {
+                        refreshPhase = RefreshPhase.SYNCING
+                        val replayResult = withContext(Dispatchers.IO) {
+                            offlineSyncCoordinator.runPendingReplayAndCanonicalRefresh()
+                        }
+                        publishSyncOutcome(replayResult.syncResult)
+                        replayResult.warningMessage?.let { showSnackbar(it, "main_warning") }
+                    }
+                }
+            } catch (_: TimeoutCancellationException) {
+                showSnackbar("Refresh timed out (10s)", "refresh_timeout")
             } catch (_: CancellationException) {
-                publishFromCache()
+                val message = refreshCancelMessage ?: "Syncing cancelled"
+                showSnackbar(message, "refresh_cancelled")
             } finally {
+                refreshPhase = RefreshPhase.IDLE
+                publishFromCache()
                 _state.update {
                     it.copy(
                         isRefreshing = false,
@@ -172,7 +193,17 @@ class MainScreenViewModel(
     }
 
     fun cancelRefresh() {
-        refreshJob?.cancel(CancellationException("Cancelled by user"))
+        refreshCancelMessage = "Cancelled - using cached data"
+        when (refreshPhase) {
+            RefreshPhase.FETCHING -> {
+                refreshJob?.cancel(CancellationException(refreshCancelMessage ?: "Cancelled by user"))
+            }
+            RefreshPhase.SYNCING -> {
+                showSnackbar(refreshCancelMessage ?: "Syncing cancelled", "refresh_cancelled")
+                _state.update { it.copy(showSyncOverlay = false, syncOverlayTitle = "Syncing...", syncOverlaySubtext = "Tap to cancel") }
+            }
+            RefreshPhase.IDLE -> Unit
+        }
     }
 
     fun deleteSavedPlace(feature: Feature) {
@@ -238,6 +269,10 @@ class MainScreenViewModel(
         _state.update { it.copy(snackbar = null) }
     }
 
+    fun showExternalError(message: String) {
+        showSnackbar(message, "external_error")
+    }
+
     fun setSelectedPlaceId(id: Int?) {
         _state.update { it.copy(selectedPlaceId = id) }
     }
@@ -256,6 +291,53 @@ class MainScreenViewModel(
             )
         }
         publishFromCache()
+    }
+
+    private fun publishSyncOutcome(syncResult: SyncResult) {
+        if (!syncResult.hadQueuedItems) return
+        syncResult.events.forEach { event ->
+            when (event) {
+                is SyncEvent.ConflictSavedAsNew -> {
+                    showSnackbar("Conflict detected: '${event.placeName}' saved as new item", "sync_conflict")
+                }
+                is SyncEvent.ItemFailed -> {
+                    showSnackbar(formatItemFailureMessage(event), "sync_item_failed")
+                }
+            }
+        }
+        val message = GeoVaultQueuedSyncMessageFormatter.format(
+            outcome = GeoVaultQueuedSyncOutcome(
+                successCount = syncResult.successCount,
+                failedCount = syncResult.failedCount,
+                conflictCount = syncResult.conflictCount,
+            ),
+            itemLabelSingular = "offline item",
+            itemLabelPlural = "offline items",
+        )
+        if (message.isNotBlank()) {
+            showSnackbar(message, "sync_result")
+        }
+    }
+
+    private fun formatItemFailureMessage(event: SyncEvent.ItemFailed): String {
+        val details = event.message?.takeIf { it.isNotBlank() }
+        return when (event.reason) {
+            SyncFailureReason.FetchFailed -> details ?: "Sync failed while checking server changes for '${event.placeName}'"
+            SyncFailureReason.ConflictCreateFailed -> details ?: "Sync conflict for '${event.placeName}' could not be saved as new item"
+            SyncFailureReason.UpdateFailed -> details ?: "Sync update failed for '${event.placeName}'"
+            SyncFailureReason.CreateFailed -> details ?: "Sync create failed for '${event.placeName}'"
+        }
+    }
+
+    private fun showSnackbar(message: String, prefix: String) {
+        _state.update {
+            it.copy(
+                snackbar = GeoVaultSnackbarModel(
+                    id = "${prefix}_${System.currentTimeMillis()}",
+                    message = message
+                )
+            )
+        }
     }
 
     private fun publishFromCache() {
@@ -298,4 +380,10 @@ class MainScreenViewModel(
         val format = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
         return "Last synced: ${format.format(java.util.Date(lastSyncMillis))}"
     }
+}
+
+private enum class RefreshPhase {
+    IDLE,
+    FETCHING,
+    SYNCING,
 }

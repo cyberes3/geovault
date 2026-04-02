@@ -1,6 +1,7 @@
 package com.geovault.places.data
 
 import android.content.Context
+import com.geovault.places.domain.PlacesOfflineStore
 import com.geovault.places.model.Feature
 import com.geovault.places.model.FeatureCollection
 import com.geovault.places.model.OfflineFeature
@@ -9,16 +10,16 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class PlacesCacheStore(context: Context) {
+class PlacesCacheStore(context: Context) : PlacesOfflineStore {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val gson = Gson()
 
-    fun getCachedFeatures(): List<Feature> {
+    override fun getCachedFeatures(): List<Feature> {
         val json = prefs.getString(KEY_CACHED_PLACES, null) ?: return emptyList()
         return runCatching { gson.fromJson(json, FeatureCollection::class.java).features }.getOrElse { emptyList() }
     }
 
-    fun getOfflineFeatures(): List<OfflineFeature> {
+    override fun getOfflineFeatures(): List<OfflineFeature> {
         val json = prefs.getString(KEY_OFFLINE_PLACES, "[]") ?: "[]"
         return runCatching { gson.fromJson(json, Array<OfflineFeature>::class.java).toList() }.getOrElse { emptyList() }
     }
@@ -30,11 +31,15 @@ class PlacesCacheStore(context: Context) {
 
     fun getLastSyncTime(): Long = prefs.getLong(KEY_LAST_SYNC_TIME, 0L)
 
-    fun setCached(collection: FeatureCollection, lastSyncTime: Long = System.currentTimeMillis()) {
+    override fun setCached(collection: FeatureCollection, lastSyncTime: Long) {
         prefs.edit()
             .putString(KEY_CACHED_PLACES, gson.toJson(collection))
             .putLong(KEY_LAST_SYNC_TIME, lastSyncTime)
             .apply()
+    }
+
+    fun setCached(collection: FeatureCollection) {
+        setCached(collection, System.currentTimeMillis())
     }
 
     fun setLastSyncTime(value: Long) {
@@ -81,7 +86,7 @@ class PlacesCacheStore(context: Context) {
         prefs.edit().putString(KEY_OFFLINE_PLACES, gson.toJson(list)).commit()
     }
 
-    fun removeOffline(item: OfflineFeature) {
+    override fun removeOffline(item: OfflineFeature) {
         val list = getOfflineFeatures().toMutableList()
         list.remove(item)
         prefs.edit().putString(KEY_OFFLINE_PLACES, gson.toJson(list)).commit()

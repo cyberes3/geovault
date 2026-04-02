@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -134,6 +135,12 @@ class PlaceEditActivity : ComponentActivity() {
                             if (deleted) {
                                 setResult(RESULT_OK, Intent().putExtra("deleted_feature", editFeature))
                                 finish()
+                            } else {
+                                Toast.makeText(
+                                    this@PlaceEditActivity,
+                                    "Cannot delete while offline. Please try again when connected.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                         }
                     },

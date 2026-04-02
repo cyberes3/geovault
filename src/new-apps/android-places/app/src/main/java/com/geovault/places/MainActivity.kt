@@ -32,6 +32,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_OAUTH_ERROR = "oauth_error"
         const val EXTRA_SELECTED_ID_FROM_MAP = "selected_id_from_map"
+        const val EXTRA_SHOW_EXPORT_SAVED_MESSAGE = "show_export_saved_message"
     }
 
     private val viewModel: MainScreenViewModel by viewModels()
@@ -85,8 +86,9 @@ class MainActivity : ComponentActivity() {
                     state.oauthUrl?.let { GeovaultAuthManager.launchOAuthInBrowser(this@MainActivity, it) }
                 }
                 LaunchedEffect(Unit) {
-                    intent.getStringExtra(EXTRA_OAUTH_ERROR)?.let {
-                        viewModel.clearSnackbar()
+                    intent.getStringExtra(EXTRA_OAUTH_ERROR)?.let { error ->
+                        viewModel.showExternalError(error)
+                        intent?.removeExtra(EXTRA_OAUTH_ERROR)
                     }
                 }
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -152,7 +154,6 @@ class MainActivity : ComponentActivity() {
                         },
                         onCancelRefresh = {
                             viewModel.cancelRefresh()
-                            Toast.makeText(this@MainActivity, "Cancelled - using cached data", Toast.LENGTH_SHORT).show()
                         },
                         onDismissSnackbar = viewModel::clearSnackbar,
                     )
@@ -162,6 +163,10 @@ class MainActivity : ComponentActivity() {
     }
     override fun onResume() {
         super.onResume()
+        if (intent?.getBooleanExtra(EXTRA_SHOW_EXPORT_SAVED_MESSAGE, false) == true) {
+            intent?.removeExtra(EXTRA_SHOW_EXPORT_SAVED_MESSAGE)
+            Toast.makeText(this, "Offline data saved to Files -> Downloads", Toast.LENGTH_SHORT).show()
+        }
         val selectedIdFromMap = intent?.getIntExtra(EXTRA_SELECTED_ID_FROM_MAP, -1) ?: -1
         if (selectedIdFromMap != -1) {
             intent?.removeExtra(EXTRA_SELECTED_ID_FROM_MAP)
