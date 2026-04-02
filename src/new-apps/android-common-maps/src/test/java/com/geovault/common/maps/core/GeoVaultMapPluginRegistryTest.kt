@@ -5,7 +5,7 @@ import org.junit.Test
 
 class GeoVaultMapPluginRegistryTest {
     @Test
-    fun remove_callsOnDestroyOnceForRemovedPlugin() {
+    fun remove_callsOnPluginDestroyedOnceForRemovedPlugin() {
         val registry = GeoVaultMapPluginRegistry()
         val plugin = TestPlugin()
         registry.add(plugin)
@@ -13,11 +13,11 @@ class GeoVaultMapPluginRegistryTest {
         registry.remove(plugin)
         registry.remove(plugin)
 
-        assertEquals(1, plugin.destroyCalls)
+        assertEquals(1, plugin.pluginDestroyedCalls)
     }
 
     @Test
-    fun clearAndDestroy_callsOnDestroyForAllRegisteredPlugins() {
+    fun clearAndDestroy_callsOnPluginDestroyedForAllRegisteredPlugins() {
         val registry = GeoVaultMapPluginRegistry()
         val first = TestPlugin()
         val second = TestPlugin()
@@ -26,15 +26,15 @@ class GeoVaultMapPluginRegistryTest {
 
         registry.clearAndDestroy()
 
-        assertEquals(1, first.destroyCalls)
-        assertEquals(1, second.destroyCalls)
+        assertEquals(1, first.pluginDestroyedCalls)
+        assertEquals(1, second.pluginDestroyedCalls)
     }
 
     private class TestPlugin : GeoVaultMapPlugin {
-        var destroyCalls: Int = 0
+        var pluginDestroyedCalls: Int = 0
 
-        override fun onDestroy() {
-            destroyCalls += 1
+        override fun onPluginDestroyed() {
+            pluginDestroyedCalls += 1
         }
     }
 }

@@ -15,14 +15,19 @@ class MapLocationRendererPlugin(
     context: Context,
     private val config: LocationComponentHelper.Config,
     private val autoEnableLocationComponent: Boolean = true,
-) : GeoVaultMapPlugin {
+) : GeoVaultMapPlugin, GeoVaultUserLocationCapability {
     private val appContext = context.applicationContext
     private var map: MapLibreMap? = null
     private var updatesSession: LocationUpdates.LocationUpdatesSession? = null
     private var accuracyCircleVisible: Boolean = config.accuracyAlpha > 0f
 
-    override fun onMapReady(map: MapLibreMap) {
+    override fun onMapAttached(map: MapLibreMap) {
         this.map = map
+    }
+
+    override fun onMapDetached() {
+        stopRenderingGpsLocation()
+        map = null
     }
 
     override fun onStyleLoaded(map: MapLibreMap, style: Style) {
@@ -31,12 +36,12 @@ class MapLocationRendererPlugin(
         activateOrApply(map, style)
     }
 
-    fun setEnabled(enabled: Boolean) {
+    override fun setEnabled(enabled: Boolean) {
         val mapValue = map ?: return
         LocationComponentHelper.setEnabled(mapValue, enabled)
     }
 
-    fun setCameraTracking(enabled: Boolean) {
+    override fun setCameraTracking(enabled: Boolean) {
         val mapValue = map ?: return
         LocationComponentHelper.setCameraTracking(mapValue, enabled)
     }
@@ -45,7 +50,7 @@ class MapLocationRendererPlugin(
      * Shows/hides the MapLibre location accuracy circle without rebuilding the map.
      * Applies immediately when the location component is active.
      */
-    fun setAccuracyCircleVisible(visible: Boolean) {
+    override fun setAccuracyCircleVisible(visible: Boolean) {
         accuracyCircleVisible = visible
         val mapValue = map ?: return
         val locationComponent = mapValue.locationComponent
@@ -53,10 +58,10 @@ class MapLocationRendererPlugin(
         LocationComponentHelper.applyStyle(mapValue, appContext, effectiveConfig())
     }
 
-    fun isAccuracyCircleVisible(): Boolean = accuracyCircleVisible
+    override fun isAccuracyCircleVisible(): Boolean = accuracyCircleVisible
 
     @SuppressLint("MissingPermission")
-    fun renderLocation(location: Location) {
+    override fun renderLocation(location: Location) {
         val mapValue = map ?: return
         LocationComponentHelper.forceLocation(mapValue, location)
     }
@@ -80,8 +85,9 @@ class MapLocationRendererPlugin(
         updatesSession = null
     }
 
-    override fun onDestroy() {
+    override fun onPluginDestroyed() {
         stopRenderingGpsLocation()
+        map = null
     }
 
     @SuppressLint("MissingPermission")
@@ -101,4 +107,5 @@ class MapLocationRendererPlugin(
             config.copy(accuracyAlpha = 0f)
         }
     }
+
 }

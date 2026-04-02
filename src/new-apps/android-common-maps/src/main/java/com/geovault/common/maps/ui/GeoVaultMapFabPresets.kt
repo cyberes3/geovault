@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.outlined.GpsNotFixed
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -19,15 +20,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
-import com.geovault.common.maps.core.GeoVaultMapController
+import com.geovault.common.maps.core.GeoVaultBaseMap
+import com.geovault.common.maps.core.GeoVaultMapPhase
+import com.geovault.common.maps.location.GeoVaultUserLocationCapability
 import com.geovault.common.maps.core.MapLibreManager
 import com.geovault.common.maps.location.LocationUpdates
-import com.geovault.common.maps.location.MapLocationRendererPlugin
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 
 fun geoVaultLayerToggleFabAction(
-    controller: GeoVaultMapController,
+    map: GeoVaultBaseMap,
     id: String = "layers",
     order: Int = 10,
     contentDescription: String = "Toggle map source",
@@ -37,12 +39,12 @@ fun geoVaultLayerToggleFabAction(
         order = order,
         icon = GeoVaultMapFabIcon.Vector(Icons.Default.Layers),
         contentDescription = contentDescription,
-        onTap = { controller.cycleSource() },
+        onTap = { map.cycleSource() },
     )
 }
 
 fun geoVaultZoomInFabAction(
-    controller: GeoVaultMapController,
+    map: GeoVaultBaseMap,
     id: String = "zoom_in",
     order: Int = 40,
     contentDescription: String = "Zoom in",
@@ -54,17 +56,17 @@ fun geoVaultZoomInFabAction(
         icon = GeoVaultMapFabIcon.Vector(Icons.Default.Add),
         contentDescription = contentDescription,
         onTap = {
-            val map = controller.maplibreMap
-            if (map != null) {
-                val targetZoom = (map.cameraPosition.zoom + 1.0).coerceAtMost(maxZoom)
-                controller.animateCameraWithPadding(CameraUpdateFactory.zoomTo(targetZoom))
+            val mapLibreMap = map.maplibreMap
+            if (mapLibreMap != null) {
+                val targetZoom = (mapLibreMap.cameraPosition.zoom + 1.0).coerceAtMost(maxZoom)
+                map.animateCameraWithPadding(CameraUpdateFactory.zoomTo(targetZoom))
             }
         },
     )
 }
 
 fun geoVaultZoomOutFabAction(
-    controller: GeoVaultMapController,
+    map: GeoVaultBaseMap,
     id: String = "zoom_out",
     order: Int = 50,
     contentDescription: String = "Zoom out",
@@ -76,10 +78,10 @@ fun geoVaultZoomOutFabAction(
         icon = GeoVaultMapFabIcon.Vector(Icons.Default.Remove),
         contentDescription = contentDescription,
         onTap = {
-            val map = controller.maplibreMap
-            if (map != null) {
-                val targetZoom = (map.cameraPosition.zoom - 1.0).coerceAtLeast(minZoom)
-                controller.animateCameraWithPadding(CameraUpdateFactory.zoomTo(targetZoom))
+            val mapLibreMap = map.maplibreMap
+            if (mapLibreMap != null) {
+                val targetZoom = (mapLibreMap.cameraPosition.zoom - 1.0).coerceAtLeast(minZoom)
+                map.animateCameraWithPadding(CameraUpdateFactory.zoomTo(targetZoom))
             }
         },
     )
@@ -87,8 +89,8 @@ fun geoVaultZoomOutFabAction(
 
 @Composable
 fun rememberGeoVaultGpsRecenterFabAction(
-    controller: GeoVaultMapController,
-    locationPlugin: MapLocationRendererPlugin,
+    map: GeoVaultBaseMap,
+    userLocation: GeoVaultUserLocationCapability,
     id: String = "gps_recenter",
     order: Int = 30,
     contentDescription: String = "Recenter on my location",
@@ -97,22 +99,35 @@ fun rememberGeoVaultGpsRecenterFabAction(
     val context = LocalContext.current
     var locationEnabled by remember { mutableStateOf(false) }
     var locationLocking by remember { mutableStateOf(false) }
+    var activeRecenterRequestId by remember { mutableStateOf(0) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            // Invalidate in-flight callbacks after host leaves composition.
+            activeRecenterRequestId += 1
+        }
+    }
 
     fun recenterOnUser(showSpinner: Boolean) {
         if (showSpinner) {
             locationLocking = true
         }
-        controller.ensureInteractiveGestures()
-        locationPlugin.setEnabled(true)
-        locationPlugin.setCameraTracking(false)
-        locationPlugin.setAccuracyCircleVisible(true)
+        activeRecenterRequestId += 1
+        val requestId = activeRecenterRequestId
+        map.ensureInteractiveGestures()
+        userLocation.setEnabled(true)
+        userLocation.setCameraTracking(false)
+        userLocation.setAccuracyCircleVisible(true)
         // Post to next UI tick so loading state is visible before fast callbacks.
         android.os.Handler(android.os.Looper.getMainLooper()).post {
+            if (requestId != activeRecenterRequestId) return@post
             LocationUpdates.getCurrentLocation(context) { latLng ->
+                if (requestId != activeRecenterRequestId) return@getCurrentLocation
                 if (showSpinner) {
                     locationLocking = false
                 }
                 if (latLng == null) return@getCurrentLocation
+                if (map.phase.value != GeoVaultMapPhase.Ready) return@getCurrentLocation
                 locationEnabled = true
                 onLocationResolved?.invoke(latLng)
                 val syntheticLocation = android.location.Location("geovault-gps-fab").apply {
@@ -121,23 +136,27 @@ fun rememberGeoVaultGpsRecenterFabAction(
                     accuracy = 10f
                     time = System.currentTimeMillis()
                 }
-                locationPlugin.renderLocation(syntheticLocation)
-                val map = controller.maplibreMap ?: return@getCurrentLocation
-                val currentZoom = map.cameraPosition.zoom.coerceAtLeast(1.0)
-                controller.animateCameraWithPadding(
+                userLocation.renderLocation(syntheticLocation)
+                val mapLibreMap = map.maplibreMap ?: return@getCurrentLocation
+                val currentZoom = mapLibreMap.cameraPosition.zoom.coerceAtLeast(1.0)
+                map.animateCameraWithPadding(
                     CameraUpdateFactory.newLatLngZoom(latLng, currentZoom),
                     callback = object : org.maplibre.android.maps.MapLibreMap.CancelableCallback {
                         override fun onCancel() {
-                            controller.ensureInteractiveGestures()
+                            map.ensureInteractiveGestures()
                         }
 
                         override fun onFinish() {
-                            controller.ensureInteractiveGestures()
+                            map.ensureInteractiveGestures()
                         }
                     },
                 )
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
-                    { controller.ensureInteractiveGestures() },
+                    {
+                        if (requestId == activeRecenterRequestId) {
+                            map.ensureInteractiveGestures()
+                        }
+                    },
                     350L,
                 )
             }

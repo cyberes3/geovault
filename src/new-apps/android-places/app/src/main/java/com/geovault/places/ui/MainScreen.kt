@@ -64,9 +64,17 @@ import com.geovault.places.model.OfflineFeature
 import com.geovault.places.presentation.MainScreenState
 
 private const val HEADER_WAITING_TO_SYNC = "WAITING TO SYNC"
+private const val HEADER_PLACES = "Places"
+
+private enum class ListSectionHeaderPlacement {
+    /** First section in the list (e.g. waiting to sync at top). */
+    First,
+    /** Section after another block; extra top margin separates groups. */
+    AfterOtherSection,
+}
 
 private sealed interface PlaceListItem {
-    data class Header(val title: String) : PlaceListItem
+    data class Header(val title: String, val placement: ListSectionHeaderPlacement) : PlaceListItem
     data class Row(
         val feature: Feature,
         val isOffline: Boolean,
@@ -233,7 +241,12 @@ private fun PlacesBody(
     val listItems = remember(state.saved, state.offlineItems) {
         buildList {
             if (state.offlineItems.isNotEmpty()) {
-                add(PlaceListItem.Header(HEADER_WAITING_TO_SYNC))
+                add(
+                    PlaceListItem.Header(
+                        title = HEADER_WAITING_TO_SYNC,
+                        placement = ListSectionHeaderPlacement.First,
+                    )
+                )
                 state.offlineItems.forEachIndexed { index, offline ->
                     add(
                         PlaceListItem.Row(
@@ -245,8 +258,18 @@ private fun PlacesBody(
                     )
                 }
             }
-            state.saved.forEach { feature ->
-                add(PlaceListItem.Row(feature = feature, isOffline = false))
+            if (state.saved.isNotEmpty()) {
+                if (state.offlineItems.isNotEmpty()) {
+                    add(
+                        PlaceListItem.Header(
+                            title = HEADER_PLACES,
+                            placement = ListSectionHeaderPlacement.AfterOtherSection,
+                        )
+                    )
+                }
+                state.saved.forEach { feature ->
+                    add(PlaceListItem.Row(feature = feature, isOffline = false))
+                }
             }
         }
     }
@@ -282,7 +305,8 @@ private fun PlacesBody(
             ) {
                 items(listItems) { item ->
                     when (item) {
-                        is PlaceListItem.Header -> SectionHeader(text = item.title)
+                        is PlaceListItem.Header ->
+                            SectionHeader(text = item.title, placement = item.placement)
                         is PlaceListItem.Row -> PlaceRow(
                             item = item,
                             isSelected = item.feature.properties.database_id != null &&
@@ -308,13 +332,19 @@ private fun PlacesBody(
 }
 
 @Composable
-private fun SectionHeader(text: String) {
+private fun SectionHeader(text: String, placement: ListSectionHeaderPlacement) {
+    val topPadding = when (placement) {
+        ListSectionHeaderPlacement.First -> 32.dp
+        ListSectionHeaderPlacement.AfterOtherSection -> 24.dp
+    }
     Text(
         text = text,
-        modifier = Modifier.padding(start = 32.dp, top = 32.dp, end = 32.dp, bottom = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 4.dp, top = topPadding, end = 4.dp, bottom = 8.dp),
         color = GeoVaultColorTokens.TextSecondary,
         fontSize = 14.sp,
-        fontWeight = FontWeight.Medium
+        fontWeight = FontWeight.Medium,
     )
 }
 

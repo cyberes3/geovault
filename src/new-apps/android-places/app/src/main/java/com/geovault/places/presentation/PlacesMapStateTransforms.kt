@@ -1,5 +1,6 @@
 package com.geovault.places.presentation
 
+import com.geovault.common.maps.core.geoVaultLatLngBoundsForPoints
 import com.geovault.common.maps.render.MapRenderPoint
 import com.geovault.common.maps.render.MapRenderState
 import com.geovault.common.maps.render.CommonMapIconIds
@@ -31,10 +32,7 @@ object PlacesMapStateTransforms {
             if (coords.size < 2) return@mapNotNull null
             LatLng(coords[1], coords[0])
         }
-        if (points.isEmpty()) return null
-        val builder = LatLngBounds.Builder()
-        points.forEach { builder.include(it) }
-        return builder.build()
+        return geoVaultLatLngBoundsForPoints(points)
     }
 
     fun buildRenderState(

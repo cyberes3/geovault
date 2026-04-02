@@ -22,8 +22,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.Scaffold
@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -48,11 +49,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
-import com.geovault.common.maps.core.GeoVaultMap
+import com.geovault.common.maps.core.GeoVaultStandardMapView
 import com.geovault.common.maps.core.GeoVaultMapPhase
-import com.geovault.common.maps.core.rememberGeoVaultMapController
-import com.geovault.common.maps.location.GeoVaultLocationPuckPresets
-import com.geovault.common.maps.location.MapLocationRendererPlugin
+import com.geovault.common.maps.core.MapLibreManager
+import com.geovault.common.maps.core.rememberGeoVaultStandardMap
+import com.geovault.common.maps.location.rememberGeoVaultMapUserLocationPlugin
 import com.geovault.common.maps.render.CommonMapIconIds
 import com.geovault.common.maps.render.GeoJsonRenderConfig
 import com.geovault.common.maps.render.GeoJsonRenderPlugin
@@ -70,6 +71,7 @@ import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.components.GeoVaultTopTitleBarDefaults
+import com.geovault.common.ui.modifier.geoVaultKeyboardAwareVerticalScroll
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.GeoVaultTheme
@@ -184,7 +186,7 @@ private fun PlaceEditScreen(
     onSave: (Feature) -> Unit,
 ) {
     val state = remember(initial, isOfflineEdit) { PlaceEditScreenState(initial = initial, isOfflineEdit = isOfflineEdit) }
-    val controller = rememberGeoVaultMapController()
+    val map = rememberGeoVaultStandardMap()
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     val renderPlugin = remember(context) {
@@ -198,23 +200,18 @@ private fun PlaceEditScreen(
             context = context,
         )
     }
-    val locationPlugin = remember(context) {
-        MapLocationRendererPlugin(
-            context = context,
-            config = GeoVaultLocationPuckPresets.blueUserLocation(),
-            autoEnableLocationComponent = true,
-        )
-    }
+    val locationPlugin = rememberGeoVaultMapUserLocationPlugin(context = context)
     val gpsFabAction = rememberGeoVaultGpsRecenterFabAction(
-        controller = controller,
-        locationPlugin = locationPlugin,
+        map = map,
+        userLocation = locationPlugin,
         order = 2,
         onLocationResolved = { latLng ->
-            state.setFromMapPoint(latLng.latitude, latLng.longitude)
+            state.setFromGpsLocation(latLng.latitude, latLng.longitude)
         },
     )
-    val layerFabAction = remember(controller) { geoVaultLayerToggleFabAction(controller, order = 1) }
+    val layerFabAction = remember(map) { geoVaultLayerToggleFabAction(map, order = 1) }
     var geocodeJob by remember { mutableStateOf<Job?>(null) }
+    val formScrollState = rememberScrollState()
 
     GeoVaultRegisterBackHandler(
         canGoBack = { true },
@@ -228,44 +225,56 @@ private fun PlaceEditScreen(
         },
     )
 
-    LaunchedEffect(controller) {
-        controller.registerPlugin(renderPlugin)
-        controller.registerPlugin(locationPlugin)
-        controller.fetchSources()
+    LaunchedEffect(map) {
+        map.fetchSources()
     }
 
-    DisposableEffect(controller) {
+    DisposableEffect(map) {
+        map.registerPlugin(renderPlugin)
+        map.registerPlugin(locationPlugin)
         val listener = MapLibreMap.OnMapClickListener { clicked ->
             state.setFromMapPoint(clicked.latitude, clicked.longitude)
             true
         }
-        controller.addOnMapClickListener(listener)
+        map.addOnMapClickListener(listener)
         onDispose {
-            controller.removeOnMapClickListener(listener)
-            controller.unregisterPlugin(renderPlugin)
-            controller.unregisterPlugin(locationPlugin)
+            map.removeOnMapClickListener(listener)
+            map.unregisterPlugin(renderPlugin)
+            map.unregisterPlugin(locationPlugin)
         }
     }
 
-    LaunchedEffect(state.selectedLat, state.selectedLon) {
+    val phase by map.phase.collectAsState()
+    LaunchedEffect(state.selectedLat, state.selectedLon, phase) {
         val lat = state.selectedLat ?: return@LaunchedEffect
         val lon = state.selectedLon ?: return@LaunchedEffect
+        val points = if (state.showSelectedPointMarker) {
+            listOf(
+                MapRenderPoint(
+                    id = "edit-selected-point",
+                    latitude = lat,
+                    longitude = lon,
+                    iconImageId = CommonMapIconIds.MARKER_DEFAULT,
+                    iconSize = 1f,
+                )
+            )
+        } else {
+            emptyList()
+        }
         renderPlugin.setRenderState(
             MapRenderState(
-                points = listOf(
-                    MapRenderPoint(
-                        id = "edit-selected-point",
-                        latitude = lat,
-                        longitude = lon,
-                        iconImageId = CommonMapIconIds.MARKER_DEFAULT,
-                        iconSize = 1f,
-                    ),
-                ),
+                points = points,
             ),
         )
-        if (controller.phase.value == GeoVaultMapPhase.Ready) {
-            controller.animateCameraWithPadding(CameraUpdateFactory.newLatLng(LatLng(lat, lon)))
-        }
+        if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
+        if (!state.shouldFocusCameraOnSelection()) return@LaunchedEffect
+        map.animateCameraWithPadding(
+            CameraUpdateFactory.newLatLngZoom(
+                LatLng(lat, lon),
+                MapLibreManager.DEFAULT_POINT_ZOOM,
+            )
+        )
+        state.markSelectionCameraFocusHandled()
     }
 
     LaunchedEffect(state.mapSearchQuery, state.showSearchPanel) {
@@ -320,9 +329,10 @@ private fun PlaceEditScreen(
                         .weight(1f)
                         .heightIn(min = mapMinHeight),
                 ) {
-                    GeoVaultMap(
-                        controller = controller,
+                    GeoVaultStandardMapView(
+                        map = map,
                         modifier = Modifier.fillMaxSize(),
+                        includeDefaultFabColumnPadding = true,
                     )
                     GeoVaultMapFabColumn(
                         actions = buildGeoVaultMapFabActions {
@@ -416,7 +426,7 @@ private fun PlaceEditScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .verticalScroll(rememberScrollState())
+                                .geoVaultKeyboardAwareVerticalScroll(formScrollState)
                                 .padding(horizontal = 16.dp, vertical = 14.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {

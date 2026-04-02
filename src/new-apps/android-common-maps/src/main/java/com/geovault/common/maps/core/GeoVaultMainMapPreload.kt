@@ -14,6 +14,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
@@ -28,8 +29,8 @@ class GeoVaultMainMapHandle internal constructor(
     val key: String,
     private val ref: MainMapControllerRef,
 ) {
-    val controller: GeoVaultMapController
-        get() = ref.controller
+    val map: GeoVaultMainMap
+        get() = ref.map
 
     internal fun release() {
         GeoVaultMainMapControllerStore.release(key)
@@ -37,7 +38,7 @@ class GeoVaultMainMapHandle internal constructor(
 }
 
 internal interface MainMapControllerRef {
-    val controller: GeoVaultMapController
+    val map: GeoVaultMainMap
     fun preload()
     fun destroy()
 }
@@ -45,14 +46,14 @@ internal interface MainMapControllerRef {
 private class DefaultMainMapControllerRef(
     context: Context,
 ) : MainMapControllerRef {
-    override val controller: GeoVaultMapController = GeoVaultMapController(context.applicationContext)
+    override val map: GeoVaultMainMap = GeoVaultMainMap(context.applicationContext)
 
     override fun preload() {
-        controller.preloadMainMap()
+        map.preload()
     }
 
     override fun destroy() {
-        controller.onDestroy()
+        map.onDestroy()
     }
 }
 
@@ -181,11 +182,11 @@ fun rememberGeoVaultMainMapHandle(
 }
 
 @Composable
-fun rememberGeoVaultMainMapController(
+fun rememberGeoVaultMainMap(
     key: String,
-): GeoVaultMapController {
+): GeoVaultMainMap {
     val handle = rememberGeoVaultMainMapHandle(key)
-    return handle.controller
+    return handle.map
 }
 
 fun preloadGeoVaultMainMapOnAppLaunch(
@@ -207,13 +208,12 @@ fun resolveGeoVaultMainMapPreloadCameraTarget(
         val point = points.first()
         return GeoVaultMainMapPreloadCameraTarget.Single(point.latitude, point.longitude)
     }
-    return GeoVaultMainMapPreloadCameraTarget.Bounds(
-        LatLngBounds.Builder().includes(points).build(),
-    )
+    val bounds = geoVaultLatLngBoundsForPoints(points) ?: return GeoVaultMainMapPreloadCameraTarget.None
+    return GeoVaultMainMapPreloadCameraTarget.Bounds(bounds)
 }
 
 /**
- * Hosts the shared main map for preload/warm-up. When [surfaceMapInHost] is false, the [GeoVaultMap]
+ * Hosts the shared main map for preload/warm-up. When [surfaceMapInHost] is false, the [GeoVaultMainMapView]
  * is not composed here so another screen can own the sole MapLibre AndroidView for the same controller key
  * (avoids two views fighting for one MapLibre surface).
  */
@@ -223,7 +223,6 @@ fun GeoVaultMainMapPreloadHost(
     enabled: Boolean,
     cameraTarget: GeoVaultMainMapPreloadCameraTarget,
     modifier: Modifier = Modifier.fillMaxSize(),
-    boundsPaddingPx: Int = 96,
     surfaceMapInHost: Boolean = true,
 ) {
     if (!enabled) {
@@ -233,7 +232,6 @@ fun GeoVaultMainMapPreloadHost(
         mainMapKey = mainMapKey,
         cameraTarget = cameraTarget,
         modifier = modifier,
-        boundsPaddingPx = boundsPaddingPx,
         surfaceMapInHost = surfaceMapInHost,
     )
 }
@@ -243,12 +241,22 @@ private fun GeoVaultMainMapPreloadHostAuthenticatedBody(
     mainMapKey: String,
     cameraTarget: GeoVaultMainMapPreloadCameraTarget,
     modifier: Modifier,
-    boundsPaddingPx: Int,
     surfaceMapInHost: Boolean,
 ) {
     val handle = rememberGeoVaultMainMapHandle(mainMapKey)
-    val controller = handle.controller
-    val phase by controller.phase.collectAsState()
+    val map = handle.map
+    val phase by map.phase.collectAsState()
+    val density = LocalDensity.current
+    val preloadPaddingPx = remember(density) {
+        computeMapPaddingPx(
+            density = density,
+            includeDefaultFabColumnPadding = true,
+            mapPaddingDp = GeoVaultMapPaddingDp(),
+        )
+    }
+    val preloadBoundsFitPaddingPx = remember(density) {
+        computeGeoVaultMapBoundsFitPaddingPx(density)
+    }
     var lastAppliedTarget by remember(mainMapKey) {
         mutableStateOf<GeoVaultMainMapPreloadCameraTarget?>(null)
     }
@@ -260,17 +268,25 @@ private fun GeoVaultMainMapPreloadHostAuthenticatedBody(
         }
         when (cameraTarget) {
             is GeoVaultMainMapPreloadCameraTarget.Single -> {
-                controller.moveCameraWithPadding(
+                map.moveCameraWithPadding(
                     CameraUpdateFactory.newLatLngZoom(
                         LatLng(cameraTarget.lat, cameraTarget.lon),
                         MapLibreManager.DEFAULT_POINT_ZOOM,
                     ),
+                    padding = preloadPaddingPx,
                 )
             }
 
             is GeoVaultMainMapPreloadCameraTarget.Bounds -> {
-                controller.moveCameraWithPadding(
-                    CameraUpdateFactory.newLatLngBounds(cameraTarget.bounds, boundsPaddingPx),
+                map.moveCameraWithPadding(
+                    CameraUpdateFactory.newLatLngBounds(
+                        cameraTarget.bounds,
+                        preloadBoundsFitPaddingPx[0],
+                        preloadBoundsFitPaddingPx[1],
+                        preloadBoundsFitPaddingPx[2],
+                        preloadBoundsFitPaddingPx[3],
+                    ),
+                    padding = preloadPaddingPx,
                 )
             }
 
@@ -280,11 +296,11 @@ private fun GeoVaultMainMapPreloadHostAuthenticatedBody(
     }
 
     if (surfaceMapInHost) {
-        GeoVaultMap(
+        GeoVaultMainMapView(
             modifier = modifier,
-            controller = controller,
+            map = map,
             showDefaultSourceToggle = false,
-            mapMode = GeoVaultMapMode.Main,
+            includeDefaultFabColumnPadding = true,
         )
     }
 }

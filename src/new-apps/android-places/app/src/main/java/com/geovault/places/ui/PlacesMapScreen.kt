@@ -31,11 +31,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.geovault.common.maps.core.GeoVaultMap
-import com.geovault.common.maps.core.GeoVaultMapController
-import com.geovault.common.maps.core.GeoVaultMapMode
-import com.geovault.common.maps.location.GeoVaultLocationPuckPresets
-import com.geovault.common.maps.location.MapLocationRendererPlugin
+import com.geovault.common.maps.core.GeoVaultMainMap
+import com.geovault.common.maps.core.GeoVaultMainMapView
+import com.geovault.common.maps.core.animateCameraToFitLatLngBounds
+import com.geovault.common.maps.core.geoVaultLatLngBoundsUnion
+import com.geovault.common.maps.core.moveCameraToFitLatLngBounds
+import com.geovault.common.maps.core.rememberGeoVaultMapBoundsFitPaddingPx
+import com.geovault.common.maps.location.rememberGeoVaultMapUserLocationPlugin
 import com.geovault.common.maps.render.GeoJsonRenderPlugin
 import com.geovault.common.maps.render.GeoJsonRenderConfig
 import com.geovault.common.maps.ui.GeoVaultMapFabColumn
@@ -55,7 +57,6 @@ import com.geovault.places.presentation.PlacesMapViewModel
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.geometry.LatLngBounds
 
 data class PlacesMapLaunchArgs(
     val zoomToLat: Double? = null,
@@ -66,7 +67,7 @@ data class PlacesMapLaunchArgs(
 
 @Composable
 fun PlacesMapScreen(
-    controller: GeoVaultMapController,
+    map: GeoVaultMainMap,
     viewModel: PlacesMapViewModel,
     launchArgs: PlacesMapLaunchArgs,
     onOpenSettings: () -> Unit,
@@ -78,6 +79,7 @@ fun PlacesMapScreen(
     val context = LocalContext.current
     val rootView = LocalView.current
     val density = LocalDensity.current
+    val boundsFitPaddingPx = rememberGeoVaultMapBoundsFitPaddingPx()
     val renderPlugin = remember {
         GeoJsonRenderPlugin(
             config = GeoJsonRenderConfig(
@@ -88,21 +90,14 @@ fun PlacesMapScreen(
             context = context,
         )
     }
-    val locationPlugin = remember {
-        MapLocationRendererPlugin(
-            context = context,
-            config = GeoVaultLocationPuckPresets.blueUserLocation(),
-            autoEnableLocationComponent = true,
-        )
-    }
-    var initialCameraApplied by remember(launchArgs.requestToken) { mutableStateOf(false) }
+    val locationPlugin = rememberGeoVaultMapUserLocationPlugin(context = context)
     var gpsHomeAnchor by remember { mutableStateOf<LatLng?>(null) }
-    val layerFabAction = remember(controller) { geoVaultLayerToggleFabAction(controller) }
-    val zoomInFabAction = remember(controller) { geoVaultZoomInFabAction(controller) }
-    val zoomOutFabAction = remember(controller) { geoVaultZoomOutFabAction(controller) }
+    val layerFabAction = remember(map) { geoVaultLayerToggleFabAction(map) }
+    val zoomInFabAction = remember(map) { geoVaultZoomInFabAction(map) }
+    val zoomOutFabAction = remember(map) { geoVaultZoomOutFabAction(map) }
     val gpsFabAction = rememberGeoVaultGpsRecenterFabAction(
-        controller = controller,
-        locationPlugin = locationPlugin,
+        map = map,
+        userLocation = locationPlugin,
         order = 30,
         onLocationResolved = { latLng -> gpsHomeAnchor = latLng },
     )
@@ -111,20 +106,20 @@ fun PlacesMapScreen(
         viewModel.loadFromCache()
     }
 
-    DisposableEffect(controller) {
-        controller.registerPlugin(renderPlugin)
-        controller.registerPlugin(locationPlugin)
+    DisposableEffect(map) {
+        map.registerPlugin(renderPlugin)
+        map.registerPlugin(locationPlugin)
         onDispose {
-            controller.unregisterPlugin(renderPlugin)
-            controller.unregisterPlugin(locationPlugin)
+            map.unregisterPlugin(renderPlugin)
+            map.unregisterPlugin(locationPlugin)
         }
     }
 
-    DisposableEffect(controller, density, state.features) {
+    DisposableEffect(map, density, state.features) {
         val tapListener = org.maplibre.android.maps.MapLibreMap.OnMapClickListener { tapLatLng ->
-            val map = controller.maplibreMap ?: return@OnMapClickListener false
+            val mapLibreMap = map.maplibreMap ?: return@OnMapClickListener false
             val hitRadiusPx = with(density) { 20.dp.toPx() }
-            val near = viewModel.findFeaturesNearTap(tapLatLng, map.projection, hitRadiusPx)
+            val near = viewModel.findFeaturesNearTap(tapLatLng, mapLibreMap.projection, hitRadiusPx)
             when {
                 near.isEmpty() -> false
                 near.size == 1 -> {
@@ -132,8 +127,8 @@ fun PlacesMapScreen(
                     true
                 }
                 else -> {
-                    val point = map.projection.toScreenLocation(tapLatLng)
-                    val popupAnchor = controller.getMapViewOrNull() ?: rootView
+                    val point = mapLibreMap.projection.toScreenLocation(tapLatLng)
+                    val popupAnchor = map.getMapViewOrNull() ?: rootView
                     com.geovault.common.maps.ui.OverlappingPointsPopup(
                         context = context,
                         anchor = popupAnchor,
@@ -147,9 +142,9 @@ fun PlacesMapScreen(
                 }
             }
         }
-        controller.addOnMapClickListener(tapListener)
+        map.addOnMapClickListener(tapListener)
         onDispose {
-            controller.removeOnMapClickListener(tapListener)
+            map.removeOnMapClickListener(tapListener)
         }
     }
 
@@ -157,26 +152,26 @@ fun PlacesMapScreen(
         renderPlugin.setRenderState(viewModel.buildMapRenderState())
     }
 
-    val phase by controller.phase.collectAsState()
+    val phase by map.phase.collectAsState()
     LaunchedEffect(phase, state.features, launchArgs) {
-        val map = controller.maplibreMap ?: return@LaunchedEffect
+        map.maplibreMap ?: return@LaunchedEffect
         if (phase != com.geovault.common.maps.core.GeoVaultMapPhase.Ready) return@LaunchedEffect
         if (launchArgs.zoomToId != null && launchArgs.zoomToId >= 0) {
             viewModel.selectByDatabaseId(launchArgs.zoomToId)
         }
-        if (initialCameraApplied) return@LaunchedEffect
-        initialCameraApplied = true
+        if (!viewModel.shouldApplyInitialCamera(launchArgs.requestToken)) return@LaunchedEffect
+        viewModel.markInitialCameraApplied(launchArgs.requestToken)
         if (launchArgs.zoomToLat != null && launchArgs.zoomToLon != null) {
             val camera = CameraPosition.Builder()
                 .target(org.maplibre.android.geometry.LatLng(launchArgs.zoomToLat, launchArgs.zoomToLon))
                 .zoom(com.geovault.common.maps.core.MapLibreManager.DEFAULT_POINT_ZOOM)
                 .build()
-            controller.moveCameraWithPadding(CameraUpdateFactory.newCameraPosition(camera))
+            map.moveCameraWithPadding(CameraUpdateFactory.newCameraPosition(camera))
             return@LaunchedEffect
         }
         val bounds = viewModel.featureBounds()
         if (bounds != null) {
-            controller.moveCameraWithPadding(CameraUpdateFactory.newLatLngBounds(bounds, 96))
+            map.moveCameraToFitLatLngBounds(bounds, boundsFitPaddingPx)
         }
     }
 
@@ -208,11 +203,10 @@ fun PlacesMapScreen(
                     .fillMaxWidth()
                     .fillMaxSize(),
             ) {
-                GeoVaultMap(
+                GeoVaultMainMapView(
                     modifier = Modifier.fillMaxSize(),
-                    controller = controller,
+                    map = map,
                     showDefaultSourceToggle = false,
-                    mapMode = GeoVaultMapMode.Main,
                     includeDefaultFabColumnPadding = true,
                 )
 
@@ -230,23 +224,21 @@ fun PlacesMapScreen(
                     icon = GeoVaultMapFabIcon.Vector(Icons.Default.Home),
                     contentDescription = "Home extent",
                     onTap = {
-                        val map = controller.maplibreMap
-                        if (map != null) {
-                            map.setCameraPosition(CameraPosition.Builder(map.cameraPosition).bearing(0.0).tilt(0.0).build())
+                        val mapLibreMap = map.maplibreMap
+                        if (mapLibreMap != null) {
+                            mapLibreMap.setCameraPosition(
+                                CameraPosition.Builder(mapLibreMap.cameraPosition).bearing(0.0).tilt(0.0).build()
+                            )
                         }
                         val bounds = viewModel.featureBounds()
                         val gpsAnchor = gpsHomeAnchor
-                        val effectiveBounds = if (bounds != null && gpsAnchor != null) {
-                            LatLngBounds.Builder()
-                                .include(bounds.southWest)
-                                .include(bounds.northEast)
-                                .include(gpsAnchor)
-                                .build()
-                        } else {
-                            bounds
+                        val effectiveBounds = when {
+                            bounds != null && gpsAnchor != null ->
+                                geoVaultLatLngBoundsUnion(bounds, listOf(gpsAnchor))
+                            else -> bounds
                         }
                         if (effectiveBounds != null) {
-                            controller.animateCameraWithPadding(CameraUpdateFactory.newLatLngBounds(effectiveBounds, 96))
+                            map.animateCameraToFitLatLngBounds(effectiveBounds, boundsFitPaddingPx)
                         }
                     },
                 )

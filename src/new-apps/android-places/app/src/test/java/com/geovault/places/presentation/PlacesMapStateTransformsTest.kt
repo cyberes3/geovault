@@ -6,6 +6,7 @@ import com.geovault.places.model.Properties
 import com.geovault.common.maps.render.CommonMapIconIds
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlacesMapStateTransformsTest {
@@ -83,6 +84,24 @@ class PlacesMapStateTransformsTest {
         assertEquals(41.0, bounds.northEast.latitude, 0.000001)
         assertEquals(-121.0, bounds.southWest.longitude, 0.000001)
         assertEquals(-120.0, bounds.northEast.longitude, 0.000001)
+    }
+
+    @Test
+    fun featureBounds_usesShortLongitudeArcAcrossPacific() {
+        val bounds = PlacesMapStateTransforms.featureBounds(
+            listOf(
+                feature(id = 1, lat = 39.0, lon = -95.0, name = "USA"),
+                feature(id = 2, lat = 55.0, lon = 37.0, name = "Russia"),
+            ),
+        )
+
+        assertNotNull(bounds)
+        assertEquals(39.0, bounds!!.southWest.latitude, 0.000001)
+        assertEquals(55.0, bounds.northEast.latitude, 0.000001)
+        assertEquals(-95.0, bounds.southWest.longitude, 0.000001)
+        assertEquals(37.0, bounds.northEast.longitude, 0.000001)
+        val lonSpan = bounds.longitudeEast - bounds.longitudeWest
+        assertTrue("span should be the short arc (~132°), not ~292°", lonSpan < 200.0)
     }
 
     private fun feature(id: Int?, lat: Double, lon: Double, name: String): Feature {

@@ -13,6 +13,11 @@ class PlaceEditScreenState(
     private val initial: Feature?,
     val isOfflineEdit: Boolean,
 ) {
+    private enum class CameraMotionRequest {
+        None,
+        FocusSelection,
+    }
+
     var name by mutableStateOf(initial?.properties?.name.orEmpty())
     var description by mutableStateOf(initial?.properties?.description.orEmpty())
     var coordinatesInput by mutableStateOf(
@@ -24,6 +29,7 @@ class PlaceEditScreenState(
     var selectedLat by mutableStateOf(initial?.geometry?.coordinates?.getOrNull(1))
     var selectedLon by mutableStateOf(initial?.geometry?.coordinates?.getOrNull(0))
     var selectedAddress by mutableStateOf(initial?.properties?.address)
+    var showSelectedPointMarker by mutableStateOf(true)
     var mapSearchQuery by mutableStateOf("")
     var mapSearchResults by mutableStateOf<List<AddressSearchResult>>(emptyList())
     var isSearching by mutableStateOf(false)
@@ -31,6 +37,9 @@ class PlaceEditScreenState(
     var showSearchPanel by mutableStateOf(false)
     var showDiscardDialog by mutableStateOf(false)
     var showDeleteDialog by mutableStateOf(false)
+    private var pendingCameraMotion by mutableStateOf(
+        if (initial != null) CameraMotionRequest.FocusSelection else CameraMotionRequest.None
+    )
 
     private val initialName = initial?.properties?.name.orEmpty().trim()
     private val initialDescription = initial?.properties?.description.orEmpty().trim()
@@ -59,6 +68,19 @@ class PlaceEditScreenState(
         selectedAddress = null
         coordinatesInput = String.format("%.6f, %.6f", latitude, longitude)
         coordinatesError = null
+        showSelectedPointMarker = true
+        pendingCameraMotion = CameraMotionRequest.None
+    }
+
+    fun setFromGpsLocation(latitude: Double, longitude: Double) {
+        selectedLat = latitude
+        selectedLon = longitude
+        selectedAddress = null
+        coordinatesInput = String.format("%.6f, %.6f", latitude, longitude)
+        coordinatesError = null
+        // Avoid drawing the edit-point marker on top of the location puck.
+        showSelectedPointMarker = false
+        pendingCameraMotion = CameraMotionRequest.FocusSelection
     }
 
     fun setFromSearchResult(result: AddressSearchResult) {
@@ -72,6 +94,8 @@ class PlaceEditScreenState(
         mapSearchQuery = ""
         showSearchPanel = false
         coordinatesError = null
+        showSelectedPointMarker = true
+        pendingCameraMotion = CameraMotionRequest.FocusSelection
     }
 
     fun clearMapSearch() {
@@ -93,7 +117,13 @@ class PlaceEditScreenState(
     fun parseCoordinatesFromInput(): Boolean {
         val parsed = CoordinateParser.parse(coordinatesInput.trim())
         if (parsed != null) {
-            setFromMapPoint(parsed.first, parsed.second)
+            selectedLat = parsed.first
+            selectedLon = parsed.second
+            selectedAddress = null
+            coordinatesInput = String.format("%.6f, %.6f", parsed.first, parsed.second)
+            coordinatesError = null
+            showSelectedPointMarker = true
+            pendingCameraMotion = CameraMotionRequest.FocusSelection
             return true
         }
         coordinatesError = "Invalid coordinate format"
@@ -129,5 +159,13 @@ class PlaceEditScreenState(
         } else {
             "Delete"
         }
+    }
+
+    fun shouldFocusCameraOnSelection(): Boolean {
+        return pendingCameraMotion == CameraMotionRequest.FocusSelection
+    }
+
+    fun markSelectionCameraFocusHandled() {
+        pendingCameraMotion = CameraMotionRequest.None
     }
 }

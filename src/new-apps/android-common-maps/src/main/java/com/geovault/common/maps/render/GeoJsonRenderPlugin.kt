@@ -23,18 +23,22 @@ class GeoJsonRenderPlugin(
     private val sourceIdPrefix: String = "gv-common-render",
     private val config: GeoJsonRenderConfig = GeoJsonRenderConfig(),
     private val context: Context? = null,
-) : GeoVaultMapPlugin {
+) : GeoVaultMapPlugin, GeoVaultRenderCapability {
     private var renderState: MapRenderState = MapRenderState()
     private var map: MapLibreMap? = null
 
-    fun setRenderState(newState: MapRenderState) {
+    override fun setRenderState(newState: MapRenderState) {
         renderState = newState
         val style = map?.style ?: return
         applyState(style, newState)
     }
 
-    override fun onMapReady(map: MapLibreMap) {
+    override fun onMapAttached(map: MapLibreMap) {
         this.map = map
+    }
+
+    override fun onMapDetached() {
+        map = null
     }
 
     override fun onStyleLoaded(map: MapLibreMap, style: Style) {

@@ -1,9 +1,6 @@
 package com.geovault.common.maps.core
 
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.os.SystemClock
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.Button
@@ -27,7 +24,6 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.maplibre.android.maps.MapView
-import java.util.concurrent.atomic.AtomicLong
 
 data class GeoVaultMapPaddingDp(
     val left: Dp = Dp.Unspecified,
@@ -36,112 +32,102 @@ data class GeoVaultMapPaddingDp(
     val bottom: Dp = Dp.Unspecified,
 )
 
-enum class GeoVaultMapMode {
+@Composable
+fun rememberGeoVaultStandardMap(): GeoVaultStandardMap {
+    val context = LocalContext.current
+    return remember(context) {
+        GeoVaultStandardMap(context)
+    }
+}
+
+@Composable
+fun GeoVaultStandardMapView(
+    modifier: Modifier = Modifier,
+    map: GeoVaultStandardMap = rememberGeoVaultStandardMap(),
+    showDefaultSourceToggle: Boolean = false,
+    includeDefaultFabColumnPadding: Boolean = false,
+    mapPaddingDp: GeoVaultMapPaddingDp = GeoVaultMapPaddingDp(),
+) {
+    GeoVaultMapHost(
+        modifier = modifier,
+        map = map,
+        mode = GeoVaultMapHostMode.Standard,
+        showDefaultSourceToggle = showDefaultSourceToggle,
+        includeDefaultFabColumnPadding = includeDefaultFabColumnPadding,
+        mapPaddingDp = mapPaddingDp,
+    )
+}
+
+@Composable
+fun GeoVaultMainMapView(
+    modifier: Modifier = Modifier,
+    map: GeoVaultMainMap,
+    showDefaultSourceToggle: Boolean = false,
+    includeDefaultFabColumnPadding: Boolean = false,
+    mapPaddingDp: GeoVaultMapPaddingDp = GeoVaultMapPaddingDp(),
+) {
+    GeoVaultMapHost(
+        modifier = modifier,
+        map = map,
+        mode = GeoVaultMapHostMode.Main,
+        showDefaultSourceToggle = showDefaultSourceToggle,
+        includeDefaultFabColumnPadding = includeDefaultFabColumnPadding,
+        mapPaddingDp = mapPaddingDp,
+    )
+}
+
+private enum class GeoVaultMapHostMode {
     Standard,
     Main,
 }
 
 @Composable
-fun rememberGeoVaultMapController(): GeoVaultMapController {
-    val context = LocalContext.current
-    return remember(context) {
-        GeoVaultMapController(context)
-    }
-}
-
-@Composable
-fun GeoVaultMap(
-    modifier: Modifier = Modifier,
-    controller: GeoVaultMapController = rememberGeoVaultMapController(),
-    showDefaultSourceToggle: Boolean = false,
-    mapMode: GeoVaultMapMode = GeoVaultMapMode.Standard,
-    includeDefaultFabColumnPadding: Boolean = false,
-    mapPaddingDp: GeoVaultMapPaddingDp = GeoVaultMapPaddingDp(),
+private fun GeoVaultMapHost(
+    modifier: Modifier,
+    map: GeoVaultBaseMap,
+    mode: GeoVaultMapHostMode,
+    showDefaultSourceToggle: Boolean,
+    includeDefaultFabColumnPadding: Boolean,
+    mapPaddingDp: GeoVaultMapPaddingDp,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val density = LocalDensity.current
     var mapView: MapView? by remember { mutableStateOf(null) }
-    val currentController by rememberUpdatedState(controller)
+    val currentMap by rememberUpdatedState(map)
     val mapStateBundle = remember { Bundle() }
-    val mainHandler = remember { Handler(Looper.getMainLooper()) }
-    val hotHoldGeneration = remember { AtomicLong(0L) }
 
-    fun cancelMainHotHold() {
-        hotHoldGeneration.incrementAndGet()
-        mainHandler.removeCallbacksAndMessages(HOT_HOLD_TOKEN)
-    }
-
-    fun scheduleMainHotHold(view: MapView?) {
-        if (view == null) return
-        val generation = hotHoldGeneration.incrementAndGet()
-        val runnable = Runnable {
-            if (hotHoldGeneration.get() != generation) return@Runnable
-            if (currentController.getMapViewOrNull() !== view) return@Runnable
-            view.onPause()
-            view.onStop()
-        }
-        mainHandler.removeCallbacksAndMessages(HOT_HOLD_TOKEN)
-        mainHandler.postAtTime(
-            runnable,
-            HOT_HOLD_TOKEN,
-            SystemClock.uptimeMillis() + DEFAULT_MAIN_MAP_HOT_HOLD_MS,
+    val effectivePaddingPx = remember(density, includeDefaultFabColumnPadding, mapPaddingDp) {
+        computeMapPaddingPx(
+            density = density,
+            includeDefaultFabColumnPadding = includeDefaultFabColumnPadding,
+            mapPaddingDp = mapPaddingDp,
         )
     }
 
-    val effectivePaddingPx = remember(density, includeDefaultFabColumnPadding, mapPaddingDp) {
-        fun Dp.orZeroPx(): Double {
-            return if (this == Dp.Unspecified) 0.0 else with(density) { toPx().toDouble() }
-        }
-        if (includeDefaultFabColumnPadding) {
-            // Same edge inset on left / top / bottom; extra on the right for the FAB stack
-            // (see GeoVaultMapFabColumn default end margin + fabSize) so framing is not shifted left.
-            val edge = with(density) { DEFAULT_MAP_EDGE_PADDING_DP.toPx().toDouble() }
-            val rightReserve = with(density) {
-                (DEFAULT_MAP_FAB_COLUMN_END_MARGIN_DP + DEFAULT_MAP_FAB_COLUMN_FAB_SIZE_DP).toPx().toDouble()
-            }
-            doubleArrayOf(
-                edge + mapPaddingDp.left.orZeroPx(),
-                edge + mapPaddingDp.top.orZeroPx(),
-                rightReserve + mapPaddingDp.right.orZeroPx(),
-                edge + mapPaddingDp.bottom.orZeroPx(),
-            )
-        } else {
-            doubleArrayOf(
-                mapPaddingDp.left.orZeroPx(),
-                mapPaddingDp.top.orZeroPx(),
-                mapPaddingDp.right.orZeroPx(),
-                mapPaddingDp.bottom.orZeroPx(),
-            )
-        }
-    }
-
     SideEffect {
-        currentController.setDefaultCameraPadding(effectivePaddingPx)
+        currentMap.setDefaultCameraPadding(effectivePaddingPx)
     }
 
     Box(modifier = modifier) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = {
-                val acquiredMapView = when (mapMode) {
-                    GeoVaultMapMode.Standard -> currentController.createTransientMapView(mapStateBundle)
-                    GeoVaultMapMode.Main -> currentController.acquireRetainedMapView(mapStateBundle)
-                }
+                val acquiredMapView = currentMap.acquireMapView(mapStateBundle)
                 mapView = acquiredMapView
-                currentController.attachMapView(acquiredMapView)
+                currentMap.attachMapView(acquiredMapView)
                 acquiredMapView
             },
             update = {
                 if (mapView !== it) {
                     mapView = it
-                    currentController.attachMapView(it)
+                    currentMap.attachMapView(it)
                 }
             },
         )
 
         if (showDefaultSourceToggle) {
             Button(
-                onClick = { currentController.cycleSource() },
+                onClick = { currentMap.cycleSource() },
                 modifier = Modifier.align(Alignment.TopEnd),
             ) {
                 Text("Layers")
@@ -149,45 +135,31 @@ fun GeoVaultMap(
         }
     }
 
-    DisposableEffect(lifecycleOwner, currentController, mapMode) {
+    DisposableEffect(lifecycleOwner, currentMap, mode) {
         val observer = object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
-                if (mapMode == GeoVaultMapMode.Main) {
-                    cancelMainHotHold()
-                }
                 mapView?.onStart()
-                currentController.ensureInteractiveGestures()
+                currentMap.ensureInteractiveGestures()
             }
 
             override fun onResume(owner: LifecycleOwner) {
-                if (mapMode == GeoVaultMapMode.Main) {
-                    cancelMainHotHold()
-                }
                 mapView?.onResume()
-                currentController.ensureInteractiveGestures()
+                currentMap.ensureInteractiveGestures()
             }
 
             override fun onPause(owner: LifecycleOwner) {
-                if (mapMode == GeoVaultMapMode.Main) {
-                    scheduleMainHotHold(mapView)
-                } else {
-                    mapView?.onPause()
-                }
+                mapView?.onPause()
             }
 
             override fun onStop(owner: LifecycleOwner) {
-                if (mapMode == GeoVaultMapMode.Main) {
-                    scheduleMainHotHold(mapView)
-                } else {
-                    mapView?.onStop()
-                }
+                mapView?.onStop()
             }
 
             override fun onDestroy(owner: LifecycleOwner) {
                 mapView?.onSaveInstanceState(mapStateBundle)
-                if (mapMode == GeoVaultMapMode.Standard) {
+                if (mode == GeoVaultMapHostMode.Standard) {
                     mapView?.onDestroy()
-                    currentController.onDestroy()
+                    currentMap.onDestroy()
                 }
             }
         }
@@ -195,28 +167,56 @@ fun GeoVaultMap(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            currentController.setDefaultCameraPadding(null)
             val activeMapView = mapView
-            if (mapMode == GeoVaultMapMode.Main) {
-                scheduleMainHotHold(activeMapView)
-                activeMapView?.onSaveInstanceState(mapStateBundle)
-            } else {
-                cancelMainHotHold()
+            if (mode == GeoVaultMapHostMode.Standard) {
+                currentMap.setDefaultCameraPadding(null)
                 activeMapView?.onPause()
                 activeMapView?.onStop()
                 activeMapView?.onSaveInstanceState(mapStateBundle)
-            }
-            if (mapMode == GeoVaultMapMode.Standard) {
+                currentMap.detachMapView()
                 activeMapView?.onDestroy()
-                currentController.onDestroy()
+                currentMap.onDestroy()
             }
         }
     }
 
 }
-private const val DEFAULT_MAIN_MAP_HOT_HOLD_MS = 30_000L
-private val HOT_HOLD_TOKEN = Any()
+
+internal fun computeMapPaddingPx(
+    density: androidx.compose.ui.unit.Density,
+    includeDefaultFabColumnPadding: Boolean,
+    mapPaddingDp: GeoVaultMapPaddingDp,
+): DoubleArray {
+    fun Dp.orZeroPx(): Double {
+        return if (this == Dp.Unspecified) 0.0 else with(density) { toPx().toDouble() }
+    }
+    if (includeDefaultFabColumnPadding) {
+        // Same edge inset on all sides, plus additional right-side reserve for the FAB stack
+        // (see GeoVaultMapFabColumn default end margin + fabSize) to keep fitted content clear.
+        val edge = with(density) { DEFAULT_MAP_EDGE_PADDING_DP.toPx().toDouble() }
+        val fabColumnReserve = with(density) {
+            (DEFAULT_MAP_FAB_COLUMN_END_MARGIN_DP + DEFAULT_MAP_FAB_COLUMN_FAB_SIZE_DP).toPx().toDouble()
+        }
+        val leftExtra = with(density) { DEFAULT_MAP_LEFT_SAFE_EXTRA_DP.toPx().toDouble() }
+        val rightExtra = with(density) { DEFAULT_MAP_RIGHT_SAFE_EXTRA_DP.toPx().toDouble() }
+        return doubleArrayOf(
+            edge + leftExtra + mapPaddingDp.left.orZeroPx(),
+            edge + mapPaddingDp.top.orZeroPx(),
+            edge + fabColumnReserve + rightExtra + mapPaddingDp.right.orZeroPx(),
+            edge + mapPaddingDp.bottom.orZeroPx(),
+        )
+    }
+    return doubleArrayOf(
+        mapPaddingDp.left.orZeroPx(),
+        mapPaddingDp.top.orZeroPx(),
+        mapPaddingDp.right.orZeroPx(),
+        mapPaddingDp.bottom.orZeroPx(),
+    )
+}
+
 private val DEFAULT_MAP_EDGE_PADDING_DP = 16.dp
+private val DEFAULT_MAP_LEFT_SAFE_EXTRA_DP = 8.dp
+private val DEFAULT_MAP_RIGHT_SAFE_EXTRA_DP = 12.dp
 
 /** Matches [GeoVaultMapFabColumn] default `Modifier.padding` end inset and FAB width. */
 private val DEFAULT_MAP_FAB_COLUMN_END_MARGIN_DP = 16.dp

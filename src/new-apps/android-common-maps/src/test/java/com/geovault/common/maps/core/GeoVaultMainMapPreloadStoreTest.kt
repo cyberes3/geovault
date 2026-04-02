@@ -122,8 +122,8 @@ class GeoVaultMainMapPreloadStoreTest {
     }
 
     private class FakeRef : MainMapControllerRef {
-        override val controller: GeoVaultMapController
-            get() = throw UnsupportedOperationException("Controller not needed in this test")
+        override val map: GeoVaultMainMap
+            get() = throw UnsupportedOperationException("Map not needed in this test")
 
         var destroyed: Boolean = false
         var preloadCalls: Int = 0

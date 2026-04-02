@@ -8,11 +8,11 @@ object KeyboardScrollHelper {
 
     private val KEYBOARD_SETTLE_DELAYS_MS = intArrayOf(0, 120, 260)
 
-    /**
-     * Auto-scroll focused inputs into view inside a [NestedScrollView].
-     *
-     * This helper is intended for form screens where the keyboard can hide fields near the bottom.
-     */
+/**
+ * Auto-scroll focused inputs into view inside a [NestedScrollView].
+ *
+ * This helper is intended for form screens where the keyboard can hide fields near the bottom.
+ */
     fun installNestedScrollFocusAutoScroll(
         scrollView: NestedScrollView,
         focusableViews: List<View>,

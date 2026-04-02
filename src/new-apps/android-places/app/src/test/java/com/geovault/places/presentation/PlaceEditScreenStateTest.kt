@@ -33,6 +33,23 @@ class PlaceEditScreenStateTest {
         assertEquals(56.78, state.selectedLon!!, 0.0)
         assertEquals("12.340000, 56.780000", state.coordinatesInput)
         assertNull(state.coordinatesError)
+        assertTrue(state.showSelectedPointMarker)
+        assertFalse(state.shouldFocusCameraOnSelection())
+    }
+
+    @Test
+    fun setFromGpsLocation_updatesCoordinates_andHidesSelectedMarker() {
+        val state = PlaceEditScreenState(initial = null, isOfflineEdit = false)
+
+        state.setFromGpsLocation(latitude = 12.34, longitude = 56.78)
+
+        assertEquals(12.34, state.selectedLat!!, 0.0)
+        assertEquals(56.78, state.selectedLon!!, 0.0)
+        assertEquals("12.340000, 56.780000", state.coordinatesInput)
+        assertFalse(state.showSelectedPointMarker)
+        assertTrue(state.shouldFocusCameraOnSelection())
+        state.markSelectionCameraFocusHandled()
+        assertFalse(state.shouldFocusCameraOnSelection())
     }
 
     @Test
@@ -54,6 +71,8 @@ class PlaceEditScreenStateTest {
         assertEquals("San Francisco, CA", state.coordinatesInput)
         assertFalse(state.showSearchPanel)
         assertEquals("", state.mapSearchQuery)
+        assertTrue(state.showSelectedPointMarker)
+        assertTrue(state.shouldFocusCameraOnSelection())
     }
 
     @Test

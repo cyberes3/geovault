@@ -25,7 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.maps.core.GeoVaultMainMapPreloadHost
-import com.geovault.common.maps.core.rememberGeoVaultMainMapController
+import com.geovault.common.maps.core.rememberGeoVaultMainMap
 import com.geovault.common.maps.core.resolveGeoVaultMainMapPreloadCameraTarget
 import com.geovault.common.ui.components.GeoVaultBottomNavDestination
 import com.geovault.common.ui.components.GeoVaultBottomNavScaffold
@@ -90,8 +90,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             GeoVaultTheme {
                 val state by viewModel.state.collectAsState()
-                val mapController = rememberGeoVaultMainMapController(PLACES_MAIN_MAP_KEY)
+                val mainMap = rememberGeoVaultMainMap(PLACES_MAIN_MAP_KEY)
                 var selectedTab by rememberSaveable { mutableStateOf(PlacesTab.LIST.name) }
+                var hasOpenedMapTab by rememberSaveable {
+                    mutableStateOf(selectedTab == PlacesTab.MAP.name)
+                }
                 var mapLaunchArgs by remember {
                     mutableStateOf(PlacesMapLaunchArgs())
                 }
@@ -132,14 +135,19 @@ class MainActivity : ComponentActivity() {
                 Box(modifier = Modifier.fillMaxSize()) {
                     GeoVaultMainMapPreloadHost(
                         mainMapKey = PLACES_MAIN_MAP_KEY,
-                        enabled = state.isAuthenticated,
+                        enabled = state.isAuthenticated && !hasOpenedMapTab,
                         cameraTarget = preloadTarget,
-                        surfaceMapInHost = selectedTab != PlacesTab.MAP.name,
+                        surfaceMapInHost = selectedTab != PlacesTab.MAP.name && !hasOpenedMapTab,
                     )
                     GeoVaultBottomNavScaffold(
                         destinations = bottomDestinations,
                         selectedDestinationId = selectedTab,
-                        onDestinationSelected = { selectedTab = it.id },
+                        onDestinationSelected = {
+                            selectedTab = it.id
+                            if (it.id == PlacesTab.MAP.name) {
+                                hasOpenedMapTab = true
+                            }
+                        },
                         modifier = Modifier.fillMaxSize(),
                     ) { destination ->
                         when (destination.id) {
@@ -202,6 +210,7 @@ class MainActivity : ComponentActivity() {
                                             zoomToId = feature.properties.database_id,
                                             requestToken = System.currentTimeMillis(),
                                         )
+                                        hasOpenedMapTab = true
                                         selectedTab = PlacesTab.MAP.name
                                     },
                                     onCopyCoordinates = { text ->
@@ -221,7 +230,7 @@ class MainActivity : ComponentActivity() {
                             }
                             PlacesTab.MAP.name -> {
                                 PlacesMapScreen(
-                                    controller = mapController,
+                                    map = mainMap,
                                     viewModel = mapViewModel,
                                     launchArgs = mapLaunchArgs,
                                     onOpenSettings = {

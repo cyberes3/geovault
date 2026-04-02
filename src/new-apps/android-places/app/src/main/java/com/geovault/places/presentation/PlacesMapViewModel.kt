@@ -74,4 +74,14 @@ class PlacesMapViewModel(application: Application) : AndroidViewModel(applicatio
     fun selectedFeatureLabel(properties: Properties?): String {
         return properties?.name?.takeIf { it.isNotBlank() } ?: "Select a place"
     }
+
+    private var lastAppliedCameraRequestToken: Long? = null
+
+    fun shouldApplyInitialCamera(requestToken: Long): Boolean {
+        return lastAppliedCameraRequestToken != requestToken
+    }
+
+    fun markInitialCameraApplied(requestToken: Long) {
+        lastAppliedCameraRequestToken = requestToken
+    }
 }
