@@ -1,17 +1,19 @@
 #!/bin/bash
-# Build script for Android Places app
+# Build script for Android Tracker app
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Load src/new-apps/.env if present
-if [ -f "$SCRIPT_DIR/../.env" ]; then
-    set -a
-    source "$SCRIPT_DIR/../.env"
-    set +a
-fi
+# Load env files if present (new-apps first, then repo root)
+for ENV_FILE in "$SCRIPT_DIR/../.env" "$SCRIPT_DIR/../../.env"; do
+    if [ -f "$ENV_FILE" ]; then
+        set -a
+        source "$ENV_FILE"
+        set +a
+    fi
+done
 
 if [ ! -x "./gradlew" ]; then
     echo "Error: ./gradlew is missing or not executable"
@@ -57,6 +59,10 @@ if [ "$SKIP_MINIFY" = true ]; then
 fi
 
 if [ "$BUILD_TYPE" = "release" ]; then
+    # Normalize common env naming variants to the script's expected names.
+    RELEASE_STORE_PASSWORD="${RELEASE_STORE_PASSWORD:-${ANDROID_KEYSTORE_PASSWORD:-}}"
+    RELEASE_KEY_PASSWORD="${RELEASE_KEY_PASSWORD:-${ANDROID_KEY_PASSWORD:-}}"
+
     if [ -n "${ANDROID_KEY_PASSWORD_FILE:-}" ] && [ -f "$ANDROID_KEY_PASSWORD_FILE" ]; then
         RELEASE_STORE_PASSWORD="$(sed -n '1p' "$ANDROID_KEY_PASSWORD_FILE" | tr -d '\r\n')"
         RELEASE_KEY_PASSWORD="${RELEASE_KEY_PASSWORD:-$RELEASE_STORE_PASSWORD}"
@@ -70,11 +76,16 @@ if [ "$BUILD_TYPE" = "release" ]; then
     fi
 
     if [ -z "${RELEASE_STORE_PASSWORD:-}" ]; then
-        echo -n "Enter keystore password (used for both keystore and key): "
-        read -rs RELEASE_STORE_PASSWORD
-        echo
+        echo "Error: RELEASE_STORE_PASSWORD is not set for release builds."
+        echo "Set it in env (or set ANDROID_KEYSTORE_PASSWORD), or provide ANDROID_KEY_PASSWORD_FILE."
+        exit 1
     fi
     RELEASE_KEY_PASSWORD="${RELEASE_KEY_PASSWORD:-$RELEASE_STORE_PASSWORD}"
+
+    if [ -z "${RELEASE_STORE_FILE:-}" ]; then
+        echo "Error: RELEASE_STORE_FILE is not set for release builds."
+        exit 1
+    fi
 
     GRADLE_ARGS+=("-PRELEASE_STORE_PASSWORD=$RELEASE_STORE_PASSWORD")
     GRADLE_ARGS+=("-PRELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD")
@@ -124,7 +135,7 @@ if [ "$BUILD_TYPE" = "release" ]; then
         BUILD_DATE="$(git -C "$SCRIPT_DIR/.." log -1 --format=%cd --date=short 2>/dev/null || date +%Y-%m-%d)"
         COMMIT_HASH="$(git -C "$SCRIPT_DIR/.." rev-parse --short=10 HEAD 2>/dev/null || echo "norepo")"
     fi
-    DEST_NAME="GeoVault Places ${BUILD_DATE} ${COMMIT_HASH}.apk"
+    DEST_NAME="GeoVault Tracker ${BUILD_DATE} ${COMMIT_HASH}.apk"
     cp "$APK_PATH" "$SCRIPT_DIR/$DEST_NAME"
     echo "Copied release APK to: $SCRIPT_DIR/$DEST_NAME"
 fi

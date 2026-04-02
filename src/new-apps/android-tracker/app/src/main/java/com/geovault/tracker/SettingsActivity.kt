@@ -1,6 +1,5 @@
 package com.geovault.tracker
 
-import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -11,43 +10,30 @@ import androidx.compose.runtime.getValue
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultTheme
-import com.geovault.tracker.presentation.MainScreenViewModel
-import com.geovault.tracker.ui.MainScreen
+import com.geovault.tracker.presentation.SettingsViewModel
+import com.geovault.tracker.ui.SettingsScreen
 
-class MainActivity : ComponentActivity() {
+class SettingsActivity : ComponentActivity() {
 
-    companion object {
-        const val EXTRA_OAUTH_ERROR = "oauth_error"
-    }
-
-    private val viewModel: MainScreenViewModel by viewModels()
+    private val viewModel: SettingsViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        GeoVaultSystemBars.applyAppChrome(activity = this)
+        GeoVaultSystemBars.applyAppChrome(this)
         viewModel.initialize()
-
         setContent {
             GeoVaultTheme {
                 val state by viewModel.state.collectAsState()
-
                 LaunchedEffect(state.oauthUrl) {
                     state.oauthUrl?.let {
-                        GeovaultAuthManager.launchOAuthInBrowser(this@MainActivity, it)
+                        GeovaultAuthManager.launchOAuthInBrowser(this@SettingsActivity, it)
                     }
                 }
-
-                LaunchedEffect(Unit) {
-                    intent.getStringExtra(EXTRA_OAUTH_ERROR)?.let { error ->
-                        viewModel.showExternalError(error)
-                        intent?.removeExtra(EXTRA_OAUTH_ERROR)
-                    }
-                }
-                MainScreen(
+                SettingsScreen(
                     state = state,
-                    onOpenSettings = { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) },
-                    onAuthServerUrlChanged = viewModel::onAuthServerUrlChanged,
-                    onAuthConnect = viewModel::connectAuth,
+                    onServerUrlChanged = viewModel::onServerUrlChanged,
+                    onConnect = viewModel::connect,
+                    onDisconnect = { viewModel.disconnect(MainActivity::class.java) },
                 )
             }
         }

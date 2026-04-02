@@ -12,8 +12,6 @@ object ServerUrlContract {
 
     fun getServerUrlsFromOtherApps(context: Context): Set<String> {
         val ourPackage = context.packageName
-        if (ourPackage.endsWith(DEBUG_SUFFIX)) return emptySet()
-
         val packages = context.packageManager.getInstalledPackages(0)
             .map { it.packageName }
             .asSequence()
