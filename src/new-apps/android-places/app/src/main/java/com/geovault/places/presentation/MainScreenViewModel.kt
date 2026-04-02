@@ -262,6 +262,13 @@ class MainScreenViewModel(
         publishFromCache()
     }
 
+    fun applyDeletedFeature(deleted: Feature) {
+        cache.removeCachedFeature(deleted)
+        cache.removeOfflineByFeature(deleted)
+        _state.update { it.copy(searchQuery = "") }
+        publishFromCache()
+    }
+
     fun clearSnackbar() {
         _state.update { it.copy(snackbar = null) }
     }

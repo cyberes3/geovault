@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
         val revertOffline = data?.serializableExtraCompat<OfflineFeature>("revert_offline_feature")
         when {
             deletedFeature != null -> {
-                viewModel.onHostResumed()
+                viewModel.applyDeletedFeature(deletedFeature)
             }
             revertOffline != null -> {
                 viewModel.revertOfflineChanges(revertOffline)
