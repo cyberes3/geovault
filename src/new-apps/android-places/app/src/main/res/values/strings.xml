@@ -1,3 +1,5 @@
 <resources>
-    <string name="app_name">GeoVault Places</string>
+    <string name="app_name">Places</string>
+    <string name="app_title_bar">GeoVault Places</string>
+    <string name="map_screen_subtitle">Map</string>
 </resources>

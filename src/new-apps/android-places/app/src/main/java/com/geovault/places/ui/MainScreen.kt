@@ -42,18 +42,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geovault.common.ui.components.GeoVaultAuthGate
-import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingOverlay
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
@@ -64,9 +62,8 @@ import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.places.model.Feature
 import com.geovault.places.model.OfflineFeature
-import com.geovault.places.presentation.PlacesOfflineBehaviorPolicy
+import com.geovault.places.R
 import com.geovault.places.presentation.MainScreenState
-import com.geovault.places.presentation.PlacesOfflineDestructiveAction
 
 private const val HEADER_WAITING_TO_SYNC = "WAITING TO SYNC"
 private const val HEADER_PLACES = "Places"
@@ -99,8 +96,6 @@ fun MainScreen(
     onAddPlace: () -> Unit,
     onEditSavedPlace: (Feature) -> Unit,
     onEditOfflinePlace: (OfflineFeature, Int) -> Unit,
-    onDeleteSavedPlace: (Feature) -> Unit,
-    onRevertOrDiscardOffline: (OfflineFeature) -> Unit,
     onNavigatePlace: (Feature) -> Unit,
     onViewDescription: (Feature) -> Unit,
     onOpenMapToPlace: (Feature) -> Unit,
@@ -109,8 +104,6 @@ fun MainScreen(
     onDismissSnackbar: () -> Unit,
 ) {
     val listState = rememberLazyListState()
-    var pendingDeleteFeature by remember { mutableStateOf<Feature?>(null) }
-    var pendingOfflineRemoval by remember { mutableStateOf<OfflineFeature?>(null) }
     val showSearchDivider by remember(listState) {
         derivedStateOf {
             listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
@@ -120,7 +113,7 @@ fun MainScreen(
     Scaffold(
         topBar = {
             GeoVaultTopTitleBar(
-                title = "Places",
+                title = stringResource(R.string.app_title_bar),
                 subtitle = state.lastSyncLabel,
                 actionsContent = {
                     GeoVaultTopBarSettingsMenuAction(
@@ -161,8 +154,6 @@ fun MainScreen(
                         state = state,
                         listState = listState,
                         onRefresh = onRefresh,
-                        onDeleteSavedPlace = { pendingDeleteFeature = it },
-                        onRevertOrDiscardOffline = { pendingOfflineRemoval = it },
                         onNavigatePlace = onNavigatePlace,
                         onEditSavedPlace = onEditSavedPlace,
                         onEditOfflinePlace = onEditOfflinePlace,
@@ -195,44 +186,6 @@ fun MainScreen(
         onDismiss = onDismissSnackbar,
         onAction = { _ -> onDismissSnackbar() },
     )
-
-    pendingDeleteFeature?.let { feature ->
-        GeoVaultConfirmationDialog(
-            title = "Delete Place",
-            message = "Are you sure you want to delete '${feature.properties.name ?: "this place"}'? This cannot be undone.",
-            onConfirm = {
-                pendingDeleteFeature = null
-                onDeleteSavedPlace(feature)
-            },
-            onCancel = { pendingDeleteFeature = null },
-            confirmText = PlacesOfflineBehaviorPolicy.destructiveActionLabel(PlacesOfflineDestructiveAction.Delete),
-            cancelText = "Cancel",
-        )
-    }
-
-    pendingOfflineRemoval?.let { offlineFeature ->
-        val action = PlacesOfflineBehaviorPolicy.destructiveActionForRow(
-            isOffline = true,
-            offlineFeature = offlineFeature
-        )
-        val placeName = offlineFeature.feature.properties.name ?: "this place"
-        val message = if (action == PlacesOfflineDestructiveAction.Revert) {
-            "Are you sure you want to revert your changes to '$placeName'?"
-        } else {
-            "Are you sure you want to discard '$placeName'?"
-        }
-        GeoVaultConfirmationDialog(
-            title = "${PlacesOfflineBehaviorPolicy.destructiveActionLabel(action)} Changes",
-            message = message,
-            onConfirm = {
-                pendingOfflineRemoval = null
-                onRevertOrDiscardOffline(offlineFeature)
-            },
-            onCancel = { pendingOfflineRemoval = null },
-            confirmText = PlacesOfflineBehaviorPolicy.destructiveActionLabel(action),
-            cancelText = "Cancel",
-        )
-    }
 }
 
 @Composable
@@ -280,8 +233,6 @@ private fun PlacesBody(
     state: MainScreenState,
     listState: LazyListState,
     onRefresh: () -> Unit,
-    onDeleteSavedPlace: (Feature) -> Unit,
-    onRevertOrDiscardOffline: (OfflineFeature) -> Unit,
     onNavigatePlace: (Feature) -> Unit,
     onEditSavedPlace: (Feature) -> Unit,
     onEditOfflinePlace: (OfflineFeature, Int) -> Unit,
@@ -363,8 +314,6 @@ private fun PlacesBody(
                             isSelected = item.feature.properties.database_id != null &&
                                 item.feature.properties.database_id == state.selectedPlaceId,
                             actionsEnabled = !state.isRefreshing,
-                        onDeleteSavedPlace = onDeleteSavedPlace,
-                        onRevertOrDiscardOffline = onRevertOrDiscardOffline,
                             onNavigatePlace = onNavigatePlace,
                             onEditSavedPlace = onEditSavedPlace,
                             onEditOfflinePlace = onEditOfflinePlace,
@@ -406,8 +355,6 @@ private fun PlaceRow(
     item: PlaceListItem.Row,
     isSelected: Boolean,
     actionsEnabled: Boolean,
-    onDeleteSavedPlace: (Feature) -> Unit,
-    onRevertOrDiscardOffline: (OfflineFeature) -> Unit,
     onNavigatePlace: (Feature) -> Unit,
     onEditSavedPlace: (Feature) -> Unit,
     onEditOfflinePlace: (OfflineFeature, Int) -> Unit,
@@ -427,7 +374,6 @@ private fun PlaceRow(
     val rawDate = feature.properties.created_at.orEmpty()
     val formattedDate = if (rawDate.length >= 10) rawDate.substring(0, 10) else rawDate
     val dateLabel = if (item.isOffline) "$formattedDate (offline)" else formattedDate
-    val destructiveAction = PlacesOfflineBehaviorPolicy.destructiveActionForRow(item.isOffline, item.offlineFeature)
 
     Card(
         modifier = Modifier
@@ -553,21 +499,6 @@ private fun PlaceRow(
                             onEditSavedPlace(feature)
                         }
                     },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp),
-                    enabled = actionsEnabled
-                )
-                GeoVaultSecondaryButton(
-                    text = PlacesOfflineBehaviorPolicy.destructiveActionLabel(destructiveAction),
-                    onClick = {
-                        if (item.isOffline && item.offlineFeature != null) {
-                            onRevertOrDiscardOffline(item.offlineFeature)
-                        } else {
-                            onDeleteSavedPlace(feature)
-                        }
-                    },
-                    accentColor = GeoVaultColorTokens.Error,
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp),

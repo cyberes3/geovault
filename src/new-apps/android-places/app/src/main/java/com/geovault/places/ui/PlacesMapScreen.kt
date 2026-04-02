@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -52,6 +53,7 @@ import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.places.R
 import com.geovault.places.model.Feature
 import com.geovault.places.presentation.PlacesMapViewModel
 import org.maplibre.android.camera.CameraPosition
@@ -179,7 +181,8 @@ fun PlacesMapScreen(
         modifier = Modifier.fillMaxSize(),
         topBar = {
             GeoVaultTopTitleBar(
-                title = "Places Map",
+                title = stringResource(R.string.app_title_bar),
+                subtitle = stringResource(R.string.map_screen_subtitle),
                 actionsContent = {
                     GeoVaultTopBarSettingsMenuAction(
                         onOpenSettings = onOpenSettings,

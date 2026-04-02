@@ -180,14 +180,6 @@ class MainActivity : ComponentActivity() {
                                         }
                                         editLauncher.launch(i)
                                     },
-                                    onDeleteSavedPlace = viewModel::deleteSavedPlace,
-                                    onRevertOrDiscardOffline = { offlineItem ->
-                                        if (offlineItem.feature.properties.database_id != null) {
-                                            viewModel.revertOfflineChanges(offlineItem)
-                                        } else {
-                                            viewModel.discardOfflineDraft(offlineItem)
-                                        }
-                                    },
                                     onNavigatePlace = { feature ->
                                         val url = PlacesAppServices.from(application).navigationRepository()
                                             .buildMapsSearchUrl(feature)

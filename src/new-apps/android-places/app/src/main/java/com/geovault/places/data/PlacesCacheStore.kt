@@ -16,12 +16,18 @@ class PlacesCacheStore(context: Context) : PlacesOfflineStore {
 
     override fun getCachedFeatures(): List<Feature> {
         val json = prefs.getString(KEY_CACHED_PLACES, null) ?: return emptyList()
-        return runCatching { gson.fromJson(json, FeatureCollection::class.java).features }.getOrElse { emptyList() }
+        return runCatching {
+            val collection = gson.fromJson(json, FeatureCollection::class.java)
+            collection?.features ?: emptyList()
+        }.getOrElse { emptyList() }
     }
 
     override fun getOfflineFeatures(): List<OfflineFeature> {
         val json = prefs.getString(KEY_OFFLINE_PLACES, "[]") ?: "[]"
-        return runCatching { gson.fromJson(json, Array<OfflineFeature>::class.java).toList() }.getOrElse { emptyList() }
+        return runCatching {
+            val parsed = gson.fromJson(json, Array<OfflineFeature>::class.java)
+            parsed?.toList() ?: emptyList()
+        }.getOrElse { emptyList() }
     }
 
     fun getDisplayFeatures(): List<Feature> = buildList {
