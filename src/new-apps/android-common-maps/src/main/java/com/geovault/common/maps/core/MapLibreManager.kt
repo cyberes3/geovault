@@ -33,6 +33,10 @@ class MapLibreManager(
         maplibreMap = map
         map.uiSettings.setLogoEnabled(false)
         map.uiSettings.setAttributionEnabled(false)
+        map.uiSettings.isScrollGesturesEnabled = true
+        map.uiSettings.isZoomGesturesEnabled = true
+        map.uiSettings.isTiltGesturesEnabled = true
+        map.uiSettings.isDoubleTapGesturesEnabled = true
         map.uiSettings.isRotateGesturesEnabled = false
         map.setLatLngBoundsForCameraTarget(LatLngBounds.world())
         map.setMaxZoomPreference(MAX_ZOOM_LEVEL.toDouble())

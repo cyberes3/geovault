@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.geovault.common.ui.modifier.dismissKeyboardOnOutsideTap
+import com.geovault.common.ui.navigation.GeoVaultBackHandlerHost
 
 private fun lightScheme(): Colors = lightColors(
     primary = GeoVaultColorTokens.PrimaryBlue,
@@ -47,13 +48,15 @@ fun GeoVaultTheme(
     MaterialTheme(
         colors = if (darkTheme) darkScheme() else lightScheme()
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
-                .dismissKeyboardOnOutsideTap()
-        ) {
-            content()
+        GeoVaultBackHandlerHost {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding()
+                    .dismissKeyboardOnOutsideTap()
+            ) {
+                content()
+            }
         }
     }
 }

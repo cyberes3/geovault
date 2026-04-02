@@ -227,6 +227,19 @@ class GeoVaultMapController(context: Context) : MapView.OnDidFailLoadingMapListe
         _mapManager?.animateCameraWithPadding(map, update, padding, durationMs, callback)
     }
 
+    /**
+     * Re-applies expected gesture settings for the retained map instance.
+     * This is a defensive no-op when the map is not ready.
+     */
+    fun ensureInteractiveGestures() {
+        val map = maplibreMap ?: return
+        map.uiSettings.isScrollGesturesEnabled = true
+        map.uiSettings.isZoomGesturesEnabled = true
+        map.uiSettings.isTiltGesturesEnabled = true
+        map.uiSettings.isDoubleTapGesturesEnabled = true
+        map.uiSettings.isRotateGesturesEnabled = false
+    }
+
     fun addOnMapClickListener(listener: MapLibreMap.OnMapClickListener) {
         mapClickListeners.add(listener)
         maplibreMap?.addOnMapClickListener(listener)

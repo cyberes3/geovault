@@ -3,7 +3,6 @@ package com.geovault.places
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.content.IntentCompat
@@ -71,6 +70,7 @@ import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.components.GeoVaultTopTitleBarDefaults
+import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.places.di.PlacesAppServices
@@ -216,9 +216,17 @@ private fun PlaceEditScreen(
     val layerFabAction = remember(controller) { geoVaultLayerToggleFabAction(controller, order = 1) }
     var geocodeJob by remember { mutableStateOf<Job?>(null) }
 
-    BackHandler {
-        if (state.hasUnsavedChanges) state.showDiscardDialog = true else onClose()
-    }
+    GeoVaultRegisterBackHandler(
+        canGoBack = { true },
+        onBack = {
+            if (state.hasUnsavedChanges) {
+                state.showDiscardDialog = true
+            } else {
+                onClose()
+            }
+            true
+        },
+    )
 
     LaunchedEffect(controller) {
         controller.registerPlugin(renderPlugin)

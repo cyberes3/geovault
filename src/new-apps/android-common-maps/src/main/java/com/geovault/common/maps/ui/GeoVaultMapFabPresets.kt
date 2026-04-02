@@ -98,15 +98,20 @@ fun rememberGeoVaultGpsRecenterFabAction(
     var locationEnabled by remember { mutableStateOf(false) }
     var locationLocking by remember { mutableStateOf(false) }
 
-    fun recenterOnUser() {
-        locationLocking = true
+    fun recenterOnUser(showSpinner: Boolean) {
+        if (showSpinner) {
+            locationLocking = true
+        }
+        controller.ensureInteractiveGestures()
         locationPlugin.setEnabled(true)
         locationPlugin.setCameraTracking(false)
         locationPlugin.setAccuracyCircleVisible(true)
         // Post to next UI tick so loading state is visible before fast callbacks.
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             LocationUpdates.getCurrentLocation(context) { latLng ->
-                locationLocking = false
+                if (showSpinner) {
+                    locationLocking = false
+                }
                 if (latLng == null) return@getCurrentLocation
                 locationEnabled = true
                 onLocationResolved?.invoke(latLng)
@@ -121,6 +126,19 @@ fun rememberGeoVaultGpsRecenterFabAction(
                 val currentZoom = map.cameraPosition.zoom.coerceAtLeast(1.0)
                 controller.animateCameraWithPadding(
                     CameraUpdateFactory.newLatLngZoom(latLng, currentZoom),
+                    callback = object : org.maplibre.android.maps.MapLibreMap.CancelableCallback {
+                        override fun onCancel() {
+                            controller.ensureInteractiveGestures()
+                        }
+
+                        override fun onFinish() {
+                            controller.ensureInteractiveGestures()
+                        }
+                    },
+                )
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+                    { controller.ensureInteractiveGestures() },
+                    350L,
                 )
             }
         }
@@ -132,7 +150,7 @@ fun rememberGeoVaultGpsRecenterFabAction(
         val granted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (granted) {
-            recenterOnUser()
+            recenterOnUser(showSpinner = !locationEnabled)
         } else {
             locationLocking = false
         }
@@ -152,7 +170,7 @@ fun rememberGeoVaultGpsRecenterFabAction(
         onTap = {
             if (!locationLocking) {
                 if (context.hasLocationPermission()) {
-                    recenterOnUser()
+                    recenterOnUser(showSpinner = !locationEnabled)
                 } else {
                     permissionLauncher.launch(
                         arrayOf(

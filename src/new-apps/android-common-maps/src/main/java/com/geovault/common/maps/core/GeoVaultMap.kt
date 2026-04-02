@@ -111,6 +111,7 @@ fun GeoVaultMap(
                     cancelMainHotHold()
                 }
                 mapView?.onStart()
+                currentController.ensureInteractiveGestures()
             }
 
             override fun onResume(owner: LifecycleOwner) {
@@ -118,6 +119,7 @@ fun GeoVaultMap(
                     cancelMainHotHold()
                 }
                 mapView?.onResume()
+                currentController.ensureInteractiveGestures()
             }
 
             override fun onPause(owner: LifecycleOwner) {

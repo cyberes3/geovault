@@ -1,7 +1,6 @@
 package com.geovault.places.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.geovault.common.maps.core.GeoVaultMap
 import com.geovault.common.maps.core.GeoVaultMapController
@@ -281,17 +281,24 @@ fun PlacesMapScreen(
                 modifier = Modifier
                     .fillMaxWidth(),
                 shape = androidx.compose.ui.graphics.RectangleShape,
-                backgroundColor = GeoVaultColorTokens.Surface,
-                border = BorderStroke(1.dp, GeoVaultColorTokens.BorderLight),
+                backgroundColor = GeoVaultColorTokens.Background,
                 elevation = 0.dp,
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column {
+                    Spacer(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(GeoVaultColorTokens.BorderLight),
+                    )
+                    Column(modifier = Modifier.padding(12.dp)) {
                     Text(
                         text = viewModel.selectedFeatureLabel(selectedFeature?.properties),
                         color = GeoVaultColorTokens.TextPrimary,
+                        fontWeight = FontWeight.Bold,
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         GeoVaultPrimaryButton(
                             text = "View in List",
                             onClick = { selectedFeature?.let(onViewInList) },
@@ -316,6 +323,7 @@ fun PlacesMapScreen(
                             )
                         }
                     }
+                }
                 }
             }
         }
