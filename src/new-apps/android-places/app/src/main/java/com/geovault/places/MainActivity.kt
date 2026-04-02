@@ -1,5 +1,6 @@
 package com.geovault.places
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -35,6 +36,7 @@ import com.geovault.places.di.PlacesAppServices
 import com.geovault.places.model.Feature
 import com.geovault.places.model.OfflineFeature
 import com.geovault.places.presentation.MainScreenViewModel
+import com.geovault.places.presentation.PlacesOfflineBehaviorPolicy
 import com.geovault.places.presentation.PlacesMapViewModel
 import com.geovault.places.ui.MainScreen
 import com.geovault.places.ui.PlacesMapLaunchArgs
@@ -178,15 +180,24 @@ class MainActivity : ComponentActivity() {
                                         }
                                         editLauncher.launch(i)
                                     },
+                                    onDeleteSavedPlace = viewModel::deleteSavedPlace,
+                                    onRevertOrDiscardOffline = { offlineItem ->
+                                        if (offlineItem.feature.properties.database_id != null) {
+                                            viewModel.revertOfflineChanges(offlineItem)
+                                        } else {
+                                            viewModel.discardOfflineDraft(offlineItem)
+                                        }
+                                    },
                                     onNavigatePlace = { feature ->
                                         val url = PlacesAppServices.from(application).navigationRepository()
                                             .buildMapsSearchUrl(feature)
                                         if (url != null) {
-                                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                                            PlacesAppServices.from(application).navigationRepository().trackNavigation(
-                                                feature,
-                                                GeovaultAuthManager.getServerUrl(this@MainActivity)
-                                            )
+                                            if (launchMapIntent(Uri.parse(url))) {
+                                                PlacesAppServices.from(application).navigationRepository().trackNavigation(
+                                                    feature,
+                                                    GeovaultAuthManager.getServerUrl(this@MainActivity)
+                                                )
+                                            }
                                         }
                                     },
                                     onViewDescription = { feature ->
@@ -250,11 +261,12 @@ class MainActivity : ComponentActivity() {
                                         val url = PlacesAppServices.from(application).navigationRepository()
                                             .buildMapsSearchUrl(feature)
                                         if (url != null) {
-                                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                                            PlacesAppServices.from(application).navigationRepository().trackNavigation(
-                                                feature = feature,
-                                                serverUrl = GeovaultAuthManager.getServerUrl(this@MainActivity),
-                                            )
+                                            if (launchMapIntent(Uri.parse(url))) {
+                                                PlacesAppServices.from(application).navigationRepository().trackNavigation(
+                                                    feature = feature,
+                                                    serverUrl = GeovaultAuthManager.getServerUrl(this@MainActivity),
+                                                )
+                                            }
                                         }
                                     },
                                 )
@@ -283,5 +295,15 @@ class MainActivity : ComponentActivity() {
 
     private inline fun <reified T : java.io.Serializable> Intent.serializableExtraCompat(key: String): T? {
         return IntentCompat.getSerializableExtra(this, key, T::class.java)
+    }
+
+    private fun launchMapIntent(uri: Uri): Boolean {
+        return try {
+            startActivity(Intent(Intent.ACTION_VIEW, uri))
+            true
+        } catch (_: ActivityNotFoundException) {
+            viewModel.showExternalError(PlacesOfflineBehaviorPolicy.MAP_APP_UNAVAILABLE_MESSAGE)
+            false
+        }
     }
 }

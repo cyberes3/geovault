@@ -6,9 +6,9 @@ import com.geovault.places.model.OfflineFeature
 
 interface PlacesRemoteDataSource {
     suspend fun fetchPlacesCancellable(): Result<FeatureCollection>
-    fun fetchPlace(id: Int): Result<Feature>
-    fun createPlace(feature: Feature): Result<Feature>
-    fun updatePlace(id: Int, feature: Feature): Result<Feature>
+    suspend fun fetchPlace(id: Int): Result<Feature>
+    suspend fun createPlace(feature: Feature): Result<Feature>
+    suspend fun updatePlace(id: Int, feature: Feature): Result<Feature>
 }
 
 interface PlacesOfflineStore {

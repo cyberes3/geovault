@@ -67,7 +67,7 @@ class SyncOfflinePlacesUseCase(
         )
     }
 
-    private fun syncOne(item: OfflineFeature): SyncItemOutcome {
+    private suspend fun syncOne(item: OfflineFeature): SyncItemOutcome {
         val feature = item.feature
         val dbId = feature.properties.database_id
         if (dbId == null) {

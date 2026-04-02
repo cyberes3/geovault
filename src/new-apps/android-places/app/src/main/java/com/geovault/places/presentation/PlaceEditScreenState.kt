@@ -153,11 +153,16 @@ class PlaceEditScreenState(
     }
 
     fun deleteActionLabel(): String {
-        val feature = initial ?: return "Delete"
+        val feature = initial
+            ?: return PlacesOfflineBehaviorPolicy.destructiveActionLabel(PlacesOfflineDestructiveAction.Delete)
         return if (isOfflineEdit) {
-            if (feature.properties.database_id != null) "Revert" else "Discard"
+            if (feature.properties.database_id != null) {
+                PlacesOfflineBehaviorPolicy.destructiveActionLabel(PlacesOfflineDestructiveAction.Revert)
+            } else {
+                PlacesOfflineBehaviorPolicy.destructiveActionLabel(PlacesOfflineDestructiveAction.Discard)
+            }
         } else {
-            "Delete"
+            PlacesOfflineBehaviorPolicy.destructiveActionLabel(PlacesOfflineDestructiveAction.Delete)
         }
     }
 

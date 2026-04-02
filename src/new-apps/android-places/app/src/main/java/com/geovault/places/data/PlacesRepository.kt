@@ -40,27 +40,39 @@ class PlacesRepository(private val context: Context) : PlacesRemoteDataSource {
         }
     }
 
-    override fun fetchPlace(id: Int): Result<Feature> {
+    override suspend fun fetchPlace(id: Int): Result<Feature> {
         return runCatching {
-            val response = api().getPlace(id).execute()
-            if (!response.isSuccessful) error(parseApiError(response, "Sync failed: server error ${response.code()}"))
-            response.body() ?: error("Server returned no data")
+            val call = api().getPlace(id)
+            executeCancellable(call) { response ->
+                if (!response.isSuccessful) {
+                    error(parseApiError(response, "Sync failed: server error ${response.code()}"))
+                }
+                response.body() ?: error("Server returned no data")
+            }
         }
     }
 
-    override fun createPlace(feature: Feature): Result<Feature> {
+    override suspend fun createPlace(feature: Feature): Result<Feature> {
         return runCatching {
-            val response = api().createPlace(feature).execute()
-            if (!response.isSuccessful) error(parseApiError(response, "Sync failed: server error ${response.code()}"))
-            response.body() ?: error("Server returned no data")
+            val call = api().createPlace(feature)
+            executeCancellable(call) { response ->
+                if (!response.isSuccessful) {
+                    error(parseApiError(response, "Sync failed: server error ${response.code()}"))
+                }
+                response.body() ?: error("Server returned no data")
+            }
         }
     }
 
-    override fun updatePlace(id: Int, feature: Feature): Result<Feature> {
+    override suspend fun updatePlace(id: Int, feature: Feature): Result<Feature> {
         return runCatching {
-            val response = api().updatePlace(id, feature).execute()
-            if (!response.isSuccessful) error(parseApiError(response, "Sync failed: server error ${response.code()}"))
-            response.body() ?: error("Server returned no data")
+            val call = api().updatePlace(id, feature)
+            executeCancellable(call) { response ->
+                if (!response.isSuccessful) {
+                    error(parseApiError(response, "Sync failed: server error ${response.code()}"))
+                }
+                response.body() ?: error("Server returned no data")
+            }
         }
     }
 

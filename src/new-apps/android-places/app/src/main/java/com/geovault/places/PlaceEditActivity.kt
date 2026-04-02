@@ -80,6 +80,7 @@ import com.geovault.places.model.AddressSearchResult
 import com.geovault.places.model.Feature
 import com.geovault.places.model.OfflineFeature
 import com.geovault.places.presentation.PlaceEditScreenState
+import com.geovault.places.presentation.PlacesOfflineBehaviorPolicy
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -124,7 +125,7 @@ class PlaceEditActivity : ComponentActivity() {
                             } else {
                                 Toast.makeText(
                                     this@PlaceEditActivity,
-                                    "Cannot delete while offline. Please try again when connected.",
+                                    PlacesOfflineBehaviorPolicy.DELETE_WHILE_OFFLINE_MESSAGE,
                                     Toast.LENGTH_SHORT
                                 ).show()
                             }

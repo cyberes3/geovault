@@ -68,6 +68,40 @@ class SyncOfflinePlacesUseCaseTest {
         assertTrue(result.events.first() is SyncEvent.ItemFailed)
     }
 
+    @Test
+    fun mixedCreateSuccessAndUpdateFailure_reportsCountsAndRetainsFailedItem() {
+        val newDraft = place(id = null, name = "Draft", desc = "new")
+        val existing = place(id = 44, name = "Saved", desc = "old")
+        val edited = place(id = 44, name = "Saved", desc = "changed")
+        val store = FakeStore(
+            offline = mutableListOf(
+                OfflineFeature(feature = newDraft, original = null),
+                OfflineFeature(feature = edited, original = existing),
+            ),
+            cached = mutableListOf(),
+        )
+        val repo = SequencedRepo(
+            createResults = mutableListOf(
+                Result.success(newDraft.copy(properties = newDraft.properties.copy(database_id = 500)))
+            ),
+            fetchPlaceResults = mutableListOf(Result.success(existing)),
+            updateResults = mutableListOf(Result.failure(IllegalStateException("network")))
+        )
+        val useCase = SyncOfflinePlacesUseCase(
+            repository = repo,
+            cacheStore = store,
+            conflictResolutionPolicy = ConflictResolutionPolicy(),
+        )
+
+        val result = kotlinx.coroutines.runBlocking { useCase.runSync() }
+
+        assertEquals(1, result.successCount)
+        assertEquals(1, result.failedCount)
+        assertEquals(SyncFailureReason.UpdateFailed, result.failures.first().reason)
+        assertEquals(1, store.getOfflineFeatures().size)
+        assertEquals(44, store.getOfflineFeatures().first().feature.properties.database_id)
+    }
+
     private fun place(id: Int?, name: String, desc: String): Feature {
         return Feature(
             geometry = Geometry(coordinates = listOf(2.0, 1.0)),
@@ -109,10 +143,26 @@ private class FakeRepo(
 ) : PlacesRemoteDataSource {
     val createCalls = mutableListOf<Feature>()
     override suspend fun fetchPlacesCancellable(): Result<FeatureCollection> = fetchPlacesResult
-    override fun fetchPlace(id: Int): Result<Feature> = fetchPlaceResult
-    override fun createPlace(feature: Feature): Result<Feature> {
+    override suspend fun fetchPlace(id: Int): Result<Feature> = fetchPlaceResult
+    override suspend fun createPlace(feature: Feature): Result<Feature> {
         createCalls.add(feature)
         return createResult
     }
-    override fun updatePlace(id: Int, feature: Feature): Result<Feature> = updateResult
+    override suspend fun updatePlace(id: Int, feature: Feature): Result<Feature> = updateResult
+}
+
+private class SequencedRepo(
+    private val fetchPlaceResults: MutableList<Result<Feature>>,
+    private val createResults: MutableList<Result<Feature>>,
+    private val updateResults: MutableList<Result<Feature>>,
+) : PlacesRemoteDataSource {
+    override suspend fun fetchPlacesCancellable(): Result<FeatureCollection> {
+        return Result.success(FeatureCollection(features = emptyList()))
+    }
+
+    override suspend fun fetchPlace(id: Int): Result<Feature> = fetchPlaceResults.removeFirst()
+
+    override suspend fun createPlace(feature: Feature): Result<Feature> = createResults.removeFirst()
+
+    override suspend fun updatePlace(id: Int, feature: Feature): Result<Feature> = updateResults.removeFirst()
 }

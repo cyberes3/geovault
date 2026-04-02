@@ -82,6 +82,44 @@ class OfflineSyncCoordinatorTest {
         assertEquals(0, store.cachedSnapshots.size)
     }
 
+    @Test
+    fun canonicalRefreshFailureReturnsWarningAfterSuccessfulReplay() {
+        val firstCollection = FeatureCollection(features = listOf(place(1, "A")))
+        val repository = SequenceRepo(
+            fetchResults = mutableListOf(
+                Result.success(firstCollection),
+                Result.failure(IllegalStateException("network down")),
+            )
+        )
+        val store = CoordinatorStore()
+        val syncUseCase = FakeSyncUseCase(
+            SyncResult(
+                hadQueuedItems = true,
+                successCount = 1,
+                failedCount = 0,
+                queueBecameEmpty = true,
+                conflictCount = 0,
+                failures = emptyList(),
+                events = emptyList(),
+            )
+        )
+        val coordinator = OfflineSyncCoordinator(
+            repository = repository,
+            cacheStore = store,
+            syncExecutor = syncUseCase,
+            navigationRetryFlusher = CountingFlusher(),
+            serverUrlProvider = { "https://example.test" },
+        )
+
+        val fetchResult = kotlinx.coroutines.runBlocking { coordinator.fetchAndCacheServerSnapshot() }
+        val replayResult = kotlinx.coroutines.runBlocking { coordinator.runPendingReplayAndCanonicalRefresh() }
+
+        assertTrue(fetchResult is SnapshotFetchResult.Success)
+        assertEquals(2, repository.fetchCount)
+        assertEquals(1, store.cachedSnapshots.size)
+        assertTrue(replayResult.warningMessage?.contains("failed to refresh latest server data") == true)
+    }
+
     private fun place(id: Int, name: String): Feature {
         return Feature(
             geometry = Geometry(coordinates = listOf(2.0, 1.0)),
@@ -104,9 +142,9 @@ private class SequenceRepo(
         fetchCount += 1
         return fetchResults.removeFirst()
     }
-    override fun fetchPlace(id: Int): Result<Feature> = error("unused")
-    override fun createPlace(feature: Feature): Result<Feature> = error("unused")
-    override fun updatePlace(id: Int, feature: Feature): Result<Feature> = error("unused")
+    override suspend fun fetchPlace(id: Int): Result<Feature> = error("unused")
+    override suspend fun createPlace(feature: Feature): Result<Feature> = error("unused")
+    override suspend fun updatePlace(id: Int, feature: Feature): Result<Feature> = error("unused")
 }
 
 private class CoordinatorStore : PlacesOfflineStore {

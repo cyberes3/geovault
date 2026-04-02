@@ -193,14 +193,10 @@ class MainScreenViewModel(
     }
 
     fun cancelRefresh() {
-        refreshCancelMessage = "Cancelled - using cached data"
+        refreshCancelMessage = PlacesOfflineBehaviorPolicy.REFRESH_CANCELLED_USING_CACHE_MESSAGE
         when (refreshPhase) {
-            RefreshPhase.FETCHING -> {
+            RefreshPhase.FETCHING, RefreshPhase.SYNCING -> {
                 refreshJob?.cancel(CancellationException(refreshCancelMessage ?: "Cancelled by user"))
-            }
-            RefreshPhase.SYNCING -> {
-                showSnackbar(refreshCancelMessage ?: "Syncing cancelled", "refresh_cancelled")
-                _state.update { it.copy(showSyncOverlay = false, syncOverlayTitle = "Syncing...", syncOverlaySubtext = "Tap to cancel") }
             }
             RefreshPhase.IDLE -> Unit
         }
@@ -217,11 +213,12 @@ class MainScreenViewModel(
                 }
                 refreshNow()
             }.onFailure { err ->
+                val message = PlacesOfflineBehaviorPolicy.deleteFailureMessage(err.message)
                 _state.update {
                     it.copy(
                         snackbar = GeoVaultSnackbarModel(
                             id = "delete_error_${System.currentTimeMillis()}",
-                            message = err.message ?: "Failed to delete place"
+                            message = message
                         )
                     )
                 }
@@ -236,14 +233,14 @@ class MainScreenViewModel(
             it.copy(
                 snackbar = GeoVaultSnackbarModel(
                     id = "offline_revert_${System.currentTimeMillis()}",
-                    message = if (item.feature.properties.database_id != null) {
-                        "Changes reverted."
-                    } else {
-                        "Offline place discarded."
-                    }
+                    message = PlacesOfflineBehaviorPolicy.offlineRemovalMessage(item)
                 )
             )
         }
+    }
+
+    fun discardOfflineDraft(item: OfflineFeature) {
+        revertOfflineChanges(item)
     }
 
     fun saveOffline(feature: Feature, original: Feature? = null, offlineIndex: Int = -1) {
@@ -253,7 +250,7 @@ class MainScreenViewModel(
             it.copy(
                 snackbar = GeoVaultSnackbarModel(
                     id = "offline_saved_${System.currentTimeMillis()}",
-                    message = "Saved offline. Pull to sync."
+                    message = PlacesOfflineBehaviorPolicy.SAVED_OFFLINE_MESSAGE
                 )
             )
         }
