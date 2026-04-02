@@ -1,6 +1,8 @@
 package com.geovault.places.data
 
 import android.content.Context
+import com.geovault.common.settings.GeoVaultPrefsStore
+import com.geovault.common.settings.PrefKey
 import com.geovault.places.domain.PlacesOfflineStore
 import com.geovault.places.model.Feature
 import com.geovault.places.model.FeatureCollection
@@ -11,11 +13,21 @@ import java.util.Date
 import java.util.Locale
 
 class PlacesCacheStore(context: Context) : PlacesOfflineStore {
-    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val store = GeoVaultPrefsStore(
+        context = context,
+        prefsName = PREFS_NAME,
+        schemaVersion = SCHEMA_VERSION,
+        registeredKeys = ALL_KEYS
+    )
     private val gson = Gson()
 
+    fun preloadOnLaunch() {
+        store.preloadAllDataBlocking()
+    }
+
     override fun getCachedFeatures(): List<Feature> {
-        val json = prefs.getString(KEY_CACHED_PLACES, null) ?: return emptyList()
+        val json = store.getBlocking(KEY_CACHED_PLACES)
+        if (json.isBlank()) return emptyList()
         return runCatching {
             val collection = gson.fromJson(json, FeatureCollection::class.java)
             collection?.features ?: emptyList()
@@ -23,7 +35,7 @@ class PlacesCacheStore(context: Context) : PlacesOfflineStore {
     }
 
     override fun getOfflineFeatures(): List<OfflineFeature> {
-        val json = prefs.getString(KEY_OFFLINE_PLACES, "[]") ?: "[]"
+        val json = store.getBlocking(KEY_OFFLINE_PLACES)
         return runCatching {
             val parsed = gson.fromJson(json, Array<OfflineFeature>::class.java)
             parsed?.toList() ?: emptyList()
@@ -35,13 +47,13 @@ class PlacesCacheStore(context: Context) : PlacesOfflineStore {
         addAll(getCachedFeatures())
     }
 
-    fun getLastSyncTime(): Long = prefs.getLong(KEY_LAST_SYNC_TIME, 0L)
+    fun getLastSyncTime(): Long = store.getBlocking(KEY_LAST_SYNC_TIME)
 
     override fun setCached(collection: FeatureCollection, lastSyncTime: Long) {
-        prefs.edit()
-            .putString(KEY_CACHED_PLACES, gson.toJson(collection))
-            .putLong(KEY_LAST_SYNC_TIME, lastSyncTime)
-            .apply()
+        store.putBatchBlocking(mapOf(
+            KEY_CACHED_PLACES to gson.toJson(collection),
+            KEY_LAST_SYNC_TIME to lastSyncTime
+        ))
     }
 
     fun setCached(collection: FeatureCollection) {
@@ -49,7 +61,7 @@ class PlacesCacheStore(context: Context) : PlacesOfflineStore {
     }
 
     fun setLastSyncTime(value: Long) {
-        prefs.edit().putLong(KEY_LAST_SYNC_TIME, value).apply()
+        store.putBlocking(KEY_LAST_SYNC_TIME, value)
     }
 
     fun updateCachedFeature(feature: Feature) {
@@ -67,7 +79,7 @@ class PlacesCacheStore(context: Context) : PlacesOfflineStore {
             }
             current.add(0, withDate)
         }
-        prefs.edit().putString(KEY_CACHED_PLACES, gson.toJson(FeatureCollection(features = current))).commit()
+        store.putBlocking(KEY_CACHED_PLACES, gson.toJson(FeatureCollection(features = current)))
     }
 
     fun addOrUpdateOffline(feature: Feature, original: Feature?, offlineEditIndex: Int = -1) {
@@ -89,13 +101,13 @@ class PlacesCacheStore(context: Context) : PlacesOfflineStore {
         } else {
             list.add(item)
         }
-        prefs.edit().putString(KEY_OFFLINE_PLACES, gson.toJson(list)).commit()
+        store.putBlocking(KEY_OFFLINE_PLACES, gson.toJson(list))
     }
 
     override fun removeOffline(item: OfflineFeature) {
         val list = getOfflineFeatures().toMutableList()
         list.remove(item)
-        prefs.edit().putString(KEY_OFFLINE_PLACES, gson.toJson(list)).commit()
+        store.putBlocking(KEY_OFFLINE_PLACES, gson.toJson(list))
     }
 
     fun removeOfflineByFeature(feature: Feature) {
@@ -112,7 +124,7 @@ class PlacesCacheStore(context: Context) : PlacesOfflineStore {
                     offlineFeature.geometry.coordinates == targetCoords
             }
         }
-        prefs.edit().putString(KEY_OFFLINE_PLACES, gson.toJson(filtered)).commit()
+        store.putBlocking(KEY_OFFLINE_PLACES, gson.toJson(filtered))
     }
 
     fun removeCachedFeature(feature: Feature) {
@@ -128,22 +140,20 @@ class PlacesCacheStore(context: Context) : PlacesOfflineStore {
                         cached.geometry.coordinates == targetCoords
                 }
             }
-        prefs.edit().putString(KEY_CACHED_PLACES, gson.toJson(FeatureCollection(features = list))).commit()
+        store.putBlocking(KEY_CACHED_PLACES, gson.toJson(FeatureCollection(features = list)))
     }
 
     fun clear() {
-        prefs.edit()
-            .remove(KEY_CACHED_PLACES)
-            .remove(KEY_OFFLINE_PLACES)
-            .remove(KEY_LAST_SYNC_TIME)
-            .apply()
+        store.clearBlocking()
     }
 
     companion object {
-        private const val PREFS_NAME = "geovault_prefs"
-        private const val KEY_CACHED_PLACES = "cached_places"
-        private const val KEY_OFFLINE_PLACES = "offline_places"
-        private const val KEY_LAST_SYNC_TIME = "last_sync_time"
+        private const val PREFS_NAME = "geovault_places_cache"
+        private const val SCHEMA_VERSION = 1
+        private val KEY_CACHED_PLACES = PrefKey.StringKey("cached_places")
+        private val KEY_OFFLINE_PLACES = PrefKey.StringKey("offline_places", "[]")
+        private val KEY_LAST_SYNC_TIME = PrefKey.LongKey("last_sync_time")
+        private val ALL_KEYS: Set<PrefKey<*>> = setOf(KEY_CACHED_PLACES, KEY_OFFLINE_PLACES, KEY_LAST_SYNC_TIME)
         private val DATE_FORMAT = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     }
 }

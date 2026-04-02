@@ -2,10 +2,7 @@ package com.geovault.common.maps.core
 
 import android.content.Context
 import com.geovault.common.GeovaultAuthManager
-import com.geovault.common.maps.model.OPTION_SATELLITE
 import com.geovault.common.maps.model.OPTION_STREET
-import com.geovault.common.maps.model.OPTION_STREET_DARK
-import com.geovault.common.maps.model.OPTION_TOPO
 import com.geovault.common.maps.model.SOURCE_GOOGLE_HYBRID_FALLBACK
 import com.geovault.common.maps.model.SOURCE_MAPTILER_HYBRID
 import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS
@@ -14,9 +11,16 @@ import com.geovault.common.maps.model.SOURCE_MAPTILER_TOPO
 import com.geovault.common.maps.model.SOURCE_OSM
 import com.geovault.common.maps.model.TileClientConfig
 import com.geovault.common.maps.model.TileSource
+import com.geovault.common.settings.GeoVaultPrefsStore
+import com.geovault.common.settings.PrefKey
 
 class MapSourceManager(private val context: Context) {
-    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val store = GeoVaultPrefsStore(
+        context = context,
+        prefsName = PREFS_NAME,
+        schemaVersion = SCHEMA_VERSION,
+        registeredKeys = ALL_KEYS
+    )
     private var availableSources: List<TileSource> = listOf(
         defaultOsmSource(),
     )
@@ -57,16 +61,17 @@ class MapSourceManager(private val context: Context) {
     fun getSources(): List<TileSource> = availableSources
 
     fun getSelectedSourceId(): String {
-        val raw = prefs.getString(KEY_SELECTED_SOURCE, OPTION_STREET) ?: OPTION_STREET
-        val normalized = MapSourcePolicy.normalizeSelection(raw)
-        if (raw != normalized) {
-            prefs.edit().putString(KEY_SELECTED_SOURCE, normalized).apply()
+        val raw = store.getBlocking(KEY_SELECTED_SOURCE)
+        val effective = raw.ifBlank { OPTION_STREET }
+        val normalized = MapSourcePolicy.normalizeSelection(effective)
+        if (effective != normalized) {
+            store.putBlocking(KEY_SELECTED_SOURCE, normalized)
         }
         return normalized
     }
 
     fun setSelectedSourceId(id: String) {
-        prefs.edit().putString(KEY_SELECTED_SOURCE, MapSourcePolicy.normalizeSelection(id)).apply()
+        store.putBlocking(KEY_SELECTED_SOURCE, MapSourcePolicy.normalizeSelection(id))
     }
 
     fun getNextSourceId(): String {
@@ -151,7 +156,11 @@ class MapSourceManager(private val context: Context) {
     private fun isAuthenticated(): Boolean = GeovaultAuthManager.isLoggedIn(context)
 
     companion object {
-        private const val PREFS_NAME = "geovault_prefs"
-        private const val KEY_SELECTED_SOURCE = "selected_map_source"
+        private const val PREFS_NAME = "geovault_map_source"
+        private const val SCHEMA_VERSION = 1
+
+        private val KEY_SELECTED_SOURCE = PrefKey.StringKey("selected_map_source")
+
+        private val ALL_KEYS: Set<PrefKey<*>> = setOf(KEY_SELECTED_SOURCE)
     }
 }

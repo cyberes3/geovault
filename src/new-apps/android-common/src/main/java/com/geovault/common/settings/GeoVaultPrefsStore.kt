@@ -121,6 +121,38 @@ class GeoVaultPrefsStore(
         }
     }
 
+    fun <T> getBlocking(key: PrefKey<T>): T {
+        return runBlocking(Dispatchers.IO) { get(key) }
+    }
+
+    fun <T> putBlocking(key: PrefKey<T>, value: T) {
+        runBlocking(Dispatchers.IO) { put(key, value) }
+    }
+
+    fun removeBlocking(key: PrefKey<*>) {
+        runBlocking(Dispatchers.IO) { remove(key) }
+    }
+
+    /**
+     * Applies multiple put/remove operations in a single atomic DataStore transaction.
+     * Map values that are `null` remove the key; non-null values set it.
+     * Value types must match their [PrefKey] type at runtime.
+     */
+    suspend fun putBatch(changes: Map<PrefKey<*>, Any?>) {
+        if (changes.isEmpty()) return
+        dataStore.updateData { current ->
+            var result = restoreHelper.normalize(current)
+            for ((key, value) in changes) {
+                result = if (value == null) applyRemove(result, key) else applyPut(result, key, value)
+            }
+            result
+        }
+    }
+
+    fun putBatchBlocking(changes: Map<PrefKey<*>, Any?>) {
+        runBlocking(Dispatchers.IO) { putBatch(changes) }
+    }
+
     fun preloadAllDataBlocking(): Boolean {
         return runCatching {
             runBlocking(Dispatchers.IO) {
@@ -140,6 +172,27 @@ class GeoVaultPrefsStore(
             flow = flow.drop(1)
         }
         return flow
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun applyPut(settings: GeoVaultSettings, key: PrefKey<*>, value: Any): GeoVaultSettings {
+        return when (key) {
+            is PrefKey.BooleanKey -> settings.copy(boolValues = settings.boolValues + (key.name to (value as Boolean)))
+            is PrefKey.StringKey -> settings.copy(stringValues = settings.stringValues + (key.name to (value as String)))
+            is PrefKey.IntKey -> settings.copy(intValues = settings.intValues + (key.name to (value as Int)))
+            is PrefKey.LongKey -> settings.copy(longValues = settings.longValues + (key.name to (value as Long)))
+            is PrefKey.FloatKey -> settings.copy(floatValues = settings.floatValues + (key.name to (value as Float)))
+        }
+    }
+
+    private fun applyRemove(settings: GeoVaultSettings, key: PrefKey<*>): GeoVaultSettings {
+        return when (key) {
+            is PrefKey.BooleanKey -> settings.copy(boolValues = settings.boolValues - key.name)
+            is PrefKey.StringKey -> settings.copy(stringValues = settings.stringValues - key.name)
+            is PrefKey.IntKey -> settings.copy(intValues = settings.intValues - key.name)
+            is PrefKey.LongKey -> settings.copy(longValues = settings.longValues - key.name)
+            is PrefKey.FloatKey -> settings.copy(floatValues = settings.floatValues - key.name)
+        }
     }
 
     @Suppress("UNCHECKED_CAST")

@@ -1,6 +1,8 @@
 package com.geovault.places.data
 
 import android.content.Context
+import com.geovault.common.settings.GeoVaultPrefsStore
+import com.geovault.common.settings.PrefKey
 import com.geovault.places.domain.NavigationRetryFlusher
 import com.geovault.places.model.Feature
 import com.google.gson.Gson
@@ -13,9 +15,18 @@ import java.nio.charset.StandardCharsets
 import java.util.Locale
 
 class NavigationTrackingRepository(private val context: Context) : NavigationRetryFlusher {
-    private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val store = GeoVaultPrefsStore(
+        context = context,
+        prefsName = PREFS_NAME,
+        schemaVersion = SCHEMA_VERSION,
+        registeredKeys = ALL_KEYS
+    )
     private val gson = Gson()
     private val intListType = TypeToken.getParameterized(List::class.java, Int::class.javaObjectType).type
+
+    fun preloadOnLaunch() {
+        store.preloadAllDataBlocking()
+    }
 
     fun buildMapsSearchUrl(feature: Feature): String? {
         val coords = feature.geometry.coordinates
@@ -55,11 +66,11 @@ class NavigationTrackingRepository(private val context: Context) : NavigationRet
     }
 
     fun clearPending() {
-        prefs.edit().remove(PENDING_NAVIGATION_IDS_KEY).apply()
+        store.removeBlocking(KEY_PENDING_NAVIGATION_IDS)
     }
 
     private fun getPending(): List<Int> {
-        val json = prefs.getString(PENDING_NAVIGATION_IDS_KEY, "[]") ?: "[]"
+        val json = store.getBlocking(KEY_PENDING_NAVIGATION_IDS)
         return runCatching { gson.fromJson<List<Int>>(json, intListType) ?: emptyList() }.getOrElse { emptyList() }
     }
 
@@ -67,19 +78,21 @@ class NavigationTrackingRepository(private val context: Context) : NavigationRet
         val pending = getPending().toMutableList()
         if (id !in pending) {
             pending.add(id)
-            prefs.edit().putString(PENDING_NAVIGATION_IDS_KEY, gson.toJson(pending)).apply()
+            store.putBlocking(KEY_PENDING_NAVIGATION_IDS, gson.toJson(pending))
         }
     }
 
     private fun removePending(id: Int) {
         val pending = getPending().toMutableList()
         pending.remove(id)
-        prefs.edit().putString(PENDING_NAVIGATION_IDS_KEY, gson.toJson(pending)).apply()
+        store.putBlocking(KEY_PENDING_NAVIGATION_IDS, gson.toJson(pending))
     }
 
     companion object {
-        private const val PREFS_NAME = "geovault_prefs"
-        private const val PENDING_NAVIGATION_IDS_KEY = "pending_navigation_ids"
+        private const val PREFS_NAME = "geovault_places_nav"
+        private const val SCHEMA_VERSION = 1
+        private val KEY_PENDING_NAVIGATION_IDS = PrefKey.StringKey("pending_navigation_ids", "[]")
+        private val ALL_KEYS: Set<PrefKey<*>> = setOf(KEY_PENDING_NAVIGATION_IDS)
         private const val COORDINATE_PRECISION_DP = 8
     }
 }

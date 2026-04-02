@@ -6,6 +6,7 @@ import android.net.Uri
 import android.util.Base64
 import android.util.Log
 import androidx.browser.customtabs.CustomTabsIntent
+import com.geovault.common.auth.GeoVaultAuthStore
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -19,22 +20,12 @@ import java.util.concurrent.TimeUnit
 
 object GeovaultAuthManager {
     private const val TAG = "GeovaultAuthManager"
-    private const val PREFS_NAME = "geovault_prefs"
-    private const val PREF_SERVER_URL = "server_url"
-    private const val AUTH_PREFS_NAME = "geovault_auth_prefs"
-    private const val PREF_ACCESS_TOKEN = "access_token"
-    private const val PREF_REFRESH_TOKEN = "refresh_token"
-    private const val PREF_EXPIRES_AT = "expires_at"
-    private const val PREF_PKCE_VERIFIER = "pkce_code_verifier"
-    private const val PREF_PKCE_STATE = "pkce_state"
-    private const val PREF_USER_EMAIL = "cached_user_email"
 
     const val OAUTH_CLIENT_ID_UPLOADER = "geovault-android-uploader"
     const val OAUTH_CLIENT_ID_PLACES = "geovault-android-places"
     private const val OAUTH_SCOPE = "api"
     private const val TOKEN_ENDPOINT_PATH = "/api/oauth/token/"
     private const val AUTHORIZE_PATH = "/api/oauth/authorize/"
-    private const val TOKEN_BUFFER_SECONDS = 60L
     private val authJson = Json {
         ignoreUnknownKeys = true
         explicitNulls = false
@@ -47,7 +38,6 @@ object GeovaultAuthManager {
     @Volatile
     private var redirectUri: String? = null
 
-    private var authPrefs: android.content.SharedPreferences? = null
     private val refreshLock = Any()
     private var authFailureListener: AuthFailureListener? = null
     private val resolveExecutor = Executors.newSingleThreadExecutor()
@@ -68,8 +58,7 @@ object GeovaultAuthManager {
         if (this.redirectUri != null) return
         this.redirectUri = redirectUri
         this.clientId = clientId
-        val appContext = context.applicationContext
-        authPrefs = appContext.getSharedPreferences(AUTH_PREFS_NAME, Context.MODE_PRIVATE)
+        GeoVaultAuthStore.getInstance(context).preloadAll()
     }
 
     private fun requireInitialized(): String {
@@ -80,47 +69,14 @@ object GeovaultAuthManager {
         return uri
     }
 
-    private fun requirePrefs(): android.content.SharedPreferences {
-        requireInitialized()
-        return authPrefs
-            ?: error("GeovaultAuthManager not initialized. Call init(context, redirectUri, clientId) first.")
-    }
-
-    private fun putSecureString(
-        editor: android.content.SharedPreferences.Editor,
-        key: String,
-        value: String?
-    ): android.content.SharedPreferences.Editor {
-        if (value.isNullOrBlank()) {
-            editor.remove(key)
-        } else {
-            editor.putString(key, SecureValueCipher.encrypt(value))
-        }
-        return editor
-    }
-
-    private fun getSecureString(
-        prefs: android.content.SharedPreferences,
-        key: String
-    ): String? {
-        val encrypted = prefs.getString(key, null) ?: return null
-        val decrypted = SecureValueCipher.decrypt(encrypted)
-        if (decrypted == null) {
-            Log.w(TAG, "secure_decrypt_failed key=$key")
-            prefs.edit().remove(key).apply()
-        }
-        return decrypted?.takeIf { it.isNotBlank() }
-    }
-
-    private fun plainPrefs(context: Context) =
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private fun store(context: Context): GeoVaultAuthStore =
+        GeoVaultAuthStore.getInstance(context)
 
     fun getServerUrl(context: Context): String =
-        plainPrefs(context).getString(PREF_SERVER_URL, "") ?: ""
+        store(context).getServerUrl()
 
     fun setServerUrl(context: Context, url: String, commit: Boolean = false) {
-        val editor = plainPrefs(context).edit().putString(PREF_SERVER_URL, url)
-        if (commit) editor.commit() else editor.apply()
+        store(context).setServerUrl(url)
     }
 
     fun normalizeServerUrl(url: String): String {
@@ -166,8 +122,9 @@ object GeovaultAuthManager {
     }
 
     fun isLoggedIn(context: Context): Boolean {
-        val hasAccess = !getAccessToken(context).isNullOrBlank()
-        val hasRefresh = !getRefreshToken().isNullOrBlank()
+        val s = store(context)
+        val hasAccess = !s.getAccessToken().isNullOrBlank()
+        val hasRefresh = !s.getRefreshToken().isNullOrBlank()
         val loggedIn = hasAccess || hasRefresh
         Log.i(TAG, "isLoggedIn hasAccess=$hasAccess hasRefresh=$hasRefresh loggedIn=$loggedIn")
         return loggedIn
@@ -175,11 +132,11 @@ object GeovaultAuthManager {
 
     fun getAuthDebugSnapshot(context: Context): String {
         return runCatching {
-            val prefs = requirePrefs()
+            val s = store(context)
             val now = System.currentTimeMillis() / 1000
-            val expiresAt = prefs.getLong(PREF_EXPIRES_AT, 0L)
-            val hasAccess = !getRawAccessToken().isNullOrBlank()
-            val hasRefresh = !getRefreshToken().isNullOrBlank()
+            val expiresAt = s.getExpiresAt()
+            val hasAccess = !s.getRawAccessToken().isNullOrBlank()
+            val hasRefresh = !s.getRefreshToken().isNullOrBlank()
             val loggedIn = hasAccess || hasRefresh
             "auth_snapshot hasAccess=$hasAccess hasRefresh=$hasRefresh loggedIn=$loggedIn now=$now expiresAt=$expiresAt"
         }.getOrElse { e ->
@@ -187,37 +144,21 @@ object GeovaultAuthManager {
         }
     }
 
-    fun getAccessToken(context: Context): String? {
-        val prefs = requirePrefs()
-        val expiresAt = prefs.getLong(PREF_EXPIRES_AT, 0L)
-        if (expiresAt > 0 && System.currentTimeMillis() / 1000 >= expiresAt - TOKEN_BUFFER_SECONDS) {
-            return null
-        }
-        return getSecureString(prefs, PREF_ACCESS_TOKEN)
-    }
+    fun getAccessToken(context: Context): String? =
+        store(context).getAccessToken()
 
-    private fun getRawAccessToken(): String? =
-        getSecureString(requirePrefs(), PREF_ACCESS_TOKEN)
+    private fun getRawAccessToken(context: Context): String? =
+        store(context).getRawAccessToken()
 
     fun saveTokens(context: Context, accessToken: String, refreshToken: String?, expiresInSeconds: Long) {
-        val editor = requirePrefs().edit()
-        putSecureString(editor, PREF_ACCESS_TOKEN, accessToken)
-        putSecureString(editor, PREF_REFRESH_TOKEN, refreshToken)
-        val committed = editor
-            .putLong(PREF_EXPIRES_AT, System.currentTimeMillis() / 1000 + expiresInSeconds)
-            .commit()
-        Log.i(TAG, "saveTokens committed=$committed expiresInSeconds=$expiresInSeconds refreshPresent=${!refreshToken.isNullOrBlank()}")
+        store(context).saveTokens(accessToken, refreshToken, expiresInSeconds)
+        Log.i(TAG, "saveTokens expiresInSeconds=$expiresInSeconds refreshPresent=${!refreshToken.isNullOrBlank()}")
         Log.i(TAG, getAuthDebugSnapshot(context))
     }
 
     fun clearTokens(context: Context) {
-        val committed = requirePrefs().edit()
-            .remove(PREF_ACCESS_TOKEN)
-            .remove(PREF_REFRESH_TOKEN)
-            .remove(PREF_EXPIRES_AT)
-            .remove(PREF_USER_EMAIL)
-            .commit()
-        Log.i(TAG, "clearTokens committed=$committed")
+        store(context).clearTokens()
+        Log.i(TAG, "clearTokens")
         Log.i(TAG, getAuthDebugSnapshot(context))
     }
 
@@ -251,9 +192,8 @@ object GeovaultAuthManager {
     }
 
     fun revokeCurrentSession(context: Context) {
-        // Revoke both tokens to mirror legacy sign-out semantics and reduce stale session risk.
         revokeToken(context, getAccessToken(context))
-        revokeToken(context, getRefreshToken())
+        revokeToken(context, store(context).getRefreshToken())
     }
 
     fun generatePkcePair(): Pair<String, String> {
@@ -273,18 +213,11 @@ object GeovaultAuthManager {
     }
 
     fun savePkceState(context: Context, verifier: String, state: String) {
-        val editor = requirePrefs().edit()
-        putSecureString(editor, PREF_PKCE_VERIFIER, verifier)
-        putSecureString(editor, PREF_PKCE_STATE, state)
-        editor.commit()
+        store(context).savePkceState(verifier, state)
     }
 
     fun getAndClearPkceState(context: Context): Pair<String, String>? {
-        val prefs = requirePrefs()
-        val verifier = getSecureString(prefs, PREF_PKCE_VERIFIER) ?: return null
-        val state = getSecureString(prefs, PREF_PKCE_STATE) ?: return null
-        prefs.edit().remove(PREF_PKCE_VERIFIER).remove(PREF_PKCE_STATE).apply()
-        return verifier to state
+        return store(context).getAndClearPkceState()
     }
 
     fun buildAuthorizeUrl(serverUrl: String, codeChallenge: String, state: String): String {
@@ -348,21 +281,22 @@ object GeovaultAuthManager {
     }
 
     fun getValidAccessToken(context: Context, forceRefreshForToken: String? = null): String? {
-        val needsForceRefresh = forceRefreshForToken != null && getRawAccessToken() == forceRefreshForToken
+        val s = store(context)
+        val needsForceRefresh = forceRefreshForToken != null && s.getRawAccessToken() == forceRefreshForToken
         if (!needsForceRefresh) {
-            val token = getAccessToken(context)
+            val token = s.getAccessToken()
             if (!token.isNullOrBlank()) return token
         }
 
         synchronized(refreshLock) {
-            val syncNeedsForceRefresh = forceRefreshForToken != null && getRawAccessToken() == forceRefreshForToken
+            val syncNeedsForceRefresh = forceRefreshForToken != null && s.getRawAccessToken() == forceRefreshForToken
             if (!syncNeedsForceRefresh) {
-                val token = getAccessToken(context)
+                val token = s.getAccessToken()
                 if (!token.isNullOrBlank()) return token
             }
 
-            val refreshToken = getRefreshToken() ?: return null
-            val serverUrl = getServerUrl(context)
+            val refreshToken = s.getRefreshToken() ?: return null
+            val serverUrl = s.getServerUrl()
             if (serverUrl.isBlank()) return null
 
             val requestBody = FormBody.Builder()
@@ -398,17 +332,12 @@ object GeovaultAuthManager {
         }
     }
 
-    private fun getRefreshToken(): String? =
-        getSecureString(requirePrefs(), PREF_REFRESH_TOKEN)
-
     fun getCachedUserEmail(context: Context): String? {
-        return getSecureString(requirePrefs(), PREF_USER_EMAIL)
+        return store(context).getCachedUserEmail()
     }
 
     private fun setCachedUserEmail(context: Context, email: String?) {
-        val editor = requirePrefs().edit()
-        putSecureString(editor, PREF_USER_EMAIL, email)
-        editor.apply()
+        store(context).setCachedUserEmail(email)
     }
 
     fun fetchUserStatus(context: Context, callback: ((String?) -> Unit)? = null) {

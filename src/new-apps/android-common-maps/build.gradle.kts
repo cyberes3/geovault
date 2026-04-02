@@ -42,7 +42,7 @@ dependencies {
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.browser)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
@@ -56,8 +56,7 @@ dependencies {
     implementation(libs.androidx.compose.material)
     implementation(libs.androidx.compose.material.icons)
 
-    api("org.maplibre.gl:android-sdk:11.11.0")
-    api("org.maplibre.gl:android-plugin-annotation-v9:3.0.2")
+    api("org.maplibre.gl:android-sdk:12.3.1")
 
     testImplementation(libs.junit)
 }

@@ -2,13 +2,11 @@ package com.geovault.common.maps.core
 
 import android.util.Log
 import org.maplibre.android.maps.Style
-import org.maplibre.android.plugins.annotation.SymbolManager
 import org.maplibre.android.style.layers.SymbolLayer
 
 object SymbolManagerStyleCleanup {
-    fun removeFromStyle(style: Style, manager: SymbolManager) {
+    fun removeFromStyle(style: Style, layerId: String) {
         try {
-            val layerId = manager.layerId
             val layer = style.getLayer(layerId) ?: return
             val sourceId = (layer as? SymbolLayer)?.sourceId
             style.removeLayer(layerId)

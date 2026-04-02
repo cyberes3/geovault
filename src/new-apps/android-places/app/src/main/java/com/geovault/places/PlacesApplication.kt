@@ -30,6 +30,9 @@ class PlacesApplication : Application(), GeovaultAuthManager.AuthFailureListener
             clientId = GeovaultAuthManager.OAUTH_CLIENT_ID_PLACES,
         )
         GeovaultAuthManager.setAuthFailureListener(this)
+        val services = PlacesAppServices.from(this)
+        services.cacheStore().preloadOnLaunch()
+        services.navigationRepository().preloadOnLaunch()
         MapLibreInitializer.init(this)
         AppResetFlow.registerHook(
             key = HOOK_EMERGENCY_EXPORT,
