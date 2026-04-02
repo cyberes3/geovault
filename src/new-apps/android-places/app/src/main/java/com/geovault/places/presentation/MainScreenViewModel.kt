@@ -64,10 +64,6 @@ class MainScreenViewModel(
 
     fun initialize() {
         refreshAuthAndCache()
-        if (_state.value.isAuthenticated && !initialRefreshTriggered) {
-            initialRefreshTriggered = true
-            refreshNow()
-        }
     }
 
     fun onHostResumed() {
@@ -282,6 +278,7 @@ class MainScreenViewModel(
     }
 
     private fun refreshAuthAndCache() {
+        val wasAuthenticated = _state.value.isAuthenticated
         val serverUrl = authController.getConfiguredServerUrlOrPeerDefault()
         val loggedIn = serverUrl.isNotBlank() && authController.isLoggedIn()
         _state.update {
@@ -295,6 +292,12 @@ class MainScreenViewModel(
             )
         }
         publishFromCache()
+        val authenticatedAfterLaunch = !initialRefreshTriggered && loggedIn
+        val becameAuthenticated = !wasAuthenticated && loggedIn
+        if (authenticatedAfterLaunch || becameAuthenticated) {
+            initialRefreshTriggered = true
+            refreshNow()
+        }
     }
 
     private fun publishSyncOutcome(syncResult: SyncResult) {

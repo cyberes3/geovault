@@ -71,11 +71,11 @@ class PlacesApplication : Application(), GeovaultAuthManager.AuthFailureListener
             val content = buildString {
                 appendLine("GeoVault emergency export - $exportedAt")
                 appendLine()
-                offlineList.forEach { append(formatPlaceBlock(it.feature, "offline")) }
+                offlineList.forEach { append(formatPlaceBlock(it.feature)) }
                 val cachedFiltered = cachedFeatures.filter { cached ->
                     offlineList.none { it.feature.properties.database_id == cached.properties.database_id }
                 }
-                cachedFiltered.forEach { append(formatPlaceBlock(it, "cached")) }
+                cachedFiltered.forEach { append(formatPlaceBlock(it)) }
             }
 
             val filename = "geovault_emergency_export_${
@@ -93,23 +93,18 @@ class PlacesApplication : Application(), GeovaultAuthManager.AuthFailureListener
         }
     }
 
-    private fun formatPlaceBlock(feature: Feature, source: String): String {
+    private fun formatPlaceBlock(feature: Feature): String {
         val properties = feature.properties
         val coords = feature.geometry.coordinates
         val coordsLine = if (coords.size >= 2) "${coords[1]}, ${coords[0]}" else ""
         val addressLine = properties.address?.takeIf { it.isNotBlank() } ?: ""
         val descLine = properties.description?.takeIf { it.isNotBlank() } ?: ""
-        val metadata = buildList {
-            if (properties.database_id != null) add("database_id: ${properties.database_id}")
-            add(source)
-        }.joinToString(" | ")
         return buildString {
             appendLine(properties.name?.takeIf { it.isNotBlank() } ?: "(unnamed)")
             appendLine(properties.created_at ?: "")
             appendLine(coordsLine)
             appendLine(addressLine)
             appendLine(descLine)
-            appendLine(metadata)
             appendLine()
         }
     }

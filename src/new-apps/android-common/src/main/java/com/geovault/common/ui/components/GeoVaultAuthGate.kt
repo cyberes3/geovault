@@ -20,6 +20,7 @@ fun GeoVaultAuthGate(
         if (isAuthenticated) {
             authenticatedContent()
         } else {
+            GeoVaultRequestBottomTabsHidden(shouldHide = true)
             GeoVaultInitialAuthView(
                 serverUrl = serverUrl,
                 onServerUrlChanged = onServerUrlChanged,

@@ -17,8 +17,16 @@ import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,6 +49,33 @@ data class GeoVaultBottomNavDestination(
     val contentDescription: String = label,
 )
 
+@Stable
+class GeoVaultBottomNavVisibilityController internal constructor(
+    private val onRequestHide: () -> Unit,
+    private val onReleaseHide: () -> Unit,
+) {
+    fun requestHide() = onRequestHide()
+    fun releaseHide() = onReleaseHide()
+}
+
+private val LocalGeoVaultBottomNavVisibilityController =
+    staticCompositionLocalOf<GeoVaultBottomNavVisibilityController?> { null }
+
+@Composable
+fun GeoVaultRequestBottomTabsHidden(shouldHide: Boolean) {
+    val controller = LocalGeoVaultBottomNavVisibilityController.current ?: return
+    DisposableEffect(controller, shouldHide) {
+        if (shouldHide) {
+            controller.requestHide()
+        }
+        onDispose {
+            if (shouldHide) {
+                controller.releaseHide()
+            }
+        }
+    }
+}
+
 @Composable
 fun GeoVaultBottomNavScaffold(
     destinations: List<GeoVaultBottomNavDestination>,
@@ -55,27 +90,45 @@ fun GeoVaultBottomNavScaffold(
         "GeoVaultBottomNavScaffold destination IDs must be unique."
     }
     val activeDestination = destinations.firstOrNull { it.id == selectedDestinationId } ?: destinations.first()
-
-    Column(
-        modifier = modifier.fillMaxSize(),
-    ) {
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-        ) {
-            content(activeDestination)
-        }
-        GeoVaultBottomNavRow(
-            destinations = destinations,
-            selectedDestinationId = activeDestination.id,
-            onDestinationSelected = onDestinationSelected,
+    var hiddenRequests by remember { mutableIntStateOf(0) }
+    val visibilityController = remember {
+        GeoVaultBottomNavVisibilityController(
+            onRequestHide = { hiddenRequests += 1 },
+            onReleaseHide = {
+                if (hiddenRequests > 0) {
+                    hiddenRequests -= 1
+                }
+            },
         )
+    }
+    val areTabsHidden = hiddenRequests > 0
+
+    CompositionLocalProvider(
+        LocalGeoVaultBottomNavVisibilityController provides visibilityController
+    ) {
+        Column(
+            modifier = modifier.fillMaxSize(),
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+            ) {
+                content(activeDestination)
+            }
+            if (!areTabsHidden) {
+                GeoVaultBottomNavRow(
+                    destinations = destinations,
+                    selectedDestinationId = activeDestination.id,
+                    onDestinationSelected = onDestinationSelected,
+                )
+            }
+        }
     }
 
     val activity = LocalContext.current as? ComponentActivity
     SideEffect {
-        if (activity != null) {
+        if (activity != null && !areTabsHidden) {
             val lighterNavBarBlue = ColorUtils.blendARGB(
                 GeoVaultColorTokens.PRIMARY_BLUE_INT,
                 0xFFFFFFFF.toInt(),

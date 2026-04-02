@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -18,6 +19,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import com.geovault.common.ui.modifier.dismissKeyboardOnOutsideTap
+import com.geovault.common.ui.theme.GeoVaultLayoutTokens
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 
@@ -85,7 +87,9 @@ fun GeoVaultInitialAuthView(
             .dismissKeyboardOnOutsideTap()
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(GeoVaultLayoutTokens.ScreenPadding),
             verticalArrangement = Arrangement.Top
         ) {
             Text(
