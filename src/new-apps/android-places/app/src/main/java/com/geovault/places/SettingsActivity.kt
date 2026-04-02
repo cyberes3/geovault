@@ -1,6 +1,5 @@
 package com.geovault.places
 
-import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -32,7 +31,6 @@ class SettingsActivity : ComponentActivity() {
                     onServerUrlChanged = viewModel::onServerUrlChanged,
                     onConnect = viewModel::connect,
                     onDisconnect = { viewModel.disconnect(MainActivity::class.java) },
-                    onClose = { finish() },
                 )
             }
         }

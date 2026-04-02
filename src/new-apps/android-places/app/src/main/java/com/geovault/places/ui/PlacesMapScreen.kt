@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Card
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
@@ -62,6 +61,7 @@ data class PlacesMapLaunchArgs(
     val zoomToLat: Double? = null,
     val zoomToLon: Double? = null,
     val zoomToId: Int? = null,
+    val requestToken: Long = 0L,
 )
 
 @Composable
@@ -95,7 +95,7 @@ fun PlacesMapScreen(
             autoEnableLocationComponent = true,
         )
     }
-    var initialCameraApplied by remember { mutableStateOf(false) }
+    var initialCameraApplied by remember(launchArgs.requestToken) { mutableStateOf(false) }
     var gpsHomeAnchor by remember { mutableStateOf<LatLng?>(null) }
     val layerFabAction = remember(controller) { geoVaultLayerToggleFabAction(controller) }
     val zoomInFabAction = remember(controller) { geoVaultZoomInFabAction(controller) }
@@ -181,6 +181,7 @@ fun PlacesMapScreen(
     }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
         topBar = {
             GeoVaultTopTitleBar(
                 title = "Places Map",
@@ -193,6 +194,8 @@ fun PlacesMapScreen(
             )
         },
     ) { scaffoldPadding ->
+        // Match legacy activity_map.xml: map lives in a weighted region above the info panel;
+        // bottom UI is a sibling, not an overlay — no camera bottom inset needed for it.
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -201,72 +204,74 @@ fun PlacesMapScreen(
         ) {
             Box(
                 modifier = Modifier
+                    .weight(1f)
                     .fillMaxWidth()
-                    .weight(1f),
+                    .fillMaxSize(),
             ) {
                 GeoVaultMap(
                     modifier = Modifier.fillMaxSize(),
                     controller = controller,
                     showDefaultSourceToggle = false,
                     mapMode = GeoVaultMapMode.Main,
+                    includeDefaultFabColumnPadding = true,
                 )
 
-                val mapFabActions = buildGeoVaultMapFabActions {
-                    action(
-                        id = "source",
-                        order = 10,
-                        icon = layerFabAction.icon,
-                        contentDescription = "Toggle map source",
-                        onTap = layerFabAction.onTap,
-                    )
-                    action(
-                        id = "home",
-                        order = 20,
-                        icon = GeoVaultMapFabIcon.Vector(Icons.Default.Home),
-                        contentDescription = "Home extent",
-                        onTap = {
-                            val map = controller.maplibreMap
-                            if (map != null) {
-                                map.setCameraPosition(CameraPosition.Builder(map.cameraPosition).bearing(0.0).tilt(0.0).build())
-                            }
-                            val bounds = viewModel.featureBounds()
-                            val gpsAnchor = gpsHomeAnchor
-                            val effectiveBounds = if (bounds != null && gpsAnchor != null) {
-                                LatLngBounds.Builder()
-                                    .include(bounds.southWest)
-                                    .include(bounds.northEast)
-                                    .include(gpsAnchor)
-                                    .build()
-                            } else {
-                                bounds
-                            }
-                            if (effectiveBounds != null) {
-                                controller.animateCameraWithPadding(CameraUpdateFactory.newLatLngBounds(effectiveBounds, 96))
-                            }
-                        },
-                    )
-                    action(
-                        id = gpsFabAction.id,
-                        order = gpsFabAction.order,
-                        icon = gpsFabAction.icon,
-                        contentDescription = gpsFabAction.contentDescription,
-                        onTap = gpsFabAction.onTap,
-                    )
-                    action(
-                        id = "zoom_in",
-                        order = 40,
-                        icon = zoomInFabAction.icon,
-                        contentDescription = "Zoom in",
-                        onTap = zoomInFabAction.onTap,
-                    )
-                    action(
-                        id = "zoom_out",
-                        order = 50,
-                        icon = zoomOutFabAction.icon,
-                        contentDescription = "Zoom out",
-                        onTap = zoomOutFabAction.onTap,
-                    )
-                }
+            val mapFabActions = buildGeoVaultMapFabActions {
+                action(
+                    id = "source",
+                    order = 10,
+                    icon = layerFabAction.icon,
+                    contentDescription = "Toggle map source",
+                    onTap = layerFabAction.onTap,
+                )
+                action(
+                    id = "home",
+                    order = 20,
+                    icon = GeoVaultMapFabIcon.Vector(Icons.Default.Home),
+                    contentDescription = "Home extent",
+                    onTap = {
+                        val map = controller.maplibreMap
+                        if (map != null) {
+                            map.setCameraPosition(CameraPosition.Builder(map.cameraPosition).bearing(0.0).tilt(0.0).build())
+                        }
+                        val bounds = viewModel.featureBounds()
+                        val gpsAnchor = gpsHomeAnchor
+                        val effectiveBounds = if (bounds != null && gpsAnchor != null) {
+                            LatLngBounds.Builder()
+                                .include(bounds.southWest)
+                                .include(bounds.northEast)
+                                .include(gpsAnchor)
+                                .build()
+                        } else {
+                            bounds
+                        }
+                        if (effectiveBounds != null) {
+                            controller.animateCameraWithPadding(CameraUpdateFactory.newLatLngBounds(effectiveBounds, 96))
+                        }
+                    },
+                )
+                action(
+                    id = gpsFabAction.id,
+                    order = gpsFabAction.order,
+                    icon = gpsFabAction.icon,
+                    contentDescription = gpsFabAction.contentDescription,
+                    onTap = gpsFabAction.onTap,
+                )
+                action(
+                    id = "zoom_in",
+                    order = 40,
+                    icon = zoomInFabAction.icon,
+                    contentDescription = "Zoom in",
+                    onTap = zoomInFabAction.onTap,
+                )
+                action(
+                    id = "zoom_out",
+                    order = 50,
+                    icon = zoomOutFabAction.icon,
+                    contentDescription = "Zoom out",
+                    onTap = zoomOutFabAction.onTap,
+                )
+            }
 
                 GeoVaultMapFabColumn(
                     modifier = Modifier
@@ -276,10 +281,16 @@ fun PlacesMapScreen(
                 )
             }
 
+            Spacer(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(GeoVaultColorTokens.BorderLight),
+            )
+
             val selectedFeature = state.selectedFeature
             Card(
-                modifier = Modifier
-                    .fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
                 shape = androidx.compose.ui.graphics.RectangleShape,
                 backgroundColor = GeoVaultColorTokens.Background,
                 elevation = 0.dp,

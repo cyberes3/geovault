@@ -183,7 +183,7 @@ fun GeoVaultTopTitleBar(
     val activity = context as? ComponentActivity
     if (syncSystemStatusBarColor && activity != null) {
         SideEffect {
-            GeoVaultSystemBars.applyAppChrome(
+            GeoVaultSystemBars.setStatusBarBackground(
                 activity = activity,
                 statusBarColor = backgroundColor.toArgb()
             )

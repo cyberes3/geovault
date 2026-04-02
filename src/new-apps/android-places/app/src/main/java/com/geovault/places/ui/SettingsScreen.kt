@@ -17,7 +17,6 @@ import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.components.GeoVaultInitialAuthView
 import com.geovault.common.ui.components.GeoVaultServerConfigBlock
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
-import com.geovault.common.ui.components.GeoVaultTopTitleBarDefaults
 import com.geovault.places.presentation.SettingsState
 
 @Composable
@@ -26,15 +25,11 @@ fun SettingsScreen(
     onServerUrlChanged: (String) -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
-    onClose: () -> Unit,
 ) {
     Scaffold(
         topBar = {
             GeoVaultTopTitleBar(
                 title = "Settings",
-                rightActions = listOf(
-                    GeoVaultTopTitleBarDefaults.closeAction(onClick = onClose)
-                )
             )
         }
     ) { padding ->

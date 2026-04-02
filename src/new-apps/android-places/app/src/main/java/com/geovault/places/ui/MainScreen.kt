@@ -84,7 +84,6 @@ fun MainScreen(
     onOpenSettings: () -> Unit,
     onRefresh: () -> Unit,
     onAddPlace: () -> Unit,
-    onOpenMap: () -> Unit,
     onEditSavedPlace: (Feature) -> Unit,
     onEditOfflinePlace: (OfflineFeature, Int) -> Unit,
     onNavigatePlace: (Feature) -> Unit,
@@ -159,7 +158,6 @@ fun MainScreen(
                 FabStack(
                     modifier = Modifier.align(Alignment.BottomEnd),
                     onAddPlace = onAddPlace,
-                    onOpenMap = onOpenMap,
                     enabled = !state.isRefreshing
                 )
             }
@@ -514,7 +512,6 @@ private fun EmptyState() {
 private fun FabStack(
     modifier: Modifier = Modifier,
     onAddPlace: () -> Unit,
-    onOpenMap: () -> Unit,
     enabled: Boolean = true,
 ) {
     Column(
@@ -534,18 +531,6 @@ private fun FabStack(
             )
         ) {
             Icon(Icons.Default.Add, contentDescription = "Create Place")
-        }
-        FloatingActionButton(
-            onClick = { if (enabled) onOpenMap() },
-            shape = CircleShape,
-            backgroundColor = GeoVaultColorTokens.PrimaryBlue,
-            contentColor = Color.White,
-            elevation = androidx.compose.material.FloatingActionButtonDefaults.elevation(
-                defaultElevation = 0.dp,
-                pressedElevation = 0.dp
-            )
-        ) {
-            Icon(Icons.Default.Map, contentDescription = "Map View")
         }
     }
 }

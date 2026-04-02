@@ -9,6 +9,8 @@ import com.geovault.common.ui.theme.GeoVaultColorTokens
 object GeoVaultSystemBars {
     @ColorInt const val PRIMARY_BLUE: Int = GeoVaultColorTokens.PRIMARY_BLUE_INT
     @ColorInt const val DEFAULT_NAV_BG: Int = GeoVaultColorTokens.BACKGROUND_INT
+    @ColorInt private var lastNavigationBarColor: Int = DEFAULT_NAV_BG
+    private var lastUseDarkNavigationBarIcons: Boolean = true
 
     fun applyAppChrome(
         activity: ComponentActivity,
@@ -17,6 +19,8 @@ object GeoVaultSystemBars {
         useDarkStatusBarText: Boolean = false,
         useDarkNavigationBarIcons: Boolean = true
     ) {
+        lastNavigationBarColor = navigationBarColor
+        lastUseDarkNavigationBarIcons = useDarkNavigationBarIcons
         activity.enableEdgeToEdge(
             statusBarStyle = if (useDarkStatusBarText) {
                 SystemBarStyle.light(statusBarColor, statusBarColor)
@@ -44,6 +48,20 @@ object GeoVaultSystemBars {
             navigationBarColor = navigationBarColor,
             useDarkStatusBarText = useDarkStatusBarText,
             useDarkNavigationBarIcons = useDarkNavigationBarIcons
+        )
+    }
+
+    fun setStatusBarBackground(
+        activity: ComponentActivity,
+        @ColorInt statusBarColor: Int,
+        useDarkStatusBarText: Boolean = false
+    ) {
+        applyAppChrome(
+            activity = activity,
+            statusBarColor = statusBarColor,
+            navigationBarColor = lastNavigationBarColor,
+            useDarkStatusBarText = useDarkStatusBarText,
+            useDarkNavigationBarIcons = lastUseDarkNavigationBarIcons,
         )
     }
 }

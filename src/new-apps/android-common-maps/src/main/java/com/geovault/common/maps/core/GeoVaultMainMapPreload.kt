@@ -212,6 +212,11 @@ fun resolveGeoVaultMainMapPreloadCameraTarget(
     )
 }
 
+/**
+ * Hosts the shared main map for preload/warm-up. When [surfaceMapInHost] is false, the [GeoVaultMap]
+ * is not composed here so another screen can own the sole MapLibre AndroidView for the same controller key
+ * (avoids two views fighting for one MapLibre surface).
+ */
 @Composable
 fun GeoVaultMainMapPreloadHost(
     mainMapKey: String,
@@ -219,11 +224,28 @@ fun GeoVaultMainMapPreloadHost(
     cameraTarget: GeoVaultMainMapPreloadCameraTarget,
     modifier: Modifier = Modifier.fillMaxSize(),
     boundsPaddingPx: Int = 96,
+    surfaceMapInHost: Boolean = true,
 ) {
     if (!enabled) {
         return
     }
+    GeoVaultMainMapPreloadHostAuthenticatedBody(
+        mainMapKey = mainMapKey,
+        cameraTarget = cameraTarget,
+        modifier = modifier,
+        boundsPaddingPx = boundsPaddingPx,
+        surfaceMapInHost = surfaceMapInHost,
+    )
+}
 
+@Composable
+private fun GeoVaultMainMapPreloadHostAuthenticatedBody(
+    mainMapKey: String,
+    cameraTarget: GeoVaultMainMapPreloadCameraTarget,
+    modifier: Modifier,
+    boundsPaddingPx: Int,
+    surfaceMapInHost: Boolean,
+) {
     val handle = rememberGeoVaultMainMapHandle(mainMapKey)
     val controller = handle.controller
     val phase by controller.phase.collectAsState()
@@ -231,8 +253,7 @@ fun GeoVaultMainMapPreloadHost(
         mutableStateOf<GeoVaultMainMapPreloadCameraTarget?>(null)
     }
 
-    LaunchedEffect(phase, cameraTarget, enabled) {
-        if (!enabled) return@LaunchedEffect
+    LaunchedEffect(phase, cameraTarget) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
         if (lastAppliedTarget == cameraTarget) {
             return@LaunchedEffect
@@ -258,10 +279,12 @@ fun GeoVaultMainMapPreloadHost(
         lastAppliedTarget = cameraTarget
     }
 
-    GeoVaultMap(
-        modifier = modifier,
-        controller = controller,
-        showDefaultSourceToggle = false,
-        mapMode = GeoVaultMapMode.Main,
-    )
+    if (surfaceMapInHost) {
+        GeoVaultMap(
+            modifier = modifier,
+            controller = controller,
+            showDefaultSourceToggle = false,
+            mapMode = GeoVaultMapMode.Main,
+        )
+    }
 }

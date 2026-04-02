@@ -8,34 +8,47 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
 import androidx.core.content.IntentCompat
 import com.geovault.common.ClipboardCopyHelper
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.maps.core.GeoVaultMainMapPreloadHost
+import com.geovault.common.maps.core.rememberGeoVaultMainMapController
 import com.geovault.common.maps.core.resolveGeoVaultMainMapPreloadCameraTarget
+import com.geovault.common.ui.components.GeoVaultBottomNavDestination
+import com.geovault.common.ui.components.GeoVaultBottomNavScaffold
 import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.places.di.PlacesAppServices
 import com.geovault.places.model.Feature
 import com.geovault.places.model.OfflineFeature
 import com.geovault.places.presentation.MainScreenViewModel
+import com.geovault.places.presentation.PlacesMapViewModel
 import com.geovault.places.ui.MainScreen
+import com.geovault.places.ui.PlacesMapLaunchArgs
+import com.geovault.places.ui.PlacesMapScreen
 import org.maplibre.android.geometry.LatLng
 
 class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_OAUTH_ERROR = "oauth_error"
-        const val EXTRA_SELECTED_ID_FROM_MAP = "selected_id_from_map"
         const val EXTRA_SHOW_EXPORT_SAVED_MESSAGE = "show_export_saved_message"
     }
 
     private val viewModel: MainScreenViewModel by viewModels()
+    private val mapViewModel: PlacesMapViewModel by viewModels()
     private val clipboardCopyHelper: ClipboardCopyHelper by lazy { ClipboardCopyHelper(this) }
 
     private val editLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -61,6 +74,12 @@ class MainActivity : ComponentActivity() {
             }
             else -> viewModel.onHostResumed()
         }
+        mapViewModel.loadFromCache()
+    }
+
+    private enum class PlacesTab {
+        LIST,
+        MAP,
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -71,6 +90,25 @@ class MainActivity : ComponentActivity() {
         setContent {
             GeoVaultTheme {
                 val state by viewModel.state.collectAsState()
+                val mapController = rememberGeoVaultMainMapController(PLACES_MAIN_MAP_KEY)
+                var selectedTab by rememberSaveable { mutableStateOf(PlacesTab.LIST.name) }
+                var mapLaunchArgs by remember {
+                    mutableStateOf(PlacesMapLaunchArgs())
+                }
+                val bottomDestinations = remember {
+                    listOf(
+                        GeoVaultBottomNavDestination(
+                            id = PlacesTab.LIST.name,
+                            label = "List",
+                            icon = Icons.AutoMirrored.Filled.List,
+                        ),
+                        GeoVaultBottomNavDestination(
+                            id = PlacesTab.MAP.name,
+                            label = "Map",
+                            icon = Icons.Default.Map,
+                        ),
+                    )
+                }
                 val preloadPoints = buildList {
                     state.saved.forEach { feature ->
                         val coords = feature.geometry.coordinates
@@ -96,67 +134,124 @@ class MainActivity : ComponentActivity() {
                         mainMapKey = PLACES_MAIN_MAP_KEY,
                         enabled = state.isAuthenticated,
                         cameraTarget = preloadTarget,
+                        surfaceMapInHost = selectedTab != PlacesTab.MAP.name,
                     )
-                    MainScreen(
-                        state = state,
-                        onSearchChanged = viewModel::onSearchChanged,
-                        onAuthServerUrlChanged = viewModel::onAuthServerUrlChanged,
-                        onAuthConnect = viewModel::connectAuth,
-                        onOpenSettings = { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) },
-                        onRefresh = viewModel::refreshNow,
-                        onAddPlace = { editLauncher.launch(Intent(this@MainActivity, PlaceEditActivity::class.java)) },
-                        onOpenMap = { startActivity(Intent(this@MainActivity, MapActivity::class.java)) },
-                        onEditSavedPlace = { feature ->
-                            val i = Intent(this@MainActivity, PlaceEditActivity::class.java)
-                            i.putExtra("feature", feature)
-                            editLauncher.launch(i)
-                        },
-                        onEditOfflinePlace = { offlineFeature, offlineIndex ->
-                            val i = Intent(this@MainActivity, PlaceEditActivity::class.java).apply {
-                                putExtra("feature", offlineFeature.feature)
-                                putExtra("original_feature", offlineFeature.original)
-                                putExtra("is_offline_edit", true)
-                                putExtra("offline_edit_index", offlineIndex)
-                            }
-                            editLauncher.launch(i)
-                        },
-                        onNavigatePlace = { feature ->
-                            val url = PlacesAppServices.from(application).navigationRepository().buildMapsSearchUrl(feature)
-                            if (url != null) {
-                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                                PlacesAppServices.from(application).navigationRepository().trackNavigation(
-                                    feature,
-                                    GeovaultAuthManager.getServerUrl(this@MainActivity)
+                    GeoVaultBottomNavScaffold(
+                        destinations = bottomDestinations,
+                        selectedDestinationId = selectedTab,
+                        onDestinationSelected = { selectedTab = it.id },
+                        modifier = Modifier.fillMaxSize(),
+                    ) { destination ->
+                        when (destination.id) {
+                            PlacesTab.LIST.name -> {
+                                MainScreen(
+                                    state = state,
+                                    onSearchChanged = viewModel::onSearchChanged,
+                                    onAuthServerUrlChanged = viewModel::onAuthServerUrlChanged,
+                                    onAuthConnect = viewModel::connectAuth,
+                                    onOpenSettings = {
+                                        startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
+                                    },
+                                    onRefresh = viewModel::refreshNow,
+                                    onAddPlace = {
+                                        editLauncher.launch(Intent(this@MainActivity, PlaceEditActivity::class.java))
+                                    },
+                                    onEditSavedPlace = { feature ->
+                                        val i = Intent(this@MainActivity, PlaceEditActivity::class.java)
+                                        i.putExtra("feature", feature)
+                                        editLauncher.launch(i)
+                                    },
+                                    onEditOfflinePlace = { offlineFeature, offlineIndex ->
+                                        val i = Intent(this@MainActivity, PlaceEditActivity::class.java).apply {
+                                            putExtra("feature", offlineFeature.feature)
+                                            putExtra("original_feature", offlineFeature.original)
+                                            putExtra("is_offline_edit", true)
+                                            putExtra("offline_edit_index", offlineIndex)
+                                        }
+                                        editLauncher.launch(i)
+                                    },
+                                    onNavigatePlace = { feature ->
+                                        val url = PlacesAppServices.from(application).navigationRepository()
+                                            .buildMapsSearchUrl(feature)
+                                        if (url != null) {
+                                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                            PlacesAppServices.from(application).navigationRepository().trackNavigation(
+                                                feature,
+                                                GeovaultAuthManager.getServerUrl(this@MainActivity)
+                                            )
+                                        }
+                                    },
+                                    onViewDescription = { feature ->
+                                        val intent = Intent(this@MainActivity, DescriptionViewActivity::class.java).apply {
+                                            putExtra(
+                                                DescriptionViewActivity.EXTRA_TITLE,
+                                                feature.properties.name ?: "Description"
+                                            )
+                                            putExtra(
+                                                DescriptionViewActivity.EXTRA_DESCRIPTION,
+                                                feature.properties.description.orEmpty()
+                                            )
+                                        }
+                                        startActivity(intent)
+                                    },
+                                    onOpenMapToPlace = { feature ->
+                                        val coords = feature.geometry.coordinates
+                                        mapLaunchArgs = PlacesMapLaunchArgs(
+                                            zoomToLat = coords.getOrNull(1),
+                                            zoomToLon = coords.getOrNull(0),
+                                            zoomToId = feature.properties.database_id,
+                                            requestToken = System.currentTimeMillis(),
+                                        )
+                                        selectedTab = PlacesTab.MAP.name
+                                    },
+                                    onCopyCoordinates = { text ->
+                                        if (clipboardCopyHelper.copyText(text = text, label = "Coordinates")) {
+                                            Toast.makeText(
+                                                this@MainActivity,
+                                                "Coordinates copied",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    },
+                                    onCancelRefresh = {
+                                        viewModel.cancelRefresh()
+                                    },
+                                    onDismissSnackbar = viewModel::clearSnackbar,
                                 )
                             }
-                        },
-                        onViewDescription = { feature ->
-                            val intent = Intent(this@MainActivity, DescriptionViewActivity::class.java).apply {
-                                putExtra(DescriptionViewActivity.EXTRA_TITLE, feature.properties.name ?: "Description")
-                                putExtra(DescriptionViewActivity.EXTRA_DESCRIPTION, feature.properties.description.orEmpty())
+                            PlacesTab.MAP.name -> {
+                                PlacesMapScreen(
+                                    controller = mapController,
+                                    viewModel = mapViewModel,
+                                    launchArgs = mapLaunchArgs,
+                                    onOpenSettings = {
+                                        startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
+                                    },
+                                    onOpenEdit = { feature ->
+                                        val editIntent = Intent(this@MainActivity, PlaceEditActivity::class.java).apply {
+                                            putExtra("feature", feature)
+                                        }
+                                        editLauncher.launch(editIntent)
+                                    },
+                                    onViewInList = { feature ->
+                                        viewModel.setSelectedPlaceId(feature.properties.database_id)
+                                        selectedTab = PlacesTab.LIST.name
+                                    },
+                                    onNavigate = { feature ->
+                                        val url = PlacesAppServices.from(application).navigationRepository()
+                                            .buildMapsSearchUrl(feature)
+                                        if (url != null) {
+                                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                            PlacesAppServices.from(application).navigationRepository().trackNavigation(
+                                                feature = feature,
+                                                serverUrl = GeovaultAuthManager.getServerUrl(this@MainActivity),
+                                            )
+                                        }
+                                    },
+                                )
                             }
-                            startActivity(intent)
-                        },
-                        onOpenMapToPlace = { feature ->
-                            val intent = Intent(this@MainActivity, MapActivity::class.java)
-                            val coords = feature.geometry.coordinates
-                            if (coords.size >= 2) {
-                                intent.putExtra("zoom_to_lat", coords[1])
-                                intent.putExtra("zoom_to_lon", coords[0])
-                                intent.putExtra("zoom_to_id", feature.properties.database_id ?: -1)
-                            }
-                            startActivity(intent)
-                        },
-                        onCopyCoordinates = { text ->
-                            if (clipboardCopyHelper.copyText(text = text, label = "Coordinates")) {
-                                Toast.makeText(this@MainActivity, "Coordinates copied", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        onCancelRefresh = {
-                            viewModel.cancelRefresh()
-                        },
-                        onDismissSnackbar = viewModel::clearSnackbar,
-                    )
+                        }
+                    }
                 }
             }
         }
@@ -167,12 +262,8 @@ class MainActivity : ComponentActivity() {
             intent?.removeExtra(EXTRA_SHOW_EXPORT_SAVED_MESSAGE)
             Toast.makeText(this, "Offline data saved to Files -> Downloads", Toast.LENGTH_SHORT).show()
         }
-        val selectedIdFromMap = intent?.getIntExtra(EXTRA_SELECTED_ID_FROM_MAP, -1) ?: -1
-        if (selectedIdFromMap != -1) {
-            intent?.removeExtra(EXTRA_SELECTED_ID_FROM_MAP)
-            viewModel.setSelectedPlaceId(selectedIdFromMap)
-        }
         viewModel.onHostResumed()
+        mapViewModel.loadFromCache()
     }
 
     override fun onStop() {

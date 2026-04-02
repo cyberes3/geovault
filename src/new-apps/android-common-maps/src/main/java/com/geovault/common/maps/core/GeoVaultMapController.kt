@@ -32,6 +32,7 @@ class GeoVaultMapController(context: Context) : MapView.OnDidFailLoadingMapListe
     private var styleLoadWatchdog: Runnable? = null
     private var styleLoadGeneration: Long = 0L
     private var styleDeliveredForGeneration = false
+    private var defaultCameraPadding: DoubleArray? = null
     private val pluginRegistry = GeoVaultMapPluginRegistry()
     private val mapClickListeners = linkedSetOf<MapLibreMap.OnMapClickListener>()
     private val mapLongClickListeners = linkedSetOf<MapLibreMap.OnMapLongClickListener>()
@@ -66,6 +67,7 @@ class GeoVaultMapController(context: Context) : MapView.OnDidFailLoadingMapListe
         detachMapView()
         mapView = view
         val attachedManager = MapLibreManager(appContext, view).also { manager ->
+            manager.defaultPadding = defaultCameraPadding
             manager.onStyleLoaded = { map, style ->
                 // Ignore late style callbacks from stale attach cycles.
                 if (_mapManager === manager && mapView === view) {
@@ -243,6 +245,15 @@ class GeoVaultMapController(context: Context) : MapView.OnDidFailLoadingMapListe
     fun addOnMapClickListener(listener: MapLibreMap.OnMapClickListener) {
         mapClickListeners.add(listener)
         maplibreMap?.addOnMapClickListener(listener)
+    }
+
+    /**
+     * Sets default camera padding used when callers do not provide explicit padding.
+     * Format is [left, top, right, bottom] in pixels.
+     */
+    fun setDefaultCameraPadding(padding: DoubleArray?) {
+        defaultCameraPadding = padding
+        _mapManager?.defaultPadding = padding
     }
 
     fun removeOnMapClickListener(listener: MapLibreMap.OnMapClickListener) {
