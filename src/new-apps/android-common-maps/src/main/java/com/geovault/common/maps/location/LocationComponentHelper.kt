@@ -13,13 +13,14 @@ import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 
 object LocationComponentHelper {
-    private const val FIXED_LOCATION_ICON_SCALE = 0.45f
+    private const val DEFAULT_LOCATION_ICON_SCALE = 0.45f
 
     data class Config(
         val accuracyColor: Int,
         val accuracyAlpha: Float = 0.25f,
         @param:DrawableRes val backgroundDrawable: Int? = null,
         @param:DrawableRes val foregroundDrawable: Int? = null,
+        val iconScale: Float = DEFAULT_LOCATION_ICON_SCALE,
         val renderMode: Int = RenderMode.NORMAL,
     )
 
@@ -65,8 +66,8 @@ object LocationComponentHelper {
             .trackingAnimationDurationMultiplier(0f)
             .enableStaleState(false)
             .elevation(0f)
-            .minZoomIconScale(FIXED_LOCATION_ICON_SCALE)
-            .maxZoomIconScale(FIXED_LOCATION_ICON_SCALE)
+            .minZoomIconScale(config.iconScale)
+            .maxZoomIconScale(config.iconScale)
             .accuracyColor(config.accuracyColor)
             .accuracyAlpha(config.accuracyAlpha)
         config.backgroundDrawable?.let {

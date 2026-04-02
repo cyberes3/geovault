@@ -1,9 +1,5 @@
 package com.geovault.places.ui
 
-import android.Manifest
-import android.content.pm.PackageManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
@@ -21,11 +17,7 @@ import androidx.compose.material.Card
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -40,18 +32,20 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import com.geovault.common.maps.core.GeoVaultMap
 import com.geovault.common.maps.core.GeoVaultMapController
 import com.geovault.common.maps.core.GeoVaultMapMode
-import com.geovault.common.maps.location.LocationComponentHelper
-import com.geovault.common.maps.location.LocationUpdates
+import com.geovault.common.maps.location.GeoVaultLocationPuckPresets
 import com.geovault.common.maps.location.MapLocationRendererPlugin
 import com.geovault.common.maps.render.GeoJsonRenderPlugin
 import com.geovault.common.maps.render.GeoJsonRenderConfig
 import com.geovault.common.maps.ui.GeoVaultMapFabColumn
 import com.geovault.common.maps.ui.GeoVaultMapFabIcon
 import com.geovault.common.maps.ui.buildGeoVaultMapFabActions
+import com.geovault.common.maps.ui.geoVaultLayerToggleFabAction
+import com.geovault.common.maps.ui.geoVaultZoomInFabAction
+import com.geovault.common.maps.ui.geoVaultZoomOutFabAction
+import com.geovault.common.maps.ui.rememberGeoVaultGpsRecenterFabAction
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
@@ -61,6 +55,8 @@ import com.geovault.places.model.Feature
 import com.geovault.places.presentation.PlacesMapViewModel
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
+import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 
 data class PlacesMapLaunchArgs(
     val zoomToLat: Double? = null,
@@ -95,29 +91,21 @@ fun PlacesMapScreen(
     val locationPlugin = remember {
         MapLocationRendererPlugin(
             context = context,
-            config = LocationComponentHelper.Config(
-                accuracyColor = GeoVaultColorTokens.PRIMARY_BLUE_INT,
-                accuracyAlpha = 0.25f,
-            ),
+            config = GeoVaultLocationPuckPresets.blueUserLocation(),
             autoEnableLocationComponent = true,
         )
     }
     var initialCameraApplied by remember { mutableStateOf(false) }
-    var locationEnabled by remember { mutableStateOf(false) }
-    var gpsPanSession by remember { mutableStateOf<LocationUpdates.LocationUpdatesSession?>(null) }
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions(),
-    ) { result ->
-        val granted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-            result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (granted) {
-            locationEnabled = true
-            startLocationPanning(context, controller, locationPlugin) { session ->
-                gpsPanSession?.stop()
-                gpsPanSession = session
-            }
-        }
-    }
+    var gpsHomeAnchor by remember { mutableStateOf<LatLng?>(null) }
+    val layerFabAction = remember(controller) { geoVaultLayerToggleFabAction(controller) }
+    val zoomInFabAction = remember(controller) { geoVaultZoomInFabAction(controller) }
+    val zoomOutFabAction = remember(controller) { geoVaultZoomOutFabAction(controller) }
+    val gpsFabAction = rememberGeoVaultGpsRecenterFabAction(
+        controller = controller,
+        locationPlugin = locationPlugin,
+        order = 30,
+        onLocationResolved = { latLng -> gpsHomeAnchor = latLng },
+    )
 
     LaunchedEffect(Unit) {
         viewModel.loadFromCache()
@@ -127,7 +115,6 @@ fun PlacesMapScreen(
         controller.registerPlugin(renderPlugin)
         controller.registerPlugin(locationPlugin)
         onDispose {
-            gpsPanSession?.stop()
             controller.unregisterPlugin(renderPlugin)
             controller.unregisterPlugin(locationPlugin)
         }
@@ -206,108 +193,92 @@ fun PlacesMapScreen(
             )
         },
     ) { scaffoldPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(scaffoldPadding)
                 .background(GeoVaultColorTokens.Background),
         ) {
-            GeoVaultMap(
-                modifier = Modifier.fillMaxSize(),
-                controller = controller,
-                showDefaultSourceToggle = false,
-                mapMode = GeoVaultMapMode.Main,
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            ) {
+                GeoVaultMap(
+                    modifier = Modifier.fillMaxSize(),
+                    controller = controller,
+                    showDefaultSourceToggle = false,
+                    mapMode = GeoVaultMapMode.Main,
+                )
 
-            val mapFabActions = buildGeoVaultMapFabActions {
-                action(
-                    id = "source",
-                    order = 10,
-                    icon = GeoVaultMapFabIcon.Vector(Icons.Default.Layers),
-                    contentDescription = "Toggle map source",
-                    onTap = { controller.cycleSource() },
-                )
-                action(
-                    id = "home",
-                    order = 20,
-                    icon = GeoVaultMapFabIcon.Vector(Icons.Default.Home),
-                    contentDescription = "Home extent",
-                    onTap = {
-                        val map = controller.maplibreMap
-                        if (map != null) {
-                            map.setCameraPosition(CameraPosition.Builder(map.cameraPosition).bearing(0.0).tilt(0.0).build())
-                        }
-                        val bounds = viewModel.featureBounds()
-                        if (bounds != null) {
-                            controller.animateCameraWithPadding(CameraUpdateFactory.newLatLngBounds(bounds, 96))
-                        }
-                    },
-                )
-                action(
-                    id = "gps",
-                    order = 30,
-                    icon = GeoVaultMapFabIcon.Vector(Icons.Default.GpsFixed),
-                    contentDescription = "Enable location",
-                    emphasized = locationEnabled,
-                    onTap = {
-                        val hasLocationPermission =
-                            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-                                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                        if (!hasLocationPermission) {
-                            permissionLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                                ),
-                            )
-                        } else {
-                            locationEnabled = true
-                            startLocationPanning(context, controller, locationPlugin) { session ->
-                                gpsPanSession?.stop()
-                                gpsPanSession = session
+                val mapFabActions = buildGeoVaultMapFabActions {
+                    action(
+                        id = "source",
+                        order = 10,
+                        icon = layerFabAction.icon,
+                        contentDescription = "Toggle map source",
+                        onTap = layerFabAction.onTap,
+                    )
+                    action(
+                        id = "home",
+                        order = 20,
+                        icon = GeoVaultMapFabIcon.Vector(Icons.Default.Home),
+                        contentDescription = "Home extent",
+                        onTap = {
+                            val map = controller.maplibreMap
+                            if (map != null) {
+                                map.setCameraPosition(CameraPosition.Builder(map.cameraPosition).bearing(0.0).tilt(0.0).build())
                             }
-                        }
-                    },
-                )
-                action(
-                    id = "zoom_in",
-                    order = 40,
-                    icon = GeoVaultMapFabIcon.Vector(Icons.Default.Add),
-                    contentDescription = "Zoom in",
-                    onTap = {
-                        val map = controller.maplibreMap
-                        if (map != null) {
-                            val targetZoom = (map.cameraPosition.zoom + 1.0).coerceAtMost(22.0)
-                            controller.animateCameraWithPadding(CameraUpdateFactory.zoomTo(targetZoom))
-                        }
-                    },
-                )
-                action(
-                    id = "zoom_out",
-                    order = 50,
-                    icon = GeoVaultMapFabIcon.Vector(Icons.Default.Remove),
-                    contentDescription = "Zoom out",
-                    onTap = {
-                        val map = controller.maplibreMap
-                        if (map != null) {
-                            val targetZoom = (map.cameraPosition.zoom - 1.0).coerceAtLeast(1.0)
-                            controller.animateCameraWithPadding(CameraUpdateFactory.zoomTo(targetZoom))
-                        }
-                    },
+                            val bounds = viewModel.featureBounds()
+                            val gpsAnchor = gpsHomeAnchor
+                            val effectiveBounds = if (bounds != null && gpsAnchor != null) {
+                                LatLngBounds.Builder()
+                                    .include(bounds.southWest)
+                                    .include(bounds.northEast)
+                                    .include(gpsAnchor)
+                                    .build()
+                            } else {
+                                bounds
+                            }
+                            if (effectiveBounds != null) {
+                                controller.animateCameraWithPadding(CameraUpdateFactory.newLatLngBounds(effectiveBounds, 96))
+                            }
+                        },
+                    )
+                    action(
+                        id = gpsFabAction.id,
+                        order = gpsFabAction.order,
+                        icon = gpsFabAction.icon,
+                        contentDescription = gpsFabAction.contentDescription,
+                        onTap = gpsFabAction.onTap,
+                    )
+                    action(
+                        id = "zoom_in",
+                        order = 40,
+                        icon = zoomInFabAction.icon,
+                        contentDescription = "Zoom in",
+                        onTap = zoomInFabAction.onTap,
+                    )
+                    action(
+                        id = "zoom_out",
+                        order = 50,
+                        icon = zoomOutFabAction.icon,
+                        contentDescription = "Zoom out",
+                        onTap = zoomOutFabAction.onTap,
+                    )
+                }
+
+                GeoVaultMapFabColumn(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 16.dp, end = 16.dp),
+                    actions = mapFabActions,
                 )
             }
-
-            GeoVaultMapFabColumn(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 16.dp, end = 16.dp),
-                actions = mapFabActions,
-            )
 
             val selectedFeature = state.selectedFeature
             Card(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
                     .fillMaxWidth(),
                 shape = androidx.compose.ui.graphics.RectangleShape,
                 backgroundColor = GeoVaultColorTokens.Surface,
@@ -349,27 +320,4 @@ fun PlacesMapScreen(
             }
         }
     }
-}
-
-private fun startLocationPanning(
-    context: android.content.Context,
-    controller: GeoVaultMapController,
-    locationPlugin: MapLocationRendererPlugin,
-    onSessionReady: (LocationUpdates.LocationUpdatesSession) -> Unit,
-) {
-    locationPlugin.setEnabled(true)
-    locationPlugin.setCameraTracking(false)
-    locationPlugin.setAccuracyCircleVisible(true)
-    val session = LocationUpdates.startLocationUpdates(
-        context = context,
-        intervalMs = 2000L,
-    ) { latLng, location ->
-        if (location != null) {
-            locationPlugin.renderLocation(location)
-        }
-        val map = controller.maplibreMap ?: return@startLocationUpdates
-        val currentZoom = map.cameraPosition.zoom
-        controller.moveCameraWithPadding(CameraUpdateFactory.newLatLngZoom(latLng, currentZoom))
-    }
-    onSessionReady(session)
 }

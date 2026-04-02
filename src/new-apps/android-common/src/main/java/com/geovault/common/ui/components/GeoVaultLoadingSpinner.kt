@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
@@ -22,7 +23,8 @@ import kotlinx.coroutines.delay
 fun GeoVaultLoadingSpinner(
     modifier: Modifier = Modifier,
     spinnerSize: Dp = 28.dp,
-    strokeWidth: Dp = 2.5.dp
+    strokeWidth: Dp = 2.5.dp,
+    color: Color = GeoVaultColorTokens.PrimaryBlue,
 ) {
     var rotationDegrees by androidx.compose.runtime.remember { mutableFloatStateOf(0f) }
 
@@ -52,7 +54,7 @@ fun GeoVaultLoadingSpinner(
             y = (size.height - legacyArcDiameter) / 2f + radiusInset
         )
         drawArc(
-            color = GeoVaultColorTokens.PrimaryBlue,
+            color = color,
             startAngle = -90f,
             sweepAngle = 90f,
             useCenter = false,

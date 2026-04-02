@@ -14,11 +14,16 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 
 sealed class GeoVaultMapFabIcon {
     data class Vector(val imageVector: ImageVector) : GeoVaultMapFabIcon()
     data class Drawable(@param:DrawableRes val drawableResId: Int) : GeoVaultMapFabIcon()
+    data class Spinner(
+        val spinnerSize: Dp = 20.dp,
+        val spinnerColor: Color = Color.White,
+    ) : GeoVaultMapFabIcon()
 }
 
 data class GeoVaultMapFabAction(
@@ -114,6 +119,12 @@ fun GeoVaultMapFabColumn(
                             painter = painterResource(id = icon.drawableResId),
                             contentDescription = action.contentDescription,
                             modifier = Modifier.size(iconSize),
+                        )
+                    }
+                    is GeoVaultMapFabIcon.Spinner -> {
+                        GeoVaultLoadingSpinner(
+                            spinnerSize = icon.spinnerSize,
+                            color = icon.spinnerColor,
                         )
                     }
                 }

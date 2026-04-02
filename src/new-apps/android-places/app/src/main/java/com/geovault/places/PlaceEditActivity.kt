@@ -1,16 +1,12 @@
 package com.geovault.places
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.IntentCompat
-import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -35,8 +31,6 @@ import androidx.compose.material.Scaffold
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.GpsFixed
-import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
@@ -58,7 +52,8 @@ import androidx.lifecycle.lifecycleScope
 import com.geovault.common.maps.core.GeoVaultMap
 import com.geovault.common.maps.core.GeoVaultMapPhase
 import com.geovault.common.maps.core.rememberGeoVaultMapController
-import com.geovault.common.maps.location.LocationUpdates
+import com.geovault.common.maps.location.GeoVaultLocationPuckPresets
+import com.geovault.common.maps.location.MapLocationRendererPlugin
 import com.geovault.common.maps.render.CommonMapIconIds
 import com.geovault.common.maps.render.GeoJsonRenderConfig
 import com.geovault.common.maps.render.GeoJsonRenderPlugin
@@ -67,6 +62,8 @@ import com.geovault.common.maps.render.MapRenderState
 import com.geovault.common.maps.ui.GeoVaultMapFabColumn
 import com.geovault.common.maps.ui.GeoVaultMapFabIcon
 import com.geovault.common.maps.ui.buildGeoVaultMapFabActions
+import com.geovault.common.maps.ui.geoVaultLayerToggleFabAction
+import com.geovault.common.maps.ui.rememberGeoVaultGpsRecenterFabAction
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
@@ -97,25 +94,12 @@ class PlaceEditActivity : ComponentActivity() {
         val originalFeature = intent.serializableExtraCompat<Feature>("original_feature")
         val isOfflineEdit = intent.getBooleanExtra("is_offline_edit", false)
         val offlineEditIndex = intent.getIntExtra("offline_edit_index", -1)
-        val locationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
 
         setContent {
             GeoVaultTheme {
                 PlaceEditScreen(
                     initial = editFeature,
                     isOfflineEdit = isOfflineEdit,
-                    requestLocationPermission = {
-                        locationPermissionLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                Manifest.permission.ACCESS_COARSE_LOCATION,
-                            ),
-                        )
-                    },
-                    hasLocationPermission = {
-                        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-                            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                    },
                     onClose = { finish() },
                     onDeleteOrRevert = {
                         lifecycleScope.launch {
@@ -194,8 +178,6 @@ class PlaceEditActivity : ComponentActivity() {
 private fun PlaceEditScreen(
     initial: Feature?,
     isOfflineEdit: Boolean,
-    requestLocationPermission: () -> Unit,
-    hasLocationPermission: () -> Boolean,
     onClose: () -> Unit,
     onDeleteOrRevert: () -> Unit,
     onGeocodeSearch: suspend (String) -> List<AddressSearchResult>,
@@ -216,6 +198,22 @@ private fun PlaceEditScreen(
             context = context,
         )
     }
+    val locationPlugin = remember(context) {
+        MapLocationRendererPlugin(
+            context = context,
+            config = GeoVaultLocationPuckPresets.blueUserLocation(),
+            autoEnableLocationComponent = true,
+        )
+    }
+    val gpsFabAction = rememberGeoVaultGpsRecenterFabAction(
+        controller = controller,
+        locationPlugin = locationPlugin,
+        order = 2,
+        onLocationResolved = { latLng ->
+            state.setFromMapPoint(latLng.latitude, latLng.longitude)
+        },
+    )
+    val layerFabAction = remember(controller) { geoVaultLayerToggleFabAction(controller, order = 1) }
     var geocodeJob by remember { mutableStateOf<Job?>(null) }
 
     BackHandler {
@@ -224,6 +222,7 @@ private fun PlaceEditScreen(
 
     LaunchedEffect(controller) {
         controller.registerPlugin(renderPlugin)
+        controller.registerPlugin(locationPlugin)
         controller.fetchSources()
     }
 
@@ -236,6 +235,7 @@ private fun PlaceEditScreen(
         onDispose {
             controller.removeOnMapClickListener(listener)
             controller.unregisterPlugin(renderPlugin)
+            controller.unregisterPlugin(locationPlugin)
         }
     }
 
@@ -329,25 +329,16 @@ private fun PlaceEditScreen(
                             action(
                                 id = "layers",
                                 order = 1,
-                                icon = GeoVaultMapFabIcon.Vector(Icons.Default.Layers),
+                                icon = layerFabAction.icon,
                                 contentDescription = "Switch map layer",
-                                onTap = { controller.cycleSource() },
+                                onTap = layerFabAction.onTap,
                             )
                             action(
-                                id = "location",
-                                order = 2,
-                                icon = GeoVaultMapFabIcon.Vector(Icons.Default.GpsFixed),
-                                contentDescription = "Use current location",
-                                onTap = {
-                                    if (!hasLocationPermission()) {
-                                        requestLocationPermission()
-                                    } else {
-                                        LocationUpdates.getCurrentLocation(context) { latLng ->
-                                            latLng ?: return@getCurrentLocation
-                                            state.setFromMapPoint(latLng.latitude, latLng.longitude)
-                                        }
-                                    }
-                                },
+                                id = gpsFabAction.id,
+                                order = gpsFabAction.order,
+                                icon = gpsFabAction.icon,
+                                contentDescription = gpsFabAction.contentDescription,
+                                onTap = gpsFabAction.onTap,
                             )
                         },
                         modifier = Modifier
