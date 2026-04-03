@@ -39,8 +39,8 @@ object TrackerMapStateTransforms {
 
         val line = buildTrailLine(effectiveTrail)
         val lastQueued = effectiveTrail.lastOrNull()
-        val lastLat = lastQueued?.latitude ?: runtime.lastTrackedLatitude
-        val lastLon = lastQueued?.longitude ?: runtime.lastTrackedLongitude
+        val lastLat = runtime.lastTrackedLatitude ?: lastQueued?.latitude
+        val lastLon = runtime.lastTrackedLongitude ?: lastQueued?.longitude
         val lastBearing = lastQueued?.bearing
 
         val markers = mutableListOf<MapRenderPoint>()

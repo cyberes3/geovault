@@ -3,6 +3,7 @@ package com.geovault.tracker.services
 import android.location.Location
 import com.geovault.tracker.db.LocationDao
 import com.geovault.tracker.db.QueuedLocation
+import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.settings.TrackerSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -33,14 +34,19 @@ class LocationIngestCoordinatorTest {
         }
 
         val result = coordinator.ingest(
+            trackId = "tracker-1",
             location = location,
             settings = settings,
+            motionMode = TrackingMotionMode.BIKING,
             previousAcceptedLocation = null,
             sessionVisibleBoundaryId = 0L,
             maxQueueSize = 5000,
             bypassFilters = true,
             propsJson = """{"manual_send":true}""",
-            totalDistanceMeters = 0f
+            totalDistanceMeters = 0f,
+            nowMs = System.currentTimeMillis(),
+            nowElapsedRealtimeNanos = 0L,
+            isMockLocation = false
         )
 
         assertTrue(result.accepted)
@@ -62,19 +68,90 @@ class LocationIngestCoordinatorTest {
         }
 
         val result = coordinator.ingest(
+            trackId = "tracker-1",
             location = location,
             settings = settings,
+            motionMode = TrackingMotionMode.BIKING,
             previousAcceptedLocation = null,
             sessionVisibleBoundaryId = 0L,
             maxQueueSize = 5000,
             bypassFilters = false,
             propsJson = null,
-            totalDistanceMeters = 0f
+            totalDistanceMeters = 0f,
+            nowMs = System.currentTimeMillis(),
+            nowElapsedRealtimeNanos = 0L,
+            isMockLocation = false
         )
 
         assertFalse(result.accepted)
         assertEquals(0, dao.getCount())
         assertNotNull(result.lastAccuracyMeters)
+    }
+
+    @Test
+    fun ingest_withoutBypass_rejectsStaleFix() {
+        val dao = FakeLocationDao()
+        val coordinator = LocationIngestCoordinator(dao)
+        val settings = TrackerSettings(accuracyFilterMeters = 25f)
+        val nowMs = System.currentTimeMillis()
+        val location = Location("gps").apply {
+            latitude = 10.0
+            longitude = 20.0
+            accuracy = 5f
+            time = nowMs - 180_000L
+        }
+
+        val result = coordinator.ingest(
+            trackId = "tracker-1",
+            location = location,
+            settings = settings,
+            motionMode = TrackingMotionMode.BIKING,
+            previousAcceptedLocation = null,
+            sessionVisibleBoundaryId = 0L,
+            maxQueueSize = 5000,
+            bypassFilters = false,
+            propsJson = null,
+            totalDistanceMeters = 0f,
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = 0L,
+            isMockLocation = false
+        )
+
+        assertFalse(result.accepted)
+        assertEquals(TrackPointRejectReason.STALE, result.rejectReason)
+    }
+
+    @Test
+    fun ingest_mockFix_withLargeTimestampSkew_isNormalizedAndAccepted() {
+        val dao = FakeLocationDao()
+        val coordinator = LocationIngestCoordinator(dao)
+        val settings = TrackerSettings(accuracyFilterMeters = 25f)
+        val nowMs = System.currentTimeMillis()
+        val location = Location("gps").apply {
+            latitude = 10.0
+            longitude = 20.0
+            accuracy = 5f
+            time = nowMs - (20 * 60 * 1000L)
+        }
+
+        val result = coordinator.ingest(
+            trackId = "tracker-1",
+            location = location,
+            settings = settings,
+            motionMode = TrackingMotionMode.BIKING,
+            previousAcceptedLocation = null,
+            sessionVisibleBoundaryId = 0L,
+            maxQueueSize = 5000,
+            bypassFilters = false,
+            propsJson = null,
+            totalDistanceMeters = 0f,
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = 0L,
+            isMockLocation = true
+        )
+
+        assertTrue(result.accepted)
+        assertEquals(1, dao.getCount())
     }
 }
 
@@ -137,6 +214,13 @@ private class FakeLocationDao : LocationDao {
         val before = rows.size
         rows.removeAll { it.id in oldest }
         return before - rows.size
+    }
+
+    override fun updateDistanceById(id: Long, distanceMeters: Float) {
+        val index = rows.indexOfFirst { it.id == id }
+        if (index >= 0) {
+            rows[index] = rows[index].copy(dist = distanceMeters)
+        }
     }
 
     override fun deleteAll() {

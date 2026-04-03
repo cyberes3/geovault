@@ -175,8 +175,10 @@ private fun TrackerMapAuthenticatedContent(
     val fabDescZoomOut = stringResource(R.string.map_fab_zoom_out)
 
     val phase by map.phase.collectAsState()
-    DisposableEffect(map, locationPermission, phase) {
-        val shouldStreamGps = locationPermission && phase == GeoVaultMapPhase.Ready
+    DisposableEffect(map, locationPermission, phase, state.runtime.isRunning) {
+        val shouldStreamGps = locationPermission &&
+            phase == GeoVaultMapPhase.Ready &&
+            !state.runtime.isRunning
         if (shouldStreamGps) {
             locationPlugin.startRenderingGpsLocation(intervalMs = 2000L)
         }
@@ -189,8 +191,9 @@ private fun TrackerMapAuthenticatedContent(
 
     LaunchedEffect(state.followLockEnabled, phase) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
-        locationPlugin.setEnabled(true)
-        locationPlugin.setCameraTracking(state.followLockEnabled)
+        val allowPuck = !state.runtime.isRunning
+        locationPlugin.setEnabled(allowPuck)
+        locationPlugin.setCameraTracking(allowPuck && state.followLockEnabled)
     }
 
     DisposableEffect(map) {

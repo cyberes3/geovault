@@ -47,4 +47,47 @@ class LowAccuracyFallbackCoordinatorTest {
         coordinator.onRejectedFixForLock(true, 1.0, 2.0, 2500L)
         assertTrue(coordinator.shouldEmitFallback(true, true))
     }
+
+    @Test
+    fun secondRejectWhileAwaitingLock_doesNotRequestNewTimer() {
+        val coordinator = LowAccuracyFallbackCoordinator()
+        assertTrue(coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L))
+        assertFalse(coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1200L))
+    }
+
+    @Test
+    fun ineligibleReject_neverArmsOrEmits() {
+        val coordinator = LowAccuracyFallbackCoordinator()
+        assertFalse(coordinator.onRejectedFixForLock(false, 1.0, 2.0, 1000L))
+        assertFalse(coordinator.shouldEmitFallback(fallbackEligible = false, hasCandidate = true))
+    }
+
+    @Test
+    fun trackingStopped_clearsStateAndPreventsEmitUntilNewReject() {
+        val coordinator = LowAccuracyFallbackCoordinator()
+        coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L)
+        coordinator.onTrackingStopped()
+        assertFalse(coordinator.shouldEmitFallback(fallbackEligible = true, hasCandidate = true))
+
+        assertTrue(coordinator.onRejectedFixForLock(true, 1.0, 2.0, 2000L))
+        assertTrue(coordinator.shouldEmitFallback(fallbackEligible = true, hasCandidate = true))
+    }
+
+    @Test
+    fun fallbackEmitted_withoutMeaningfulChange_doesNotReemit() {
+        val coordinator = LowAccuracyFallbackCoordinator()
+        coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L)
+        coordinator.onFallbackEmitted(1.0, 2.0, 1000L)
+        coordinator.onRejectedFixForLock(true, 1.000001, 2.000001, 1500L)
+        assertFalse(coordinator.shouldEmitFallback(fallbackEligible = true, hasCandidate = true))
+    }
+
+    @Test
+    fun fallbackEmitted_largeMoveWithinOneSecond_allowsReemit() {
+        val coordinator = LowAccuracyFallbackCoordinator()
+        coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L)
+        coordinator.onFallbackEmitted(1.0, 2.0, 1000L)
+        coordinator.onRejectedFixForLock(true, 1.0001, 2.0001, 1500L)
+        assertTrue(coordinator.shouldEmitFallback(fallbackEligible = true, hasCandidate = true))
+    }
 }

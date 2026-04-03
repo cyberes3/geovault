@@ -13,12 +13,7 @@ enum class TrackingMotionMode(val profileIndex: Int) {
     companion object {
         @JvmStatic
         fun fromProfileIndex(profileIndex: Int): TrackingMotionMode {
-            return when (profileIndex) {
-                WALKING.profileIndex -> WALKING
-                BIKING.profileIndex -> BIKING
-                DRIVING.profileIndex -> DRIVING
-                else -> WALKING
-            }
+            return TrackingPolicyProfiles.motionModeFromProfileIndex(profileIndex)
         }
     }
 }
@@ -44,6 +39,38 @@ object TrackingUiStatusResolver {
         if (gpsPaused) return TrackingUiStatus.TRACKING_ACTIVE
         val noGoodFix = lastAccuracyMeters == null || lastAccuracyMeters > effectiveAccuracyThresholdMeters
         return if (noGoodFix) TrackingUiStatus.LOCKING else TrackingUiStatus.TRACKING_ACTIVE
+    }
+
+    @JvmStatic
+    fun resolveForGpsState(
+        isRunning: Boolean,
+        gpsProviderEnabled: Boolean,
+        gpsState: GpsRuntimeState,
+        lastAccuracyMeters: Float?,
+        effectiveAccuracyThresholdMeters: Float
+    ): TrackingUiStatus {
+        if (!isRunning) return TrackingUiStatus.NOT_TRACKING
+        if (
+            !gpsProviderEnabled ||
+            gpsState == GpsRuntimeState.WAITING_FOR_PROVIDER ||
+            gpsState == GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED
+        ) {
+            return TrackingUiStatus.WAITING_FOR_GPS
+        }
+        return when (gpsState) {
+            GpsRuntimeState.LOCKING, GpsRuntimeState.FALLBACK_PENDING -> TrackingUiStatus.LOCKING
+            GpsRuntimeState.RUNNING, GpsRuntimeState.PAUSED_FOR_MOTION ->
+                resolve(
+                    isRunning = true,
+                    gpsProviderEnabled = true,
+                    gpsPaused = gpsState == GpsRuntimeState.PAUSED_FOR_MOTION,
+                    lastAccuracyMeters = lastAccuracyMeters,
+                    effectiveAccuracyThresholdMeters = effectiveAccuracyThresholdMeters
+                )
+            GpsRuntimeState.INACTIVE -> TrackingUiStatus.NOT_TRACKING
+            GpsRuntimeState.WAITING_FOR_PROVIDER -> TrackingUiStatus.WAITING_FOR_GPS
+            GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED -> TrackingUiStatus.WAITING_FOR_GPS
+        }
     }
 }
 

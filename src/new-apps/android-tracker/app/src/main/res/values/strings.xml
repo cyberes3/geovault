@@ -2,6 +2,10 @@
     <string name="app_name">Tracker</string>
     <string name="live_tracker_title">Live tracking</string>
     <string name="stop_tracking">Stop</string>
+    <string name="tracking_status_not_tracking">Not tracking</string>
+    <string name="tracking_status_waiting_for_gps">Waiting for GPS</string>
+    <string name="tracking_status_locking">Locking</string>
+    <string name="tracking_status_active">Tracking active</string>
     <string name="tracking_notification_counts_line">%1$d sent · %2$d queued</string>
     <string name="tracking_notification_channel_name">Live tracking</string>
     <string name="tracking_notification_channel_description">Foreground notification while location is recorded</string>

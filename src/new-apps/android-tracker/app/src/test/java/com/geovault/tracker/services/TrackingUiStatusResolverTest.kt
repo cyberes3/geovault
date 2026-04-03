@@ -46,4 +46,74 @@ class TrackingUiStatusResolverTest {
             )
         )
     }
+
+    @Test
+    fun resolve_gpsPaused_returnsTrackingActive() {
+        assertEquals(
+            TrackingUiStatus.TRACKING_ACTIVE,
+            TrackingUiStatusResolver.resolve(
+                isRunning = true,
+                gpsProviderEnabled = true,
+                gpsPaused = true,
+                lastAccuracyMeters = null,
+                effectiveAccuracyThresholdMeters = 10f
+            )
+        )
+    }
+
+    @Test
+    fun resolveForGpsState_lockingState_returnsLocking() {
+        assertEquals(
+            TrackingUiStatus.LOCKING,
+            TrackingUiStatusResolver.resolveForGpsState(
+                isRunning = true,
+                gpsProviderEnabled = true,
+                gpsState = GpsRuntimeState.LOCKING,
+                lastAccuracyMeters = null,
+                effectiveAccuracyThresholdMeters = 10f
+            )
+        )
+    }
+
+    @Test
+    fun resolveForGpsState_waitingProvider_returnsWaitingForGps() {
+        assertEquals(
+            TrackingUiStatus.WAITING_FOR_GPS,
+            TrackingUiStatusResolver.resolveForGpsState(
+                isRunning = true,
+                gpsProviderEnabled = false,
+                gpsState = GpsRuntimeState.WAITING_FOR_PROVIDER,
+                lastAccuracyMeters = 5f,
+                effectiveAccuracyThresholdMeters = 10f
+            )
+        )
+    }
+
+    @Test
+    fun resolveForGpsState_waitingProviderPaused_returnsWaitingForGps() {
+        assertEquals(
+            TrackingUiStatus.WAITING_FOR_GPS,
+            TrackingUiStatusResolver.resolveForGpsState(
+                isRunning = true,
+                gpsProviderEnabled = false,
+                gpsState = GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED,
+                lastAccuracyMeters = 5f,
+                effectiveAccuracyThresholdMeters = 10f
+            )
+        )
+    }
+
+    @Test
+    fun resolveForGpsState_waitingProvider_withGpsEnabled_stillReturnsWaiting() {
+        assertEquals(
+            TrackingUiStatus.WAITING_FOR_GPS,
+            TrackingUiStatusResolver.resolveForGpsState(
+                isRunning = true,
+                gpsProviderEnabled = true,
+                gpsState = GpsRuntimeState.WAITING_FOR_PROVIDER,
+                lastAccuracyMeters = 5f,
+                effectiveAccuracyThresholdMeters = 10f
+            )
+        )
+    }
 }

@@ -54,6 +54,9 @@ interface LocationDao {
     @Query("DELETE FROM queued_locations WHERE id IN (SELECT id FROM queued_locations ORDER BY time ASC LIMIT :count)")
     fun deleteOldestCount(count: Int): Int
 
+    @Query("UPDATE queued_locations SET dist = :distanceMeters WHERE id = :id")
+    fun updateDistanceById(id: Long, distanceMeters: Float)
+
     @Query("DELETE FROM queued_locations")
     fun deleteAll()
 }

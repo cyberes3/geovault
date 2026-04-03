@@ -7,18 +7,28 @@ import android.content.Context
 import android.content.Intent
 import android.location.Location
 import androidx.core.app.NotificationCompat
+import androidx.core.location.LocationCompat
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
-import com.geovault.tracker.TrackingLocationPolicy
 import com.geovault.tracker.TrackingService
 import com.geovault.tracker.db.LocationDao
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.location.TrackingLifecycleState
+import com.geovault.tracker.policy.CanonicalTimeNormalizer
+import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.policy.TrackPointQuality
+import com.geovault.tracker.policy.TrackPointPolicyConfig
+import com.geovault.tracker.policy.TrackPointPolicyEngine
+import com.geovault.tracker.policy.TrackPointRejectReason
+import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.runtime.RuntimeServiceEvent
 import com.geovault.tracker.runtime.RuntimeServiceEventType
 import com.geovault.tracker.runtime.RuntimeTrigger
 import com.geovault.tracker.runtime.TrackingRuntimeController
 import com.geovault.tracker.settings.TrackerSettings
+import kotlin.math.abs
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 class TrackingSessionCoordinator {
     fun transitionToRunning(previous: TrackingRuntimeSnapshot, nowMs: Long): TrackingRuntimeSnapshot {
@@ -60,6 +70,11 @@ class TrackingSessionCoordinator {
 
 data class LocationIngestResult(
     val accepted: Boolean,
+    val rejectReason: TrackPointRejectReason? = null,
+    val adjustmentReason: String? = null,
+    val trackPointQuality: TrackPointQuality? = null,
+    val pointPersisted: Boolean = false,
+    val persistedRowId: Long? = null,
     val lastFilteredLocation: Location?,
     val queuedPointsVisible: Int,
     val lastAccuracyMeters: Float?,
@@ -70,36 +85,91 @@ data class LocationIngestResult(
 )
 
 class LocationIngestCoordinator(private val locationDao: LocationDao) {
+    private val lastAcceptedByTrack = ConcurrentHashMap<String, TrackPointEvent>()
+    private val acceptedHistoryByTrack = ConcurrentHashMap<String, ArrayDeque<TrackPointEvent>>()
+    private val jumpRejectStreakByTrack = ConcurrentHashMap<String, AtomicLong>()
+
+    @Synchronized
+    fun resetSession(trackId: String) {
+        resetLocalSession(trackId)
+    }
+
     fun ingest(
+        trackId: String,
         location: Location,
         settings: TrackerSettings,
+        motionMode: TrackingMotionMode,
+        effectiveAccuracyFilterMeters: Float = settings.accuracyFilterMeters,
         previousAcceptedLocation: Location?,
         sessionVisibleBoundaryId: Long,
         maxQueueSize: Int,
         bypassFilters: Boolean,
         propsJson: String?,
-        totalDistanceMeters: Float
+        totalDistanceMeters: Float,
+        nowMs: Long,
+        nowElapsedRealtimeNanos: Long,
+        isMockLocation: Boolean = LocationCompat.isMock(location)
     ): LocationIngestResult {
         val accuracy = if (location.hasAccuracy()) location.accuracy else null
+        var resolvedQuality: TrackPointQuality? = null
         if (!bypassFilters) {
-            if (!TrackingLocationPolicy.acceptByAccuracy(location, settings.accuracyFilterMeters)) {
-                return ignored(previousAcceptedLocation, accuracy, propsJson)
+            val decision = evaluatePolicyDecision(
+                trackId = trackId,
+                location = location,
+                previousAcceptedLocation = previousAcceptedLocation,
+                maxAccuracyMeters = effectiveAccuracyFilterMeters,
+                motionMode = motionMode,
+                isMockLocation = isMockLocation,
+                nowMs = nowMs,
+                nowElapsedRealtimeNanos = nowElapsedRealtimeNanos
+            )
+            if (!decision.accepted || decision.canonicalEvent == null) {
+                return ignored(
+                    previousAcceptedLocation = previousAcceptedLocation,
+                    accuracy = accuracy,
+                    propsJson = propsJson,
+                    rejectReason = decision.rejectReason
+                )
             }
-            if (TrackingLocationPolicy.isJump(previousAcceptedLocation, location)) {
-                return ignored(previousAcceptedLocation, accuracy, propsJson)
+            val canonical = decision.canonicalEvent
+            resolvedQuality = canonical.quality
+            location.latitude = canonical.lat
+            location.longitude = canonical.lon
+            location.time = canonical.timestampMs
+            if (canonical.elapsedRealtimeNanos != null) {
+                location.elapsedRealtimeNanos = canonical.elapsedRealtimeNanos
             }
-            val minDist = settings.distanceFilterMeters
-            if (previousAcceptedLocation != null && previousAcceptedLocation.distanceTo(location) < minDist) {
-                return ignored(previousAcceptedLocation, accuracy, propsJson)
+            if (decision.adjustmentReason == TrackPointPolicyEngine.ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED) {
+                val visible = locationDao.getCurrentSessionCountById(sessionVisibleBoundaryId)
+                return LocationIngestResult(
+                    accepted = true,
+                    rejectReason = null,
+                    adjustmentReason = decision.adjustmentReason,
+                    trackPointQuality = canonical.quality,
+                    pointPersisted = false,
+                    persistedRowId = null,
+                    lastFilteredLocation = Location(location),
+                    queuedPointsVisible = visible,
+                    lastAccuracyMeters = accuracy,
+                    lastTrackedLatitude = location.latitude,
+                    lastTrackedLongitude = location.longitude,
+                    lastTrackedTimestampMs = location.time,
+                    lastTrackedPropsJson = propsJson
+                )
             }
         }
 
         val queued = QueuedLocation.fromLocation(location, totalDistanceMeters = totalDistanceMeters)
-        locationDao.insert(queued)
+        val insertedId = locationDao.insert(queued)
         trimQueueIfNeeded(maxQueueSize)
         val visible = locationDao.getCurrentSessionCountById(sessionVisibleBoundaryId)
         return LocationIngestResult(
             accepted = true,
+            rejectReason = null,
+            adjustmentReason = null,
+            trackPointQuality = resolvedQuality,
+            pointPersisted = true,
+            persistedRowId = insertedId,
             lastFilteredLocation = Location(location),
             queuedPointsVisible = visible,
             lastAccuracyMeters = accuracy,
@@ -117,9 +187,179 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         }
     }
 
-    private fun ignored(previousAcceptedLocation: Location?, accuracy: Float?, propsJson: String?): LocationIngestResult {
+    private fun evaluatePolicyDecision(
+        trackId: String,
+        location: Location,
+        previousAcceptedLocation: Location?,
+        maxAccuracyMeters: Float,
+        motionMode: TrackingMotionMode,
+        isMockLocation: Boolean,
+        nowMs: Long,
+        nowElapsedRealtimeNanos: Long
+    ): com.geovault.tracker.policy.TrackPointDecision {
+        val event = trackPointEventForPolicy(trackId = trackId, location = location, isMockLocation = isMockLocation, nowMs = nowMs)
+        // Legacy pipeline derives "previous" from pipeline-local accepted state.
+        // This intentionally avoids anchoring policy to bypass-only points.
+        val previousByTrack = lastAcceptedByTrack[trackId]
+        val config = TrackingPolicyProfiles.ingestConfig(
+            maxAccuracyMeters = maxAccuracyMeters,
+            motionMode = motionMode,
+            isMockLocation = isMockLocation
+        )
+        return evaluateWithState(
+            trackId = trackId,
+            event = event,
+            previousByTrack = previousByTrack,
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+            config = config
+        )
+    }
+
+    @Synchronized
+    private fun evaluateWithState(
+        trackId: String,
+        event: TrackPointEvent,
+        previousByTrack: TrackPointEvent?,
+        nowMs: Long,
+        nowElapsedRealtimeNanos: Long,
+        config: TrackPointPolicyConfig
+    ): com.geovault.tracker.policy.TrackPointDecision {
+        val history = acceptedHistoryByTrack[trackId]?.toList() ?: emptyList()
+        var decision = TrackPointPolicyEngine.evaluate(
+            event = event,
+            previous = previousByTrack,
+            history = history,
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+            rawConfig = config
+        )
+        var effectivePreviousByTrack = previousByTrack
+        if (!decision.accepted &&
+            shouldForceLocalStallReanchor(
+                trackId = trackId,
+                reason = decision.rejectReason,
+                previousByTrack = effectivePreviousByTrack,
+                nowMs = nowMs
+            )
+        ) {
+            resetLocalSession(trackId)
+            effectivePreviousByTrack = null
+            decision = TrackPointPolicyEngine.evaluate(
+                event = event,
+                previous = null,
+                history = emptyList(),
+                nowMs = nowMs,
+                nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+                rawConfig = config
+            )
+        }
+        if (!decision.accepted || decision.canonicalEvent == null) {
+            updateJumpRejectStreak(trackId, decision.rejectReason)
+            return decision
+        }
+        val canonical = decision.canonicalEvent
+        if (isDuplicateAgainstTrack(effectivePreviousByTrack, canonical)) {
+            updateJumpRejectStreak(trackId, TrackPointRejectReason.DUPLICATE)
+            return decision.copy(accepted = false, canonicalEvent = null, rejectReason = TrackPointRejectReason.DUPLICATE)
+        }
+        if (isOutOfOrderAgainstTrack(effectivePreviousByTrack, canonical)) {
+            updateJumpRejectStreak(trackId, TrackPointRejectReason.OUT_OF_ORDER)
+            return decision.copy(accepted = false, canonicalEvent = null, rejectReason = TrackPointRejectReason.OUT_OF_ORDER)
+        }
+        lastAcceptedByTrack[trackId] = canonical
+        appendHistory(trackId, canonical, config.rollingWindowSize)
+        jumpRejectStreakByTrack.remove(trackId)
+        return decision.copy(canonicalEvent = canonical)
+    }
+
+    private fun shouldForceLocalStallReanchor(
+        trackId: String,
+        reason: TrackPointRejectReason?,
+        previousByTrack: TrackPointEvent?,
+        nowMs: Long
+    ): Boolean {
+        if (reason != TrackPointRejectReason.JUMP) return false
+        val previous = previousByTrack ?: return false
+        val anchorAgeMs = nowMs - previous.timestampMs
+        if (anchorAgeMs < TrackingPolicyProfiles.LOCAL_STALL_REANCHOR_MIN_ANCHOR_AGE_MS) return false
+        val nextStreak = (jumpRejectStreakByTrack[trackId]?.get() ?: 0L) + 1L
+        return nextStreak >= TrackingPolicyProfiles.LOCAL_STALL_REJECT_STREAK_THRESHOLD
+    }
+
+    private fun updateJumpRejectStreak(trackId: String, reason: TrackPointRejectReason?) {
+        if (reason == TrackPointRejectReason.JUMP) {
+            jumpRejectStreakByTrack.getOrPut(trackId) { AtomicLong(0L) }.incrementAndGet()
+        } else {
+            jumpRejectStreakByTrack.remove(trackId)
+        }
+    }
+
+    private fun appendHistory(trackId: String, event: TrackPointEvent, windowSize: Int) {
+        val history = acceptedHistoryByTrack.getOrPut(trackId) { ArrayDeque() }
+        history.addLast(event)
+        val maxHistory = windowSize.coerceIn(3, 20)
+        while (history.size > maxHistory) {
+            history.removeFirst()
+        }
+    }
+
+    private fun isOutOfOrderAgainstTrack(previousByTrack: TrackPointEvent?, canonical: TrackPointEvent): Boolean {
+        val previousTs = previousByTrack?.timestampMs ?: return false
+        return canonical.timestampMs < previousTs
+    }
+
+    private fun isDuplicateAgainstTrack(previousByTrack: TrackPointEvent?, canonical: TrackPointEvent): Boolean {
+        val previous = previousByTrack ?: return false
+        return canonical.timestampMs == previous.timestampMs &&
+            canonical.lon == previous.lon &&
+            canonical.lat == previous.lat
+    }
+
+    private fun resetLocalSession(trackId: String) {
+        lastAcceptedByTrack.remove(trackId)
+        acceptedHistoryByTrack.remove(trackId)
+        jumpRejectStreakByTrack.remove(trackId)
+    }
+
+    private fun trackPointEventForPolicy(
+        trackId: String,
+        location: Location,
+        isMockLocation: Boolean,
+        nowMs: Long
+    ): TrackPointEvent {
+        val normalizedTimestampMs = CanonicalTimeNormalizer.normalizeTimestampMs(location.time, nowMs)
+        val timestampSkewMs = abs(normalizedTimestampMs - nowMs)
+        val timestampForPolicyMs = if (
+            isMockLocation &&
+            timestampSkewMs > TrackingPolicyProfiles.MOCK_TIMESTAMP_SKEW_TOLERANCE_MS
+        ) {
+            nowMs
+        } else {
+            normalizedTimestampMs
+        }
+        return TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = location.longitude,
+            lat = location.latitude,
+            timestampMs = timestampForPolicyMs,
+            accuracyMeters = if (location.hasAccuracy()) location.accuracy else null,
+            elapsedRealtimeNanos = location.elapsedRealtimeNanos
+        )
+    }
+
+    private fun ignored(
+        previousAcceptedLocation: Location?,
+        accuracy: Float?,
+        propsJson: String?,
+        rejectReason: TrackPointRejectReason?
+    ): LocationIngestResult {
         return LocationIngestResult(
             accepted = false,
+            rejectReason = rejectReason,
+            adjustmentReason = null,
+            pointPersisted = false,
             lastFilteredLocation = previousAcceptedLocation,
             queuedPointsVisible = 0,
             lastAccuracyMeters = accuracy,
@@ -132,7 +372,15 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
 }
 
 class TrackingNotificationPresenter(private val context: Context) {
-    fun buildTrackingNotification(sentCount: Int, queuedCount: Int): Notification {
+    fun buildTrackingNotification(snapshot: TrackingRuntimeSnapshot): Notification {
+        return buildTrackingNotification(
+            sentCount = snapshot.pointsSentThisSession,
+            queuedCount = snapshot.queuedPointsVisible,
+            uiStatus = snapshot.uiStatus
+        )
+    }
+
+    fun buildTrackingNotification(sentCount: Int, queuedCount: Int, uiStatus: TrackingUiStatus): Notification {
         val pendingIntent = PendingIntent.getActivity(
             context,
             0,
@@ -158,7 +406,9 @@ class TrackingNotificationPresenter(private val context: Context) {
             dismissIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        val text = context.getString(R.string.tracking_notification_counts_line, sentCount, queuedCount)
+        val status = context.getString(statusTextRes(uiStatus))
+        val counts = context.getString(R.string.tracking_notification_counts_line, sentCount, queuedCount)
+        val text = "$status\n$counts"
         return NotificationCompat.Builder(context, TrackingService.CHANNEL_ID)
             .setContentTitle(context.getString(R.string.live_tracker_title))
             .setContentText(text)
@@ -176,12 +426,29 @@ class TrackingNotificationPresenter(private val context: Context) {
             .build()
     }
 
-    fun updateForegroundNotification(sentCount: Int, queuedCount: Int) {
+    fun updateForegroundNotification(sentCount: Int, queuedCount: Int, uiStatus: TrackingUiStatus) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(
             TrackingService.NOTIFICATION_ID,
-            buildTrackingNotification(sentCount, queuedCount)
+            buildTrackingNotification(sentCount, queuedCount, uiStatus)
         )
+    }
+
+    fun updateForegroundNotification(snapshot: TrackingRuntimeSnapshot) {
+        updateForegroundNotification(
+            sentCount = snapshot.pointsSentThisSession,
+            queuedCount = snapshot.queuedPointsVisible,
+            uiStatus = snapshot.uiStatus
+        )
+    }
+
+    private fun statusTextRes(status: TrackingUiStatus): Int {
+        return when (status) {
+            TrackingUiStatus.NOT_TRACKING -> R.string.tracking_status_not_tracking
+            TrackingUiStatus.WAITING_FOR_GPS -> R.string.tracking_status_waiting_for_gps
+            TrackingUiStatus.LOCKING -> R.string.tracking_status_locking
+            TrackingUiStatus.TRACKING_ACTIVE -> R.string.tracking_status_active
+        }
     }
 }
 

@@ -55,6 +55,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material)
     implementation(libs.androidx.compose.material.icons)
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 
     api("org.maplibre.gl:android-sdk:12.3.1")
 
