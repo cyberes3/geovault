@@ -97,6 +97,24 @@ class GpsRuntimeStateMachineTest {
     }
 
     @Test
+    fun providerDisabled_fromWaitingPaused_staysWaitingPaused() {
+        val next = GpsRuntimeStateMachine.transition(
+            GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED,
+            GpsRuntimeEvent.PROVIDER_DISABLED
+        )
+        assertEquals(GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED, next)
+    }
+
+    @Test
+    fun providerDisabled_fromWaiting_staysWaiting() {
+        val next = GpsRuntimeStateMachine.transition(
+            GpsRuntimeState.WAITING_FOR_PROVIDER,
+            GpsRuntimeEvent.PROVIDER_DISABLED
+        )
+        assertEquals(GpsRuntimeState.WAITING_FOR_PROVIDER, next)
+    }
+
+    @Test
     fun providerEnabled_fromWaitingPaused_restoresPaused() {
         val next = GpsRuntimeStateMachine.transition(
             GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED,
@@ -175,5 +193,30 @@ class GpsRuntimeStateMachineTest {
             GpsRuntimeEvent.PROVIDER_ENABLED
         )
         assertEquals(GpsRuntimeState.RUNNING, next)
+    }
+
+    @Test
+    fun providerPauseResume_sequence_preservesPausedUntilMotionResume() {
+        val providerDownWhileRunning = GpsRuntimeStateMachine.transition(
+            GpsRuntimeState.RUNNING,
+            GpsRuntimeEvent.PROVIDER_DISABLED
+        )
+        val pausedWhileProviderDown = GpsRuntimeStateMachine.transition(
+            providerDownWhileRunning,
+            GpsRuntimeEvent.PAUSE_FOR_MOTION
+        )
+        val providerReenabled = GpsRuntimeStateMachine.transition(
+            pausedWhileProviderDown,
+            GpsRuntimeEvent.PROVIDER_ENABLED
+        )
+        val resumedByMotion = GpsRuntimeStateMachine.transition(
+            providerReenabled,
+            GpsRuntimeEvent.RESUME_FROM_MOTION
+        )
+
+        assertEquals(GpsRuntimeState.WAITING_FOR_PROVIDER, providerDownWhileRunning)
+        assertEquals(GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED, pausedWhileProviderDown)
+        assertEquals(GpsRuntimeState.PAUSED_FOR_MOTION, providerReenabled)
+        assertEquals(GpsRuntimeState.LOCKING, resumedByMotion)
     }
 }

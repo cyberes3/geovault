@@ -42,14 +42,10 @@ class TrackingRuntimeFacade internal constructor(
         return result
     }
 
-    fun handleWatchdogTick(
-        restartTrackingIfKilled: Boolean,
-        wasTrackingBeforeExit: Boolean
-    ): TrackingSessionUpdateResult {
+    fun handleWatchdogTick(request: WatchdogRecoveryRequest): TrackingSessionUpdateResult {
         val result = commandHandler.handleWatchdogTick(
             current = _state.value,
-            restartTrackingIfKilled = restartTrackingIfKilled,
-            wasTrackingBeforeExit = wasTrackingBeforeExit
+            request = request
         )
         _state.value = result.state
         return result

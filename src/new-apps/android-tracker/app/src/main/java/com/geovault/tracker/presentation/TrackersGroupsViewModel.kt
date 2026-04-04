@@ -5,10 +5,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.tracker.AppError
 import com.geovault.tracker.GroupPatchRequest
-import com.geovault.tracker.MapVisibilityRequest
-import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.R
 import com.geovault.tracker.RepositoryResult
+import com.geovault.tracker.SelectedTrackerPrefs
+import com.geovault.tracker.SelectedTrackerManager
 import com.geovault.tracker.TrackerCreateRequest
 import com.geovault.tracker.TrackerSettingsRequest
 import com.geovault.tracker.data.GroupManagementRepository
@@ -49,7 +49,16 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
 
     fun openEditTrackerDialog(tracker: com.geovault.tracker.Tracker) {
         if (!OwnershipActionPolicy.canEditTracker(tracker)) return
-        _uiState.update { it.copy(dialog = TrackersGroupsDialog.EditTracker(tracker, tracker.name)) }
+        val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(getApplication())
+        _uiState.update {
+            it.copy(
+                dialog = TrackersGroupsDialog.EditTracker(
+                    tracker = tracker,
+                    nameDraft = tracker.name,
+                    setAsSelectedTracker = selectedTrackerId == tracker.id
+                )
+            )
+        }
     }
 
     fun openEditGroupDialog(group: com.geovault.tracker.Group) {
@@ -64,7 +73,14 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
     fun updateCreateTrackerDraft(name: String, color: String) {
         val d = _uiState.value.dialog
         if (d is TrackersGroupsDialog.CreateTracker) {
-            _uiState.update { it.copy(dialog = d.copy(nameDraft = name, colorDraft = color)) }
+            _uiState.update {
+                it.copy(
+                    dialog = d.copy(
+                        nameDraft = name,
+                        colorDraft = color
+                    )
+                )
+            }
         }
     }
 
@@ -79,6 +95,20 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
         val d = _uiState.value.dialog
         if (d is TrackersGroupsDialog.EditTracker) {
             _uiState.update { it.copy(dialog = d.copy(nameDraft = name)) }
+        }
+    }
+
+    fun updateCreateTrackerSetAsSelected(setAsSelected: Boolean) {
+        val d = _uiState.value.dialog
+        if (d is TrackersGroupsDialog.CreateTracker) {
+            _uiState.update { it.copy(dialog = d.copy(setAsSelectedTracker = setAsSelected)) }
+        }
+    }
+
+    fun updateEditTrackerSetAsSelected(setAsSelected: Boolean) {
+        val d = _uiState.value.dialog
+        if (d is TrackersGroupsDialog.EditTracker) {
+            _uiState.update { it.copy(dialog = d.copy(setAsSelectedTracker = setAsSelected)) }
         }
     }
 
@@ -123,6 +153,14 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             val color = d.colorDraft.trim().ifEmpty { null }
             when (val r = trackerRepository.createTracker(TrackerCreateRequest(name = name, color = color))) {
                 is RepositoryResult.Success -> {
+                    if (d.setAsSelectedTracker) {
+                        SelectedTrackerManager.setSelectedTracker(
+                            context = getApplication(),
+                            trackerId = r.data.id,
+                            trackerName = r.data.name,
+                            restartTrackingIfRunning = true
+                        )
+                    }
                     dismissDialog()
                     refreshAll()
                 }
@@ -170,6 +208,23 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                 )
             ) {
                 is RepositoryResult.Success -> {
+                    val app = getApplication<Application>()
+                    val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(app)
+                    if (d.setAsSelectedTracker) {
+                        SelectedTrackerManager.setSelectedTracker(
+                            context = app,
+                            trackerId = d.tracker.id,
+                            trackerName = name,
+                            restartTrackingIfRunning = true
+                        )
+                    } else if (selectedTrackerId == d.tracker.id) {
+                        SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(app)
+                    }
+                    SelectedTrackerManager.updateSelectedTrackerNameIfSelected(
+                        context = app,
+                        trackerId = d.tracker.id,
+                        trackerName = name
+                    )
                     dismissDialog()
                     refreshAll()
                 }
@@ -312,22 +367,4 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             AppError.Unknown -> ctx.getString(R.string.trackers_error_unknown)
         }
     }
-}
-
-internal fun toggleTrackerInVisibility(current: MapVisibilityResponse, trackerId: String): MapVisibilityRequest {
-    val hidden = current.hidden_track_ids.toMutableSet()
-    if (hidden.contains(trackerId)) hidden.remove(trackerId) else hidden.add(trackerId)
-    return MapVisibilityRequest(
-        hidden_track_ids = hidden.toList(),
-        hidden_group_ids = current.hidden_group_ids,
-    )
-}
-
-internal fun toggleGroupInVisibility(current: MapVisibilityResponse, groupId: String): MapVisibilityRequest {
-    val hidden = current.hidden_group_ids.toMutableSet()
-    if (hidden.contains(groupId)) hidden.remove(groupId) else hidden.add(groupId)
-    return MapVisibilityRequest(
-        hidden_track_ids = current.hidden_track_ids,
-        hidden_group_ids = hidden.toList(),
-    )
 }

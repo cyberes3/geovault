@@ -11,9 +11,17 @@ enum class TrackersGroupsSubTab {
 
 sealed interface TrackersGroupsDialog {
     data object Hidden : TrackersGroupsDialog
-    data class CreateTracker(val nameDraft: String = "", val colorDraft: String = "") : TrackersGroupsDialog
+    data class CreateTracker(
+        val nameDraft: String = "",
+        val colorDraft: String = "",
+        val setAsSelectedTracker: Boolean = false
+    ) : TrackersGroupsDialog
     data class CreateGroup(val nameDraft: String = "") : TrackersGroupsDialog
-    data class EditTracker(val tracker: Tracker, val nameDraft: String) : TrackersGroupsDialog
+    data class EditTracker(
+        val tracker: Tracker,
+        val nameDraft: String,
+        val setAsSelectedTracker: Boolean = false
+    ) : TrackersGroupsDialog
     data class EditGroup(val group: Group, val nameDraft: String) : TrackersGroupsDialog
 }
 

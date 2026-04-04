@@ -21,12 +21,9 @@ class TrackingRuntimeController private constructor(context: Context) {
             ?: RuntimeCommandResult(action = RuntimeActionType.NOOP, reason = "orchestrator_no_result")
     }
 
-    fun handleWatchdogTick(restartTrackingIfKilled: Boolean, wasTrackingBeforeExit: Boolean): RuntimeCommandResult {
+    fun handleWatchdogTick(request: WatchdogRecoveryRequest): RuntimeCommandResult {
         return runtimeFacade
-            .handleWatchdogTick(
-                restartTrackingIfKilled = restartTrackingIfKilled,
-                wasTrackingBeforeExit = wasTrackingBeforeExit
-            )
+            .handleWatchdogTick(request)
             .commandResult
             ?: RuntimeCommandResult(action = RuntimeActionType.NOOP, reason = "orchestrator_no_result")
     }

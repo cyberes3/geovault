@@ -119,14 +119,13 @@ class RuntimeCommandHandler(
 
     fun handleWatchdogTick(
         current: TrackingSessionState,
-        restartTrackingIfKilled: Boolean,
-        wasTrackingBeforeExit: Boolean
+        request: WatchdogRecoveryRequest
     ): TrackingSessionUpdateResult {
         val reconciledCurrent = reconcileRuntimeState(current, reason = "watchdog_tick")
-        val desiredRunning = restartTrackingIfKilled && wasTrackingBeforeExit
+        val desiredRunning = request.shouldAttemptRecovery
         telemetry.decision(
             "watchdog_tick",
-            "restartTrackingIfKilled=$restartTrackingIfKilled wasTrackingBeforeExit=$wasTrackingBeforeExit desiredRunning=$desiredRunning"
+            "restartTrackingIfKilled=${request.restartTrackingIfKilled} wasTrackingBeforeExit=${request.wasTrackingBeforeExit} desiredRunning=$desiredRunning"
         )
         if (!desiredRunning) {
             val after = repository.updateState {
@@ -141,7 +140,7 @@ class RuntimeCommandHandler(
             effects.cancelWatchdog()
             telemetry.event(
                 "watchdog",
-                "disabled restartTrackingIfKilled=$restartTrackingIfKilled wasTrackingBeforeExit=$wasTrackingBeforeExit"
+                "disabled restartTrackingIfKilled=${request.restartTrackingIfKilled} wasTrackingBeforeExit=${request.wasTrackingBeforeExit}"
             )
             return TrackingSessionUpdateResult(
                 state = next,

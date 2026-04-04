@@ -42,10 +42,10 @@ object GpsRuntimeStateMachine {
                 }
             }
             GpsRuntimeEvent.PROVIDER_DISABLED -> {
-                if (current == GpsRuntimeState.PAUSED_FOR_MOTION) {
-                    GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED
-                } else {
-                    GpsRuntimeState.WAITING_FOR_PROVIDER
+                when (current) {
+                    GpsRuntimeState.PAUSED_FOR_MOTION,
+                    GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED -> GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED
+                    else -> GpsRuntimeState.WAITING_FOR_PROVIDER
                 }
             }
             GpsRuntimeEvent.PROVIDER_ENABLED -> {

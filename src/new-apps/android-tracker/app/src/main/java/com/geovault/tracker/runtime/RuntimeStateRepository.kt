@@ -1,9 +1,11 @@
 package com.geovault.tracker.runtime
 
 import android.content.Context
-import com.geovault.tracker.services.TrackingRuntimeStateStore
 
-class RuntimeStateRepository(context: Context) : RuntimeStateAccessor {
+internal class RuntimeStateRepository(
+    context: Context,
+    private val serviceStateProbe: RuntimeServiceStateProbe = RuntimeServiceStateProbe()
+) : RuntimeStateAccessor {
     private val stateStore = RuntimeStateStore(context.applicationContext)
 
     override fun readState(): RuntimeState = stateStore.read()
@@ -13,6 +15,6 @@ class RuntimeStateRepository(context: Context) : RuntimeStateAccessor {
     }
 
     override fun isServiceRunning(): Boolean {
-        return TrackingRuntimeStateStore.state.value.isRunning
+        return serviceStateProbe.isServiceRunningOrStarting()
     }
 }

@@ -6,6 +6,8 @@ import com.geovault.tracker.TrackingService
 data class BootStartupSnapshot(
     val action: String?,
     val startOnBoot: Boolean,
+    val wasTrackingBeforeExit: Boolean,
+    val userUnlocked: Boolean,
     val hasRequiredPermissions: Boolean,
     val gpsProviderEnabled: Boolean,
     val selectedTrackerId: String
@@ -14,6 +16,7 @@ data class BootStartupSnapshot(
 enum class BootStartupBlocker(val logLabel: String) {
     UnsupportedAction("unsupported_action"),
     StartOnBootDisabled("start_on_boot_disabled"),
+    UserLocked("user_locked"),
     MissingTrackingPermissions("missing_tracking_permissions"),
     GpsProviderDisabled("gps_provider_disabled"),
     InvalidSelectedTracker("invalid_selected_tracker")
@@ -35,8 +38,11 @@ object BootStartupPolicy {
         if (!supportedActions.contains(snapshot.action)) {
             blockers += BootStartupBlocker.UnsupportedAction
         }
-        if (!snapshot.startOnBoot) {
+        if (!snapshot.startOnBoot && !snapshot.wasTrackingBeforeExit) {
             blockers += BootStartupBlocker.StartOnBootDisabled
+        }
+        if (!snapshot.userUnlocked) {
+            blockers += BootStartupBlocker.UserLocked
         }
         if (!snapshot.hasRequiredPermissions) {
             blockers += BootStartupBlocker.MissingTrackingPermissions

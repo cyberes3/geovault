@@ -210,6 +210,47 @@ class LocationIngestCoordinatorTest {
         assertTrue(result.accepted)
         assertEquals(1, dao.getCount())
     }
+
+    @Test
+    fun ingest_acceptsFix_persistsDistanceAtomicallyOnInsert() {
+        val dao = FakeLocationDao()
+        val coordinator = LocationIngestCoordinator(dao)
+        val settings = TrackerSettings(accuracyFilterMeters = 25f)
+        val nowMs = System.currentTimeMillis()
+        val previous = Location("gps").apply {
+            latitude = 10.0
+            longitude = 20.0
+            accuracy = 5f
+            time = nowMs - 1000L
+        }
+        val location = Location("gps").apply {
+            latitude = 10.001
+            longitude = 20.001
+            accuracy = 5f
+            time = nowMs
+        }
+        val startingDistance = 123f
+
+        val result = coordinator.ingest(
+            trackId = "tracker-1",
+            location = location,
+            settings = settings,
+            motionMode = TrackingMotionMode.BIKING,
+            previousAcceptedLocation = previous,
+            sessionVisibleBoundaryId = 0L,
+            bypassFilters = true,
+            propsJson = null,
+            totalDistanceMeters = startingDistance,
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = 0L,
+            isMockLocation = false
+        )
+
+        assertTrue(result.accepted)
+        assertTrue(result.pointPersisted)
+        assertTrue(result.nextSessionDistanceMeters > startingDistance)
+        assertEquals(result.nextSessionDistanceMeters, dao.getAll().single().dist)
+    }
 }
 
 private class FakeLocationDao : LocationDao {

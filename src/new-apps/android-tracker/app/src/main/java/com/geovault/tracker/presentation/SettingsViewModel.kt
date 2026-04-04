@@ -151,6 +151,10 @@ class SettingsViewModel(
         trackerSettingsRepository.setSignificantDataOnly(enabled)
     }
 
+    fun setAutoTrackingMode(enabled: Boolean) {
+        trackerSettingsRepository.setAutoTrackingMode(enabled)
+    }
+
     fun setKeepScreenOnWhileViewingMap(enabled: Boolean) {
         trackerSettingsRepository.setKeepScreenOnWhileViewingMap(enabled)
     }

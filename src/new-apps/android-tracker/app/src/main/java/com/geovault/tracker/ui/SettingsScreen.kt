@@ -51,6 +51,7 @@ fun SettingsScreen(
     onStartOnLaunch: (Boolean) -> Unit,
     onSendExtendedData: (Boolean) -> Unit,
     onSignificantMotionOnly: (Boolean) -> Unit,
+    onAutoTrackingMode: (Boolean) -> Unit,
     onKeepScreenOnMap: (Boolean) -> Unit,
 ) {
     Scaffold(
@@ -97,6 +98,7 @@ fun SettingsScreen(
                     onStartOnLaunch = onStartOnLaunch,
                     onSendExtendedData = onSendExtendedData,
                     onSignificantMotionOnly = onSignificantMotionOnly,
+                    onAutoTrackingMode = onAutoTrackingMode,
                     onKeepScreenOnMap = onKeepScreenOnMap,
                 )
             }
@@ -121,6 +123,7 @@ private fun TrackerSettingsSection(
     onStartOnLaunch: (Boolean) -> Unit,
     onSendExtendedData: (Boolean) -> Unit,
     onSignificantMotionOnly: (Boolean) -> Unit,
+    onAutoTrackingMode: (Boolean) -> Unit,
     onKeepScreenOnMap: (Boolean) -> Unit,
 ) {
     Divider(
@@ -243,6 +246,12 @@ private fun TrackerSettingsSection(
                 checked = s.significantDataOnly,
                 onCheckedChange = onSignificantMotionOnly,
                 label = stringResource(R.string.settings_tracker_significant_motion_only),
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            GeoVaultToggle(
+                checked = s.autoTrackingMode,
+                onCheckedChange = onAutoTrackingMode,
+                label = stringResource(R.string.settings_tracker_auto_tracking_mode),
             )
             Spacer(modifier = Modifier.height(4.dp))
             GeoVaultToggle(

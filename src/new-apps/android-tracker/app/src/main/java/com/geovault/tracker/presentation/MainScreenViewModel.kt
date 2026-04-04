@@ -1,12 +1,14 @@
 package com.geovault.tracker.presentation
 
 import android.app.Application
+import android.content.Intent
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.tracker.SelectedTrackerPrefs
+import com.geovault.tracker.SelectedTrackerManager
 import com.geovault.tracker.TrackerCheckRequest
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.di.TrackerAppServices
@@ -66,15 +68,27 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun requestStartTracking() {
-        TrackingCommandFacade.requestStart(
-            getApplication(),
-            trigger = RuntimeTrigger.EXPLICIT_START,
-            reason = "home_start"
-        )
+        viewModelScope.launch {
+            if (!ensureStartupTrackingPreflight()) return@launch
+            if (!ensureSelectedTrackerReadyForStart(showNoSelectionMessage = true)) return@launch
+            TrackingCommandFacade.requestStart(
+                getApplication(),
+                trigger = RuntimeTrigger.EXPLICIT_START,
+                reason = "home_start"
+            )
+        }
     }
 
     fun requestStopTracking() {
         TrackingCommandFacade.requestStop(getApplication(), reason = "home_stop")
+    }
+
+    fun requestManualPoint() {
+        app.startService(
+            Intent(app, TrackingService::class.java).apply {
+                action = TrackingService.ACTION_SEND_MANUAL_POINT
+            }
+        )
     }
 
     fun onHostResumed() {
@@ -124,6 +138,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun refreshAuthState() {
+        val wasAuthenticated = _state.value.isAuthenticated
         val server = authController.getConfiguredServerUrlOrPeerDefault()
         val loggedIn = server.isNotBlank() && authController.isLoggedIn()
         _state.update {
@@ -131,6 +146,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 isAuthenticated = loggedIn,
                 serverUrl = server,
             )
+        }
+        if (wasAuthenticated && !loggedIn) {
+            resetPostAuthStartupState()
         }
     }
 
@@ -204,28 +222,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     private suspend fun tryStartTrackingOnLaunch() {
         if (!ensureStartupTrackingPreflight()) return
-        val trackerId = SelectedTrackerPrefs.selectedTrackerId(app)
-        if (trackerId.isBlank()) return
-        val isValid = when (
-            val result = trackerManagementRepository.checkTracker(TrackerCheckRequest(tracker_id = trackerId))
-        ) {
-            is RepositoryResult.Success -> result.data
-            is RepositoryResult.Failure -> false
-        }
-        if (!isValid) {
-            Log.w("MainScreenViewModel", "startup auto-start invalid selected tracker, clearing selection")
-            SelectedTrackerPrefs.clearSelectedTracker(app)
-            trackerManagementRepository.clearSelectedTrackerCaches()
-            trackerManagementRepository.loadTrackers(forceRefresh = true)
-            TrackingRuntimeStateStore.update {
-                it.copy(
-                    selectedTrackerId = "",
-                    selectedTrackerName = "",
-                )
-            }
-            _state.update { it.copy(infoMessage = app.getString(R.string.tracker_validation_failed_go_to_settings)) }
-            return
-        }
+        if (!ensureSelectedTrackerReadyForStart(showNoSelectionMessage = false)) return
         TrackingCommandFacade.requestStart(
             context = app,
             trigger = RuntimeTrigger.MAIN_START_ON_LAUNCH,
@@ -263,5 +260,38 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun isTrackingServiceActiveOrStarting(): Boolean {
         return TrackingRuntimeStateStore.state.value.isRunning || TrackingService.isStartupInProgress
+    }
+
+    private fun resetPostAuthStartupState() {
+        startupTrackingAutomationHandled = false
+        startupRefreshHandled = false
+        startupTrackingAutomationJob?.cancel()
+        startupTrackingAutomationJob = null
+        startupRefreshJob?.cancel()
+        startupRefreshJob = null
+    }
+
+    private suspend fun ensureSelectedTrackerReadyForStart(showNoSelectionMessage: Boolean): Boolean {
+        val trackerId = SelectedTrackerPrefs.selectedTrackerId(app)
+        if (trackerId.isBlank()) {
+            if (showNoSelectionMessage) {
+                _state.update {
+                    it.copy(infoMessage = app.getString(R.string.no_tracker_selected_go_to_settings))
+                }
+            }
+            return false
+        }
+        val isValid = when (
+            val result = trackerManagementRepository.checkTracker(TrackerCheckRequest(tracker_id = trackerId))
+        ) {
+            is RepositoryResult.Success -> result.data
+            is RepositoryResult.Failure -> false
+        }
+        if (isValid) return true
+        Log.w("MainScreenViewModel", "selected tracker invalid on start, clearing selection")
+        SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(app)
+        trackerManagementRepository.loadTrackers(forceRefresh = true)
+        _state.update { it.copy(infoMessage = app.getString(R.string.tracker_validation_failed_go_to_settings)) }
+        return false
     }
 }

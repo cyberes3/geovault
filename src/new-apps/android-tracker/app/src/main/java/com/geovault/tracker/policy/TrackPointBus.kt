@@ -19,7 +19,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 data class TrackPointBusDiagnostics(
     val isLocalDeliveryPaused: Boolean,
     val pausedBufferSize: Int,
-    val deferredEmitCount: Long
+    val deferredEmitCount: Long,
+    val droppedPausedLocalEvents: Long
 )
 
 object TrackPointBus {
@@ -32,6 +33,7 @@ object TrackPointBus {
     private val localDeliveryPaused = AtomicBoolean(false)
     private val deferredEmitCount = AtomicLong(0L)
     private val pausedLocalEvents = ArrayDeque<TrackPointEvent>()
+    private val droppedPausedLocalEvents = AtomicLong(0L)
 
     private val eventsFlow = MutableSharedFlow<TrackPointEvent>(
         replay = REPLAY_EVENTS,
@@ -53,16 +55,28 @@ object TrackPointBus {
 
     fun publish(event: TrackPointEvent) {
         val sanitizedEvent = sanitize(event) ?: return
-        if (sanitizedEvent.source == TrackPointSource.LOCAL_GPS && localDeliveryPaused.get()) {
+        val policyValidatedEvent = if (
+            sanitizedEvent.source == TrackPointSource.REMOTE_STREAM &&
+            sanitizedEvent.orderingKey <= 0L
+        ) {
+            RemoteStreamIngressPolicy.process(
+                event = sanitizedEvent,
+                nowMs = System.currentTimeMillis()
+            )
+        } else {
+            sanitizedEvent
+        } ?: return
+        if (policyValidatedEvent.source == TrackPointSource.LOCAL_GPS && localDeliveryPaused.get()) {
             synchronized(pausedLocalEvents) {
                 if (pausedLocalEvents.size >= PAUSED_BUFFER_CAPACITY) {
                     pausedLocalEvents.removeFirst()
+                    droppedPausedLocalEvents.incrementAndGet()
                 }
-                pausedLocalEvents.addLast(sanitizedEvent)
+                pausedLocalEvents.addLast(policyValidatedEvent)
             }
             return
         }
-        val sendResult = orderedEmitQueue.trySend(sanitizedEvent)
+        val sendResult = orderedEmitQueue.trySend(policyValidatedEvent)
         if (!sendResult.isSuccess) {
             deferredEmitCount.incrementAndGet()
         }
@@ -94,7 +108,8 @@ object TrackPointBus {
         return TrackPointBusDiagnostics(
             isLocalDeliveryPaused = localDeliveryPaused.get(),
             pausedBufferSize = pausedSize,
-            deferredEmitCount = deferredEmitCount.get()
+            deferredEmitCount = deferredEmitCount.get(),
+            droppedPausedLocalEvents = droppedPausedLocalEvents.get()
         )
     }
 
@@ -102,6 +117,7 @@ object TrackPointBus {
     fun resetForTests() {
         localDeliveryPaused.set(false)
         deferredEmitCount.set(0L)
+        droppedPausedLocalEvents.set(0L)
         synchronized(pausedLocalEvents) {
             pausedLocalEvents.clear()
         }

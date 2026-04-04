@@ -15,7 +15,9 @@ import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerApi
+import com.geovault.tracker.TrackerBulkGeometryRequest
 import com.geovault.tracker.TrackerCheckRequest
+import com.geovault.tracker.TrackerCoordinatesResponse
 import com.geovault.tracker.TrackerCreateRequest
 import com.geovault.tracker.TrackerSettingsRequest
 import com.geovault.tracker.UsersResponse
@@ -38,9 +40,9 @@ class ApiTrackerManagementRepository(
     }
 
     private val cacheMutex = Mutex()
-    private var trackersCache: List<Tracker>? = null
-    private var groupsCache: List<Group>? = null
-    private var mapVisibilityCache: MapVisibilityResponse? = null
+    @Volatile private var trackersCache: List<Tracker>? = null
+    @Volatile private var groupsCache: List<Group>? = null
+    @Volatile private var mapVisibilityCache: MapVisibilityResponse? = null
 
     override suspend fun loadTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> {
         return cacheMutex.withLock {
@@ -96,6 +98,28 @@ class ApiTrackerManagementRepository(
     override suspend fun loadTrackerGeometry(trackerId: String): RepositoryResult<Tracker> {
         return when (val networkResult = executeApiCall { api -> api.getTrackerGeometry(trackerId).execute() }) {
             is RepositoryResult.Success -> RepositoryResult.Success(networkResult.data.toDomainModel())
+            is RepositoryResult.Failure -> networkResult
+        }
+    }
+
+    override suspend fun loadTrackerCoordinates(trackerId: String): RepositoryResult<TrackerCoordinatesResponse> {
+        return when (val networkResult = executeApiCall { api -> api.getTrackerCoordinates(trackerId).execute() }) {
+            is RepositoryResult.Success -> RepositoryResult.Success(networkResult.data.toDomainModel())
+            is RepositoryResult.Failure -> networkResult
+        }
+    }
+
+    override suspend fun loadTrackersGeometry(trackerIds: List<String>): RepositoryResult<List<Tracker>> {
+        val normalizedIds = trackerIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (normalizedIds.isEmpty()) {
+            return RepositoryResult.Success(emptyList())
+        }
+        return when (
+            val networkResult = executeApiCall {
+                api -> api.getTrackersGeometry(TrackerBulkGeometryRequest(tracker_ids = normalizedIds)).execute()
+            }
+        ) {
+            is RepositoryResult.Success -> RepositoryResult.Success(networkResult.data.toDomainModels())
             is RepositoryResult.Failure -> networkResult
         }
     }

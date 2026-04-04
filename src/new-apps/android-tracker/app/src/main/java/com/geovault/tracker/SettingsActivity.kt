@@ -44,6 +44,7 @@ class SettingsActivity : ComponentActivity() {
                     onStartOnLaunch = viewModel::setStartTrackingOnLaunch,
                     onSendExtendedData = viewModel::setSendExtendedData,
                     onSignificantMotionOnly = viewModel::setSignificantDataOnly,
+                    onAutoTrackingMode = viewModel::setAutoTrackingMode,
                     onKeepScreenOnMap = viewModel::setKeepScreenOnWhileViewingMap,
                 )
             }

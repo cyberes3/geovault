@@ -47,6 +47,7 @@ fun HomeScreen(
     onClearInfoMessage: () -> Unit,
     onRequestStartTracking: () -> Unit,
     onRequestStopTracking: () -> Unit,
+    onRequestManualPoint: () -> Unit,
 ) {
     val homeViewModel: HomeViewModel = viewModel()
     val homeState by homeViewModel.uiState.collectAsState()
@@ -251,6 +252,14 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(stringResource(R.string.stop_tracking))
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = onRequestManualPoint,
+                enabled = homeState.isTracking,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.home_send_manual_point))
             }
             Spacer(modifier = Modifier.height(8.dp))
             TextButton(

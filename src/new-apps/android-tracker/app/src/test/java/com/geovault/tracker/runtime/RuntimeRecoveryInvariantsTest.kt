@@ -43,8 +43,10 @@ class RuntimeRecoveryInvariantsTest {
         )
         val result = handler.handleWatchdogTick(
             current = TrackingSessionState(runtime = repo.readState()),
-            restartTrackingIfKilled = false,
-            wasTrackingBeforeExit = true
+            request = WatchdogRecoveryRequest(
+                restartTrackingIfKilled = false,
+                wasTrackingBeforeExit = true
+            )
         )
         assertEquals(RuntimeActionType.NOOP, result.commandResult?.action)
         assertEquals("watchdog_disabled", result.commandResult?.reason)
@@ -66,11 +68,45 @@ class RuntimeRecoveryInvariantsTest {
         )
         val result = handler.handleWatchdogTick(
             current = TrackingSessionState(),
-            restartTrackingIfKilled = true,
-            wasTrackingBeforeExit = false
+            request = WatchdogRecoveryRequest(
+                restartTrackingIfKilled = true,
+                wasTrackingBeforeExit = false
+            )
         )
         assertEquals("watchdog_disabled", result.commandResult?.reason)
         assertEquals(1, effects.cancelWatchdogCalls)
+    }
+
+    @Test
+    fun watchdogTick_restartEnabled_andWasTrackingBeforeExit_attemptsRecoveryStart() {
+        val repo = FakeRuntimeStateAccessor(
+            runtime = RuntimeState(
+                lifecycleState = RuntimeLifecycleState.RECOVERING,
+                shouldBeRunning = true
+            ),
+            serviceRunning = false
+        )
+        val effects = RecordingRuntimeEffects(
+            startDecision = StartGateDecision(allowed = true, reason = "watchdog_recover")
+        )
+        val handler = RuntimeCommandHandler(
+            repository = repo,
+            stateMachine = RuntimeStateMachine(),
+            healthPolicy = RuntimeHealthPolicy(appContext),
+            effects = effects,
+            telemetry = RuntimeTelemetry(appContext)
+        )
+        val result = handler.handleWatchdogTick(
+            current = TrackingSessionState(runtime = repo.readState()),
+            request = WatchdogRecoveryRequest(
+                restartTrackingIfKilled = true,
+                wasTrackingBeforeExit = true
+            )
+        )
+        assertTrue(result.commandResult?.reason != "watchdog_disabled")
+        assertEquals(0, effects.cancelWatchdogCalls)
+        assertTrue(effects.scheduleWatchdogCalls >= 1)
+        assertTrue(result.state.runtime.shouldBeRunning)
     }
 
     @Test
@@ -92,8 +128,10 @@ class RuntimeRecoveryInvariantsTest {
         )
         val result = handler.handleWatchdogTick(
             current = TrackingSessionState(runtime = repo.readState()),
-            restartTrackingIfKilled = false,
-            wasTrackingBeforeExit = true
+            request = WatchdogRecoveryRequest(
+                restartTrackingIfKilled = false,
+                wasTrackingBeforeExit = true
+            )
         )
 
         assertEquals(RuntimeActionType.NOOP, result.commandResult?.action)
@@ -122,8 +160,10 @@ class RuntimeRecoveryInvariantsTest {
         )
         val result = handler.handleWatchdogTick(
             current = TrackingSessionState(runtime = repo.readState()),
-            restartTrackingIfKilled = false,
-            wasTrackingBeforeExit = true
+            request = WatchdogRecoveryRequest(
+                restartTrackingIfKilled = false,
+                wasTrackingBeforeExit = true
+            )
         )
 
         assertEquals(RuntimeActionType.NOOP, result.commandResult?.action)

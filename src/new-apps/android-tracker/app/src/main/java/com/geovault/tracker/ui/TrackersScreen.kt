@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Card
+import androidx.compose.material.Checkbox
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
@@ -97,8 +98,10 @@ fun TrackersScreen(
         dialog = state.dialog,
         onDismiss = vm::dismissDialog,
         onCreateTrackerDraft = vm::updateCreateTrackerDraft,
+        onCreateTrackerSetAsSelected = vm::updateCreateTrackerSetAsSelected,
         onCreateGroupDraft = vm::updateCreateGroupDraft,
         onEditTrackerDraft = vm::updateEditTrackerDraft,
+        onEditTrackerSetAsSelected = vm::updateEditTrackerSetAsSelected,
         onEditGroupDraft = vm::updateEditGroupDraft,
         onSubmitCreateTracker = vm::submitCreateTracker,
         onSubmitCreateGroup = vm::submitCreateGroup,
@@ -377,8 +380,10 @@ private fun TrackersGroupsDialogs(
     dialog: TrackersGroupsDialog,
     onDismiss: () -> Unit,
     onCreateTrackerDraft: (String, String) -> Unit,
+    onCreateTrackerSetAsSelected: (Boolean) -> Unit,
     onCreateGroupDraft: (String) -> Unit,
     onEditTrackerDraft: (String) -> Unit,
+    onEditTrackerSetAsSelected: (Boolean) -> Unit,
     onEditGroupDraft: (String) -> Unit,
     onSubmitCreateTracker: () -> Unit,
     onSubmitCreateGroup: () -> Unit,
@@ -408,6 +413,17 @@ private fun TrackersGroupsDialogs(
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = dialog.setAsSelectedTracker,
+                                onCheckedChange = onCreateTrackerSetAsSelected
+                            )
+                            Text(text = stringResource(R.string.trackers_field_set_as_selected_tracker))
+                        }
                     }
                 },
                 confirmButton = {
@@ -459,6 +475,17 @@ private fun TrackersGroupsDialogs(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = dialog.setAsSelectedTracker,
+                            onCheckedChange = onEditTrackerSetAsSelected
+                        )
+                        Text(text = stringResource(R.string.trackers_field_set_as_selected_tracker))
+                    }
                 },
                 confirmButton = {
                     TextButton(onClick = onSubmitEditTracker) {

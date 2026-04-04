@@ -11,6 +11,8 @@ class BootReceiverTest {
         assertFalse(
             BootReceiver.shouldStartTrackingOnBoot(
                 startOnBoot = false,
+                wasTrackingBeforeExit = false,
+                userUnlocked = true,
                 hasRequiredPermissions = true,
                 gpsProviderEnabled = true,
                 selectedTrackerId = "00000000-0000-0000-0000-000000000001"
@@ -19,6 +21,8 @@ class BootReceiverTest {
         assertFalse(
             BootReceiver.shouldStartTrackingOnBoot(
                 startOnBoot = true,
+                wasTrackingBeforeExit = false,
+                userUnlocked = true,
                 hasRequiredPermissions = false,
                 gpsProviderEnabled = true,
                 selectedTrackerId = "00000000-0000-0000-0000-000000000001"
@@ -27,6 +31,8 @@ class BootReceiverTest {
         assertFalse(
             BootReceiver.shouldStartTrackingOnBoot(
                 startOnBoot = true,
+                wasTrackingBeforeExit = false,
+                userUnlocked = true,
                 hasRequiredPermissions = true,
                 gpsProviderEnabled = false,
                 selectedTrackerId = "00000000-0000-0000-0000-000000000001"
@@ -35,6 +41,8 @@ class BootReceiverTest {
         assertFalse(
             BootReceiver.shouldStartTrackingOnBoot(
                 startOnBoot = true,
+                wasTrackingBeforeExit = false,
+                userUnlocked = true,
                 hasRequiredPermissions = true,
                 gpsProviderEnabled = true,
                 selectedTrackerId = ""
@@ -43,6 +51,36 @@ class BootReceiverTest {
         assertTrue(
             BootReceiver.shouldStartTrackingOnBoot(
                 startOnBoot = true,
+                wasTrackingBeforeExit = false,
+                userUnlocked = true,
+                hasRequiredPermissions = true,
+                gpsProviderEnabled = true,
+                selectedTrackerId = "00000000-0000-0000-0000-000000000001"
+            )
+        )
+    }
+
+    @Test
+    fun shouldStartTrackingOnBoot_allowsRecoveryFromPreviousActiveSession() {
+        assertTrue(
+            BootReceiver.shouldStartTrackingOnBoot(
+                startOnBoot = false,
+                wasTrackingBeforeExit = true,
+                userUnlocked = true,
+                hasRequiredPermissions = true,
+                gpsProviderEnabled = true,
+                selectedTrackerId = "00000000-0000-0000-0000-000000000001"
+            )
+        )
+    }
+
+    @Test
+    fun shouldStartTrackingOnBoot_requiresUserUnlocked() {
+        assertFalse(
+            BootReceiver.shouldStartTrackingOnBoot(
+                startOnBoot = true,
+                wasTrackingBeforeExit = true,
+                userUnlocked = false,
                 hasRequiredPermissions = true,
                 gpsProviderEnabled = true,
                 selectedTrackerId = "00000000-0000-0000-0000-000000000001"

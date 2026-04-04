@@ -104,10 +104,15 @@ class MapLibreManager(
                             val rasterLayer = RasterLayer(RASTER_LAYER_ID, RASTER_SOURCE_ID)
                             try {
                                 style.addLayerBelow(rasterLayer, ANNOTATIONS_LAYER_ID)
-                            } catch (_: Exception) {
+                            } catch (layerError: Exception) {
+                                Log.w(TAG, "Raster layer insertion fallback to top-layer add", layerError)
                                 style.addLayer(rasterLayer)
                             }
-                        } catch (_: Exception) {
+                        } catch (rasterError: Exception) {
+                            Log.e(TAG, "Failed applying raster source for selected map source", rasterError)
+                            onStyleLoadFailed?.invoke(
+                                rasterError.message ?: "raster_source_apply_failed"
+                            )
                         }
                         lastAppliedSourceKey = requestedSourceKey
                         pendingSourceKey = null
@@ -206,10 +211,12 @@ class MapLibreManager(
                     try {
                         try {
                             styleInMap.addLayerBelow(rasterLayer, "track-outline-layer")
-                        } catch (_: Exception) {
+                        } catch (outlineError: Exception) {
+                            Log.w(TAG, "Raster layer insert below track outline failed, retrying annotations layer", outlineError)
                             styleInMap.addLayerBelow(rasterLayer, ANNOTATIONS_LAYER_ID)
                         }
-                    } catch (_: Exception) {
+                    } catch (annotationsError: Exception) {
+                        Log.w(TAG, "Raster layer insert below annotations failed, retrying symbol fallback", annotationsError)
                         try {
                             val firstSymbolLayer = styleInMap.layers.firstOrNull { it is SymbolLayer }
                             if (firstSymbolLayer != null) {

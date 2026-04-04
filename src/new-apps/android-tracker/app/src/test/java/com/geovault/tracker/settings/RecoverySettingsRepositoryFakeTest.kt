@@ -3,14 +3,13 @@ package com.geovault.tracker.settings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
  * Documents how [TrackerSettingsRepository.getState] feeds recovery: [TrackingRecoveryReceiver]
- * reads [TrackerSettingsState.wasTrackingBeforeExit] but passes restartTrackingIfKilled=false, so
- * desired-running is never derived from was-tracking alone.
+ * reads [TrackerSettingsState.wasTrackingBeforeExit] and enables restart-on-kill behavior through
+ * runtime watchdog handling.
  */
 class RecoverySettingsRepositoryFakeTest {
 
@@ -31,8 +30,8 @@ class RecoverySettingsRepositoryFakeTest {
     @Test
     fun recoveryTickDesiredRunning_matchesRuntimeHandlerContract() {
         val wasFromSettings = true
-        val restartTrackingIfKilled = false
-        assertFalse(restartTrackingIfKilled && wasFromSettings)
+        val restartTrackingIfKilled = true
+        assertTrue(restartTrackingIfKilled && wasFromSettings)
     }
 }
 

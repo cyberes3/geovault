@@ -28,6 +28,7 @@ fun MainScreen(
     onClearInfoMessage: () -> Unit = {},
     onRequestStartTracking: () -> Unit = {},
     onRequestStopTracking: () -> Unit = {},
+    onRequestManualPoint: () -> Unit = {},
 ) {
     val mapViewModel: TrackerMapViewModel = viewModel()
     var selectedTab by rememberSaveable { mutableStateOf(TrackerTab.HOME.name) }
@@ -90,6 +91,7 @@ fun MainScreen(
                     onClearInfoMessage = onClearInfoMessage,
                     onRequestStartTracking = onRequestStartTracking,
                     onRequestStopTracking = onRequestStopTracking,
+                    onRequestManualPoint = onRequestManualPoint,
                 )
             }
 

@@ -38,6 +38,14 @@ data class RuntimeCommand(
     val reason: String
 )
 
+data class WatchdogRecoveryRequest(
+    val restartTrackingIfKilled: Boolean,
+    val wasTrackingBeforeExit: Boolean
+) {
+    val shouldAttemptRecovery: Boolean
+        get() = restartTrackingIfKilled && wasTrackingBeforeExit
+}
+
 enum class RuntimeFailureClass {
     NONE,
     TRANSIENT,

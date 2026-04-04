@@ -82,6 +82,7 @@ data class LocationIngestResult(
     val trackPointQuality: TrackPointQuality? = null,
     val pointPersisted: Boolean = false,
     val persistedRowId: Long? = null,
+    val nextSessionDistanceMeters: Float,
     val lastFilteredLocation: Location?,
     val queuedPointsVisible: Int,
     val lastAccuracyMeters: Float?,
@@ -134,7 +135,8 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
                     previousAcceptedLocation = previousAcceptedLocation,
                     accuracy = accuracy,
                     propsJson = propsJson,
-                    rejectReason = decision.rejectReason
+                    rejectReason = decision.rejectReason,
+                    currentSessionDistanceMeters = totalDistanceMeters
                 )
             }
             val canonical = decision.canonicalEvent
@@ -147,6 +149,11 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             }
             if (decision.adjustmentReason == TrackPointPolicyEngine.ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED) {
                 val visible = locationDao.getCurrentSessionCountById(sessionVisibleBoundaryId)
+                val nextSessionDistanceMeters = computeNextSessionDistanceMeters(
+                    currentSessionDistanceMeters = totalDistanceMeters,
+                    previousAcceptedLocation = previousAcceptedLocation,
+                    acceptedLocation = location
+                )
                 return LocationIngestResult(
                     accepted = true,
                     rejectReason = null,
@@ -154,6 +161,7 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
                     trackPointQuality = canonical.quality,
                     pointPersisted = false,
                     persistedRowId = null,
+                    nextSessionDistanceMeters = nextSessionDistanceMeters,
                     lastFilteredLocation = Location(location),
                     queuedPointsVisible = visible,
                     lastAccuracyMeters = accuracy,
@@ -165,7 +173,12 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             }
         }
 
-        val queued = QueuedLocation.fromLocation(location, totalDistanceMeters = totalDistanceMeters)
+        val nextSessionDistanceMeters = computeNextSessionDistanceMeters(
+            currentSessionDistanceMeters = totalDistanceMeters,
+            previousAcceptedLocation = previousAcceptedLocation,
+            acceptedLocation = location
+        )
+        val queued = QueuedLocation.fromLocation(location, totalDistanceMeters = nextSessionDistanceMeters)
         val insertedId = locationDao.insert(queued)
         if (bypassFilters) {
             val canonical = trackPointEventForPolicy(
@@ -184,6 +197,7 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             trackPointQuality = resolvedQuality,
             pointPersisted = true,
             persistedRowId = insertedId,
+            nextSessionDistanceMeters = nextSessionDistanceMeters,
             lastFilteredLocation = Location(location),
             queuedPointsVisible = visible,
             lastAccuracyMeters = accuracy,
@@ -391,13 +405,15 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         previousAcceptedLocation: Location?,
         accuracy: Float?,
         propsJson: String?,
-        rejectReason: TrackPointRejectReason?
+        rejectReason: TrackPointRejectReason?,
+        currentSessionDistanceMeters: Float
     ): LocationIngestResult {
         return LocationIngestResult(
             accepted = false,
             rejectReason = rejectReason,
             adjustmentReason = null,
             pointPersisted = false,
+            nextSessionDistanceMeters = currentSessionDistanceMeters,
             lastFilteredLocation = previousAcceptedLocation,
             queuedPointsVisible = 0,
             lastAccuracyMeters = accuracy,
@@ -406,6 +422,19 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             lastTrackedTimestampMs = 0L,
             lastTrackedPropsJson = propsJson
         )
+    }
+
+    private fun computeNextSessionDistanceMeters(
+        currentSessionDistanceMeters: Float,
+        previousAcceptedLocation: Location?,
+        acceptedLocation: Location
+    ): Float {
+        val distanceDeltaMeters = if (previousAcceptedLocation != null) {
+            previousAcceptedLocation.distanceTo(acceptedLocation).coerceAtLeast(0f)
+        } else {
+            0f
+        }
+        return currentSessionDistanceMeters + distanceDeltaMeters
     }
 }
 

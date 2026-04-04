@@ -1,6 +1,8 @@
 package com.geovault.tracker
 
 import android.app.ForegroundServiceStartNotAllowedException
+import android.app.KeyguardManager
+import android.app.NotificationManager
 import android.app.Service
 import android.Manifest
 import android.os.VibrationEffect
@@ -17,6 +19,7 @@ import android.location.LocationManager
 import android.os.Bundle
 import android.os.IBinder
 import android.os.SystemClock
+import android.os.UserManager
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
@@ -354,6 +357,7 @@ class TrackingService : Service() {
             trigger = SensorManagerSignificantMotionTrigger(applicationContext),
             onResume = { resumeGps() }
         )
+        SelectedTrackerManager.syncRuntimeSelectedTracker(this)
         TrackingRecoveryCoordinator.markHeartbeat(applicationContext)
         syncRuntimeStateStore()
     }
@@ -365,8 +369,18 @@ class TrackingService : Service() {
             TAG,
             "onStartCommand action=${intent?.action} path=$commandPath startId=$startId trigger=$startupTrigger isTracking=$isTracking"
         )
+        logNotificationSurfaceDiagnostics(
+            trigger = startupTrigger,
+            action = intent?.action,
+            path = commandPath,
+            stage = "on_start_command"
+        )
         if (requiresForegroundPromotion(commandPath) &&
-            !promoteToForegroundForStartup(trigger = startupTrigger)
+            !promoteToForegroundForStartup(
+                trigger = startupTrigger,
+                action = intent?.action,
+                path = commandPath
+            )
         ) {
             stopSelfSafelyAfterStartup(reason = "fgs_promotion_failed")
             return START_NOT_STICKY
@@ -382,7 +396,7 @@ class TrackingService : Service() {
                 START_NOT_STICKY
             }
             StartupCommandPath.ReshowForeground -> {
-                if (isTrackingActiveOrStarting()) {
+                if (isTracking) {
                     serviceScope.launch(Dispatchers.IO) {
                         val count = database.locationDao().getCurrentSessionCountById(sessionVisibleBoundaryId)
                         updateRuntimeSnapshot { it.copy(queuedPointsVisible = count) }
@@ -392,6 +406,12 @@ class TrackingService : Service() {
                                 NOTIFICATION_ID,
                                 notificationPresenter.buildTrackingNotification(runtimeSnapshot),
                                 ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                            )
+                            logNotificationSurfaceDiagnostics(
+                                trigger = startupTrigger,
+                                action = intent?.action,
+                                path = commandPath,
+                                stage = "reshow_foreground"
                             )
                         }
                     }
@@ -552,6 +572,11 @@ class TrackingService : Service() {
 
         settingsRepository.setWasTrackingBeforeExit(true)
         TrackingRecoveryCoordinator.markTrackingStarted(applicationContext)
+        runtimeEventPublisher.publish(
+            type = RuntimeServiceEventType.TRACKING_STARTED,
+            reason = "start_tracking",
+            trigger = mapRuntimeTrigger(trigger)
+        )
         startRecoveryHeartbeat()
         ensureGpsProviderReceiverRegistered()
         startRetryJob(runGeneration)
@@ -649,14 +674,16 @@ class TrackingService : Service() {
         location: Location,
         bypassFilters: Boolean = false,
         propsJson: String? = null,
-        allowWhenGpsPaused: Boolean = false
+        allowWhenGpsPaused: Boolean = false,
+        skipAdaptiveTrackingEffects: Boolean = false
     ) {
         locationUpdateMutex.withLock {
             processLocationUpdate(
                 location = location,
                 bypassFilters = bypassFilters,
                 propsJson = propsJson,
-                allowWhenGpsPaused = allowWhenGpsPaused
+                allowWhenGpsPaused = allowWhenGpsPaused,
+                skipAdaptiveTrackingEffects = skipAdaptiveTrackingEffects
             )
         }
     }
@@ -665,7 +692,8 @@ class TrackingService : Service() {
         location: Location,
         bypassFilters: Boolean = false,
         propsJson: String? = null,
-        allowWhenGpsPaused: Boolean = false
+        allowWhenGpsPaused: Boolean = false,
+        skipAdaptiveTrackingEffects: Boolean = false
     ) {
         val runGeneration = trackingGeneration
         if (
@@ -719,15 +747,7 @@ class TrackingService : Service() {
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
             isMockLocation = LocationCompat.isMock(location)
         )
-        val distanceDeltaMeters = if (result.accepted && previousAcceptedLocation != null && result.lastFilteredLocation != null) {
-            previousAcceptedLocation.distanceTo(result.lastFilteredLocation).coerceAtLeast(0f)
-        } else {
-            0f
-        }
-        val nextSessionDistance = runtimeSnapshot.sessionTotalDistanceMeters + distanceDeltaMeters
-        if (result.accepted && result.pointPersisted && result.persistedRowId != null) {
-            database.locationDao().updateDistanceById(result.persistedRowId, nextSessionDistance)
-        }
+        val nextSessionDistance = result.nextSessionDistanceMeters
         updateRuntimeSnapshot {
             it.copy(
                 lastAccuracyMeters = result.lastAccuracyMeters,
@@ -808,33 +828,35 @@ class TrackingService : Service() {
             lowAccuracyFallbackCoordinator.onAcceptedFix()
             cancelLowAccuracyFallbackTimer(clearCandidate = true)
         }
-        val (_, distanceFilter, _) = resolveCurrentProfileParams()
-        val stationaryResult = TrackingLocationPolicy.stationaryUpdate(
-            lastLocation = previousAcceptedLocation,
-            location = result.lastFilteredLocation ?: location,
-            distanceFilter = distanceFilter,
-            currentConsecutive = consecutiveStationaryPoints,
-            significantMotionOnly = settings.significantDataOnly
-        )
-        consecutiveStationaryPoints = stationaryResult.first
-        if (stationaryResult.second) {
-            pauseGps()
-        }
-        if (settings.autoTrackingMode) {
-            processAutoTrackingOutput(
-                output = autoTrackingMotionEngine.onAcceptedFix(
-                    speedMps = observedSpeedMps ?: 0f,
-                    eventTimeMs = nowMs
-                ),
-                reason = "accepted_fix"
+        if (!skipAdaptiveTrackingEffects) {
+            val (_, distanceFilter, _) = resolveCurrentProfileParams()
+            val stationaryResult = TrackingLocationPolicy.stationaryUpdate(
+                lastLocation = previousAcceptedLocation,
+                location = result.lastFilteredLocation ?: location,
+                distanceFilter = distanceFilter,
+                currentConsecutive = consecutiveStationaryPoints,
+                significantMotionOnly = settings.significantDataOnly
+            )
+            consecutiveStationaryPoints = stationaryResult.first
+            if (stationaryResult.second) {
+                pauseGps()
+            }
+            if (settings.autoTrackingMode) {
+                processAutoTrackingOutput(
+                    output = autoTrackingMotionEngine.onAcceptedFix(
+                        speedMps = observedSpeedMps ?: 0f,
+                        eventTimeMs = nowMs
+                    ),
+                    reason = "accepted_fix"
+                )
+            }
+            maybeApplyElasticDistanceFilter(
+                observedSpeedMps = observedSpeedMps,
+                measuredAccuracyMeters = (result.lastFilteredLocation ?: location)
+                    .takeIf { it.hasAccuracy() }
+                    ?.accuracy
             )
         }
-        maybeApplyElasticDistanceFilter(
-            observedSpeedMps = observedSpeedMps,
-            measuredAccuracyMeters = (result.lastFilteredLocation ?: location)
-                .takeIf { it.hasAccuracy() }
-                ?.accuracy
-        )
         publishTrackPoint(
             trackId = selectedTrackerId,
             location = acceptedLocation,
@@ -884,7 +906,8 @@ class TrackingService : Service() {
             processLocationUpdateSerialized(
                 location = manualLocation,
                 bypassFilters = true,
-                allowWhenGpsPaused = true
+                allowWhenGpsPaused = true,
+                skipAdaptiveTrackingEffects = true
             )
             withContext(Dispatchers.Main) {
                 Toast.makeText(
@@ -937,7 +960,11 @@ class TrackingService : Service() {
         stopTracking(reason = "fatal_failure", failureReason = message)
     }
 
-    private fun promoteToForegroundForStartup(trigger: String): Boolean {
+    private fun promoteToForegroundForStartup(
+        trigger: String,
+        action: String?,
+        path: StartupCommandPath
+    ): Boolean {
         if (startupForegroundPromoted) return true
         return try {
             startForeground(
@@ -947,6 +974,12 @@ class TrackingService : Service() {
             )
             startupForegroundPromoted = true
             Log.i(TAG, "Foreground promotion succeeded trigger=$trigger")
+            logNotificationSurfaceDiagnostics(
+                trigger = trigger,
+                action = action,
+                path = path,
+                stage = "foreground_promoted"
+            )
             true
         } catch (e: Exception) {
             if (e is ForegroundServiceStartNotAllowedException) {
@@ -957,6 +990,12 @@ class TrackingService : Service() {
             TrackingRecoveryCoordinator.markIntentionalStop(
                 applicationContext,
                 reason = "fgs_start_failed_$trigger"
+            )
+            logNotificationSurfaceDiagnostics(
+                trigger = trigger,
+                action = action,
+                path = path,
+                stage = "foreground_promotion_failed"
             )
             false
         }
@@ -1096,6 +1135,10 @@ class TrackingService : Service() {
         recoveryHeartbeatJob = serviceScope.launch {
             while (isTracking) {
                 TrackingRecoveryCoordinator.markHeartbeat(applicationContext)
+                runtimeEventPublisher.publish(
+                    type = RuntimeServiceEventType.HEARTBEAT,
+                    reason = "recovery_heartbeat"
+                )
                 delay(1_000L)
             }
         }
@@ -1245,8 +1288,8 @@ class TrackingService : Service() {
             updateNotificationFromDb(broadcastStats = true)
             return
         }
-        if (!runCatching { startLocationUpdates() }.isSuccess) {
-            failActiveTrackingAndStop(getString(R.string.unable_to_start_location_updates))
+        if (!applyCurrentLocationRequest("gps_provider_reenabled_$reason")) {
+            failActiveTrackingAndStop(resolveLocationRequestFailureMessage())
             return
         }
         Log.i(TAG, "GPS provider re-enabled, resumed updates reason=$reason")
@@ -1342,8 +1385,10 @@ class TrackingService : Service() {
         if (!isTracking) return SyncFailureClass.NONE
         trimQueuedLocationsRetention()
         if (!NetworkStatusMonitor.hasUsableNetwork(this)) {
-            if (updateFailureCounters && scope != QueueUploadScope.BACKLOG_ONLY) {
+            if (scope != QueueUploadScope.BACKLOG_ONLY) {
                 lastSyncFailureClass = SyncFailureClass.TRANSIENT
+            }
+            if (updateFailureCounters && scope != QueueUploadScope.BACKLOG_ONLY) {
                 consecutivePushFailures++
             }
             withContext(Dispatchers.Main) {
@@ -1361,9 +1406,9 @@ class TrackingService : Service() {
             }
             if (scope != QueueUploadScope.BACKLOG_ONLY) {
                 lastSyncFailureClass = SyncFailureClass.PERMANENT
-                if (updateFailureCounters) {
-                    consecutivePushFailures++
-                }
+            }
+            if (updateFailureCounters && scope != QueueUploadScope.BACKLOG_ONLY) {
+                consecutivePushFailures++
             }
             withContext(Dispatchers.Main) {
                 sendBroadcast(
@@ -2145,6 +2190,33 @@ class TrackingService : Service() {
             TrackingMotionMode.WALKING -> speedBucket.coerceIn(0, WALKING_ELASTICITY_MAX_SPEED_BUCKET)
             TrackingMotionMode.BIKING, TrackingMotionMode.DRIVING -> speedBucket.coerceIn(0, ELASTICITY_MAX_SPEED_BUCKET)
         }
+    }
+
+    private fun logNotificationSurfaceDiagnostics(
+        trigger: String,
+        action: String?,
+        path: StartupCommandPath,
+        stage: String
+    ) {
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        val userManager = getSystemService(Context.USER_SERVICE) as? UserManager
+        val channel = notificationManager?.getNotificationChannel(CHANNEL_ID)
+        val activeNotificationIds = runCatching {
+            notificationManager?.activeNotifications?.map { it.id } ?: emptyList()
+        }.getOrElse { emptyList() }
+        val appImportance = runCatching { notificationManager?.importance }.getOrNull()
+        Log.i(
+            TAG,
+            "Notification diagnostics stage=$stage trigger=$trigger action=$action path=$path " +
+                "notificationsEnabled=${notificationManager?.areNotificationsEnabled()} appImportance=$appImportance " +
+                "channelExists=${channel != null} channelImportance=${channel?.importance} " +
+                "channelLockscreenVisibility=${channel?.lockscreenVisibility} " +
+                "channelBypassDnd=${channel?.canBypassDnd()} channelShowBadge=${channel?.canShowBadge()} " +
+                "activeNotificationIds=$activeNotificationIds " +
+                "keyguardLocked=${keyguardManager?.isKeyguardLocked} " +
+                "deviceLocked=${keyguardManager?.isDeviceLocked} userUnlocked=${userManager?.isUserUnlocked}"
+        )
     }
 
     private fun mapRuntimeTrigger(trigger: String): RuntimeTrigger {

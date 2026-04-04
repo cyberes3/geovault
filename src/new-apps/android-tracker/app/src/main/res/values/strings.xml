@@ -45,6 +45,7 @@
     <string name="home_status_gps_off">Off — enable to start</string>
     <string name="home_tracker_none">None selected</string>
     <string name="home_start_tracking">Start tracking</string>
+    <string name="home_send_manual_point">Send manual point</string>
     <string name="home_open_app_settings">Open app settings</string>
     <string name="home_dismiss_message">Dismiss</string>
     <string name="map_screen_title">Map</string>
@@ -86,6 +87,7 @@
     <string name="trackers_dialog_edit_group_title">Rename group</string>
     <string name="trackers_field_name">Name</string>
     <string name="trackers_field_color_optional">Color (optional)</string>
+    <string name="trackers_field_set_as_selected_tracker">Use as selected tracker for tracking</string>
     <string name="trackers_dialog_confirm_create">Create</string>
     <string name="trackers_dialog_save">Save</string>
     <string name="trackers_dialog_cancel">Cancel</string>
@@ -140,6 +142,7 @@
     <string name="settings_tracker_start_on_launch">Start tracking when app opens</string>
     <string name="settings_tracker_send_extended">Send extended sensor data</string>
     <string name="settings_tracker_significant_motion_only">Significant motion only</string>
+    <string name="settings_tracker_auto_tracking_mode">Automatic tracking mode</string>
     <string name="settings_tracker_keep_screen_on_map">Keep screen on while viewing map</string>
     <string name="manual_send_point_sent">Manual point sent</string>
     <string name="manual_send_point_requires_active_tracking">Start tracking to send a manual point</string>

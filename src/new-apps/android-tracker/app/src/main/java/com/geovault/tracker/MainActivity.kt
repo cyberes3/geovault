@@ -79,6 +79,7 @@ class MainActivity : ComponentActivity() {
                     onClearInfoMessage = viewModel::clearInfoMessage,
                     onRequestStartTracking = viewModel::requestStartTracking,
                     onRequestStopTracking = viewModel::requestStopTracking,
+                    onRequestManualPoint = viewModel::requestManualPoint,
                 )
             }
         }
@@ -153,14 +154,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun syncRuntimeSelectedTracker() {
-        val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
-        val selectedTrackerName = SelectedTrackerPrefs.selectedTrackerName(this)
-        TrackingRuntimeStateStore.update {
-            it.copy(
-                selectedTrackerId = selectedTrackerId,
-                selectedTrackerName = selectedTrackerName
-            )
-        }
+        SelectedTrackerManager.syncRuntimeSelectedTracker(this)
     }
 
     private fun isTrackingServiceActiveOrStarting(): Boolean {

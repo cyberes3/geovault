@@ -11,7 +11,7 @@ import org.junit.Test
 class TrackerMapStateTransformsTest {
 
     @Test
-    fun groupPlaceholderMode_emptyGeoJsonState() {
+    fun groupPlaceholderMode_rendersRemoteMarkersAndGroupLines() {
         val trail = listOf(
             QueuedLocation(
                 time = 1L,
@@ -27,9 +27,26 @@ class TrackerMapStateTransformsTest {
             TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             trail,
             TrackingRuntimeSnapshot(lastTrackedLatitude = 3.0, lastTrackedLongitude = 4.0),
+            remoteLastPoints = mapOf(
+                "g1" to com.geovault.tracker.policy.TrackPointEvent(
+                    source = com.geovault.tracker.policy.TrackPointSource.REMOTE_STREAM,
+                    trackId = "g1",
+                    lon = 2.2,
+                    lat = 1.1,
+                    timestampMs = 1L
+                )
+            ),
+            activeStreamedTrackerIds = setOf("g1"),
+            allQueueTrailsByTracker = mapOf(
+                "g1" to listOf(
+                    QueuedLocation(time = 1L, latitude = 1.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = null),
+                    QueuedLocation(time = 2L, latitude = 1.001, longitude = 2.001, altitude = null, speed = null, bearing = null, accuracy = null)
+                )
+            ),
         )
-        assertTrue(st.points.isEmpty())
-        assertTrue(st.lines.isEmpty())
+        assertEquals(1, st.lines.size)
+        assertEquals(1, st.points.size)
+        assertEquals("remote-g1", st.points.first().id)
     }
 
     @Test
@@ -46,8 +63,8 @@ class TrackerMapStateTransformsTest {
             ),
             QueuedLocation(
                 time = 2L,
-                latitude = 10.1,
-                longitude = 20.1,
+                latitude = 10.001,
+                longitude = 20.001,
                 altitude = null,
                 speed = null,
                 bearing = 33.5f,
@@ -60,7 +77,7 @@ class TrackerMapStateTransformsTest {
             TrackingRuntimeSnapshot(selectedTrackerName = "T1"),
         )
         assertEquals(1, st.lines.size)
-        assertEquals("tracker-trail", st.lines.first().id)
+        assertTrue(st.lines.first().id.startsWith("tracker-trail-"))
         assertEquals(1, st.points.size)
         assertEquals("last-fix", st.points.first().id)
         assertEquals(33.5f, st.points.first().iconRotationDegrees)
@@ -133,5 +150,28 @@ class TrackerMapStateTransformsTest {
     @Test
     fun trailBounds_empty_null() {
         assertNull(TrackerMapStateTransforms.trailBounds(emptyList()))
+    }
+
+    @Test
+    fun allQueueMode_rendersPerTrackerLinesWithTrackerColors() {
+        val render = TrackerMapStateTransforms.buildRenderState(
+            mode = TrackerMapDisplayMode.ALL_QUEUE,
+            trail = emptyList(),
+            runtime = TrackingRuntimeSnapshot(),
+            allQueueTrailsByTracker = mapOf(
+                "t1" to listOf(
+                    QueuedLocation(time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
+                    QueuedLocation(time = 2L, latitude = 1.001, longitude = 1.001, altitude = null, speed = null, bearing = null, accuracy = null)
+                ),
+                "t2" to listOf(
+                    QueuedLocation(time = 1L, latitude = 2.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = null),
+                    QueuedLocation(time = 2L, latitude = 2.001, longitude = 2.001, altitude = null, speed = null, bearing = null, accuracy = null)
+                )
+            ),
+            trackerColorById = mapOf("t1" to "FF0000", "t2" to "#00FF00")
+        )
+        assertEquals(2, render.lines.size)
+        assertTrue(render.lines.any { it.id.startsWith("all-track-t1-") && it.lineColorHex == "#FF0000" })
+        assertTrue(render.lines.any { it.id.startsWith("all-track-t2-") && it.lineColorHex == "#00FF00" })
     }
 }

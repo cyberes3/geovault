@@ -7,7 +7,6 @@ import com.geovault.common.AppResetFlow
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.maps.core.GeoVaultMainMapControllerStore
 import com.geovault.common.maps.core.MapLibreInitializer
-import com.geovault.tracker.di.TrackerAppServices
 
 class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListener {
 
@@ -41,8 +40,7 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
             key = HOOK_CLEAR_LOCAL,
             phase = AppResetFlow.Phase.AFTER_TOKEN_CLEAR,
         ) { hookContext ->
-            TrackerAppServices.from(this).trackerManagementRepository().clearSelectedTrackerCaches()
-            SelectedTrackerPrefs.clearSelectedTracker(hookContext)
+            SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(hookContext)
             GeoVaultMainMapControllerStore.forceReleaseKeyForReset(TRACKER_MAIN_MAP_KEY)
         }
 

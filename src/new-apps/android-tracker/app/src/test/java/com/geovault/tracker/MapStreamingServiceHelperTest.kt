@@ -82,4 +82,22 @@ class MapStreamingServiceHelperTest {
         assertEquals(0, starts)
         assertEquals(0, stops)
     }
+
+    @Test
+    fun updateStreamingForDisplayedTracker_groupPlaceholder_stopsStreaming() {
+        var starts = 0
+        var stops = 0
+
+        MapStreamingServiceHelper.updateStreamingForDisplayedTracker(
+            displayedTrackerId = "tracker-b",
+            displayedTrackerName = "Tracker B",
+            selectedTrackerId = "tracker-a",
+            mapMode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            startStreaming = { _, _ -> starts += 1 },
+            stopStreaming = { stops += 1 }
+        )
+
+        assertEquals(0, starts)
+        assertEquals(1, stops)
+    }
 }

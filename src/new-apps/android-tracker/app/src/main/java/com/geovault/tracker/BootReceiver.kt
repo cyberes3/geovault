@@ -19,8 +19,12 @@ import com.geovault.tracker.startup.BootStartupSnapshot
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val bootAction = intent.action
-        val app = context.applicationContext
-        val settingsRepository = TrackerAppServices.from(app as android.app.Application).trackerSettingsRepository()
+        val app = context.applicationContext as? android.app.Application
+        if (app == null) {
+            Log.e(TAG, "Boot handling ignored because application context was not Application")
+            return
+        }
+        val settingsRepository = TrackerAppServices.from(app).trackerSettingsRepository()
         val settingsState = settingsRepository.getState()
         if (!shouldProcessSettingsState(settingsState.loadState)) {
             Log.w(
@@ -48,6 +52,8 @@ class BootReceiver : BroadcastReceiver() {
             BootStartupSnapshot(
                 action = bootAction,
                 startOnBoot = startOnBoot,
+                wasTrackingBeforeExit = wasTrackingBeforeExit,
+                userUnlocked = userUnlocked,
                 hasRequiredPermissions = hasRequiredPermissions,
                 gpsProviderEnabled = gpsProviderEnabled,
                 selectedTrackerId = trackerId
@@ -85,6 +91,8 @@ class BootReceiver : BroadcastReceiver() {
 
         fun shouldStartTrackingOnBoot(
             startOnBoot: Boolean,
+            wasTrackingBeforeExit: Boolean,
+            userUnlocked: Boolean,
             hasRequiredPermissions: Boolean,
             gpsProviderEnabled: Boolean,
             selectedTrackerId: String
@@ -93,6 +101,8 @@ class BootReceiver : BroadcastReceiver() {
                 BootStartupSnapshot(
                     action = Intent.ACTION_BOOT_COMPLETED,
                     startOnBoot = startOnBoot,
+                    wasTrackingBeforeExit = wasTrackingBeforeExit,
+                    userUnlocked = userUnlocked,
                     hasRequiredPermissions = hasRequiredPermissions,
                     gpsProviderEnabled = gpsProviderEnabled,
                     selectedTrackerId = selectedTrackerId

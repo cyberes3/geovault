@@ -8,6 +8,7 @@ import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerAddToGroupCandidate
 import com.geovault.tracker.TrackerCheckRequest
+import com.geovault.tracker.TrackerCoordinatesResponse
 import com.geovault.tracker.TrackerCreateRequest
 import com.geovault.tracker.TrackerSettingsRequest
 import com.geovault.tracker.UsersResponse
@@ -21,6 +22,8 @@ interface TrackerManagementRepository {
     suspend fun loadAvailableToAdd(forceRefresh: Boolean = false): RepositoryResult<AvailableToAddResponse>
     suspend fun loadTracker(trackerId: String): RepositoryResult<Tracker>
     suspend fun loadTrackerGeometry(trackerId: String): RepositoryResult<Tracker>
+    suspend fun loadTrackerCoordinates(trackerId: String): RepositoryResult<TrackerCoordinatesResponse>
+    suspend fun loadTrackersGeometry(trackerIds: List<String>): RepositoryResult<List<Tracker>>
     suspend fun createTracker(request: TrackerCreateRequest): RepositoryResult<Tracker>
     suspend fun updateTrackerSettings(
         trackerId: String,

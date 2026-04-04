@@ -91,6 +91,73 @@ class TrackerMapPointAcceptancePolicyTest {
         assertFalse(rejected)
     }
 
+    @Test
+    fun trackingSingle_withBlankSelected_acceptsLocalForAnyTracker() {
+        val accepted = TrackerMapPointAcceptancePolicy.shouldAccept(
+            event = event(source = TrackPointSource.LOCAL_GPS, trackId = "any-id"),
+            input = input(
+                trackingRunning = true,
+                mode = TrackerMapDisplayMode.SINGLE_SESSION,
+                selectedTrackerId = "",
+                displayedTrackerId = "",
+                activeStreamedTrackerIds = emptySet()
+            )
+        )
+        assertTrue(accepted)
+    }
+
+    @Test
+    fun trackingSingle_rejectsLocalForDifferentSelectedTracker() {
+        val accepted = TrackerMapPointAcceptancePolicy.shouldAccept(
+            event = event(source = TrackPointSource.LOCAL_GPS, trackId = "other"),
+            input = input(
+                trackingRunning = true,
+                mode = TrackerMapDisplayMode.SINGLE_SESSION,
+                selectedTrackerId = "selected",
+                displayedTrackerId = "selected",
+                activeStreamedTrackerIds = emptySet()
+            )
+        )
+        assertFalse(accepted)
+    }
+
+    @Test
+    fun browsingGroupPlaceholder_acceptsOnlyRemoteFromActiveIds() {
+        val remoteAccepted = TrackerMapPointAcceptancePolicy.shouldAccept(
+            event = event(source = TrackPointSource.REMOTE_STREAM, trackId = "active"),
+            input = input(
+                trackingRunning = false,
+                mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+                selectedTrackerId = "selected",
+                displayedTrackerId = "selected",
+                activeStreamedTrackerIds = setOf("active")
+            )
+        )
+        val localRejected = TrackerMapPointAcceptancePolicy.shouldAccept(
+            event = event(source = TrackPointSource.LOCAL_GPS, trackId = "active"),
+            input = input(
+                trackingRunning = false,
+                mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+                selectedTrackerId = "selected",
+                displayedTrackerId = "selected",
+                activeStreamedTrackerIds = setOf("active")
+            )
+        )
+        val remoteRejected = TrackerMapPointAcceptancePolicy.shouldAccept(
+            event = event(source = TrackPointSource.REMOTE_STREAM, trackId = "inactive"),
+            input = input(
+                trackingRunning = false,
+                mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+                selectedTrackerId = "selected",
+                displayedTrackerId = "selected",
+                activeStreamedTrackerIds = setOf("active")
+            )
+        )
+        assertTrue(remoteAccepted)
+        assertFalse(localRejected)
+        assertFalse(remoteRejected)
+    }
+
     private fun input(
         trackingRunning: Boolean,
         mode: TrackerMapDisplayMode,
