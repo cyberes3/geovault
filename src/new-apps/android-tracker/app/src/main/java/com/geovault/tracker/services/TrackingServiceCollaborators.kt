@@ -109,7 +109,6 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         effectiveAccuracyFilterMeters: Float = settings.accuracyFilterMeters,
         previousAcceptedLocation: Location?,
         sessionVisibleBoundaryId: Long,
-        maxQueueSize: Int,
         bypassFilters: Boolean,
         propsJson: String?,
         totalDistanceMeters: Float,
@@ -177,7 +176,6 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             )
             updateAcceptedStateForLocalStream(trackId = trackId, canonical = canonical, historyWindowSize = 5)
         }
-        trimQueueIfNeeded(maxQueueSize)
         val visible = locationDao.getCurrentSessionCountById(sessionVisibleBoundaryId)
         return LocationIngestResult(
             accepted = true,
@@ -194,13 +192,6 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             lastTrackedTimestampMs = location.time,
             lastTrackedPropsJson = propsJson
         )
-    }
-
-    private fun trimQueueIfNeeded(maxQueueSize: Int) {
-        val count = locationDao.getCount()
-        if (count > maxQueueSize) {
-            locationDao.deleteOldestCount(count - maxQueueSize)
-        }
     }
 
     private fun evaluatePolicyDecision(

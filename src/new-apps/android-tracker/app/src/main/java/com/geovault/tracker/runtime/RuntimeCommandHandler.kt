@@ -122,14 +122,30 @@ class RuntimeCommandHandler(
         restartTrackingIfKilled: Boolean,
         wasTrackingBeforeExit: Boolean
     ): TrackingSessionUpdateResult {
-        val reconciledCurrent = reconcileRuntimeState(current, reason = "watchdog_tick")
         val desiredRunning = restartTrackingIfKilled && wasTrackingBeforeExit
+        val serviceRunning = repository.isServiceRunning()
         telemetry.decision(
             "watchdog_tick",
             "restartTrackingIfKilled=$restartTrackingIfKilled wasTrackingBeforeExit=$wasTrackingBeforeExit desiredRunning=$desiredRunning"
         )
         if (!desiredRunning) {
-            if (repository.isServiceRunning()) {
+            if (wasTrackingBeforeExit && !serviceRunning) {
+                effects.scheduleWatchdog()
+                telemetry.event(
+                    "watchdog",
+                    "defer_disable_waiting_for_restart restartTrackingIfKilled=$restartTrackingIfKilled wasTrackingBeforeExit=$wasTrackingBeforeExit"
+                )
+                return TrackingSessionUpdateResult(
+                    state = current,
+                    effects = listOf(RuntimeEffect(RuntimeEffectType.SCHEDULE_WATCHDOG, "watchdog_wait_for_restart")),
+                    commandResult = RuntimeCommandResult(
+                        action = RuntimeActionType.NOOP,
+                        reason = "watchdog_wait_for_restart"
+                    )
+                )
+            }
+            val reconciledCurrent = reconcileRuntimeState(current, reason = "watchdog_tick")
+            if (serviceRunning) {
                 effects.cancelWatchdog()
                 telemetry.event(
                     "watchdog",
@@ -168,6 +184,7 @@ class RuntimeCommandHandler(
             )
         }
 
+        val reconciledCurrent = reconcileRuntimeState(current, reason = "watchdog_tick")
         repository.updateState {
             it.copy(
                 shouldBeRunning = true,

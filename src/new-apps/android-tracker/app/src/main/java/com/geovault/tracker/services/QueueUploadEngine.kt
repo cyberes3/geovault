@@ -122,7 +122,7 @@ class QueueUploadEngine(
         }
         if (!lockAcquired) {
             Log.d(TAG, "Push already in progress for scope=$scope")
-            return@withContext SyncFailureClass.TRANSIENT
+            return@withContext SyncFailureClass.NONE
         }
 
         try {
@@ -137,6 +137,7 @@ class QueueUploadEngine(
             val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
             val ingressUrl = "${baseUrl}api/extensions/live-track/app-ingress/"
             var batchesSent = 0
+            var encounteredBatch = false
             var shouldContinuePush = true
             while (batchesSent < config.maxBatchesPerPush && shouldContinuePush) {
                 val batch = claimNextBatch(
@@ -145,6 +146,7 @@ class QueueUploadEngine(
                     limit = config.batchSize
                 )
                 if (batch.isEmpty()) break
+                encounteredBatch = true
                 locallyClaimedIds.addAll(batch.map { it.id })
                 val payload = if (config.useExtendedParams) {
                     BinaryPayloadBuilder.buildPayload(
@@ -183,7 +185,8 @@ class QueueUploadEngine(
                         } else {
                             releaseClaimedBatch(batch)
                             locallyClaimedIds.removeAll(batch.map { it.id }.toSet())
-                            if (response.code in 400..499) {
+                            val failureClass = classifyHttpFailure(response.code)
+                            if (failureClass == SyncFailureClass.PERMANENT) {
                                 return@withContext SyncFailureClass.PERMANENT
                             }
                             shouldContinuePush = false
@@ -196,7 +199,11 @@ class QueueUploadEngine(
                     shouldContinuePush = false
                 }
             }
-            return@withContext if (batchesSent > 0) SyncFailureClass.NONE else SyncFailureClass.TRANSIENT
+            return@withContext when {
+                batchesSent > 0 -> SyncFailureClass.NONE
+                encounteredBatch -> SyncFailureClass.TRANSIENT
+                else -> SyncFailureClass.NONE
+            }
         } finally {
             if (locallyClaimedIds.isNotEmpty()) {
                 inFlightClaims.releaseIds(locallyClaimedIds.toSet())
@@ -235,6 +242,14 @@ class QueueUploadEngine(
             gzip.write(data)
         }
         return output.toByteArray()
+    }
+
+    private fun classifyHttpFailure(statusCode: Int): SyncFailureClass {
+        return when {
+            statusCode == 408 || statusCode == 429 -> SyncFailureClass.TRANSIENT
+            statusCode in 400..499 -> SyncFailureClass.PERMANENT
+            else -> SyncFailureClass.TRANSIENT
+        }
     }
 
     companion object {

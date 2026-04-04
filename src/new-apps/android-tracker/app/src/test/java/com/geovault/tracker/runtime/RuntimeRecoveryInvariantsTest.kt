@@ -47,10 +47,10 @@ class RuntimeRecoveryInvariantsTest {
             wasTrackingBeforeExit = true
         )
         assertEquals(RuntimeActionType.NOOP, result.commandResult?.action)
-        assertEquals("watchdog_disabled", result.commandResult?.reason)
-        assertEquals(1, effects.cancelWatchdogCalls)
-        assertEquals(0, effects.scheduleWatchdogCalls)
-        assertFalse(result.state.runtime.shouldBeRunning)
+        assertEquals("watchdog_wait_for_restart", result.commandResult?.reason)
+        assertEquals(0, effects.cancelWatchdogCalls)
+        assertEquals(1, effects.scheduleWatchdogCalls)
+        assertTrue(result.state.runtime.shouldBeRunning)
     }
 
     @Test
@@ -101,6 +101,36 @@ class RuntimeRecoveryInvariantsTest {
         assertEquals(1, effects.cancelWatchdogCalls)
         assertTrue(result.state.runtime.shouldBeRunning)
         assertEquals(RuntimeLifecycleState.ACTIVE, result.state.runtime.lifecycleState)
+    }
+
+    @Test
+    fun watchdogTick_restartDisabled_waitsForRestartWhenWasTrackingAndServiceDown() {
+        val repo = FakeRuntimeStateAccessor(
+            runtime = RuntimeState(
+                lifecycleState = RuntimeLifecycleState.RECOVERING,
+                shouldBeRunning = true
+            ),
+            serviceRunning = false
+        )
+        val effects = RecordingRuntimeEffects()
+        val handler = RuntimeCommandHandler(
+            repository = repo,
+            stateMachine = RuntimeStateMachine(),
+            healthPolicy = RuntimeHealthPolicy(appContext),
+            effects = effects,
+            telemetry = RuntimeTelemetry(appContext)
+        )
+        val result = handler.handleWatchdogTick(
+            current = TrackingSessionState(runtime = repo.readState()),
+            restartTrackingIfKilled = false,
+            wasTrackingBeforeExit = true
+        )
+
+        assertEquals(RuntimeActionType.NOOP, result.commandResult?.action)
+        assertEquals("watchdog_wait_for_restart", result.commandResult?.reason)
+        assertEquals(1, effects.scheduleWatchdogCalls)
+        assertTrue(result.state.runtime.shouldBeRunning)
+        assertEquals(RuntimeLifecycleState.RECOVERING, result.state.runtime.lifecycleState)
     }
 
     @Test

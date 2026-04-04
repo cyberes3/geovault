@@ -24,15 +24,17 @@ class TrackingRuntimeFacade internal constructor(
     val state: StateFlow<TrackingSessionState> = _state.asStateFlow()
 
     init {
-        val reconciled = healthPolicy.reconcileState(
-            current = _state.value.runtime,
-            isServiceRunning = repository.isServiceRunning(),
-            reason = "facade_init"
-        )
-        if (reconciled != _state.value.runtime) {
-            telemetry.transition("reconcile:facade_init", _state.value.runtime, reconciled)
-            val persisted = repository.updateState { reconciled }
-            _state.value = _state.value.copy(runtime = persisted)
+        if (!_state.value.runtime.shouldBeRunning) {
+            val reconciled = healthPolicy.reconcileState(
+                current = _state.value.runtime,
+                isServiceRunning = repository.isServiceRunning(),
+                reason = "facade_init"
+            )
+            if (reconciled != _state.value.runtime) {
+                telemetry.transition("reconcile:facade_init", _state.value.runtime, reconciled)
+                val persisted = repository.updateState { reconciled }
+                _state.value = _state.value.copy(runtime = persisted)
+            }
         }
     }
 

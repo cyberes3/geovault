@@ -356,10 +356,6 @@ class TrackingService : Service() {
             onResume = { resumeGps() }
         )
         TrackingRecoveryCoordinator.markHeartbeat(applicationContext)
-        runtimeEventPublisher.publish(
-            type = RuntimeServiceEventType.HEARTBEAT,
-            reason = "service_created"
-        )
         syncRuntimeStateStore()
     }
 
@@ -436,10 +432,6 @@ class TrackingService : Service() {
         Log.d(TAG, "onDestroy isTracking=$isTracking")
         if (isTracking) {
             TrackingRecoveryCoordinator.markUnexpectedDestroy(applicationContext, wasTracking = true)
-            runtimeEventPublisher.publish(
-                type = RuntimeServiceEventType.UNEXPECTED_DESTROY,
-                reason = "on_destroy_while_tracking"
-            )
             transitionToStoppedState(failureReason = "unexpected_destroy")
         }
         cleanupServiceResources(reason = "on_destroy")
@@ -562,11 +554,6 @@ class TrackingService : Service() {
 
         settingsRepository.setWasTrackingBeforeExit(true)
         TrackingRecoveryCoordinator.markTrackingStarted(applicationContext)
-        runtimeEventPublisher.publish(
-            type = RuntimeServiceEventType.TRACKING_STARTED,
-            reason = "start_tracking",
-            trigger = mapRuntimeTrigger(trigger)
-        )
         startRecoveryHeartbeat()
         ensureGpsProviderReceiverRegistered()
         startRetryJob(runGeneration)
@@ -592,19 +579,11 @@ class TrackingService : Service() {
     }
 
     private fun stopTracking(reason: String, failureReason: String? = null) {
-        val wasRunning = isTracking
-        Log.d(TAG, "Stopping tracking reason=$reason wasRunning=$wasRunning")
+        Log.d(TAG, "Stopping tracking reason=$reason wasRunning=$isTracking")
         transitionControlState(TrackingControlEvent.StopRequested, failureReason = failureReason)
         transitionToStoppedState(failureReason = failureReason)
         settingsRepository.clearWasTrackingBeforeExit()
         TrackingRecoveryCoordinator.markIntentionalStop(applicationContext, reason = reason)
-        if (wasRunning) {
-            runtimeEventPublisher.publish(
-                type = RuntimeServiceEventType.TRACKING_STOPPED,
-                reason = reason,
-                trigger = RuntimeTrigger.EXPLICIT_STOP
-            )
-        }
         transitionControlState(TrackingControlEvent.StopCompleted)
         cleanupServiceResources(reason = reason)
         TrackPointBus.resumeLocalDelivery()
@@ -735,7 +714,6 @@ class TrackingService : Service() {
             effectiveAccuracyFilterMeters = resolveCurrentAccuracyFilter(),
             previousAcceptedLocation = previousAcceptedLocation,
             sessionVisibleBoundaryId = sessionVisibleBoundaryId,
-            maxQueueSize = MAX_QUEUE_SIZE,
             bypassFilters = bypassFilters,
             propsJson = pointPropsJson,
             totalDistanceMeters = runtimeSnapshot.sessionTotalDistanceMeters,
@@ -1108,10 +1086,6 @@ class TrackingService : Service() {
         recoveryHeartbeatJob = serviceScope.launch {
             while (isTracking) {
                 TrackingRecoveryCoordinator.markHeartbeat(applicationContext)
-                runtimeEventPublisher.publish(
-                    type = RuntimeServiceEventType.HEARTBEAT,
-                    reason = "service_heartbeat"
-                )
                 delay(1_000L)
             }
         }
@@ -1133,7 +1107,7 @@ class TrackingService : Service() {
                 val jitter = Random.nextLong(-RETRY_JITTER_MS, RETRY_JITTER_MS + 1)
                 delay((baseDelay + jitter).coerceAtLeast(5_000L))
                 if (!isTracking || runGeneration != trackingGeneration) break
-                val count = database.locationDao().getCount()
+                val count = database.locationDao().getCurrentSessionCountById(sessionBoundaryForBacklogId)
                 if (count > 0) {
                     pushQueuedLocations(scope = QueueUploadScope.LIVE_ONLY)
                 }
@@ -1371,6 +1345,7 @@ class TrackingService : Service() {
         }
         val serverUrl = GeovaultAuthManager.getServerUrl(this)
         val settings = settingsRepository.getSettings()
+        var uploadedBatchCount = 0
         val outcome = queueUploadEngine.push(
             scope = scope,
             trackerId = trackerId,
@@ -1386,6 +1361,7 @@ class TrackingService : Service() {
                 deviceIdentifier = getDeviceIdentifier()
             ),
             onBatchUploaded = { visibleSentCount ->
+                uploadedBatchCount++
                 val sentDelta = visibleSentCount.coerceAtLeast(0)
                 if (sentDelta > 0) {
                     updateRuntimeSnapshot {
@@ -1405,7 +1381,9 @@ class TrackingService : Service() {
                 consecutivePushFailures++
             }
         }
-        trimQueuedLocationsRetention()
+        if (outcome == SyncFailureClass.NONE && uploadedBatchCount > 0) {
+            trimQueuedLocationsRetention()
+        }
         withContext(Dispatchers.Main) {
             updateNotificationFromDb(broadcastStats = true)
         }
