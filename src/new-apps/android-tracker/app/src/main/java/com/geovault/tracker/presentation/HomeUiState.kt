@@ -1,6 +1,7 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.location.TrackingLifecycleState
+import com.geovault.tracker.TrackingService
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 
 data class HomePermissionSnapshot(
@@ -34,9 +35,16 @@ internal fun mergeHomeUiState(
     val displayName = runtime.selectedTrackerName.trim().ifBlank {
         runtime.selectedTrackerId.trim()
     }
+    val startupInProgress = TrackingService.isStartupInProgress
+    val effectiveRunning = runtime.isRunning || startupInProgress
+    val effectiveLifecycleState = if (!runtime.isRunning && startupInProgress) {
+        TrackingLifecycleState.STARTING
+    } else {
+        runtime.lifecycleState
+    }
     return HomeUiState(
-        isTracking = runtime.isRunning,
-        lifecycleState = runtime.lifecycleState,
+        isTracking = effectiveRunning,
+        lifecycleState = effectiveLifecycleState,
         selectedTrackerId = runtime.selectedTrackerId,
         selectedTrackerDisplayName = displayName,
         queuedPointsVisible = runtime.queuedPointsVisible,

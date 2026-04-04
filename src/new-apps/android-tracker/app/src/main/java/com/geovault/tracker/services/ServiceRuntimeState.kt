@@ -67,7 +67,7 @@ object TrackingUiStatusResolver {
                     lastAccuracyMeters = lastAccuracyMeters,
                     effectiveAccuracyThresholdMeters = effectiveAccuracyThresholdMeters
                 )
-            GpsRuntimeState.INACTIVE -> TrackingUiStatus.NOT_TRACKING
+            GpsRuntimeState.INACTIVE -> TrackingUiStatus.LOCKING
             GpsRuntimeState.WAITING_FOR_PROVIDER -> TrackingUiStatus.WAITING_FOR_GPS
             GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED -> TrackingUiStatus.WAITING_FOR_GPS
         }
@@ -86,6 +86,7 @@ data class TrackingRuntimeSnapshot(
     val uiStatus: TrackingUiStatus = TrackingUiStatus.NOT_TRACKING,
     val gpsPaused: Boolean = false,
     val effectiveAccuracyThresholdMeters: Float = 0f,
+    val sessionVisibleBoundaryId: Long = 0L,
     val sessionStartTimeMs: Long = 0L,
     val pointsSentThisSession: Int = 0,
     val lastPointSentAtMs: Long = 0L,

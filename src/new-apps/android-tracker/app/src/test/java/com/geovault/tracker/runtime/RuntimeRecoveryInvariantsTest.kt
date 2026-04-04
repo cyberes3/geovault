@@ -74,6 +74,36 @@ class RuntimeRecoveryInvariantsTest {
     }
 
     @Test
+    fun watchdogTick_restartDisabled_doesNotDisableRuntimeWhenServiceRunning() {
+        val repo = FakeRuntimeStateAccessor(
+            runtime = RuntimeState(
+                lifecycleState = RuntimeLifecycleState.ACTIVE,
+                shouldBeRunning = true
+            ),
+            serviceRunning = true
+        )
+        val effects = RecordingRuntimeEffects()
+        val handler = RuntimeCommandHandler(
+            repository = repo,
+            stateMachine = RuntimeStateMachine(),
+            healthPolicy = RuntimeHealthPolicy(appContext),
+            effects = effects,
+            telemetry = RuntimeTelemetry(appContext)
+        )
+        val result = handler.handleWatchdogTick(
+            current = TrackingSessionState(runtime = repo.readState()),
+            restartTrackingIfKilled = false,
+            wasTrackingBeforeExit = true
+        )
+
+        assertEquals(RuntimeActionType.NOOP, result.commandResult?.action)
+        assertEquals("watchdog_disabled_service_running", result.commandResult?.reason)
+        assertEquals(1, effects.cancelWatchdogCalls)
+        assertTrue(result.state.runtime.shouldBeRunning)
+        assertEquals(RuntimeLifecycleState.ACTIVE, result.state.runtime.lifecycleState)
+    }
+
+    @Test
     fun startCommand_startGateDenied_marksDegradedAndDoesNotScheduleWatchdog() {
         val repo = FakeRuntimeStateAccessor(
             runtime = RuntimeState(

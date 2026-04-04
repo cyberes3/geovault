@@ -2,12 +2,14 @@ package com.geovault.tracker
 
 import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Service
+import android.Manifest
 import android.os.VibrationEffect
 import android.os.VibratorManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.Location
 import android.location.LocationListener
@@ -42,6 +44,7 @@ import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointQuality
 import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.policy.TrackPointSource
+import com.geovault.tracker.policy.RemoteStreamIngressPolicy
 import com.geovault.tracker.runtime.RuntimeTelemetry
 import com.geovault.tracker.runtime.RuntimeServiceEventType
 import com.geovault.tracker.runtime.RuntimeTrigger
@@ -75,13 +78,13 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -95,6 +98,7 @@ class TrackingService : Service() {
 
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(serviceJob + Dispatchers.Main.immediate)
+    private val ingestScope = CoroutineScope(serviceJob + Dispatchers.Default)
 
     private lateinit var database: AppDatabase
     private lateinit var settingsRepository: TrackerSettingsRepository
@@ -174,7 +178,7 @@ class TrackingService : Service() {
             }
         }
         latestObservedRawLocation = Location(location)
-        runBlocking {
+        ingestScope.launch {
             processLocationUpdateSerialized(location)
         }
     }
@@ -214,6 +218,9 @@ class TrackingService : Service() {
 
         @Volatile
         var isRunning: Boolean = false
+
+        @Volatile
+        var isStartupInProgress: Boolean = false
 
         @Volatile
         var sessionStartTimeMs: Long = 0
@@ -380,7 +387,7 @@ class TrackingService : Service() {
                 START_NOT_STICKY
             }
             StartupCommandPath.ReshowForeground -> {
-                if (isTracking) {
+                if (isTrackingActiveOrStarting()) {
                     serviceScope.launch(Dispatchers.IO) {
                         val count = database.locationDao().getCurrentSessionCountById(sessionVisibleBoundaryId)
                         updateRuntimeSnapshot { it.copy(queuedPointsVisible = count) }
@@ -433,6 +440,7 @@ class TrackingService : Service() {
                 type = RuntimeServiceEventType.UNEXPECTED_DESTROY,
                 reason = "on_destroy_while_tracking"
             )
+            transitionToStoppedState(failureReason = "unexpected_destroy")
         }
         cleanupServiceResources(reason = "on_destroy")
         significantMotionBridge?.cancel()
@@ -451,14 +459,14 @@ class TrackingService : Service() {
                 Log.i(TAG, "Ignoring start request; startup already in progress")
                 return true
             }
-            startupInProgress = true
+            setStartupInProgress(true)
             startupReadyForEvents = false
         }
         transitionControlState(TrackingControlEvent.StartRequested)
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (!hasValidSelectedTrackerId(selectedTrackerId)) {
             Log.w(TAG, "Start blocked: invalid selected tracker id")
-            startupInProgress = false
+            setStartupInProgress(false)
             failStartup(
                 message = getString(R.string.no_tracker_selected_go_to_settings),
                 path = path,
@@ -469,7 +477,7 @@ class TrackingService : Service() {
         }
         if (!TrackingPermissionGate.hasRequiredPermissionsForTracking(this)) {
             Log.w(TAG, "Start blocked: required tracking permissions missing")
-            startupInProgress = false
+            setStartupInProgress(false)
             failStartup(
                 message = getString(R.string.location_permissions_required),
                 path = path,
@@ -480,7 +488,7 @@ class TrackingService : Service() {
         }
         if (!isGpsProviderEnabled()) {
             Log.w(TAG, "Start blocked: GPS provider disabled")
-            startupInProgress = false
+            setStartupInProgress(false)
             failStartup(
                 message = getString(R.string.gps_provider_required),
                 path = path,
@@ -489,12 +497,21 @@ class TrackingService : Service() {
             )
             return false
         }
-        try {
-            runBlocking {
+        serviceScope.launch {
+            try {
                 performStartTracking(trigger = trigger)
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                Log.e(TAG, "Start failed during startup pipeline", t)
+                failStartup(
+                    message = getString(R.string.unable_to_start_location_updates),
+                    path = path,
+                    trigger = trigger,
+                    reason = "startup_pipeline_exception"
+                )
+            } finally {
+                setStartupInProgress(false)
             }
-        } finally {
-            startupInProgress = false
         }
         return true
     }
@@ -506,11 +523,16 @@ class TrackingService : Service() {
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (selectedTrackerId.isNotEmpty()) {
             locationIngestCoordinator.resetSession(selectedTrackerId)
+            RemoteStreamIngressPolicy.resetTrack(selectedTrackerId)
         }
         sessionVisibleBoundaryId = withContext(Dispatchers.IO) {
             database.locationDao().getMaxId()
         }
         sessionBoundaryForBacklogId = sessionVisibleBoundaryId
+        isTracking = true
+        transitionGpsState(GpsRuntimeEvent.TRACKING_STARTED, "perform_start_tracking")
+        transitionControlState(TrackingControlEvent.StartSucceeded)
+        startAutoModeTickIfNeeded()
         lastFilteredLocation = null
         latestObservedRawLocation = null
         lowAccuracyFallbackCandidate = null
@@ -530,14 +552,11 @@ class TrackingService : Service() {
         resetElasticDistanceOverride(reason = "start_tracking", reapplyRequest = false)
         autoTrackingMotionEngine.reset(System.currentTimeMillis())
         consecutiveStationaryPoints = 0
-        transitionGpsState(GpsRuntimeEvent.TRACKING_STARTED, "perform_start_tracking")
-        isTracking = true
-        transitionControlState(TrackingControlEvent.StartSucceeded)
-        startAutoModeTickIfNeeded()
         updateRuntimeSnapshot {
             sessionCoordinator.transitionToRunning(
                 previous = it,
-                nowMs = System.currentTimeMillis()
+                nowMs = System.currentTimeMillis(),
+                sessionVisibleBoundaryId = sessionVisibleBoundaryId
             )
         }
 
@@ -559,7 +578,9 @@ class TrackingService : Service() {
             startLocationUpdates()
             maybeStartFastGpsLockWindow(measuredAccuracyMeters = null)
             startupReadyForEvents = true
-            pushQueuedLocations(scope = QueueUploadScope.ALL)
+            serviceScope.launch(Dispatchers.IO) {
+                pushQueuedLocations(scope = QueueUploadScope.ALL)
+            }
             updateNotificationFromDb(broadcastStats = true)
             TrackPointBus.resumeLocalDelivery()
             Log.i(TAG, "Tracking session started boundary=$sessionVisibleBoundaryId")
@@ -593,7 +614,7 @@ class TrackingService : Service() {
     private fun transitionToStoppedState(failureReason: String?) {
         trackingGeneration++
         isTracking = false
-        startupInProgress = false
+        setStartupInProgress(false)
         startupReadyForEvents = false
         transitionGpsState(GpsRuntimeEvent.TRACKING_STOPPED, "transition_to_stopped_state")
         lastFilteredLocation = null
@@ -625,6 +646,7 @@ class TrackingService : Service() {
         watchdogJob?.cancel()
         watchdogJob = null
         stopLocationUpdates()
+        TrackPointBus.resumeLocalDelivery()
         if (startupForegroundPromoted) {
             stopForeground(STOP_FOREGROUND_REMOVE)
             startupForegroundPromoted = false
@@ -897,16 +919,16 @@ class TrackingService : Service() {
 
     private fun failStartup(message: String, path: StartupCommandPath, trigger: String, reason: String) {
         Log.w(TAG, "Tracking start failed: $reason path=$path trigger=$trigger")
+        TrackPointBus.resumeLocalDelivery()
         transitionControlState(TrackingControlEvent.StartFailed, failureReason = message)
+        transitionToStoppedState(failureReason = message)
         settingsRepository.clearWasTrackingBeforeExit()
         TrackingRecoveryCoordinator.markIntentionalStop(applicationContext, reason = "startup_failed")
-        updateRuntimeSnapshot { it.copy(failureReason = message) }
         runtimeEventPublisher.publish(
             type = RuntimeServiceEventType.STARTUP_FAILED,
             reason = reason,
             trigger = mapRuntimeTrigger(trigger)
         )
-        syncRuntimeStateStore()
         serviceScope.launch(Dispatchers.Main) {
             Toast.makeText(this@TrackingService, message, Toast.LENGTH_LONG).show()
         }
@@ -957,6 +979,15 @@ class TrackingService : Service() {
         stopServiceInstance(reason = reason)
     }
 
+    private fun setStartupInProgress(value: Boolean) {
+        startupInProgress = value
+        isStartupInProgress = value
+    }
+
+    private fun isTrackingActiveOrStarting(): Boolean {
+        return isTracking || startupInProgress
+    }
+
     private fun updateNotificationFromDb(broadcastStats: Boolean) {
         serviceScope.launch(Dispatchers.IO) {
             val count = if (isTracking) {
@@ -994,12 +1025,13 @@ class TrackingService : Service() {
         val settings = settingsRepository.getSettings()
         val effectiveAccuracyThreshold = resolveCurrentAccuracyFilter()
         validateRuntimeInvariant(gpsProviderEnabled = gpsOk)
+        val effectiveRunning = isTrackingActiveOrStarting()
         val gpsPaused = gpsRuntimeState == GpsRuntimeState.PAUSED_FOR_MOTION ||
             gpsRuntimeState == GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED
-        val uiStatus = TrackingUiStatusResolver.resolve(
-            isRunning = isTracking,
+        val uiStatus = TrackingUiStatusResolver.resolveForGpsState(
+            isRunning = effectiveRunning,
             gpsProviderEnabled = gpsOk,
-            gpsPaused = gpsPaused,
+            gpsState = gpsRuntimeState,
             lastAccuracyMeters = runtimeSnapshot.lastAccuracyMeters,
             effectiveAccuracyThresholdMeters = effectiveAccuracyThreshold
         )
@@ -1011,7 +1043,7 @@ class TrackingService : Service() {
         val next = RuntimeSnapshotProjector.project(
             previous = runtimeSnapshot,
             input = RuntimeSnapshotProjectionInput(
-                isRunning = isTracking,
+                isRunning = effectiveRunning,
                 lifecycleState = controlState.lifecycleState,
                 failureReason = controlState.failureReason,
                 selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this),
@@ -1021,12 +1053,18 @@ class TrackingService : Service() {
                 activeMotionMode = activeMotionMode,
                 uiStatus = uiStatus,
                 gpsPaused = gpsPaused,
-                effectiveAccuracyThresholdMeters = effectiveAccuracyThreshold
+                effectiveAccuracyThresholdMeters = effectiveAccuracyThreshold,
+                sessionVisibleBoundaryId = sessionVisibleBoundaryId
             )
         )
         updateRuntimeSnapshot { next }
         TrackingRuntimeStateStore.update { next }
         mirrorLegacyCompanionState(next)
+        if (startupForegroundPromoted && startupInProgress) {
+            serviceScope.launch(Dispatchers.Main) {
+                notificationPresenter.updateForegroundNotification(runtimeSnapshot)
+            }
+        }
     }
 
     private fun transitionControlState(event: TrackingControlEvent, failureReason: String? = null) {
@@ -1316,15 +1354,19 @@ class TrackingService : Service() {
     private suspend fun pushQueuedLocations(scope: QueueUploadScope) {
         if (!isTracking) return
         if (!NetworkStatusMonitor.hasUsableNetwork(this)) {
-            lastSyncFailureClass = SyncFailureClass.TRANSIENT
-            consecutivePushFailures++
+            if (scope != QueueUploadScope.BACKLOG_ONLY) {
+                lastSyncFailureClass = SyncFailureClass.TRANSIENT
+                consecutivePushFailures++
+            }
             return
         }
         val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (!hasValidSelectedTrackerId(trackerId)) {
-            if (scope != QueueUploadScope.BACKLOG_ONLY) {
-                failActiveTrackingAndStop(getString(R.string.no_tracker_selected_go_to_settings))
+            if (scope == QueueUploadScope.BACKLOG_ONLY) {
+                runtimeTelemetry.event("queue_skip_invalid_tracker", "scope=BACKLOG_ONLY")
+                return
             }
+            failActiveTrackingAndStop(getString(R.string.no_tracker_selected_go_to_settings))
             return
         }
         val serverUrl = GeovaultAuthManager.getServerUrl(this)
@@ -1464,7 +1506,15 @@ class TrackingService : Service() {
         }
         val applied = applyCurrentLocationRequest(reason)
         if (!applied) {
-            failActiveTrackingAndStop(getString(R.string.location_permissions_required))
+            failActiveTrackingAndStop(resolveLocationRequestFailureMessage())
+        }
+    }
+
+    private fun resolveLocationRequestFailureMessage(): String {
+        return if (TrackingPermissionGate.hasRequiredPermissionsForTracking(this)) {
+            getString(R.string.unable_to_start_location_updates)
+        } else {
+            getString(R.string.location_permissions_required)
         }
     }
 
@@ -1620,7 +1670,7 @@ class TrackingService : Service() {
             return
         }
         if (!applyCurrentLocationRequest("resume_gps")) {
-            failActiveTrackingAndStop(getString(R.string.location_permissions_required))
+            failActiveTrackingAndStop(resolveLocationRequestFailureMessage())
             return
         }
         syncRuntimeStateStore()
@@ -1685,7 +1735,7 @@ class TrackingService : Service() {
         )
         fastGpsLockWindowJob?.cancel()
         val runGeneration = trackingGeneration
-        fastGpsLockWindowJob = serviceScope.launch {
+        fastGpsLockWindowJob = ingestScope.launch {
             delay(FAST_GPS_LOCK_WINDOW_MS)
             if (!isTracking || runGeneration != trackingGeneration || !isFastGpsLockWindowActive) return@launch
             val best = selectBestFastGpsLockSample(
@@ -2200,6 +2250,9 @@ class TrackingService : Service() {
     }
 
     private fun triggerLightHaptic() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.VIBRATE) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
         val vibratorManager = getSystemService(VibratorManager::class.java) ?: return
         val vibrator = vibratorManager.defaultVibrator
         if (!vibrator.hasVibrator()) return
@@ -2255,7 +2308,7 @@ class TrackingService : Service() {
         return Location(source).apply {
             time = System.currentTimeMillis()
             elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
-            val sourceProvider = source.provider?.takeIf { it.isNotBlank() } ?: "gps"
+            val sourceProvider = source.provider?.takeIf { it.isNotBlank() } ?: "fused"
             provider = "manual_send:$sourceProvider"
             val mergedExtras = Bundle().apply {
                 source.extras?.let { putAll(it) }

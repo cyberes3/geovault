@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
             )
             streamingErrorReceiverRegistered = true
         }
-        if (TrackingRuntimeStateStore.state.value.isRunning &&
+        if (isTrackingServiceActiveOrStarting() &&
             !TrackingPermissionGate.hasLocationPermission(this)
         ) {
             TrackerAppServices.from(application).trackerSettingsRepository().clearWasTrackingBeforeExit()
@@ -161,6 +161,10 @@ class MainActivity : ComponentActivity() {
                 selectedTrackerName = selectedTrackerName
             )
         }
+    }
+
+    private fun isTrackingServiceActiveOrStarting(): Boolean {
+        return TrackingRuntimeStateStore.state.value.isRunning || TrackingService.isStartupInProgress
     }
 
     override fun onStop() {

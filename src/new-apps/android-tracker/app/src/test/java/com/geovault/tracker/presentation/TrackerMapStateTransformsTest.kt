@@ -83,6 +83,35 @@ class TrackerMapStateTransformsTest {
     }
 
     @Test
+    fun effectiveTrail_singleSession_filtersBacklogBySessionBoundary() {
+        val trail = listOf(
+            QueuedLocation(id = 1L, time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
+            QueuedLocation(id = 2L, time = 2L, latitude = 2.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = null),
+            QueuedLocation(id = 3L, time = 3L, latitude = 3.0, longitude = 3.0, altitude = null, speed = null, bearing = null, accuracy = null),
+        )
+        val filtered = TrackerMapStateTransforms.effectiveTrail(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            trail = trail,
+            runtime = TrackingRuntimeSnapshot(sessionVisibleBoundaryId = 2L)
+        )
+        assertEquals(listOf(3L), filtered.map { it.id })
+    }
+
+    @Test
+    fun effectiveTrail_allQueue_keepsBacklogAndCurrentSession() {
+        val trail = listOf(
+            QueuedLocation(id = 1L, time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
+            QueuedLocation(id = 3L, time = 3L, latitude = 3.0, longitude = 3.0, altitude = null, speed = null, bearing = null, accuracy = null),
+        )
+        val filtered = TrackerMapStateTransforms.effectiveTrail(
+            mode = TrackerMapDisplayMode.ALL_QUEUE,
+            trail = trail,
+            runtime = TrackingRuntimeSnapshot(sessionVisibleBoundaryId = 2L)
+        )
+        assertEquals(listOf(1L, 3L), filtered.map { it.id })
+    }
+
+    @Test
     fun trailBounds_singlePoint_degenerateBounds() {
         val trail = listOf(
             QueuedLocation(

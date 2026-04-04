@@ -3,12 +3,14 @@ package com.geovault.tracker.services
 import android.location.Location
 import com.geovault.tracker.db.LocationDao
 import com.geovault.tracker.db.QueuedLocation
+import com.geovault.tracker.policy.TrackPointCrossSourceState
 import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.settings.TrackerSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -17,6 +19,11 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], manifest = Config.NONE)
 class LocationIngestCoordinatorTest {
+
+    @Before
+    fun setUp() {
+        TrackPointCrossSourceState.resetForTests()
+    }
 
     @Test
     fun ingest_manualBypass_acceptsLocation_andMarksProps() {
@@ -53,6 +60,62 @@ class LocationIngestCoordinatorTest {
         assertEquals(1, dao.getCount())
         assertEquals(1, result.queuedPointsVisible)
         assertEquals("""{"manual_send":true}""", result.lastTrackedPropsJson)
+    }
+
+    @Test
+    fun ingest_manualBypass_updatesPolicyAnchorForNextFix() {
+        val dao = FakeLocationDao()
+        val coordinator = LocationIngestCoordinator(dao)
+        val settings = TrackerSettings(accuracyFilterMeters = 25f)
+        val nowMs = System.currentTimeMillis()
+
+        val manualBypass = Location("manual_send:fused").apply {
+            latitude = 10.0
+            longitude = 20.0
+            accuracy = 5f
+            time = nowMs
+        }
+        val olderFix = Location("gps").apply {
+            latitude = 10.0
+            longitude = 20.0
+            accuracy = 5f
+            time = nowMs - 5_000L
+        }
+
+        val bypassResult = coordinator.ingest(
+            trackId = "tracker-1",
+            location = manualBypass,
+            settings = settings,
+            motionMode = TrackingMotionMode.BIKING,
+            previousAcceptedLocation = null,
+            sessionVisibleBoundaryId = 0L,
+            maxQueueSize = 5000,
+            bypassFilters = true,
+            propsJson = """{"manual_send":true}""",
+            totalDistanceMeters = 0f,
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = 0L,
+            isMockLocation = false
+        )
+        val secondResult = coordinator.ingest(
+            trackId = "tracker-1",
+            location = olderFix,
+            settings = settings,
+            motionMode = TrackingMotionMode.BIKING,
+            previousAcceptedLocation = null,
+            sessionVisibleBoundaryId = 0L,
+            maxQueueSize = 5000,
+            bypassFilters = false,
+            propsJson = null,
+            totalDistanceMeters = 0f,
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = 0L,
+            isMockLocation = false
+        )
+
+        assertTrue(bypassResult.accepted)
+        assertFalse(secondResult.accepted)
+        assertEquals(TrackPointRejectReason.OUT_OF_ORDER, secondResult.rejectReason)
     }
 
     @Test

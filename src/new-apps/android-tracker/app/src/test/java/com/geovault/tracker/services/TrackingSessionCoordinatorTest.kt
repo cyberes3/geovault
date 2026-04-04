@@ -31,11 +31,16 @@ class TrackingSessionCoordinatorTest {
             lastTrackedPropsJson = """{"manual_send":true}"""
         )
 
-        val next = coordinator.transitionToRunning(previous, nowMs = 999L)
+        val next = coordinator.transitionToRunning(
+            previous = previous,
+            nowMs = 999L,
+            sessionVisibleBoundaryId = 444L
+        )
 
         assertTrue(next.isRunning)
         assertEquals(TrackingLifecycleState.RUNNING, next.lifecycleState)
         assertNull(next.failureReason)
+        assertEquals(444L, next.sessionVisibleBoundaryId)
         assertEquals(999L, next.sessionStartTimeMs)
         assertEquals(0, next.pointsSentThisSession)
         assertEquals(0L, next.lastPointSentAtMs)
@@ -65,6 +70,7 @@ class TrackingSessionCoordinatorTest {
         assertFalse(next.isRunning)
         assertEquals(TrackingLifecycleState.STOPPED, next.lifecycleState)
         assertEquals("fatal_failure", next.failureReason)
+        assertEquals(0L, next.sessionVisibleBoundaryId)
         assertEquals(0L, next.sessionStartTimeMs)
         assertEquals(0, next.pointsSentThisSession)
         assertEquals(0, next.queuedPointsVisible)

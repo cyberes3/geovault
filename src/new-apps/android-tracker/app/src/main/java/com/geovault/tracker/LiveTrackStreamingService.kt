@@ -20,6 +20,7 @@ import com.geovault.tracker.location.TrackingLifecycleState
 import com.geovault.tracker.policy.TrackPointBus
 import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.policy.TrackPointQuality
+import com.geovault.tracker.policy.RemoteStreamIngressPolicy
 import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import kotlinx.coroutines.CoroutineScope
@@ -295,7 +296,7 @@ class LiveTrackStreamingService : Service() {
     }
 
     private fun publishRemotePoint(point: StreamingTrackPoint) {
-        TrackPointBus.publish(
+        val canonical = RemoteStreamIngressPolicy.process(
             TrackPointEvent(
                 source = TrackPointSource.REMOTE_STREAM,
                 trackId = point.trackId,
@@ -305,8 +306,12 @@ class LiveTrackStreamingService : Service() {
                 accuracyMeters = point.accuracyMeters,
                 propsJson = point.propsJson,
                 quality = TrackPointQuality.HIGH_CONFIDENCE
-            )
+            ),
+            nowMs = System.currentTimeMillis()
         )
+        if (canonical != null) {
+            TrackPointBus.publish(canonical)
+        }
     }
 
     private fun extractTrackerIds(intent: Intent): Set<String> {

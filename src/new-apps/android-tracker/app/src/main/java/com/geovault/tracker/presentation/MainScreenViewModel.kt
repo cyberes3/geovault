@@ -19,6 +19,7 @@ import com.geovault.tracker.settings.TrackerSettingsLoadState
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.TrackerManagementRepository
+import com.geovault.tracker.TrackingService
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -68,12 +69,12 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         TrackingCommandFacade.requestStart(
             getApplication(),
             trigger = RuntimeTrigger.EXPLICIT_START,
-            reason = "home_debug_start"
+            reason = "home_start"
         )
     }
 
     fun requestStopTracking() {
-        TrackingCommandFacade.requestStop(getApplication(), reason = "home_debug_stop")
+        TrackingCommandFacade.requestStop(getApplication(), reason = "home_stop")
     }
 
     fun onHostResumed() {
@@ -153,7 +154,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                         if (settingsState.wasTrackingBeforeExit) {
                             trackerSettingsRepository.clearWasTrackingBeforeExit()
                         }
-                        if (!TrackingRuntimeStateStore.state.value.isRunning &&
+                        if (!isTrackingServiceActiveOrStarting() &&
                             settingsState.settings.startTrackingOnLaunch
                         ) {
                             tryStartTrackingOnLaunch()
@@ -258,5 +259,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             return false
         }
         return true
+    }
+
+    private fun isTrackingServiceActiveOrStarting(): Boolean {
+        return TrackingRuntimeStateStore.state.value.isRunning || TrackingService.isStartupInProgress
     }
 }

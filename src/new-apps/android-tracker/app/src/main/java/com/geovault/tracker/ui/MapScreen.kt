@@ -36,7 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.geovault.common.maps.core.GeoVaultMainMap
 import com.geovault.common.maps.core.GeoVaultMainMapView
 import com.geovault.common.maps.core.GeoVaultMapPhase
@@ -71,6 +70,7 @@ import org.maplibre.android.maps.MapLibreMap
 
 @Composable
 fun MapScreen(
+    mapViewModel: TrackerMapViewModel,
     isAuthenticated: Boolean,
     serverUrl: String,
     onAuthServerUrlChanged: (String) -> Unit,
@@ -78,7 +78,6 @@ fun MapScreen(
     isConnecting: Boolean,
     onOpenSettings: () -> Unit,
 ) {
-    val mapViewModel: TrackerMapViewModel = viewModel()
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
@@ -125,10 +124,22 @@ private fun TrackerMapAuthenticatedContent(
         mutableStateOf(TrackingPermissionGate.hasLocationPermission(context))
     }
 
+    DisposableEffect(viewModel) {
+        viewModel.onMapSurfaceVisible()
+        onDispose { viewModel.onMapSurfaceHidden() }
+    }
+
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                locationPermission = TrackingPermissionGate.hasLocationPermission(context)
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    locationPermission = TrackingPermissionGate.hasLocationPermission(context)
+                    viewModel.onHostResumed()
+                }
+                Lifecycle.Event.ON_PAUSE -> {
+                    viewModel.onHostPaused()
+                }
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -176,6 +187,9 @@ private fun TrackerMapAuthenticatedContent(
     val fabDescZoomOut = stringResource(R.string.map_fab_zoom_out)
 
     val phase by map.phase.collectAsState()
+    LaunchedEffect(phase) {
+        viewModel.setMapReady(phase == GeoVaultMapPhase.Ready)
+    }
     DisposableEffect(map, locationPermission, phase, state.runtime.isRunning) {
         val shouldStreamGps = locationPermission &&
             phase == GeoVaultMapPhase.Ready &&
@@ -195,33 +209,6 @@ private fun TrackerMapAuthenticatedContent(
         val allowPuck = !state.runtime.isRunning
         locationPlugin.setEnabled(allowPuck)
         locationPlugin.setCameraTracking(allowPuck && state.followLockEnabled)
-    }
-
-    DisposableEffect(
-        state.runtime.isRunning,
-        state.streamTargetIds,
-        state.runtime.selectedTrackerName,
-        state.mode
-    ) {
-        val streamIds = state.streamTargetIds
-        val shouldStream = !state.runtime.isRunning &&
-            state.mode != TrackerMapDisplayMode.SINGLE_SESSION &&
-            streamIds.isNotEmpty()
-        if (shouldStream) {
-            val streamDisplayName = if (streamIds.size == 1) {
-                state.runtime.selectedTrackerName.takeIf { it.isNotBlank() }
-            } else {
-                null
-            }
-            MapStreamingServiceHelper.startStreaming(
-                context = context,
-                trackerIds = streamIds,
-                trackerName = streamDisplayName
-            )
-        } else {
-            MapStreamingServiceHelper.stopStreaming(context)
-        }
-        onDispose { }
     }
 
     DisposableEffect(map) {

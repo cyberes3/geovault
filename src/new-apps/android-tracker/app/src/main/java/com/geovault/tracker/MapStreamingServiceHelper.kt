@@ -3,6 +3,7 @@ package com.geovault.tracker
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
+import com.geovault.tracker.presentation.TrackerMapDisplayMode
 
 internal object MapStreamingServiceHelper {
     fun startStreaming(context: Context, trackerIds: Set<String>, trackerName: String? = null): Set<String>? {
@@ -26,5 +27,29 @@ internal object MapStreamingServiceHelper {
                 action = LiveTrackStreamingService.ACTION_STOP
             }
         )
+    }
+
+    fun updateStreamingForDisplayedTracker(
+        displayedTrackerId: String?,
+        displayedTrackerName: String?,
+        selectedTrackerId: String?,
+        mapMode: TrackerMapDisplayMode,
+        startStreaming: (Set<String>, String?) -> Unit,
+        stopStreaming: () -> Unit
+    ) {
+        if (mapMode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+            stopStreaming()
+            return
+        }
+        val id = displayedTrackerId?.trim().orEmpty()
+        if (id.isBlank()) {
+            // Legacy behavior: no-op when single-context tracker id is not yet resolved.
+            return
+        }
+        if (!selectedTrackerId.isNullOrBlank() && id == selectedTrackerId) {
+            stopStreaming()
+            return
+        }
+        startStreaming(setOf(id), displayedTrackerName)
     }
 }

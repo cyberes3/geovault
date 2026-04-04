@@ -13,9 +13,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.geovault.common.ui.components.GeoVaultBottomNavDestination
 import com.geovault.common.ui.components.GeoVaultBottomNavScaffold
 import com.geovault.tracker.presentation.MainScreenState
+import com.geovault.tracker.presentation.TrackerMapViewModel
 
 @Composable
 fun MainScreen(
@@ -27,11 +29,19 @@ fun MainScreen(
     onRequestStartTracking: () -> Unit = {},
     onRequestStopTracking: () -> Unit = {},
 ) {
+    val mapViewModel: TrackerMapViewModel = viewModel()
     var selectedTab by rememberSaveable { mutableStateOf(TrackerTab.HOME.name) }
+    var lastSelectedTab by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(state.isServerAccessible) {
         if (!state.isServerAccessible && selectedTab != TrackerTab.HOME.name) {
             selectedTab = TrackerTab.HOME.name
         }
+    }
+    LaunchedEffect(selectedTab) {
+        if (selectedTab == TrackerTab.MAP.name && lastSelectedTab != TrackerTab.MAP.name) {
+            mapViewModel.markPendingInitialTrackerForMap()
+        }
+        lastSelectedTab = selectedTab
     }
     val bottomDestinations = remember(state.isServerAccessible) {
         listOf(
@@ -85,6 +95,7 @@ fun MainScreen(
 
             TrackerTab.MAP.name -> {
                 MapScreen(
+                    mapViewModel = mapViewModel,
                     isAuthenticated = state.isAuthenticated,
                     serverUrl = state.serverUrl,
                     onAuthServerUrlChanged = onAuthServerUrlChanged,

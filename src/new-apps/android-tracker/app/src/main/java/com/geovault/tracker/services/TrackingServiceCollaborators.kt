@@ -16,6 +16,7 @@ import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.location.TrackingLifecycleState
 import com.geovault.tracker.policy.CanonicalTimeNormalizer
 import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.policy.TrackPointCrossSourceState
 import com.geovault.tracker.policy.TrackPointQuality
 import com.geovault.tracker.policy.TrackPointPolicyConfig
 import com.geovault.tracker.policy.TrackPointPolicyEngine
@@ -31,11 +32,16 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 class TrackingSessionCoordinator {
-    fun transitionToRunning(previous: TrackingRuntimeSnapshot, nowMs: Long): TrackingRuntimeSnapshot {
+    fun transitionToRunning(
+        previous: TrackingRuntimeSnapshot,
+        nowMs: Long,
+        sessionVisibleBoundaryId: Long
+    ): TrackingRuntimeSnapshot {
         return previous.copy(
             isRunning = true,
             lifecycleState = TrackingLifecycleState.RUNNING,
             failureReason = null,
+            sessionVisibleBoundaryId = sessionVisibleBoundaryId,
             sessionStartTimeMs = nowMs,
             pointsSentThisSession = 0,
             lastPointSentAtMs = 0L,
@@ -54,6 +60,7 @@ class TrackingSessionCoordinator {
             isRunning = false,
             lifecycleState = TrackingLifecycleState.STOPPED,
             failureReason = failureReason,
+            sessionVisibleBoundaryId = 0L,
             sessionStartTimeMs = 0L,
             pointsSentThisSession = 0,
             lastPointSentAtMs = 0L,
@@ -85,9 +92,9 @@ data class LocationIngestResult(
 )
 
 class LocationIngestCoordinator(private val locationDao: LocationDao) {
-    private val lastAcceptedByTrack = ConcurrentHashMap<String, TrackPointEvent>()
-    private val acceptedHistoryByTrack = ConcurrentHashMap<String, ArrayDeque<TrackPointEvent>>()
-    private val jumpRejectStreakByTrack = ConcurrentHashMap<String, AtomicLong>()
+    private val lastAcceptedByStream = ConcurrentHashMap<String, TrackPointEvent>()
+    private val acceptedHistoryByStream = ConcurrentHashMap<String, ArrayDeque<TrackPointEvent>>()
+    private val jumpRejectStreakByStream = ConcurrentHashMap<String, AtomicLong>()
 
     @Synchronized
     fun resetSession(trackId: String) {
@@ -161,6 +168,15 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
 
         val queued = QueuedLocation.fromLocation(location, totalDistanceMeters = totalDistanceMeters)
         val insertedId = locationDao.insert(queued)
+        if (bypassFilters) {
+            val canonical = trackPointEventForPolicy(
+                trackId = trackId,
+                location = location,
+                isMockLocation = isMockLocation,
+                nowMs = nowMs
+            )
+            updateAcceptedStateForLocalStream(trackId = trackId, canonical = canonical, historyWindowSize = 5)
+        }
         trimQueueIfNeeded(maxQueueSize)
         val visible = locationDao.getCurrentSessionCountById(sessionVisibleBoundaryId)
         return LocationIngestResult(
@@ -200,7 +216,6 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         val event = trackPointEventForPolicy(trackId = trackId, location = location, isMockLocation = isMockLocation, nowMs = nowMs)
         // Legacy pipeline derives "previous" from pipeline-local accepted state.
         // This intentionally avoids anchoring policy to bypass-only points.
-        val previousByTrack = lastAcceptedByTrack[trackId]
         val config = TrackingPolicyProfiles.ingestConfig(
             maxAccuracyMeters = maxAccuracyMeters,
             motionMode = motionMode,
@@ -209,7 +224,6 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         return evaluateWithState(
             trackId = trackId,
             event = event,
-            previousByTrack = previousByTrack,
             nowMs = nowMs,
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
             config = config
@@ -220,61 +234,74 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
     private fun evaluateWithState(
         trackId: String,
         event: TrackPointEvent,
-        previousByTrack: TrackPointEvent?,
         nowMs: Long,
         nowElapsedRealtimeNanos: Long,
         config: TrackPointPolicyConfig
     ): com.geovault.tracker.policy.TrackPointDecision {
-        val history = acceptedHistoryByTrack[trackId]?.toList() ?: emptyList()
-        var decision = TrackPointPolicyEngine.evaluate(
-            event = event,
-            previous = previousByTrack,
-            history = history,
-            nowMs = nowMs,
-            nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
-            rawConfig = config
-        )
-        var effectivePreviousByTrack = previousByTrack
-        if (!decision.accepted &&
-            shouldForceLocalStallReanchor(
-                trackId = trackId,
-                reason = decision.rejectReason,
-                previousByTrack = effectivePreviousByTrack,
-                nowMs = nowMs
-            )
-        ) {
-            resetLocalSession(trackId)
-            effectivePreviousByTrack = null
-            decision = TrackPointPolicyEngine.evaluate(
+        return TrackPointCrossSourceState.withLock {
+            val streamKey = localStreamKey(trackId)
+            val currentPreviousByStream = lastAcceptedByStream[streamKey]
+            val currentPreviousByTrack = TrackPointCrossSourceState.previous(trackId)
+            val history = acceptedHistoryByStream[streamKey]?.toList() ?: emptyList()
+            var decision = TrackPointPolicyEngine.evaluate(
                 event = event,
-                previous = null,
-                history = emptyList(),
+                previous = currentPreviousByStream,
+                history = history,
                 nowMs = nowMs,
                 nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
                 rawConfig = config
             )
+            var effectivePreviousByTrack = currentPreviousByTrack
+            if (!decision.accepted &&
+                shouldForceLocalStallReanchor(
+                    streamKey = streamKey,
+                    reason = decision.rejectReason,
+                    previousByTrack = effectivePreviousByTrack,
+                    nowMs = nowMs
+                )
+            ) {
+                resetLocalSession(trackId)
+                effectivePreviousByTrack = null
+                decision = TrackPointPolicyEngine.evaluate(
+                    event = event,
+                    previous = null,
+                    history = emptyList(),
+                    nowMs = nowMs,
+                    nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+                    rawConfig = config
+                )
+            }
+            if (!decision.accepted || decision.canonicalEvent == null) {
+                updateJumpRejectStreak(streamKey, decision.rejectReason)
+                return@withLock decision
+            }
+            val canonical = decision.canonicalEvent
+            if (isDuplicateAgainstTrack(effectivePreviousByTrack, canonical)) {
+                updateJumpRejectStreak(streamKey, TrackPointRejectReason.DUPLICATE)
+                return@withLock decision.copy(
+                    accepted = false,
+                    canonicalEvent = null,
+                    rejectReason = TrackPointRejectReason.DUPLICATE
+                )
+            }
+            if (isOutOfOrderAgainstTrack(effectivePreviousByTrack, canonical)) {
+                updateJumpRejectStreak(streamKey, TrackPointRejectReason.OUT_OF_ORDER)
+                return@withLock decision.copy(
+                    accepted = false,
+                    canonicalEvent = null,
+                    rejectReason = TrackPointRejectReason.OUT_OF_ORDER
+                )
+            }
+            lastAcceptedByStream[streamKey] = canonical
+            TrackPointCrossSourceState.update(trackId, canonical)
+            appendHistory(streamKey, canonical, config.rollingWindowSize)
+            jumpRejectStreakByStream.remove(streamKey)
+            decision.copy(canonicalEvent = canonical)
         }
-        if (!decision.accepted || decision.canonicalEvent == null) {
-            updateJumpRejectStreak(trackId, decision.rejectReason)
-            return decision
-        }
-        val canonical = decision.canonicalEvent
-        if (isDuplicateAgainstTrack(effectivePreviousByTrack, canonical)) {
-            updateJumpRejectStreak(trackId, TrackPointRejectReason.DUPLICATE)
-            return decision.copy(accepted = false, canonicalEvent = null, rejectReason = TrackPointRejectReason.DUPLICATE)
-        }
-        if (isOutOfOrderAgainstTrack(effectivePreviousByTrack, canonical)) {
-            updateJumpRejectStreak(trackId, TrackPointRejectReason.OUT_OF_ORDER)
-            return decision.copy(accepted = false, canonicalEvent = null, rejectReason = TrackPointRejectReason.OUT_OF_ORDER)
-        }
-        lastAcceptedByTrack[trackId] = canonical
-        appendHistory(trackId, canonical, config.rollingWindowSize)
-        jumpRejectStreakByTrack.remove(trackId)
-        return decision.copy(canonicalEvent = canonical)
     }
 
     private fun shouldForceLocalStallReanchor(
-        trackId: String,
+        streamKey: String,
         reason: TrackPointRejectReason?,
         previousByTrack: TrackPointEvent?,
         nowMs: Long
@@ -283,20 +310,20 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         val previous = previousByTrack ?: return false
         val anchorAgeMs = nowMs - previous.timestampMs
         if (anchorAgeMs < TrackingPolicyProfiles.LOCAL_STALL_REANCHOR_MIN_ANCHOR_AGE_MS) return false
-        val nextStreak = (jumpRejectStreakByTrack[trackId]?.get() ?: 0L) + 1L
+        val nextStreak = (jumpRejectStreakByStream[streamKey]?.get() ?: 0L) + 1L
         return nextStreak >= TrackingPolicyProfiles.LOCAL_STALL_REJECT_STREAK_THRESHOLD
     }
 
-    private fun updateJumpRejectStreak(trackId: String, reason: TrackPointRejectReason?) {
+    private fun updateJumpRejectStreak(streamKey: String, reason: TrackPointRejectReason?) {
         if (reason == TrackPointRejectReason.JUMP) {
-            jumpRejectStreakByTrack.getOrPut(trackId) { AtomicLong(0L) }.incrementAndGet()
+            jumpRejectStreakByStream.getOrPut(streamKey) { AtomicLong(0L) }.incrementAndGet()
         } else {
-            jumpRejectStreakByTrack.remove(trackId)
+            jumpRejectStreakByStream.remove(streamKey)
         }
     }
 
-    private fun appendHistory(trackId: String, event: TrackPointEvent, windowSize: Int) {
-        val history = acceptedHistoryByTrack.getOrPut(trackId) { ArrayDeque() }
+    private fun appendHistory(streamKey: String, event: TrackPointEvent, windowSize: Int) {
+        val history = acceptedHistoryByStream.getOrPut(streamKey) { ArrayDeque() }
         history.addLast(event)
         val maxHistory = windowSize.coerceIn(3, 20)
         while (history.size > maxHistory) {
@@ -317,9 +344,29 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
     }
 
     private fun resetLocalSession(trackId: String) {
-        lastAcceptedByTrack.remove(trackId)
-        acceptedHistoryByTrack.remove(trackId)
-        jumpRejectStreakByTrack.remove(trackId)
+        val streamKey = localStreamKey(trackId)
+        lastAcceptedByStream.remove(streamKey)
+        acceptedHistoryByStream.remove(streamKey)
+        jumpRejectStreakByStream.remove(streamKey)
+        TrackPointCrossSourceState.resetTrack(trackId)
+    }
+
+    private fun localStreamKey(trackId: String): String {
+        return "${TrackPointSource.LOCAL_GPS}:$trackId"
+    }
+
+    private fun updateAcceptedStateForLocalStream(
+        trackId: String,
+        canonical: TrackPointEvent,
+        historyWindowSize: Int
+    ) {
+        TrackPointCrossSourceState.withLock {
+            val streamKey = localStreamKey(trackId)
+            lastAcceptedByStream[streamKey] = canonical
+            TrackPointCrossSourceState.update(trackId, canonical)
+            appendHistory(streamKey, canonical, historyWindowSize)
+            jumpRejectStreakByStream.remove(streamKey)
+        }
     }
 
     private fun trackPointEventForPolicy(

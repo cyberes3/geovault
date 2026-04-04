@@ -129,6 +129,21 @@ class RuntimeCommandHandler(
             "restartTrackingIfKilled=$restartTrackingIfKilled wasTrackingBeforeExit=$wasTrackingBeforeExit desiredRunning=$desiredRunning"
         )
         if (!desiredRunning) {
+            if (repository.isServiceRunning()) {
+                effects.cancelWatchdog()
+                telemetry.event(
+                    "watchdog",
+                    "skip_disable_service_running restartTrackingIfKilled=$restartTrackingIfKilled wasTrackingBeforeExit=$wasTrackingBeforeExit"
+                )
+                return TrackingSessionUpdateResult(
+                    state = reconciledCurrent,
+                    effects = listOf(RuntimeEffect(RuntimeEffectType.CANCEL_WATCHDOG, "watchdog_disabled_service_running")),
+                    commandResult = RuntimeCommandResult(
+                        action = RuntimeActionType.NOOP,
+                        reason = "watchdog_disabled_service_running"
+                    )
+                )
+            }
             val after = repository.updateState {
                 it.copy(
                     shouldBeRunning = false,
@@ -219,13 +234,35 @@ class RuntimeCommandHandler(
                 )
             }
 
-            RuntimeServiceEventType.TRACKING_STOPPED,
+            RuntimeServiceEventType.TRACKING_STOPPED -> {
+                val after = repository.updateState {
+                    it.copy(
+                        lifecycleState = RuntimeLifecycleState.IDLE,
+                        shouldBeRunning = false,
+                        lastIntentionalStop = true,
+                        lastTransitionAtMs = event.timestampMs
+                    )
+                }
+                reconciledCurrent.copy(
+                    runtime = after,
+                    trackingRunning = false,
+                    trackingLifecycleState = TrackingLifecycleState.STOPPED,
+                    lastServiceEvent = event.type,
+                    lastServiceEventReason = event.reason,
+                    lastServiceEventAtMs = event.timestampMs
+                )
+            }
+
             RuntimeServiceEventType.STARTUP_FAILED -> {
                 val after = repository.updateState {
                     it.copy(
                         lifecycleState = RuntimeLifecycleState.IDLE,
                         shouldBeRunning = false,
                         lastIntentionalStop = true,
+                        lastFailure = RuntimeFailure(
+                            clazz = RuntimeFailureClass.PREREQUISITE,
+                            reason = event.reason
+                        ),
                         lastTransitionAtMs = event.timestampMs
                     )
                 }

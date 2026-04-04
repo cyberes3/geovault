@@ -36,9 +36,7 @@ object TrackerMapStateTransforms {
             return MapRenderState()
         }
 
-        // TODO(chunk-map): For SINGLE_SESSION, filter trail by session boundary when exposed on runtime;
-        // ALL_QUEUE will then include historical backlog across sessions.
-        val effectiveTrail = trail
+        val effectiveTrail = effectiveTrail(mode, trail, runtime)
 
         val line = buildTrailLine(effectiveTrail)
         val lastQueued = effectiveTrail.lastOrNull()
@@ -81,6 +79,18 @@ object TrackerMapStateTransforms {
             points = markers,
             lines = listOfNotNull(line),
         )
+    }
+
+    fun effectiveTrail(
+        mode: TrackerMapDisplayMode,
+        trail: List<QueuedLocation>,
+        runtime: TrackingRuntimeSnapshot
+    ): List<QueuedLocation> {
+        if (mode != TrackerMapDisplayMode.SINGLE_SESSION) return trail
+        val boundaryId = runtime.sessionVisibleBoundaryId
+        if (boundaryId <= 0L) return trail
+        // Live in-memory overlay points use non-positive ids; keep them in session mode.
+        return trail.filter { it.id <= 0L || it.id > boundaryId }
     }
 
     fun trailBounds(trail: List<QueuedLocation>): LatLngBounds? {

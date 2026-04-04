@@ -13,7 +13,8 @@ data class RuntimeSnapshotProjectionInput(
     val activeMotionMode: TrackingMotionMode,
     val uiStatus: TrackingUiStatus,
     val gpsPaused: Boolean,
-    val effectiveAccuracyThresholdMeters: Float
+    val effectiveAccuracyThresholdMeters: Float,
+    val sessionVisibleBoundaryId: Long,
 )
 
 object RuntimeSnapshotProjector {
@@ -33,7 +34,8 @@ object RuntimeSnapshotProjector {
             activeMotionMode = input.activeMotionMode,
             uiStatus = input.uiStatus,
             gpsPaused = input.gpsPaused,
-            effectiveAccuracyThresholdMeters = input.effectiveAccuracyThresholdMeters
+            effectiveAccuracyThresholdMeters = input.effectiveAccuracyThresholdMeters,
+            sessionVisibleBoundaryId = input.sessionVisibleBoundaryId
         )
     }
 }
