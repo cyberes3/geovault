@@ -47,10 +47,10 @@ class RuntimeRecoveryInvariantsTest {
             wasTrackingBeforeExit = true
         )
         assertEquals(RuntimeActionType.NOOP, result.commandResult?.action)
-        assertEquals("watchdog_wait_for_restart", result.commandResult?.reason)
-        assertEquals(0, effects.cancelWatchdogCalls)
-        assertEquals(1, effects.scheduleWatchdogCalls)
-        assertTrue(result.state.runtime.shouldBeRunning)
+        assertEquals("watchdog_disabled", result.commandResult?.reason)
+        assertEquals(1, effects.cancelWatchdogCalls)
+        assertEquals(0, effects.scheduleWatchdogCalls)
+        assertFalse(result.state.runtime.shouldBeRunning)
     }
 
     @Test
@@ -97,10 +97,10 @@ class RuntimeRecoveryInvariantsTest {
         )
 
         assertEquals(RuntimeActionType.NOOP, result.commandResult?.action)
-        assertEquals("watchdog_disabled_service_running", result.commandResult?.reason)
+        assertEquals("watchdog_disabled", result.commandResult?.reason)
         assertEquals(1, effects.cancelWatchdogCalls)
-        assertTrue(result.state.runtime.shouldBeRunning)
-        assertEquals(RuntimeLifecycleState.ACTIVE, result.state.runtime.lifecycleState)
+        assertFalse(result.state.runtime.shouldBeRunning)
+        assertEquals(RuntimeLifecycleState.IDLE, result.state.runtime.lifecycleState)
     }
 
     @Test
@@ -127,10 +127,11 @@ class RuntimeRecoveryInvariantsTest {
         )
 
         assertEquals(RuntimeActionType.NOOP, result.commandResult?.action)
-        assertEquals("watchdog_wait_for_restart", result.commandResult?.reason)
-        assertEquals(1, effects.scheduleWatchdogCalls)
-        assertTrue(result.state.runtime.shouldBeRunning)
-        assertEquals(RuntimeLifecycleState.RECOVERING, result.state.runtime.lifecycleState)
+        assertEquals("watchdog_disabled", result.commandResult?.reason)
+        assertEquals(1, effects.cancelWatchdogCalls)
+        assertEquals(0, effects.scheduleWatchdogCalls)
+        assertFalse(result.state.runtime.shouldBeRunning)
+        assertEquals(RuntimeLifecycleState.IDLE, result.state.runtime.lifecycleState)
     }
 
     @Test

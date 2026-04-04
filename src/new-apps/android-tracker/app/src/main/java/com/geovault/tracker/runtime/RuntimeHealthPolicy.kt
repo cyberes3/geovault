@@ -33,9 +33,7 @@ class RuntimeHealthPolicy(private val context: Context) {
 
         val serviceExpected = current.lifecycleState == RuntimeLifecycleState.ACTIVE ||
             current.lifecycleState == RuntimeLifecycleState.STARTING ||
-            current.lifecycleState == RuntimeLifecycleState.RECOVERING ||
-            current.lifecycleState == RuntimeLifecycleState.STOPPING ||
-            current.lifecycleState == RuntimeLifecycleState.DEGRADED
+            current.lifecycleState == RuntimeLifecycleState.RECOVERING
         if (!serviceExpected) return current
 
         Log.w(TAG, "reconcile reset_stale_active_state reason=$reason lifecycle=${current.lifecycleState}")

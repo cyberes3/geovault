@@ -85,7 +85,7 @@ class RuntimeStateMachine {
                 RuntimeDecision(
                     action = RuntimeAction(RuntimeActionType.NOOP, "heartbeat"),
                     nextState = current.copy(
-                        lifecycleState = if (current.shouldBeRunning && isServiceRunning) {
+                        lifecycleState = if (current.shouldBeRunning || isServiceRunning) {
                             RuntimeLifecycleState.ACTIVE
                         } else {
                             current.lifecycleState

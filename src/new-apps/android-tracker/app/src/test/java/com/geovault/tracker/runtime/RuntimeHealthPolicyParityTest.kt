@@ -56,32 +56,34 @@ class RuntimeHealthPolicyParityTest {
     }
 
     @Test
-    fun reconcile_resetsStopping_whenServiceNotRunning() {
+    fun reconcile_keepsStopping_whenServiceNotRunning() {
+        val current = RuntimeState(
+            lifecycleState = RuntimeLifecycleState.STOPPING,
+            shouldBeRunning = true
+        )
         val reconciled = policy.reconcileState(
-            current = RuntimeState(
-                lifecycleState = RuntimeLifecycleState.STOPPING,
-                shouldBeRunning = true
-            ),
+            current = current,
             isServiceRunning = false,
             reason = "parity_test"
         )
 
-        assertEquals(RuntimeLifecycleState.IDLE, reconciled.lifecycleState)
-        assertFalse(reconciled.shouldBeRunning)
+        assertEquals(current.lifecycleState, reconciled.lifecycleState)
+        assertEquals(current.shouldBeRunning, reconciled.shouldBeRunning)
     }
 
     @Test
-    fun reconcile_resetsDegraded_whenServiceNotRunning() {
+    fun reconcile_keepsDegraded_whenServiceNotRunning() {
+        val current = RuntimeState(
+            lifecycleState = RuntimeLifecycleState.DEGRADED,
+            shouldBeRunning = true
+        )
         val reconciled = policy.reconcileState(
-            current = RuntimeState(
-                lifecycleState = RuntimeLifecycleState.DEGRADED,
-                shouldBeRunning = true
-            ),
+            current = current,
             isServiceRunning = false,
             reason = "parity_test"
         )
 
-        assertEquals(RuntimeLifecycleState.IDLE, reconciled.lifecycleState)
-        assertFalse(reconciled.shouldBeRunning)
+        assertEquals(current.lifecycleState, reconciled.lifecycleState)
+        assertEquals(current.shouldBeRunning, reconciled.shouldBeRunning)
     }
 }

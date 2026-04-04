@@ -3,7 +3,7 @@ package com.geovault.tracker.runtime
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -14,7 +14,7 @@ import org.robolectric.annotation.Config
 class TrackingRuntimeFacadeInitTest {
 
     @Test
-    fun init_doesNotReconcileWhenRuntimeShouldBeRunning() {
+    fun init_reconcilesStaleRunningRuntimeWhenServiceNotRunning() {
         val accessor = CountingRuntimeStateAccessor(
             runtime = RuntimeState(
                 lifecycleState = RuntimeLifecycleState.RECOVERING,
@@ -31,9 +31,9 @@ class TrackingRuntimeFacadeInitTest {
             stateMachine = RuntimeStateMachine()
         )
 
-        assertEquals(0, accessor.updateCalls)
-        assertTrue(facade.state.value.runtime.shouldBeRunning)
-        assertEquals(RuntimeLifecycleState.RECOVERING, facade.state.value.runtime.lifecycleState)
+        assertEquals(1, accessor.updateCalls)
+        assertFalse(facade.state.value.runtime.shouldBeRunning)
+        assertEquals(RuntimeLifecycleState.IDLE, facade.state.value.runtime.lifecycleState)
     }
 }
 

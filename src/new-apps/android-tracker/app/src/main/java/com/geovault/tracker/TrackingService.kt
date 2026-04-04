@@ -44,7 +44,6 @@ import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointQuality
 import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.policy.TrackPointSource
-import com.geovault.tracker.policy.RemoteStreamIngressPolicy
 import com.geovault.tracker.runtime.RuntimeTelemetry
 import com.geovault.tracker.runtime.RuntimeServiceEventType
 import com.geovault.tracker.runtime.RuntimeTrigger
@@ -515,7 +514,6 @@ class TrackingService : Service() {
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (selectedTrackerId.isNotEmpty()) {
             locationIngestCoordinator.resetSession(selectedTrackerId)
-            RemoteStreamIngressPolicy.resetTrack(selectedTrackerId)
         }
         sessionVisibleBoundaryId = withContext(Dispatchers.IO) {
             database.locationDao().getMaxId()
@@ -566,7 +564,7 @@ class TrackingService : Service() {
             maybeStartFastGpsLockWindow(measuredAccuracyMeters = null)
             startupReadyForEvents = true
             serviceScope.launch(Dispatchers.IO) {
-                pushQueuedLocations(scope = QueueUploadScope.ALL)
+                pushQueuedLocations(scope = QueueUploadScope.ALL, updateFailureCounters = false)
             }
             updateNotificationFromDb(broadcastStats = true)
             TrackPointBus.resumeLocalDelivery()
@@ -850,7 +848,13 @@ class TrackingService : Service() {
         }
         if (result.pointPersisted) {
             serviceScope.launch(Dispatchers.IO) {
-                pushQueuedLocations(scope = QueueUploadScope.LIVE_ONLY)
+                val outcome = pushQueuedLocations(
+                    scope = QueueUploadScope.LIVE_ONLY,
+                    updateFailureCounters = false
+                )
+                if (outcome == SyncFailureClass.NONE) {
+                    consecutivePushFailures = 0
+                }
             }
         }
     }
@@ -908,6 +912,12 @@ class TrackingService : Service() {
             trigger = mapRuntimeTrigger(trigger)
         )
         serviceScope.launch(Dispatchers.Main) {
+            sendBroadcast(
+                Intent(ACTION_TRACKING_ERROR).apply {
+                    setPackage(packageName)
+                    putExtra(EXTRA_TRACKING_ERROR_MESSAGE, message)
+                }
+            )
             Toast.makeText(this@TrackingService, message, Toast.LENGTH_LONG).show()
         }
         stopSelfSafelyAfterStartup(reason = "startup_failed")
@@ -1325,27 +1335,49 @@ class TrackingService : Service() {
         }
     }
 
-    private suspend fun pushQueuedLocations(scope: QueueUploadScope) {
-        if (!isTracking) return
+    private suspend fun pushQueuedLocations(
+        scope: QueueUploadScope,
+        updateFailureCounters: Boolean = true
+    ): SyncFailureClass {
+        if (!isTracking) return SyncFailureClass.NONE
+        trimQueuedLocationsRetention()
         if (!NetworkStatusMonitor.hasUsableNetwork(this)) {
-            if (scope != QueueUploadScope.BACKLOG_ONLY) {
+            if (updateFailureCounters && scope != QueueUploadScope.BACKLOG_ONLY) {
                 lastSyncFailureClass = SyncFailureClass.TRANSIENT
                 consecutivePushFailures++
             }
-            return
+            withContext(Dispatchers.Main) {
+                updateNotificationFromDb(broadcastStats = true)
+            }
+            return SyncFailureClass.TRANSIENT
         }
         val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (!hasValidSelectedTrackerId(trackerId)) {
-            if (scope == QueueUploadScope.BACKLOG_ONLY) {
-                runtimeTelemetry.event("queue_skip_invalid_tracker", "scope=BACKLOG_ONLY")
-                return
+            runtimeTelemetry.event("queue_skip_invalid_tracker", "scope=$scope")
+            val trackerError = if (trackerId.isBlank()) {
+                getString(R.string.no_tracker_selected_go_to_settings)
+            } else {
+                getString(R.string.tracker_validation_failed_go_to_settings)
             }
-            failActiveTrackingAndStop(getString(R.string.no_tracker_selected_go_to_settings))
-            return
+            if (scope != QueueUploadScope.BACKLOG_ONLY) {
+                lastSyncFailureClass = SyncFailureClass.PERMANENT
+                if (updateFailureCounters) {
+                    consecutivePushFailures++
+                }
+            }
+            withContext(Dispatchers.Main) {
+                sendBroadcast(
+                    Intent(ACTION_TRACKING_ERROR).apply {
+                        setPackage(packageName)
+                        putExtra(EXTRA_TRACKING_ERROR_MESSAGE, trackerError)
+                    }
+                )
+                updateNotificationFromDb(broadcastStats = true)
+            }
+            return SyncFailureClass.PERMANENT
         }
         val serverUrl = GeovaultAuthManager.getServerUrl(this)
         val settings = settingsRepository.getSettings()
-        var uploadedBatchCount = 0
         val outcome = queueUploadEngine.push(
             scope = scope,
             trackerId = trackerId,
@@ -1361,7 +1393,6 @@ class TrackingService : Service() {
                 deviceIdentifier = getDeviceIdentifier()
             ),
             onBatchUploaded = { visibleSentCount ->
-                uploadedBatchCount++
                 val sentDelta = visibleSentCount.coerceAtLeast(0)
                 if (sentDelta > 0) {
                     updateRuntimeSnapshot {
@@ -1375,18 +1406,19 @@ class TrackingService : Service() {
         )
         if (scope != QueueUploadScope.BACKLOG_ONLY) {
             lastSyncFailureClass = outcome
-            if (outcome == SyncFailureClass.NONE) {
-                consecutivePushFailures = 0
-            } else {
-                consecutivePushFailures++
+            if (updateFailureCounters) {
+                if (outcome == SyncFailureClass.NONE) {
+                    consecutivePushFailures = 0
+                } else {
+                    consecutivePushFailures++
+                }
             }
         }
-        if (outcome == SyncFailureClass.NONE && uploadedBatchCount > 0) {
-            trimQueuedLocationsRetention()
-        }
+        trimQueuedLocationsRetention()
         withContext(Dispatchers.Main) {
             updateNotificationFromDb(broadcastStats = true)
         }
+        return outcome
     }
 
     private fun trimQueuedLocationsRetention() {

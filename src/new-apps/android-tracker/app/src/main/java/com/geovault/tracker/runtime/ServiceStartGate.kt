@@ -35,9 +35,6 @@ class ServiceStartGate(private val context: Context) {
         )
         if (blockedUntil > now) {
             val retryInMs = blockedUntil - now
-            if (retryInMs > 0L) {
-                scheduleRetry(retryInMs)
-            }
             Log.w(TAG, "dispatchStart blocked by backoff retryInMs=${blockedUntil - now}")
             return StartGateDecision(
                 allowed = false,
@@ -47,9 +44,6 @@ class ServiceStartGate(private val context: Context) {
         }
         if (lastAttempt > 0L && now - lastAttempt < MIN_ATTEMPT_GAP_MS) {
             val retryInMs = MIN_ATTEMPT_GAP_MS - (now - lastAttempt)
-            if (retryInMs > 0L) {
-                scheduleRetry(retryInMs)
-            }
             Log.w(TAG, "dispatchStart blocked by min gap retryInMs=$retryInMs")
             return StartGateDecision(
                 allowed = false,

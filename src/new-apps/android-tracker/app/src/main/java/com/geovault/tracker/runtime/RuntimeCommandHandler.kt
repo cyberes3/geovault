@@ -122,44 +122,13 @@ class RuntimeCommandHandler(
         restartTrackingIfKilled: Boolean,
         wasTrackingBeforeExit: Boolean
     ): TrackingSessionUpdateResult {
+        val reconciledCurrent = reconcileRuntimeState(current, reason = "watchdog_tick")
         val desiredRunning = restartTrackingIfKilled && wasTrackingBeforeExit
-        val serviceRunning = repository.isServiceRunning()
         telemetry.decision(
             "watchdog_tick",
             "restartTrackingIfKilled=$restartTrackingIfKilled wasTrackingBeforeExit=$wasTrackingBeforeExit desiredRunning=$desiredRunning"
         )
         if (!desiredRunning) {
-            if (wasTrackingBeforeExit && !serviceRunning) {
-                effects.scheduleWatchdog()
-                telemetry.event(
-                    "watchdog",
-                    "defer_disable_waiting_for_restart restartTrackingIfKilled=$restartTrackingIfKilled wasTrackingBeforeExit=$wasTrackingBeforeExit"
-                )
-                return TrackingSessionUpdateResult(
-                    state = current,
-                    effects = listOf(RuntimeEffect(RuntimeEffectType.SCHEDULE_WATCHDOG, "watchdog_wait_for_restart")),
-                    commandResult = RuntimeCommandResult(
-                        action = RuntimeActionType.NOOP,
-                        reason = "watchdog_wait_for_restart"
-                    )
-                )
-            }
-            val reconciledCurrent = reconcileRuntimeState(current, reason = "watchdog_tick")
-            if (serviceRunning) {
-                effects.cancelWatchdog()
-                telemetry.event(
-                    "watchdog",
-                    "skip_disable_service_running restartTrackingIfKilled=$restartTrackingIfKilled wasTrackingBeforeExit=$wasTrackingBeforeExit"
-                )
-                return TrackingSessionUpdateResult(
-                    state = reconciledCurrent,
-                    effects = listOf(RuntimeEffect(RuntimeEffectType.CANCEL_WATCHDOG, "watchdog_disabled_service_running")),
-                    commandResult = RuntimeCommandResult(
-                        action = RuntimeActionType.NOOP,
-                        reason = "watchdog_disabled_service_running"
-                    )
-                )
-            }
             val after = repository.updateState {
                 it.copy(
                     shouldBeRunning = false,
@@ -184,7 +153,6 @@ class RuntimeCommandHandler(
             )
         }
 
-        val reconciledCurrent = reconcileRuntimeState(current, reason = "watchdog_tick")
         repository.updateState {
             it.copy(
                 shouldBeRunning = true,
@@ -276,10 +244,6 @@ class RuntimeCommandHandler(
                         lifecycleState = RuntimeLifecycleState.IDLE,
                         shouldBeRunning = false,
                         lastIntentionalStop = true,
-                        lastFailure = RuntimeFailure(
-                            clazz = RuntimeFailureClass.PREREQUISITE,
-                            reason = event.reason
-                        ),
                         lastTransitionAtMs = event.timestampMs
                     )
                 }
