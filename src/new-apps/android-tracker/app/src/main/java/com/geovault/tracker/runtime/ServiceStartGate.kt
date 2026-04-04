@@ -34,18 +34,26 @@ class ServiceStartGate(private val context: Context) {
             "dispatchStart trigger=$trigger reason=$reason now=$now blockedUntil=$blockedUntil lastAttempt=$lastAttempt"
         )
         if (blockedUntil > now) {
+            val retryInMs = blockedUntil - now
+            if (retryInMs > 0L) {
+                scheduleRetry(retryInMs)
+            }
             Log.w(TAG, "dispatchStart blocked by backoff retryInMs=${blockedUntil - now}")
             return StartGateDecision(
                 allowed = false,
-                retryInMs = blockedUntil - now,
+                retryInMs = retryInMs,
                 reason = "blocked_backoff"
             )
         }
         if (lastAttempt > 0L && now - lastAttempt < MIN_ATTEMPT_GAP_MS) {
-            Log.w(TAG, "dispatchStart blocked by min gap retryInMs=${MIN_ATTEMPT_GAP_MS - (now - lastAttempt)}")
+            val retryInMs = MIN_ATTEMPT_GAP_MS - (now - lastAttempt)
+            if (retryInMs > 0L) {
+                scheduleRetry(retryInMs)
+            }
+            Log.w(TAG, "dispatchStart blocked by min gap retryInMs=$retryInMs")
             return StartGateDecision(
                 allowed = false,
-                retryInMs = MIN_ATTEMPT_GAP_MS - (now - lastAttempt),
+                retryInMs = retryInMs,
                 reason = "min_gap"
             )
         }

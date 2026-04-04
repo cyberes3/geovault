@@ -60,6 +60,7 @@ import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
+import com.geovault.tracker.MapStreamingServiceHelper
 import com.geovault.tracker.TrackerApplication
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.presentation.TrackerMapDisplayMode
@@ -196,6 +197,33 @@ private fun TrackerMapAuthenticatedContent(
         locationPlugin.setCameraTracking(allowPuck && state.followLockEnabled)
     }
 
+    DisposableEffect(
+        state.runtime.isRunning,
+        state.streamTargetIds,
+        state.runtime.selectedTrackerName,
+        state.mode
+    ) {
+        val streamIds = state.streamTargetIds
+        val shouldStream = !state.runtime.isRunning &&
+            state.mode != TrackerMapDisplayMode.SINGLE_SESSION &&
+            streamIds.isNotEmpty()
+        if (shouldStream) {
+            val streamDisplayName = if (streamIds.size == 1) {
+                state.runtime.selectedTrackerName.takeIf { it.isNotBlank() }
+            } else {
+                null
+            }
+            MapStreamingServiceHelper.startStreaming(
+                context = context,
+                trackerIds = streamIds,
+                trackerName = streamDisplayName
+            )
+        } else {
+            MapStreamingServiceHelper.stopStreaming(context)
+        }
+        onDispose { }
+    }
+
     DisposableEffect(map) {
         val listener = MapLibreMap.OnCameraMoveStartedListener { reason ->
             if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
@@ -208,7 +236,7 @@ private fun TrackerMapAuthenticatedContent(
         }
     }
 
-    LaunchedEffect(state.trail, state.runtime, state.mode) {
+    LaunchedEffect(state.trail, state.runtime, state.mode, state.remoteLastPoints, state.activeStreamedTrackerIds) {
         renderPlugin.setRenderState(viewModel.buildMapRenderState())
     }
 

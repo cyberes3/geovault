@@ -5,6 +5,7 @@ import com.geovault.common.maps.render.MapRenderLine
 import com.geovault.common.maps.render.MapRenderPoint
 import com.geovault.common.maps.render.MapRenderState
 import com.geovault.tracker.db.QueuedLocation
+import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
@@ -28,6 +29,8 @@ object TrackerMapStateTransforms {
         mode: TrackerMapDisplayMode,
         trail: List<QueuedLocation>,
         runtime: TrackingRuntimeSnapshot,
+        remoteLastPoints: Map<String, TrackPointEvent> = emptyMap(),
+        activeStreamedTrackerIds: Set<String> = emptySet(),
     ): MapRenderState {
         if (mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
             return MapRenderState()
@@ -56,6 +59,22 @@ object TrackerMapStateTransforms {
                     iconSize = 1.05f,
                 ),
             )
+        }
+        if (mode != TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+            remoteLastPoints.values
+                .filter { activeStreamedTrackerIds.isNotEmpty() && it.trackId in activeStreamedTrackerIds }
+                .forEach { point ->
+                markers.add(
+                    MapRenderPoint(
+                        id = "remote-${point.trackId}",
+                        latitude = point.lat,
+                        longitude = point.lon,
+                        title = point.trackId,
+                        iconImageId = CommonMapIconIds.MARKER_DEFAULT,
+                        iconSize = 0.9f,
+                    )
+                )
+            }
         }
 
         return MapRenderState(

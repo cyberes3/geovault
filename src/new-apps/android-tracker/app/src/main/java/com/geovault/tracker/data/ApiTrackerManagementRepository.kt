@@ -219,7 +219,10 @@ class ApiTrackerManagementRepository(
     }
 
     override fun clearSelectedTrackerCaches() {
-        // No-op until TrackerRepository geometry/selection caches are ported.
+        trackersCache = null
+        groupsCache = null
+        mapVisibilityCache = null
+        stateStore.clearAll()
     }
 
     override fun getTrackerFromCache(trackerId: String): Tracker? {

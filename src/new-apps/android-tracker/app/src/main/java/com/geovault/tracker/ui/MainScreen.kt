@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.People
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,7 +28,12 @@ fun MainScreen(
     onRequestStopTracking: () -> Unit = {},
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(TrackerTab.HOME.name) }
-    val bottomDestinations = remember {
+    LaunchedEffect(state.isServerAccessible) {
+        if (!state.isServerAccessible && selectedTab != TrackerTab.HOME.name) {
+            selectedTab = TrackerTab.HOME.name
+        }
+    }
+    val bottomDestinations = remember(state.isServerAccessible) {
         listOf(
             GeoVaultBottomNavDestination(
                 id = TrackerTab.HOME.name,
@@ -38,16 +44,19 @@ fun MainScreen(
                 id = TrackerTab.MAP.name,
                 label = "Map",
                 icon = Icons.Default.Map,
+                enabled = state.isServerAccessible,
             ),
             GeoVaultBottomNavDestination(
                 id = TrackerTab.TRACKERS.name,
                 label = "Trackers",
                 icon = Icons.AutoMirrored.Filled.List,
+                enabled = state.isServerAccessible,
             ),
             GeoVaultBottomNavDestination(
                 id = TrackerTab.SHARED.name,
                 label = "Shared",
                 icon = Icons.Default.People,
+                enabled = state.isServerAccessible,
             ),
         )
     }

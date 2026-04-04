@@ -89,4 +89,10 @@ class TrackerManagementStateStore {
         _mapVisibility.value = value
         _events.tryEmit(TrackerManagementEvent.MapVisibilityChanged(value))
     }
+
+    fun clearAll() {
+        _trackers.value = emptyList()
+        _groups.value = emptyList()
+        _mapVisibility.value = null
+    }
 }
