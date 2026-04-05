@@ -7,6 +7,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
+import com.geovault.common.update.AppVersionChecker
+import com.geovault.common.update.VersionCheckRequest
+import com.geovault.common.update.VersionCheckSnackbarPresenter
+import com.geovault.tracker.BuildConfig
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.SelectedTrackerManager
 import com.geovault.tracker.TrackerCheckRequest
@@ -22,6 +27,7 @@ import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.TrackingService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -41,6 +47,10 @@ data class MainScreenState(
     val isConnecting: Boolean = false,
     val oauthUrl: String? = null,
     val infoMessage: String? = null,
+    val updatePrompt: GeoVaultSnackbarModel? = null,
+    val updateReleaseUrl: String? = null,
+    val mapRecoveryRequestToken: Long = 0L,
+    val isPreparingToTrack: Boolean = false,
 )
 
 class MainScreenViewModel(application: Application) : AndroidViewModel(application) {
@@ -61,6 +71,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private var startupTrackingAutomationJob: Job? = null
     private var startupRefreshHandled = false
     private var startupRefreshJob: Job? = null
+    private var serverAccessibilityRefreshJob: Job? = null
+    private var hasStartedVersionCheck = false
+    private var preparingStartJob: Job? = null
 
     fun initialize() {
         refreshAuthState()
@@ -68,22 +81,48 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun requestStartTracking() {
-        viewModelScope.launch {
+        if (preparingStartJob?.isActive == true) return
+        preparingStartJob = viewModelScope.launch {
             if (!ensureStartupTrackingPreflight()) return@launch
+            _state.update { it.copy(isPreparingToTrack = true, infoMessage = null) }
             if (!ensureSelectedTrackerReadyForStart(showNoSelectionMessage = true)) return@launch
+            if (!_state.value.isPreparingToTrack) return@launch
             TrackingCommandFacade.requestStart(
                 getApplication(),
                 trigger = RuntimeTrigger.EXPLICIT_START,
                 reason = "home_start"
             )
+        }.also { job ->
+            job.invokeOnCompletion {
+                preparingStartJob = null
+                _state.update { it.copy(isPreparingToTrack = false) }
+            }
         }
     }
 
     fun requestStopTracking() {
+        if (_state.value.isPreparingToTrack) {
+            preparingStartJob?.cancel()
+            preparingStartJob = null
+            _state.update { it.copy(isPreparingToTrack = false) }
+            return
+        }
         TrackingCommandFacade.requestStop(getApplication(), reason = "home_stop")
     }
 
     fun requestManualPoint() {
+        if (!isTrackingServiceActiveOrStarting()) {
+            _state.update {
+                it.copy(infoMessage = app.getString(R.string.manual_send_point_requires_active_tracking))
+            }
+            return
+        }
+        if (SelectedTrackerPrefs.selectedTrackerId(app).isBlank()) {
+            _state.update {
+                it.copy(infoMessage = app.getString(R.string.no_tracker_selected_go_to_settings))
+            }
+            return
+        }
         app.startService(
             Intent(app, TrackingService::class.java).apply {
                 action = TrackingService.ACTION_SEND_MANUAL_POINT
@@ -94,6 +133,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     fun onHostResumed() {
         refreshAuthState()
         launchPostAuthStartupFlowsIfNeeded()
+        refreshServerAccessibilityOnResume()
     }
 
     fun onAuthServerUrlChanged(url: String) {
@@ -137,6 +177,20 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         _state.update { it.copy(infoMessage = null) }
     }
 
+    fun clearUpdatePrompt() {
+        _state.update { it.copy(updatePrompt = null, updateReleaseUrl = null) }
+    }
+
+    fun requestMapRecoveryAfterStreamingStop() {
+        _state.update { it.copy(mapRecoveryRequestToken = it.mapRecoveryRequestToken + 1L) }
+    }
+
+    fun consumeMapRecoveryRequest(token: Long) {
+        if (_state.value.mapRecoveryRequestToken == token) {
+            _state.update { it.copy(mapRecoveryRequestToken = 0L) }
+        }
+    }
+
     private fun refreshAuthState() {
         val wasAuthenticated = _state.value.isAuthenticated
         val server = authController.getConfiguredServerUrlOrPeerDefault()
@@ -156,6 +210,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         if (!_state.value.isAuthenticated) return
         launchStartupRefreshIfNeeded()
         launchStartupTrackingAutomationIfNeeded()
+        launchVersionCheckIfNeeded()
     }
 
     private fun launchStartupTrackingAutomationIfNeeded() {
@@ -190,25 +245,39 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         startupRefreshJob = viewModelScope.launch {
             startupRefreshHandled = true
             refreshUserStatus()
-            coroutineScope {
-                val trackersDef = async {
-                    trackerManagementRepository.loadTrackers(forceRefresh = true)
+            val outcome = MainStartupRefreshCoordinator.run(
+                selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(app),
+                loadTrackers = { trackerManagementRepository.loadTrackers(forceRefresh = true) },
+                loadGroups = { groupManagementRepository.loadGroups(forceRefresh = true) },
+                loadMapVisibility = { trackerManagementRepository.loadMapVisibility(forceRefresh = true) },
+                loadAvailableToAdd = { trackerManagementRepository.loadAvailableToAdd(forceRefresh = true) },
+                loadTracker = { trackerId -> trackerManagementRepository.loadTracker(trackerId) },
+                loadTrackerGeometry = { trackerId ->
+                    trackerManagementRepository.loadTrackerGeometry(trackerId)
                 }
-                launch { groupManagementRepository.loadGroups(forceRefresh = true) }
-                launch { trackerManagementRepository.loadMapVisibility(forceRefresh = true) }
-                launch { trackerManagementRepository.loadAvailableToAdd(forceRefresh = true) }
-                val trackersResult = trackersDef.await()
-                _state.update {
-                    it.copy(isServerAccessible = trackersResult is RepositoryResult.Success)
-                }
+            )
+            _state.update { it.copy(isServerAccessible = outcome.isServerAccessible) }
+        }
+    }
+
+    private fun refreshServerAccessibilityOnResume() {
+        if (!_state.value.isAuthenticated) return
+        if (serverAccessibilityRefreshJob?.isActive == true) return
+        serverAccessibilityRefreshJob = viewModelScope.launch {
+            val isAccessible = coroutineScope {
+                val trackersDef = async { trackerManagementRepository.loadTrackers(forceRefresh = true) }
+                val groupsDef = async { groupManagementRepository.loadGroups(forceRefresh = true) }
+                val visibilityDef = async { trackerManagementRepository.loadMapVisibility(forceRefresh = true) }
+                val addableDef = async { trackerManagementRepository.loadAvailableToAdd(forceRefresh = true) }
+                val refreshResults = listOf(
+                    trackersDef.await(),
+                    groupsDef.await(),
+                    visibilityDef.await(),
+                    addableDef.await(),
+                )
+                refreshResults.any { it is RepositoryResult.Success }
             }
-            val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(app)
-            if (selectedTrackerId.isNotBlank()) {
-                coroutineScope {
-                    launch { trackerManagementRepository.loadTracker(selectedTrackerId) }
-                    launch { trackerManagementRepository.loadTrackerGeometry(selectedTrackerId) }
-                }
-            }
+            _state.update { it.copy(isServerAccessible = isAccessible) }
         }
     }
 
@@ -262,13 +331,47 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         return TrackingRuntimeStateStore.state.value.isRunning || TrackingService.isStartupInProgress
     }
 
+    private fun launchVersionCheckIfNeeded() {
+        if (hasStartedVersionCheck) return
+        hasStartedVersionCheck = true
+        viewModelScope.launch {
+            val result = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                AppVersionChecker().checkForUpdateIfDue(
+                    context = app,
+                    rateLimitKey = "tracker",
+                    request = VersionCheckRequest(
+                        appName = EXPECTED_APP_NAME,
+                        localFullCommitSha = BuildConfig.GIT_COMMIT_SHA
+                    )
+                )
+            }
+            val (prompt, releaseUrl) = VersionCheckSnackbarPresenter.snackbarAndReleaseUrl(result)
+            if (prompt != null && releaseUrl != null) {
+                _state.update { it.copy(updatePrompt = prompt, updateReleaseUrl = releaseUrl) }
+            }
+        }
+    }
+
     private fun resetPostAuthStartupState() {
         startupTrackingAutomationHandled = false
         startupRefreshHandled = false
+        hasStartedVersionCheck = false
         startupTrackingAutomationJob?.cancel()
         startupTrackingAutomationJob = null
         startupRefreshJob?.cancel()
         startupRefreshJob = null
+        serverAccessibilityRefreshJob?.cancel()
+        serverAccessibilityRefreshJob = null
+        preparingStartJob?.cancel()
+        preparingStartJob = null
+        _state.update {
+            it.copy(
+                updatePrompt = null,
+                updateReleaseUrl = null,
+                mapRecoveryRequestToken = 0L,
+                isPreparingToTrack = false
+            )
+        }
     }
 
     private suspend fun ensureSelectedTrackerReadyForStart(showNoSelectionMessage: Boolean): Boolean {
@@ -293,5 +396,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         trackerManagementRepository.loadTrackers(forceRefresh = true)
         _state.update { it.copy(infoMessage = app.getString(R.string.tracker_validation_failed_go_to_settings)) }
         return false
+    }
+
+    private companion object {
+        private const val EXPECTED_APP_NAME = "GeoVault Live Tracker"
     }
 }

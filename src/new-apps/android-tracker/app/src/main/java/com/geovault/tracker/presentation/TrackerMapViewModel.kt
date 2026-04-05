@@ -42,10 +42,24 @@ data class TrackerMapUiState(
     val activeStreamedTrackerIds: Set<String> = emptySet(),
     val streamTargetIds: Set<String> = emptySet(),
     val currentGroupId: String = "",
+    val groupModeOptions: List<TrackerMapGroupModeOption> = emptyList(),
     val displayedTrackerId: String = "",
     val displayedTrackerName: String = "",
+    val selectedMapTracker: TrackerMapSelectionCard? = null,
+    val selectionLockTrackerId: String = "",
     val mode: TrackerMapDisplayMode = TrackerMapDisplayMode.SINGLE_SESSION,
     val followLockEnabled: Boolean = false,
+    val isHistoryLoading: Boolean = false,
+)
+
+data class TrackerMapSelectionCard(
+    val trackerId: String,
+    val trackerName: String,
+    val latitude: Double,
+    val longitude: Double,
+    val lastUpdatedMs: Long?,
+    val accuracyMeters: Float?,
+    val isOwned: Boolean,
 )
 
 class TrackerMapViewModel(application: Application) : AndroidViewModel(application) {
@@ -306,19 +320,240 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun setMode(mode: TrackerMapDisplayMode) {
+        val groupOptions = if (mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+            resolveGroupModeOptions()
+        } else {
+            emptyList()
+        }
+        val preferredGroupId = if (mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+            val currentGroup = _uiState.value.currentGroupId.trim()
+            currentGroup.takeIf { candidate -> groupOptions.any { it.groupId == candidate } }
+                ?: groupOptions.firstOrNull()?.groupId.orEmpty()
+        } else {
+            ""
+        }
         _uiState.value = _uiState.value.copy(
             mode = mode,
-            currentGroupId = if (mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
-                _uiState.value.currentGroupId
-            } else {
-                ""
-            }
+            currentGroupId = preferredGroupId,
+            groupModeOptions = groupOptions,
+            selectedMapTracker = null,
+            selectionLockTrackerId = "",
         )
         if (mode != TrackerMapDisplayMode.SINGLE_SESSION) {
             pendingReopenSingleTrackerLoadId = null
         }
         requestRuntimeTrailReload()
         refreshStreamTargets()
+    }
+
+    fun setGroupModeGroup(groupId: String) {
+        val normalized = groupId.trim()
+        if (normalized.isEmpty()) return
+        val state = _uiState.value
+        if (state.currentGroupId == normalized && state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+            return
+        }
+        _uiState.value = state.copy(
+            currentGroupId = normalized,
+            mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            selectedMapTracker = null,
+            selectionLockTrackerId = "",
+        )
+        pendingReopenSingleTrackerLoadId = null
+        requestRuntimeTrailReload()
+        refreshStreamTargets()
+    }
+
+    fun openTrackerOnMap(trackerId: String, trackerName: String?) {
+        val normalizedId = trackerId.trim()
+        if (normalizedId.isEmpty()) return
+        val state = _uiState.value
+        val resolvedName = trackerName?.trim().orEmpty().ifBlank {
+            if (normalizedId == state.runtime.selectedTrackerId) {
+                state.runtime.selectedTrackerName
+            } else {
+                state.displayedTrackerName
+            }
+        }
+        _uiState.value = state.copy(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = normalizedId,
+            displayedTrackerName = resolvedName,
+            currentGroupId = "",
+            groupModeOptions = emptyList(),
+            selectedMapTracker = null,
+            selectionLockTrackerId = "",
+        )
+        pendingReopenSingleTrackerLoadId = normalizedId
+        requestRuntimeTrailReload()
+        refreshStreamTargets()
+    }
+
+    fun openGroupOnMap(groupId: String) {
+        val normalizedId = groupId.trim()
+        if (normalizedId.isEmpty()) return
+        val groupOptions = resolveGroupModeOptions()
+        val resolvedGroupId = normalizedId.takeIf { candidate ->
+            groupOptions.any { it.groupId == candidate }
+        } ?: groupOptions.firstOrNull()?.groupId.orEmpty()
+        _uiState.value = _uiState.value.copy(
+            mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            currentGroupId = resolvedGroupId,
+            groupModeOptions = groupOptions,
+            selectedMapTracker = null,
+            selectionLockTrackerId = "",
+        )
+        pendingReopenSingleTrackerLoadId = null
+        requestRuntimeTrailReload()
+        refreshStreamTargets()
+    }
+
+    fun restoreSelectedTrackerAfterStreamingStop() {
+        val state = _uiState.value
+        if (state.runtime.isRunning) return
+        val selectedId = state.runtime.selectedTrackerId.trim()
+        if (selectedId.isEmpty()) return
+        _uiState.value = state.copy(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = selectedId,
+            displayedTrackerName = state.runtime.selectedTrackerName,
+            currentGroupId = "",
+            groupModeOptions = emptyList(),
+            selectedMapTracker = null,
+            selectionLockTrackerId = "",
+        )
+        pendingReopenSingleTrackerLoadId = selectedId
+        requestRuntimeTrailReload()
+        refreshStreamTargets()
+    }
+
+    fun resolveListNavigationTarget(preferredTrackerIdOverride: String? = null): MapListNavigationTarget {
+        val state = _uiState.value
+        val preferredTrackerId = preferredTrackerIdOverride?.trim().orEmpty().ifBlank {
+            effectiveDisplayedTrackerId(state)
+        }.ifBlank {
+            state.runtime.selectedTrackerId.trim()
+        }.ifBlank { "" }
+        val preferredTrackerOwned = trackerManagementStateStore.trackers.value
+            .firstOrNull { it.id == preferredTrackerId }
+            ?.isOwner()
+        val currentGroupOwned = trackerManagementStateStore.groups.value
+            .firstOrNull { it.id == state.currentGroupId.trim() }
+            ?.isOwner()
+        return MapListNavigationPolicy.resolve(
+            mode = state.mode,
+            currentGroupId = state.currentGroupId,
+            preferredTrackerId = preferredTrackerId,
+            isCurrentGroupOwned = currentGroupOwned,
+            isPreferredTrackerOwned = preferredTrackerOwned,
+        )
+    }
+
+    fun selectMapTrackerFromTap(trackerId: String) {
+        val normalizedTrackerId = trackerId.trim()
+        if (normalizedTrackerId.isEmpty()) return
+        val state = _uiState.value
+        _uiState.value = state.copy(
+            selectedMapTracker = buildSelectionCard(state, normalizedTrackerId)
+        )
+    }
+
+    fun clearMapTrackerSelection() {
+        val state = _uiState.value
+        if (state.selectedMapTracker == null) return
+        val clearLock = state.selectionLockTrackerId == state.selectedMapTracker.trackerId
+        _uiState.value = state.copy(
+            selectedMapTracker = null,
+            selectionLockTrackerId = if (clearLock) "" else state.selectionLockTrackerId,
+        )
+    }
+
+    fun focusSelectedTrackerOnMap() {
+        val state = _uiState.value
+        val selection = state.selectedMapTracker ?: return
+        openTrackerOnMap(selection.trackerId, selection.trackerName)
+    }
+
+    fun toggleSelectedTrackerLock() {
+        val state = _uiState.value
+        val selection = state.selectedMapTracker ?: return
+        val selectedId = selection.trackerId.trim()
+        if (selectedId.isEmpty()) return
+        _uiState.value = state.copy(
+            selectionLockTrackerId = if (state.selectionLockTrackerId == selectedId) "" else selectedId,
+            // Local follow-lock is for device tracking; keep selection lock mutually exclusive.
+            followLockEnabled = false,
+        )
+    }
+
+    fun selectionLockPointOrNull(): Pair<Double, Double>? {
+        val state = _uiState.value
+        val trackerId = state.selectionLockTrackerId.trim()
+        if (trackerId.isEmpty()) return null
+        val point = resolveTrackerPointData(state, trackerId) ?: return null
+        return point.latitude to point.longitude
+    }
+
+    private fun buildSelectionCard(
+        state: TrackerMapUiState,
+        trackerId: String
+    ): TrackerMapSelectionCard? {
+        val tracker = trackerManagementStateStore.trackers.value.firstOrNull { it.id == trackerId }
+        val point = resolveTrackerPointData(state, trackerId) ?: return null
+        val trackerName = tracker?.name
+            ?.takeIf { it.isNotBlank() }
+            ?: state.displayedTrackerName.takeIf { trackerId == state.displayedTrackerId && it.isNotBlank() }
+            ?: state.runtime.selectedTrackerName.takeIf { trackerId == state.runtime.selectedTrackerId && it.isNotBlank() }
+            ?: trackerId
+        return TrackerMapSelectionCard(
+            trackerId = trackerId,
+            trackerName = trackerName,
+            latitude = point.latitude,
+            longitude = point.longitude,
+            lastUpdatedMs = point.lastUpdatedMs,
+            accuracyMeters = point.accuracyMeters,
+            isOwned = tracker?.isOwner() == true,
+        )
+    }
+
+    private data class ResolvedTrackerPoint(
+        val latitude: Double,
+        val longitude: Double,
+        val lastUpdatedMs: Long?,
+        val accuracyMeters: Float?,
+    )
+
+    private fun resolveTrackerPointData(
+        state: TrackerMapUiState,
+        trackerId: String
+    ): ResolvedTrackerPoint? {
+        val normalizedId = trackerId.trim()
+        if (normalizedId.isEmpty()) return null
+        val tracker = trackerManagementStateStore.trackers.value.firstOrNull { it.id == normalizedId }
+        val remotePoint = state.remoteLastPoints[normalizedId]
+        val singleTrailPoint = state.trail.lastOrNull()
+            ?.takeIf {
+                normalizedId == effectiveDisplayedTrackerId(state) || normalizedId == state.runtime.selectedTrackerId
+            }
+        val trackerLastPoint = tracker?.last_point
+        val latitude = when {
+            remotePoint != null -> remotePoint.lat
+            singleTrailPoint != null -> singleTrailPoint.latitude
+            trackerLastPoint != null && trackerLastPoint.size >= 2 -> trackerLastPoint[1]
+            else -> return null
+        }
+        val longitude = when {
+            remotePoint != null -> remotePoint.lon
+            singleTrailPoint != null -> singleTrailPoint.longitude
+            trackerLastPoint != null && trackerLastPoint.size >= 2 -> trackerLastPoint[0]
+            else -> return null
+        }
+        return ResolvedTrackerPoint(
+            latitude = latitude,
+            longitude = longitude,
+            lastUpdatedMs = remotePoint?.timestampMs ?: singleTrailPoint?.time ?: tracker?.updated_at,
+            accuracyMeters = remotePoint?.accuracyMeters ?: singleTrailPoint?.accuracy,
+        )
     }
 
     fun onHostPaused() {
@@ -479,7 +714,10 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun setFollowLock(enabled: Boolean) {
-        _uiState.value = _uiState.value.copy(followLockEnabled = enabled)
+        _uiState.value = _uiState.value.copy(
+            followLockEnabled = enabled,
+            selectionLockTrackerId = if (enabled) "" else _uiState.value.selectionLockTrackerId,
+        )
     }
 
     fun clearFollowLockAfterUserGesture() {
@@ -532,46 +770,43 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             val state = _uiState.value
             val groupSelection = resolveGroupModeSelection(state)
-            val trackerRosterSignature = trackerManagementStateStore.trackers.value
-                .map { it.id.trim() }
-                .filter { it.isNotEmpty() }
-                .sorted()
-                .joinToString(separator = ",")
-            val groupModeSignature = "${groupSelection.groupId}|${groupSelection.trackerIds.toList().sorted().joinToString(separator = ",")}"
-            val seed =
-                "${state.mode}|${state.runtime.isRunning}|${state.runtime.selectedTrackerId}|${effectiveDisplayedTrackerId(state)}|$trackerRosterSignature|$groupModeSignature"
-            if (seed == lastStreamTargetsSeed) return@launch
-            lastStreamTargetsSeed = seed
-            val streamIds = when (state.mode) {
-                TrackerMapDisplayMode.SINGLE_SESSION -> resolveStreamTargetIds(
+            val seed = TrackerMapReloadSeedPolicy.streamSeed(
+                TrackerMapStreamSeedInput(
                     mode = state.mode,
                     runtimeRunning = state.runtime.isRunning,
                     selectedTrackerId = state.runtime.selectedTrackerId,
                     displayedTrackerId = effectiveDisplayedTrackerId(state),
-                    rosterTrackerIds = emptySet()
+                    rosterTrackerIds = trackerManagementStateStore.trackers.value.map { it.id },
+                    groupSelection = groupSelection
                 )
-                TrackerMapDisplayMode.GROUP_PLACEHOLDER -> groupSelection.trackerIds
-                TrackerMapDisplayMode.ALL_QUEUE -> {
-                    val rosterIds = when (val loaded = trackerManagementRepository.loadTrackers(forceRefresh = false)) {
-                        is RepositoryResult.Success -> loaded.data.map { it.id }.toSet()
-                        is RepositoryResult.Failure -> trackerManagementStateStore.trackers.value.map { it.id }.toSet()
-                    }
-                    resolveStreamTargetIds(
-                        mode = state.mode,
-                        runtimeRunning = state.runtime.isRunning,
-                        selectedTrackerId = state.runtime.selectedTrackerId,
-                        displayedTrackerId = effectiveDisplayedTrackerId(state),
-                        rosterTrackerIds = rosterIds
-                    )
-                }
-            }
+            )
+            if (seed == lastStreamTargetsSeed) return@launch
+            lastStreamTargetsSeed = seed
+            val streamTargetResult = TrackerMapStreamTargetCoordinator.resolve(
+                TrackerMapStreamTargetInput(
+                    mode = state.mode,
+                    runtimeRunning = state.runtime.isRunning,
+                    selectedTrackerId = state.runtime.selectedTrackerId,
+                    displayedTrackerId = effectiveDisplayedTrackerId(state),
+                    rosterTrackerIds = trackerManagementStateStore.trackers.value
+                        .map { it.id.trim() }
+                        .filter { it.isNotEmpty() }
+                        .toSet(),
+                    groupSelection = groupSelection
+                )
+            )
             _uiState.value = _uiState.value.copy(
-                streamTargetIds = streamIds,
+                streamTargetIds = streamTargetResult.streamTargetIds,
                 currentGroupId = if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
-                    groupSelection.groupId.orEmpty()
+                    streamTargetResult.resolvedGroupId
                 } else {
                     state.currentGroupId
-                }
+                },
+                groupModeOptions = if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+                    resolveGroupModeOptions()
+                } else {
+                    emptyList()
+                },
             )
         }
     }
@@ -580,44 +815,65 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         val state = _uiState.value
         val activeTrackerId = effectiveDisplayedTrackerId(state)
         val groupSelection = resolveGroupModeSelection(state)
-        val rosterSeed = trackerManagementStateStore.trackers.value.map { it.id }.sorted().joinToString(",")
-        val groupModeSeed = "${groupSelection.groupId}|${groupSelection.trackerIds.toList().sorted().joinToString(separator = ",")}"
-        val seed = "${state.mode}|${state.runtime.isRunning}|$activeTrackerId|${state.runtime.sessionVisibleBoundaryId}|$rosterSeed|$groupModeSeed"
+        val rosterTrackerIds = trackerManagementStateStore.trackers.value.map { it.id }.toSet()
+        val seed = TrackerMapReloadSeedPolicy.trailSeed(
+            TrackerMapTrailSeedInput(
+                mode = state.mode,
+                runtimeRunning = state.runtime.isRunning,
+                activeTrackerId = activeTrackerId,
+                sessionVisibleBoundaryId = state.runtime.sessionVisibleBoundaryId,
+                rosterTrackerIds = rosterTrackerIds,
+                groupSelection = groupSelection
+            )
+        )
         if (!force && lastTrailLoadSeed == seed) return
         lastTrailLoadSeed = seed
+        _uiState.value = _uiState.value.copy(isHistoryLoading = true)
 
-        val (trail, allQueueTrailsByTracker) = if (!state.runtime.isRunning &&
-            state.mode == TrackerMapDisplayMode.SINGLE_SESSION &&
-            activeTrackerId.isNotBlank()
-        ) {
-            loadSingleTrackerTrailFromServer(activeTrackerId) to emptyMap()
-        } else if (state.mode == TrackerMapDisplayMode.ALL_QUEUE) {
-            val allQueueTrails = loadAllQueueTrailsFromServer().toMutableMap()
-            if (state.runtime.isRunning && activeTrackerId.isNotBlank()) {
-                allQueueTrails[activeTrackerId] = loadQueueTrailWithOverlay()
+        try {
+            val plan = TrackerMapTrailReloadCoordinator.resolvePlan(
+                TrackerMapTrailReloadInput(
+                    mode = state.mode,
+                    runtimeRunning = state.runtime.isRunning,
+                    activeTrackerId = activeTrackerId,
+                    rosterTrackerIds = rosterTrackerIds,
+                    groupSelection = groupSelection
+                )
+            )
+            val (trail, allQueueTrailsByTracker) = when (plan.source) {
+                TrackerMapTrailSource.SINGLE_SERVER -> {
+                    loadSingleTrackerTrailFromServer(plan.singleTrackerId) to emptyMap()
+                }
+                TrackerMapTrailSource.MULTI_SERVER -> {
+                    val multiTrails = loadTrailsForTrackerIds(plan.trackerIds).toMutableMap()
+                    plan.overlayTrackerId?.let { overlayTrackerId ->
+                        multiTrails[overlayTrackerId] = loadQueueTrailWithOverlay()
+                    }
+                    val fallbackTrail = multiTrails[plan.fallbackTrackerId].orEmpty()
+                    fallbackTrail to multiTrails.toMap()
+                }
+                TrackerMapTrailSource.SINGLE_QUEUE -> {
+                    loadQueueTrailWithOverlay() to emptyMap()
+                }
             }
-            val fallbackTrail = allQueueTrails[activeTrackerId].orEmpty()
-            fallbackTrail to allQueueTrails.toMap()
-        } else if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
-            val groupTrackerIds = groupSelection.trackerIds
-            val groupTrails = loadTrailsForTrackerIds(groupTrackerIds).toMutableMap()
-            if (state.runtime.isRunning && activeTrackerId.isNotBlank() && activeTrackerId in groupTrackerIds) {
-                groupTrails[activeTrackerId] = loadQueueTrailWithOverlay()
-            }
-            val fallbackTrail = groupTrails[activeTrackerId].orEmpty()
-            fallbackTrail to groupTrails.toMap()
-        } else {
-            loadQueueTrailWithOverlay() to emptyMap()
+            _uiState.value = state.copy(
+                trail = trail,
+                allQueueTrailsByTracker = allQueueTrailsByTracker,
+                currentGroupId = if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+                    plan.resolvedGroupId
+                } else {
+                    state.currentGroupId
+                },
+                groupModeOptions = if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+                    resolveGroupModeOptions()
+                } else {
+                    emptyList()
+                },
+                isHistoryLoading = false,
+            )
+        } finally {
+            _uiState.value = _uiState.value.copy(isHistoryLoading = false)
         }
-        _uiState.value = state.copy(
-            trail = trail,
-            allQueueTrailsByTracker = allQueueTrailsByTracker,
-            currentGroupId = if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
-                groupSelection.groupId.orEmpty()
-            } else {
-                state.currentGroupId
-            }
-        )
     }
 
     private fun requestRuntimeTrailReload() {
@@ -659,65 +915,51 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private suspend fun loadSingleTrackerTrailFromServer(trackerId: String): List<QueuedLocation> {
-        val coordinatesResponse = when (val response = trackerManagementRepository.loadTrackerCoordinates(trackerId)) {
-            is RepositoryResult.Success -> response.data.coordinates
-            is RepositoryResult.Failure -> emptyList()
-        }
-        return when (val geometry = trackerManagementRepository.loadTrackerGeometry(trackerId)) {
-            is RepositoryResult.Success -> {
-                val geometryCoords = geometry.data.geometry?.coordinates.orEmpty()
-                val latestSessionStart = TrackerMapSessionWindowPolicy.resolveLatestSessionStartMs(geometry.data.point_params)
+        return TrackerMapTrailDataCoordinator.loadSingleTrackerTrail(
+            trackerId = trackerId,
+            loadTrackerCoordinates = { id -> trackerManagementRepository.loadTrackerCoordinates(id) },
+            loadTrackerGeometry = { id -> trackerManagementRepository.loadTrackerGeometry(id) },
+            loadQueueTrailWithOverlay = { loadQueueTrailWithOverlay() },
+            resolveSessionStartMs = { pointParams ->
+                TrackerMapSessionWindowPolicy.resolveLatestSessionStartMs(pointParams)
+            },
+            onSessionStartResolved = { id, latestSessionStart ->
                 if (latestSessionStart != null) {
-                    remoteSessionStartByTrack[trackerId] = latestSessionStart
+                    remoteSessionStartByTrack[id] = latestSessionStart
                 }
-                val merged = TrackerMapCoordinateMergePolicy.mergedCoordinates(
+            },
+            onSessionAnchorResolved = { id -> clearSessionAnchorResync(id) },
+            mergeCoordinates = { geometryCoords, responseCoords ->
+                TrackerMapCoordinateMergePolicy.mergedCoordinates(
                     geometryCoords = geometryCoords,
-                    responseCoords = coordinatesResponse
+                    responseCoords = responseCoords
                 )
-                clearSessionAnchorResync(trackerId)
-                if (merged.isEmpty()) loadQueueTrailWithOverlay() else mapCoordinatesToTrail(merged)
-            }
-            is RepositoryResult.Failure -> {
-                val merged = TrackerMapCoordinateMergePolicy.mergedCoordinates(
-                    geometryCoords = emptyList(),
-                    responseCoords = coordinatesResponse
-                )
-                clearSessionAnchorResync(trackerId)
-                if (merged.isEmpty()) loadQueueTrailWithOverlay() else mapCoordinatesToTrail(merged)
-            }
-        }
+            },
+            mapCoordinatesToTrail = { merged -> mapCoordinatesToTrail(merged) }
+        )
     }
 
     private suspend fun loadTrailsForTrackerIds(trackerIds: Collection<String>): Map<String, List<QueuedLocation>> {
-        val normalizedIds = trackerIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-        if (normalizedIds.isEmpty()) return emptyMap()
-        return when (val result = trackerManagementRepository.loadTrackersGeometry(normalizedIds)) {
-            is RepositoryResult.Success -> {
-                val coordinatesById = loadCoordinatesForTrackerIds(normalizedIds)
-                result.data.associate { tracker ->
-                    val latestSessionStart = TrackerMapSessionWindowPolicy.resolveLatestSessionStartMs(tracker.point_params)
-                    if (latestSessionStart != null) {
-                        remoteSessionStartByTrack[tracker.id] = latestSessionStart
-                    }
-                    val merged = TrackerMapCoordinateMergePolicy.mergedCoordinates(
-                        geometryCoords = tracker.geometry?.coordinates.orEmpty(),
-                        responseCoords = coordinatesById[tracker.id].orEmpty()
-                    )
-                    tracker.id to mapCoordinatesToTrail(merged)
+        return TrackerMapTrailDataCoordinator.loadTrailsForTrackerIds(
+            trackerIds = trackerIds,
+            loadTrackersGeometry = { ids -> trackerManagementRepository.loadTrackersGeometry(ids) },
+            loadTrackerCoordinates = { id -> trackerManagementRepository.loadTrackerCoordinates(id) },
+            resolveSessionStartMs = { pointParams ->
+                TrackerMapSessionWindowPolicy.resolveLatestSessionStartMs(pointParams)
+            },
+            onSessionStartResolved = { id, latestSessionStart ->
+                if (latestSessionStart != null) {
+                    remoteSessionStartByTrack[id] = latestSessionStart
                 }
-            }
-            is RepositoryResult.Failure -> emptyMap()
-        }
-    }
-
-    private suspend fun loadCoordinatesForTrackerIds(trackerIds: Collection<String>): Map<String, List<List<Double>>> {
-        if (trackerIds.isEmpty()) return emptyMap()
-        return trackerIds.associateWith { trackerId ->
-            when (val response = trackerManagementRepository.loadTrackerCoordinates(trackerId)) {
-                is RepositoryResult.Success -> response.data.coordinates
-                is RepositoryResult.Failure -> emptyList()
-            }
-        }
+            },
+            mergeCoordinates = { geometryCoords, responseCoords ->
+                TrackerMapCoordinateMergePolicy.mergedCoordinates(
+                    geometryCoords = geometryCoords,
+                    responseCoords = responseCoords
+                )
+            },
+            mapCoordinatesToTrail = { merged -> mapCoordinatesToTrail(merged) }
+        )
     }
 
     private fun resolveGroupModeSelection(state: TrackerMapUiState): TrackerMapGroupModeSelection {
@@ -743,10 +985,21 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         )
     }
 
-    private suspend fun loadAllQueueTrailsFromServer(): Map<String, List<QueuedLocation>> {
-        val rosterIds = trackerManagementStateStore.trackers.value.map { it.id }.distinct()
-        if (rosterIds.isEmpty()) return emptyMap()
-        return loadTrailsForTrackerIds(rosterIds)
+    private fun resolveGroupModeOptions(): List<TrackerMapGroupModeOption> {
+        val visibility = trackerManagementStateStore.mapVisibility.value
+        val hiddenGroupIds = visibility?.hidden_group_ids.orEmpty().toSet()
+        val hiddenTrackIds = visibility?.hidden_track_ids.orEmpty().toSet()
+        val hiddenOwnerTrackerIds = trackerManagementStateStore.trackers.value
+            .filter { it.isOwner() && it.settingBoolean("hidden") == true }
+            .map { it.id.trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+        return TrackerMapGroupModePolicy.resolveEligibleGroups(
+            groups = trackerManagementStateStore.groups.value,
+            hiddenGroupIds = hiddenGroupIds,
+            hiddenTrackIds = hiddenTrackIds,
+            hiddenOwnerTrackerIds = hiddenOwnerTrackerIds
+        )
     }
 
     private fun mapCoordinatesToTrail(coordinates: List<List<Double>>): List<QueuedLocation> {
@@ -808,40 +1061,27 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             "${state.mode}|${state.runtime.isRunning}|$streamIdsSignature|$effectiveDisplayedId|${state.runtime.selectedTrackerId}|$effectiveDisplayedName"
         if (seed == lastStreamingServiceSeed) return
         lastStreamingServiceSeed = seed
-
-        if (state.mode == TrackerMapDisplayMode.SINGLE_SESSION) {
-            MapStreamingServiceHelper.updateStreamingForDisplayedTracker(
+        val command = TrackerMapStreamingCoordinator.resolve(
+            TrackerMapStreamingDecisionInput(
+                mode = state.mode,
+                streamTargetIds = state.streamTargetIds,
                 displayedTrackerId = effectiveDisplayedId,
-                displayedTrackerName = effectiveDisplayedName.takeIf { it.isNotBlank() },
-                selectedTrackerId = state.runtime.selectedTrackerId,
-                mapMode = state.mode,
-                startStreaming = { trackerIds, trackerName ->
-                    MapStreamingServiceHelper.startStreaming(
-                        context = appContext,
-                        trackerIds = trackerIds,
-                        trackerName = trackerName
-                    )
-                },
-                stopStreaming = {
-                    MapStreamingServiceHelper.stopStreaming(appContext)
-                }
+                displayedTrackerName = effectiveDisplayedName,
+                selectedTrackerId = state.runtime.selectedTrackerId
             )
-            return
-        }
-
-        if (state.streamTargetIds.isNotEmpty()) {
-            val streamDisplayName = if (state.streamTargetIds.size == 1) {
-                effectiveDisplayedName.takeIf { it.isNotBlank() }
-            } else {
-                null
+        )
+        when (command) {
+            is TrackerMapStreamingCommand.Start -> {
+                MapStreamingServiceHelper.startStreaming(
+                    context = appContext,
+                    trackerIds = command.trackerIds,
+                    trackerName = command.trackerName
+                )
             }
-            MapStreamingServiceHelper.startStreaming(
-                context = appContext,
-                trackerIds = state.streamTargetIds,
-                trackerName = streamDisplayName
-            )
-        } else {
-            MapStreamingServiceHelper.stopStreaming(appContext)
+            TrackerMapStreamingCommand.Stop -> {
+                MapStreamingServiceHelper.stopStreaming(appContext)
+            }
+            TrackerMapStreamingCommand.NoOp -> Unit
         }
     }
 

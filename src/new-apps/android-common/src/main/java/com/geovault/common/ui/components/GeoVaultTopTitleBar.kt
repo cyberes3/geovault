@@ -1,12 +1,16 @@
 package com.geovault.common.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
@@ -30,12 +34,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.activity.ComponentActivity
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ui.system.GeoVaultSystemBars
+import com.geovault.common.ui.theme.GeoVaultColorTokens
 
 data class TopBarIconAction(
     val icon: ImageVector,
@@ -237,5 +244,56 @@ fun GeoVaultTopTitleBar(
                 }
             }
         )
+    }
+}
+
+@Composable
+fun GeoVaultCompactDismissTitleBar(
+    title: String,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+    closeContentDescription: String = "Close",
+) {
+    val backgroundColor = if (MaterialTheme.colors.isLight) {
+        GeoVaultColorTokens.Gray300.copy(alpha = 0.58f)
+    } else {
+        MaterialTheme.colors.onSurface.copy(alpha = 0.10f)
+    }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(backgroundColor)
+            .drawBehind {
+                val strokeWidth = 1.dp.toPx()
+                drawLine(
+                    color = GeoVaultColorTokens.BorderLight.copy(alpha = 0.9f),
+                    start = androidx.compose.ui.geometry.Offset(0f, size.height - strokeWidth / 2f),
+                    end = androidx.compose.ui.geometry.Offset(size.width, size.height - strokeWidth / 2f),
+                    strokeWidth = strokeWidth,
+                )
+            }
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.subtitle1,
+            color = MaterialTheme.colors.onSurface,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clickable(onClick = onClose),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription = closeContentDescription,
+                tint = MaterialTheme.colors.onSurface.copy(alpha = 0.8f),
+                modifier = Modifier.size(30.dp),
+            )
+        }
     }
 }

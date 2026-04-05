@@ -472,7 +472,10 @@ def tracker_post_settings(request, tracker_id):
         keep_ids = recipient_ids | {track.user_id}
         LiveTrackGroupMember.objects.filter(track=track).exclude(group__user_id__in=keep_ids).delete()
         LiveTrackSubscription.objects.filter(track=track).exclude(user_id__in=keep_ids).delete()
-    if body.world_share_enabled is not None:
+    # World share is allowed for shared/public tracks, but never for private tracks.
+    if track.visibility == VISIBILITY_PRIVATE:
+        LiveTrackWorldShare.objects.filter(track=track).delete()
+    elif body.world_share_enabled is not None:
         if body.world_share_enabled:
             share, _ = LiveTrackWorldShare.objects.get_or_create(
                 track=track,

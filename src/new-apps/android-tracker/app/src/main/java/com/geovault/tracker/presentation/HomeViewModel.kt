@@ -46,6 +46,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             hasForegroundLocation = TrackingPermissionGate.hasLocationPermission(ctx),
             hasBackgroundLocation = TrackingPermissionGate.hasBackgroundLocationPermission(ctx),
             hasPostNotifications = TrackingPermissionGate.hasNotificationPermission(ctx),
+            hasBatteryOptimizationExemption = TrackingPermissionGate.hasBatteryOptimizationExemption(ctx),
+            hasExactAlarmPermission = TrackingPermissionGate.hasExactAlarmPermission(ctx),
         )
     }
 

@@ -13,6 +13,10 @@ import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Checkbox
 import androidx.compose.material.CheckboxDefaults
+import androidx.compose.material.DropdownMenuItem
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.ExposedDropdownMenuBox
+import androidx.compose.material.ExposedDropdownMenuDefaults
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Switch
 import androidx.compose.material.SwitchDefaults
@@ -276,7 +280,8 @@ fun GeoVaultInput(
     enabled: Boolean = true,
     readOnly: Boolean = false,
     singleLine: Boolean = true,
-    visualTransformation: VisualTransformation = VisualTransformation.None
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    trailingIcon: (@Composable (() -> Unit))? = null,
 ) {
     val fieldBackground =
         if (MaterialTheme.colors.isLight) {
@@ -298,6 +303,7 @@ fun GeoVaultInput(
         readOnly = readOnly,
         singleLine = singleLine,
         visualTransformation = visualTransformation,
+        trailingIcon = trailingIcon,
         colors = TextFieldDefaults.outlinedTextFieldColors(
             backgroundColor = fieldBackground,
             focusedBorderColor = GeoVaultColorTokens.PrimaryBlue,
@@ -306,4 +312,64 @@ fun GeoVaultInput(
             unfocusedLabelColor = GeoVaultColorTokens.PrimaryBlue
         )
     )
+}
+
+data class GeoVaultSelectOption<T>(
+    val value: T,
+    val label: String,
+)
+
+/**
+ * Shared select/dropdown control styled with [GeoVaultInput].
+ *
+ * Keeps selection logic in one component and avoids ad-hoc overlay/dropdown patterns per screen.
+ */
+@OptIn(ExperimentalMaterialApi::class)
+@Composable
+fun <T> GeoVaultDropdownSelect(
+    selectedValue: T,
+    options: List<GeoVaultSelectOption<T>>,
+    onValueSelected: (T) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = options.firstOrNull { it.value == selectedValue }?.label
+        ?: options.firstOrNull()?.label.orEmpty()
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { requested ->
+            if (enabled) {
+                expanded = requested
+            }
+        },
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        GeoVaultInput(
+            value = selectedLabel,
+            onValueChange = {},
+            label = label,
+            readOnly = true,
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth(),
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    onClick = {
+                        expanded = false
+                        onValueSelected(option.value)
+                    },
+                ) {
+                    Text(option.label)
+                }
+            }
+        }
+    }
 }

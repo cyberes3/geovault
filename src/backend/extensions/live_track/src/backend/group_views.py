@@ -219,7 +219,10 @@ def group_get_patch_delete(request, group_id):
                 LiveTrackGroupShare.objects.get_or_create(group=group, shared_with=u)
             LiveTrackGroupShare.objects.filter(group=group, shared_with_id__in=to_remove).delete()
             LiveTrackGroupSubscription.objects.filter(group=group, user_id__in=to_remove).delete()
-        if "world_share_enabled" in data:
+        # World share is allowed for shared/public groups, but never for private groups.
+        if group.visibility == VISIBILITY_PRIVATE:
+            LiveTrackGroupWorldShare.objects.filter(group=group).delete()
+        elif "world_share_enabled" in data:
             if data["world_share_enabled"]:
                 LiveTrackGroupWorldShare.objects.get_or_create(
                     group=group,

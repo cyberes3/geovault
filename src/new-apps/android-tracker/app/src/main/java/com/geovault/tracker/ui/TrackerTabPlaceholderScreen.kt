@@ -2,6 +2,7 @@ package com.geovault.tracker.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
@@ -15,6 +16,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.components.GeoVaultAuthGate
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
@@ -33,7 +35,10 @@ internal fun TrackerTabPlaceholderScreen(
     onOpenSettings: () -> Unit,
     authenticatedMainContent: (@Composable ColumnScope.() -> Unit)? = null,
     authenticatedFooter: (@Composable () -> Unit)? = null,
+    authenticatedFloatingAction: (@Composable BoxScope.() -> Unit)? = null,
     scrollAuthenticatedMainContent: Boolean = true,
+    authenticatedContentHorizontalPadding: Dp = 16.dp,
+    authenticatedBottomSpacer: Dp = 16.dp,
 ) {
     Scaffold(
         topBar = {
@@ -70,7 +75,7 @@ internal fun TrackerTabPlaceholderScreen(
                         if (authenticatedMainContent != null) {
                             val mainModifier = Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = 16.dp)
+                                .padding(horizontal = authenticatedContentHorizontalPadding)
                                 .then(
                                     if (scrollAuthenticatedMainContent) {
                                         Modifier.verticalScroll(rememberScrollState())
@@ -91,8 +96,16 @@ internal fun TrackerTabPlaceholderScreen(
                         }
                     }
                     authenticatedFooter?.invoke()
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(authenticatedBottomSpacer))
                 }
+            }
+            if (isAuthenticated && authenticatedFloatingAction != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = authenticatedContentHorizontalPadding),
+                    content = authenticatedFloatingAction,
+                )
             }
         }
     }

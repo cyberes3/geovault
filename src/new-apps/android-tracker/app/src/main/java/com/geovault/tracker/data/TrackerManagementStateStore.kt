@@ -1,5 +1,6 @@
 package com.geovault.tracker.data
 
+import com.geovault.common.NaturalSort
 import com.geovault.tracker.Group
 import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.Tracker
@@ -62,9 +63,10 @@ class TrackerManagementStateStore {
     }
 
     fun publishGroups(groups: List<Group>) {
-        if (_groups.value == groups) return
-        _groups.value = groups
-        _events.tryEmit(TrackerManagementEvent.GroupsRefreshed(groups))
+        val sortedGroups = groups.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
+        if (_groups.value == sortedGroups) return
+        _groups.value = sortedGroups
+        _events.tryEmit(TrackerManagementEvent.GroupsRefreshed(sortedGroups))
     }
 
     fun publishGroup(group: Group, emitEvent: Boolean = true) {
@@ -73,7 +75,7 @@ class TrackerManagementStateStore {
         _groups.value = _groups.value
             .filterNot { it.id == group.id }
             .plus(group)
-            .sortedBy { it.name.lowercase() }
+            .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
         if (emitEvent) {
             _events.tryEmit(TrackerManagementEvent.GroupUpserted(group))
         }

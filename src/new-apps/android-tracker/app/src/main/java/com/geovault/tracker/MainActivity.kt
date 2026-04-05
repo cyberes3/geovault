@@ -17,6 +17,7 @@ import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.tracker.presentation.MainScreenViewModel
+import com.geovault.tracker.presentation.SettingsViewModel
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.ui.MainScreen
@@ -29,6 +30,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val viewModel: MainScreenViewModel by viewModels()
+    private val settingsViewModel: SettingsViewModel by viewModels()
     private var streamingErrorReceiverRegistered = false
     private var trackingErrorReceiverRegistered = false
     private val trackingErrorReceiver = object : BroadcastReceiver() {
@@ -54,13 +56,20 @@ class MainActivity : ComponentActivity() {
         GeoVaultSystemBars.applyAppChrome(activity = this)
         syncRuntimeSelectedTracker()
         viewModel.initialize()
+        settingsViewModel.initialize()
 
         setContent {
             GeoVaultTheme {
                 val state by viewModel.state.collectAsState()
+                val settingsState by settingsViewModel.state.collectAsState()
 
                 LaunchedEffect(state.oauthUrl) {
                     state.oauthUrl?.let {
+                        GeovaultAuthManager.launchOAuthInBrowser(this@MainActivity, it)
+                    }
+                }
+                LaunchedEffect(settingsState.oauthUrl) {
+                    settingsState.oauthUrl?.let {
                         GeovaultAuthManager.launchOAuthInBrowser(this@MainActivity, it)
                     }
                 }
@@ -73,13 +82,37 @@ class MainActivity : ComponentActivity() {
                 }
                 MainScreen(
                     state = state,
-                    onOpenSettings = { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) },
+                    mapRecoveryRequestToken = state.mapRecoveryRequestToken,
+                    onMapRecoveryRequestConsumed = viewModel::consumeMapRecoveryRequest,
                     onAuthServerUrlChanged = viewModel::onAuthServerUrlChanged,
                     onAuthConnect = viewModel::connectAuth,
                     onClearInfoMessage = viewModel::clearInfoMessage,
+                    onClearUpdatePrompt = viewModel::clearUpdatePrompt,
                     onRequestStartTracking = viewModel::requestStartTracking,
                     onRequestStopTracking = viewModel::requestStopTracking,
                     onRequestManualPoint = viewModel::requestManualPoint,
+                    settingsState = settingsState,
+                    onSettingsServerUrlChanged = settingsViewModel::onServerUrlChanged,
+                    onSettingsConnect = settingsViewModel::connect,
+                    onSettingsDisconnect = { settingsViewModel.disconnect(MainActivity::class.java) },
+                    onSettingsTrackingProfileSelected = settingsViewModel::setTrackingProfile,
+                    onSettingsLoggingIntervalInput = settingsViewModel::setLoggingIntervalSecFromInput,
+                    onSettingsDistanceFilterInput = settingsViewModel::setDistanceFilterMetersFromInput,
+                    onSettingsAccuracyFilterInput = settingsViewModel::setAccuracyFilterMetersFromInput,
+                    onSettingsLowAccuracyFallbackEnabled = settingsViewModel::setLowAccuracyFallbackEnabled,
+                    onSettingsLowAccuracyTimeoutInput = settingsViewModel::setLowAccuracyFallbackTimeoutSecFromInput,
+                    onSettingsStartOnBoot = settingsViewModel::setStartOnBoot,
+                    onSettingsStartOnLaunch = settingsViewModel::setStartTrackingOnLaunch,
+                    onSettingsSendExtendedData = settingsViewModel::setSendExtendedData,
+                    onSettingsSignificantMotionOnly = settingsViewModel::setSignificantDataOnly,
+                    onSettingsAutoTrackingMode = settingsViewModel::setAutoTrackingMode,
+                    onSettingsKeepScreenOnMap = settingsViewModel::setKeepScreenOnWhileViewingMap,
+                    onSettingsRefreshSelectableTrackers = settingsViewModel::refreshSelectableTrackers,
+                    onSettingsSetSelectedTracker = settingsViewModel::setSelectedTracker,
+                    onSettingsClearSelectedTracker = settingsViewModel::clearSelectedTracker,
+                    onSettingsRefreshHiddenMapItems = settingsViewModel::refreshHiddenMapItems,
+                    onSettingsUnhideMapItem = settingsViewModel::unhideMapItem,
+                    onSettingsUnhideAllMapItems = settingsViewModel::unhideAllMapItems,
                 )
             }
         }
@@ -89,11 +122,16 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIntentAction(intent)
+        intent.getStringExtra(EXTRA_OAUTH_ERROR)?.let { error ->
+            viewModel.showExternalError(error)
+            intent.removeExtra(EXTRA_OAUTH_ERROR)
+        }
     }
 
     override fun onResume() {
         super.onResume()
         viewModel.onHostResumed()
+        settingsViewModel.onHostResumed()
     }
 
     override fun onStart() {
@@ -143,6 +181,9 @@ class MainActivity : ComponentActivity() {
                 startService(Intent(this, LiveTrackStreamingService::class.java).apply {
                     this.action = action
                 })
+                if (!TrackingRuntimeStateStore.state.value.isRunning) {
+                    viewModel.requestMapRecoveryAfterStreamingStop()
+                }
             }
             ACTION_DUMP_RECOVERY_TELEMETRY -> {
                 TrackingRecoveryCoordinator.dumpTelemetryToLogcat(
@@ -172,6 +213,7 @@ class MainActivity : ComponentActivity() {
             streamingErrorReceiverRegistered = false
         }
         viewModel.onOauthUrlConsumed()
+        settingsViewModel.onOauthUrlConsumed()
     }
 
     override fun onDestroy() {

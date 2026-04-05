@@ -392,6 +392,66 @@ class TestLiveTrackAPI(TestCase):
             )
         self.assertFalse(LiveTrackShare.objects.filter(track=track).exists())
 
+    def test_post_settings_world_share_enabled_in_shared_mode(self):
+        """POST settings allows world_share_enabled when visibility=shared and keeps recipient share state."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Shared World Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                    "world_share_enabled": True,
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data.get("visibility"), "shared")
+        self.assertIn("world_share_id", data)
+        self.assertIn("world_share_url", data)
+        self.assertTrue(LiveTrackWorldShare.objects.filter(track=track).exists())
+        self.assertTrue(
+            LiveTrackShare.objects.filter(track=track, shared_with=self.other_user).exists()
+        )
+
+    def test_post_settings_private_visibility_overrides_world_share_enabled_true(self):
+        """POST settings with visibility=private and world_share_enabled=true never creates/keeps world share."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Private Override Track"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"visibility": "public", "world_share_enabled": True}),
+                content_type="application/json",
+            )
+        self.assertTrue(LiveTrackWorldShare.objects.filter(track=track).exists())
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"visibility": "private", "world_share_enabled": True}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data.get("visibility"), "private")
+        self.assertNotIn("world_share_id", data)
+        self.assertNotIn("world_share_url", data)
+        self.assertFalse(LiveTrackWorldShare.objects.filter(track=track).exists())
+
     def test_post_settings_shared_with_emails_invalid_emails_400(self):
         """POST settings with visibility=shared and unknown emails returns 400 with invalid_emails."""
         with _patch_live_track_enabled():
@@ -4093,7 +4153,7 @@ class TestLiveTrackGroups(TestCase):
         with _patch_live_track_enabled():
             response = self.client.patch(
                 f"/api/extensions/live-track/groups/{group_id}/",
-                data=json.dumps({"world_share_enabled": True}),
+                data=json.dumps({"visibility": "public", "world_share_enabled": True}),
                 content_type="application/json",
             )
         self.assertEqual(response.status_code, 200)
@@ -4110,6 +4170,66 @@ class TestLiveTrackGroups(TestCase):
             )
         self.assertEqual(response.status_code, 200)
         data = response.json()
+        self.assertNotIn("world_share_id", data)
+        self.assertNotIn("world_share_url", data)
+        self.assertFalse(LiveTrackGroupWorldShare.objects.filter(group=group).exists())
+
+    def test_group_patch_world_share_enabled_in_shared_mode(self):
+        """Owner PATCHes visibility=shared with recipients and world_share_enabled true; both sharing modes coexist."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Shared World Group"}),
+                content_type="application/json",
+            )
+        group_id = create_resp.json()["id"]
+        group = LiveTrackGroup.objects.get(id=group_id)
+        with _patch_live_track_enabled():
+            response = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                    "world_share_enabled": True,
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data.get("visibility"), "shared")
+        self.assertIn("world_share_id", data)
+        self.assertIn("world_share_url", data)
+        self.assertTrue(LiveTrackGroupWorldShare.objects.filter(group=group).exists())
+        self.assertTrue(
+            LiveTrackGroupShare.objects.filter(group=group, shared_with=self.other_user).exists()
+        )
+
+    def test_group_patch_private_visibility_overrides_world_share_enabled_true(self):
+        """PATCH visibility=private with world_share_enabled=true always removes group world share."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Private Override Group"}),
+                content_type="application/json",
+            )
+        group_id = create_resp.json()["id"]
+        group = LiveTrackGroup.objects.get(id=group_id)
+        with _patch_live_track_enabled():
+            self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"visibility": "public", "world_share_enabled": True}),
+                content_type="application/json",
+            )
+        self.assertTrue(LiveTrackGroupWorldShare.objects.filter(group=group).exists())
+        with _patch_live_track_enabled():
+            response = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"visibility": "private", "world_share_enabled": True}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data.get("visibility"), "private")
         self.assertNotIn("world_share_id", data)
         self.assertNotIn("world_share_url", data)
         self.assertFalse(LiveTrackGroupWorldShare.objects.filter(group=group).exists())
@@ -4605,7 +4725,7 @@ class TestLiveTrackWorldShare(TestCase):
         with _patch_live_track_enabled():
             settings_resp = self.client.post(
                 f"/api/extensions/live-track/trackers/{self.track_id}/settings/",
-                data=json.dumps({"world_share_enabled": True}),
+                data=json.dumps({"visibility": "public", "world_share_enabled": True}),
                 content_type="application/json",
             )
         data = settings_resp.json()
@@ -4687,6 +4807,35 @@ class TestLiveTrackWorldShare(TestCase):
         self.assertNotIn("world_share_url", data)
         self.assertFalse(LiveTrackWorldShare.objects.filter(track_id=self.track_id).exists())
 
+    def test_private_visibility_always_removes_world_share(self):
+        """POST settings with visibility=private always removes world share, even if world_share_enabled is true."""
+        self.assertTrue(LiveTrackWorldShare.objects.filter(track_id=self.track_id).exists())
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{self.track_id}/settings/",
+                data=json.dumps({"visibility": "private"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data.get("visibility"), "private")
+        self.assertNotIn("world_share_id", data)
+        self.assertNotIn("world_share_url", data)
+        self.assertFalse(LiveTrackWorldShare.objects.filter(track_id=self.track_id).exists())
+
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{self.track_id}/settings/",
+                data=json.dumps({"visibility": "private", "world_share_enabled": True}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data.get("visibility"), "private")
+        self.assertNotIn("world_share_id", data)
+        self.assertNotIn("world_share_url", data)
+        self.assertFalse(LiveTrackWorldShare.objects.filter(track_id=self.track_id).exists())
+
     def test_world_share_data_respects_share_params_with_world(self):
         """GET world/share/<id>/ returns point_params when share_params_with_world True, empty when False."""
         track = LiveTrack.objects.get(id=self.track_id)
@@ -4755,6 +4904,12 @@ class TestLiveTrackWorldShare(TestCase):
         with _patch_live_track_enabled():
             self.client.patch(
                 f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"visibility": "public"}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
                 data=json.dumps({"world_share_enabled": True}),
                 content_type="application/json",
             )
@@ -4805,11 +4960,40 @@ class TestLiveTrackGroupWorldShare(TestCase):
         with _patch_live_track_enabled():
             patch_resp = self.client.patch(
                 f"/api/extensions/live-track/groups/{self.group_id}/",
-                data=json.dumps({"world_share_enabled": True}),
+                data=json.dumps({"visibility": "public", "world_share_enabled": True}),
                 content_type="application/json",
             )
         self.group_share_id = patch_resp.json().get("world_share_id")
         self.assertIsNotNone(self.group_share_id)
+
+    def test_group_private_visibility_always_removes_world_share(self):
+        """PATCH visibility=private always removes group world share, even if world_share_enabled is true."""
+        self.assertTrue(LiveTrackGroupWorldShare.objects.filter(group_id=self.group_id).exists())
+        with _patch_live_track_enabled():
+            response = self.client.patch(
+                f"/api/extensions/live-track/groups/{self.group_id}/",
+                data=json.dumps({"visibility": "private"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data.get("visibility"), "private")
+        self.assertNotIn("world_share_id", data)
+        self.assertNotIn("world_share_url", data)
+        self.assertFalse(LiveTrackGroupWorldShare.objects.filter(group_id=self.group_id).exists())
+
+        with _patch_live_track_enabled():
+            response = self.client.patch(
+                f"/api/extensions/live-track/groups/{self.group_id}/",
+                data=json.dumps({"visibility": "private", "world_share_enabled": True}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data.get("visibility"), "private")
+        self.assertNotIn("world_share_id", data)
+        self.assertNotIn("world_share_url", data)
+        self.assertFalse(LiveTrackGroupWorldShare.objects.filter(group_id=self.group_id).exists())
 
     def test_group_world_share_info_200(self):
         """GET world/share/<group_share_id>/info/ without auth returns 200 with share_type live_track_group."""

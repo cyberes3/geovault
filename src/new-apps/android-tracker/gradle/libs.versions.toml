@@ -24,6 +24,7 @@ room = "2.8.4"
 ksp = "2.3.6"
 robolectric = "4.16"
 playServicesLocation = "21.3.0"
+quadflaskColorPicker = "0.0.15"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -64,6 +65,7 @@ androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version
 androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "androidxFragment" }
 androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidxTestCore" }
 play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
+quadflask-colorpicker = { group = "com.github.QuadFlask", name = "colorpicker", version.ref = "quadflaskColorPicker" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

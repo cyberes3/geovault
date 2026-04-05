@@ -46,6 +46,13 @@ class SettingsActivity : ComponentActivity() {
                     onSignificantMotionOnly = viewModel::setSignificantDataOnly,
                     onAutoTrackingMode = viewModel::setAutoTrackingMode,
                     onKeepScreenOnMap = viewModel::setKeepScreenOnWhileViewingMap,
+                    onRefreshSelectableTrackers = viewModel::refreshSelectableTrackers,
+                    onSetSelectedTracker = viewModel::setSelectedTracker,
+                    onClearSelectedTracker = viewModel::clearSelectedTracker,
+                    onRefreshHiddenMapItems = viewModel::refreshHiddenMapItems,
+                    onUnhideMapItem = viewModel::unhideMapItem,
+                    onUnhideAllMapItems = viewModel::unhideAllMapItems,
+                    onOpenAllTrackersOnMap = {},
                 )
             }
         }

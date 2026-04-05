@@ -2,6 +2,7 @@ package com.geovault.tracker.data
 
 import android.content.Context
 import android.util.Log
+import com.geovault.common.NaturalSort
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
 import com.geovault.tracker.AppError
@@ -298,8 +299,9 @@ class ApiTrackerManagementRepository(
             }
             val result = executeApiCall { api -> api.getGroups().execute() }
             if (result is RepositoryResult.Success) {
-                groupsCache = result.data
-                stateStore.publishGroups(result.data)
+                val sortedGroups = result.data.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
+                groupsCache = sortedGroups
+                stateStore.publishGroups(sortedGroups)
             }
             result
         }
@@ -314,7 +316,7 @@ class ApiTrackerManagementRepository(
                     .orEmpty()
                     .plus(result.data)
                     .distinctBy { it.id }
-                    .sortedBy { it.name.lowercase() }
+                    .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
             }
             stateStore.publishGroup(result.data)
         }
@@ -325,7 +327,10 @@ class ApiTrackerManagementRepository(
         val result = executeApiCall { api -> api.createGroup(GroupCreateRequest(name)).execute() }
         if (result is RepositoryResult.Success) {
             cacheMutex.withLock {
-                groupsCache = groupsCache.orEmpty().plus(result.data).sortedBy { it.name.lowercase() }
+                groupsCache = groupsCache
+                    .orEmpty()
+                    .plus(result.data)
+                    .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
             }
             stateStore.publishGroup(result.data)
         }
@@ -342,7 +347,7 @@ class ApiTrackerManagementRepository(
             cacheMutex.withLock {
                 groupsCache = groupsCache
                     ?.map { if (it.id == groupId) result.data else it }
-                    ?.sortedBy { it.name.lowercase() }
+                    ?.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
             }
             stateStore.publishGroup(result.data, emitEvent = publishToStore)
         }
@@ -364,7 +369,9 @@ class ApiTrackerManagementRepository(
         val result = executeApiCall { api -> api.addGroupTrack(groupId, GroupAddTrackRequest(trackId)).execute() }
         if (result is RepositoryResult.Success) {
             cacheMutex.withLock {
-                groupsCache = groupsCache?.map { if (it.id == groupId) result.data else it }?.sortedBy { it.name.lowercase() }
+                groupsCache = groupsCache
+                    ?.map { if (it.id == groupId) result.data else it }
+                    ?.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
             }
             stateStore.publishGroup(result.data)
         }
@@ -377,7 +384,9 @@ class ApiTrackerManagementRepository(
             return loadGroup(groupId).also { updated ->
                 if (updated is RepositoryResult.Success) {
                     cacheMutex.withLock {
-                        groupsCache = groupsCache?.map { if (it.id == groupId) updated.data else it }?.sortedBy { it.name.lowercase() }
+                        groupsCache = groupsCache
+                            ?.map { if (it.id == groupId) updated.data else it }
+                            ?.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
                     }
                     stateStore.publishGroup(updated.data)
                 }
@@ -401,7 +410,11 @@ class ApiTrackerManagementRepository(
         val result = executeApiCall { api -> api.acceptGroupShare(groupId).execute() }
         if (result is RepositoryResult.Success) {
             cacheMutex.withLock {
-                groupsCache = groupsCache.orEmpty().filterNot { it.id == groupId }.plus(result.data).sortedBy { it.name.lowercase() }
+                groupsCache = groupsCache
+                    .orEmpty()
+                    .filterNot { it.id == groupId }
+                    .plus(result.data)
+                    .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
             }
             stateStore.publishGroup(result.data)
         }

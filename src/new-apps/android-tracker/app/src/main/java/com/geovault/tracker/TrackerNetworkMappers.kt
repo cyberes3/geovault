@@ -1,10 +1,10 @@
 package com.geovault.tracker
 
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
+import com.google.gson.JsonArray
+import com.google.gson.JsonElement
+import com.google.gson.JsonNull
+import com.google.gson.JsonObject
+import com.google.gson.JsonPrimitive
 
 fun TrackerDto.toDomainModel(): Tracker {
     return Tracker(
@@ -41,24 +41,28 @@ fun TrackerCoordinatesResponseDto.toDomainModel(): TrackerCoordinatesResponse {
     )
 }
 
-private fun JsonObject.toMapAny(): Map<String, Any?> = entries.associate { (key, value) ->
+private fun JsonObject.toMapAny(): Map<String, Any?> = entrySet().associate { (key, value) ->
     key to value.toAnyValue()
 }
 
 private fun JsonElement.toAnyValue(): Any? {
     return when (this) {
-        JsonNull -> null
+        is JsonNull -> null
         is JsonObject -> toMapAny()
         is JsonArray -> map { it.toAnyValue() }
         is JsonPrimitive -> toPrimitiveValue()
+        else -> null
     }
 }
 
 private fun JsonPrimitive.toPrimitiveValue(): Any? {
     if (isString) {
-        return content
+        return asString
     }
-    val raw = content
+    if (isBoolean) {
+        return asBoolean
+    }
+    val raw = asString
     when (raw.lowercase()) {
         "true" -> return true
         "false" -> return false

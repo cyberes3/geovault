@@ -139,6 +139,7 @@ dependencies {
     implementation(libs.androidx.compose.material.icons)
     implementation(libs.androidx.browser)
     implementation(libs.play.services.location)
+    implementation(libs.quadflask.colorpicker)
     implementation(libs.okhttp)
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)

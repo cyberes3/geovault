@@ -1,11 +1,20 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.common.NaturalSort
+import com.geovault.tracker.AvailableToAddGroup
+import com.geovault.tracker.AvailableToAddItem
 import com.geovault.tracker.Group
 import com.geovault.tracker.Tracker
+import java.util.Locale
 
 /**
- * Mirrors `sharingSelectors.js` (`computeVisibleSharedTrackers` / `computeVisibleSharedGroups`).
- * TODO: Confirm behavior when `visibility` is null on non-owned trackers (treated as not shared/public).
+ * Shared parity contract (legacy `SharedTrackersFragment` + `SharedSurfaceFilterUseCase`):
+ * 1) Shared surface contains only accepted non-owned shared groups and standalone non-owned
+ *    shared/public trackers.
+ * 2) Trackers represented by a shared group are removed from standalone rows (de-dupe).
+ * 3) Shared surface ordering is one naturally sorted list across groups + trackers.
+ * 4) Discover/Public sections exclude entities already present on-map and de-dupe between buckets.
+ * 5) Search filtering is pure and centralized here so Compose rendering stays declarative.
  */
 internal fun normalizeSharedId(id: String?): String = id.orEmpty()
 
@@ -23,7 +32,7 @@ fun computeVisibleSharedTrackers(
     trackers: List<Tracker>,
     groups: List<Group>,
 ): List<Tracker> {
-    val sharedGroups = groups.filter { !it.isOwner() }
+    val sharedGroups = computeVisibleSharedGroups(groups)
     val trackIdsInSharedGroups = sharedGroups
         .flatMap { it.track_ids.orEmpty() }
         .map { normalizeSharedId(it) }
@@ -34,7 +43,7 @@ fun computeVisibleSharedTrackers(
             isSharedOrPublicNonOwnedTracker(track) &&
                 !trackIdsInSharedGroups.contains(normalizeSharedId(track.id))
         }
-        .sortedBy { it.name.lowercase() }
+        .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase(Locale.getDefault()) })
 }
 
 /**
@@ -47,5 +56,97 @@ fun computeVisibleSharedGroups(groups: List<Group>): List<Group> {
                 (group.visibility ?: "") == "shared" &&
                 group.is_accepted == true
         }
-        .sortedBy { it.name.lowercase() }
+        .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase(Locale.getDefault()) })
+}
+
+sealed interface SharedSurfaceItem {
+    val sortName: String
+
+    data class TrackerItem(val tracker: Tracker) : SharedSurfaceItem {
+        override val sortName: String = tracker.name
+    }
+
+    data class GroupItem(val group: Group) : SharedSurfaceItem {
+        override val sortName: String = group.name
+    }
+}
+
+/**
+ * Legacy-style shared surface list: accepted shared groups + non-owned shared/public standalone trackers,
+ * sorted together naturally by display name.
+ */
+fun computeSharedSurfaceItems(
+    trackers: List<Tracker>,
+    groups: List<Group>,
+): List<SharedSurfaceItem> {
+    val sharedGroups = computeVisibleSharedGroups(groups).map { SharedSurfaceItem.GroupItem(it) }
+    val sharedTrackers = computeVisibleSharedTrackers(trackers, groups)
+        .map { SharedSurfaceItem.TrackerItem(it) }
+    return (sharedGroups + sharedTrackers).sortedWith(
+        NaturalSort.naturalOrderBy { it.sortName.lowercase(Locale.getDefault()) }
+    )
+}
+
+data class SharedFilteredSections(
+    val sharedItems: List<SharedSurfaceItem>,
+    val incomingTrackers: List<AvailableToAddItem>,
+    val incomingGroups: List<AvailableToAddGroup>,
+    val publicTrackers: List<AvailableToAddItem>,
+    val publicGroups: List<AvailableToAddGroup>,
+)
+
+fun deriveSharedFilteredSections(
+    sharedItems: List<SharedSurfaceItem>,
+    incomingTrackers: List<AvailableToAddItem>,
+    incomingGroups: List<AvailableToAddGroup>,
+    publicTrackers: List<AvailableToAddItem>,
+    publicGroups: List<AvailableToAddGroup>,
+    sharedQuery: String,
+    discoverQuery: String,
+    publicQuery: String,
+): SharedFilteredSections {
+    val filteredSharedItems = sharedItems.filter { item ->
+        when (item) {
+            is SharedSurfaceItem.GroupItem -> matchesSharedSearch(
+                sharedQuery,
+                item.group.name,
+                item.group.owner_email,
+                item.group.visibility,
+                item.group.track_ids?.size?.toString()
+            )
+            is SharedSurfaceItem.TrackerItem -> matchesSharedSearch(
+                sharedQuery,
+                item.tracker.name,
+                item.tracker.owner_email,
+                item.tracker.visibility
+            )
+        }
+    }
+    val filteredIncomingTrackers = incomingTrackers.filter { item ->
+        matchesSharedSearch(discoverQuery, item.name, item.owner_email)
+    }
+    val filteredIncomingGroups = incomingGroups.filter { group ->
+        matchesSharedSearch(discoverQuery, group.name, group.owner_email, group.track_ids.size.toString())
+    }
+    val filteredPublicTrackers = publicTrackers.filter { item ->
+        matchesSharedSearch(publicQuery, item.name, item.owner_email)
+    }
+    val filteredPublicGroups = publicGroups.filter { group ->
+        matchesSharedSearch(publicQuery, group.name, group.owner_email, group.track_ids.size.toString())
+    }
+    return SharedFilteredSections(
+        sharedItems = filteredSharedItems,
+        incomingTrackers = filteredIncomingTrackers,
+        incomingGroups = filteredIncomingGroups,
+        publicTrackers = filteredPublicTrackers,
+        publicGroups = filteredPublicGroups,
+    )
+}
+
+fun matchesSharedSearch(query: String, vararg parts: String?): Boolean {
+    val normalizedQuery = query.trim().lowercase()
+    if (normalizedQuery.isEmpty()) return true
+    return parts.any { part ->
+        part.orEmpty().lowercase().contains(normalizedQuery)
+    }
 }

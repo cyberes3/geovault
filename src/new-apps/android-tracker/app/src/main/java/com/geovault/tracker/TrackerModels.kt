@@ -3,9 +3,9 @@ package com.geovault.tracker
 import android.os.Parcelable
 import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
+import com.google.gson.JsonObject
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonObject
 
 @Parcelize
 data class Tracker(
@@ -195,7 +195,6 @@ data class GeoJsonLineStringDto(
     val coordinates: List<List<Double>>
 )
 
-@Serializable
 data class TrackerDto(
     val id: String,
     val name: String,
@@ -220,7 +219,6 @@ data class TrackerDto(
     @SerialName("shared_with_emails") val shared_with_emails: List<String>? = null
 )
 
-@Serializable
 data class TrackerCoordinatesResponseDto(
     val coordinates: List<List<Double>> = emptyList(),
     @SerialName("point_params") val point_params: List<JsonObject>? = null

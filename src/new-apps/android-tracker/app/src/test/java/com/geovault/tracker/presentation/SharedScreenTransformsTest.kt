@@ -98,4 +98,101 @@ class SharedScreenTransformsTest {
         val visible = computeVisibleSharedGroups(groups)
         assertEquals(listOf("g1"), visible.map { it.id })
     }
+
+    @Test
+    fun computeSharedSurfaceItems_mergesAndSortsNaturally() {
+        val trackers = listOf(
+            Tracker(id = "t10", name = "tracker 10", color = null, is_owner = false, visibility = "shared"),
+            Tracker(id = "t2", name = "tracker 2", color = null, is_owner = false, visibility = "shared"),
+        )
+        val groups = listOf(
+            Group(
+                id = "g1",
+                name = "group 1",
+                is_owner = false,
+                visibility = "shared",
+                is_accepted = true,
+            ),
+        )
+
+        val items = computeSharedSurfaceItems(trackers = trackers, groups = groups)
+
+        assertEquals(3, items.size)
+        assertEquals("g1", (items[0] as SharedSurfaceItem.GroupItem).group.id)
+        assertEquals("t2", (items[1] as SharedSurfaceItem.TrackerItem).tracker.id)
+        assertEquals("t10", (items[2] as SharedSurfaceItem.TrackerItem).tracker.id)
+    }
+
+    @Test
+    fun computeSharedSurfaceItems_excludesStandaloneTrackerIfRepresentedInSharedGroup() {
+        val trackers = listOf(
+            Tracker(id = "t1", name = "member tracker", color = null, is_owner = false, visibility = "shared"),
+            Tracker(id = "t2", name = "standalone", color = null, is_owner = false, visibility = "shared"),
+        )
+        val groups = listOf(
+            Group(
+                id = "g1",
+                name = "Shared Group",
+                is_owner = false,
+                visibility = "shared",
+                is_accepted = true,
+                track_ids = listOf("t1"),
+            ),
+        )
+
+        val items = computeSharedSurfaceItems(trackers = trackers, groups = groups)
+
+        assertEquals(listOf("g1", "t2"), items.map {
+            when (it) {
+                is SharedSurfaceItem.GroupItem -> it.group.id
+                is SharedSurfaceItem.TrackerItem -> it.tracker.id
+            }
+        })
+    }
+
+    @Test
+    fun deriveSharedFilteredSections_filtersEachBucketByTabQuery() {
+        val sharedItems = listOf(
+            SharedSurfaceItem.TrackerItem(
+                Tracker(id = "t1", name = "Alpha tracker", color = null, is_owner = false, visibility = "shared")
+            ),
+            SharedSurfaceItem.GroupItem(
+                Group(id = "g1", name = "Bravo group", is_owner = false, visibility = "shared", is_accepted = true)
+            ),
+        )
+        val incomingTrackers = listOf(
+            com.geovault.tracker.AvailableToAddItem(id = "i1", name = "Charlie tracker")
+        )
+        val incomingGroups = listOf(
+            com.geovault.tracker.AvailableToAddGroup(id = "ig1", name = "Delta group")
+        )
+        val publicTrackers = listOf(
+            com.geovault.tracker.AvailableToAddItem(id = "p1", name = "Echo tracker")
+        )
+        val publicGroups = listOf(
+            com.geovault.tracker.AvailableToAddGroup(id = "pg1", name = "Foxtrot group")
+        )
+
+        val filtered = deriveSharedFilteredSections(
+            sharedItems = sharedItems,
+            incomingTrackers = incomingTrackers,
+            incomingGroups = incomingGroups,
+            publicTrackers = publicTrackers,
+            publicGroups = publicGroups,
+            sharedQuery = "alpha",
+            discoverQuery = "delta",
+            publicQuery = "echo",
+        )
+
+        assertEquals(listOf("t1"), filtered.sharedItems.map {
+            when (it) {
+                is SharedSurfaceItem.TrackerItem -> it.tracker.id
+                is SharedSurfaceItem.GroupItem -> it.group.id
+            }
+        })
+        assertEquals(emptyList<String>(), filtered.incomingTrackers.map { it.id })
+        assertEquals(listOf("ig1"), filtered.incomingGroups.map { it.id })
+        assertEquals(listOf("p1"), filtered.publicTrackers.map { it.id })
+        assertEquals(emptyList<String>(), filtered.publicGroups.map { it.id })
+    }
 }

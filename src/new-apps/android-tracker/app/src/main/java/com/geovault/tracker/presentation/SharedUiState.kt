@@ -19,25 +19,49 @@ data class SharedUiState(
     val groups: List<Group> = emptyList(),
     val availableToAdd: AvailableToAddResponse? = null,
     val mapVisibility: MapVisibilityResponse? = null,
+    val sharedQuery: String = "",
+    val discoverQuery: String = "",
+    val publicQuery: String = "",
     val isLoading: Boolean = false,
-    val userMessage: String? = null,
     val hasCompletedInitialLoad: Boolean = false,
 ) {
+    private val discoveryBuckets: SharedDiscoveryBuckets
+        get() = SharedDiscoveryPolicy.derive(
+            availableToAdd = availableToAdd,
+            trackers = trackers,
+            groups = groups
+        )
+
     val visibleSharedTrackers: List<Tracker>
         get() = computeVisibleSharedTrackers(trackers, groups)
 
     val visibleSharedGroups: List<Group>
         get() = computeVisibleSharedGroups(groups)
 
+    val sharedSurfaceItems: List<SharedSurfaceItem>
+        get() = computeSharedSurfaceItems(trackers, groups)
+
     val incomingTrackers: List<AvailableToAddItem>
-        get() = availableToAdd?.shared_with_me.orEmpty()
+        get() = discoveryBuckets.incomingTrackers
 
     val incomingGroups: List<AvailableToAddGroup>
-        get() = availableToAdd?.shared_with_me_groups.orEmpty()
+        get() = discoveryBuckets.incomingGroups
 
     val publicDiscoverTrackers: List<AvailableToAddItem>
-        get() = availableToAdd?.public.orEmpty()
+        get() = discoveryBuckets.publicTrackers
 
     val publicDiscoverGroups: List<AvailableToAddGroup>
-        get() = availableToAdd?.public_groups.orEmpty()
+        get() = discoveryBuckets.publicGroups
+
+    val filteredSections: SharedFilteredSections
+        get() = deriveSharedFilteredSections(
+            sharedItems = sharedSurfaceItems,
+            incomingTrackers = incomingTrackers,
+            incomingGroups = incomingGroups,
+            publicTrackers = publicDiscoverTrackers,
+            publicGroups = publicDiscoverGroups,
+            sharedQuery = sharedQuery,
+            discoverQuery = discoverQuery,
+            publicQuery = publicQuery,
+        )
 }

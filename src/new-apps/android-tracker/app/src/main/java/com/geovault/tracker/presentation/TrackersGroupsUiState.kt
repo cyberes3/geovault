@@ -3,6 +3,7 @@ package com.geovault.tracker.presentation
 import com.geovault.tracker.Group
 import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.UserItem
 
 enum class TrackersGroupsSubTab {
     TRACKERS,
@@ -11,6 +12,10 @@ enum class TrackersGroupsSubTab {
 
 sealed interface TrackersGroupsDialog {
     data object Hidden : TrackersGroupsDialog
+    data class EditTrackerLoading(
+        val trackerId: String,
+        val trackerName: String,
+    ) : TrackersGroupsDialog
     data class CreateTracker(
         val nameDraft: String = "",
         val colorDraft: String = "",
@@ -20,9 +25,26 @@ sealed interface TrackersGroupsDialog {
     data class EditTracker(
         val tracker: Tracker,
         val nameDraft: String,
-        val setAsSelectedTracker: Boolean = false
+        val colorDraft: String,
+        val setAsSelectedTracker: Boolean = false,
+        val hiddenDraft: Boolean = false,
+        val recentDataWindowDraft: String = "all",
+        val visibilityDraft: TrackerShareVisibility = TrackerShareVisibility.PRIVATE,
+        val sharedEmailsDraft: String = "",
+        val shareParamsWithRecipientsDraft: Boolean = false,
+        val allowGroupReshareDraft: Boolean = false,
+        val worldShareEnabledDraft: Boolean = false,
+        val shareParamsWithWorldDraft: Boolean = false,
+        val worldShareUrlDraft: String? = null,
+        val isWorldShareLinkLoading: Boolean = false,
     ) : TrackersGroupsDialog
-    data class EditGroup(val group: Group, val nameDraft: String) : TrackersGroupsDialog
+    data class EditGroup(
+        val group: Group,
+        val nameDraft: String,
+        val visibilityDraft: GroupShareVisibility = GroupShareVisibility.PRIVATE,
+        val sharedEmailsDraft: String = "",
+        val worldShareEnabledDraft: Boolean = false,
+    ) : TrackersGroupsDialog
 }
 
 data class TrackersGroupsUiState(
@@ -30,7 +52,13 @@ data class TrackersGroupsUiState(
     val trackers: List<Tracker> = emptyList(),
     val groups: List<Group> = emptyList(),
     val mapVisibility: MapVisibilityResponse? = null,
+    val shareRecipientSuggestions: List<String> = emptyList(),
+    val shareRecipientUsers: List<UserItem> = emptyList(),
+    val isShareRecipientSuggestionsLoading: Boolean = false,
+    val isKmlExportLoading: Boolean = false,
     val isLoading: Boolean = false,
+    val isPullRefreshing: Boolean = false,
+    val hasCompletedInitialLoad: Boolean = false,
     val userMessage: String? = null,
     val dialog: TrackersGroupsDialog = TrackersGroupsDialog.Hidden,
 )
