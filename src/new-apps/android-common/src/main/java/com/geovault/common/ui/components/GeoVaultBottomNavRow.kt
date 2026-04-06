@@ -58,8 +58,20 @@ class GeoVaultBottomNavVisibilityController internal constructor(
     fun releaseHide() = onReleaseHide()
 }
 
+@Stable
+class GeoVaultBottomNavDisableController internal constructor(
+    private val onRequestDisable: () -> Unit,
+    private val onReleaseDisable: () -> Unit,
+) {
+    fun requestDisable() = onRequestDisable()
+    fun releaseDisable() = onReleaseDisable()
+}
+
 private val LocalGeoVaultBottomNavVisibilityController =
     staticCompositionLocalOf<GeoVaultBottomNavVisibilityController?> { null }
+
+private val LocalGeoVaultBottomNavDisableController =
+    staticCompositionLocalOf<GeoVaultBottomNavDisableController?> { null }
 
 @Composable
 fun GeoVaultRequestBottomTabsHidden(shouldHide: Boolean) {
@@ -71,6 +83,21 @@ fun GeoVaultRequestBottomTabsHidden(shouldHide: Boolean) {
         onDispose {
             if (shouldHide) {
                 controller.releaseHide()
+            }
+        }
+    }
+}
+
+@Composable
+fun GeoVaultRequestBottomTabsDisabled(shouldDisable: Boolean) {
+    val controller = LocalGeoVaultBottomNavDisableController.current ?: return
+    DisposableEffect(controller, shouldDisable) {
+        if (shouldDisable) {
+            controller.requestDisable()
+        }
+        onDispose {
+            if (shouldDisable) {
+                controller.releaseDisable()
             }
         }
     }
@@ -101,10 +128,23 @@ fun GeoVaultBottomNavScaffold(
             },
         )
     }
+    var disableRequests by remember { mutableIntStateOf(0) }
+    val disableController = remember {
+        GeoVaultBottomNavDisableController(
+            onRequestDisable = { disableRequests += 1 },
+            onReleaseDisable = {
+                if (disableRequests > 0) {
+                    disableRequests -= 1
+                }
+            },
+        )
+    }
     val areTabsHidden = hiddenRequests > 0
+    val areTabsDisabled = disableRequests > 0
 
     CompositionLocalProvider(
-        LocalGeoVaultBottomNavVisibilityController provides visibilityController
+        LocalGeoVaultBottomNavVisibilityController provides visibilityController,
+        LocalGeoVaultBottomNavDisableController provides disableController,
     ) {
         Column(
             modifier = modifier.fillMaxSize(),
@@ -117,8 +157,13 @@ fun GeoVaultBottomNavScaffold(
                 content(activeDestination)
             }
             if (!areTabsHidden) {
+                val effectiveDestinations = if (areTabsDisabled) {
+                    destinations.map { it.copy(enabled = false) }
+                } else {
+                    destinations
+                }
                 GeoVaultBottomNavRow(
-                    destinations = destinations,
+                    destinations = effectiveDestinations,
                     selectedDestinationId = activeDestination.id,
                     onDestinationSelected = onDestinationSelected,
                 )

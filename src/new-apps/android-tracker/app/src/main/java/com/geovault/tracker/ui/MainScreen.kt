@@ -206,11 +206,6 @@ fun MainScreen(
             icon = Icons.Default.People,
             enabled = state.isServerAccessible,
         ),
-        GeoVaultBottomNavDestination(
-            id = TrackerTab.SETTINGS.name,
-            label = stringResource(R.string.nav_settings),
-            icon = Icons.Default.Settings,
-        ),
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -229,8 +224,8 @@ fun MainScreen(
                 }
             },
             modifier = Modifier.fillMaxSize(),
-        ) { destination ->
-            when (destination.id) {
+        ) { _ ->
+            when (selectedTab) {
                 TrackerTab.HOME.name -> {
                     HomeScreen(
                         isAuthenticated = state.isAuthenticated,

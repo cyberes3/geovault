@@ -44,6 +44,11 @@ sealed interface TrackersGroupsDialog {
         val visibilityDraft: GroupShareVisibility = GroupShareVisibility.PRIVATE,
         val sharedEmailsDraft: String = "",
         val worldShareEnabledDraft: Boolean = false,
+        val worldShareUrlDraft: String? = null,
+        val isWorldShareLinkLoading: Boolean = false,
+        val hiddenDraft: Boolean = false,
+        val memberTrackIds: Set<String> = emptySet(),
+        val initialMemberTrackIds: Set<String> = emptySet(),
     ) : TrackersGroupsDialog
 }
 
@@ -57,8 +62,10 @@ data class TrackersGroupsUiState(
     val isShareRecipientSuggestionsLoading: Boolean = false,
     val isKmlExportLoading: Boolean = false,
     val isLoading: Boolean = false,
+    val isPickerRefreshing: Boolean = false,
     val isPullRefreshing: Boolean = false,
     val hasCompletedInitialLoad: Boolean = false,
     val userMessage: String? = null,
     val dialog: TrackersGroupsDialog = TrackersGroupsDialog.Hidden,
+    val addingTrackerIds: Set<String> = emptySet(),
 )

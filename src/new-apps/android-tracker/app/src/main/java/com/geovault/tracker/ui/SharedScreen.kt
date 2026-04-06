@@ -56,7 +56,9 @@ import com.geovault.tracker.Group
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.presentation.GroupShareVisibility
 import com.geovault.tracker.presentation.OwnershipActionPolicy
+import com.geovault.tracker.presentation.TrackersGroupsDialog
 import com.geovault.tracker.presentation.SharedSurfaceItem
 import com.geovault.tracker.presentation.SharedSubTab
 import com.geovault.tracker.presentation.SharedUiState
@@ -86,6 +88,7 @@ fun SharedScreen(
     var pendingActionKey by remember { mutableStateOf<String?>(null) }
     var snackbarModel by remember { mutableStateOf<GeoVaultSnackbarModel?>(null) }
     var editSharedTrackerDialog by remember { mutableStateOf<Tracker?>(null) }
+    var editSharedGroupDialog by remember { mutableStateOf<TrackersGroupsDialog.EditGroup?>(null) }
 
     LaunchedEffect(isAuthenticated) {
         if (isAuthenticated) {
@@ -123,6 +126,53 @@ fun SharedScreen(
         onOpenSettings = onOpenSettings,
         scrollAuthenticatedMainContent = false,
         authenticatedMainContent = {
+            if (groupActionsDialog != null) {
+                val dialog = groupActionsDialog!!
+                GroupActionsScreen(
+                    group = dialog.group,
+                    allTrackers = state.trackers,
+                    highlightedTrackerId = dialog.highlightedTrackerId,
+                    onDismiss = { groupActionsDialog = null },
+                    onViewTrackerOnMap = { trackerId ->
+                        groupActionsDialog = null
+                        onOpenTrackerOnMap(trackerId, null)
+                    },
+                    onViewTrackerParams = { tracker ->
+                        tracker.toTrackerParamsUiModelOrNull()?.let(onRequestTrackerParams)
+                    },
+                    onViewTrackerInList = null,
+                    onEditGroup = { _ -> },
+                    onViewGroupOnMap = { groupId ->
+                        groupActionsDialog = null
+                        onOpenGroupOnMap(groupId)
+                    },
+                )
+            } else if (editSharedGroupDialog != null) {
+                GroupEditScreen(
+                    dialog = editSharedGroupDialog!!,
+                    allTrackers = state.trackers,
+                    shareRecipientUsers = emptyList(),
+                    isShareRecipientSuggestionsLoading = false,
+                    isPickerRefreshing = false,
+                    isSaving = state.isLoading,
+                    onDismiss = { editSharedGroupDialog = null },
+                    onReloadShareRecipients = {},
+                    onRefreshTrackers = {},
+                    onNameDraftChanged = {},
+                    onVisibilityChanged = {},
+                    onToggleSharedEmail = {},
+                    onWorldShareToggled = {},
+                    onHiddenChanged = {},
+                    onUpdateDraftTrackers = {},
+                    onDeleteGroup = {},
+                    onLeaveGroup = {
+                        val groupId = editSharedGroupDialog!!.group.id
+                        editSharedGroupDialog = null
+                        vm.leaveGroup(groupId)
+                    },
+                    onSave = {},
+                )
+            } else {
             SharedAuthenticatedBody(
                 state = state,
                 onSubTabSelected = vm::setSubTab,
@@ -174,7 +224,14 @@ fun SharedScreen(
                     editSharedTrackerDialog = tracker
                 },
                 onEditSharedGroup = { group ->
-                    pendingConfirmAction = SharedConfirmAction.LeaveGroup(group.id, group.name)
+                    editSharedGroupDialog = TrackersGroupsDialog.EditGroup(
+                        group = group,
+                        nameDraft = group.name,
+                        visibilityDraft = GroupShareVisibility.fromApiValue(group.visibility),
+                        sharedEmailsDraft = group.shared_with_emails.orEmpty().joinToString(", "),
+                        worldShareEnabledDraft = !group.world_share_id.isNullOrBlank() ||
+                            !group.world_share_url.isNullOrBlank(),
+                    )
                 },
                 navigationRequest = pendingNavigationRequest,
                 onNavigationRequestHandled = { pendingNavigationRequest = null },
@@ -191,6 +248,7 @@ fun SharedScreen(
                 },
                 pendingActionKey = pendingActionKey,
             )
+            }
         },
     )
     GeoVaultSnackbarHost(
@@ -223,20 +281,6 @@ fun SharedScreen(
             onRemoveFromShare = {
                 vm.leaveTrackerShare(tracker.id)
                 editSharedTrackerDialog = null
-            },
-        )
-    }
-    groupActionsDialog?.let { dialog ->
-        GroupMembersDialog(
-            group = dialog.group,
-            allTrackers = state.trackers,
-            highlightedTrackerId = dialog.highlightedTrackerId,
-            onDismiss = { groupActionsDialog = null },
-            onViewTrackerOnMap = { tracker ->
-                onOpenTrackerOnMap(tracker.id, tracker.name)
-            },
-            onViewTrackerParams = { tracker ->
-                tracker.toTrackerParamsUiModelOrNull()?.let(onRequestTrackerParams)
             },
         )
     }

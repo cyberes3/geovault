@@ -39,6 +39,7 @@ import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultServerConfigBlock
 import com.geovault.common.ui.components.GeoVaultToggle
+import com.geovault.common.ui.components.GeoVaultRequestBottomTabsHidden
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
@@ -72,6 +73,8 @@ fun SettingsScreen(
     onUnhideAllMapItems: () -> Unit,
     onOpenAllTrackersOnMap: () -> Unit = {},
 ) {
+    GeoVaultRequestBottomTabsHidden(shouldHide = true)
+
     var showSelectedTrackerDialog by remember { mutableStateOf(false) }
     var showHiddenMapItemsDialog by remember { mutableStateOf(false) }
     Scaffold(

@@ -1,12 +1,17 @@
 package com.geovault.common.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
@@ -25,10 +30,43 @@ fun GeoVaultLoadingSpinner(
     spinnerSize: Dp = 28.dp,
     strokeWidth: Dp = 2.5.dp,
     color: Color = GeoVaultColorTokens.PrimaryBlue,
+    bottomText: String? = null,
+) {
+    if (bottomText != null) {
+        Column(
+            modifier = modifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            GeoVaultLoadingSpinnerArc(
+                spinnerSize = spinnerSize,
+                strokeWidth = strokeWidth,
+                color = color,
+            )
+            Text(
+                text = bottomText,
+                style = MaterialTheme.typography.body2,
+            )
+        }
+    } else {
+        GeoVaultLoadingSpinnerArc(
+            modifier = modifier,
+            spinnerSize = spinnerSize,
+            strokeWidth = strokeWidth,
+            color = color,
+        )
+    }
+}
+
+@Composable
+private fun GeoVaultLoadingSpinnerArc(
+    modifier: Modifier = Modifier,
+    spinnerSize: Dp = 28.dp,
+    strokeWidth: Dp = 2.5.dp,
+    color: Color = GeoVaultColorTokens.PrimaryBlue,
 ) {
     var rotationDegrees by androidx.compose.runtime.remember { mutableFloatStateOf(0f) }
 
-    // Manual tick-based rotation to bypass system animator scale settings.
     LaunchedEffect(Unit) {
         while (true) {
             rotationDegrees = (rotationDegrees + 10f) % 360f

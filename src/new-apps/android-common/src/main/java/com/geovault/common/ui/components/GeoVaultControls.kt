@@ -4,8 +4,11 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonColors
@@ -60,6 +63,64 @@ fun GeoVaultBaseButton(
     tooltip: String? = null,
     fitToContent: Boolean = false,
     minWidthWhenFitToContent: Dp = 1.dp,
+    trailingContent: (@Composable RowScope.() -> Unit)? = null,
+) {
+    val tooltipText = tooltip?.takeIf { it.isNotBlank() }
+
+    val baseModifier = if (fitToContent) {
+        modifier.widthIn(min = minWidthWhenFitToContent)
+    } else {
+        modifier
+    }
+
+    val buttonContent: @Composable RowScope.() -> Unit = {
+        if (trailingContent != null) {
+            Text(text = text, modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.width(8.dp))
+            trailingContent()
+        } else {
+            Text(text = text)
+        }
+    }
+
+    if (tooltipText != null) {
+        GeoVaultBaseButtonWithTooltip(
+            text = text,
+            onClick = onClick,
+            style = style,
+            modifier = baseModifier,
+            enabled = enabled,
+            tooltipText = tooltipText,
+            content = buttonContent,
+        )
+    } else {
+        Button(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = baseModifier,
+            colors = style.colors,
+            border = style.border,
+            elevation = ButtonDefaults.elevation(
+                defaultElevation = 0.dp,
+                pressedElevation = 0.dp,
+                disabledElevation = 0.dp,
+                hoveredElevation = 0.dp,
+                focusedElevation = 0.dp
+            ),
+            content = buttonContent,
+        )
+    }
+}
+
+@Composable
+private fun GeoVaultBaseButtonWithTooltip(
+    text: String,
+    onClick: () -> Unit,
+    style: GeoVaultButtonStyle,
+    modifier: Modifier,
+    enabled: Boolean,
+    tooltipText: String,
+    content: @Composable RowScope.() -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -72,7 +133,6 @@ fun GeoVaultBaseButton(
             importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
     }
-    val tooltipText = tooltip?.takeIf { it.isNotBlank() }
     var anchorBounds by remember { mutableStateOf<android.graphics.Rect?>(null) }
 
     fun updateAnchorProxyLayout() {
@@ -104,7 +164,7 @@ fun GeoVaultBaseButton(
     }
 
     LaunchedEffect(isPressed, tooltipText, enabled, anchorBounds, anchorProxyView) {
-        if (!enabled || tooltipText == null || !isPressed) return@LaunchedEffect
+        if (!enabled || !isPressed) return@LaunchedEffect
         delay(android.view.ViewConfiguration.getLongPressTimeout().toLong())
         if (isPressed) {
             updateAnchorProxyLayout()
@@ -119,12 +179,7 @@ fun GeoVaultBaseButton(
         ViewCompat.setTooltipText(anchorProxyView, tooltipText)
     }
 
-    val baseModifier = if (fitToContent) {
-        modifier.widthIn(min = minWidthWhenFitToContent)
-    } else {
-        modifier
-    }
-    val buttonModifier = baseModifier.onGloballyPositioned { coordinates ->
+    val buttonModifier = modifier.onGloballyPositioned { coordinates ->
         val bounds = coordinates.boundsInWindow()
         anchorBounds = android.graphics.Rect(
             bounds.left.roundToInt(),
@@ -147,10 +202,9 @@ fun GeoVaultBaseButton(
             disabledElevation = 0.dp,
             hoveredElevation = 0.dp,
             focusedElevation = 0.dp
-        )
-    ) {
-        Text(text = text)
-    }
+        ),
+        content = content,
+    )
 }
 
 @Composable
@@ -189,6 +243,7 @@ fun GeoVaultSecondaryButton(
     accentColor: Color = GeoVaultColorTokens.PrimaryBlue,
     tooltip: String? = null,
     fitToContent: Boolean = false,
+    trailingContent: (@Composable RowScope.() -> Unit)? = null,
 ) {
     GeoVaultBaseButton(
         text = text,
@@ -206,6 +261,7 @@ fun GeoVaultSecondaryButton(
         enabled = enabled,
         tooltip = tooltip,
         fitToContent = fitToContent,
+        trailingContent = trailingContent,
     )
 }
 

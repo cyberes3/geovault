@@ -179,16 +179,12 @@ private fun UploadContent(
                 .heightIn(min = 120.dp),
             contentAlignment = Alignment.Center
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(GeoVaultLayoutTokens.TightGap)
-            ) {
-                if (isUploading) {
-                    GeoVaultLoadingSpinner()
-                }
-                if (statusMessage.isNotBlank()) {
-                    Text(statusMessage)
-                }
+            if (isUploading) {
+                GeoVaultLoadingSpinner(
+                    bottomText = statusMessage.takeIf { it.isNotBlank() },
+                )
+            } else if (statusMessage.isNotBlank()) {
+                Text(statusMessage)
             }
         }
     }

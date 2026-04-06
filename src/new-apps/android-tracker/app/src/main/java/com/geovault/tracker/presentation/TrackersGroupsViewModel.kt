@@ -56,6 +56,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
 
     private var openEditTrackerJob: Job? = null
     private var editTrackerWorldShareJob: Job? = null
+    private var editGroupWorldShareJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -73,6 +74,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                 _uiState.update { it.copy(mapVisibility = mapVisibility) }
             }
         }
+        refreshAll()
     }
 
     fun setSubTab(tab: TrackersGroupsSubTab) {
@@ -159,7 +161,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
     }
 
     fun openEditGroupDialog(group: com.geovault.tracker.Group) {
-        if (!OwnershipActionPolicy.canEditGroup(group)) return
+        val trackIds = group.track_ids.orEmpty().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
         _uiState.update {
             it.copy(
                 dialog = TrackersGroupsDialog.EditGroup(
@@ -168,11 +170,18 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                     visibilityDraft = GroupShareVisibility.fromApiValue(group.visibility),
                     sharedEmailsDraft = group.shared_with_emails.orEmpty().joinToString(", "),
                     worldShareEnabledDraft = !group.world_share_id.isNullOrBlank() ||
-                        !group.world_share_url.isNullOrBlank()
+                        !group.world_share_url.isNullOrBlank(),
+                    worldShareUrlDraft = group.world_share_url,
+                    hiddenDraft = group.hidden == true,
+                    memberTrackIds = trackIds,
+                    initialMemberTrackIds = trackIds,
                 )
             )
         }
-        refreshShareRecipientSuggestions()
+        if (group.isOwner()) {
+            refreshShareRecipientSuggestions()
+            refreshTrackersForPicker()
+        }
     }
 
     fun dismissDialog() {
@@ -180,6 +189,8 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
         openEditTrackerJob = null
         editTrackerWorldShareJob?.cancel()
         editTrackerWorldShareJob = null
+        editGroupWorldShareJob?.cancel()
+        editGroupWorldShareJob = null
         _uiState.update { it.copy(dialog = TrackersGroupsDialog.Hidden) }
     }
 
@@ -516,6 +527,102 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
         }
     }
 
+    fun updateEditGroupHidden(hidden: Boolean) {
+        val d = _uiState.value.dialog
+        if (d is TrackersGroupsDialog.EditGroup) {
+            _uiState.update { it.copy(dialog = d.copy(hiddenDraft = hidden)) }
+        }
+    }
+
+    fun addGroupDraftTracker(trackerId: String) {
+        val d = _uiState.value.dialog as? TrackersGroupsDialog.EditGroup ?: return
+        if (trackerId in d.memberTrackIds) return
+        _uiState.update { it.copy(dialog = d.copy(memberTrackIds = d.memberTrackIds + trackerId)) }
+    }
+
+    fun removeGroupDraftTracker(trackerId: String) {
+        val d = _uiState.value.dialog as? TrackersGroupsDialog.EditGroup ?: return
+        if (trackerId !in d.memberTrackIds) return
+        _uiState.update { it.copy(dialog = d.copy(memberTrackIds = d.memberTrackIds - trackerId)) }
+    }
+
+    fun updateGroupDraftTrackers(trackerIds: Set<String>) {
+        val d = _uiState.value.dialog as? TrackersGroupsDialog.EditGroup ?: return
+        _uiState.update { it.copy(dialog = d.copy(memberTrackIds = trackerIds)) }
+    }
+
+    fun recordImmediateTrackerAdd(trackerId: String) {
+        val d = _uiState.value.dialog as? TrackersGroupsDialog.EditGroup ?: return
+        _uiState.update {
+            it.copy(
+                dialog = d.copy(
+                    memberTrackIds = d.memberTrackIds + trackerId,
+                    initialMemberTrackIds = d.initialMemberTrackIds + trackerId,
+                )
+            )
+        }
+    }
+
+    fun toggleGroupWorldShare() {
+        val d = _uiState.value.dialog as? TrackersGroupsDialog.EditGroup ?: return
+        if (d.visibilityDraft == GroupShareVisibility.PRIVATE) return
+        val groupId = d.group.id
+        val enabling = !d.worldShareEnabledDraft
+        editGroupWorldShareJob?.cancel()
+        editGroupWorldShareJob = viewModelScope.launch {
+            _uiState.update {
+                val cur = it.dialog as? TrackersGroupsDialog.EditGroup ?: return@update it
+                if (cur.group.id != groupId) return@update it
+                it.copy(
+                    dialog = cur.copy(
+                        worldShareEnabledDraft = enabling,
+                        isWorldShareLinkLoading = true,
+                    ),
+                )
+            }
+            val request = com.geovault.tracker.GroupPatchRequest(world_share_enabled = enabling)
+            when (val result = groupRepository.patchGroup(groupId, request, publishToStore = true)) {
+                is RepositoryResult.Success -> {
+                    val g = result.data
+                    _uiState.update {
+                        val cur = it.dialog as? TrackersGroupsDialog.EditGroup ?: return@update it
+                        if (cur.group.id != groupId) return@update it
+                        it.copy(
+                            dialog = cur.copy(
+                                group = g,
+                                isWorldShareLinkLoading = false,
+                                worldShareEnabledDraft = !g.world_share_id.isNullOrBlank() ||
+                                    !g.world_share_url.isNullOrBlank(),
+                                worldShareUrlDraft = g.world_share_url,
+                            ),
+                        )
+                    }
+                }
+                is RepositoryResult.Failure -> {
+                    _uiState.update {
+                        val cur = it.dialog as? TrackersGroupsDialog.EditGroup ?: return@update it
+                        if (cur.group.id != groupId) return@update it
+                        it.copy(
+                            dialog = cur.copy(
+                                worldShareEnabledDraft = !enabling,
+                                isWorldShareLinkLoading = false,
+                            ),
+                            userMessage = getApplication<Application>().getString(
+                                if (enabling) R.string.trackers_failed_to_enable_world_share
+                                else R.string.trackers_failed_to_disable_world_share,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun leaveGroupFromEditor(groupId: String) {
+        runGroupTransition(SharedOwnershipTransitionPolicy.forGroupLeave(groupId))
+        dismissDialog()
+    }
+
     fun refreshAll(asPullRefresh: Boolean = false) {
         viewModelScope.launch {
             _uiState.update {
@@ -529,6 +636,22 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                 userMessage = null,
                 forceRefresh = asPullRefresh
             )
+        }
+    }
+
+    fun refreshTrackersForPicker() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isPickerRefreshing = true) }
+            val result = trackerRepository.loadTrackers(forceRefresh = true)
+            _uiState.update { current ->
+                current.copy(
+                    isPickerRefreshing = false,
+                    trackers = when (result) {
+                        is RepositoryResult.Success -> result.data
+                        is RepositoryResult.Failure -> current.trackers
+                    },
+                )
+            }
         }
     }
 
@@ -686,18 +809,25 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             sharedEmailsInput = d.sharedEmailsDraft,
             worldShareEnabled = d.worldShareEnabledDraft
         )
-        GroupSharingSettingsPolicy.validate(sharingDraft)
+        val addTrackIds = d.memberTrackIds.minus(d.initialMemberTrackIds).toList()
+        val removeTrackIds = d.initialMemberTrackIds.minus(d.memberTrackIds).toList()
         runMutationAndRefresh(
             mutation = {
                 groupRepository.patchGroup(
                     d.group.id,
                     GroupSharingSettingsPolicy.buildPatchRequest(
                         name = name,
-                        sharingDraft = sharingDraft
+                        sharingDraft = sharingDraft,
+                        hidden = d.hiddenDraft,
+                        addTrackIds = addTrackIds,
+                        removeTrackIds = removeTrackIds,
                     )
                 )
             },
             onSuccess = {
+                _toastEvents.tryEmit(
+                    getApplication<Application>().getString(R.string.trackers_saved_successfully)
+                )
                 dismissDialog()
             }
         )
@@ -784,10 +914,14 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
         )
     }
 
-    fun syncGroupTrackMembership(group: Group, targetTrackerIds: Set<String>) {
+    fun syncGroupTrackMembership(
+        groupId: String,
+        currentTrackerIds: Set<String>,
+        targetTrackerIds: Set<String>,
+    ) {
         val syncPlan = GroupMembershipSyncPolicy.plan(
-            currentTrackerIds = group.track_ids.orEmpty(),
-            targetTrackerIds = targetTrackerIds
+            currentTrackerIds = currentTrackerIds,
+            targetTrackerIds = targetTrackerIds,
         )
         if (syncPlan.isNoOp) return
         viewModelScope.launch {
@@ -796,7 +930,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             val outcome = GroupMembershipMutationCoordinator.run(
                 plan = syncPlan,
                 removeTrackerFromGroup = { trackId ->
-                    when (val result = groupRepository.removeGroupTrack(group.id, trackId)) {
+                    when (val result = groupRepository.removeGroupTrack(groupId, trackId)) {
                         is RepositoryResult.Success -> true
                         is RepositoryResult.Failure -> {
                             if (firstFailure == null) firstFailure = result.error
@@ -805,7 +939,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                     }
                 },
                 addTrackerToGroup = { trackId ->
-                    when (val result = groupRepository.addGroupTrack(group.id, trackId)) {
+                    when (val result = groupRepository.addGroupTrack(groupId, trackId)) {
                         is RepositoryResult.Success -> true
                         is RepositoryResult.Failure -> {
                             if (firstFailure == null) firstFailure = result.error
@@ -818,6 +952,22 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                 userMessage = resolveGroupMembershipMessage(outcome, firstFailure),
                 forceRefresh = true
             )
+        }
+    }
+
+    fun addTrackerToGroup(groupId: String, trackerId: String, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(addingTrackerIds = it.addingTrackerIds + trackerId) }
+            when (val result = groupRepository.addGroupTrack(groupId, trackerId)) {
+                is RepositoryResult.Success -> {
+                    _uiState.update { it.copy(addingTrackerIds = it.addingTrackerIds - trackerId) }
+                    onSuccess()
+                }
+                is RepositoryResult.Failure -> {
+                    _uiState.update { it.copy(addingTrackerIds = it.addingTrackerIds - trackerId) }
+                    _toastEvents.emit(appErrorMessage(result.error))
+                }
+            }
         }
     }
 

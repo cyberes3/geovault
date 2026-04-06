@@ -259,6 +259,23 @@
     <string name="groups_deleted">Group deleted.</string>
     <string name="groups_membership_updated">Group membership updated.</string>
     <string name="groups_membership_partial_update">%1$d membership changes applied, %2$d failed.</string>
+    <string name="groups_edit_shared_title">Shared Group</string>
+    <string name="groups_edit_owner_label">Owner: %1$s</string>
+    <string name="groups_edit_leave">Leave Group</string>
+    <string name="groups_edit_delete">Delete Group</string>
+    <string name="groups_edit_members_row">Trackers (%1$d)</string>
+    <string name="groups_edit_discard_title">Discard changes?</string>
+    <string name="groups_edit_discard_message">You have unsaved group edits. If you close now, these changes will be lost.</string>
+    <string name="groups_edit_hidden_help">When on, this group is hidden from your map. You can show it again in Settings.</string>
+    <string name="groups_edit_visibility_help_private">Only you can access this group and its trackers.</string>
+    <string name="groups_edit_visibility_help_shared">Only specific users you choose can access this group.</string>
+    <string name="groups_edit_visibility_help_public">All authenticated users can discover this group.</string>
+    <string name="groups_edit_world_share_help">When on, anyone with the link can view this group on a read-only map without logging in.</string>
+    <string name="groups_tracker_list_title">Trackers</string>
+    <string name="groups_tracker_list_empty">No trackers in this group.</string>
+    <string name="groups_tracker_add_title">Add Trackers</string>
+    <string name="groups_tracker_picker_empty">No trackers available.</string>
+    <string name="groups_tracker_picker_filter_hint">Filter by name or owner</string>
 
     <string name="shared_screen_title">Shared</string>
     <string name="shared_placeholder_signed_out">Sign in to see shared trackers, invites, and public discovery.</string>

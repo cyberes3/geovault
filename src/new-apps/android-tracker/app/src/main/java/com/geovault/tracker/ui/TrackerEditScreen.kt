@@ -68,6 +68,7 @@ import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultSelectOption
 import com.geovault.common.ui.components.GeoVaultToggleHelpCard
 import com.geovault.common.ui.components.GeoVaultCompactDismissTitleBar
+import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
 import com.geovault.common.NaturalSort
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
@@ -119,6 +120,8 @@ fun TrackerEditScreen(
     onExportKml: () -> Unit,
     onSave: () -> Unit,
 ) {
+    GeoVaultRequestBottomTabsDisabled(shouldDisable = true)
+
     val context = LocalContext.current
     val colorPreview = remember(dialog.colorDraft, context) {
         resolveTrackerColorPreview(dialog.colorDraft, context)
@@ -133,13 +136,6 @@ fun TrackerEditScreen(
     }
     var showPickUsersDialog by remember { mutableStateOf(false) }
     var shareUserPickerSearch by remember { mutableStateOf("") }
-
-    LaunchedEffect(showPickUsersDialog) {
-        if (showPickUsersDialog) {
-            shareUserPickerSearch = ""
-            onReloadShareRecipients()
-        }
-    }
 
     val initialSnapshot = remember(dialog.tracker.id) {
         TrackerEditInitialSnapshot(
@@ -404,7 +400,11 @@ fun TrackerEditScreen(
                                     if (dialog.visibilityDraft == TrackerShareVisibility.SHARED) {
                                         GeoVaultSecondaryButton(
                                             text = stringResource(R.string.trackers_edit_pick_users),
-                                            onClick = { showPickUsersDialog = true },
+                                            onClick = {
+                                                shareUserPickerSearch = ""
+                                                onReloadShareRecipients()
+                                                showPickUsersDialog = true
+                                            },
                                             enabled = !isSaving,
                                             modifier = Modifier.fillMaxWidth(),
                                         )
@@ -511,6 +511,12 @@ fun TrackerEditScreen(
     }
 
     if (showPickUsersDialog) {
+        var hasSeenLoading by remember { mutableStateOf(false) }
+        LaunchedEffect(isShareRecipientSuggestionsLoading) {
+            if (isShareRecipientSuggestionsLoading) hasSeenLoading = true
+        }
+        val effectivelyLoading = isShareRecipientSuggestionsLoading || !hasSeenLoading
+
         val selectedEmails = TrackerSharingSettingsPolicy.parseSharedEmails(dialog.sharedEmailsDraft)
         val apiEmailsLower = shareRecipientUsers
             .map { it.email.trim().lowercase(Locale.getDefault()) }
@@ -556,23 +562,16 @@ fun TrackerEditScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     when {
-                        isShareRecipientSuggestionsLoading -> {
+                        effectivelyLoading -> {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .heightIn(min = 120.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    GeoVaultLoadingSpinner()
-                                    Text(
-                                        text = stringResource(R.string.trackers_share_suggestions_loading),
-                                        style = MaterialTheme.typography.body2,
-                                    )
-                                }
+                                GeoVaultLoadingSpinner(
+                                    bottomText = stringResource(R.string.trackers_share_suggestions_loading),
+                                )
                             }
                         }
                         filteredPickerEmails.isEmpty() -> {

@@ -36,11 +36,15 @@ object GroupSharingSettingsPolicy {
 
     fun buildPatchRequest(
         name: String,
-        sharingDraft: GroupSharingDraft
+        sharingDraft: GroupSharingDraft,
+        hidden: Boolean = false,
+        addTrackIds: List<String> = emptyList(),
+        removeTrackIds: List<String> = emptyList(),
     ): GroupPatchRequest {
         val normalized = validate(sharingDraft).normalizedEmails
         return GroupPatchRequest(
             name = name,
+            hidden = hidden,
             visibility = sharingDraft.visibility.apiValue,
             shared_with_emails = if (sharingDraft.visibility == GroupShareVisibility.SHARED) {
                 normalized
@@ -48,7 +52,9 @@ object GroupSharingSettingsPolicy {
                 emptyList()
             },
             world_share_enabled = sharingDraft.visibility != GroupShareVisibility.PRIVATE &&
-                sharingDraft.worldShareEnabled
+                sharingDraft.worldShareEnabled,
+            add_track_ids = addTrackIds.ifEmpty { null },
+            remove_track_ids = removeTrackIds.ifEmpty { null },
         )
     }
 }
