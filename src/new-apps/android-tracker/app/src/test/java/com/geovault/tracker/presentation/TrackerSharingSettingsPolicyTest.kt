@@ -9,7 +9,7 @@ import org.junit.Test
 class TrackerSharingSettingsPolicyTest {
 
     @Test
-    fun validate_sharedRequiresEmails() {
+    fun validate_sharedAllowsEmptyEmails() {
         val result = TrackerSharingSettingsPolicy.validate(
             TrackerSharingDraft(
                 visibility = TrackerShareVisibility.SHARED,
@@ -17,7 +17,7 @@ class TrackerSharingSettingsPolicyTest {
                 worldShareEnabled = false
             )
         )
-        assertFalse(result.isValid)
+        assertTrue(result.isValid)
     }
 
     @Test
@@ -56,6 +56,35 @@ class TrackerSharingSettingsPolicyTest {
         assertEquals("shared", request.visibility)
         assertEquals(listOf("a@example.com", "b@example.com"), request.shared_with_emails)
         assertTrue(request.world_share_enabled == false || request.world_share_enabled == null)
+    }
+
+    @Test
+    fun buildSettingsRequest_sharedAllowsWorldShare() {
+        val request = TrackerSharingSettingsPolicy.buildSettingsRequest(
+            name = "Tracker",
+            sharingDraft = TrackerSharingDraft(
+                visibility = TrackerShareVisibility.SHARED,
+                sharedEmailsInput = "a@example.com",
+                worldShareEnabled = true
+            )
+        )
+        assertEquals("shared", request.visibility)
+        assertEquals(true, request.world_share_enabled)
+        assertEquals(listOf("a@example.com"), request.shared_with_emails)
+    }
+
+    @Test
+    fun buildSettingsRequest_privateDisablesWorldShare() {
+        val request = TrackerSharingSettingsPolicy.buildSettingsRequest(
+            name = "Tracker",
+            sharingDraft = TrackerSharingDraft(
+                visibility = TrackerShareVisibility.PRIVATE,
+                sharedEmailsInput = "",
+                worldShareEnabled = true
+            )
+        )
+        assertEquals("private", request.visibility)
+        assertEquals(false, request.world_share_enabled)
     }
 
     @Test

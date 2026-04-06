@@ -615,16 +615,6 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             worldShareEnabled = d.worldShareEnabledDraft
         )
         val sharingValidation = TrackerSharingSettingsPolicy.validate(sharingDraft)
-        if (!sharingValidation.isValid) {
-            val message = getApplication<Application>().getString(
-                R.string.trackers_validation_shared_requires_emails,
-            )
-            _toastEvents.tryEmit(message)
-            _uiState.update {
-                it.copy(userMessage = message)
-            }
-            return
-        }
         val app = getApplication<Application>()
         val recentResolved = TrackerRecentDataWindowOptions.resolveValueFromInput(
             context = app,
@@ -696,13 +686,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             sharedEmailsInput = d.sharedEmailsDraft,
             worldShareEnabled = d.worldShareEnabledDraft
         )
-        val sharingValidation = GroupSharingSettingsPolicy.validate(sharingDraft)
-        if (!sharingValidation.isValid) {
-            _uiState.update {
-                it.copy(userMessage = getApplication<Application>().getString(R.string.groups_validation_shared_requires_emails))
-            }
-            return
-        }
+        GroupSharingSettingsPolicy.validate(sharingDraft)
         runMutationAndRefresh(
             mutation = {
                 groupRepository.patchGroup(

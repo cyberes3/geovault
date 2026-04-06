@@ -316,7 +316,7 @@ def tracker_list_create(request):
             world_share = LiveTrackWorldShare.objects.filter(track=t).first()
             if world_share:
                 payload["world_share_id"] = world_share.share_id
-                payload["world_share_url"] = build_live_track_share_url(world_share.share_id)
+                payload["world_share_url"] = build_live_track_share_url(request, world_share.share_id)
             out.append(TrackerListItemResponse.model_validate(payload).model_dump(exclude_none=True))
         non_owned_out = []
         for t in visible_non_owned_by_id.values():
@@ -373,7 +373,7 @@ def tracker_get_patch_delete(request, tracker_id):
             world_share = LiveTrackWorldShare.objects.filter(track=track).first()
             if world_share:
                 resp["world_share_id"] = world_share.share_id
-                resp["world_share_url"] = build_live_track_share_url(world_share.share_id)
+                resp["world_share_url"] = build_live_track_share_url(request, world_share.share_id)
         return JsonResponse(resp)
     if request.method == "DELETE":
         if not is_owner:
@@ -493,7 +493,7 @@ def tracker_post_settings(request, tracker_id):
     world_share = LiveTrackWorldShare.objects.filter(track=track).first()
     if world_share:
         resp["world_share_id"] = world_share.share_id
-        resp["world_share_url"] = build_live_track_share_url(world_share.share_id)
+        resp["world_share_url"] = build_live_track_share_url(request, world_share.share_id)
     return JsonResponse(resp)
 
 

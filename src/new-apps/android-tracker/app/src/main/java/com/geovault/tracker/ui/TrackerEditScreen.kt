@@ -7,6 +7,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +33,7 @@ import androidx.compose.material.Card
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -46,6 +49,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -213,9 +217,18 @@ fun TrackerEditScreen(
             )
         },
         bottomBar = {
+            val borderColor = if (isSystemInDarkTheme()) GeoVaultColorTokens.DarkBorderLight else GeoVaultColorTokens.BorderLight
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .drawBehind {
+                        drawLine(
+                            color = borderColor,
+                            start = Offset.Zero,
+                            end = Offset(size.width, 0f),
+                            strokeWidth = 1.dp.toPx(),
+                        )
+                    }
                     .navigationBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
@@ -272,8 +285,7 @@ fun TrackerEditScreen(
                             )
                         }
                     }
-                    GeoVaultSecondaryButton(
-                        text = stringResource(R.string.trackers_action_pick_tracker_color),
+                    IconButton(
                         onClick = {
                             showHueColorPickerDialog(
                                 context = context,
@@ -282,15 +294,21 @@ fun TrackerEditScreen(
                             )
                         },
                         enabled = !isSaving,
-                        modifier = Modifier.weight(1f),
-                    )
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_eye_dropper),
+                            contentDescription = stringResource(R.string.trackers_action_pick_tracker_color),
+                            tint = GeoVaultColorTokens.PrimaryBlue,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
                     GeoVaultInput(
                         value = dialog.colorDraft,
                         onValueChange = onColorDraftChanged,
                         label = null,
                         singleLine = true,
                         placeholder = stringResource(R.string.trackers_field_color_hint),
-                        modifier = Modifier.widthIn(min = 96.dp, max = 132.dp),
+                        modifier = Modifier.weight(1f),
                         enabled = !isSaving,
                     )
                 }

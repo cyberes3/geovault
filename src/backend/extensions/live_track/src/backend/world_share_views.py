@@ -13,6 +13,8 @@ from django.views.decorators.http import require_http_methods
 from .helpers import track_to_response
 from .models import LiveTrack, LiveTrackGroupMember, LiveTrackGroupWorldShare, LiveTrackWorldShare
 
+_SHARE_HASH_PATH = "/#/extensions/live-track/share?id="
+
 
 def _validate_share_id(share_id: str) -> bool:
     """Validate share_id is UUID4 format."""
@@ -22,14 +24,14 @@ def _validate_share_id(share_id: str) -> bool:
     return bool(re.match(pattern, share_id.lower()))
 
 
-def build_live_track_share_url(share_id: str) -> str:
-    """Return the frontend path for the world share (hash route)."""
-    return f"/#/extensions/live-track/share?id={share_id}"
+def build_live_track_share_url(request, share_id: str) -> str:
+    """Return the full URL for the world share, using the request's host."""
+    return request.build_absolute_uri(f"{_SHARE_HASH_PATH}{share_id}")
 
 
-def build_live_track_group_share_url(share_id: str) -> str:
-    """Return the frontend path for the group world share (same route as track)."""
-    return f"/#/extensions/live-track/share?id={share_id}"
+def build_live_track_group_share_url(request, share_id: str) -> str:
+    """Return the full URL for the group world share, using the request's host."""
+    return request.build_absolute_uri(f"{_SHARE_HASH_PATH}{share_id}")
 
 
 @require_http_methods(["GET"])

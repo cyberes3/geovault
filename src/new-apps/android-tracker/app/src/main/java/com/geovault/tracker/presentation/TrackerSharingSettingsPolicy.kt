@@ -52,13 +52,8 @@ object TrackerSharingSettingsPolicy {
 
     fun validate(draft: TrackerSharingDraft): TrackerSharingValidationResult {
         val emails = parseSharedEmails(draft.sharedEmailsInput)
-        val valid = if (draft.visibility == TrackerShareVisibility.SHARED) {
-            emails.isNotEmpty()
-        } else {
-            true
-        }
         return TrackerSharingValidationResult(
-            isValid = valid,
+            isValid = true,
             normalizedEmails = emails
         )
     }
@@ -76,7 +71,7 @@ object TrackerSharingSettingsPolicy {
             } else {
                 emptyList()
             },
-            world_share_enabled = sharingDraft.visibility == TrackerShareVisibility.PUBLIC &&
+            world_share_enabled = sharingDraft.visibility != TrackerShareVisibility.PRIVATE &&
                 sharingDraft.worldShareEnabled
         )
     }

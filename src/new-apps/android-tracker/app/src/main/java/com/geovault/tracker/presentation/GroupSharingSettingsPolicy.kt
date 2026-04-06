@@ -28,13 +28,8 @@ data class GroupSharingValidationResult(
 object GroupSharingSettingsPolicy {
     fun validate(draft: GroupSharingDraft): GroupSharingValidationResult {
         val emails = TrackerSharingSettingsPolicy.parseSharedEmails(draft.sharedEmailsInput)
-        val valid = if (draft.visibility == GroupShareVisibility.SHARED) {
-            emails.isNotEmpty()
-        } else {
-            true
-        }
         return GroupSharingValidationResult(
-            isValid = valid,
+            isValid = true,
             normalizedEmails = emails
         )
     }
@@ -52,7 +47,7 @@ object GroupSharingSettingsPolicy {
             } else {
                 emptyList()
             },
-            world_share_enabled = sharingDraft.visibility == GroupShareVisibility.PUBLIC &&
+            world_share_enabled = sharingDraft.visibility != GroupShareVisibility.PRIVATE &&
                 sharingDraft.worldShareEnabled
         )
     }

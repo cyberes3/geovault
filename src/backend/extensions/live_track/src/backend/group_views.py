@@ -64,7 +64,7 @@ def _group_can_edit(group, user):
     return group.user_id == user.id
 
 
-def _group_payload(group, request_user, include_track_ids=True, accepted_group_ids=None):
+def _group_payload(group, request_user, include_track_ids=True, accepted_group_ids=None, request=None):
     is_owner = group.user_id == request_user.id
     is_accepted = True
     if not is_owner and group.visibility == VISIBILITY_SHARED:
@@ -96,7 +96,8 @@ def _group_payload(group, request_user, include_track_ids=True, accepted_group_i
         world_share = LiveTrackGroupWorldShare.objects.filter(group=group).first()
         if world_share:
             out["world_share_id"] = world_share.share_id
-            out["world_share_url"] = build_live_track_group_share_url(world_share.share_id)
+            if request:
+                out["world_share_url"] = build_live_track_group_share_url(request, world_share.share_id)
     if include_track_ids:
         out["track_ids"] = visible_group_track_ids_for_user(
             group=group,
@@ -119,7 +120,7 @@ def group_list_create(request):
         items = []
         for g in owned:
             seen_ids.add(g.id)
-            items.append(_group_payload(g, request.user, accepted_group_ids=accepted_group_ids))
+            items.append(_group_payload(g, request.user, accepted_group_ids=accepted_group_ids, request=request))
         public_groups = (
             LiveTrackGroup.objects.filter(visibility=VISIBILITY_PUBLIC)
             .exclude(user=request.user)
@@ -129,7 +130,7 @@ def group_list_create(request):
         )
         for g in public_groups:
             seen_ids.add(g.id)
-            items.append(_group_payload(g, request.user, accepted_group_ids=accepted_group_ids))
+            items.append(_group_payload(g, request.user, accepted_group_ids=accepted_group_ids, request=request))
         shared_with_me = (
             LiveTrackGroup.objects.filter(
                 visibility=VISIBILITY_SHARED,
@@ -141,7 +142,7 @@ def group_list_create(request):
             .order_by("name")
         )
         for g in shared_with_me:
-            items.append(_group_payload(g, request.user, accepted_group_ids=accepted_group_ids))
+            items.append(_group_payload(g, request.user, accepted_group_ids=accepted_group_ids, request=request))
         items.sort(key=lambda x: (x.get("name") or "").lower())
         return JsonResponse(items, safe=False)
     if request.method == "POST":
@@ -154,7 +155,7 @@ def group_list_create(request):
         if LiveTrackGroup.objects.filter(user=request.user, name=name).exists():
             return error_response("A group with this name already exists", 409)
         group = LiveTrackGroup.objects.create(user=request.user, name=name)
-        return JsonResponse(_group_payload(group, request.user), status=201)
+        return JsonResponse(_group_payload(group, request.user, request=request), status=201)
     return error_response("Method not allowed", 405)
 
 
@@ -165,7 +166,7 @@ def group_list_create(request):
 def group_get_patch_delete(request, group_id):
     group = _get_group_for_user_or_404(request.user, group_id)
     if request.method == "GET":
-        return JsonResponse(_group_payload(group, request.user))
+        return JsonResponse(_group_payload(group, request.user, request=request))
     if request.method == "PATCH":
         if not _group_can_edit(group, request.user):
             return error_response("Only the owner can update this group", 403)
@@ -287,7 +288,7 @@ def group_get_patch_delete(request, group_id):
                 )
         if len(update_fields) > 1:
             group.save(update_fields=update_fields)
-        return JsonResponse(_group_payload(group, request.user))
+        return JsonResponse(_group_payload(group, request.user, request=request))
     if request.method == "DELETE":
         if not _group_can_edit(group, request.user):
             return error_response("Only the owner can delete this group", 403)
@@ -332,7 +333,7 @@ def group_add_track(request, group_id):
                 403,
             )
     LiveTrackGroupMember.objects.get_or_create(group=group, track=track)
-    return JsonResponse(_group_payload(group, request.user))
+    return JsonResponse(_group_payload(group, request.user, request=request))
 
 
 @api_or_login_required_401()
@@ -391,4 +392,4 @@ def group_accept_share(request, group_id):
         user=request.user,
         group=group,
     )
-    return JsonResponse(_group_payload(group, request.user), status=201)
+    return JsonResponse(_group_payload(group, request.user, request=request), status=201)

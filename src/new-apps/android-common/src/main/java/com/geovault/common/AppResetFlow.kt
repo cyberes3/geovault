@@ -2,10 +2,12 @@ package com.geovault.common
 
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.util.Log
 
 object AppResetFlow {
     private const val TAG = "AppResetFlow"
+    private const val RESET_REENTRY_WINDOW_MS = 2_000L
 
     enum class Reason {
         AUTH_FAILURE,
@@ -28,6 +30,10 @@ object AppResetFlow {
     )
 
     private val hooksByKey = LinkedHashMap<String, ResetHook>()
+    @Volatile
+    private var resetInProgress = false
+    @Volatile
+    private var lastResetStartedAtMs = 0L
 
     @Synchronized
     fun registerHook(
@@ -47,18 +53,26 @@ object AppResetFlow {
         mainActivityClass: Class<*>,
         configureRelaunchIntent: (Intent) -> Unit = {}
     ) {
-        val appContext = context.applicationContext
-        runPhaseHooks(appContext, reason, Phase.BEFORE_EMERGENCY_EXPORT)
-        runPhaseHooks(appContext, reason, Phase.BEFORE_TOKEN_CLEAR)
-        GeovaultAuthManager.clearTokens(appContext)
-        runPhaseHooks(appContext, reason, Phase.AFTER_TOKEN_CLEAR)
-        runPhaseHooks(appContext, reason, Phase.BEFORE_RELAUNCH)
-
-        val intent = Intent(appContext, mainActivityClass).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        if (!beginReset()) {
+            Log.w(TAG, "execute ignored; reset already in progress or recently started")
+            return
         }
-        safeRun("configureRelaunchIntent") { configureRelaunchIntent(intent) }
-        appContext.startActivity(intent)
+        val appContext = context.applicationContext
+        try {
+            runPhaseHooks(appContext, reason, Phase.BEFORE_EMERGENCY_EXPORT)
+            runPhaseHooks(appContext, reason, Phase.BEFORE_TOKEN_CLEAR)
+            GeovaultAuthManager.clearTokens(appContext)
+            runPhaseHooks(appContext, reason, Phase.AFTER_TOKEN_CLEAR)
+            runPhaseHooks(appContext, reason, Phase.BEFORE_RELAUNCH)
+
+            val intent = Intent(appContext, mainActivityClass).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            }
+            safeRun("configureRelaunchIntent") { configureRelaunchIntent(intent) }
+            appContext.startActivity(intent)
+        } finally {
+            finishReset()
+        }
     }
 
     private fun runPhaseHooks(context: Context, reason: Reason, phase: Phase) {
@@ -76,5 +90,20 @@ object AppResetFlow {
         } catch (e: Exception) {
             Log.e(TAG, "Reset step failed: $step", e)
         }
+    }
+
+    @Synchronized
+    private fun beginReset(): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        if (resetInProgress) return false
+        if (now - lastResetStartedAtMs < RESET_REENTRY_WINDOW_MS) return false
+        resetInProgress = true
+        lastResetStartedAtMs = now
+        return true
+    }
+
+    @Synchronized
+    private fun finishReset() {
+        resetInProgress = false
     }
 }

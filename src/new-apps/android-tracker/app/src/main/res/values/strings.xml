@@ -244,8 +244,7 @@
     <string name="trackers_edit_discard_message">You have unsaved tracker edits. If you close now, these changes will be lost.</string>
     <string name="trackers_edit_discard_confirm">Discard</string>
     <string name="trackers_validation_name_required">Name is required.</string>
-    <string name="trackers_validation_shared_requires_emails">Shared visibility requires at least one email.</string>
-    <string name="groups_validation_shared_requires_emails">Shared group visibility requires at least one email.</string>
+
     <string name="trackers_error_missing_server">Server URL is not configured.</string>
     <string name="trackers_error_network">Network error. Try again.</string>
     <string name="trackers_error_unauthorized">Session expired. Sign in again.</string>
