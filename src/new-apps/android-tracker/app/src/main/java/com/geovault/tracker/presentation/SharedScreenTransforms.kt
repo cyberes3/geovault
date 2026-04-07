@@ -89,6 +89,8 @@ fun computeSharedSurfaceItems(
 
 data class SharedFilteredSections(
     val sharedItems: List<SharedSurfaceItem>,
+    val discoverOnMyMapTrackers: List<AvailableToAddItem>,
+    val discoverOnMyMapGroups: List<AvailableToAddGroup>,
     val incomingTrackers: List<AvailableToAddItem>,
     val incomingGroups: List<AvailableToAddGroup>,
     val publicTrackers: List<AvailableToAddItem>,
@@ -97,36 +99,28 @@ data class SharedFilteredSections(
 
 fun deriveSharedFilteredSections(
     sharedItems: List<SharedSurfaceItem>,
+    discoverOnMyMapTrackers: List<AvailableToAddItem>,
+    discoverOnMyMapGroups: List<AvailableToAddGroup>,
     incomingTrackers: List<AvailableToAddItem>,
     incomingGroups: List<AvailableToAddGroup>,
     publicTrackers: List<AvailableToAddItem>,
     publicGroups: List<AvailableToAddGroup>,
-    sharedQuery: String,
-    discoverQuery: String,
+    discoverOnMapQuery: String,
+    discoverIncomingQuery: String,
     publicQuery: String,
 ): SharedFilteredSections {
-    val filteredSharedItems = sharedItems.filter { item ->
-        when (item) {
-            is SharedSurfaceItem.GroupItem -> matchesSharedSearch(
-                sharedQuery,
-                item.group.name,
-                item.group.owner_email,
-                item.group.visibility,
-                item.group.track_ids?.size?.toString()
-            )
-            is SharedSurfaceItem.TrackerItem -> matchesSharedSearch(
-                sharedQuery,
-                item.tracker.name,
-                item.tracker.owner_email,
-                item.tracker.visibility
-            )
-        }
+    val filteredSharedItems = sharedItems
+    val filteredOnMyMapTrackers = discoverOnMyMapTrackers.filter { item ->
+        matchesSharedSearch(discoverOnMapQuery, item.name, item.owner_email)
+    }
+    val filteredOnMyMapGroups = discoverOnMyMapGroups.filter { group ->
+        matchesSharedSearch(discoverOnMapQuery, group.name, group.owner_email, group.track_ids.size.toString())
     }
     val filteredIncomingTrackers = incomingTrackers.filter { item ->
-        matchesSharedSearch(discoverQuery, item.name, item.owner_email)
+        matchesSharedSearch(discoverIncomingQuery, item.name, item.owner_email)
     }
     val filteredIncomingGroups = incomingGroups.filter { group ->
-        matchesSharedSearch(discoverQuery, group.name, group.owner_email, group.track_ids.size.toString())
+        matchesSharedSearch(discoverIncomingQuery, group.name, group.owner_email, group.track_ids.size.toString())
     }
     val filteredPublicTrackers = publicTrackers.filter { item ->
         matchesSharedSearch(publicQuery, item.name, item.owner_email)
@@ -136,6 +130,8 @@ fun deriveSharedFilteredSections(
     }
     return SharedFilteredSections(
         sharedItems = filteredSharedItems,
+        discoverOnMyMapTrackers = filteredOnMyMapTrackers,
+        discoverOnMyMapGroups = filteredOnMyMapGroups,
         incomingTrackers = filteredIncomingTrackers,
         incomingGroups = filteredIncomingGroups,
         publicTrackers = filteredPublicTrackers,

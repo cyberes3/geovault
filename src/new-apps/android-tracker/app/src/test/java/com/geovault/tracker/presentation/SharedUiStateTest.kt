@@ -25,17 +25,19 @@ class SharedUiStateTest {
                 public = listOf(AvailableToAddItem(id = "p1", name = "Echo tracker")),
                 public_groups = listOf(AvailableToAddGroup(id = "pg1", name = "Foxtrot group")),
             ),
-            sharedQuery = "beta",
-            discoverQuery = "gamma",
+            discoverOnMapQuery = "alpha",
+            discoverIncomingQuery = "gamma",
             publicQuery = "foxtrot",
         )
 
-        assertEquals(listOf("g1"), state.filteredSections.sharedItems.map {
+        assertEquals(listOf("t1", "g1"), state.filteredSections.sharedItems.map {
             when (it) {
                 is SharedSurfaceItem.GroupItem -> it.group.id
                 is SharedSurfaceItem.TrackerItem -> it.tracker.id
             }
         })
+        assertEquals(listOf("t1"), state.filteredSections.discoverOnMyMapTrackers.map { it.id })
+        assertEquals(emptyList<String>(), state.filteredSections.discoverOnMyMapGroups.map { it.id })
         assertEquals(listOf("i1"), state.filteredSections.incomingTrackers.map { it.id })
         assertEquals(emptyList<String>(), state.filteredSections.incomingGroups.map { it.id })
         assertEquals(emptyList<String>(), state.filteredSections.publicTrackers.map { it.id })

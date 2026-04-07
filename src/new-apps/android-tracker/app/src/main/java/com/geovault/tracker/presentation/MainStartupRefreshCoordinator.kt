@@ -15,7 +15,6 @@ object MainStartupRefreshCoordinator {
         loadTrackers: suspend () -> RepositoryResult<*>,
         loadGroups: suspend () -> RepositoryResult<*>,
         loadMapVisibility: suspend () -> RepositoryResult<*>,
-        loadAvailableToAdd: suspend () -> RepositoryResult<*>,
         loadTracker: suspend (String) -> RepositoryResult<*>,
         loadTrackerGeometry: suspend (String) -> RepositoryResult<*>,
     ): MainStartupRefreshOutcome {
@@ -23,12 +22,10 @@ object MainStartupRefreshCoordinator {
             val trackersDef = async { loadTrackers() }
             val groupsDef = async { loadGroups() }
             val visibilityDef = async { loadMapVisibility() }
-            val addableDef = async { loadAvailableToAdd() }
             val startupResults = listOf(
                 trackersDef.await(),
                 groupsDef.await(),
                 visibilityDef.await(),
-                addableDef.await(),
             )
             startupResults.any { it is RepositoryResult.Success }
         }

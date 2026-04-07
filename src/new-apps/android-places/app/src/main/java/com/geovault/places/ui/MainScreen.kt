@@ -29,10 +29,6 @@ import androidx.compose.material.IconButton
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
-import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.pullrefresh.PullRefreshIndicator
-import androidx.compose.material.pullrefresh.pullRefresh
-import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -54,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import com.geovault.common.ui.components.GeoVaultAuthGate
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingOverlay
+import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
@@ -227,7 +224,6 @@ private fun SearchBlock(
     }
 }
 
-@OptIn(ExperimentalMaterialApi::class)
 @Composable
 private fun PlacesBody(
     state: MainScreenState,
@@ -275,10 +271,6 @@ private fun PlacesBody(
             }
         }
     }
-    val pullRefreshState = rememberPullRefreshState(
-        refreshing = state.isRefreshing,
-        onRefresh = onRefresh
-    )
     val selectedIndex = remember(state.selectedPlaceId, listItems) {
         val selectedId = state.selectedPlaceId ?: return@remember -1
         listItems.indexOfFirst { listItem ->
@@ -291,11 +283,14 @@ private fun PlacesBody(
         }
     }
 
-    Box(
+    GeoVaultPullRefreshLoadingContainer(
+        refreshing = state.isRefreshing,
+        showBlockingLoader = state.isRefreshing,
+        onRefresh = onRefresh,
+        canRefresh = !state.isRefreshing,
         modifier = Modifier
             .fillMaxSize()
-            .background(GeoVaultColorTokens.Background)
-            .pullRefresh(pullRefreshState)
+            .background(GeoVaultColorTokens.Background),
     ) {
         if (state.saved.isEmpty() && state.offlineItems.isEmpty()) {
             EmptyState()
@@ -325,11 +320,6 @@ private fun PlacesBody(
                 }
             }
         }
-        PullRefreshIndicator(
-            refreshing = state.isRefreshing,
-            state = pullRefreshState,
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
     }
 }
 

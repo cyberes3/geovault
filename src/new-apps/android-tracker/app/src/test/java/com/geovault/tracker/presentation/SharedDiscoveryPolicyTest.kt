@@ -11,7 +11,7 @@ import org.junit.Test
 class SharedDiscoveryPolicyTest {
 
     @Test
-    fun derive_filtersIncomingThatAlreadyExistLocally() {
+    fun derive_keepsIncomingEvenWhenAlreadyLocal() {
         val buckets = SharedDiscoveryPolicy.derive(
             availableToAdd = AvailableToAddResponse(
                 shared_with_me = listOf(
@@ -25,11 +25,11 @@ class SharedDiscoveryPolicyTest {
             groups = emptyList()
         )
 
-        assertEquals(listOf("t2"), buckets.incomingTrackers.map { it.id })
+        assertEquals(listOf("t1", "t2"), buckets.incomingTrackers.map { it.id })
     }
 
     @Test
-    fun derive_dedupesPublicAgainstIncomingAndExisting() {
+    fun derive_keepsPublicEntriesEvenWhenIncomingOrExisting() {
         val buckets = SharedDiscoveryPolicy.derive(
             availableToAdd = AvailableToAddResponse(
                 shared_with_me = listOf(AvailableToAddItem(id = "a", name = "Incoming A")),
@@ -45,7 +45,7 @@ class SharedDiscoveryPolicyTest {
             groups = emptyList()
         )
 
-        assertEquals(listOf("b"), buckets.publicTrackers.map { it.id })
+        assertEquals(setOf("a", "b", "c"), buckets.publicTrackers.map { it.id }.toSet())
     }
 
     @Test
@@ -67,7 +67,7 @@ class SharedDiscoveryPolicyTest {
     }
 
     @Test
-    fun derive_filtersIncomingAndPublicGroupsThatAlreadyExistLocally() {
+    fun derive_filtersIncomingGroupsAlreadyLocalButKeepsPublicDuplicates() {
         val buckets = SharedDiscoveryPolicy.derive(
             availableToAdd = AvailableToAddResponse(
                 shared_with_me_groups = listOf(
@@ -86,7 +86,7 @@ class SharedDiscoveryPolicyTest {
         )
 
         assertEquals(listOf("g2"), buckets.incomingGroups.map { it.id })
-        assertEquals(listOf("g3"), buckets.publicGroups.map { it.id })
+        assertEquals(listOf("g2", "g3"), buckets.publicGroups.map { it.id })
     }
 
     @Test

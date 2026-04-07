@@ -290,6 +290,17 @@
     <string name="shared_section_incoming_groups">Incoming group invites</string>
     <string name="shared_section_public_trackers">Public trackers</string>
     <string name="shared_section_public_groups">Public groups</string>
+    <string name="shared_action_open_discover">Open discover trackers</string>
+    <string name="shared_action_open_public">Open public trackers</string>
+    <string name="shared_discover_overlay_title">Add Trackers</string>
+    <string name="shared_public_overlay_title">Public Trackers</string>
+    <string name="shared_discover_tab_on_my_map">On my map</string>
+    <string name="shared_discover_tab_incoming">Incoming</string>
+    <string name="shared_empty_title">No shared trackers.</string>
+    <string name="shared_empty_line_1">Tap + to discover shared trackers.</string>
+    <string name="shared_empty_line_2">Tap globe to browse public trackers.</string>
+    <string name="shared_empty_discover_on_my_map">No shared trackers or groups on your map.</string>
+    <string name="shared_empty_discover_incoming">No incoming tracker shares or group invites.</string>
     <string name="shared_empty_shared_trackers">No shared or public trackers on your map.</string>
     <string name="shared_empty_shared_groups">No shared groups on your map.</string>
     <string name="shared_empty_incoming_trackers">No incoming tracker shares.</string>

@@ -13,14 +13,26 @@ enum class SharedSubTab {
     PUBLIC,
 }
 
+enum class SharedViewMode {
+    SHARED_LIST,
+    DISCOVER_OVERLAY,
+    PUBLIC_OVERLAY,
+}
+
+enum class DiscoverOverlayMode {
+    ON_MY_MAP,
+    INCOMING,
+}
+
 data class SharedUiState(
-    val subTab: SharedSubTab = SharedSubTab.SHARED,
+    val viewMode: SharedViewMode = SharedViewMode.SHARED_LIST,
+    val discoverMode: DiscoverOverlayMode = DiscoverOverlayMode.ON_MY_MAP,
     val trackers: List<Tracker> = emptyList(),
     val groups: List<Group> = emptyList(),
     val availableToAdd: AvailableToAddResponse? = null,
     val mapVisibility: MapVisibilityResponse? = null,
-    val sharedQuery: String = "",
-    val discoverQuery: String = "",
+    val discoverOnMapQuery: String = "",
+    val discoverIncomingQuery: String = "",
     val publicQuery: String = "",
     val isLoading: Boolean = false,
     val hasCompletedInitialLoad: Boolean = false,
@@ -41,6 +53,12 @@ data class SharedUiState(
     val sharedSurfaceItems: List<SharedSurfaceItem>
         get() = computeSharedSurfaceItems(trackers, groups)
 
+    val discoverOnMyMapTrackers: List<AvailableToAddItem>
+        get() = discoveryBuckets.onMyMapTrackers
+
+    val discoverOnMyMapGroups: List<AvailableToAddGroup>
+        get() = discoveryBuckets.onMyMapGroups
+
     val incomingTrackers: List<AvailableToAddItem>
         get() = discoveryBuckets.incomingTrackers
 
@@ -56,12 +74,14 @@ data class SharedUiState(
     val filteredSections: SharedFilteredSections
         get() = deriveSharedFilteredSections(
             sharedItems = sharedSurfaceItems,
+            discoverOnMyMapTrackers = discoverOnMyMapTrackers,
+            discoverOnMyMapGroups = discoverOnMyMapGroups,
             incomingTrackers = incomingTrackers,
             incomingGroups = incomingGroups,
             publicTrackers = publicDiscoverTrackers,
             publicGroups = publicDiscoverGroups,
-            sharedQuery = sharedQuery,
-            discoverQuery = discoverQuery,
+            discoverOnMapQuery = discoverOnMapQuery,
+            discoverIncomingQuery = discoverIncomingQuery,
             publicQuery = publicQuery,
         )
 }

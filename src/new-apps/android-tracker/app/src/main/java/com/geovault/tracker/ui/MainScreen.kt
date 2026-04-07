@@ -31,6 +31,7 @@ import com.geovault.tracker.presentation.HiddenMapItem
 import com.geovault.tracker.presentation.MainScreenState
 import com.geovault.tracker.presentation.SettingsState
 import com.geovault.tracker.presentation.SharedSubTab
+import com.geovault.tracker.presentation.SharedViewModel
 import com.geovault.tracker.presentation.TrackerMapViewModel
 import com.geovault.tracker.presentation.TrackersGroupsSubTab
 import com.geovault.tracker.settings.TrackerTrackingProfile
@@ -74,6 +75,7 @@ fun MainScreen(
     val context = LocalContext.current
     val releaseLauncher = remember(context) { CustomTabReleasePageLauncher(context) }
     val mapViewModel: TrackerMapViewModel = viewModel()
+    val sharedViewModel: SharedViewModel = viewModel()
     var selectedTab by rememberSaveable { mutableStateOf(TrackerTab.HOME.name) }
     var lastSelectedTab by rememberSaveable { mutableStateOf("") }
     var tabBackStack by rememberSaveable { mutableStateOf(emptyList<String>()) }
@@ -82,6 +84,12 @@ fun MainScreen(
     var pendingSharedRequest by remember { mutableStateOf<SharedHostNavigationRequest?>(null) }
     var pendingMapReturnContext by remember { mutableStateOf<MapReturnContext?>(null) }
     var trackerParamsModel by remember { mutableStateOf<TrackerParamsUiModel?>(null) }
+    LaunchedEffect(state.isAuthenticated) {
+        if (state.isAuthenticated) {
+            // Preload only main shared list data on app startup.
+            sharedViewModel.preloadSharedSurface()
+        }
+    }
     val openTrackerOnMap = remember {
         { trackerId: String, trackerName: String?, source: MapReturnSource ->
             if (trackerId.isBlank()) return@remember

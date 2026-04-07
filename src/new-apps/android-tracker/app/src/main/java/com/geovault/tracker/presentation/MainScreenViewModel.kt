@@ -250,7 +250,6 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 loadTrackers = { trackerManagementRepository.loadTrackers(forceRefresh = true) },
                 loadGroups = { groupManagementRepository.loadGroups(forceRefresh = true) },
                 loadMapVisibility = { trackerManagementRepository.loadMapVisibility(forceRefresh = true) },
-                loadAvailableToAdd = { trackerManagementRepository.loadAvailableToAdd(forceRefresh = true) },
                 loadTracker = { trackerId -> trackerManagementRepository.loadTracker(trackerId) },
                 loadTrackerGeometry = { trackerId ->
                     trackerManagementRepository.loadTrackerGeometry(trackerId)
@@ -268,12 +267,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 val trackersDef = async { trackerManagementRepository.loadTrackers(forceRefresh = true) }
                 val groupsDef = async { groupManagementRepository.loadGroups(forceRefresh = true) }
                 val visibilityDef = async { trackerManagementRepository.loadMapVisibility(forceRefresh = true) }
-                val addableDef = async { trackerManagementRepository.loadAvailableToAdd(forceRefresh = true) }
                 val refreshResults = listOf(
                     trackersDef.await(),
                     groupsDef.await(),
                     visibilityDef.await(),
-                    addableDef.await(),
                 )
                 refreshResults.any { it is RepositoryResult.Success }
             }

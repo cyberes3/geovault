@@ -19,7 +19,6 @@ class MainStartupRefreshCoordinatorTest {
             loadTrackers = { RepositoryResult.Success(Unit) },
             loadGroups = { RepositoryResult.Success(Unit) },
             loadMapVisibility = { RepositoryResult.Success(Unit) },
-            loadAvailableToAdd = { RepositoryResult.Success(Unit) },
             loadTracker = {
                 loadTrackerCalls += 1
                 RepositoryResult.Success(Unit)
@@ -37,7 +36,7 @@ class MainStartupRefreshCoordinatorTest {
     }
 
     @Test
-    fun run_marksServerInaccessibleWhenTrackersLoadFails() = runBlocking {
+    fun run_marksServerAccessibleWhenAnyStartupLoadSucceeds() = runBlocking {
         var loadTrackerCalls = 0
         var loadTrackerGeometryCalls = 0
         val outcome = MainStartupRefreshCoordinator.run(
@@ -45,7 +44,6 @@ class MainStartupRefreshCoordinatorTest {
             loadTrackers = { RepositoryResult.Failure(AppError.Network) },
             loadGroups = { RepositoryResult.Success(Unit) },
             loadMapVisibility = { RepositoryResult.Success(Unit) },
-            loadAvailableToAdd = { RepositoryResult.Success(Unit) },
             loadTracker = {
                 loadTrackerCalls += 1
                 RepositoryResult.Success(Unit)
@@ -56,7 +54,7 @@ class MainStartupRefreshCoordinatorTest {
             }
         )
 
-        assertFalse(outcome.isServerAccessible)
+        assertTrue(outcome.isServerAccessible)
         assertFalse(outcome.selectedTrackerPrefetchAttempted)
         assertEquals(0, loadTrackerCalls)
         assertEquals(0, loadTrackerGeometryCalls)

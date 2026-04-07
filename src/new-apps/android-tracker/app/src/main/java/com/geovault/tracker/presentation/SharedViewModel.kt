@@ -33,16 +33,50 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     private val _snackbarEvents = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val snackbarEvents: SharedFlow<String> = _snackbarEvents
 
-    fun setSubTab(tab: SharedSubTab) {
-        _uiState.update { it.copy(subTab = tab) }
+    fun showSharedList() {
+        _uiState.update { it.copy(viewMode = SharedViewMode.SHARED_LIST) }
     }
 
-    fun updateSharedQuery(value: String) {
-        _uiState.update { it.copy(sharedQuery = value) }
+    fun showDiscoverOverlay() {
+        ensureDiscoveryDataLoaded()
+        _uiState.update { current ->
+            current.copy(
+                viewMode = SharedViewMode.DISCOVER_OVERLAY,
+                discoverMode = defaultDiscoverMode(current),
+            )
+        }
     }
 
-    fun updateDiscoverQuery(value: String) {
-        _uiState.update { it.copy(discoverQuery = value) }
+    fun showPublicOverlay() {
+        ensureDiscoveryDataLoaded()
+        _uiState.update { it.copy(viewMode = SharedViewMode.PUBLIC_OVERLAY) }
+    }
+
+    fun openFromNavigationSubTab(tab: SharedSubTab) {
+        when (tab) {
+            SharedSubTab.SHARED -> showSharedList()
+            SharedSubTab.DISCOVER -> showDiscoverOverlay()
+            SharedSubTab.PUBLIC -> showPublicOverlay()
+        }
+    }
+
+    fun setDiscoverOverlayMode(mode: DiscoverOverlayMode) {
+        _uiState.update { current ->
+            val clearQueries = current.discoverMode != mode
+            current.copy(
+                discoverMode = mode,
+                discoverOnMapQuery = if (clearQueries) "" else current.discoverOnMapQuery,
+                discoverIncomingQuery = if (clearQueries) "" else current.discoverIncomingQuery,
+            )
+        }
+    }
+
+    fun updateDiscoverOnMapQuery(value: String) {
+        _uiState.update { it.copy(discoverOnMapQuery = value) }
+    }
+
+    fun updateDiscoverIncomingQuery(value: String) {
+        _uiState.update { it.copy(discoverIncomingQuery = value) }
     }
 
     fun updatePublicQuery(value: String) {
@@ -60,6 +94,30 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
                 )
             }
             emitSnackbar(snapshot.errorMessage)
+        }
+    }
+
+    fun preloadSharedSurface() {
+        val current = _uiState.value
+        if (current.isLoading || current.hasCompletedInitialLoad) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            val trackersDef = async { trackerRepository.loadTrackers(forceRefresh = false) }
+            val groupsDef = async { groupRepository.loadGroups(forceRefresh = false) }
+            val visibilityDef = async { trackerRepository.loadMapVisibility(forceRefresh = false) }
+            val trackersResult = trackersDef.await()
+            val groupsResult = groupsDef.await()
+            val visibilityResult = visibilityDef.await()
+            _uiState.update { state ->
+                state.copy(
+                    isLoading = false,
+                    trackers = trackersResult.successDataOr(state.trackers),
+                    groups = groupsResult.successDataOr(state.groups),
+                    mapVisibility = visibilityResult.successDataOr(state.mapVisibility),
+                    hasCompletedInitialLoad = true,
+                )
+            }
+            emitSnackbar(firstError(trackersResult, groupsResult, visibilityResult)?.let(::appErrorMessage))
         }
     }
 
@@ -145,7 +203,14 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun subscribePublicTracker(trackerId: String) {
-        runTrackerTransition(SharedOwnershipTransitionPolicy.forPublicTrackerSubscribe(trackerId))
+        subscribePublicTracker(trackerId) { }
+    }
+
+    fun subscribePublicTracker(trackerId: String, onSuccess: () -> Unit) {
+        runTrackerTransition(
+            command = SharedOwnershipTransitionPolicy.forPublicTrackerSubscribe(trackerId),
+            onSuccess = onSuccess,
+        )
     }
 
     /**
@@ -153,6 +218,10 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
      * Mutations are applied per-track; state is always refreshed afterwards to match server truth.
      */
     fun subscribePublicGroup(trackIds: List<String>) {
+        subscribePublicGroup(trackIds) { }
+    }
+
+    fun subscribePublicGroup(trackIds: List<String>, onSuccess: () -> Unit) {
         val normalizedIds = SharedBulkMutationCoordinator.normalizeIds(trackIds)
         if (normalizedIds.isEmpty()) {
             emitSnackbar(getApplication<Application>().getString(R.string.shared_error_public_group_no_tracks))
@@ -171,6 +240,9 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
             refreshStateFromServer(feedbackMessage = resolveBulkSubscribeMessage(outcome, firstFailure))
+            if (outcome.failedCount == 0 && outcome.succeededCount > 0) {
+                onSuccess()
+            }
         }
     }
 
@@ -179,6 +251,10 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
      * This only affects tracker subscriptions; membership is managed independently via [leaveGroup].
      */
     fun unsubscribeAllTracksInGroup(trackIds: List<String>) {
+        unsubscribeAllTracksInGroup(trackIds) { }
+    }
+
+    fun unsubscribeAllTracksInGroup(trackIds: List<String>, onSuccess: () -> Unit) {
         val normalizedIds = SharedBulkMutationCoordinator.normalizeIds(trackIds)
         if (normalizedIds.isEmpty()) return
         viewModelScope.launch {
@@ -194,6 +270,9 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
             refreshStateFromServer(feedbackMessage = resolveBulkUnsubscribeMessage(outcome, firstFailure))
+            if (outcome.failedCount == 0 && outcome.succeededCount > 0) {
+                onSuccess()
+            }
         }
     }
 
@@ -217,11 +296,27 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private fun runTrackerTransition(command: SharedTrackerTransitionCommand) {
+    fun unsubscribeTracker(trackerId: String, onSuccess: () -> Unit) {
+        runTrackerTransition(
+            command = SharedTrackerTransitionCommand(
+                trackerId = trackerId,
+                action = SharedTrackerTransitionAction.Unsubscribe,
+            ),
+            onSuccess = onSuccess,
+        )
+    }
+
+    private fun runTrackerTransition(
+        command: SharedTrackerTransitionCommand,
+        onSuccess: () -> Unit = {},
+    ) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             when (val result = executeTrackerTransition(command)) {
-                is RepositoryResult.Success -> refreshStateFromServer(feedbackMessage = null)
+                is RepositoryResult.Success -> {
+                    refreshStateFromServer(feedbackMessage = null)
+                    onSuccess()
+                }
                 is RepositoryResult.Failure -> {
                     _uiState.update { it.copy(isLoading = false) }
                     emitSnackbar(appErrorMessage(result.error))
@@ -285,7 +380,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         base: SharedUiState,
         snapshot: SharedLoadSnapshot,
     ): SharedUiState {
-        return base.copy(
+        val next = base.copy(
             isLoading = false,
             trackers = snapshot.trackersResult.successDataOr(base.trackers),
             groups = snapshot.groupsResult.successDataOr(base.groups),
@@ -293,6 +388,14 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
             mapVisibility = snapshot.mapVisibilityResult.successDataOr(base.mapVisibility),
             hasCompletedInitialLoad = true,
         )
+        val hasOnMapContent = next.discoverOnMyMapTrackers.isNotEmpty() || next.discoverOnMyMapGroups.isNotEmpty()
+        val hasIncomingContent = next.incomingTrackers.isNotEmpty() || next.incomingGroups.isNotEmpty()
+        val mode = when {
+            !hasOnMapContent && hasIncomingContent -> DiscoverOverlayMode.INCOMING
+            hasOnMapContent && !hasIncomingContent -> DiscoverOverlayMode.ON_MY_MAP
+            else -> next.discoverMode
+        }
+        return next.copy(discoverMode = mode)
     }
 
     private fun resolveBulkSubscribeMessage(
@@ -372,6 +475,37 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     private fun emitSnackbar(message: String?) {
         if (message.isNullOrBlank()) return
         _snackbarEvents.tryEmit(message)
+    }
+
+    private fun ensureDiscoveryDataLoaded() {
+        if (_uiState.value.availableToAdd != null) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            when (val result = trackerRepository.loadAvailableToAdd(forceRefresh = false)) {
+                is RepositoryResult.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            availableToAdd = result.data,
+                            hasCompletedInitialLoad = true,
+                        )
+                    }
+                }
+                is RepositoryResult.Failure -> {
+                    _uiState.update { it.copy(isLoading = false) }
+                    emitSnackbar(appErrorMessage(result.error))
+                }
+            }
+        }
+    }
+
+    private fun defaultDiscoverMode(state: SharedUiState): DiscoverOverlayMode {
+        val hasOnMapContent = state.discoverOnMyMapTrackers.isNotEmpty() || state.discoverOnMyMapGroups.isNotEmpty()
+        val hasIncomingContent = state.incomingTrackers.isNotEmpty() || state.incomingGroups.isNotEmpty()
+        return when {
+            !hasOnMapContent && hasIncomingContent -> DiscoverOverlayMode.INCOMING
+            else -> DiscoverOverlayMode.ON_MY_MAP
+        }
     }
 
     private data class SharedLoadSnapshot(

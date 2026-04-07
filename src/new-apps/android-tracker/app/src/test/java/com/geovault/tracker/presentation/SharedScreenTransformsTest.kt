@@ -166,6 +166,12 @@ class SharedScreenTransformsTest {
         val incomingGroups = listOf(
             com.geovault.tracker.AvailableToAddGroup(id = "ig1", name = "Delta group")
         )
+        val onMyMapTrackers = listOf(
+            com.geovault.tracker.AvailableToAddItem(id = "m1", name = "Map tracker")
+        )
+        val onMyMapGroups = listOf(
+            com.geovault.tracker.AvailableToAddGroup(id = "mg1", name = "Map group")
+        )
         val publicTrackers = listOf(
             com.geovault.tracker.AvailableToAddItem(id = "p1", name = "Echo tracker")
         )
@@ -175,21 +181,25 @@ class SharedScreenTransformsTest {
 
         val filtered = deriveSharedFilteredSections(
             sharedItems = sharedItems,
+            discoverOnMyMapTrackers = onMyMapTrackers,
+            discoverOnMyMapGroups = onMyMapGroups,
             incomingTrackers = incomingTrackers,
             incomingGroups = incomingGroups,
             publicTrackers = publicTrackers,
             publicGroups = publicGroups,
-            sharedQuery = "alpha",
-            discoverQuery = "delta",
+            discoverOnMapQuery = "map",
+            discoverIncomingQuery = "delta",
             publicQuery = "echo",
         )
 
-        assertEquals(listOf("t1"), filtered.sharedItems.map {
+        assertEquals(listOf("t1", "g1"), filtered.sharedItems.map {
             when (it) {
                 is SharedSurfaceItem.TrackerItem -> it.tracker.id
                 is SharedSurfaceItem.GroupItem -> it.group.id
             }
         })
+        assertEquals(listOf("m1"), filtered.discoverOnMyMapTrackers.map { it.id })
+        assertEquals(listOf("mg1"), filtered.discoverOnMyMapGroups.map { it.id })
         assertEquals(emptyList<String>(), filtered.incomingTrackers.map { it.id })
         assertEquals(listOf("ig1"), filtered.incomingGroups.map { it.id })
         assertEquals(listOf("p1"), filtered.publicTrackers.map { it.id })

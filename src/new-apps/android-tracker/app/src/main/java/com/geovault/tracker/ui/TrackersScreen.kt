@@ -25,8 +25,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Card
 import androidx.compose.material.Divider
@@ -38,19 +36,12 @@ import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
-import androidx.compose.material.Tab
-import androidx.compose.material.TabRow
-import androidx.compose.material.TabRowDefaults
-import androidx.compose.material.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.pullrefresh.pullRefresh
-import androidx.compose.material.pullrefresh.rememberPullRefreshState
-import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -83,6 +74,10 @@ import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
+import com.geovault.common.ui.components.GeoVaultTab
+import com.geovault.common.ui.components.GeoVaultTopTabBehavior
+import com.geovault.common.ui.components.GeoVaultTopTabSurface
+import com.geovault.common.ui.components.GeoVaultTopTabSwipeMode
 import com.geovault.common.ui.components.GeoVaultToggle
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.Group
@@ -648,25 +643,18 @@ private fun TrackersGroupsAuthenticatedBody(
             is GroupRowAction.OpenActions -> groupLookup[action.groupId]?.let { onOpenGroupActions(it, null) }
         }
     }
-    val tabIndex = if (state.subTab == TrackersGroupsSubTab.TRACKERS) 0 else 1
-    val pagerState = rememberPagerState(initialPage = tabIndex, pageCount = { 2 })
-
-    LaunchedEffect(state.subTab) {
-        val targetPage = if (state.subTab == TrackersGroupsSubTab.TRACKERS) 0 else 1
-        if (pagerState.currentPage != targetPage) {
-            pagerState.animateScrollToPage(targetPage)
-        }
-    }
-    LaunchedEffect(pagerState.currentPage) {
-        val nextSubTab = if (pagerState.currentPage == 0) {
-            TrackersGroupsSubTab.TRACKERS
-        } else {
-            TrackersGroupsSubTab.GROUPS
-        }
-        if (nextSubTab != state.subTab) {
-            onSubTabSelected(nextSubTab)
-        }
-    }
+    val tabs = listOf(
+        GeoVaultTab(
+            value = TrackersGroupsSubTab.TRACKERS,
+            label = stringResource(R.string.trackers_subtab_trackers),
+        ),
+        GeoVaultTab(
+            value = TrackersGroupsSubTab.GROUPS,
+            label = stringResource(R.string.trackers_subtab_groups),
+        ),
+    )
+    val loadingTrackersText = stringResource(R.string.loading_trackers)
+    val loadingGroupsText = stringResource(R.string.loading_groups)
 
     LaunchedEffect(navigationRequest, state.subTab, visibleTrackers, visibleGroups, state.isLoading, state.isPullRefreshing) {
         val request = navigationRequest ?: return@LaunchedEffect
@@ -731,99 +719,39 @@ private fun TrackersGroupsAuthenticatedBody(
         highlightedTrackerId = null
         highlightedGroupId = null
     }
-    val pullRefreshState = rememberPullRefreshState(
-        refreshing = state.isPullRefreshing,
-        onRefresh = {
-            if (!state.isLoading && !state.isPullRefreshing) {
-                onPullRefresh()
-            }
-        },
-    )
-
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            TabRow(
-                selectedTabIndex = tabIndex,
-                backgroundColor = MaterialTheme.colors.surface,
-                indicator = { tabPositions ->
-                    TabRowDefaults.Indicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[tabIndex]),
-                        color = GeoVaultColorTokens.MainYellow,
+        GeoVaultTopTabSurface(
+            tabs = tabs,
+            selectedTab = state.subTab,
+            onTabSelected = onSubTabSelected,
+            behavior = GeoVaultTopTabBehavior(
+                swipeMode = GeoVaultTopTabSwipeMode.ALWAYS,
+                isTabRefreshing = { state.isPullRefreshing },
+                isTabBlocking = { state.isLoading || state.isPullRefreshing },
+                canRefreshTab = { !state.isLoading && !state.isPullRefreshing },
+                isPullRefreshEnabled = { true },
+                loadingTextForTab = { tab -> if (tab == TrackersGroupsSubTab.TRACKERS) loadingTrackersText else loadingGroupsText },
+                onRefreshTab = { onPullRefresh() },
+            ),
+            contentForTab = { tab ->
+                when (tab) {
+                    TrackersGroupsSubTab.TRACKERS -> TrackersListPage(
+                        models = trackerModels,
+                        listState = trackersListState,
+                        isEmpty = visibleTrackers.isEmpty() && !state.isLoading,
+                        onAction = onTrackerAction,
+                        enabled = !state.isLoading,
                     )
-                },
-                divider = {
-                    Divider(color = GeoVaultColorTokens.PrimaryBlue, thickness = 2.dp)
-                },
-            ) {
-                Tab(
-                    selected = state.subTab == TrackersGroupsSubTab.TRACKERS,
-                    onClick = { onSubTabSelected(TrackersGroupsSubTab.TRACKERS) },
-                    selectedContentColor = GeoVaultColorTokens.TextPrimary,
-                    unselectedContentColor = GeoVaultColorTokens.TextPrimary,
-                    text = { Text(stringResource(R.string.trackers_subtab_trackers)) },
-                )
-                Tab(
-                    selected = state.subTab == TrackersGroupsSubTab.GROUPS,
-                    onClick = { onSubTabSelected(TrackersGroupsSubTab.GROUPS) },
-                    selectedContentColor = GeoVaultColorTokens.TextPrimary,
-                    unselectedContentColor = GeoVaultColorTokens.TextPrimary,
-                    text = { Text(stringResource(R.string.trackers_subtab_groups)) },
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .pullRefresh(pullRefreshState),
-            ) {
-                val showBlockingLoader = state.isLoading || state.isPullRefreshing
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxSize(),
-                    userScrollEnabled = !showBlockingLoader,
-                ) { page ->
-                    when (page) {
-                        0 -> TrackersListPage(
-                            models = trackerModels,
-                            listState = trackersListState,
-                            isEmpty = visibleTrackers.isEmpty() && !state.isLoading,
-                            onAction = onTrackerAction,
-                            enabled = !state.isLoading,
-                        )
-                        else -> GroupsListPage(
-                            models = groupModels,
-                            listState = groupsListState,
-                            isEmpty = visibleGroups.isEmpty() && !state.isLoading,
-                            onAction = onGroupAction,
-                            enabled = !state.isLoading,
-                        )
-                    }
-                }
-                if (showBlockingLoader) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colors.surface),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        GeoVaultLoadingSpinner(
-                            bottomText = if (state.subTab == TrackersGroupsSubTab.TRACKERS) {
-                                stringResource(R.string.loading_trackers)
-                            } else {
-                                stringResource(R.string.loading_groups)
-                            },
-                        )
-                    }
-                } else {
-                    PullRefreshIndicator(
-                        refreshing = state.isPullRefreshing,
-                        state = pullRefreshState,
-                        modifier = Modifier.align(Alignment.TopCenter),
+                    TrackersGroupsSubTab.GROUPS -> GroupsListPage(
+                        models = groupModels,
+                        listState = groupsListState,
+                        isEmpty = visibleGroups.isEmpty() && !state.isLoading,
+                        onAction = onGroupAction,
+                        enabled = !state.isLoading,
                     )
                 }
-            }
-        }
+            },
+        )
         if (!isServerAccessible && !isConnecting) {
             TrackersServerFailureOverlay(modifier = Modifier.fillMaxSize())
         }
