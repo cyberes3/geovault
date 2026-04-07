@@ -108,8 +108,16 @@ fun deriveSharedFilteredSections(
     discoverOnMapQuery: String,
     discoverIncomingQuery: String,
     publicQuery: String,
+    optimisticTrackerAdds: Map<String, Tracker> = emptyMap(),
+    optimisticTrackerRemovals: Set<String> = emptySet(),
+    optimisticDiscoverOnMapRemovals: Set<String> = emptySet(),
 ): SharedFilteredSections {
-    val filteredSharedItems = sharedItems
+    val sharedItemsWithOptimistic = applyOptimisticSharedItems(
+        sharedItems = sharedItems,
+        optimisticTrackerAdds = optimisticTrackerAdds,
+        optimisticTrackerRemovals = optimisticTrackerRemovals,
+    )
+    val filteredSharedItems = sharedItemsWithOptimistic
     val filteredOnMyMapTrackers = discoverOnMyMapTrackers.filter { item ->
         matchesSharedSearch(discoverOnMapQuery, item.name, item.owner_email)
     }
@@ -138,6 +146,28 @@ fun deriveSharedFilteredSections(
         publicGroups = filteredPublicGroups,
     )
 }
+
+private fun applyOptimisticSharedItems(
+    sharedItems: List<SharedSurfaceItem>,
+    optimisticTrackerAdds: Map<String, Tracker>,
+    optimisticTrackerRemovals: Set<String>,
+): List<SharedSurfaceItem> {
+    val base = sharedItems.filterNot { item ->
+        item is SharedSurfaceItem.TrackerItem && optimisticTrackerRemovals.contains(item.tracker.id)
+    }
+    val existingTrackerIds = base.mapNotNull { (it as? SharedSurfaceItem.TrackerItem)?.tracker?.id }.toSet()
+    val optimisticAddItems = optimisticTrackerAdds.values
+        .asSequence()
+        .filterNot { tracker ->
+            optimisticTrackerRemovals.contains(tracker.id) || existingTrackerIds.contains(tracker.id)
+        }
+        .map { tracker -> SharedSurfaceItem.TrackerItem(tracker) }
+        .toList()
+    return (base + optimisticAddItems).sortedWith(
+        NaturalSort.naturalOrderBy { it.sortName.lowercase(Locale.getDefault()) }
+    )
+}
+
 
 fun matchesSharedSearch(query: String, vararg parts: String?): Boolean {
     val normalizedQuery = query.trim().lowercase()

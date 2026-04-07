@@ -35,6 +35,7 @@ import com.geovault.tracker.R
 enum class TrackerAddRowActionState {
     IDLE,
     ADDING,
+    REMOVING,
     ADDED_DELETE,
 }
 
@@ -55,7 +56,7 @@ fun TrackerAddRowCard(
         modifier = modifier
             .fillMaxWidth()
             .then(
-                if (state == TrackerAddRowActionState.ADDING) Modifier
+                if (state == TrackerAddRowActionState.ADDING || state == TrackerAddRowActionState.REMOVING) Modifier
                 else Modifier.clickable(enabled = enabled, onClick = onAdd)
             ),
         shape = RoundedCornerShape(8.dp),
@@ -96,7 +97,9 @@ fun TrackerAddRowCard(
                 }
             }
             when (state) {
-                TrackerAddRowActionState.ADDING -> {
+                TrackerAddRowActionState.ADDING,
+                TrackerAddRowActionState.REMOVING,
+                -> {
                     Box(
                         modifier = Modifier.size(48.dp),
                         contentAlignment = Alignment.Center,

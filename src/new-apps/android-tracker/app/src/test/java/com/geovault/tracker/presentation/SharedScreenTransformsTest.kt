@@ -205,4 +205,74 @@ class SharedScreenTransformsTest {
         assertEquals(listOf("p1"), filtered.publicTrackers.map { it.id })
         assertEquals(emptyList<String>(), filtered.publicGroups.map { it.id })
     }
+
+    @Test
+    fun deriveSharedFilteredSections_appliesOptimisticTrackerAddAndRemove() {
+        val sharedItems = listOf(
+            SharedSurfaceItem.TrackerItem(
+                Tracker(id = "remove-me", name = "Remove Me", color = null, is_owner = false, visibility = "shared")
+            ),
+            SharedSurfaceItem.GroupItem(
+                Group(id = "g1", name = "Base Group", is_owner = false, visibility = "shared", is_accepted = true)
+            ),
+        )
+
+        val filtered = deriveSharedFilteredSections(
+            sharedItems = sharedItems,
+            discoverOnMyMapTrackers = emptyList(),
+            discoverOnMyMapGroups = emptyList(),
+            incomingTrackers = emptyList(),
+            incomingGroups = emptyList(),
+            publicTrackers = emptyList(),
+            publicGroups = emptyList(),
+            discoverOnMapQuery = "",
+            discoverIncomingQuery = "",
+            publicQuery = "",
+            optimisticTrackerAdds = mapOf(
+                "add-me" to Tracker(
+                    id = "add-me",
+                    name = "Add Me",
+                    color = null,
+                    is_owner = false,
+                    visibility = "shared",
+                )
+            ),
+            optimisticTrackerRemovals = setOf("remove-me"),
+        )
+
+        assertEquals(
+            listOf("add-me", "g1"),
+            filtered.sharedItems.map {
+                when (it) {
+                    is SharedSurfaceItem.GroupItem -> it.group.id
+                    is SharedSurfaceItem.TrackerItem -> it.tracker.id
+                }
+            }
+        )
+    }
+
+    @Test
+    fun deriveSharedFilteredSections_keepsOnMapVisibleDuringPendingRemove() {
+        val onMyMap = listOf(
+            com.geovault.tracker.AvailableToAddItem(id = "t1", name = "Tracker 1")
+        )
+        val incoming = emptyList<com.geovault.tracker.AvailableToAddItem>()
+
+        val filtered = deriveSharedFilteredSections(
+            sharedItems = emptyList(),
+            discoverOnMyMapTrackers = onMyMap,
+            discoverOnMyMapGroups = emptyList(),
+            incomingTrackers = incoming,
+            incomingGroups = emptyList(),
+            publicTrackers = emptyList(),
+            publicGroups = emptyList(),
+            discoverOnMapQuery = "",
+            discoverIncomingQuery = "",
+            publicQuery = "",
+            optimisticDiscoverOnMapRemovals = setOf("t1"),
+        )
+
+        assertEquals(listOf("t1"), filtered.discoverOnMyMapTrackers.map { it.id })
+        assertEquals(emptyList<String>(), filtered.incomingTrackers.map { it.id })
+    }
 }

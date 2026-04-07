@@ -24,6 +24,11 @@ enum class DiscoverOverlayMode {
     INCOMING,
 }
 
+enum class SharedMutationPhase {
+    PENDING_ADD,
+    PENDING_REMOVE,
+}
+
 data class SharedUiState(
     val viewMode: SharedViewMode = SharedViewMode.SHARED_LIST,
     val discoverMode: DiscoverOverlayMode = DiscoverOverlayMode.ON_MY_MAP,
@@ -36,6 +41,10 @@ data class SharedUiState(
     val publicQuery: String = "",
     val isLoading: Boolean = false,
     val hasCompletedInitialLoad: Boolean = false,
+    val pendingOps: Map<String, SharedMutationPhase> = emptyMap(),
+    val optimisticTrackerAdds: Map<String, Tracker> = emptyMap(),
+    val optimisticTrackerRemovals: Set<String> = emptySet(),
+    val optimisticDiscoverOnMapRemovals: Set<String> = emptySet(),
 ) {
     private val discoveryBuckets: SharedDiscoveryBuckets
         get() = SharedDiscoveryPolicy.derive(
@@ -83,5 +92,31 @@ data class SharedUiState(
             discoverOnMapQuery = discoverOnMapQuery,
             discoverIncomingQuery = discoverIncomingQuery,
             publicQuery = publicQuery,
+            optimisticTrackerAdds = optimisticTrackerAdds,
+            optimisticTrackerRemovals = optimisticTrackerRemovals,
+            optimisticDiscoverOnMapRemovals = optimisticDiscoverOnMapRemovals,
         )
+
+    val pendingAddActionKeys: Set<String>
+        get() = pendingOps.filterValues { it == SharedMutationPhase.PENDING_ADD }.keys
+
+    val pendingRemoveActionKeys: Set<String>
+        get() = pendingOps.filterValues { it == SharedMutationPhase.PENDING_REMOVE }.keys
+
+    val hasInlineMutation: Boolean
+        get() = pendingOps.isNotEmpty()
+
+    val effectiveSubscribedTrackerIds: Set<String>
+        get() = trackers.map { it.id }.toSet()
+            .plus(optimisticTrackerAdds.keys)
+            .minus(optimisticTrackerRemovals)
+
+    fun isPublicTrackerAdded(trackerId: String): Boolean =
+        effectiveSubscribedTrackerIds.contains(trackerId)
+
+    fun isPublicGroupAdded(trackIds: List<String>): Boolean {
+        val normalizedIds = trackIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (normalizedIds.isEmpty()) return false
+        return normalizedIds.all { effectiveSubscribedTrackerIds.contains(it) }
+    }
 }

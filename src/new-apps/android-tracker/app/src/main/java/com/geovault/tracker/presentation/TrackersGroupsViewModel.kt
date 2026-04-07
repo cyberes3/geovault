@@ -957,15 +957,34 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
 
     fun addTrackerToGroup(groupId: String, trackerId: String, onSuccess: () -> Unit) {
         viewModelScope.launch {
-            _uiState.update { it.copy(addingTrackerIds = it.addingTrackerIds + trackerId) }
-            when (val result = groupRepository.addGroupTrack(groupId, trackerId)) {
-                is RepositoryResult.Success -> {
-                    _uiState.update { it.copy(addingTrackerIds = it.addingTrackerIds - trackerId) }
-                    onSuccess()
+            var shouldRunMutation = false
+            _uiState.update { state ->
+                val (started, updatedIds) = TrackersGroupAddMutationPolicy.tryBegin(
+                    addingTrackerIds = state.addingTrackerIds,
+                    trackerId = trackerId,
+                )
+                if (started) {
+                    shouldRunMutation = true
+                    state.copy(addingTrackerIds = updatedIds)
+                } else {
+                    state
                 }
-                is RepositoryResult.Failure -> {
-                    _uiState.update { it.copy(addingTrackerIds = it.addingTrackerIds - trackerId) }
-                    _toastEvents.emit(appErrorMessage(result.error))
+            }
+            if (!shouldRunMutation) return@launch
+
+            try {
+                when (val result = groupRepository.addGroupTrack(groupId, trackerId)) {
+                    is RepositoryResult.Success -> onSuccess()
+                    is RepositoryResult.Failure -> _toastEvents.emit(appErrorMessage(result.error))
+                }
+            } finally {
+                _uiState.update { state ->
+                    state.copy(
+                        addingTrackerIds = TrackersGroupAddMutationPolicy.settle(
+                            addingTrackerIds = state.addingTrackerIds,
+                            trackerId = trackerId,
+                        )
+                    )
                 }
             }
         }

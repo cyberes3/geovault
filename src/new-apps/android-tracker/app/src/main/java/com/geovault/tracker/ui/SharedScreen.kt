@@ -10,41 +10,49 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.Card
-import androidx.compose.material.TextButton
-import androidx.compose.material.AlertDialog
 import androidx.compose.material.FloatingActionButton
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Divider
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.activity.compose.BackHandler
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.geovault.common.ui.components.GeoVaultCompactDismissTitleBar
@@ -52,6 +60,7 @@ import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
+import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTab
 import com.geovault.common.ui.components.GeoVaultTopTabBehavior
@@ -67,16 +76,18 @@ import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.parseHexToColorInt
-import com.geovault.tracker.presentation.GroupShareVisibility
 import com.geovault.tracker.presentation.OwnershipActionPolicy
-import com.geovault.tracker.presentation.TrackersGroupsDialog
 import com.geovault.tracker.presentation.DiscoverOverlayMode
+import com.geovault.tracker.presentation.SharedEditActionPolicy
 import com.geovault.tracker.presentation.SharedSurfaceItem
 import com.geovault.tracker.presentation.SharedViewMode
 import com.geovault.tracker.presentation.SharedUiState
 import com.geovault.tracker.presentation.SharedViewModel
 import com.geovault.tracker.presentation.TrackerLeaveKind
 import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun SharedScreen(
@@ -97,10 +108,9 @@ fun SharedScreen(
     var pendingConfirmAction by remember { mutableStateOf<SharedConfirmAction?>(null) }
     var pendingNavigationRequest by remember { mutableStateOf<SharedHostNavigationRequest?>(null) }
     var groupActionsDialog by remember { mutableStateOf<GroupMembersOverlayState?>(null) }
-    var pendingActionKey by remember { mutableStateOf<String?>(null) }
     var snackbarModel by remember { mutableStateOf<GeoVaultSnackbarModel?>(null) }
-    var editSharedTrackerDialog by remember { mutableStateOf<Tracker?>(null) }
-    var editSharedGroupDialog by remember { mutableStateOf<TrackersGroupsDialog.EditGroup?>(null) }
+    var editSharedTracker by remember { mutableStateOf<Tracker?>(null) }
+    var editSharedGroup by remember { mutableStateOf<Group?>(null) }
 
     LaunchedEffect(isAuthenticated) {
         if (isAuthenticated) {
@@ -112,11 +122,6 @@ fun SharedScreen(
         vm.openFromNavigationSubTab(request.subTab)
         pendingNavigationRequest = request
         onNavigationTargetConsumed()
-    }
-    LaunchedEffect(state.isLoading) {
-        if (!state.isLoading) {
-            pendingActionKey = null
-        }
     }
     LaunchedEffect(vm) {
         vm.snackbarEvents.collect { message ->
@@ -161,30 +166,40 @@ fun SharedScreen(
                         onOpenGroupOnMap(groupId)
                     },
                 )
-            } else if (editSharedGroupDialog != null) {
-                GroupEditScreen(
-                    dialog = editSharedGroupDialog!!,
-                    allTrackers = state.trackers,
-                    shareRecipientUsers = emptyList(),
-                    isShareRecipientSuggestionsLoading = false,
-                    isPickerRefreshing = false,
-                    isSaving = state.isLoading,
-                    onDismiss = { editSharedGroupDialog = null },
-                    onReloadShareRecipients = {},
-                    onRefreshTrackers = {},
-                    onNameDraftChanged = {},
-                    onVisibilityChanged = {},
-                    onToggleSharedEmail = {},
-                    onWorldShareToggled = {},
-                    onHiddenChanged = {},
-                    onUpdateDraftTrackers = {},
-                    onDeleteGroup = {},
+            } else if (editSharedGroup != null) {
+                val group = editSharedGroup!!
+                val leavePending = state.pendingRemoveActionKeys.contains(
+                    vm.editGroupLeavePendingKey(group.id)
+                )
+                SharedGroupEditScreen(
+                    group = group,
+                    isLeavePending = leavePending,
+                    onDismiss = { editSharedGroup = null },
                     onLeaveGroup = {
-                        val groupId = editSharedGroupDialog!!.group.id
-                        editSharedGroupDialog = null
-                        vm.leaveGroup(groupId)
+                        pendingConfirmAction = SharedConfirmAction.LeaveGroup(
+                            groupId = group.id,
+                            groupName = group.name,
+                        )
                     },
-                    onSave = {},
+                )
+            } else if (editSharedTracker != null) {
+                val tracker = editSharedTracker!!
+                val unsubscribePending = state.pendingRemoveActionKeys.contains(
+                    vm.editTrackerUnsubscribePendingKey(tracker.id)
+                )
+                val leaveSharePending = state.pendingRemoveActionKeys.contains(
+                    vm.editTrackerLeaveSharePendingKey(tracker.id)
+                )
+                val actions = SharedEditActionPolicy.trackerActions(tracker)
+                SharedTrackerEditScreen(
+                    tracker = tracker,
+                    canUnsubscribe = actions.canUnsubscribe,
+                    canLeaveShare = actions.canLeaveShare,
+                    isUnsubscribePending = unsubscribePending,
+                    isLeaveSharePending = leaveSharePending,
+                    onDismiss = { editSharedTracker = null },
+                    onUnsubscribe = { pendingConfirmAction = SharedConfirmAction.UnsubscribeTracker(tracker) },
+                    onLeaveShare = { pendingConfirmAction = SharedConfirmAction.LeaveShareTracker(tracker) },
                 )
             } else {
             SharedAuthenticatedBody(
@@ -208,38 +223,20 @@ fun SharedScreen(
                         groupName = groupName
                     )
                 },
-                onAcceptGroup = { groupId ->
-                    pendingActionKey = "incoming-group-$groupId"
-                    vm.acceptGroupShare(groupId)
-                },
-                onSubscribeIncomingTracker = { trackerId ->
-                    pendingActionKey = "incoming-tracker-$trackerId"
-                    vm.subscribeIncomingTracker(trackerId)
-                },
+                onAcceptGroup = vm::requestIncomingGroupAccept,
+                onSubscribeIncomingTracker = vm::requestIncomingTrackerAdd,
                 onLeaveIncomingShare = { trackerId, trackerName ->
                     pendingConfirmAction = SharedConfirmAction.RejectIncomingShare(
                         trackerId = trackerId,
                         trackerName = trackerName
                     )
                 },
-                onSubscribePublicTracker = { trackerId ->
-                    pendingActionKey = "public-tracker-$trackerId"
-                    vm.subscribePublicTracker(trackerId)
-                },
-                onSubscribePublicGroup = { trackIds ->
-                    val key = trackIds.sorted().joinToString(separator = ",")
-                    pendingActionKey = "public-group-$key"
-                    vm.subscribePublicGroup(trackIds)
-                },
-                onUnsubscribePublicTracker = { trackerId ->
-                    pendingActionKey = "public-remove-tracker-$trackerId"
-                    vm.unsubscribeTracker(trackerId) { }
-                },
-                onUnsubscribePublicGroup = { trackIds ->
-                    val key = trackIds.sorted().joinToString(separator = ",")
-                    pendingActionKey = "public-remove-group-$key"
-                    vm.unsubscribeAllTracksInGroup(trackIds) { }
-                },
+                onRemoveOnMapTracker = vm::requestDiscoverOnMapTrackerRemove,
+                onRemoveOnMapGroup = vm::requestDiscoverOnMapGroupRemove,
+                onSubscribePublicTracker = vm::requestPublicTrackerAdd,
+                onSubscribePublicGroup = vm::requestPublicGroupAdd,
+                onUnsubscribePublicTracker = vm::requestPublicTrackerRemove,
+                onUnsubscribePublicGroup = vm::requestPublicGroupRemove,
                 onUnsubscribeAllInGroup = { groupName, trackIds ->
                     pendingConfirmAction = SharedConfirmAction.UnsubscribeAllInGroup(
                         groupName = groupName,
@@ -247,17 +244,12 @@ fun SharedScreen(
                     )
                 },
                 onEditSharedTracker = { tracker ->
-                    editSharedTrackerDialog = tracker
+                    editSharedTracker = tracker
                 },
                 onEditSharedGroup = { group ->
-                    editSharedGroupDialog = TrackersGroupsDialog.EditGroup(
-                        group = group,
-                        nameDraft = group.name,
-                        visibilityDraft = GroupShareVisibility.fromApiValue(group.visibility),
-                        sharedEmailsDraft = group.shared_with_emails.orEmpty().joinToString(", "),
-                        worldShareEnabledDraft = !group.world_share_id.isNullOrBlank() ||
-                            !group.world_share_url.isNullOrBlank(),
-                    )
+                    if (SharedEditActionPolicy.canOpenSharedGroupEdit(group)) {
+                        editSharedGroup = group
+                    }
                 },
                 navigationRequest = pendingNavigationRequest,
                 onNavigationRequestHandled = { pendingNavigationRequest = null },
@@ -272,7 +264,6 @@ fun SharedScreen(
                         highlightedTrackerId = highlightedTrackerId,
                     )
                 },
-                pendingActionKey = pendingActionKey,
             )
             }
         },
@@ -288,28 +279,16 @@ fun SharedScreen(
         onDismiss = { pendingConfirmAction = null },
         onConfirm = { action ->
             when (action) {
+                is SharedConfirmAction.UnsubscribeTracker -> vm.requestEditSharedTrackerUnsubscribe(action.tracker.id)
+                is SharedConfirmAction.LeaveShareTracker -> vm.requestEditSharedTrackerLeaveShare(action.tracker.id)
                 is SharedConfirmAction.LeaveTracker -> vm.leaveTracker(action.tracker)
-                is SharedConfirmAction.LeaveGroup -> vm.leaveGroup(action.groupId)
+                is SharedConfirmAction.LeaveGroup -> vm.requestEditSharedGroupLeave(action.groupId)
                 is SharedConfirmAction.RejectIncomingShare -> vm.leaveIncomingShare(action.trackerId)
                 is SharedConfirmAction.UnsubscribeAllInGroup -> vm.unsubscribeAllTracksInGroup(action.trackIds)
             }
             pendingConfirmAction = null
         }
     )
-    editSharedTrackerDialog?.let { tracker ->
-        SharedTrackerActionsDialog(
-            tracker = tracker,
-            onDismiss = { editSharedTrackerDialog = null },
-            onUnsubscribe = {
-                vm.unsubscribeTracker(tracker.id)
-                editSharedTrackerDialog = null
-            },
-            onRemoveFromShare = {
-                vm.leaveTrackerShare(tracker.id)
-                editSharedTrackerDialog = null
-            },
-        )
-    }
 }
 
 @Composable
@@ -330,6 +309,8 @@ private fun ColumnScope.SharedAuthenticatedBody(
     onAcceptGroup: (String) -> Unit,
     onSubscribeIncomingTracker: (String) -> Unit,
     onLeaveIncomingShare: (String, String) -> Unit,
+    onRemoveOnMapTracker: (String) -> Unit,
+    onRemoveOnMapGroup: (String) -> Unit,
     onSubscribePublicTracker: (String) -> Unit,
     onSubscribePublicGroup: (List<String>) -> Unit,
     onUnsubscribePublicTracker: (String) -> Unit,
@@ -343,13 +324,14 @@ private fun ColumnScope.SharedAuthenticatedBody(
     onOpenGroupOnMap: (groupId: String) -> Unit,
     onViewTrackerParams: (Tracker) -> Unit,
     onOpenGroupActions: (group: Group, highlightedTrackerId: String?) -> Unit,
-    pendingActionKey: String?,
 ) {
     BackHandler(enabled = state.viewMode != SharedViewMode.SHARED_LIST) {
         onShowSharedList()
     }
     var highlightedItemKey by remember { mutableStateOf<String?>(null) }
     var navigationRefreshAttempts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    val pendingAddActionKeys = state.pendingAddActionKeys
+    val pendingRemoveActionKeys = state.pendingRemoveActionKeys
     val context = LocalContext.current
     val selectedTrackerId = remember(state.trackers) { SelectedTrackerPrefs.selectedTrackerId(context) }
     val sharedListState = rememberLazyListState()
@@ -360,8 +342,6 @@ private fun ColumnScope.SharedAuthenticatedBody(
     val filteredIncomingGroups = state.filteredSections.incomingGroups
     val filteredPublicTrackers = state.filteredSections.publicTrackers
     val filteredPublicGroups = state.filteredSections.publicGroups
-    val publicTrackerAddedState = remember { mutableStateMapOf<String, Boolean>() }
-    val publicGroupAddedState = remember { mutableStateMapOf<String, Boolean>() }
 
     LaunchedEffect(navigationRequest, filteredSharedItems, state.isLoading) {
         val request = navigationRequest ?: return@LaunchedEffect
@@ -456,7 +436,8 @@ private fun ColumnScope.SharedAuthenticatedBody(
                     filteredOnMyMapGroups = filteredDiscoverOnMapGroups,
                     filteredIncomingTrackers = filteredIncomingTrackers,
                     filteredIncomingGroups = filteredIncomingGroups,
-                    pendingActionKey = pendingActionKey,
+                    pendingAddActionKeys = pendingAddActionKeys,
+                    pendingRemoveActionKeys = pendingRemoveActionKeys,
                     onModeChanged = onDiscoverModeChanged,
                     onOnMyMapQueryChanged = onDiscoverOnMapQueryChanged,
                     onIncomingQueryChanged = onDiscoverIncomingQueryChanged,
@@ -465,10 +446,8 @@ private fun ColumnScope.SharedAuthenticatedBody(
                     onAddIncomingTracker = onSubscribeIncomingTracker,
                     onLeaveIncomingGroup = { groupId, groupName -> onLeaveGroup(groupId, groupName) },
                     onAcceptIncomingGroup = onAcceptGroup,
-                    onRemoveOnMapTracker = { trackerId ->
-                        state.trackers.firstOrNull { it.id == trackerId }?.let(onLeaveTracker)
-                    },
-                    onRemoveOnMapGroup = { groupId, groupName -> onLeaveGroup(groupId, groupName) },
+                    onRemoveOnMapTracker = onRemoveOnMapTracker,
+                    onRemoveOnMapGroup = onRemoveOnMapGroup,
                 )
             }
             SharedViewMode.PUBLIC_OVERLAY -> {
@@ -476,30 +455,15 @@ private fun ColumnScope.SharedAuthenticatedBody(
                     state = state,
                     filteredPublicTrackers = filteredPublicTrackers,
                     filteredPublicGroups = filteredPublicGroups,
-                    pendingActionKey = pendingActionKey,
+                    pendingAddActionKeys = pendingAddActionKeys,
+                    pendingRemoveActionKeys = pendingRemoveActionKeys,
                     onQueryChanged = onPublicQueryChanged,
                     onRefresh = onRefresh,
                     onClose = onShowSharedList,
-                    publicTrackerAddedState = publicTrackerAddedState,
-                    publicGroupAddedState = publicGroupAddedState,
-                    onAddTracker = { trackerId ->
-                        onSubscribePublicTracker(trackerId)
-                        publicTrackerAddedState[trackerId] = true
-                    },
-                    onRemoveTracker = { trackerId ->
-                        onUnsubscribePublicTracker(trackerId)
-                        publicTrackerAddedState[trackerId] = false
-                    },
-                    onAddGroup = { trackIds ->
-                        val groupKey = trackIds.sorted().joinToString(separator = ",")
-                        onSubscribePublicGroup(trackIds)
-                        publicGroupAddedState[groupKey] = true
-                    },
-                    onRemoveGroup = { trackIds ->
-                        val groupKey = trackIds.sorted().joinToString(separator = ",")
-                        onUnsubscribePublicGroup(trackIds)
-                        publicGroupAddedState[groupKey] = false
-                    },
+                    onAddTracker = onSubscribePublicTracker,
+                    onRemoveTracker = onUnsubscribePublicTracker,
+                    onAddGroup = onSubscribePublicGroup,
+                    onRemoveGroup = onUnsubscribePublicGroup,
                 )
             }
         }
@@ -561,6 +525,7 @@ private fun SharedMainListSurface(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             state = listState,
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (filteredSharedItems.isEmpty()) {
@@ -612,10 +577,10 @@ private fun SharedMainListSurface(
 private fun SharedEmptyState() {
     Column(
         modifier = Modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .padding(horizontal = 24.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.Center,
     ) {
         Text(
             text = stringResource(R.string.shared_empty_title),
@@ -662,7 +627,8 @@ private fun DiscoverOverlaySurface(
     filteredOnMyMapGroups: List<AvailableToAddGroup>,
     filteredIncomingTrackers: List<AvailableToAddItem>,
     filteredIncomingGroups: List<AvailableToAddGroup>,
-    pendingActionKey: String?,
+    pendingAddActionKeys: Set<String>,
+    pendingRemoveActionKeys: Set<String>,
     onModeChanged: (DiscoverOverlayMode) -> Unit,
     onOnMyMapQueryChanged: (String) -> Unit,
     onIncomingQueryChanged: (String) -> Unit,
@@ -672,9 +638,12 @@ private fun DiscoverOverlaySurface(
     onLeaveIncomingGroup: (String, String) -> Unit,
     onAcceptIncomingGroup: (String) -> Unit,
     onRemoveOnMapTracker: (String) -> Unit,
-    onRemoveOnMapGroup: (String, String) -> Unit,
+    onRemoveOnMapGroup: (String) -> Unit,
 ) {
     val listState = rememberLazyListState()
+    val isRequiredDataMissing = state.availableToAdd == null || !state.hasCompletedInitialLoad
+    val hasInlineMutation = pendingAddActionKeys.isNotEmpty() || pendingRemoveActionKeys.isNotEmpty()
+    val overlayLoading = (state.isLoading || isRequiredDataMissing) && !hasInlineMutation
     val tabs = listOf(
         GeoVaultTab(
             value = DiscoverOverlayMode.ON_MY_MAP,
@@ -692,9 +661,9 @@ private fun DiscoverOverlaySurface(
         onTabSelected = onModeChanged,
         behavior = GeoVaultTopTabBehavior(
             swipeMode = GeoVaultTopTabSwipeMode.ALWAYS,
-            isTabRefreshing = { state.isLoading },
-            isTabBlocking = { state.isLoading },
-            canRefreshTab = { !state.isLoading },
+            isTabRefreshing = { overlayLoading },
+            isTabBlocking = { overlayLoading },
+            canRefreshTab = { !overlayLoading },
             isPullRefreshEnabled = { true },
             loadingTextForTab = { loadingTrackersText },
             onRefreshTab = { onRefresh() },
@@ -726,7 +695,7 @@ private fun DiscoverOverlaySurface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 12.dp),
-                enabled = !state.isLoading,
+                enabled = !overlayLoading,
             )
         },
         contentForTab = { tab ->
@@ -741,17 +710,21 @@ private fun DiscoverOverlaySurface(
                     item { EmptyLine(stringResource(R.string.shared_empty_discover_on_my_map)) }
                 }
                 items(filteredOnMyMapTrackers, key = { "m-t-${it.id}" }) { item ->
+                    val isPendingRemove = pendingRemoveActionKeys.contains("discover-remove-tracker-${item.id}")
                     DiscoverOnMapTrackerCard(
                         item = item,
                         onRemove = { onRemoveOnMapTracker(item.id) },
-                        enabled = !state.isLoading,
+                        isPendingRemove = isPendingRemove,
+                        enabled = !overlayLoading && !isPendingRemove,
                     )
                 }
                 items(filteredOnMyMapGroups, key = { "m-g-${it.id}" }) { group ->
+                    val isPendingRemove = pendingRemoveActionKeys.contains("discover-remove-group-${group.id}")
                     DiscoverOnMapGroupCard(
                         group = group,
-                        onRemove = { onRemoveOnMapGroup(group.id, group.name) },
-                        enabled = !state.isLoading,
+                        onRemove = { onRemoveOnMapGroup(group.id) },
+                        isPendingRemove = isPendingRemove,
+                        enabled = !overlayLoading && !isPendingRemove,
                     )
                 }
             } else {
@@ -759,24 +732,26 @@ private fun DiscoverOverlaySurface(
                     item { EmptyLine(stringResource(R.string.shared_empty_discover_incoming)) }
                 }
                 items(filteredIncomingTrackers, key = { "d-t-${it.id}" }) { item ->
+                    val isPending = pendingAddActionKeys.contains("incoming-tracker-${item.id}")
                     DiscoverIncomingTrackerCard(
                         item = item,
                         onAdd = { onAddIncomingTracker(item.id) },
                         onRejectShare = {},
                         showRejectAction = false,
-                        isPendingAdd = pendingActionKey == "incoming-tracker-${item.id}",
+                        isPendingAdd = isPending,
                         isHighlighted = false,
-                        enabled = !state.isLoading,
+                        enabled = !overlayLoading && !isPending,
                     )
                 }
                 items(filteredIncomingGroups, key = { "d-g-${it.id}" }) { group ->
+                    val isPending = pendingAddActionKeys.contains("incoming-group-${group.id}")
                     DiscoverIncomingGroupCard(
                         group = group,
                         onAccept = { onAcceptIncomingGroup(group.id) },
                         onLeave = { onLeaveIncomingGroup(group.id, group.name) },
-                        isPendingAccept = pendingActionKey == "incoming-group-${group.id}",
+                        isPendingAccept = isPending,
                         isHighlighted = false,
-                        enabled = !state.isLoading,
+                        enabled = !overlayLoading && !isPending,
                     )
                 }
             }
@@ -789,18 +764,20 @@ private fun PublicOverlaySurface(
     state: SharedUiState,
     filteredPublicTrackers: List<AvailableToAddItem>,
     filteredPublicGroups: List<AvailableToAddGroup>,
-    pendingActionKey: String?,
+    pendingAddActionKeys: Set<String>,
+    pendingRemoveActionKeys: Set<String>,
     onQueryChanged: (String) -> Unit,
     onRefresh: () -> Unit,
     onClose: () -> Unit,
-    publicTrackerAddedState: Map<String, Boolean>,
-    publicGroupAddedState: Map<String, Boolean>,
     onAddTracker: (String) -> Unit,
     onRemoveTracker: (String) -> Unit,
     onAddGroup: (List<String>) -> Unit,
     onRemoveGroup: (List<String>) -> Unit,
 ) {
     val listState = rememberLazyListState()
+    val isRequiredDataMissing = state.availableToAdd == null || !state.hasCompletedInitialLoad
+    val hasInlineMutation = pendingAddActionKeys.isNotEmpty() || pendingRemoveActionKeys.isNotEmpty()
+    val overlayLoading = (state.isLoading || isRequiredDataMissing) && !hasInlineMutation
     Column(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxWidth()) {
             GeoVaultCompactDismissTitleBar(
@@ -818,13 +795,13 @@ private fun PublicOverlaySurface(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 12.dp),
-            enabled = !state.isLoading,
+            enabled = !overlayLoading,
         )
         GeoVaultPullRefreshLoadingContainer(
-            refreshing = state.isLoading,
-            showBlockingLoader = state.isLoading,
+            refreshing = overlayLoading,
+            showBlockingLoader = overlayLoading,
             onRefresh = onRefresh,
-            canRefresh = !state.isLoading,
+            canRefresh = !overlayLoading,
             loadingText = stringResource(R.string.loading_trackers),
             modifier = Modifier
                 .fillMaxSize(),
@@ -839,26 +816,32 @@ private fun PublicOverlaySurface(
                     item { EmptyLine(stringResource(R.string.shared_empty_public_trackers)) }
                 }
                 items(filteredPublicTrackers, key = { "p-t-${it.id}" }) { item ->
+                    val isPendingAdd = pendingAddActionKeys.contains("public-tracker-${item.id}")
+                    val isPendingRemove = pendingRemoveActionKeys.contains("public-remove-tracker-${item.id}")
                     PublicAddTrackerCard(
                         item = item,
-                        isAdded = publicTrackerAddedState[item.id] == true,
+                        isAdded = state.isPublicTrackerAdded(item.id),
                         onAdd = { onAddTracker(item.id) },
                         onRemove = { onRemoveTracker(item.id) },
-                        isPendingAdd = pendingActionKey == "public-tracker-${item.id}",
+                        isPendingAdd = isPendingAdd,
+                        isPendingRemove = isPendingRemove,
                         isHighlighted = false,
-                        enabled = !state.isLoading,
+                        enabled = !overlayLoading && !isPendingAdd && !isPendingRemove,
                     )
                 }
                 items(filteredPublicGroups, key = { "p-g-${it.id}" }) { group ->
-                    val groupKey = group.track_ids.sorted().joinToString(separator = ",")
+                    val actionKey = group.track_ids.sorted().joinToString(separator = ",")
+                    val isPendingAdd = pendingAddActionKeys.contains("public-group-$actionKey")
+                    val isPendingRemove = pendingRemoveActionKeys.contains("public-remove-group-$actionKey")
                     PublicAddGroupCard(
                         group = group,
-                        isAdded = publicGroupAddedState[groupKey] == true,
+                        isAdded = state.isPublicGroupAdded(group.track_ids),
                         onAddGroup = { onAddGroup(group.track_ids) },
                         onRemoveGroup = { onRemoveGroup(group.track_ids) },
-                        isPendingAdd = pendingActionKey == "public-group-${group.track_ids.sorted().joinToString(separator = ",")}",
+                        isPendingAdd = isPendingAdd,
+                        isPendingRemove = isPendingRemove,
                         isHighlighted = false,
-                        enabled = !state.isLoading,
+                        enabled = !overlayLoading && !isPendingAdd && !isPendingRemove,
                     )
                 }
             }
@@ -870,6 +853,7 @@ private fun PublicOverlaySurface(
 private fun DiscoverOnMapTrackerCard(
     item: AvailableToAddItem,
     onRemove: () -> Unit,
+    isPendingRemove: Boolean,
     enabled: Boolean,
 ) {
     TrackerAddRowCard(
@@ -877,7 +861,7 @@ private fun DiscoverOnMapTrackerCard(
         ownerEmail = item.owner_email,
         iconRes = R.drawable.ic_chevron_track,
         iconTint = GeoVaultColorTokens.PrimaryBlue,
-        state = TrackerAddRowActionState.ADDED_DELETE,
+        state = if (isPendingRemove) TrackerAddRowActionState.REMOVING else TrackerAddRowActionState.ADDED_DELETE,
         borderColor = MaterialTheme.colors.onSurface.copy(alpha = 0.16f),
         enabled = enabled,
         onAdd = {},
@@ -889,6 +873,7 @@ private fun DiscoverOnMapTrackerCard(
 private fun DiscoverOnMapGroupCard(
     group: AvailableToAddGroup,
     onRemove: () -> Unit,
+    isPendingRemove: Boolean,
     enabled: Boolean,
 ) {
     TrackerAddRowCard(
@@ -896,7 +881,7 @@ private fun DiscoverOnMapGroupCard(
         ownerEmail = group.owner_email,
         iconRes = R.drawable.ic_groups,
         iconTint = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
-        state = TrackerAddRowActionState.ADDED_DELETE,
+        state = if (isPendingRemove) TrackerAddRowActionState.REMOVING else TrackerAddRowActionState.ADDED_DELETE,
         borderColor = MaterialTheme.colors.onSurface.copy(alpha = 0.16f),
         enabled = enabled,
         onAdd = {},
@@ -905,6 +890,8 @@ private fun DiscoverOnMapGroupCard(
 }
 
 private sealed interface SharedConfirmAction {
+    data class UnsubscribeTracker(val tracker: Tracker) : SharedConfirmAction
+    data class LeaveShareTracker(val tracker: Tracker) : SharedConfirmAction
     data class LeaveTracker(val tracker: Tracker) : SharedConfirmAction
     data class LeaveGroup(val groupId: String, val groupName: String) : SharedConfirmAction
     data class RejectIncomingShare(val trackerId: String, val trackerName: String) : SharedConfirmAction
@@ -922,15 +909,33 @@ private fun SharedActionConfirmDialog(
     val message: String
     val confirmLabel: String
     when (action) {
+        is SharedConfirmAction.UnsubscribeTracker -> {
+            title = stringResource(R.string.confirm_unsubscribe_title)
+            message = stringResource(R.string.confirm_unsubscribe_message, action.tracker.name) +
+                "\n\n" +
+                stringResource(R.string.confirm_unsubscribe_help)
+            confirmLabel = stringResource(R.string.trackers_action_unsubscribe)
+        }
+        is SharedConfirmAction.LeaveShareTracker -> {
+            title = stringResource(R.string.confirm_leave_share_title)
+            message = stringResource(R.string.confirm_leave_share_message, action.tracker.name) +
+                "\n\n" +
+                stringResource(R.string.confirm_leave_share_help)
+            confirmLabel = stringResource(R.string.trackers_action_leave_share)
+        }
         is SharedConfirmAction.LeaveTracker -> {
             val leaveKind = OwnershipActionPolicy.trackerLeaveKind(action.tracker)
             if (leaveKind == TrackerLeaveKind.LeaveShare) {
                 title = stringResource(R.string.confirm_leave_share_title)
-                message = stringResource(R.string.confirm_leave_share_message, action.tracker.name)
+                message = stringResource(R.string.confirm_leave_share_message, action.tracker.name) +
+                    "\n\n" +
+                    stringResource(R.string.confirm_leave_share_help)
                 confirmLabel = stringResource(R.string.trackers_action_leave_share)
             } else {
                 title = stringResource(R.string.confirm_unsubscribe_title)
-                message = stringResource(R.string.confirm_unsubscribe_message, action.tracker.name)
+                message = stringResource(R.string.confirm_unsubscribe_message, action.tracker.name) +
+                    "\n\n" +
+                    stringResource(R.string.confirm_unsubscribe_help)
                 confirmLabel = stringResource(R.string.trackers_action_unsubscribe)
             }
         }
@@ -1003,56 +1008,113 @@ private fun SharedTrackerCard(
     enabled: Boolean,
 ) {
     val hasLastPosition = tracker.last_point?.size?.let { it >= 2 } == true
+    val context = LocalContext.current
+    val trackerLastUpdate = tracker.updated_at?.let(::formatSharedListDate)
+        ?: stringResource(R.string.waiting_for_data)
+    val trackerPosition = tracker.last_point?.takeIf { it.size >= 2 }?.let {
+        String.format(Locale.getDefault(), "%.4f, %.4f", it[1], it[0])
+    }.orEmpty()
+    val ownerLine = tracker.owner_email?.takeIf { it.isNotBlank() }
+    val chevronTint = androidx.compose.ui.graphics.Color(parseHexToColorInt(tracker.color, context))
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
+        shape = RoundedCornerShape(12.dp),
         elevation = 0.dp,
-        backgroundColor = if (isHighlighted) {
-            MaterialTheme.colors.primary.copy(alpha = 0.14f)
-        } else {
-            MaterialTheme.colors.surface
-        },
+        backgroundColor = if (isHighlighted) GeoVaultColorTokens.Purple100 else GeoVaultColorTokens.Surface,
+        border = BorderStroke(2.dp, GeoVaultColorTokens.PrimaryBlue),
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(text = tracker.name, style = MaterialTheme.typography.subtitle1, fontWeight = FontWeight.SemiBold)
-            if (isSelected) {
-                Icon(
-                    imageVector = Icons.Filled.Check,
-                    contentDescription = null,
-                    tint = MaterialTheme.colors.primary,
-                )
-            }
-            val subtitle = listOfNotNull(
-                tracker.visibility,
-                tracker.owner_email?.let { stringResource(R.string.trackers_meta_owner_line, it) },
-            ).joinToString(" · ")
-            if (subtitle.isNotBlank()) {
-                Text(text = subtitle, style = MaterialTheme.typography.caption)
-            }
-            Text(
-                text = stringResource(R.string.trackers_badge_not_owner),
-                style = MaterialTheme.typography.caption,
-                fontWeight = FontWeight.Medium,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+        Column(modifier = Modifier.padding(20.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                GeoVaultInlineActionButton(
-                    text = stringResource(R.string.trackers_action_view_on_map),
+                Image(
+                    painter = painterResource(R.drawable.ic_chevron_track),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    colorFilter = ColorFilter.tint(chevronTint),
+                )
+                Text(
+                    text = tracker.name,
+                    color = GeoVaultColorTokens.TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 12.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (isSelected) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = GeoVaultColorTokens.PrimaryBlue,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = trackerLastUpdate,
+                    color = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.8f),
+                    fontSize = 12.sp,
+                )
+                if (trackerPosition.isNotBlank()) {
+                    Text(
+                        text = " \u2022 ",
+                        color = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.5f),
+                        fontSize = 12.sp,
+                    )
+                    Text(
+                        text = trackerPosition,
+                        color = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.8f),
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            ownerLine?.let { owner ->
+                Text(
+                    text = owner,
+                    color = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.8f),
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            } ?: Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                GeoVaultPrimaryButton(
+                    text = "Map",
                     onClick = onOpenMap,
                     enabled = enabled && hasLastPosition,
+                    modifier = Modifier.weight(1f).height(48.dp),
                 )
-                GeoVaultInlineActionButton(
-                    text = stringResource(R.string.map_action_view_params),
+                GeoVaultSecondaryButton(
+                    text = "Params",
                     onClick = onViewParams,
                     enabled = enabled,
+                    modifier = Modifier.weight(1f).height(48.dp),
                 )
-                GeoVaultInlineActionButton(
-                    text = stringResource(R.string.trackers_action_edit),
+                GeoVaultSecondaryButton(
+                    text = "Edit",
                     onClick = onEdit,
                     enabled = enabled,
+                    modifier = Modifier.weight(1f).height(48.dp),
                 )
             }
         }
@@ -1068,111 +1130,102 @@ private fun SharedMemberGroupCard(
     isHighlighted: Boolean,
     enabled: Boolean,
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val ownerLine = group.owner_email?.takeIf { it.isNotBlank() }
+    val trackerCount = group.track_ids.orEmpty()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .distinct()
+        .size
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
+        shape = RoundedCornerShape(8.dp),
         elevation = 0.dp,
-        backgroundColor = if (isHighlighted) {
-            MaterialTheme.colors.primary.copy(alpha = 0.14f)
-        } else {
-            MaterialTheme.colors.surface
-        },
+        backgroundColor = if (isHighlighted) GeoVaultColorTokens.Purple100 else GeoVaultColorTokens.Surface,
+        border = BorderStroke(2.dp, GeoVaultColorTokens.PrimaryBlue),
     ) {
-        Column(
+        Row(
             modifier = Modifier
-                .padding(12.dp)
+                .padding(horizontal = 14.dp, vertical = 10.dp)
                 .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(text = group.name, style = MaterialTheme.typography.subtitle1, fontWeight = FontWeight.SemiBold)
-            val trackerCount = group.track_ids.orEmpty()
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-                .distinct()
-                .size
-            val subtitle = listOfNotNull(
-                group.visibility,
-                group.owner_email?.let { stringResource(R.string.trackers_meta_owner_line, it) },
-                stringResource(R.string.trackers_meta_tracks_count, trackerCount),
-            ).joinToString(" · ")
-            if (subtitle.isNotBlank()) {
-                Text(text = subtitle, style = MaterialTheme.typography.caption)
-            }
-            Text(
-                text = stringResource(R.string.trackers_badge_member),
-                style = MaterialTheme.typography.caption,
-                fontWeight = FontWeight.Medium,
+            Icon(
+                painter = painterResource(R.drawable.ic_groups),
+                contentDescription = null,
+                tint = GeoVaultColorTokens.PrimaryBlue,
+                modifier = Modifier.size(22.dp),
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start,
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 10.dp)
+                    .clickable(enabled = enabled, onClick = onOpenActions),
             ) {
-                GeoVaultInlineActionButton(
-                    text = stringResource(R.string.trackers_action_view_group_members),
-                    onClick = onOpenActions,
-                    enabled = enabled,
+                Text(
+                    text = group.name,
+                    color = GeoVaultColorTokens.TextPrimary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                ownerLine?.let {
+                    Text(
+                        text = it,
+                        color = GeoVaultColorTokens.TextSecondary,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.trackers_meta_tracks_count, trackerCount),
+                    color = GeoVaultColorTokens.TextSecondary,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                GeoVaultInlineActionButton(
-                    text = stringResource(R.string.trackers_action_view_group_on_map),
-                    onClick = onOpenMap,
+            Box {
+                IconButton(
+                    onClick = { menuExpanded = true },
                     enabled = enabled,
-                )
-                GeoVaultInlineActionButton(
-                    text = stringResource(R.string.trackers_action_edit),
-                    onClick = onEdit,
-                    enabled = enabled,
-                )
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.MoreVert,
+                        contentDescription = null,
+                        tint = GeoVaultColorTokens.PrimaryBlue,
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    DropdownMenuItem(onClick = {
+                        menuExpanded = false
+                        onOpenMap()
+                    }) {
+                        Text(stringResource(R.string.trackers_action_view_group_on_map))
+                    }
+                    DropdownMenuItem(onClick = {
+                        menuExpanded = false
+                        onEdit()
+                    }) {
+                        Text(stringResource(R.string.trackers_action_edit))
+                    }
+                }
             }
         }
     }
 }
 
-@Composable
-private fun SharedTrackerActionsDialog(
-    tracker: Tracker,
-    onDismiss: () -> Unit,
-    onUnsubscribe: () -> Unit,
-    onRemoveFromShare: () -> Unit,
-) {
-    val canUnsubscribe = OwnershipActionPolicy.trackerLeaveKind(tracker) == TrackerLeaveKind.Unsubscribe
-    val canRemoveFromShare = tracker.visibility == "shared" || OwnershipActionPolicy.trackerLeaveKind(tracker) == TrackerLeaveKind.LeaveShare
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = tracker.name) },
-        text = {
-            Text(
-                text = tracker.owner_email
-                    ?.takeIf { it.isNotBlank() }
-                    ?: stringResource(R.string.trackers_badge_not_owner),
-                style = MaterialTheme.typography.body2,
-            )
-        },
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.End) {
-                if (canUnsubscribe) {
-                    TextButton(onClick = onUnsubscribe) {
-                        Text(text = stringResource(R.string.trackers_action_unsubscribe))
-                    }
-                }
-                if (canRemoveFromShare) {
-                    TextButton(onClick = onRemoveFromShare) {
-                        Text(text = stringResource(R.string.trackers_action_leave_share))
-                    }
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = stringResource(R.string.trackers_dialog_cancel))
-            }
-        },
-    )
-}
+private val SHARED_LIST_DATE_FORMAT = SimpleDateFormat("MMM d, yyyy, h:mm a", Locale.getDefault())
+
+private fun formatSharedListDate(timestampMs: Long): String = SHARED_LIST_DATE_FORMAT.format(Date(timestampMs))
 
 @Composable
 private fun DiscoverIncomingTrackerCard(
@@ -1226,6 +1279,7 @@ private fun PublicAddTrackerCard(
     onAdd: () -> Unit,
     onRemove: () -> Unit,
     isPendingAdd: Boolean,
+    isPendingRemove: Boolean,
     isHighlighted: Boolean,
     enabled: Boolean,
 ) {
@@ -1236,6 +1290,7 @@ private fun PublicAddTrackerCard(
         iconTint = GeoVaultColorTokens.PrimaryBlue,
         state = when {
             isPendingAdd -> TrackerAddRowActionState.ADDING
+            isPendingRemove -> TrackerAddRowActionState.REMOVING
             isAdded -> TrackerAddRowActionState.ADDED_DELETE
             else -> TrackerAddRowActionState.IDLE
         },
@@ -1253,6 +1308,7 @@ private fun PublicAddGroupCard(
     onAddGroup: () -> Unit,
     onRemoveGroup: () -> Unit,
     isPendingAdd: Boolean,
+    isPendingRemove: Boolean,
     isHighlighted: Boolean,
     enabled: Boolean,
 ) {
@@ -1263,6 +1319,7 @@ private fun PublicAddGroupCard(
         iconTint = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
         state = when {
             isPendingAdd -> TrackerAddRowActionState.ADDING
+            isPendingRemove -> TrackerAddRowActionState.REMOVING
             isAdded -> TrackerAddRowActionState.ADDED_DELETE
             else -> TrackerAddRowActionState.IDLE
         },

@@ -231,6 +231,7 @@
     <string name="trackers_field_world_share_enabled">Enable world share link</string>
     <string name="trackers_field_share_params_with_world">Share parameters with world</string>
     <string name="trackers_action_copy_world_share_link">Copy world share link</string>
+    <string name="trackers_action_share_world_share_link">Share world share link</string>
     <string name="trackers_failed_to_enable_world_share">Could not enable world share link.</string>
     <string name="trackers_failed_to_disable_world_share">Could not disable world share link.</string>
     <string name="trackers_failed_to_fetch_world_share_link">Could not load world share link.</string>
@@ -292,6 +293,7 @@
     <string name="shared_section_public_groups">Public groups</string>
     <string name="shared_action_open_discover">Open discover trackers</string>
     <string name="shared_action_open_public">Open public trackers</string>
+    <string name="shared_tracker_edit_title">Shared Tracker</string>
     <string name="shared_discover_overlay_title">Add Trackers</string>
     <string name="shared_public_overlay_title">Public Trackers</string>
     <string name="shared_discover_tab_on_my_map">On my map</string>
@@ -322,8 +324,10 @@
     <string name="shared_error_public_group_no_tracks">This group has no addable trackers.</string>
     <string name="confirm_unsubscribe_title">Unsubscribe Tracker</string>
     <string name="confirm_unsubscribe_message">Unsubscribe from \"%1$s\"?</string>
+    <string name="confirm_unsubscribe_help">You will stop receiving this tracker on your map, but you can add it again later.</string>
     <string name="confirm_leave_share_title">Leave Shared Tracker</string>
     <string name="confirm_leave_share_message">Leave shared access to \"%1$s\"?</string>
+    <string name="confirm_leave_share_help">This removes your access to the shared tracker and it will no longer appear in your shared list.</string>
     <string name="confirm_leave_group_title">Leave Group</string>
     <string name="confirm_leave_group_message">Leave group \"%1$s\"?</string>
     <string name="confirm_reject_share_title">Reject Incoming Share</string>

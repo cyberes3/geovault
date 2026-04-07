@@ -3,6 +3,7 @@ package com.geovault.common.ui.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -64,6 +65,7 @@ fun GeoVaultBaseButton(
     fitToContent: Boolean = false,
     minWidthWhenFitToContent: Dp = 1.dp,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
+    centeredContent: (@Composable () -> Unit)? = null,
 ) {
     val tooltipText = tooltip?.takeIf { it.isNotBlank() }
 
@@ -73,13 +75,29 @@ fun GeoVaultBaseButton(
         modifier
     }
 
-    val buttonContent: @Composable RowScope.() -> Unit = {
-        if (trailingContent != null) {
-            Text(text = text, modifier = Modifier.weight(1f))
-            Spacer(modifier = Modifier.width(8.dp))
-            trailingContent()
-        } else {
-            Text(text = text)
+    val buttonContent: @Composable RowScope.() -> Unit = if (centeredContent != null) {
+        {
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    centeredContent()
+                }
+            }
+        }
+    } else {
+        {
+            if (trailingContent != null) {
+                Text(text = text, modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.width(8.dp))
+                trailingContent()
+            } else {
+                Text(text = text)
+            }
         }
     }
 
@@ -244,6 +262,7 @@ fun GeoVaultSecondaryButton(
     tooltip: String? = null,
     fitToContent: Boolean = false,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
+    centeredContent: (@Composable () -> Unit)? = null,
 ) {
     GeoVaultBaseButton(
         text = text,
@@ -262,6 +281,7 @@ fun GeoVaultSecondaryButton(
         tooltip = tooltip,
         fitToContent = fitToContent,
         trailingContent = trailingContent,
+        centeredContent = centeredContent,
     )
 }
 

@@ -396,6 +396,12 @@ fun TrackersScreen(
                         groupMembershipDialog = dialogState.copy(selectedTrackerIds = nextSelected)
                     },
                     onAddTracker = { trackerId ->
+                        if (trackerId in dialogState.selectedTrackerIds ||
+                            trackerId in dialogState.persistedTrackerIds ||
+                            trackerId in state.addingTrackerIds
+                        ) {
+                            return@GroupTrackerPickerScreen
+                        }
                         vm.addTrackerToGroup(dialogState.group.id, trackerId) {
                             groupMembershipDialog = groupMembershipDialog?.let { ds ->
                                 ds.copy(
@@ -448,6 +454,11 @@ fun TrackersScreen(
                     onHiddenChanged = vm::updateEditGroupHidden,
                     onUpdateDraftTrackers = vm::updateGroupDraftTrackers,
                     onAddTracker = { trackerId ->
+                        if (trackerId in activeGroupEditDialog.memberTrackIds ||
+                            trackerId in state.addingTrackerIds
+                        ) {
+                            return@GroupEditScreen
+                        }
                         vm.addTrackerToGroup(activeGroupEditDialog.group.id, trackerId) {
                             vm.recordImmediateTrackerAdd(trackerId)
                         }

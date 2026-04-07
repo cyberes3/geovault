@@ -43,4 +43,35 @@ class SharedUiStateTest {
         assertEquals(emptyList<String>(), state.filteredSections.publicTrackers.map { it.id })
         assertEquals(listOf("pg1"), state.filteredSections.publicGroups.map { it.id })
     }
+
+    @Test
+    fun pendingActionKeys_areSplitByMutationPhase() {
+        val state = SharedUiState(
+            pendingOps = mapOf(
+                "k-add" to SharedMutationPhase.PENDING_ADD,
+                "k-remove" to SharedMutationPhase.PENDING_REMOVE,
+            )
+        )
+
+        assertEquals(setOf("k-add"), state.pendingAddActionKeys)
+        assertEquals(setOf("k-remove"), state.pendingRemoveActionKeys)
+    }
+
+    @Test
+    fun publicAddedHelpers_useEffectiveSubscribedIdsWithOptimisticDelta() {
+        val state = SharedUiState(
+            trackers = listOf(
+                Tracker(id = "t-base", name = "Base", color = null, is_owner = false, visibility = "shared"),
+            ),
+            optimisticTrackerAdds = mapOf(
+                "t-add" to Tracker(id = "t-add", name = "Add", color = null, is_owner = false, visibility = "shared"),
+            ),
+            optimisticTrackerRemovals = setOf("t-base"),
+        )
+
+        assertEquals(true, state.isPublicTrackerAdded("t-add"))
+        assertEquals(false, state.isPublicTrackerAdded("t-base"))
+        assertEquals(true, state.isPublicGroupAdded(listOf("t-add")))
+        assertEquals(false, state.isPublicGroupAdded(listOf("t-base")))
+    }
 }

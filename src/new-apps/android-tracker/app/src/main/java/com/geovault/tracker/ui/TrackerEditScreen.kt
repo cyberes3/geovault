@@ -3,6 +3,7 @@ package com.geovault.tracker.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -37,6 +38,8 @@ import androidx.compose.material.IconButton
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -466,14 +469,51 @@ fun TrackerEditScreen(
                                                 }
                                             }
                                         } else {
-                                            GeoVaultSecondaryButton(
-                                                text = stringResource(R.string.trackers_action_copy_world_share_link),
-                                                onClick = {
-                                                    copyWorldShareLink(context, dialog.worldShareUrlDraft)
-                                                },
-                                                enabled = !isSaving && !dialog.worldShareUrlDraft.isNullOrBlank(),
+                                            Row(
                                                 modifier = Modifier.fillMaxWidth(),
-                                            )
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                            ) {
+                                                GeoVaultSecondaryButton(
+                                                    text = "Copy world link",
+                                                    onClick = {
+                                                        copyWorldShareLink(context, dialog.worldShareUrlDraft)
+                                                    },
+                                                    enabled = !isSaving && !dialog.worldShareUrlDraft.isNullOrBlank(),
+                                                    modifier = Modifier.weight(1f),
+                                                    centeredContent = {
+                                                        Icon(
+                                                            imageVector = Icons.Filled.ContentCopy,
+                                                            contentDescription = null,
+                                                            modifier = Modifier.size(18.dp),
+                                                        )
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        Text(
+                                                            text = "Copy world link",
+                                                            style = MaterialTheme.typography.button,
+                                                        )
+                                                    },
+                                                )
+                                                GeoVaultSecondaryButton(
+                                                    text = "Share world link",
+                                                    onClick = {
+                                                        shareWorldShareLink(context, dialog.worldShareUrlDraft)
+                                                    },
+                                                    enabled = !isSaving && !dialog.worldShareUrlDraft.isNullOrBlank(),
+                                                    modifier = Modifier.weight(1f),
+                                                    centeredContent = {
+                                                        Text(
+                                                            text = "Share world link",
+                                                            style = MaterialTheme.typography.button,
+                                                        )
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        Icon(
+                                                            imageVector = Icons.Filled.Share,
+                                                            contentDescription = null,
+                                                            modifier = Modifier.size(18.dp),
+                                                        )
+                                                    },
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -730,6 +770,15 @@ private fun copyWorldShareLink(context: Context, worldShareUrl: String?) {
     if (worldShareUrl.isNullOrBlank()) return
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
     clipboard.setPrimaryClip(ClipData.newPlainText("World share link", worldShareUrl))
+}
+
+private fun shareWorldShareLink(context: Context, worldShareUrl: String?) {
+    if (worldShareUrl.isNullOrBlank()) return
+    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, worldShareUrl)
+    }
+    context.startActivity(Intent.createChooser(shareIntent, null))
 }
 
 private data class TrackerColorPreviewState(
