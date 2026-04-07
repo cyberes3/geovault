@@ -59,6 +59,8 @@ import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.tracker.params.TrackerParamsRouteArgs
+import com.geovault.tracker.params.TrackerParamsSeed
 import com.geovault.tracker.R
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.presentation.HomeLayoutMode
@@ -88,7 +90,7 @@ fun HomeScreen(
     onRequestStartTracking: () -> Unit,
     onRequestStopTracking: () -> Unit,
     onRequestManualPoint: () -> Unit,
-    onRequestTrackerParams: (TrackerParamsUiModel) -> Unit,
+    onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit,
 ) {
     val homeViewModel: HomeViewModel = viewModel()
     val homeState by homeViewModel.uiState.collectAsState()
@@ -141,7 +143,7 @@ fun HomeScreen(
                 perms.hasPostNotifications &&
                 perms.hasBatteryOptimizationExemption &&
                 perms.hasExactAlarmPermission
-            val trackerParamsModel = homeTrackerParamsModelOrNull(homeState)
+            val trackerParamsArgs = homeTrackerParamsRouteArgsOrNull(homeState)
             val showInlineButtons = homeState.isTracking && homeState.selectedTrackerId.isNotBlank()
             val isRunningOrPreparing = homeState.isTracking || isPreparingToTrack
 
@@ -175,7 +177,7 @@ fun HomeScreen(
                         state = homeState,
                         isPreparingToTrack = isPreparingToTrack,
                         showInlineButtons = showInlineButtons,
-                        canOpenParams = trackerParamsModel != null,
+                        canOpenParams = trackerParamsArgs != null,
                         onStartStop = {
                             if (isRunningOrPreparing) {
                                 showStopTrackingConfirm = true
@@ -183,7 +185,7 @@ fun HomeScreen(
                                 onRequestStartTracking()
                             }
                         },
-                        onParams = { trackerParamsModel?.let(onRequestTrackerParams) },
+                        onParams = { trackerParamsArgs?.let(onRequestTrackerParams) },
                         onManualPoint = onRequestManualPoint,
                     )
                 }
@@ -664,7 +666,9 @@ private fun formatAccuracyPresentation(state: HomeUiState, imperial: Boolean): H
     )
 }
 
-private fun homeTrackerParamsModelOrNull(state: HomeUiState): TrackerParamsUiModel? {
+private fun homeTrackerParamsRouteArgsOrNull(state: HomeUiState): TrackerParamsRouteArgs? {
+    val trackerId = state.selectedTrackerId.trim()
+    if (trackerId.isBlank()) return null
     val lat = state.lastTrackedLatitude ?: return null
     val lon = state.lastTrackedLongitude ?: return null
     val trackerName = state.selectedTrackerDisplayName.ifBlank { state.selectedTrackerId }
@@ -674,12 +678,15 @@ private fun homeTrackerParamsModelOrNull(state: HomeUiState): TrackerParamsUiMod
         state.lastPointSentAtMs > 0L -> state.lastPointSentAtMs
         else -> null
     }
-    return TrackerParamsUiModel(
-        trackerName = trackerName,
-        latitude = lat,
-        longitude = lon,
-        lastUpdatedMs = lastUpdateMs,
-        accuracyMeters = state.lastAccuracyMeters,
-        isOwned = true,
+    return TrackerParamsRouteArgs(
+        trackerId = trackerId,
+        seed = TrackerParamsSeed(
+            displayName = trackerName,
+            lastUpdateMs = lastUpdateMs,
+            latitude = lat,
+            longitude = lon,
+            initialParams = null,
+            isOwner = true,
+        ),
     )
 }

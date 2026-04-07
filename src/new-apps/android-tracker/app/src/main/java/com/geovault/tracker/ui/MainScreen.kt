@@ -1,6 +1,5 @@
 package com.geovault.tracker.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
@@ -10,6 +9,7 @@ import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.geovault.common.ui.components.GeoVaultBottomNavDestination
 import com.geovault.common.ui.components.GeoVaultBottomNavScaffold
+import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
 import com.geovault.common.update.CustomTabReleasePageLauncher
@@ -35,6 +36,7 @@ import com.geovault.tracker.presentation.SharedViewModel
 import com.geovault.tracker.presentation.TrackerMapViewModel
 import com.geovault.tracker.presentation.TrackersGroupsSubTab
 import com.geovault.tracker.settings.TrackerTrackingProfile
+import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.R
 
 @Composable
@@ -83,7 +85,7 @@ fun MainScreen(
     var pendingTrackersRequest by remember { mutableStateOf<TrackersHostNavigationRequest?>(null) }
     var pendingSharedRequest by remember { mutableStateOf<SharedHostNavigationRequest?>(null) }
     var pendingMapReturnContext by remember { mutableStateOf<MapReturnContext?>(null) }
-    var trackerParamsModel by remember { mutableStateOf<TrackerParamsUiModel?>(null) }
+    var trackerParamsArgs by remember { mutableStateOf<TrackerParamsRouteArgs?>(null) }
     LaunchedEffect(state.isAuthenticated) {
         if (state.isAuthenticated) {
             // Preload only main shared list data on app startup.
@@ -100,6 +102,7 @@ fun MainScreen(
                     trackersRequest = TrackersHostNavigationRequest(
                         subTab = TrackersGroupsSubTab.TRACKERS,
                         trackerId = trackerId,
+                        focus = MapHostNavigationFocus.NONE,
                     )
                 )
                 MapReturnSource.SHARED -> MapReturnContext(
@@ -107,6 +110,7 @@ fun MainScreen(
                     sharedRequest = SharedHostNavigationRequest(
                         subTab = SharedSubTab.SHARED,
                         trackerId = trackerId,
+                        focus = MapHostNavigationFocus.NONE,
                     )
                 )
             }
@@ -123,6 +127,7 @@ fun MainScreen(
                     trackersRequest = TrackersHostNavigationRequest(
                         subTab = TrackersGroupsSubTab.GROUPS,
                         groupId = groupId,
+                        focus = MapHostNavigationFocus.NONE,
                     )
                 )
                 MapReturnSource.SHARED -> MapReturnContext(
@@ -130,31 +135,44 @@ fun MainScreen(
                     sharedRequest = SharedHostNavigationRequest(
                         subTab = SharedSubTab.SHARED,
                         groupId = groupId,
+                        focus = MapHostNavigationFocus.NONE,
                     )
                 )
             }
             selectedTab = TrackerTab.MAP.name
         }
     }
-    BackHandler(enabled = selectedTab == TrackerTab.MAP.name && pendingMapReturnContext != null) {
-        val context = pendingMapReturnContext ?: return@BackHandler
-        pendingMapReturnContext = null
-        pendingTrackersRequest = context.trackersRequest
-        pendingSharedRequest = context.sharedRequest
-        selectedTab = context.tab.name
-    }
-    BackHandler(
-        enabled = selectedTab != TrackerTab.HOME.name &&
-            tabBackStack.isNotEmpty() &&
-            !(selectedTab == TrackerTab.MAP.name && pendingMapReturnContext != null)
-    ) {
-        val previous = tabBackStack.lastOrNull() ?: return@BackHandler
-        isHandlingTabBack = true
-        tabBackStack = tabBackStack.dropLast(1)
-        pendingMapReturnContext = null
-        selectedTab = previous
-        isHandlingTabBack = false
-    }
+    GeoVaultRegisterBackHandler(
+        enabled = true,
+        priority = TrackerBackPriorities.ROOT_MAP_RETURN,
+        canGoBack = { selectedTab == TrackerTab.MAP.name && pendingMapReturnContext != null },
+        onBack = {
+            val context = pendingMapReturnContext ?: return@GeoVaultRegisterBackHandler false
+            pendingMapReturnContext = null
+            pendingTrackersRequest = context.trackersRequest
+            pendingSharedRequest = context.sharedRequest
+            selectedTab = context.tab.name
+            true
+        },
+    )
+    GeoVaultRegisterBackHandler(
+        enabled = true,
+        priority = TrackerBackPriorities.ROOT_TAB_BACK,
+        canGoBack = {
+            selectedTab != TrackerTab.HOME.name &&
+                tabBackStack.isNotEmpty() &&
+                !(selectedTab == TrackerTab.MAP.name && pendingMapReturnContext != null)
+        },
+        onBack = {
+            val previous = tabBackStack.lastOrNull() ?: return@GeoVaultRegisterBackHandler false
+            isHandlingTabBack = true
+            tabBackStack = tabBackStack.dropLast(1)
+            pendingMapReturnContext = null
+            selectedTab = previous
+            isHandlingTabBack = false
+            true
+        },
+    )
     val openSettingsTab = remember { { selectedTab = TrackerTab.SETTINGS.name } }
     val onMapHostNavigationRequested = remember {
         { request: MapHostNavigationRequest ->
@@ -216,25 +234,34 @@ fun MainScreen(
         ),
     )
 
+    val trackerParamsOverlay = trackerParamsArgs?.let { args ->
+        TrackerParamsOverlayState(
+            args = args,
+            onDismiss = { trackerParamsArgs = null },
+        )
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
-        GeoVaultBottomNavScaffold(
-            destinations = bottomDestinations,
-            selectedDestinationId = selectedTab,
-            onDestinationSelected = { destination ->
-                if (destination.id != selectedTab) {
-                    if (!isHandlingTabBack && selectedTab.isNotBlank()) {
-                        tabBackStack = (tabBackStack + selectedTab).takeLast(16)
+        CompositionLocalProvider(LocalTrackerParamsOverlay provides trackerParamsOverlay) {
+            GeoVaultBottomNavScaffold(
+                destinations = bottomDestinations,
+                selectedDestinationId = selectedTab,
+                onDestinationSelected = { destination ->
+                    if (destination.id != selectedTab) {
+                        if (!isHandlingTabBack && selectedTab.isNotBlank()) {
+                            tabBackStack = (tabBackStack + selectedTab).takeLast(16)
+                        }
+                        if (destination.id != TrackerTab.MAP.name) {
+                            pendingMapReturnContext = null
+                        }
+                        selectedTab = destination.id
                     }
-                    if (destination.id != TrackerTab.MAP.name) {
-                        pendingMapReturnContext = null
-                    }
-                    selectedTab = destination.id
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-        ) { _ ->
-            when (selectedTab) {
-                TrackerTab.HOME.name -> {
+                },
+                modifier = Modifier.fillMaxSize(),
+            ) { _ ->
+                Box(modifier = Modifier.fillMaxSize()) {
+                    when (selectedTab) {
+                    TrackerTab.HOME.name -> {
                     HomeScreen(
                         isAuthenticated = state.isAuthenticated,
                         isServerAccessible = state.isServerAccessible,
@@ -249,11 +276,11 @@ fun MainScreen(
                         onRequestStartTracking = onRequestStartTracking,
                         onRequestStopTracking = onRequestStopTracking,
                         onRequestManualPoint = onRequestManualPoint,
-                        onRequestTrackerParams = { model -> trackerParamsModel = model },
+                        onRequestTrackerParams = { args -> trackerParamsArgs = args },
                     )
-                }
+                    }
 
-                TrackerTab.MAP.name -> {
+                    TrackerTab.MAP.name -> {
                     MapScreen(
                         mapViewModel = mapViewModel,
                         isAuthenticated = state.isAuthenticated,
@@ -263,11 +290,11 @@ fun MainScreen(
                         isConnecting = state.isConnecting,
                         onOpenSettings = openSettingsTab,
                         onHostNavigationRequested = onMapHostNavigationRequested,
-                        onRequestTrackerParams = { model -> trackerParamsModel = model },
+                        onRequestTrackerParams = { args -> trackerParamsArgs = args },
                     )
-                }
+                    }
 
-                TrackerTab.TRACKERS.name -> {
+                    TrackerTab.TRACKERS.name -> {
                     TrackersScreen(
                         isAuthenticated = state.isAuthenticated,
                         serverUrl = state.serverUrl,
@@ -284,11 +311,11 @@ fun MainScreen(
                         onOpenGroupOnMap = { groupId ->
                             openGroupOnMap(groupId, MapReturnSource.TRACKERS)
                         },
-                        onRequestTrackerParams = { model -> trackerParamsModel = model },
+                        onRequestTrackerParams = { args -> trackerParamsArgs = args },
                     )
-                }
+                    }
 
-                TrackerTab.SHARED.name -> {
+                    TrackerTab.SHARED.name -> {
                     SharedScreen(
                         isAuthenticated = state.isAuthenticated,
                         serverUrl = state.serverUrl,
@@ -304,11 +331,11 @@ fun MainScreen(
                         onOpenGroupOnMap = { groupId ->
                             openGroupOnMap(groupId, MapReturnSource.SHARED)
                         },
-                        onRequestTrackerParams = { model -> trackerParamsModel = model },
+                        onRequestTrackerParams = { args -> trackerParamsArgs = args },
                     )
-                }
+                    }
 
-                TrackerTab.SETTINGS.name -> {
+                    TrackerTab.SETTINGS.name -> {
                     SettingsScreen(
                         state = settingsState,
                         onServerUrlChanged = onSettingsServerUrlChanged,
@@ -338,14 +365,10 @@ fun MainScreen(
                             selectedTab = TrackerTab.MAP.name
                         },
                     )
+                    }
+                }
                 }
             }
-        }
-        trackerParamsModel?.let { model ->
-            TrackerParamsDialog(
-                model = model,
-                onDismiss = { trackerParamsModel = null },
-            )
         }
         val globalInfoModel = state.infoMessage
             ?.takeIf { it.isNotBlank() }

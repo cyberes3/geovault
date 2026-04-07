@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import com.geovault.common.ui.components.GeoVaultCompactDismissTitleBar
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
+import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.Group
 import com.geovault.tracker.R
@@ -69,6 +70,13 @@ fun GroupActionsScreen(
     onEditGroup: (Group) -> Unit,
     onViewGroupOnMap: (groupId: String) -> Unit,
 ) {
+    GeoVaultRegisterBackHandler(
+        priority = TrackerBackPriorities.FULL_SCREEN_OVERLAY,
+        onBack = {
+            onDismiss()
+            true
+        },
+    )
     val context = LocalContext.current
     val byId = remember(allTrackers) { allTrackers.associateBy { it.id } }
     val memberRows = remember(group.track_ids, byId) {
@@ -86,9 +94,11 @@ fun GroupActionsScreen(
         }
     }
 
-    val borderColor = if (isSystemInDarkTheme()) GeoVaultColorTokens.DarkBorderLight else GeoVaultColorTokens.BorderLight
+    val actionBarBorderColor = if (isSystemInDarkTheme()) GeoVaultColorTokens.DarkBorderLight else GeoVaultColorTokens.BorderLight
+    val memberCardBorderColor = GeoVaultColorTokens.PrimaryBlue
 
     Scaffold(
+        backgroundColor = MaterialTheme.colors.surface,
         topBar = {
             GeoVaultCompactDismissTitleBar(
                 title = group.name,
@@ -102,15 +112,15 @@ fun GroupActionsScreen(
                     .fillMaxWidth()
                     .drawBehind {
                         drawLine(
-                            color = borderColor,
+                            color = actionBarBorderColor,
                             start = Offset.Zero,
                             end = Offset(size.width, 0f),
                             strokeWidth = 1.dp.toPx(),
                         )
                     }
                     .navigationBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (group.isOwner()) {
@@ -160,7 +170,7 @@ fun GroupActionsScreen(
                     GroupMemberCard(
                         row = row,
                         isHighlighted = row.trackerId == highlightedTrackerId,
-                        borderColor = borderColor,
+                        borderColor = memberCardBorderColor,
                         onRowClick = { onViewTrackerOnMap(row.trackerId) },
                         onViewOnMap = { onViewTrackerOnMap(row.trackerId) },
                         onViewParams = row.tracker?.let { t -> { onViewTrackerParams(t) } },

@@ -1,5 +1,6 @@
 package com.geovault.tracker.ui
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,7 +40,6 @@ import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultServerConfigBlock
 import com.geovault.common.ui.components.GeoVaultToggle
-import com.geovault.common.ui.components.GeoVaultRequestBottomTabsHidden
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
@@ -73,8 +73,6 @@ fun SettingsScreen(
     onUnhideAllMapItems: () -> Unit,
     onOpenAllTrackersOnMap: () -> Unit = {},
 ) {
-    GeoVaultRequestBottomTabsHidden(shouldHide = true)
-
     var showSelectedTrackerDialog by remember { mutableStateOf(false) }
     var showHiddenMapItemsDialog by remember { mutableStateOf(false) }
     Scaffold(
@@ -82,14 +80,18 @@ fun SettingsScreen(
             GeoVaultTopTitleBar(title = stringResource(R.string.settings_screen_title))
         },
     ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
-                .padding(20.dp),
+                .padding(padding),
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+            ) {
             if (!state.isLoggedIn) {
                 GeoVaultInitialAuthView(
                     serverUrl = state.serverUrl,
@@ -140,6 +142,8 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(state.infoMessage)
             }
+            }
+            TrackerParamsOverlayLayer()
         }
     }
     if (showSelectedTrackerDialog) {

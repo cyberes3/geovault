@@ -39,18 +39,27 @@ internal fun TrackerTabPlaceholderScreen(
     scrollAuthenticatedMainContent: Boolean = true,
     authenticatedContentHorizontalPadding: Dp = 16.dp,
     authenticatedBottomSpacer: Dp = 16.dp,
+    settingsMenuEnabled: Boolean = true,
+    /**
+     * When true, the tab-level [GeoVaultTopTitleBar] is omitted so a full-screen sub-view
+     * (its own scaffold / dismiss title bar) is not stacked under the tab title.
+     */
+    suppressTabTopBar: Boolean = false,
 ) {
     Scaffold(
         topBar = {
-            GeoVaultTopTitleBar(
-                title = title,
-                actionsContent = {
-                    GeoVaultTopBarSettingsMenuAction(
-                        onOpenSettings = onOpenSettings,
-                        isAuthenticated = isAuthenticated,
-                    )
-                },
-            )
+            if (!suppressTabTopBar) {
+                GeoVaultTopTitleBar(
+                    title = title,
+                    actionsContent = {
+                        GeoVaultTopBarSettingsMenuAction(
+                            onOpenSettings = onOpenSettings,
+                            isAuthenticated = isAuthenticated,
+                            enabled = settingsMenuEnabled,
+                        )
+                    },
+                )
+            }
         },
     ) { padding ->
         Box(
@@ -107,6 +116,7 @@ internal fun TrackerTabPlaceholderScreen(
                     content = authenticatedFloatingAction,
                 )
             }
+            TrackerParamsOverlayLayer()
         }
     }
 }

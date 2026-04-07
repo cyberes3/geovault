@@ -81,6 +81,8 @@ import com.geovault.common.ui.components.GeoVaultTopTabSwipeMode
 import com.geovault.common.ui.components.GeoVaultToggle
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.Group
+import com.geovault.tracker.params.TrackerParamsRouteArgs
+import com.geovault.tracker.params.toTrackerParamsRouteArgs
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
@@ -211,7 +213,7 @@ fun TrackersScreen(
     onNavigationTargetConsumed: () -> Unit = {},
     onOpenTrackerOnMap: (trackerId: String, trackerName: String?) -> Unit = { _, _ -> },
     onOpenGroupOnMap: (groupId: String) -> Unit = {},
-    onRequestTrackerParams: (TrackerParamsUiModel) -> Unit = {},
+    onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit = {},
 ) {
     val vm: TrackersGroupsViewModel = viewModel()
     val state by vm.uiState.collectAsState()
@@ -240,6 +242,8 @@ fun TrackersScreen(
         }
     }
     var pendingConfirmAction by remember { mutableStateOf<TrackersConfirmAction?>(null) }
+    var showOpenSettingsDiscardConfirm by remember { mutableStateOf(false) }
+    var editFlowHasUnsaved by remember { mutableStateOf(false) }
     var groupMembershipDialog by remember { mutableStateOf<GroupMembershipDialogState?>(null) }
     var pendingNavigationRequest by remember { mutableStateOf<TrackersHostNavigationRequest?>(null) }
     var localNavigationRequest by remember { mutableStateOf<TrackersHostNavigationRequest?>(null) }
@@ -255,6 +259,30 @@ fun TrackersScreen(
         onNavigationTargetConsumed()
     }
 
+    LaunchedEffect(state.dialog) {
+        if (state.dialog !is TrackersGroupsDialog.EditTracker && state.dialog !is TrackersGroupsDialog.EditGroup) {
+            editFlowHasUnsaved = false
+        }
+    }
+
+    val suppressTabTopBar = isAuthenticated && (groupMembershipDialog != null)
+    val isTrackerOrGroupEditOpen =
+        activeTrackerEditLoadingDialog != null ||
+            activeTrackerEditDialog != null ||
+            activeGroupEditDialog != null
+
+    val onOpenSettingsWithEditGuard: () -> Unit = {
+        if (editFlowHasUnsaved) {
+            showOpenSettingsDiscardConfirm = true
+        } else {
+            onOpenSettings()
+        }
+    }
+    val dismissEditDialog: () -> Unit = {
+        editFlowHasUnsaved = false
+        vm.dismissDialog()
+    }
+
     TrackerTabPlaceholderScreen(
         title = stringResource(R.string.trackers_screen_title),
         placeholderText = stringResource(R.string.trackers_placeholder_signed_out),
@@ -263,10 +291,12 @@ fun TrackersScreen(
         onAuthServerUrlChanged = onAuthServerUrlChanged,
         onAuthConnect = onAuthConnect,
         isConnecting = isConnecting,
-        onOpenSettings = onOpenSettings,
+        onOpenSettings = onOpenSettingsWithEditGuard,
         scrollAuthenticatedMainContent = false,
         authenticatedContentHorizontalPadding = 0.dp,
         authenticatedBottomSpacer = 0.dp,
+        suppressTabTopBar = suppressTabTopBar,
+        settingsMenuEnabled = !isTrackerOrGroupEditOpen,
         authenticatedFloatingAction = {
             if (activeTrackerEditDialog == null && activeTrackerEditLoadingDialog == null && groupActionsDialog == null && activeGroupEditDialog == null && groupMembershipDialog == null) {
                 FloatingActionButton(
@@ -296,6 +326,82 @@ fun TrackersScreen(
             }
         },
         authenticatedMainContent = {
+            val renderTrackersBody: @Composable () -> Unit = {
+                TrackersGroupsAuthenticatedBody(
+                    state = state,
+                    isServerAccessible = isServerAccessible,
+                    isConnecting = isConnecting,
+                    onSubTabSelected = vm::setSubTab,
+                    onPullRefresh = { vm.refreshAll(asPullRefresh = true) },
+                    onToggleTrackerMapHidden = vm::toggleTrackerHiddenOnMap,
+                    onToggleGroupMapHidden = vm::toggleGroupHiddenOnMap,
+                    onLeaveTracker = { tracker ->
+                        pendingConfirmAction = TrackersConfirmAction.LeaveTracker(
+                            trackerId = tracker.id,
+                            trackerName = tracker.name,
+                            leaveKind = OwnershipActionPolicy.trackerLeaveKind(tracker),
+                        )
+                    },
+                    onLeaveGroup = { groupId, groupName ->
+                        pendingConfirmAction = TrackersConfirmAction.LeaveGroup(
+                            groupId = groupId,
+                            groupName = groupName
+                        )
+                    },
+                    onClearTrackerHistory = { trackerId, trackerName ->
+                        pendingConfirmAction = TrackersConfirmAction.ClearTrackerHistory(
+                            trackerId = trackerId,
+                            trackerName = trackerName
+                        )
+                    },
+                    onDeleteTracker = { trackerId, trackerName ->
+                        pendingConfirmAction = TrackersConfirmAction.DeleteTracker(
+                            trackerId = trackerId,
+                            trackerName = trackerName
+                        )
+                    },
+                    onDeleteGroup = { groupId, groupName ->
+                        pendingConfirmAction = TrackersConfirmAction.DeleteGroup(
+                            groupId = groupId,
+                            groupName = groupName
+                        )
+                    },
+                    onUnsubscribeAllGroupTracks = { group ->
+                        pendingConfirmAction = TrackersConfirmAction.UnsubscribeAllGroupTracks(
+                            groupId = group.id,
+                            groupName = group.name,
+                            trackIds = group.track_ids.orEmpty(),
+                        )
+                    },
+                    onManageGroupTrackers = { group ->
+                        val ids = group.track_ids.orEmpty().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+                        groupMembershipDialog = GroupMembershipDialogState(
+                            group = group,
+                            selectedTrackerIds = ids,
+                            persistedTrackerIds = ids,
+                        )
+                    },
+                    onAcceptGroup = vm::acceptGroupShare,
+                    onEditTracker = vm::openEditTrackerDialog,
+                    onEditGroup = vm::openEditGroupDialog,
+                    navigationRequest = pendingNavigationRequest ?: localNavigationRequest,
+                    onNavigationRequestHandled = {
+                        pendingNavigationRequest = null
+                        localNavigationRequest = null
+                    },
+                    onOpenTrackerOnMap = onOpenTrackerOnMap,
+                    onOpenGroupOnMap = onOpenGroupOnMap,
+                    onViewTrackerParams = { tracker ->
+                        onRequestTrackerParams(tracker.toTrackerParamsRouteArgs())
+                    },
+                    onOpenGroupActions = { group, highlightedTrackerId ->
+                        groupActionsDialog = GroupMembersOverlayState(
+                            group = group,
+                            highlightedTrackerId = highlightedTrackerId,
+                        )
+                    },
+                )
+            }
             if (groupActionsDialog != null) {
                 val dialog = groupActionsDialog!!
                 GroupActionsScreen(
@@ -308,13 +414,14 @@ fun TrackersScreen(
                         onOpenTrackerOnMap(trackerId, null)
                     },
                     onViewTrackerParams = { tracker ->
-                        tracker.toTrackerParamsUiModelOrNull()?.let(onRequestTrackerParams)
+                        onRequestTrackerParams(tracker.toTrackerParamsRouteArgs())
                     },
                     onViewTrackerInList = { trackerId ->
                         groupActionsDialog = null
                         localNavigationRequest = TrackersHostNavigationRequest(
                             subTab = TrackersGroupsSubTab.TRACKERS,
                             trackerId = trackerId,
+                            focus = MapHostNavigationFocus.SCROLL_TO_ITEM,
                         )
                     },
                     onEditGroup = { group ->
@@ -327,47 +434,51 @@ fun TrackersScreen(
                     },
                 )
             } else if (activeTrackerEditDialog != null) {
-                TrackerEditScreen(
-                    dialog = activeTrackerEditDialog,
-                    shareRecipientUsers = state.shareRecipientUsers,
-                    isShareRecipientSuggestionsLoading = state.isShareRecipientSuggestionsLoading,
-                    isKmlExportLoading = state.isKmlExportLoading,
-                    isSaving = state.isLoading,
-                    onDismiss = vm::dismissDialog,
-                    onReloadShareRecipients = vm::refreshShareRecipientSuggestions,
-                    onNameDraftChanged = vm::updateEditTrackerDraft,
-                    onColorDraftChanged = vm::updateEditTrackerColorDraft,
-                    onSetAsSelectedChanged = vm::updateEditTrackerSetAsSelected,
-                    onHiddenChanged = vm::updateEditTrackerHidden,
-                    onRecentDataWindowChanged = vm::updateEditTrackerRecentDataWindow,
-                    onVisibilityChanged = vm::updateEditTrackerVisibility,
-                    onShareParamsWithRecipientsChanged = vm::updateEditTrackerShareParamsWithRecipients,
-                    onAllowGroupReshareChanged = vm::updateEditTrackerAllowGroupReshare,
-                    onToggleSharedEmail = vm::toggleEditTrackerSharedEmailSelection,
-                    onWorldShareEnabledChanged = vm::updateEditTrackerWorldShareEnabled,
-                    onShareParamsWithWorldChanged = vm::updateEditTrackerShareParamsWithWorld,
-                    onClearHistory = {
-                        pendingConfirmAction = TrackersConfirmAction.ClearTrackerHistory(
-                            trackerId = activeTrackerEditDialog.tracker.id,
-                            trackerName = activeTrackerEditDialog.tracker.name,
-                        )
-                    },
-                    onDeleteTracker = {
-                        pendingConfirmAction = TrackersConfirmAction.DeleteTracker(
-                            trackerId = activeTrackerEditDialog.tracker.id,
-                            trackerName = activeTrackerEditDialog.tracker.name,
-                        )
-                    },
-                    onExportKml = {
-                        vm.exportTrackerKml(
-                            trackerId = activeTrackerEditDialog.tracker.id,
-                            trackerDisplayName = activeTrackerEditDialog.nameDraft.ifBlank {
-                                activeTrackerEditDialog.tracker.name
-                            },
-                        )
-                    },
-                    onSave = vm::submitEditTracker,
-                )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    renderTrackersBody()
+                    TrackerEditScreen(
+                        dialog = activeTrackerEditDialog,
+                        shareRecipientUsers = state.shareRecipientUsers,
+                        isShareRecipientSuggestionsLoading = state.isShareRecipientSuggestionsLoading,
+                        isKmlExportLoading = state.isKmlExportLoading,
+                        isSaving = state.isLoading,
+                        onDismiss = dismissEditDialog,
+                        onReloadShareRecipients = vm::refreshShareRecipientSuggestions,
+                        onNameDraftChanged = vm::updateEditTrackerDraft,
+                        onColorDraftChanged = vm::updateEditTrackerColorDraft,
+                        onSetAsSelectedChanged = vm::updateEditTrackerSetAsSelected,
+                        onHiddenChanged = vm::updateEditTrackerHidden,
+                        onRecentDataWindowChanged = vm::updateEditTrackerRecentDataWindow,
+                        onVisibilityChanged = vm::updateEditTrackerVisibility,
+                        onShareParamsWithRecipientsChanged = vm::updateEditTrackerShareParamsWithRecipients,
+                        onAllowGroupReshareChanged = vm::updateEditTrackerAllowGroupReshare,
+                        onToggleSharedEmail = vm::toggleEditTrackerSharedEmailSelection,
+                        onWorldShareEnabledChanged = vm::updateEditTrackerWorldShareEnabled,
+                        onShareParamsWithWorldChanged = vm::updateEditTrackerShareParamsWithWorld,
+                        onClearHistory = {
+                            pendingConfirmAction = TrackersConfirmAction.ClearTrackerHistory(
+                                trackerId = activeTrackerEditDialog.tracker.id,
+                                trackerName = activeTrackerEditDialog.tracker.name,
+                            )
+                        },
+                        onDeleteTracker = {
+                            pendingConfirmAction = TrackersConfirmAction.DeleteTracker(
+                                trackerId = activeTrackerEditDialog.tracker.id,
+                                trackerName = activeTrackerEditDialog.tracker.name,
+                            )
+                        },
+                        onExportKml = {
+                            vm.exportTrackerKml(
+                                trackerId = activeTrackerEditDialog.tracker.id,
+                                trackerDisplayName = activeTrackerEditDialog.nameDraft.ifBlank {
+                                    activeTrackerEditDialog.tracker.name
+                                },
+                            )
+                        },
+                        onSave = vm::submitEditTracker,
+                        onUnsavedChangesChanged = { editFlowHasUnsaved = it },
+                    )
+                }
             } else if (activeTrackerEditLoadingDialog != null) {
                 TrackerEditLoadingSurface(
                     trackerName = activeTrackerEditLoadingDialog.trackerName,
@@ -436,115 +547,68 @@ fun TrackersScreen(
                     )
                 }
             } else if (activeGroupEditDialog != null) {
-                GroupEditScreen(
-                    dialog = activeGroupEditDialog,
-                    allTrackers = state.trackers,
-                    shareRecipientUsers = state.shareRecipientUsers,
-                    isShareRecipientSuggestionsLoading = state.isShareRecipientSuggestionsLoading,
-                    isPickerRefreshing = state.isPickerRefreshing,
-                    addingTrackerIds = state.addingTrackerIds,
-                    isSaving = state.isLoading,
-                    onDismiss = vm::dismissDialog,
-                    onReloadShareRecipients = vm::refreshShareRecipientSuggestions,
-                    onRefreshTrackers = vm::refreshTrackersForPicker,
-                    onNameDraftChanged = vm::updateEditGroupDraft,
-                    onVisibilityChanged = vm::updateEditGroupVisibility,
-                    onToggleSharedEmail = vm::toggleEditGroupSharedEmailSelection,
-                    onWorldShareToggled = vm::toggleGroupWorldShare,
-                    onHiddenChanged = vm::updateEditGroupHidden,
-                    onUpdateDraftTrackers = vm::updateGroupDraftTrackers,
-                    onAddTracker = { trackerId ->
-                        if (trackerId in activeGroupEditDialog.memberTrackIds ||
-                            trackerId in state.addingTrackerIds
-                        ) {
-                            return@GroupEditScreen
-                        }
-                        vm.addTrackerToGroup(activeGroupEditDialog.group.id, trackerId) {
-                            vm.recordImmediateTrackerAdd(trackerId)
-                        }
-                    },
-                    onDeleteGroup = { vm.deleteGroup(activeGroupEditDialog.group.id) },
-                    onLeaveGroup = { vm.leaveGroupFromEditor(activeGroupEditDialog.group.id) },
-                    onSave = vm::submitEditGroup,
-                )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    renderTrackersBody()
+                    GroupEditScreen(
+                        dialog = activeGroupEditDialog,
+                        allTrackers = state.trackers,
+                        shareRecipientUsers = state.shareRecipientUsers,
+                        isShareRecipientSuggestionsLoading = state.isShareRecipientSuggestionsLoading,
+                        isPickerRefreshing = state.isPickerRefreshing,
+                        addingTrackerIds = state.addingTrackerIds,
+                        isSaving = state.isLoading,
+                        onDismiss = dismissEditDialog,
+                        onReloadShareRecipients = vm::refreshShareRecipientSuggestions,
+                        onRefreshTrackers = vm::refreshTrackersForPicker,
+                        onNameDraftChanged = vm::updateEditGroupDraft,
+                        onVisibilityChanged = vm::updateEditGroupVisibility,
+                        onToggleSharedEmail = vm::toggleEditGroupSharedEmailSelection,
+                        onWorldShareToggled = vm::toggleGroupWorldShare,
+                        onHiddenChanged = vm::updateEditGroupHidden,
+                        onUpdateDraftTrackers = vm::updateGroupDraftTrackers,
+                        onAddTracker = { trackerId ->
+                            if (trackerId in activeGroupEditDialog.memberTrackIds ||
+                                trackerId in state.addingTrackerIds
+                            ) {
+                                return@GroupEditScreen
+                            }
+                            vm.addTrackerToGroup(activeGroupEditDialog.group.id, trackerId) {
+                                vm.recordImmediateTrackerAdd(trackerId)
+                            }
+                        },
+                        onDeleteGroup = { vm.deleteGroup(activeGroupEditDialog.group.id) },
+                        onLeaveGroup = { vm.leaveGroupFromEditor(activeGroupEditDialog.group.id) },
+                        onSave = vm::submitEditGroup,
+                        onUnsavedChangesChanged = { editFlowHasUnsaved = it },
+                    )
+                }
             } else {
-                TrackersGroupsAuthenticatedBody(
-                    state = state,
-                    isServerAccessible = isServerAccessible,
-                    isConnecting = isConnecting,
-                    onSubTabSelected = vm::setSubTab,
-                    onPullRefresh = { vm.refreshAll(asPullRefresh = true) },
-                    onToggleTrackerMapHidden = vm::toggleTrackerHiddenOnMap,
-                    onToggleGroupMapHidden = vm::toggleGroupHiddenOnMap,
-                    onLeaveTracker = { tracker ->
-                        pendingConfirmAction = TrackersConfirmAction.LeaveTracker(
-                            trackerId = tracker.id,
-                            trackerName = tracker.name,
-                            leaveKind = OwnershipActionPolicy.trackerLeaveKind(tracker),
-                        )
-                    },
-                    onLeaveGroup = { groupId, groupName ->
-                        pendingConfirmAction = TrackersConfirmAction.LeaveGroup(
-                            groupId = groupId,
-                            groupName = groupName
-                        )
-                    },
-                    onClearTrackerHistory = { trackerId, trackerName ->
-                        pendingConfirmAction = TrackersConfirmAction.ClearTrackerHistory(
-                            trackerId = trackerId,
-                            trackerName = trackerName
-                        )
-                    },
-                    onDeleteTracker = { trackerId, trackerName ->
-                        pendingConfirmAction = TrackersConfirmAction.DeleteTracker(
-                            trackerId = trackerId,
-                            trackerName = trackerName
-                        )
-                    },
-                    onDeleteGroup = { groupId, groupName ->
-                        pendingConfirmAction = TrackersConfirmAction.DeleteGroup(
-                            groupId = groupId,
-                            groupName = groupName
-                        )
-                    },
-                    onUnsubscribeAllGroupTracks = { group ->
-                        pendingConfirmAction = TrackersConfirmAction.UnsubscribeAllGroupTracks(
-                            groupId = group.id,
-                            groupName = group.name,
-                            trackIds = group.track_ids.orEmpty(),
-                        )
-                    },
-                    onManageGroupTrackers = { group ->
-                        val ids = group.track_ids.orEmpty().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-                        groupMembershipDialog = GroupMembershipDialogState(
-                            group = group,
-                            selectedTrackerIds = ids,
-                            persistedTrackerIds = ids,
-                        )
-                    },
-                    onAcceptGroup = vm::acceptGroupShare,
-                    onEditTracker = vm::openEditTrackerDialog,
-                    onEditGroup = vm::openEditGroupDialog,
-                    navigationRequest = pendingNavigationRequest ?: localNavigationRequest,
-                    onNavigationRequestHandled = {
-                        pendingNavigationRequest = null
-                        localNavigationRequest = null
-                    },
-                    onOpenTrackerOnMap = onOpenTrackerOnMap,
-                    onOpenGroupOnMap = onOpenGroupOnMap,
-                    onViewTrackerParams = { tracker ->
-                        tracker.toTrackerParamsUiModelOrNull()?.let(onRequestTrackerParams)
-                    },
-                    onOpenGroupActions = { group, highlightedTrackerId ->
-                        groupActionsDialog = GroupMembersOverlayState(
-                            group = group,
-                            highlightedTrackerId = highlightedTrackerId,
-                        )
-                    },
-                )
+                renderTrackersBody()
             }
         },
     )
+
+    if (showOpenSettingsDiscardConfirm) {
+        val isTracker = state.dialog is TrackersGroupsDialog.EditTracker
+        GeoVaultConfirmationDialog(
+            title = stringResource(
+                if (isTracker) R.string.trackers_edit_discard_title
+                else R.string.groups_edit_discard_title,
+            ),
+            message = stringResource(
+                if (isTracker) R.string.trackers_edit_discard_message
+                else R.string.groups_edit_discard_message,
+            ),
+            onConfirm = {
+                showOpenSettingsDiscardConfirm = false
+                dismissEditDialog()
+                onOpenSettings()
+            },
+            onCancel = { showOpenSettingsDiscardConfirm = false },
+            confirmText = stringResource(R.string.trackers_edit_discard_confirm),
+            cancelText = stringResource(R.string.trackers_dialog_cancel),
+        )
+    }
 
     TrackersGroupsDialogs(
         dialog = state.dialog,

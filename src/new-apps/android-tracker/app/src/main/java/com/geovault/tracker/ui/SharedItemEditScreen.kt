@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
@@ -20,7 +21,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.components.GeoVaultCompactDismissTitleBar
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
+import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
+import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.tracker.Group
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
@@ -36,17 +39,28 @@ fun SharedTrackerEditScreen(
     onUnsubscribe: () -> Unit,
     onLeaveShare: () -> Unit,
 ) {
+    GeoVaultRequestBottomTabsDisabled(shouldDisable = true)
+    GeoVaultRegisterBackHandler(
+        priority = TrackerBackPriorities.FULL_SCREEN_OVERLAY,
+        onBack = {
+            onDismiss()
+            true
+        },
+    )
     Scaffold(
+        backgroundColor = MaterialTheme.colors.surface,
         topBar = {
             GeoVaultCompactDismissTitleBar(
                 title = stringResource(R.string.shared_tracker_edit_title),
                 onClose = onDismiss,
+                closeContentDescription = stringResource(R.string.close),
+                modifier = Modifier.statusBarsPadding(),
             )
         },
     ) { innerPadding ->
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -89,17 +103,28 @@ fun SharedGroupEditScreen(
     onDismiss: () -> Unit,
     onLeaveGroup: () -> Unit,
 ) {
+    GeoVaultRequestBottomTabsDisabled(shouldDisable = true)
+    GeoVaultRegisterBackHandler(
+        priority = TrackerBackPriorities.FULL_SCREEN_OVERLAY,
+        onBack = {
+            onDismiss()
+            true
+        },
+    )
     Scaffold(
+        backgroundColor = MaterialTheme.colors.surface,
         topBar = {
             GeoVaultCompactDismissTitleBar(
                 title = stringResource(R.string.groups_edit_shared_title),
                 onClose = onDismiss,
+                closeContentDescription = stringResource(R.string.close),
+                modifier = Modifier.statusBarsPadding(),
             )
         },
     ) { innerPadding ->
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),

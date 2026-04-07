@@ -22,21 +22,24 @@ data class MapHostNavigationRequest(
     val target: MapHostNavigationTarget,
     val trackerId: String? = null,
     val groupId: String? = null,
-    val focus: MapHostNavigationFocus = MapHostNavigationFocus.SCROLL_TO_ITEM,
+    // Safe default: do not trigger highlight/scroll unless explicitly requested.
+    val focus: MapHostNavigationFocus = MapHostNavigationFocus.NONE,
 )
 
 data class TrackersHostNavigationRequest(
     val subTab: TrackersGroupsSubTab,
     val trackerId: String? = null,
     val groupId: String? = null,
-    val focus: MapHostNavigationFocus = MapHostNavigationFocus.SCROLL_TO_ITEM,
+    // Safe default: do not trigger highlight/scroll unless explicitly requested.
+    val focus: MapHostNavigationFocus = MapHostNavigationFocus.NONE,
 )
 
 data class SharedHostNavigationRequest(
     val subTab: SharedSubTab,
     val trackerId: String? = null,
     val groupId: String? = null,
-    val focus: MapHostNavigationFocus = MapHostNavigationFocus.SCROLL_TO_ITEM,
+    // Safe default: do not trigger highlight/scroll unless explicitly requested.
+    val focus: MapHostNavigationFocus = MapHostNavigationFocus.NONE,
 )
 
 object MapHostNavigationRequestResolver {
@@ -47,13 +50,13 @@ object MapHostNavigationRequestResolver {
                 target = MapHostNavigationTarget.GROUPS,
                 trackerId = preferredTrackerId,
                 groupId = state.currentGroupId,
-                focus = resolveFocus(preferredTrackerId, state.currentGroupId),
+                focus = focusForSelection(preferredTrackerId, state.currentGroupId),
             )
         }
         return MapHostNavigationRequest(
             target = MapHostNavigationTarget.TRACKERS,
             trackerId = preferredTrackerId,
-            focus = resolveFocus(preferredTrackerId, null),
+            focus = focusForSelection(preferredTrackerId, null),
         )
     }
 
@@ -62,7 +65,7 @@ object MapHostNavigationRequestResolver {
             target = MapHostNavigationTarget.SHARED,
             trackerId = preferredTrackerId(state),
             groupId = state.currentGroupId.takeIf { state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER },
-            focus = resolveFocus(
+            focus = focusForSelection(
                 preferredTrackerId(state),
                 state.currentGroupId.takeIf { state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER }
             ),
@@ -75,19 +78,19 @@ object MapHostNavigationRequestResolver {
                 target = MapHostNavigationTarget.TRACKERS,
                 trackerId = target.trackerId,
                 groupId = target.groupId,
-                focus = resolveFocus(target.trackerId, target.groupId),
+                focus = focusForSelection(target.trackerId, target.groupId),
             )
             MapListNavigationDestination.GROUPS -> MapHostNavigationRequest(
                 target = MapHostNavigationTarget.GROUPS,
                 trackerId = target.trackerId,
                 groupId = target.groupId,
-                focus = resolveFocus(target.trackerId, target.groupId),
+                focus = focusForSelection(target.trackerId, target.groupId),
             )
             MapListNavigationDestination.SHARED -> MapHostNavigationRequest(
                 target = MapHostNavigationTarget.SHARED,
                 trackerId = target.trackerId,
                 groupId = target.groupId,
-                focus = resolveFocus(target.trackerId, target.groupId),
+                focus = focusForSelection(target.trackerId, target.groupId),
             )
         }
     }
@@ -99,7 +102,7 @@ object MapHostNavigationRequestResolver {
         return selectedId.ifEmpty { null }
     }
 
-    private fun resolveFocus(trackerId: String?, groupId: String?): MapHostNavigationFocus {
+    private fun focusForSelection(trackerId: String?, groupId: String?): MapHostNavigationFocus {
         return if (trackerId.isNullOrBlank() && groupId.isNullOrBlank()) {
             MapHostNavigationFocus.NONE
         } else {

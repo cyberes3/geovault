@@ -3,7 +3,6 @@ package com.geovault.tracker.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -65,6 +64,7 @@ import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultToggleHelpCard
+import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
@@ -104,6 +104,7 @@ fun GroupEditScreen(
     onDeleteGroup: () -> Unit,
     onLeaveGroup: () -> Unit,
     onSave: () -> Unit,
+    onUnsavedChangesChanged: (Boolean) -> Unit = {},
 ) {
     GeoVaultRequestBottomTabsDisabled(shouldDisable = true)
 
@@ -132,6 +133,9 @@ fun GroupEditScreen(
             dialog.hiddenDraft != initialSnapshot.hiddenDraft ||
             dialog.memberTrackIds != initialSnapshot.memberTrackIds
     }
+    LaunchedEffect(hasUnsavedChanges) {
+        onUnsavedChangesChanged(hasUnsavedChanges)
+    }
     var showDiscardDialog by remember { mutableStateOf(false) }
 
     val dismissWithGuard: () -> Unit = {
@@ -144,13 +148,17 @@ fun GroupEditScreen(
         }
     }
 
-    BackHandler(enabled = true) {
-        if (showMembershipPicker) {
-            showMembershipPicker = false
-        } else {
-            dismissWithGuard()
-        }
-    }
+    GeoVaultRegisterBackHandler(
+        priority = TrackerBackPriorities.FULL_SCREEN_OVERLAY,
+        onBack = {
+            if (showMembershipPicker) {
+                showMembershipPicker = false
+            } else {
+                dismissWithGuard()
+            }
+            true
+        },
+    )
 
     if (showMembershipPicker && dialog.group.isOwner()) {
         GroupTrackerPickerScreen(
@@ -261,7 +269,7 @@ private fun GroupEditOwnerContent(
                         )
                     }
                     .navigationBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 GeoVaultPrimaryButton(
                     text = stringResource(R.string.trackers_dialog_save),
@@ -513,7 +521,13 @@ private fun GroupEditNonOwnerContent(
     val destructiveAccent =
         if (isSystemInDarkTheme()) GeoVaultColorTokens.DarkError else GeoVaultColorTokens.Error
 
-    BackHandler(enabled = true) { onDismiss() }
+    GeoVaultRegisterBackHandler(
+        priority = TrackerBackPriorities.NESTED_FULL_SCREEN_OVERLAY,
+        onBack = {
+            onDismiss()
+            true
+        },
+    )
 
     Scaffold(
         topBar = {

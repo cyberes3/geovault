@@ -1,7 +1,6 @@
 package com.geovault.tracker.ui
 
 import android.content.Context
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.Divider
@@ -54,6 +54,7 @@ import com.geovault.common.ui.components.GeoVaultTab
 import com.geovault.common.ui.components.GeoVaultTopTabBehavior
 import com.geovault.common.ui.components.GeoVaultTopTabSurface
 import com.geovault.common.ui.components.GeoVaultTopTabSwipeMode
+import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
@@ -104,9 +105,17 @@ fun GroupTrackerPickerScreen(
         tabs[1].copy(label = stringResource(R.string.groups_tracker_add_title)),
     )
 
-    BackHandler {
-        if (phase == PickerPhase.ADD) phase = PickerPhase.LIST else onDismiss()
-    }
+    GeoVaultRegisterBackHandler(
+        priority = TrackerBackPriorities.NESTED_FULL_SCREEN_OVERLAY,
+        onBack = {
+            if (phase == PickerPhase.ADD) {
+                phase = PickerPhase.LIST
+            } else {
+                onDismiss()
+            }
+            true
+        },
+    )
     PickerTabContent(
         allTrackers = allTrackers,
         selectedTrackerIds = selectedTrackerIds,
@@ -273,6 +282,7 @@ private fun PickerTabContent(
                     if (tab == PickerPhase.ADD) onPhaseSelected(PickerPhase.LIST)
                     else onDismiss()
                 },
+                modifier = Modifier.statusBarsPadding(),
             )
         },
         headerForTab = { tab ->

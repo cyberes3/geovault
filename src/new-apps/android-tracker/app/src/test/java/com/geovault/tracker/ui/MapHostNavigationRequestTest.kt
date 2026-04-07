@@ -8,6 +8,17 @@ import org.junit.Test
 class MapHostNavigationRequestTest {
 
     @Test
+    fun requestDefaultsDoNotAskForFocus() {
+        val mapRequest = MapHostNavigationRequest(target = MapHostNavigationTarget.TRACKERS)
+        val trackersRequest = TrackersHostNavigationRequest(subTab = TrackersGroupsSubTab.TRACKERS)
+        val sharedRequest = SharedHostNavigationRequest(subTab = SharedSubTab.SHARED)
+
+        assertEquals(MapHostNavigationFocus.NONE, mapRequest.focus)
+        assertEquals(MapHostNavigationFocus.NONE, trackersRequest.focus)
+        assertEquals(MapHostNavigationFocus.NONE, sharedRequest.focus)
+    }
+
+    @Test
     fun toTrackersHostNavigationRequest_groupsTargetUsesGroupsTab() {
         val request = MapHostNavigationRequest(
             target = MapHostNavigationTarget.GROUPS,
@@ -21,6 +32,7 @@ class MapHostNavigationRequestTest {
         assertEquals(TrackersGroupsSubTab.GROUPS, resolved.subTab)
         assertEquals("t1", resolved.trackerId)
         assertEquals("g1", resolved.groupId)
+        assertEquals(MapHostNavigationFocus.SCROLL_TO_ITEM, resolved.focus)
     }
 
     @Test
@@ -37,5 +49,6 @@ class MapHostNavigationRequestTest {
         assertEquals(SharedSubTab.SHARED, resolved.subTab)
         assertEquals("t42", resolved.trackerId)
         assertEquals("g42", resolved.groupId)
+        assertEquals(MapHostNavigationFocus.SCROLL_TO_ITEM, resolved.focus)
     }
 }

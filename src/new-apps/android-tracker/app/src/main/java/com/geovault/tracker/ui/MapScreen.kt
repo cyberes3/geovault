@@ -72,6 +72,8 @@ import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.tracker.params.TrackerParamsRouteArgs
+import com.geovault.tracker.params.toTrackerParamsRouteArgs
 import com.geovault.tracker.R
 import com.geovault.tracker.TrackerApplication
 import com.geovault.tracker.location.TrackingPermissionGate
@@ -95,7 +97,7 @@ fun MapScreen(
     isConnecting: Boolean,
     onOpenSettings: () -> Unit,
     onHostNavigationRequested: (MapHostNavigationRequest) -> Unit,
-    onRequestTrackerParams: (TrackerParamsUiModel) -> Unit,
+    onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit,
 ) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -132,6 +134,7 @@ fun MapScreen(
                     onRequestTrackerParams = onRequestTrackerParams,
                 )
             }
+            TrackerParamsOverlayLayer()
         }
     }
 }
@@ -141,7 +144,7 @@ private fun TrackerMapAuthenticatedContent(
     map: GeoVaultMainMap,
     viewModel: TrackerMapViewModel,
     onHostNavigationRequested: (MapHostNavigationRequest) -> Unit,
-    onRequestTrackerParams: (TrackerParamsUiModel) -> Unit,
+    onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -533,7 +536,7 @@ private fun TrackerMapAuthenticatedContent(
                         selected = false,
                         onClick = {
                             state.selectedMapTracker
-                                ?.toTrackerParamsUiModel()
+                                ?.toTrackerParamsRouteArgs()
                                 ?.let(onRequestTrackerParams)
                         },
                         modifier = Modifier.weight(1f),
@@ -559,7 +562,7 @@ private fun TrackerMapAuthenticatedContent(
                             )
                         },
                         onViewParams = {
-                            selection.toTrackerParamsUiModel().let(onRequestTrackerParams)
+                            onRequestTrackerParams(selection.toTrackerParamsRouteArgs())
                         },
                         onFocus = viewModel::focusSelectedTrackerOnMap,
                         onToggleLock = viewModel::toggleSelectedTrackerLock,
@@ -671,16 +674,6 @@ private fun shouldShowGpsAccuracyWarning(state: TrackerMapUiState): Boolean {
     val thresholdMeters = state.runtime.effectiveAccuracyThresholdMeters
     return accuracyMeters == null || accuracyMeters > thresholdMeters
 }
-
-private fun TrackerMapSelectionCard.toTrackerParamsUiModel(): TrackerParamsUiModel =
-    TrackerParamsUiModel(
-        trackerName = trackerName,
-        latitude = latitude,
-        longitude = longitude,
-        lastUpdatedMs = lastUpdatedMs,
-        accuracyMeters = accuracyMeters,
-        isOwned = isOwned,
-    )
 
 @Composable
 private fun ModeTextButton(

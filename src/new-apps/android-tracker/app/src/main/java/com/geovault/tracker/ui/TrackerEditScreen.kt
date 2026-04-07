@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -72,6 +71,7 @@ import com.geovault.common.ui.components.GeoVaultSelectOption
 import com.geovault.common.ui.components.GeoVaultToggleHelpCard
 import com.geovault.common.ui.components.GeoVaultCompactDismissTitleBar
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
+import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.NaturalSort
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
@@ -122,6 +122,7 @@ fun TrackerEditScreen(
     onDeleteTracker: () -> Unit,
     onExportKml: () -> Unit,
     onSave: () -> Unit,
+    onUnsavedChangesChanged: (Boolean) -> Unit = {},
 ) {
     GeoVaultRequestBottomTabsDisabled(shouldDisable = true)
 
@@ -181,6 +182,9 @@ fun TrackerEditScreen(
             dialog.worldShareEnabledDraft != initialSnapshot.worldShareEnabledDraft ||
             dialog.shareParamsWithWorldDraft != initialSnapshot.shareParamsWithWorldDraft
     }
+    LaunchedEffect(hasUnsavedChanges) {
+        onUnsavedChangesChanged(hasUnsavedChanges)
+    }
     var showDiscardDialog by remember { mutableStateOf(false) }
 
     val dismissWithGuard: () -> Unit = {
@@ -193,9 +197,13 @@ fun TrackerEditScreen(
         }
     }
 
-    BackHandler(enabled = true) {
-        dismissWithGuard()
-    }
+    GeoVaultRegisterBackHandler(
+        priority = TrackerBackPriorities.FULL_SCREEN_OVERLAY,
+        onBack = {
+            dismissWithGuard()
+            true
+        },
+    )
 
     val sharedRecipientCount = TrackerSharingSettingsPolicy.parseSharedEmails(dialog.sharedEmailsDraft).size
     val destructiveAccent =
@@ -229,7 +237,7 @@ fun TrackerEditScreen(
                         )
                     }
                     .navigationBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 GeoVaultPrimaryButton(
                     text = stringResource(R.string.trackers_dialog_save),

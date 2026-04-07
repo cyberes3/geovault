@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -53,7 +54,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.activity.compose.BackHandler
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.geovault.common.ui.components.GeoVaultCompactDismissTitleBar
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
@@ -66,12 +66,15 @@ import com.geovault.common.ui.components.GeoVaultTab
 import com.geovault.common.ui.components.GeoVaultTopTabBehavior
 import com.geovault.common.ui.components.GeoVaultTopTabSurface
 import com.geovault.common.ui.components.GeoVaultTopTabSwipeMode
+import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.tracker.AvailableToAddGroup
 import com.geovault.tracker.AvailableToAddItem
 import com.geovault.tracker.Group
+import com.geovault.tracker.params.TrackerParamsRouteArgs
+import com.geovault.tracker.params.toTrackerParamsRouteArgs
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
@@ -101,7 +104,7 @@ fun SharedScreen(
     onNavigationTargetConsumed: () -> Unit = {},
     onOpenTrackerOnMap: (trackerId: String, trackerName: String?) -> Unit = { _, _ -> },
     onOpenGroupOnMap: (groupId: String) -> Unit = {},
-    onRequestTrackerParams: (TrackerParamsUiModel) -> Unit = {},
+    onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit = {},
 ) {
     val vm: SharedViewModel = viewModel()
     val state by vm.uiState.collectAsState()
@@ -132,6 +135,13 @@ fun SharedScreen(
         }
     }
 
+    val suppressTabTopBar = isAuthenticated &&
+        (
+            groupActionsDialog != null ||
+                editSharedGroup != null ||
+                editSharedTracker != null ||
+                state.viewMode != SharedViewMode.SHARED_LIST
+            )
     TrackerTabPlaceholderScreen(
         title = stringResource(R.string.shared_screen_title),
         placeholderText = stringResource(R.string.shared_placeholder_signed_out),
@@ -144,6 +154,7 @@ fun SharedScreen(
         scrollAuthenticatedMainContent = false,
         authenticatedContentHorizontalPadding = 0.dp,
         authenticatedBottomSpacer = 0.dp,
+        suppressTabTopBar = suppressTabTopBar,
         authenticatedMainContent = {
             if (groupActionsDialog != null) {
                 val dialog = groupActionsDialog!!
@@ -157,7 +168,7 @@ fun SharedScreen(
                         onOpenTrackerOnMap(trackerId, null)
                     },
                     onViewTrackerParams = { tracker ->
-                        tracker.toTrackerParamsUiModelOrNull()?.let(onRequestTrackerParams)
+                        onRequestTrackerParams(tracker.toTrackerParamsRouteArgs())
                     },
                     onViewTrackerInList = null,
                     onEditGroup = { _ -> },
@@ -256,7 +267,7 @@ fun SharedScreen(
                 onOpenTrackerOnMap = onOpenTrackerOnMap,
                 onOpenGroupOnMap = onOpenGroupOnMap,
                 onViewTrackerParams = { tracker ->
-                    tracker.toTrackerParamsUiModelOrNull()?.let(onRequestTrackerParams)
+                    onRequestTrackerParams(tracker.toTrackerParamsRouteArgs())
                 },
                 onOpenGroupActions = { group, highlightedTrackerId ->
                     groupActionsDialog = GroupMembersOverlayState(
@@ -325,9 +336,14 @@ private fun ColumnScope.SharedAuthenticatedBody(
     onViewTrackerParams: (Tracker) -> Unit,
     onOpenGroupActions: (group: Group, highlightedTrackerId: String?) -> Unit,
 ) {
-    BackHandler(enabled = state.viewMode != SharedViewMode.SHARED_LIST) {
-        onShowSharedList()
-    }
+    GeoVaultRegisterBackHandler(
+        priority = TrackerBackPriorities.SHARED_OVERLAY,
+        canGoBack = { state.viewMode != SharedViewMode.SHARED_LIST },
+        onBack = {
+            onShowSharedList()
+            true
+        },
+    )
     var highlightedItemKey by remember { mutableStateOf<String?>(null) }
     var navigationRefreshAttempts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     val pendingAddActionKeys = state.pendingAddActionKeys
@@ -669,10 +685,15 @@ private fun DiscoverOverlaySurface(
             onRefreshTab = { onRefresh() },
         ),
         titleForTab = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding(),
+            ) {
                 GeoVaultCompactDismissTitleBar(
                     title = stringResource(R.string.shared_discover_overlay_title),
                     onClose = onClose,
+                    closeContentDescription = stringResource(R.string.close),
                 )
                 Divider()
             }
@@ -779,10 +800,15 @@ private fun PublicOverlaySurface(
     val hasInlineMutation = pendingAddActionKeys.isNotEmpty() || pendingRemoveActionKeys.isNotEmpty()
     val overlayLoading = (state.isLoading || isRequiredDataMissing) && !hasInlineMutation
     Column(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding(),
+        ) {
             GeoVaultCompactDismissTitleBar(
                 title = stringResource(R.string.shared_public_overlay_title),
                 onClose = onClose,
+                closeContentDescription = stringResource(R.string.close),
             )
             Divider()
         }
