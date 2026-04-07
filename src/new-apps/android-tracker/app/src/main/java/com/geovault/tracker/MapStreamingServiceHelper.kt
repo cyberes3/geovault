@@ -43,7 +43,7 @@ internal object MapStreamingServiceHelper {
         }
         val id = displayedTrackerId?.trim().orEmpty()
         if (id.isBlank()) {
-            // Legacy behavior: no-op when single-context tracker id is not yet resolved.
+            // No-op when single-context tracker id is not yet resolved.
             return
         }
         if (!selectedTrackerId.isNullOrBlank() && id == selectedTrackerId) {

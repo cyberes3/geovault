@@ -7,7 +7,7 @@ import com.geovault.tracker.runtime.RuntimeTrigger
 import com.geovault.tracker.runtime.TrackingRuntimeController
 
 /**
- * UI / app-layer entry point for deterministic runtime commands (mirrors legacy orchestration).
+ * UI / app-layer entry point for deterministic runtime commands.
  */
 object TrackingCommandFacade {
     fun requestStart(context: Context, trigger: RuntimeTrigger, reason: String) {

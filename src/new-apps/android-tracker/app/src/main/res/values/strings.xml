@@ -39,7 +39,7 @@
     <string name="gps_provider_required">Enable GPS to start tracking.</string>
     <string name="unable_to_start_location_updates">Could not start location updates.</string>
     <string name="home_title">GeoVault Tracker</string>
-    <string name="home_placeholder_legacy">Home</string>
+    <string name="home_placeholder">Home</string>
     <string name="home_permissions_section_title">Permissions</string>
     <string name="home_permission_foreground">Allow location while using the app</string>
     <string name="home_permission_background">Allow all the time (background location)</string>

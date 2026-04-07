@@ -124,7 +124,7 @@ fun HomeScreen(
 
     TrackerTabPlaceholderScreen(
         title = stringResource(R.string.home_title),
-        placeholderText = stringResource(R.string.home_placeholder_legacy),
+        placeholderText = stringResource(R.string.home_placeholder),
         isAuthenticated = isAuthenticated,
         serverUrl = serverUrl,
         onAuthServerUrlChanged = onAuthServerUrlChanged,

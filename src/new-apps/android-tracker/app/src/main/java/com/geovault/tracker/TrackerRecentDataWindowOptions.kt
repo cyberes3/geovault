@@ -3,7 +3,7 @@ package com.geovault.tracker
 import android.content.Context
 import com.geovault.tracker.R
 
-/** API values and human labels for the tracker recent-data window (legacy [RecentDataWindowOptions]). */
+/** API values and human labels for the tracker recent-data window. */
 object TrackerRecentDataWindowOptions {
     const val VALUE_ALL = "all"
     private val values = listOf(

@@ -36,8 +36,8 @@ class OwnershipActionPolicyTest {
         assertTrue(OwnershipActionPolicy.groupPendingAccept(pending))
         val accepted = Group(id = "g2", name = "Ok", is_accepted = true)
         assertFalse(OwnershipActionPolicy.groupPendingAccept(accepted))
-        val legacy = Group(id = "g3", name = "Legacy", is_accepted = null)
-        assertFalse(OwnershipActionPolicy.groupPendingAccept(legacy))
+        val unspecified = Group(id = "g3", name = "Unspecified", is_accepted = null)
+        assertFalse(OwnershipActionPolicy.groupPendingAccept(unspecified))
     }
 
     @Test

@@ -1086,7 +1086,7 @@ class TrackingService : Service() {
         )
         updateRuntimeSnapshot { next }
         TrackingRuntimeStateStore.update { next }
-        mirrorLegacyCompanionState(next)
+        syncCompanionSnapshotState(next)
         if (startupForegroundPromoted && startupInProgress) {
             serviceScope.launch(Dispatchers.Main) {
                 notificationPresenter.updateForegroundNotification(runtimeSnapshot)
@@ -2243,7 +2243,7 @@ class TrackingService : Service() {
         gpsRuntimeState = next
     }
 
-    private fun mirrorLegacyCompanionState(snapshot: TrackingRuntimeSnapshot) {
+    private fun syncCompanionSnapshotState(snapshot: TrackingRuntimeSnapshot) {
         isRunning = snapshot.isRunning
         sessionStartTimeMs = snapshot.sessionStartTimeMs
         pointsSentThisSession = snapshot.pointsSentThisSession

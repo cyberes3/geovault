@@ -63,7 +63,7 @@ object SharedDiscoveryPolicy {
         val incomingGroups = available.shared_with_me_groups
             .distinctBy { normalizeSharedId(it.id) }
             .filter { normalizeSharedId(it.id).isNotEmpty() && normalizeSharedId(it.id) !in knownGroupIds }
-            // Legacy parity: pending shared groups should not expose per-track membership pre-acceptance.
+            // Pending shared groups should not expose per-track membership pre-acceptance.
             .map { it.copy(track_ids = emptyList()) }
             .sortedBy { it.name.lowercase() }
 

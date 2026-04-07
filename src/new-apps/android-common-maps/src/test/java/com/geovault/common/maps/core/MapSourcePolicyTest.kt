@@ -15,7 +15,7 @@ import org.junit.Test
 
 class MapSourcePolicyTest {
     @Test
-    fun normalizeSelection_handlesLegacySourceIds() {
+    fun normalizeSelection_handlesMappedSourceIds() {
         assertEquals(OPTION_STREET, MapSourcePolicy.normalizeSelection(SOURCE_OSM))
         assertEquals(OPTION_STREET, MapSourcePolicy.normalizeSelection(SOURCE_MAPTILER_STREETS))
         assertEquals(OPTION_STREET_DARK, MapSourcePolicy.normalizeSelection(SOURCE_MAPTILER_STREETS_DARK))

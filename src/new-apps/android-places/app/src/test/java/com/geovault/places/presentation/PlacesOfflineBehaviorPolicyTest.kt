@@ -29,7 +29,7 @@ class PlacesOfflineBehaviorPolicyTest {
     }
 
     @Test
-    fun deleteFailureMessage_matchesLegacyOfflineAndServerErrors() {
+    fun deleteFailureMessage_matchesOfflineAndServerErrors() {
         assertEquals(
             PlacesOfflineBehaviorPolicy.DELETE_SERVER_ERROR_MESSAGE,
             PlacesOfflineBehaviorPolicy.deleteFailureMessage("Failed to delete place: 500")
@@ -45,7 +45,7 @@ class PlacesOfflineBehaviorPolicyTest {
     }
 
     @Test
-    fun offlineRemovalMessage_matchesLegacyRevertAndDiscardCopy() {
+    fun offlineRemovalMessage_matchesRevertAndDiscardCopy() {
         assertEquals(
             PlacesOfflineBehaviorPolicy.REVERTED_CHANGES_MESSAGE,
             PlacesOfflineBehaviorPolicy.offlineRemovalMessage(offlineFeature(databaseId = 99))

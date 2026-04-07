@@ -26,7 +26,7 @@ object TrackerMapStreamingCoordinator {
     private fun resolveSingleSession(input: TrackerMapStreamingDecisionInput): TrackerMapStreamingCommand {
         val id = input.displayedTrackerId.trim()
         if (id.isEmpty()) {
-            // Preserve legacy behavior while single-track context is still resolving.
+            // Keep no-op behavior while single-track context is still resolving.
             return TrackerMapStreamingCommand.NoOp
         }
         if (id == input.selectedTrackerId.trim() && input.selectedTrackerId.isNotBlank()) {

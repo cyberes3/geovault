@@ -16,10 +16,10 @@ class GeoVaultSettingsRestoreHelperTest {
         val helper = GeoVaultSettingsRestoreHelper(schemaVersion = 3, keyRegistry = registry)
         val source = GeoVaultSettings(
             schemaVersion = 1,
-            boolValues = mapOf("add_suffix" to true, "legacy_flag" to true),
+            boolValues = mapOf("add_suffix" to true, "deprecated_flag" to true),
             stringValues = mapOf(
                 "server_url" to "https://example.com",
-                "legacy_url" to "https://legacy.example.com"
+                "deprecated_url" to "https://deprecated.example.com"
             )
         )
 
@@ -27,9 +27,9 @@ class GeoVaultSettingsRestoreHelperTest {
 
         assertEquals(3, normalized.schemaVersion)
         assertTrue(normalized.boolValues.containsKey("add_suffix"))
-        assertFalse(normalized.boolValues.containsKey("legacy_flag"))
+        assertFalse(normalized.boolValues.containsKey("deprecated_flag"))
         assertTrue(normalized.stringValues.containsKey("server_url"))
-        assertFalse(normalized.stringValues.containsKey("legacy_url"))
+        assertFalse(normalized.stringValues.containsKey("deprecated_url"))
     }
 
     @Test

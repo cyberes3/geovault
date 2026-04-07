@@ -2,9 +2,9 @@
 
 ## Build Strategy
 
-- Build each subsystem **piece by piece** in `src/new-apps/android-tracker`, referencing legacy `src/android-tracker` as the behavioral spec.
+- Build each subsystem **piece by piece** in `src/new-apps/android-tracker`, referencing previous `src/android-tracker` behavior as the spec.
 - Port and rewrite each component directly into the modern architecture (Compose, manual DI, clean packages) rather than copying then refactoring.
-- Copy individual source files from legacy when their logic is complex and already correct (e.g. pipeline, runtime state machines, binary payload builders), then clean up imports/structure in place.
+- Port complex, proven logic directly when needed (e.g. pipeline, runtime state machines, binary payload builders), then clean up imports/structure in place.
 
 ## Locked Behavioral Parity Invariants
 
@@ -132,7 +132,7 @@
 - **Exit gate:** all settings read/write correctly, disconnect triggers reset
 
 ### Step 10: Integration, Testing, and Polish
-- Run full parity checklist against legacy behavior
+- Run full parity checklist against previous-app behavior
 - Add focused unit tests for runtime policies, map state transforms, share filters, queue boundaries
 - Verify build (debug + release)
 - Remove dead code and clean up naming
@@ -181,7 +181,7 @@
 - Streaming orchestration, debouncing, and session-window resync
 - Map reopen/resume/runtime resync policy
 
-## Known Legacy Ambiguities To Resolve Early
+## Known Parity Ambiguities To Resolve Early
 
 - `map-visibility` API semantics vs tracker/group hidden flags
 - discover/public/group remove semantics (`leaveGroup` vs unsubscribe)
@@ -201,9 +201,9 @@
 
 ## Acceptance Criteria
 
-- New tracker app matches legacy user-visible behavior and runtime semantics
+- New tracker app matches previous-app user-visible behavior and runtime semantics
 - No XML layout screen dependencies remain (Compose-driven UI)
 - Common library changes are lean, reusable, and not tracker-specific dumping grounds
 - Targeted tests pass; app builds cleanly for debug/release
-- Internal architecture materially improved from legacy baseline
+- Internal architecture materially improved from prior baseline
 - `android-common-maps` contains only minimal, reusable extensions with no tracker business logic leakage

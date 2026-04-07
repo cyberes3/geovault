@@ -81,15 +81,15 @@ private fun GeoVaultLoadingSpinnerArc(
     )
     {
         val strokePx = strokeWidth.toPx()
-        val legacyArcDiameter = size.minDimension * (24f / 28f)
+        val spinnerArcDiameter = size.minDimension * (24f / 28f)
         val radiusInset = strokePx / 2f
         val arcSize = Size(
-            width = legacyArcDiameter - strokePx,
-            height = legacyArcDiameter - strokePx
+            width = spinnerArcDiameter - strokePx,
+            height = spinnerArcDiameter - strokePx
         )
         val arcTopLeft = Offset(
-            x = (size.width - legacyArcDiameter) / 2f + radiusInset,
-            y = (size.height - legacyArcDiameter) / 2f + radiusInset
+            x = (size.width - spinnerArcDiameter) / 2f + radiusInset,
+            y = (size.height - spinnerArcDiameter) / 2f + radiusInset
         )
         drawArc(
             color = color,

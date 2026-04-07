@@ -362,8 +362,8 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Legacy parity: mutation outcomes should be surfaced to users without reserving inline UI slots.
-     * We keep state deterministic and emit one-shot snackbar events for outcomes/errors.
+     * Mutation outcomes are surfaced to users without reserving inline UI slots.
+     * State stays deterministic and one-shot snackbar events report outcomes/errors.
      */
     private suspend fun refreshStateFromServer(feedbackMessage: String?) {
         val snapshot = loadSharedSnapshot(forceRefresh = true)

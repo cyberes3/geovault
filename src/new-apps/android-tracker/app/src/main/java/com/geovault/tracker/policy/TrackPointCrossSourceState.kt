@@ -4,7 +4,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Shared cross-source acceptance state by track id.
- * Mirrors legacy per-track ordering/duplicate semantics across LOCAL_GPS and REMOTE_STREAM.
+ * Preserves per-track ordering/duplicate semantics across LOCAL_GPS and REMOTE_STREAM.
  */
 object TrackPointCrossSourceState {
     private val lock = Any()

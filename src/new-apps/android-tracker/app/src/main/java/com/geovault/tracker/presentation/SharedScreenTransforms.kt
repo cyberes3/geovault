@@ -8,7 +8,7 @@ import com.geovault.tracker.Tracker
 import java.util.Locale
 
 /**
- * Shared parity contract (legacy `SharedTrackersFragment` + `SharedSurfaceFilterUseCase`):
+ * Shared parity contract:
  * 1) Shared surface contains only accepted non-owned shared groups and standalone non-owned
  *    shared/public trackers.
  * 2) Trackers represented by a shared group are removed from standalone rows (de-dupe).
@@ -72,7 +72,7 @@ sealed interface SharedSurfaceItem {
 }
 
 /**
- * Legacy-style shared surface list: accepted shared groups + non-owned shared/public standalone trackers,
+ * Shared surface list: accepted shared groups + non-owned shared/public standalone trackers,
  * sorted together naturally by display name.
  */
 fun computeSharedSurfaceItems(

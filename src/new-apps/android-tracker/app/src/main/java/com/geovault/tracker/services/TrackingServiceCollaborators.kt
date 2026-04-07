@@ -219,7 +219,7 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         nowElapsedRealtimeNanos: Long
     ): com.geovault.tracker.policy.TrackPointDecision {
         val event = trackPointEventForPolicy(trackId = trackId, location = location, isMockLocation = isMockLocation, nowMs = nowMs)
-        // Legacy pipeline derives "previous" from pipeline-local accepted state.
+        // Pipeline derives "previous" from pipeline-local accepted state.
         // This intentionally avoids anchoring policy to bypass-only points.
         val config = TrackingPolicyProfiles.ingestConfig(
             maxAccuracyMeters = maxAccuracyMeters,

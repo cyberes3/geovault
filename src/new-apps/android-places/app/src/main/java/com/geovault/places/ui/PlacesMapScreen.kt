@@ -192,7 +192,7 @@ fun PlacesMapScreen(
             )
         },
     ) { scaffoldPadding ->
-        // Match legacy activity_map.xml: map lives in a weighted region above the info panel;
+        // Match previous activity_map.xml behavior: map lives in a weighted region above the info panel;
         // bottom UI is a sibling, not an overlay — no camera bottom inset needed for it.
         Column(
             modifier = Modifier

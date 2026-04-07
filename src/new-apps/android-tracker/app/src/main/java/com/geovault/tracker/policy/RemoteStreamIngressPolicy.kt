@@ -5,7 +5,7 @@ import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Remote-stream ingress parity policy aligned with legacy TrackPointPipeline.remoteProfile.
+ * Remote-stream ingress policy for parity-safe stream filtering and ordering.
  */
 object RemoteStreamIngressPolicy {
     private const val REMOTE_FRESHNESS_TTL_MS = 30L * 60L * 1000L

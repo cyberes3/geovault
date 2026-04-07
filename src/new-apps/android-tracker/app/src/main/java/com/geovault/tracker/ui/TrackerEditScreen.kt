@@ -643,7 +643,7 @@ fun TrackerEditScreen(
     }
 }
 
-/** Matches legacy [item_shared_user_picker_row]: bordered card, blue fill + check when selected. */
+/** Shared user picker row: bordered card, blue fill + check when selected. */
 @Composable
 private fun ShareUserPickerRow(
     displayEmail: String,

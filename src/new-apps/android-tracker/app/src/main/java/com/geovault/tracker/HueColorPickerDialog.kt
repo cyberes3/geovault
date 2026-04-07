@@ -67,7 +67,7 @@ private fun appCompatDialogContext(context: Context): Context {
 }
 
 /**
- * Shows the QuadFlask hue-based color picker dialog used by the legacy tracker app.
+ * Shows the QuadFlask hue-based color picker dialog for tracker color selection.
  * On confirm, invokes [onColorPicked] with a six-digit `#RRGGBB` string.
  */
 fun showHueColorPickerDialog(

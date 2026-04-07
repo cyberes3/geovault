@@ -15,7 +15,7 @@ data class HomeLayoutSizingInput(
 object HomeLayoutSizingPolicy {
     private const val COMPACT_EXIT_BUFFER_PX = 20
 
-    // Mirrors legacy defaults from HomeFragment sizing behavior.
+    // Default sizing values for home layout behavior.
     private const val NORMAL_PADDING_TOP = 32
     private const val NORMAL_PADDING_BOTTOM = 16
     private const val NORMAL_RADAR_HEIGHT = 180
@@ -28,7 +28,7 @@ object HomeLayoutSizingPolicy {
     private const val TIGHT_RADAR_BOTTOM_MARGIN = 8
     private const val COMPACT_INLINE_TOP_MARGIN = 8
 
-    // Estimated non-radar content height in legacy home.
+    // Estimated non-radar content height in home layout.
     private const val CONTENT_BASE_HEIGHT = 420
 
     @JvmStatic
