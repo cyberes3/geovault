@@ -96,4 +96,7 @@
     <color name="gv_common_feature_linestring">#86EFAC</color>
     <color name="gv_common_feature_polygon">#FBBF24</color>
     <color name="gv_common_feature_default">#D1D5DB</color>
+    <!-- Map linework stack: white halo + dark border + colored fill -->
+    <color name="gv_common_map_linework_outer_halo">#FFFFFF</color>
+    <color name="gv_common_map_linework_border">#000000</color>
 </resources>

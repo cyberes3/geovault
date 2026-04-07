@@ -5,6 +5,7 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.geovault.common.maps.core.OutlinedGeoJsonLineLayers
 import com.geovault.tracker.MapStreamingServiceHelper
 import com.geovault.tracker.TrackingService
 import com.geovault.tracker.Tracker
@@ -737,6 +738,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             mode = s.mode,
             trail = s.trail,
             runtime = s.runtime,
+            trailOutlineColorHex = OutlinedGeoJsonLineLayers.borderColorHex(appContext),
             remoteLastPoints = s.remoteLastPoints,
             activeStreamedTrackerIds = s.activeStreamedTrackerIds,
             allQueueTrailsByTracker = s.allQueueTrailsByTracker,

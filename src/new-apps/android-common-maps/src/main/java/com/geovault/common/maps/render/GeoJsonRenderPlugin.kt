@@ -153,10 +153,23 @@ class GeoJsonRenderPlugin(
             )
         }
         if (style.getLayer(lineOuterLayerId) == null) {
-            addLayerWithPlacement(style, OutlinedGeoJsonLineLayers.createOuterLayer(lineOuterLayerId, linesSourceId))
+            addLayerWithPlacement(
+                style,
+                OutlinedGeoJsonLineLayers.createOuterLayer(
+                    layerId = lineOuterLayerId,
+                    sourceId = linesSourceId,
+                )
+            )
         }
         if (style.getLayer(lineBorderLayerId) == null) {
-            addLayerWithPlacement(style, OutlinedGeoJsonLineLayers.createBorderLayer(lineBorderLayerId, linesSourceId))
+            addLayerWithPlacement(
+                style,
+                OutlinedGeoJsonLineLayers.createBorderLayer(
+                    layerId = lineBorderLayerId,
+                    sourceId = linesSourceId,
+                    context = context?.applicationContext,
+                )
+            )
         }
         if (style.getLayer(lineFillLayerId) == null) {
             addLayerWithPlacement(style, OutlinedGeoJsonLineLayers.createFillLayer(lineFillLayerId, linesSourceId))

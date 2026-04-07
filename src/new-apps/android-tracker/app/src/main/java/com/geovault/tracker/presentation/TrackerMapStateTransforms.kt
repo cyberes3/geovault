@@ -24,7 +24,7 @@ enum class TrackerMapDisplayMode {
 object TrackerMapStateTransforms {
 
     const val TRAIL_LINE_COLOR_HEX: String = "#1E88E5"
-    const val TRAIL_OUTLINE_COLOR_HEX: String = "#FFFFFF"
+    const val TRAIL_OUTLINE_COLOR_HEX: String = "#000000"
     const val DEFAULT_MULTI_TRACK_LINE_COLOR_HEX: String = "#607D8B"
     const val MAX_TRACK_JUMP_METERS: Float = 5f * 1609.344f
 
@@ -32,6 +32,7 @@ object TrackerMapStateTransforms {
         mode: TrackerMapDisplayMode,
         trail: List<QueuedLocation>,
         runtime: TrackingRuntimeSnapshot,
+        trailOutlineColorHex: String = TRAIL_OUTLINE_COLOR_HEX,
         remoteLastPoints: Map<String, TrackPointEvent> = emptyMap(),
         activeStreamedTrackerIds: Set<String> = emptySet(),
         allQueueTrailsByTracker: Map<String, List<QueuedLocation>> = emptyMap(),
@@ -42,7 +43,8 @@ object TrackerMapStateTransforms {
             mode = mode,
             effectiveTrail = effectiveTrail,
             allQueueTrailsByTracker = allQueueTrailsByTracker,
-            trackerColorById = trackerColorById
+            trackerColorById = trackerColorById,
+            trailOutlineColorHex = trailOutlineColorHex,
         )
         val lastQueued = effectiveTrail.lastOrNull()
         val isMultiContext = mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER
@@ -119,25 +121,28 @@ object TrackerMapStateTransforms {
         mode: TrackerMapDisplayMode,
         effectiveTrail: List<QueuedLocation>,
         allQueueTrailsByTracker: Map<String, List<QueuedLocation>>,
-        trackerColorById: Map<String, String>
+        trackerColorById: Map<String, String>,
+        trailOutlineColorHex: String,
     ): List<MapRenderLine> {
         return if (
             (mode == TrackerMapDisplayMode.ALL_QUEUE || mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) &&
             allQueueTrailsByTracker.isNotEmpty()
         ) {
-            buildAllQueueLines(allQueueTrailsByTracker, trackerColorById)
+            buildAllQueueLines(allQueueTrailsByTracker, trackerColorById, trailOutlineColorHex)
         } else {
             buildSegmentedLines(
                 lineIdPrefix = "tracker-trail",
                 points = effectiveTrail.map { it.latitude to it.longitude },
-                lineColorHex = TRAIL_LINE_COLOR_HEX
+                lineColorHex = TRAIL_LINE_COLOR_HEX,
+                outlineColorHex = trailOutlineColorHex,
             )
         }
     }
 
     private fun buildAllQueueLines(
         allQueueTrailsByTracker: Map<String, List<QueuedLocation>>,
-        trackerColorById: Map<String, String>
+        trackerColorById: Map<String, String>,
+        trailOutlineColorHex: String,
     ): List<MapRenderLine> {
         return allQueueTrailsByTracker.entries
             .sortedBy { it.key }
@@ -146,7 +151,8 @@ object TrackerMapStateTransforms {
                 buildSegmentedLines(
                     lineIdPrefix = "all-track-$trackerId",
                     points = queuedLocations.map { it.latitude to it.longitude },
-                    lineColorHex = color
+                    lineColorHex = color,
+                    outlineColorHex = trailOutlineColorHex,
                 )
             }
     }
@@ -154,7 +160,8 @@ object TrackerMapStateTransforms {
     private fun buildSegmentedLines(
         lineIdPrefix: String,
         points: List<Pair<Double, Double>>,
-        lineColorHex: String
+        lineColorHex: String,
+        outlineColorHex: String,
     ): List<MapRenderLine> {
         val segments = geoVaultSplitTrackByDistance(points, MAX_TRACK_JUMP_METERS)
         return segments.mapIndexed { index, segment ->
@@ -162,7 +169,7 @@ object TrackerMapStateTransforms {
                 id = "$lineIdPrefix-$index",
                 coordinates = segment,
                 lineColorHex = lineColorHex,
-                outlineColorHex = TRAIL_OUTLINE_COLOR_HEX
+                outlineColorHex = outlineColorHex
             )
         }
     }
