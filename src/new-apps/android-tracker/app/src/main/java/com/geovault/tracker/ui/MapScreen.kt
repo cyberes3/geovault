@@ -1,10 +1,12 @@
 package com.geovault.tracker.ui
 
 import android.graphics.PointF
-import android.text.format.DateUtils
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,12 +19,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.Card
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Warning
@@ -37,8 +43,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
@@ -67,8 +75,10 @@ import com.geovault.common.maps.ui.geoVaultLayerToggleFabAction
 import com.geovault.common.maps.ui.geoVaultZoomInFabAction
 import com.geovault.common.maps.ui.geoVaultZoomOutFabAction
 import com.geovault.common.maps.ui.rememberGeoVaultGpsRecenterFabAction
+import com.geovault.common.ClipboardCopyHelper
 import com.geovault.common.ui.components.GeoVaultAuthGate
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
+import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.theme.GeoVaultColorTokens
@@ -81,11 +91,13 @@ import com.geovault.tracker.services.TrackingUiStatus
 import com.geovault.tracker.presentation.TrackerMapCameraLockPolicy
 import com.geovault.tracker.presentation.TrackerMapDisplayMode
 import com.geovault.tracker.presentation.TrackerMapGroupModeOption
+import com.geovault.tracker.presentation.TrackerMapRenderContract
 import com.geovault.tracker.presentation.TrackerMapSelectionCard
 import com.geovault.tracker.presentation.TrackerMapUiState
 import com.geovault.tracker.presentation.TrackerMapViewModel
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
+import java.util.Locale
 
 @Composable
 fun MapScreen(
@@ -178,7 +190,7 @@ private fun TrackerMapAuthenticatedContent(
     val boundsFitPaddingPx = rememberGeoVaultMapBoundsFitPaddingPx()
     val renderPlugin = remember {
         GeoJsonRenderPlugin(
-            sourceIdPrefix = "gv-tracker-map",
+            sourceIdPrefix = TrackerMapRenderContract.SOURCE_ID_PREFIX,
             config = GeoJsonRenderConfig(
                 synchronousGeoJsonApplication = true,
                 showPointCircles = false,
@@ -303,7 +315,7 @@ private fun TrackerMapAuthenticatedContent(
             val features = runCatching {
                 maplibreMap.queryRenderedFeatures(
                     screenPoint,
-                    "gv-tracker-map-points-label-layer"
+                    TrackerMapRenderContract.pointsLabelLayerId()
                 )
             }.getOrElse { emptyList() }
             val trackId = features.asSequence()
@@ -470,133 +482,53 @@ private fun TrackerMapAuthenticatedContent(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(MaterialTheme.colors.surface.copy(alpha = 0.70f))
-                        .pointerInteropFilter { true },
+                        .background(MaterialTheme.colors.background),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        GeoVaultLoadingSpinner(spinnerSize = 20.dp)
-                        Text(
-                            text = stringResource(R.string.map_status_map_loading),
-                            style = MaterialTheme.typography.body2,
-                        )
-                    }
+                    GeoVaultLoadingSpinner(
+                        bottomText = stringResource(R.string.map_status_map_loading),
+                    )
                 }
             }
-        }
-
-        val selection = state.selectedMapTracker
-        if (state.isBottomCardVisible && selection != null) {
-            Spacer(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(GeoVaultColorTokens.BorderLight),
-            )
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = androidx.compose.ui.graphics.RectangleShape,
-                backgroundColor = GeoVaultColorTokens.Background,
-                elevation = 0.dp,
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                    Text(
-                        text = stringResource(R.string.map_mode_section_title),
-                        color = GeoVaultColorTokens.TextPrimary,
-                        style = MaterialTheme.typography.subtitle2,
-                        fontWeight = FontWeight.Bold,
+            val selectionModel = state.toSelectionPanelUiModel()
+            if (selectionModel != null) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth(),
+                ) {
+                    Spacer(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(GeoVaultColorTokens.BorderLight),
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    MapStatusStrip(
-                        state = state,
-                        mapReady = phase == GeoVaultMapPhase.Ready,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
+
+                    Card(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        shape = androidx.compose.ui.graphics.RectangleShape,
+                        backgroundColor = GeoVaultColorTokens.Background,
+                        elevation = 0.dp,
                     ) {
-                        ModeTextButton(
-                            label = stringResource(R.string.map_mode_session),
-                            selected = state.mode == TrackerMapDisplayMode.SINGLE_SESSION,
-                            onClick = { viewModel.setMode(TrackerMapDisplayMode.SINGLE_SESSION) },
-                            modifier = Modifier.weight(1f),
-                        )
-                        ModeTextButton(
-                            label = stringResource(R.string.map_mode_all),
-                            selected = state.mode == TrackerMapDisplayMode.ALL_QUEUE,
-                            onClick = { viewModel.setMode(TrackerMapDisplayMode.ALL_QUEUE) },
-                            modifier = Modifier.weight(1f),
-                        )
-                        ModeTextButton(
-                            label = stringResource(R.string.map_mode_group),
-                            selected = state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER,
-                            onClick = { viewModel.setMode(TrackerMapDisplayMode.GROUP_PLACEHOLDER) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        GroupModeSelector(
-                            options = state.groupModeOptions,
-                            selectedGroupId = state.currentGroupId,
-                            onSelectGroup = viewModel::setGroupModeGroup
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        ModeTextButton(
-                            label = stringResource(R.string.map_action_view_in_list),
-                            selected = false,
-                            onClick = {
-                                onHostNavigationRequested(
-                                    MapHostNavigationRequestResolver.fromListNavigationTarget(
-                                        viewModel.resolveListNavigationTarget()
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                            MapTrackerSelectionPanel(
+                                model = selectionModel,
+                                onViewInList = {
+                                    onHostNavigationRequested(
+                                        MapHostNavigationRequestResolver.fromListNavigationTarget(
+                                            viewModel.resolveListNavigationTarget(selectionModel.trackerId)
+                                        )
                                     )
-                                )
-                            },
-                            modifier = Modifier.weight(1f),
-                        )
-                        ModeTextButton(
-                            label = stringResource(R.string.map_action_view_params),
-                            selected = false,
-                            onClick = {
-                                onRequestTrackerParams(selection.toTrackerParamsRouteArgs())
-                            },
-                            modifier = Modifier.weight(1f),
-                        )
-                        ModeTextButton(
-                            label = stringResource(R.string.map_action_open_shared),
-                            selected = false,
-                            onClick = { onHostNavigationRequested(MapHostNavigationRequestResolver.forShared(state)) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    MapTrackerSelectionPanel(
-                        selection = selection,
-                        isLocked = state.selectionLockTrackerId == selection.trackerId,
-                        onViewInList = {
-                            onHostNavigationRequested(
-                                MapHostNavigationRequestResolver.fromListNavigationTarget(
-                                    viewModel.resolveListNavigationTarget(selection.trackerId)
-                                )
+                                },
+                                onViewParams = {
+                                    onRequestTrackerParams(selectionModel.toTrackerParamsRouteArgs())
+                                },
+                                onFocus = viewModel::focusSelectedTrackerOnMap,
+                                onToggleLock = viewModel::toggleSelectedTrackerLock,
+                                onClear = viewModel::clearMapTrackerSelection,
                             )
-                        },
-                        onViewParams = {
-                            onRequestTrackerParams(selection.toTrackerParamsRouteArgs())
-                        },
-                        onFocus = viewModel::focusSelectedTrackerOnMap,
-                        onToggleLock = viewModel::toggleSelectedTrackerLock,
-                        onClear = viewModel::clearMapTrackerSelection,
-                    )
+                        }
+                    }
                 }
             }
         }
@@ -721,6 +653,98 @@ private fun ModeTextButton(
 }
 
 @Composable
+private fun MapBottomModeSection(
+    state: TrackerMapUiState,
+    mapReady: Boolean,
+    onSetMode: (TrackerMapDisplayMode) -> Unit,
+    onSelectGroup: (String) -> Unit,
+) {
+    Text(
+        text = stringResource(R.string.map_mode_section_title),
+        color = GeoVaultColorTokens.TextPrimary,
+        style = MaterialTheme.typography.subtitle2,
+        fontWeight = FontWeight.Bold,
+    )
+    Spacer(modifier = Modifier.height(6.dp))
+    MapStatusStrip(
+        state = state,
+        mapReady = mapReady,
+    )
+    Spacer(modifier = Modifier.height(8.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        ModeTextButton(
+            label = stringResource(R.string.map_mode_session),
+            selected = state.mode == TrackerMapDisplayMode.SINGLE_SESSION,
+            onClick = { onSetMode(TrackerMapDisplayMode.SINGLE_SESSION) },
+            modifier = Modifier.weight(1f),
+        )
+        ModeTextButton(
+            label = stringResource(R.string.map_mode_all),
+            selected = state.mode == TrackerMapDisplayMode.ALL_QUEUE,
+            onClick = { onSetMode(TrackerMapDisplayMode.ALL_QUEUE) },
+            modifier = Modifier.weight(1f),
+        )
+        ModeTextButton(
+            label = stringResource(R.string.map_mode_group),
+            selected = state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            onClick = { onSetMode(TrackerMapDisplayMode.GROUP_PLACEHOLDER) },
+            modifier = Modifier.weight(1f),
+        )
+    }
+    if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+        Spacer(modifier = Modifier.height(8.dp))
+        GroupModeSelector(
+            options = state.groupModeOptions,
+            selectedGroupId = state.currentGroupId,
+            onSelectGroup = onSelectGroup
+        )
+    }
+}
+
+private data class MapSelectionPanelUiModel(
+    val trackerId: String,
+    val trackerName: String,
+    val isOwned: Boolean,
+    val latitude: Double,
+    val longitude: Double,
+    val lastUpdatedMs: Long?,
+    val accuracyMeters: Float?,
+    val isLocked: Boolean,
+    val showFocusAction: Boolean,
+)
+
+private fun TrackerMapUiState.toSelectionPanelUiModel(): MapSelectionPanelUiModel? {
+    val selection = selectedMapTracker ?: return null
+    if (!isBottomCardVisible) return null
+    return MapSelectionPanelUiModel(
+        trackerId = selection.trackerId,
+        trackerName = selection.trackerName,
+        isOwned = selection.isOwned,
+        latitude = selection.latitude,
+        longitude = selection.longitude,
+        lastUpdatedMs = selection.lastUpdatedMs,
+        accuracyMeters = selection.accuracyMeters,
+        isLocked = selectionLockTrackerId == selection.trackerId,
+        showFocusAction = TrackerMapViewModel.resolveFocusActionVisible(mode),
+    )
+}
+
+private fun MapSelectionPanelUiModel.toTrackerParamsRouteArgs(): TrackerParamsRouteArgs {
+    return TrackerMapSelectionCard(
+        trackerId = trackerId,
+        trackerName = trackerName,
+        latitude = latitude,
+        longitude = longitude,
+        lastUpdatedMs = lastUpdatedMs,
+        accuracyMeters = accuracyMeters,
+        isOwned = isOwned,
+    ).toTrackerParamsRouteArgs()
+}
+
+@Composable
 private fun GroupModeSelector(
     options: List<TrackerMapGroupModeOption>,
     selectedGroupId: String,
@@ -775,90 +799,196 @@ private fun GroupModeSelector(
 
 @Composable
 private fun MapTrackerSelectionPanel(
-    selection: TrackerMapSelectionCard,
-    isLocked: Boolean,
+    model: MapSelectionPanelUiModel,
     onViewInList: () -> Unit,
     onViewParams: () -> Unit,
     onFocus: () -> Unit,
     onToggleLock: () -> Unit,
     onClear: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val clipboardHelper = remember(context) { ClipboardCopyHelper(context) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colors.surface,
+        color = GeoVaultColorTokens.Background,
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
-            Text(
-                text = selection.trackerName,
-                style = MaterialTheme.typography.subtitle2,
-                fontWeight = FontWeight.Bold,
-            )
-            val latLon = stringResource(
-                R.string.map_selection_coordinates,
-                selection.latitude,
-                selection.longitude
-            )
-            Text(text = latLon, style = MaterialTheme.typography.caption)
-            selection.lastUpdatedMs?.let { updatedMs ->
-                val ago = DateUtils.getRelativeTimeSpanString(
-                    updatedMs,
-                    System.currentTimeMillis(),
-                    DateUtils.SECOND_IN_MILLIS
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val nameText = model.trackerName.ifBlank { stringResource(R.string.select_tracker) }
                 Text(
-                    text = stringResource(R.string.map_selection_updated_ago, ago),
-                    style = MaterialTheme.typography.caption,
-                )
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                ModeTextButton(
-                    label = stringResource(R.string.map_action_view_in_list),
-                    selected = false,
-                    onClick = onViewInList,
+                    text = nameText,
+                    style = MaterialTheme.typography.subtitle2,
+                    fontWeight = FontWeight.Bold,
+                    color = GeoVaultColorTokens.TextPrimary,
                     modifier = Modifier.weight(1f),
                 )
-                ModeTextButton(
-                    label = stringResource(R.string.map_action_view_params),
-                    selected = false,
-                    onClick = onViewParams,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            if (isLocked) {
-                Text(
-                    text = stringResource(R.string.map_selection_lock_active),
-                    style = MaterialTheme.typography.caption,
-                    color = GeoVaultColorTokens.PrimaryBlue,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                ModeTextButton(
-                    label = stringResource(R.string.map_action_focus_tracker),
-                    selected = false,
-                    onClick = onFocus,
-                    modifier = Modifier.weight(1f),
-                )
-                ModeTextButton(
-                    label = if (isLocked) {
-                        stringResource(R.string.map_action_unlock_selection)
-                    } else {
-                        stringResource(R.string.map_action_lock_selection)
-                    },
-                    selected = false,
+                IconButton(
                     onClick = onToggleLock,
-                    modifier = Modifier.weight(1f),
-                )
-                ModeTextButton(
-                    label = stringResource(R.string.trackers_dialog_cancel),
-                    selected = false,
-                    onClick = onClear,
-                    modifier = Modifier.weight(1f),
-                )
+                    modifier = Modifier.size(28.dp),
+                ) {
+                    Icon(
+                        imageVector = if (model.isLocked) Icons.Default.Lock else Icons.Outlined.LockOpen,
+                        contentDescription = if (model.isLocked) {
+                            stringResource(R.string.map_action_unlock_selection)
+                        } else {
+                            stringResource(R.string.map_action_lock_selection)
+                        },
+                        tint = GeoVaultColorTokens.PrimaryBlue,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .background(
+                            color = GeoVaultColorTokens.BorderLight,
+                            shape = CircleShape,
+                        )
+                        .clickable(onClick = onClear),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = stringResource(R.string.trackers_dialog_cancel),
+                        tint = GeoVaultColorTokens.PrimaryBlue,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+            val latLon = String.format(Locale.US, "%.4f, %.4f", model.latitude, model.longitude)
+            Text(
+                text = latLon,
+                style = MaterialTheme.typography.body2,
+                color = GeoVaultColorTokens.TextSecondary,
+                modifier = Modifier.clickable {
+                    clipboardHelper.copyText(latLon, label = "Coordinates")
+                },
+            )
+            val lastUpdatedText = formatLegacyLastUpdatedText(lastUpdatedMs = model.lastUpdatedMs)
+            Text(
+                text = lastUpdatedText,
+                style = MaterialTheme.typography.caption,
+                color = GeoVaultColorTokens.TextSecondary,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val iconButtons = mutableListOf<@Composable () -> Unit>()
+                if (model.showFocusAction) {
+                    iconButtons.add {
+                        MapInfoActionIconButton(
+                            onClick = onFocus,
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Default.Home,
+                                    contentDescription = stringResource(R.string.map_action_focus_tracker),
+                                    tint = GeoVaultColorTokens.PrimaryBlue,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            },
+                        )
+                    }
+                }
+                iconButtons.add {
+                    MapInfoActionIconButton(
+                        onClick = onViewParams,
+                        icon = {
+                            androidx.compose.foundation.Image(
+                                painter = painterResource(id = R.drawable.ic_params),
+                                contentDescription = stringResource(R.string.map_action_view_params),
+                                colorFilter = ColorFilter.tint(GeoVaultColorTokens.PrimaryBlue),
+                                modifier = Modifier.size(22.dp),
+                            )
+                        },
+                    )
+                }
+                iconButtons.add {
+                    MapInfoActionIconButton(
+                        onClick = onViewInList,
+                        icon = {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.List,
+                                contentDescription = stringResource(R.string.map_action_view_in_list),
+                                tint = GeoVaultColorTokens.PrimaryBlue,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        },
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    iconButtons.forEach { button ->
+                        button()
+                    }
+                }
             }
         }
     }
+}
+
+@Composable
+private fun MapInfoActionIconButton(
+    onClick: () -> Unit,
+    icon: @Composable () -> Unit,
+) {
+    GeoVaultSecondaryButton(
+        text = "",
+        onClick = onClick,
+        modifier = Modifier.size(40.dp),
+        fitToContent = true,
+        centeredContent = icon,
+        contentPadding = PaddingValues(0.dp),
+    )
+}
+
+@Composable
+private fun formatLegacyLastUpdatedText(lastUpdatedMs: Long?): String {
+    if (lastUpdatedMs == null) return stringResource(R.string.waiting_for_data)
+    val diffMs = System.currentTimeMillis() - lastUpdatedMs
+    val diffSec = (diffMs / 1000).coerceAtLeast(0)
+    val (value, unit) = when {
+        diffSec < 60 -> {
+            val n = diffSec.toInt()
+            val unit = if (n == 1) {
+                stringResource(R.string.map_updated_sec)
+            } else {
+                stringResource(R.string.map_updated_secs)
+            }
+            n to unit
+        }
+        diffSec < 3600 -> {
+            val n = (diffSec / 60).toInt()
+            val unit = if (n == 1) {
+                stringResource(R.string.map_updated_min)
+            } else {
+                stringResource(R.string.map_updated_mins)
+            }
+            n to unit
+        }
+        diffSec < 86400 -> {
+            val n = (diffSec / 3600).toInt()
+            val unit = if (n == 1) {
+                stringResource(R.string.map_updated_hr)
+            } else {
+                stringResource(R.string.map_updated_hrs)
+            }
+            n to unit
+        }
+        else -> {
+            val n = (diffSec / 86400).toInt()
+            val unit = if (n == 1) {
+                stringResource(R.string.map_updated_day_short)
+            } else {
+                stringResource(R.string.map_updated_days_short)
+            }
+            n to unit
+        }
+    }
+    return stringResource(R.string.map_updated_ago, value, unit)
 }
 

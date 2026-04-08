@@ -168,4 +168,18 @@ class TrackerMapViewModelStreamingContractsTest {
         )
         assertEquals("tracker-1", selectedId)
     }
+
+    @Test
+    fun resolveFocusActionVisible_singleSession_hidesFocusAction() {
+        val visible = TrackerMapViewModel.resolveFocusActionVisible(TrackerMapDisplayMode.SINGLE_SESSION)
+        assertEquals(false, visible)
+    }
+
+    @Test
+    fun resolveFocusActionVisible_allAndGroup_showFocusAction() {
+        val allVisible = TrackerMapViewModel.resolveFocusActionVisible(TrackerMapDisplayMode.ALL_QUEUE)
+        val groupVisible = TrackerMapViewModel.resolveFocusActionVisible(TrackerMapDisplayMode.GROUP_PLACEHOLDER)
+        assertEquals(true, allVisible)
+        assertEquals(true, groupVisible)
+    }
 }

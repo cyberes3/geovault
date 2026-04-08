@@ -114,6 +114,40 @@ class TrackerMapStateTransformsRemoteMarkersTest {
         assertEquals(listOf("remote-b", "remote-a"), render.points.map { it.id })
     }
 
+    @Test
+    fun buildRenderState_allQueue_usesTrackerDisplayNameForMarkerTitle() {
+        val render = TrackerMapStateTransforms.buildRenderState(
+            mode = TrackerMapDisplayMode.ALL_QUEUE,
+            trail = emptyList(),
+            runtime = TrackingRuntimeSnapshot(),
+            allQueueTrailsByTracker = mapOf(
+                "tracker-1" to listOf(
+                    QueuedLocation(time = 1L, latitude = 10.0, longitude = 20.0, altitude = null, speed = null, bearing = null, accuracy = null),
+                    QueuedLocation(time = 2L, latitude = 10.1, longitude = 20.1, altitude = null, speed = null, bearing = null, accuracy = null),
+                )
+            ),
+            trackerDisplayNameById = mapOf("tracker-1" to "Delta"),
+        )
+
+        val marker = render.points.first { it.id == "remote-tracker-1" }
+        assertEquals("Delta", marker.title)
+    }
+
+    @Test
+    fun buildRenderState_remoteFallback_usesTrackerIdWhenDisplayNameMissing() {
+        val render = TrackerMapStateTransforms.buildRenderState(
+            mode = TrackerMapDisplayMode.ALL_QUEUE,
+            trail = emptyList(),
+            runtime = TrackingRuntimeSnapshot(),
+            remoteLastPoints = mapOf("remote-a" to remotePoint("remote-a", 5.0, 6.0)),
+            activeStreamedTrackerIds = setOf("remote-a"),
+            trackerDisplayNameById = emptyMap(),
+        )
+
+        val marker = render.points.first { it.id == "remote-remote-a" }
+        assertEquals("remote-a", marker.title)
+    }
+
     private fun remotePoint(trackId: String, lat: Double, lon: Double): TrackPointEvent {
         return TrackPointEvent(
             source = TrackPointSource.REMOTE_STREAM,

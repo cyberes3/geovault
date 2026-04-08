@@ -112,6 +112,7 @@
     <string name="map_mode_session">Session</string>
     <string name="map_mode_all">All</string>
     <string name="map_mode_group">Group</string>
+    <string name="select_tracker">Select a tracker</string>
     <string name="map_group_picker_title">Selected group</string>
     <string name="map_group_picker_option">%1$s (%2$d)</string>
     <string name="map_group_empty_body">No visible groups are available for group map mode.</string>
@@ -126,6 +127,15 @@
     <string name="map_selection_updated_ago">Updated %1$s</string>
     <string name="map_selection_accuracy_meters">Accuracy: %1$.1f m</string>
     <string name="map_selection_lock_active">Selection lock is active</string>
+    <string name="map_updated_ago">Updated %1$d %2$s ago</string>
+    <string name="map_updated_sec">sec</string>
+    <string name="map_updated_secs">sec</string>
+    <string name="map_updated_min">min</string>
+    <string name="map_updated_mins">min</string>
+    <string name="map_updated_hr">hr</string>
+    <string name="map_updated_hrs">hr</string>
+    <string name="map_updated_day_short">day</string>
+    <string name="map_updated_days_short">days</string>
     <string name="map_fab_toggle_source">Toggle map source</string>
     <string name="map_fab_fit_trail">Fit queued trail and reset bearing</string>
     <string name="map_fab_follow_lock">Follow my location</string>

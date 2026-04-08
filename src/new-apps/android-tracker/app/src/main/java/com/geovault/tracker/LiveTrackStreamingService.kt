@@ -30,6 +30,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -70,6 +71,7 @@ class LiveTrackStreamingService : Service() {
     private var currentTrackerIds: Set<String> = emptySet()
     private var currentTrackerName: String? = null
     private var connectJob: Job? = null
+    private var wsHttpClient: OkHttpClient? = null
     private val connectionSessionId = AtomicLong(0L)
     private var lifecycle = StreamingLifecycleState()
     private val sessionGuard = StreamingSessionGuard.createDefault()
@@ -220,15 +222,8 @@ class LiveTrackStreamingService : Service() {
                 )
             }
         )
-        val wsClient = RetrofitClient.getAuthenticatedOkHttpClient(applicationContext).newBuilder()
-            .readTimeout(WS_READ_TIMEOUT_SEC, TimeUnit.SECONDS)
-            .writeTimeout(10, TimeUnit.SECONDS)
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .pingInterval(WS_PING_INTERVAL_SEC, TimeUnit.SECONDS)
-            .build()
-
         try {
-            val socket = wsClient.newWebSocket(request, listener)
+            val socket = getWebSocketClient().newWebSocket(request, listener)
             if (sessionId != connectionSessionId.get() || currentTrackerIds.isEmpty()) {
                 socket.close(1000, "stale_session")
                 return
@@ -271,6 +266,20 @@ class LiveTrackStreamingService : Service() {
         sessionGuard.markDisconnected()
         currentTrackerIds = emptySet()
         currentTrackerName = null
+    }
+
+    private fun getWebSocketClient(): OkHttpClient {
+        val existingClient = wsHttpClient
+        if (existingClient != null) {
+            return existingClient
+        }
+        return RetrofitClient.getAuthenticatedOkHttpClient(applicationContext).newBuilder()
+            .readTimeout(WS_READ_TIMEOUT_SEC, TimeUnit.SECONDS)
+            .writeTimeout(10, TimeUnit.SECONDS)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .pingInterval(WS_PING_INTERVAL_SEC, TimeUnit.SECONDS)
+            .build()
+            .also { builtClient -> wsHttpClient = builtClient }
     }
 
     private fun applyLifecycleEvent(

@@ -41,6 +41,7 @@ object TrackerMapStateTransforms {
         activeStreamedTrackerIds: Set<String> = emptySet(),
         allQueueTrailsByTracker: Map<String, List<QueuedLocation>> = emptyMap(),
         trackerColorById: Map<String, String> = emptyMap(),
+        trackerDisplayNameById: Map<String, String> = emptyMap(),
         displayedTrackerId: String = "",
         selectedMapTrackerId: String? = null,
         trackerRenderOrder: List<String> = emptyList(),
@@ -111,7 +112,7 @@ object TrackerMapStateTransforms {
                             id = "remote-$trackerId",
                             latitude = lastPoint.latitude,
                             longitude = lastPoint.longitude,
-                            title = trackerId,
+                            title = trackerDisplayNameById[trackerId]?.trim()?.takeIf { it.isNotEmpty() } ?: trackerId,
                             iconImageId = iconId,
                             iconRotationDegrees = rotation,
                         )
@@ -133,7 +134,8 @@ object TrackerMapStateTransforms {
                             id = "remote-${point.trackId}",
                             latitude = point.lat,
                             longitude = point.lon,
-                            title = point.trackId,
+                            title = trackerDisplayNameById[point.trackId]?.trim()?.takeIf { it.isNotEmpty() }
+                                ?: point.trackId,
                             iconImageId = iconId,
                         )
                     )

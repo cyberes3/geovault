@@ -176,6 +176,11 @@ fun MainScreen(
     val openSettingsTab = remember { { selectedTab = TrackerTab.SETTINGS.name } }
     val onMapHostNavigationRequested = remember {
         { request: MapHostNavigationRequest ->
+            if (!isHandlingTabBack && selectedTab.isNotBlank()) {
+                tabBackStack = (tabBackStack + selectedTab).takeLast(16)
+            }
+            // Leaving map via host navigation is an explicit context switch.
+            pendingMapReturnContext = null
             when (request.target) {
                 MapHostNavigationTarget.TRACKERS -> {
                     selectedTab = TrackerTab.TRACKERS.name

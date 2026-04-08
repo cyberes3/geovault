@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -66,6 +67,7 @@ fun GeoVaultBaseButton(
     minWidthWhenFitToContent: Dp = 1.dp,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
     centeredContent: (@Composable () -> Unit)? = null,
+    contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
 ) {
     val tooltipText = tooltip?.takeIf { it.isNotBlank() }
 
@@ -110,6 +112,7 @@ fun GeoVaultBaseButton(
             enabled = enabled,
             tooltipText = tooltipText,
             content = buttonContent,
+            contentPadding = contentPadding,
         )
     } else {
         Button(
@@ -125,6 +128,7 @@ fun GeoVaultBaseButton(
                 hoveredElevation = 0.dp,
                 focusedElevation = 0.dp
             ),
+            contentPadding = contentPadding,
             content = buttonContent,
         )
     }
@@ -139,6 +143,7 @@ private fun GeoVaultBaseButtonWithTooltip(
     enabled: Boolean,
     tooltipText: String,
     content: @Composable RowScope.() -> Unit,
+    contentPadding: PaddingValues,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -221,6 +226,7 @@ private fun GeoVaultBaseButtonWithTooltip(
             hoveredElevation = 0.dp,
             focusedElevation = 0.dp
         ),
+        contentPadding = contentPadding,
         content = content,
     )
 }
@@ -233,6 +239,7 @@ fun GeoVaultPrimaryButton(
     enabled: Boolean = true,
     tooltip: String? = null,
     fitToContent: Boolean = false,
+    contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
 ) {
     GeoVaultBaseButton(
         text = text,
@@ -249,6 +256,7 @@ fun GeoVaultPrimaryButton(
         enabled = enabled,
         tooltip = tooltip,
         fitToContent = fitToContent,
+        contentPadding = contentPadding,
     )
 }
 
@@ -263,6 +271,7 @@ fun GeoVaultSecondaryButton(
     fitToContent: Boolean = false,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
     centeredContent: (@Composable () -> Unit)? = null,
+    contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
 ) {
     GeoVaultBaseButton(
         text = text,
@@ -282,6 +291,7 @@ fun GeoVaultSecondaryButton(
         fitToContent = fitToContent,
         trailingContent = trailingContent,
         centeredContent = centeredContent,
+        contentPadding = contentPadding,
     )
 }
 

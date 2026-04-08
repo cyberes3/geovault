@@ -167,6 +167,11 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 ?.trim()
                 ?.takeIf { isBottomCardVisible && it.isNotEmpty() }
         }
+
+        @JvmStatic
+        internal fun resolveFocusActionVisible(mode: TrackerMapDisplayMode): Boolean {
+            return mode != TrackerMapDisplayMode.SINGLE_SESSION
+        }
     }
 
     private val appContext = application.applicationContext
@@ -364,10 +369,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             mode = mode,
             currentGroupId = preferredGroupId,
             groupModeOptions = groupOptions,
-            isBottomCardVisible = false,
-            selectedMapTracker = null,
-            selectionLockTrackerId = "",
         )
+        _uiState.value = stateWithClearedSelection(_uiState.value)
         if (mode != TrackerMapDisplayMode.SINGLE_SESSION) {
             pendingReopenSingleTrackerLoadId = null
         }
@@ -385,10 +388,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         _uiState.value = state.copy(
             currentGroupId = normalized,
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
-            isBottomCardVisible = false,
-            selectedMapTracker = null,
-            selectionLockTrackerId = "",
         )
+        _uiState.value = stateWithClearedSelection(_uiState.value)
         pendingReopenSingleTrackerLoadId = null
         requestRuntimeTrailReload()
         refreshStreamTargets()
@@ -411,10 +412,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             displayedTrackerName = resolvedName,
             currentGroupId = "",
             groupModeOptions = emptyList(),
-            isBottomCardVisible = false,
-            selectedMapTracker = null,
-            selectionLockTrackerId = "",
         )
+        _uiState.value = stateWithClearedSelection(_uiState.value)
         pendingReopenSingleTrackerLoadId = normalizedId
         requestRuntimeTrailReload()
         refreshStreamTargets()
@@ -431,10 +430,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             currentGroupId = resolvedGroupId,
             groupModeOptions = groupOptions,
-            isBottomCardVisible = false,
-            selectedMapTracker = null,
-            selectionLockTrackerId = "",
         )
+        _uiState.value = stateWithClearedSelection(_uiState.value)
         pendingReopenSingleTrackerLoadId = null
         requestRuntimeTrailReload()
         refreshStreamTargets()
@@ -451,10 +448,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             displayedTrackerName = state.runtime.selectedTrackerName,
             currentGroupId = "",
             groupModeOptions = emptyList(),
-            isBottomCardVisible = false,
-            selectedMapTracker = null,
-            selectionLockTrackerId = "",
         )
+        _uiState.value = stateWithClearedSelection(_uiState.value)
         pendingReopenSingleTrackerLoadId = selectedId
         requestRuntimeTrailReload()
         refreshStreamTargets()
@@ -491,16 +486,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             _uiState.value = closeBottomCardState(state)
             return
         }
-        val nextSelectionLockId = state.selectionLockTrackerId.trim()
-            .takeIf { it.isNotEmpty() && it == selection.trackerId }
-            .orEmpty()
-        _uiState.value = state.copy(
-            isBottomCardVisible = resolveBottomCardVisibilityForMarkerTap(
-                hasSelectionCard = true
-            ),
-            selectedMapTracker = selection,
-            selectionLockTrackerId = nextSelectionLockId,
-        )
+        _uiState.value = stateWithSelectionCard(state, selection)
     }
 
     fun onMapBackgroundTapped(): Boolean {
@@ -623,6 +609,28 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         )
     }
 
+    private fun stateWithSelectionCard(
+        state: TrackerMapUiState,
+        selection: TrackerMapSelectionCard
+    ): TrackerMapUiState {
+        val nextSelectionLockId = state.selectionLockTrackerId.trim()
+            .takeIf { it.isNotEmpty() && it == selection.trackerId }
+            .orEmpty()
+        return state.copy(
+            isBottomCardVisible = resolveBottomCardVisibilityForMarkerTap(hasSelectionCard = true),
+            selectedMapTracker = selection,
+            selectionLockTrackerId = nextSelectionLockId,
+        )
+    }
+
+    private fun stateWithClearedSelection(state: TrackerMapUiState): TrackerMapUiState {
+        return state.copy(
+            isBottomCardVisible = false,
+            selectedMapTracker = null,
+            selectionLockTrackerId = "",
+        )
+    }
+
     fun onHostPaused() {
         lastBackgroundAtElapsedMs = SystemClock.elapsedRealtime()
     }
@@ -741,12 +749,10 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 _uiState.value = _uiState.value.copy(
                     displayedTrackerId = "",
                     displayedTrackerName = "",
-                    isBottomCardVisible = false,
-                    selectedMapTracker = null,
-                    selectionLockTrackerId = "",
                     remoteLastPoints = emptyMap(),
                     streamTargetIds = emptySet()
                 )
+                _uiState.value = stateWithClearedSelection(_uiState.value)
                 MapStreamingServiceHelper.stopStreaming(appContext)
             }
             is TrackerMapResumeDecision.LoadSingleTrackerRuntime,
@@ -766,10 +772,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     _uiState.value = _uiState.value.copy(
                         displayedTrackerId = trackerId,
                         displayedTrackerName = trackerName,
-                        isBottomCardVisible = false,
-                        selectedMapTracker = null,
-                        selectionLockTrackerId = "",
                     )
+                    _uiState.value = stateWithClearedSelection(_uiState.value)
                 }
                 reloadTrailFromDatabase(force = true)
                 if (pendingReopenSingleTrackerLoadId == trackerId) {
@@ -806,6 +810,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     fun buildMapRenderState(): com.geovault.common.maps.render.MapRenderState {
         val s = _uiState.value
         val trackerColors = trackerManagementStateStore.trackers.value.associate { it.id to (it.color ?: "") }
+        val trackerDisplayNames = trackerManagementStateStore.trackers.value.associate { it.id to it.name }
         val trackerRenderOrder = trackerManagementStateStore.trackers.value.map { it.id }
         val effectiveDisplayedId = effectiveDisplayedTrackerId(s)
         val allowAccuracyFallback = s.mode == TrackerMapDisplayMode.SINGLE_SESSION &&
@@ -822,6 +827,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             activeStreamedTrackerIds = s.activeStreamedTrackerIds,
             allQueueTrailsByTracker = s.allQueueTrailsByTracker,
             trackerColorById = trackerColors,
+            trackerDisplayNameById = trackerDisplayNames,
             displayedTrackerId = effectiveDisplayedId,
             selectedMapTrackerId = resolveRenderSelectedMapTrackerId(
                 isBottomCardVisible = s.isBottomCardVisible,
