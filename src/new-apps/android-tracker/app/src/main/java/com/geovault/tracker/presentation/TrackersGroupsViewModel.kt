@@ -625,6 +625,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
 
     fun refreshAll(asPullRefresh: Boolean = false) {
         viewModelScope.launch {
+            val forceRefresh = asPullRefresh || !_uiState.value.hasCompletedInitialLoad
             _uiState.update {
                 it.copy(
                     isLoading = !asPullRefresh,
@@ -634,7 +635,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             }
             refreshStateFromServer(
                 userMessage = null,
-                forceRefresh = asPullRefresh
+                forceRefresh = forceRefresh
             )
         }
     }

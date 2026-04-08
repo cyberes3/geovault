@@ -18,9 +18,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 class SharedViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -34,7 +33,9 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _snackbarEvents = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val snackbarEvents: SharedFlow<String> = _snackbarEvents
-    private val refreshMutex = Mutex()
+    private var refreshInFlightJob: Job? = null
+    private var refreshPending: Boolean = false
+    private var refreshPendingFeedbackMessage: String? = null
 
     fun showSharedList() {
         _uiState.update { it.copy(viewMode = SharedViewMode.SHARED_LIST) }
@@ -138,8 +139,23 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private suspend fun refreshStateFromServerSerialized(feedbackMessage: String?) {
-        refreshMutex.withLock {
-            refreshStateFromServer(feedbackMessage = feedbackMessage)
+        if (!feedbackMessage.isNullOrBlank()) {
+            refreshPendingFeedbackMessage = feedbackMessage
+        }
+        refreshPending = true
+        while (refreshPending) {
+            val runningJob = refreshInFlightJob
+            if (runningJob?.isActive == true) {
+                runningJob.join()
+                continue
+            }
+            refreshPending = false
+            val nextFeedbackMessage = refreshPendingFeedbackMessage
+            refreshPendingFeedbackMessage = null
+            refreshInFlightJob = viewModelScope.launch {
+                refreshStateFromServer(feedbackMessage = nextFeedbackMessage)
+            }
+            refreshInFlightJob?.join()
         }
     }
 

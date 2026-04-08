@@ -14,6 +14,7 @@ class MainStartupRefreshCoordinatorTest {
     fun run_marksServerAccessibleWhenTrackersLoadSucceeds() = runBlocking {
         var loadTrackerCalls = 0
         var loadTrackerGeometryCalls = 0
+        var loadTrackerCoordinatesCalls = 0
         val outcome = MainStartupRefreshCoordinator.run(
             selectedTrackerId = "t1",
             loadTrackers = { RepositoryResult.Success(Unit) },
@@ -26,6 +27,10 @@ class MainStartupRefreshCoordinatorTest {
             loadTrackerGeometry = {
                 loadTrackerGeometryCalls += 1
                 RepositoryResult.Success(Unit)
+            },
+            loadTrackerCoordinates = {
+                loadTrackerCoordinatesCalls += 1
+                RepositoryResult.Success(Unit)
             }
         )
 
@@ -33,12 +38,14 @@ class MainStartupRefreshCoordinatorTest {
         assertTrue(outcome.selectedTrackerPrefetchAttempted)
         assertEquals(1, loadTrackerCalls)
         assertEquals(1, loadTrackerGeometryCalls)
+        assertEquals(1, loadTrackerCoordinatesCalls)
     }
 
     @Test
     fun run_marksServerAccessibleWhenAnyStartupLoadSucceeds() = runBlocking {
         var loadTrackerCalls = 0
         var loadTrackerGeometryCalls = 0
+        var loadTrackerCoordinatesCalls = 0
         val outcome = MainStartupRefreshCoordinator.run(
             selectedTrackerId = "",
             loadTrackers = { RepositoryResult.Failure(AppError.Network) },
@@ -51,6 +58,10 @@ class MainStartupRefreshCoordinatorTest {
             loadTrackerGeometry = {
                 loadTrackerGeometryCalls += 1
                 RepositoryResult.Success(Unit)
+            },
+            loadTrackerCoordinates = {
+                loadTrackerCoordinatesCalls += 1
+                RepositoryResult.Success(Unit)
             }
         )
 
@@ -58,5 +69,6 @@ class MainStartupRefreshCoordinatorTest {
         assertFalse(outcome.selectedTrackerPrefetchAttempted)
         assertEquals(0, loadTrackerCalls)
         assertEquals(0, loadTrackerGeometryCalls)
+        assertEquals(0, loadTrackerCoordinatesCalls)
     }
 }

@@ -31,7 +31,6 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -91,6 +90,8 @@ import com.geovault.tracker.presentation.TrackerMapDisplayMode
 import com.geovault.tracker.presentation.TrackerMapGroupModeOption
 import com.geovault.tracker.presentation.TrackerMapRenderContract
 import com.geovault.tracker.presentation.TrackerMapSelectionCard
+import com.geovault.tracker.presentation.TrackerMapTopLeftChipMapper
+import com.geovault.tracker.presentation.TrackerMapTopLeftChipUiModel
 import com.geovault.tracker.presentation.TrackerMapUiState
 import com.geovault.tracker.presentation.TrackerMapViewModel
 import org.maplibre.android.geometry.LatLng
@@ -162,6 +163,7 @@ private fun TrackerMapAuthenticatedContent(
     onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
+    val topLeftChipMapper = remember { TrackerMapTopLeftChipMapper() }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var locationPermission by remember {
@@ -510,13 +512,23 @@ private fun TrackerMapAuthenticatedContent(
                 actions = mapFabActions,
             )
 
-            MapStatusCornerIndicator(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = 16.dp),
-                state = state,
-                mapReady = phase == GeoVaultMapPhase.Ready,
-            )
+            val topLeftChipModel = topLeftChipMapper.map(state)
+            if (topLeftChipModel is TrackerMapTopLeftChipUiModel.Visible) {
+                MapTopLeftTrackerChip(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(top = 16.dp, start = 16.dp),
+                    model = topLeftChipModel,
+                    onCardClick = {
+                        onHostNavigationRequested(
+                            MapHostNavigationRequestResolver.fromListNavigationTarget(
+                                viewModel.resolveListNavigationTarget()
+                            )
+                        )
+                    },
+                    onResetClick = viewModel::restoreSelectedTrackerMapContext,
+                )
+            }
             if (state.isHistoryLoading) {
                 Box(
                     modifier = Modifier
@@ -607,65 +619,6 @@ private fun MapStatusStrip(
         color = GeoVaultColorTokens.TextSecondary,
         style = MaterialTheme.typography.caption,
     )
-}
-
-@Composable
-private fun MapStatusCornerIndicator(
-    modifier: Modifier = Modifier,
-    state: TrackerMapUiState,
-    mapReady: Boolean,
-) {
-    val streaming = state.activeStreamedTrackerIds.isNotEmpty()
-    val loading = !mapReady
-    val accuracyWarning = shouldShowGpsAccuracyWarning(state)
-    if (!streaming && !loading && !accuracyWarning) return
-    Surface(
-        modifier = modifier,
-        color = MaterialTheme.colors.surface.copy(alpha = 0.92f),
-        shape = MaterialTheme.shapes.small,
-        elevation = 0.dp,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            when {
-                loading && streaming -> {
-                    GeoVaultLoadingSpinner(spinnerSize = 16.dp)
-                    Text(
-                        text = stringResource(R.string.map_status_map_loading),
-                        style = MaterialTheme.typography.caption,
-                    )
-                }
-                accuracyWarning -> {
-                    androidx.compose.material.Icon(
-                        imageVector = Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = MaterialTheme.colors.error,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Text(
-                        text = stringResource(R.string.map_status_accuracy_low),
-                        style = MaterialTheme.typography.caption,
-                        color = MaterialTheme.colors.error,
-                    )
-                }
-                streaming -> {
-                    Text(
-                        text = "●",
-                        color = MaterialTheme.colors.error,
-                        fontSize = 13.sp,
-                        style = MaterialTheme.typography.caption,
-                    )
-                    Text(
-                        text = stringResource(R.string.map_status_streaming_live),
-                        style = MaterialTheme.typography.caption,
-                    )
-                }
-            }
-        }
-    }
 }
 
 private fun shouldShowGpsAccuracyWarning(state: TrackerMapUiState): Boolean {
@@ -879,6 +832,7 @@ private fun MapTrackerSelectionPanel(
                         modifier = Modifier.size(20.dp),
                     )
                 }
+                Spacer(modifier = Modifier.size(8.dp))
                 Box(
                     modifier = Modifier
                         .size(28.dp)

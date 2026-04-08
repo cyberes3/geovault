@@ -6,6 +6,8 @@ import com.geovault.tracker.MapVisibilityRequest
 import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 data class HiddenMapItemsSnapshot(
     val mapVisibility: MapVisibilityResponse,
@@ -21,12 +23,20 @@ object HiddenMapItemsCoordinator {
         loadTrackers: suspend (Boolean) -> RepositoryResult<List<Tracker>>,
         loadGroups: suspend (Boolean) -> RepositoryResult<List<Group>>,
     ): RepositoryResult<HiddenMapItemsSnapshot> {
-        val mapVisibility = when (val loaded = loadMapVisibility(forceRefresh)) {
-            is RepositoryResult.Success -> loaded.data
-            is RepositoryResult.Failure -> return RepositoryResult.Failure(loaded.error)
+        val (visibilityResult, trackersResult, groupsResult) = coroutineScope {
+            val visibilityDeferred = async { loadMapVisibility(forceRefresh) }
+            val trackersDeferred = async { loadTrackers(forceRefresh) }
+            val groupsDeferred = async { loadGroups(forceRefresh) }
+            Triple(
+                visibilityDeferred.await(),
+                trackersDeferred.await(),
+                groupsDeferred.await(),
+            )
         }
-        val trackersResult = loadTrackers(forceRefresh)
-        val groupsResult = loadGroups(forceRefresh)
+        val mapVisibility = when (visibilityResult) {
+            is RepositoryResult.Success -> visibilityResult.data
+            is RepositoryResult.Failure -> return RepositoryResult.Failure(visibilityResult.error)
+        }
         val warning = firstError(trackersResult, groupsResult)
         return RepositoryResult.Success(
             HiddenMapItemsSnapshot(

@@ -1,0 +1,124 @@
+package com.geovault.tracker.ui
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.Card
+import androidx.compose.material.Icon
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.tracker.R
+import com.geovault.tracker.presentation.TrackerMapTopLeftChipText
+import com.geovault.tracker.presentation.TrackerMapTopLeftChipUiModel
+
+@Composable
+fun MapTopLeftTrackerChip(
+    model: TrackerMapTopLeftChipUiModel.Visible,
+    onCardClick: () -> Unit,
+    onResetClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val cardDescription = stringResource(model.cardContentDescriptionResId)
+    val chipShape: Shape = RoundedCornerShape(22.dp)
+    Card(
+        modifier = modifier
+            .semantics(mergeDescendants = true) {
+                contentDescription = cardDescription
+            }
+            .clickable(onClick = onCardClick),
+        shape = chipShape,
+        elevation = 0.dp,
+        backgroundColor = GeoVaultColorTokens.PrimaryBlue,
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier.padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+        ) {
+            val maxTitleWidth = ((maxWidth * 0.66f) - 90.dp).coerceAtLeast(72.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(
+                    if (model.showReset) 6.dp else 8.dp
+                ),
+            ) {
+                Icon(
+                    painter = painterResource(model.iconResId),
+                    contentDescription = null,
+                    tint = MaterialTheme.colors.onPrimary,
+                    modifier = Modifier.size(24.dp),
+                )
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = maxTitleWidth)
+                        .padding(end = if (model.showReset) 0.dp else 4.dp),
+                ) {
+                    Text(
+                        text = model.title.resolve(),
+                        color = MaterialTheme.colors.onPrimary,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    model.subtitle?.let { subtitle ->
+                        Text(
+                            text = subtitle.resolve(),
+                            color = MaterialTheme.colors.onPrimary,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                        )
+                    }
+                }
+                if (model.showReset) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clickable(onClick = onResetClick)
+                            .padding(4.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = stringResource(model.resetContentDescriptionResId),
+                            tint = MaterialTheme.colors.onPrimary,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .size(20.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrackerMapTopLeftChipText.resolve(): String {
+    return when (this) {
+        is TrackerMapTopLeftChipText.Resource -> stringResource(resId)
+        is TrackerMapTopLeftChipText.Value -> value
+    }
+}

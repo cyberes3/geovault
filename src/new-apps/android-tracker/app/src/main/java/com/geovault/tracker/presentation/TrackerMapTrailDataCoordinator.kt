@@ -4,6 +4,8 @@ import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerCoordinatesResponse
 import com.geovault.tracker.db.QueuedLocation
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 object TrackerMapTrailDataCoordinator {
     suspend fun loadSingleTrackerTrail(
@@ -17,11 +19,15 @@ object TrackerMapTrailDataCoordinator {
         mergeCoordinates: (List<List<Double>>, List<List<Double>>) -> List<List<Double>>,
         mapCoordinatesToTrail: (List<List<Double>>) -> List<QueuedLocation>,
     ): List<QueuedLocation> {
-        val coordinatesResponse = when (val response = loadTrackerCoordinates(trackerId)) {
-            is RepositoryResult.Success -> response.data.coordinates
-            is RepositoryResult.Failure -> emptyList()
+        val (coordinatesResponse, geometryResult) = coroutineScope {
+            val coordinatesDeferred = async { loadTrackerCoordinates(trackerId) }
+            val geometryDeferred = async { loadTrackerGeometry(trackerId) }
+            val resolvedCoordinates = when (val response = coordinatesDeferred.await()) {
+                is RepositoryResult.Success -> response.data.coordinates
+                is RepositoryResult.Failure -> emptyList()
+            }
+            resolvedCoordinates to geometryDeferred.await()
         }
-        val geometryResult = loadTrackerGeometry(trackerId)
         val geometryCoords = when (geometryResult) {
             is RepositoryResult.Success -> geometryResult.data.geometry?.coordinates.orEmpty()
             is RepositoryResult.Failure -> emptyList()
@@ -77,10 +83,16 @@ object TrackerMapTrailDataCoordinator {
         trackerIds: Collection<String>,
         loadTrackerCoordinates: suspend (String) -> RepositoryResult<TrackerCoordinatesResponse>,
     ): Map<String, List<List<Double>>> {
-        return trackerIds.associateWith { trackerId ->
-            when (val response = loadTrackerCoordinates(trackerId)) {
-                is RepositoryResult.Success -> response.data.coordinates
-                is RepositoryResult.Failure -> emptyList()
+        return coroutineScope {
+            trackerIds.associateWith { trackerId ->
+                async {
+                    when (val response = loadTrackerCoordinates(trackerId)) {
+                        is RepositoryResult.Success -> response.data.coordinates
+                        is RepositoryResult.Failure -> emptyList()
+                    }
+                }
+            }.mapValues { (_, deferred) ->
+                deferred.await()
             }
         }
     }

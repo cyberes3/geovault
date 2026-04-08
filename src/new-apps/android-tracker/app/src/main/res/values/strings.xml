@@ -113,6 +113,10 @@
     <string name="map_mode_all">All</string>
     <string name="map_mode_group">Group</string>
     <string name="select_tracker">Select a tracker</string>
+    <string name="all_trackers">All Trackers</string>
+    <string name="groups_title">Groups</string>
+    <string name="show_selected_tracker">Show selected tracker</string>
+    <string name="map_chip_tracker_card_content_description">Open this map selection in your list.</string>
     <string name="map_group_picker_title">Selected group</string>
     <string name="map_group_picker_option">%1$s (%2$d)</string>
     <string name="map_group_empty_body">No visible groups are available for group map mode.</string>

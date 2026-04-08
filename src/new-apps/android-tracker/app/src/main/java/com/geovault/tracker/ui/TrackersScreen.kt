@@ -730,6 +730,11 @@ private fun TrackersGroupsAuthenticatedBody(
     val loadingTrackersText = stringResource(R.string.loading_trackers)
     val loadingGroupsText = stringResource(R.string.loading_groups)
 
+    LaunchedEffect(Unit) {
+        trackersListState.scrollToItem(0)
+        groupsListState.scrollToItem(0)
+    }
+
     LaunchedEffect(navigationRequest, state.subTab, visibleTrackers, visibleGroups, state.isLoading, state.isPullRefreshing) {
         val request = navigationRequest ?: return@LaunchedEffect
         if (request.subTab != state.subTab || request.focus != MapHostNavigationFocus.SCROLL_TO_ITEM) {

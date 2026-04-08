@@ -253,7 +253,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 loadTracker = { trackerId -> trackerManagementRepository.loadTracker(trackerId) },
                 loadTrackerGeometry = { trackerId ->
                     trackerManagementRepository.loadTrackerGeometry(trackerId)
-                }
+                },
+                loadTrackerCoordinates = { trackerId ->
+                    trackerManagementRepository.loadTrackerCoordinates(trackerId)
+                },
             )
             _state.update { it.copy(isServerAccessible = outcome.isServerAccessible) }
         }

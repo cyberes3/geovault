@@ -440,17 +440,25 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     fun restoreSelectedTrackerAfterStreamingStop() {
         val state = _uiState.value
         if (state.runtime.isRunning) return
+        restoreSelectedTrackerMapContext()
+    }
+
+    fun restoreSelectedTrackerMapContext() {
+        val state = _uiState.value
         val selectedId = state.runtime.selectedTrackerId.trim()
-        if (selectedId.isEmpty()) return
         _uiState.value = state.copy(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             displayedTrackerId = selectedId,
-            displayedTrackerName = state.runtime.selectedTrackerName,
+            displayedTrackerName = if (selectedId.isNotEmpty()) {
+                state.runtime.selectedTrackerName
+            } else {
+                ""
+            },
             currentGroupId = "",
             groupModeOptions = emptyList(),
         )
         _uiState.value = stateWithClearedSelection(_uiState.value)
-        pendingReopenSingleTrackerLoadId = selectedId
+        pendingReopenSingleTrackerLoadId = selectedId.ifEmpty { null }
         requestRuntimeTrailReload()
         refreshStreamTargets()
     }
@@ -611,13 +619,9 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun closeBottomCardState(state: TrackerMapUiState): TrackerMapUiState {
-        val selectedTrackerId = state.selectedMapTracker?.trackerId.orEmpty()
-        val clearSelectionLock = selectedTrackerId.isNotEmpty() &&
-            state.selectionLockTrackerId == selectedTrackerId
         return state.copy(
             isBottomCardVisible = false,
             selectedMapTracker = null,
-            selectionLockTrackerId = if (clearSelectionLock) "" else state.selectionLockTrackerId,
         )
     }
 
@@ -943,13 +947,27 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         )
         if (!force && lastTrailLoadSeed == seed) return
         lastTrailLoadSeed = seed
-        _uiState.value = _uiState.value.copy(isHistoryLoading = true)
+        var workingState = state
+        preloadedSingleTrackerTrailFromCacheOrNull(
+            mode = workingState.mode,
+            activeTrackerId = activeTrackerId
+        )?.let { preloadedTrail ->
+            if (workingState.trail.isEmpty()) {
+                workingState = workingState.copy(
+                    trail = preloadedTrail,
+                    allQueueTrailsByTracker = emptyMap(),
+                )
+                _uiState.value = workingState
+            }
+        }
+        val shouldShowLoading = workingState.trail.isEmpty() && workingState.allQueueTrailsByTracker.isEmpty()
+        _uiState.value = _uiState.value.copy(isHistoryLoading = shouldShowLoading)
 
         try {
             val plan = TrackerMapTrailReloadCoordinator.resolvePlan(
                 TrackerMapTrailReloadInput(
-                    mode = state.mode,
-                    runtimeRunning = state.runtime.isRunning,
+                    mode = workingState.mode,
+                    runtimeRunning = workingState.runtime.isRunning,
                     activeTrackerId = activeTrackerId,
                     rosterTrackerIds = rosterTrackerIds,
                     groupSelection = groupSelection
@@ -974,12 +992,12 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             _uiState.value = state.copy(
                 trail = trail,
                 allQueueTrailsByTracker = allQueueTrailsByTracker,
-                currentGroupId = if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+                currentGroupId = if (workingState.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
                     plan.resolvedGroupId
                 } else {
-                    state.currentGroupId
+                    workingState.currentGroupId
                 },
-                groupModeOptions = if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+                groupModeOptions = if (workingState.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
                     resolveGroupModeOptions()
                 } else {
                     emptyList()
@@ -1138,6 +1156,21 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 dist = null
             )
         }.takeLast(TRAIL_POINT_LIMIT)
+    }
+
+    private fun preloadedSingleTrackerTrailFromCacheOrNull(
+        mode: TrackerMapDisplayMode,
+        activeTrackerId: String
+    ): List<QueuedLocation>? {
+        if (mode != TrackerMapDisplayMode.SINGLE_SESSION) return null
+        val trackerId = activeTrackerId.trim()
+        if (trackerId.isEmpty()) return null
+        val cachedTracker = trackerManagementStateStore.trackers.value
+            .firstOrNull { it.id == trackerId }
+            ?: return null
+        val cachedGeometry = cachedTracker.geometry?.coordinates.orEmpty()
+        if (cachedGeometry.isEmpty()) return null
+        return mapCoordinatesToTrail(cachedGeometry).takeIf { it.isNotEmpty() }
     }
 
     private fun handleTrackPointEvent(point: TrackPointEvent) {
