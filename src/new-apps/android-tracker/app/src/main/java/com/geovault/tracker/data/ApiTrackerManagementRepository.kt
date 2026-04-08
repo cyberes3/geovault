@@ -24,7 +24,6 @@ import com.geovault.tracker.TrackerSettingsRequest
 import com.geovault.tracker.UsersResponse
 import com.geovault.tracker.toDomainModel
 import com.geovault.tracker.toDomainModels
-import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -48,17 +47,6 @@ class ApiTrackerManagementRepository(
     @Volatile private var cachedApiBaseUrl: String? = null
     @Volatile private var cachedApi: TrackerApi? = null
 
-    private fun sortTrackers(trackers: List<Tracker>): List<Tracker> {
-        val locale = Locale.getDefault()
-        return trackers.sortedWith(
-            NaturalSort.naturalOrderBy<Tracker> { tracker ->
-                tracker.name.lowercase(locale)
-            }.thenBy { tracker ->
-                tracker.id.lowercase(locale)
-            }
-        )
-    }
-
     override suspend fun loadTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> {
         if (!forceRefresh) {
             val cachedTrackers = cacheMutex.withLock { trackersCache }
@@ -68,7 +56,7 @@ class ApiTrackerManagementRepository(
         }
         val networkResult = executeApiCall { api -> api.getTrackers().execute() }
         if (networkResult is RepositoryResult.Success) {
-            val trackers = sortTrackers(networkResult.data.toDomainModels())
+            val trackers = stateStore.canonicalizeTrackers(networkResult.data.toDomainModels())
             cacheMutex.withLock {
                 trackersCache = trackers
             }
@@ -96,7 +84,7 @@ class ApiTrackerManagementRepository(
                     .orEmpty()
                     .plus(tracker)
                     .distinctBy { it.id }
-                    .let(::sortTrackers)
+                    .let(stateStore::canonicalizeTrackers)
             }
             stateStore.publishTracker(tracker)
             Log.d(
@@ -126,7 +114,7 @@ class ApiTrackerManagementRepository(
                         .orEmpty()
                         .plus(mergedTracker)
                         .distinctBy { it.id }
-                        .let(::sortTrackers)
+                        .let(stateStore::canonicalizeTrackers)
                     mergedTracker
                 }
                 stateStore.publishTracker(merged)
@@ -171,7 +159,7 @@ class ApiTrackerManagementRepository(
                         .orEmpty()
                         .plus(mergedById.values)
                         .distinctBy { it.id }
-                        .let(::sortTrackers)
+                        .let(stateStore::canonicalizeTrackers)
                     mergedById.values.toList()
                 }
                 mergedTrackers.forEach { tracker -> stateStore.publishTracker(tracker) }
@@ -186,7 +174,7 @@ class ApiTrackerManagementRepository(
         if (networkResult is RepositoryResult.Success) {
             val tracker = networkResult.data.toDomainModel()
             cacheMutex.withLock {
-                trackersCache = trackersCache.orEmpty().plus(tracker).let(::sortTrackers)
+                trackersCache = trackersCache.orEmpty().plus(tracker).let(stateStore::canonicalizeTrackers)
             }
             stateStore.publishTracker(tracker)
             return RepositoryResult.Success(tracker)
@@ -209,7 +197,7 @@ class ApiTrackerManagementRepository(
             cacheMutex.withLock {
                 trackersCache = trackersCache
                     ?.map { if (it.id == trackerId) tracker else it }
-                    ?.let(::sortTrackers)
+                    ?.let(stateStore::canonicalizeTrackers)
             }
             stateStore.publishTracker(tracker, emitEvent = publishToStore)
             Log.d(
@@ -280,7 +268,7 @@ class ApiTrackerManagementRepository(
                     .orEmpty()
                     .plus(tracker)
                     .distinctBy { it.id }
-                    .let(::sortTrackers)
+                    .let(stateStore::canonicalizeTrackers)
             }
             stateStore.publishTracker(tracker)
             return RepositoryResult.Success(tracker)

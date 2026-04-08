@@ -24,11 +24,17 @@ sealed interface TrackerManagementEvent {
 }
 
 class TrackerManagementStateStore {
-    private val locale: Locale = Locale.getDefault()
-    private val trackerNameComparator = NaturalSort.naturalOrderBy<Tracker> { tracker ->
-        tracker.name.lowercase(locale)
-    }.thenBy { tracker ->
-        tracker.id.lowercase(locale)
+    private fun trackerNameComparator(): Comparator<Tracker> {
+        val locale = Locale.getDefault()
+        return NaturalSort.naturalOrderBy<Tracker> { tracker ->
+            tracker.name.lowercase(locale)
+        }.thenBy { tracker ->
+            tracker.id.lowercase(locale)
+        }
+    }
+
+    fun canonicalizeTrackers(trackers: List<Tracker>): List<Tracker> {
+        return trackers.sortedWith(trackerNameComparator())
     }
 
     private val _events = MutableSharedFlow<TrackerManagementEvent>(extraBufferCapacity = 128)
@@ -44,9 +50,10 @@ class TrackerManagementStateStore {
     val mapVisibility: StateFlow<MapVisibilityResponse?> = _mapVisibility.asStateFlow()
 
     fun publishTrackers(trackers: List<Tracker>) {
-        if (_trackers.value == trackers) return
-        _trackers.value = trackers
-        _events.tryEmit(TrackerManagementEvent.TrackersRefreshed(trackers))
+        val sortedTrackers = canonicalizeTrackers(trackers)
+        if (_trackers.value == sortedTrackers) return
+        _trackers.value = sortedTrackers
+        _events.tryEmit(TrackerManagementEvent.TrackersRefreshed(sortedTrackers))
     }
 
     fun publishTracker(tracker: Tracker, emitEvent: Boolean = true) {
@@ -55,7 +62,7 @@ class TrackerManagementStateStore {
         _trackers.value = _trackers.value
             .filterNot { it.id == tracker.id }
             .plus(tracker)
-            .sortedWith(trackerNameComparator)
+            .let(::canonicalizeTrackers)
         if (emitEvent) {
             _events.tryEmit(TrackerManagementEvent.TrackerUpserted(tracker))
         }

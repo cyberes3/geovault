@@ -65,7 +65,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.geovault.common.NaturalSort
 import com.geovault.common.ui.components.GeoVaultCheckmark
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInput
@@ -90,6 +89,9 @@ import com.geovault.tracker.presentation.TrackerLeaveKind
 import com.geovault.tracker.presentation.TrackerShareVisibility
 import com.geovault.tracker.presentation.TrackerSharingSettingsPolicy
 import com.geovault.tracker.presentation.TrackerKmlExportEvent
+import com.geovault.tracker.presentation.TrackersListPositioningAction
+import com.geovault.tracker.presentation.TrackersListPositioningInput
+import com.geovault.tracker.presentation.TrackersListPositioningPolicy
 import com.geovault.tracker.presentation.TrackersGroupsDialog
 import com.geovault.tracker.presentation.TrackersGroupsSubTab
 import com.geovault.tracker.presentation.TrackersGroupsUiState
@@ -673,16 +675,7 @@ private fun TrackersGroupsAuthenticatedBody(
     val selectedTrackerId = remember(state.trackers, state.dialog) { SelectedTrackerPrefs.selectedTrackerId(context) }
     val visibleTrackers = remember(state.trackers) { state.trackers.filter(::isVisibleOwnerTracker) }
     val visibleGroups = remember(state.groups) { state.groups.filter(::isVisibleOwnerGroup) }
-    val orderedVisibleTrackers = remember(visibleTrackers) {
-        val locale = Locale.getDefault()
-        visibleTrackers.sortedWith(
-            NaturalSort.naturalOrderBy<Tracker> { tracker ->
-                tracker.name.lowercase(locale)
-            }.thenBy { tracker ->
-                tracker.id.lowercase(locale)
-            }
-        )
-    }
+    val orderedVisibleTrackers = visibleTrackers
     var navigationRefreshAttempts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var highlightedTrackerId by remember { mutableStateOf<String?>(null) }
     var highlightedGroupId by remember { mutableStateOf<String?>(null) }
@@ -740,72 +733,106 @@ private fun TrackersGroupsAuthenticatedBody(
     val loadingTrackersText = stringResource(R.string.loading_trackers)
     val loadingGroupsText = stringResource(R.string.loading_groups)
 
-    LaunchedEffect(navigationRequest, state.subTab, orderedVisibleTrackers, visibleGroups, state.isLoading, state.isPullRefreshing) {
-        val request = navigationRequest ?: return@LaunchedEffect
-        if (request.subTab != state.subTab || request.focus != MapHostNavigationFocus.SCROLL_TO_ITEM) {
-            if (request.subTab == state.subTab) {
+    LaunchedEffect(navigationRequest, state.subTab, orderedVisibleTrackers, visibleGroups, state.isLoading, state.isPullRefreshing, didInitialTrackersTopScroll) {
+        val request = navigationRequest
+        val action = TrackersListPositioningPolicy.resolve(
+            TrackersListPositioningInput(
+                activeSubTab = state.subTab,
+                isLoading = state.isLoading,
+                isPullRefreshing = state.isPullRefreshing,
+                hasInitializedTrackersTop = didInitialTrackersTopScroll,
+                navigationRequest = request,
+            )
+        )
+        when (action) {
+            TrackersListPositioningAction.NoOp -> Unit
+            TrackersListPositioningAction.ScrollToTopOnce -> {
+                if (orderedVisibleTrackers.isNotEmpty()) {
+                    trackersListState.scrollToItem(0)
+                }
+                didInitialTrackersTopScroll = true
+            }
+            TrackersListPositioningAction.ConsumeWithoutScroll -> {
+                didInitialTrackersTopScroll = true
+                request?.let { navigationRefreshAttempts = navigationRefreshAttempts - it.toNavigationKey() }
                 onNavigationRequestHandled()
             }
-            return@LaunchedEffect
-        }
-        val (targetIndex, targetTrackerId, targetGroupId) = when (state.subTab) {
-            TrackersGroupsSubTab.TRACKERS -> {
-                val trackerId = request.trackerId
-                if (trackerId.isNullOrBlank()) {
-                    Triple(-1, null, null)
-                } else {
-                    val index = orderedVisibleTrackers.indexOfFirst { it.id == trackerId }
-                    Triple(index, if (index >= 0) trackerId else null, null)
-                }
-            }
-            TrackersGroupsSubTab.GROUPS -> {
-                when {
-                    !request.groupId.isNullOrBlank() -> {
-                        val index = visibleGroups.indexOfFirst { it.id == request.groupId }
-                        Triple(index, null, if (index >= 0) request.groupId else null)
+            is TrackersListPositioningAction.ScrollToTracker -> {
+                val targetIndex = orderedVisibleTrackers.indexOfFirst { it.id == action.trackerId }
+                if (targetIndex < 0 && request != null) {
+                    val requestKey = request.toNavigationKey()
+                    val attempts = navigationRefreshAttempts[requestKey] ?: 0
+                    if (attempts == 0 && !state.isLoading && !state.isPullRefreshing) {
+                        navigationRefreshAttempts = navigationRefreshAttempts + (requestKey to 1)
+                        onPullRefresh()
+                        return@LaunchedEffect
                     }
-                    !request.trackerId.isNullOrBlank() -> {
-                        val index = visibleGroups.indexOfFirst { group ->
-                            group.track_ids.orEmpty().any { it.trim() == request.trackerId }
-                        }
-                        val groupId = if (index >= 0) visibleGroups[index].id else null
-                        Triple(index, null, groupId)
-                    }
-                    else -> Triple(-1, null, null)
+                    navigationRefreshAttempts = navigationRefreshAttempts - requestKey
+                    didInitialTrackersTopScroll = true
+                    onNavigationRequestHandled()
+                    return@LaunchedEffect
                 }
+                if (targetIndex >= 0) {
+                    trackersListState.animateScrollToItem(targetIndex)
+                    highlightedTrackerId = action.trackerId
+                    highlightedGroupId = null
+                }
+                request?.let { navigationRefreshAttempts = navigationRefreshAttempts - it.toNavigationKey() }
+                didInitialTrackersTopScroll = true
+                onNavigationRequestHandled()
+            }
+            is TrackersListPositioningAction.ScrollToGroup -> {
+                val targetIndex = visibleGroups.indexOfFirst { it.id == action.groupId }
+                if (targetIndex < 0 && request != null) {
+                    val requestKey = request.toNavigationKey()
+                    val attempts = navigationRefreshAttempts[requestKey] ?: 0
+                    if (attempts == 0 && !state.isLoading && !state.isPullRefreshing) {
+                        navigationRefreshAttempts = navigationRefreshAttempts + (requestKey to 1)
+                        onPullRefresh()
+                        return@LaunchedEffect
+                    }
+                    navigationRefreshAttempts = navigationRefreshAttempts - requestKey
+                    didInitialTrackersTopScroll = true
+                    onNavigationRequestHandled()
+                    return@LaunchedEffect
+                }
+                if (targetIndex >= 0) {
+                    groupsListState.animateScrollToItem(targetIndex)
+                    highlightedGroupId = action.groupId
+                    highlightedTrackerId = null
+                }
+                request?.let { navigationRefreshAttempts = navigationRefreshAttempts - it.toNavigationKey() }
+                didInitialTrackersTopScroll = true
+                onNavigationRequestHandled()
+            }
+            is TrackersListPositioningAction.ScrollToGroupContainingTracker -> {
+                val targetIndex = visibleGroups.indexOfFirst { group ->
+                    group.track_ids.orEmpty().any { it.trim() == action.trackerId }
+                }
+                val targetGroupId = if (targetIndex >= 0) visibleGroups[targetIndex].id else null
+                if (targetIndex < 0 && request != null) {
+                    val requestKey = request.toNavigationKey()
+                    val attempts = navigationRefreshAttempts[requestKey] ?: 0
+                    if (attempts == 0 && !state.isLoading && !state.isPullRefreshing) {
+                        navigationRefreshAttempts = navigationRefreshAttempts + (requestKey to 1)
+                        onPullRefresh()
+                        return@LaunchedEffect
+                    }
+                    navigationRefreshAttempts = navigationRefreshAttempts - requestKey
+                    didInitialTrackersTopScroll = true
+                    onNavigationRequestHandled()
+                    return@LaunchedEffect
+                }
+                if (targetIndex >= 0 && targetGroupId != null) {
+                    groupsListState.animateScrollToItem(targetIndex)
+                    highlightedGroupId = targetGroupId
+                    highlightedTrackerId = null
+                }
+                request?.let { navigationRefreshAttempts = navigationRefreshAttempts - it.toNavigationKey() }
+                didInitialTrackersTopScroll = true
+                onNavigationRequestHandled()
             }
         }
-        val requestKey = request.toNavigationKey()
-        if (targetIndex < 0 && (request.trackerId != null || request.groupId != null)) {
-            val attempts = navigationRefreshAttempts[requestKey] ?: 0
-            if (attempts == 0 && !state.isLoading && !state.isPullRefreshing) {
-                navigationRefreshAttempts = navigationRefreshAttempts + (requestKey to 1)
-                onPullRefresh()
-                return@LaunchedEffect
-            }
-        }
-        if (targetIndex >= 0) {
-            val targetListState = if (state.subTab == TrackersGroupsSubTab.TRACKERS) {
-                trackersListState
-            } else {
-                groupsListState
-            }
-            targetListState.animateScrollToItem(targetIndex)
-            highlightedTrackerId = targetTrackerId
-            highlightedGroupId = targetGroupId
-        }
-        navigationRefreshAttempts = navigationRefreshAttempts - requestKey
-        onNavigationRequestHandled()
-    }
-    LaunchedEffect(state.subTab, state.isLoading, state.isPullRefreshing, orderedVisibleTrackers, navigationRequest) {
-        if (state.subTab != TrackersGroupsSubTab.TRACKERS) return@LaunchedEffect
-        if (didInitialTrackersTopScroll) return@LaunchedEffect
-        if (state.isLoading || state.isPullRefreshing) return@LaunchedEffect
-        if (navigationRequest != null) return@LaunchedEffect
-        if (orderedVisibleTrackers.isNotEmpty()) {
-            trackersListState.scrollToItem(0)
-        }
-        didInitialTrackersTopScroll = true
     }
     LaunchedEffect(highlightedTrackerId, highlightedGroupId) {
         if (highlightedTrackerId == null && highlightedGroupId == null) return@LaunchedEffect
