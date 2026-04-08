@@ -28,7 +28,7 @@ enum class GeoVaultMapPhase {
  */
 sealed class GeoVaultBaseMap(
     context: Context,
-) : MapView.OnDidFailLoadingMapListener {
+) : MapView.OnDidFailLoadingMapListener, MapView.OnDidFinishLoadingStyleListener {
     protected val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -99,6 +99,7 @@ sealed class GeoVaultBaseMap(
         }
         _mapManager = attachedManager
         view.addOnDidFailLoadingMapListener(this)
+        view.addOnDidFinishLoadingStyleListener(this)
         view.getMapAsync { map ->
             // getMapAsync can return after detach/re-attach; ignore stale callbacks.
             if (_mapManager !== attachedManager || mapView !== view) return@getMapAsync
@@ -127,8 +128,9 @@ sealed class GeoVaultBaseMap(
 
     protected fun createMapView(): MapView {
         val options = MapLibreMapOptions.createFromAttributes(appContext).apply {
-            // Keep rendering pipeline identical between map subclasses.
             textureMode(true)
+            minZoomPreference(MapLibreManager.MIN_ZOOM_LEVEL.toDouble())
+            maxZoomPreference(MapLibreManager.MAX_ZOOM_LEVEL.toDouble())
         }
         return MapView(appContext, options)
     }
@@ -136,6 +138,7 @@ sealed class GeoVaultBaseMap(
     internal fun detachMapView() {
         clearStyleLoadWatchdog()
         mapView?.removeOnDidFailLoadingMapListener(this)
+        mapView?.removeOnDidFinishLoadingStyleListener(this)
         mapView = null
         pluginRegistry.onMapDetached()
         maplibreMap?.let { map ->
@@ -180,9 +183,14 @@ sealed class GeoVaultBaseMap(
         manager.applySelectedSource(map)
     }
 
-    fun moveCameraWithPadding(update: CameraUpdate, padding: DoubleArray? = null) {
+    fun moveCameraWithPadding(
+        update: CameraUpdate,
+        padding: DoubleArray? = null,
+        maxZoom: Double? = null,
+    ) {
         val map = maplibreMap ?: return
-        _mapManager?.moveCameraWithPadding(map, update, padding)
+        val mgr = _mapManager ?: return
+        mgr.moveCameraWithPadding(map, update, padding, maxZoom = maxZoom ?: mgr.resolveEffectiveMaxZoom())
     }
 
     fun animateCameraWithPadding(
@@ -190,9 +198,11 @@ sealed class GeoVaultBaseMap(
         padding: DoubleArray? = null,
         durationMs: Int = 300,
         callback: MapLibreMap.CancelableCallback? = null,
+        maxZoom: Double? = null,
     ) {
         val map = maplibreMap ?: return
-        _mapManager?.animateCameraWithPadding(map, update, padding, durationMs, callback)
+        val mgr = _mapManager ?: return
+        mgr.animateCameraWithPadding(map, update, padding, durationMs, callback, maxZoom = maxZoom ?: mgr.resolveEffectiveMaxZoom())
     }
 
     /**
@@ -261,6 +271,11 @@ sealed class GeoVaultBaseMap(
 
     internal abstract fun acquireMapView(stateBundle: Bundle): MapView
     protected abstract fun onMapDestroyed()
+
+    override fun onDidFinishLoadingStyle() {
+        val map = maplibreMap ?: return
+        _mapManager?.reapplyZoomPreferences(map)
+    }
 
     override fun onDidFailLoadingMap(errorMessage: String) {
         val map = maplibreMap ?: return

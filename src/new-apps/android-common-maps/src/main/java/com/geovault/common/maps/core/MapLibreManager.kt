@@ -41,7 +41,7 @@ class MapLibreManager(
         map.uiSettings.isDoubleTapGesturesEnabled = true
         map.uiSettings.isRotateGesturesEnabled = false
         map.setLatLngBoundsForCameraTarget(LatLngBounds.world())
-        map.setMaxZoomPreference(MAX_ZOOM_LEVEL.toDouble())
+        applyZoomPreferences(map, MAX_ZOOM_LEVEL.toDouble())
     }
 
     fun fetchMapSources(onFetched: () -> Unit = {}) {
@@ -73,7 +73,7 @@ class MapLibreManager(
             } else {
                 MAX_ZOOM_LEVEL.toDouble()
             }
-            map.setMaxZoomPreference(mapMaxZoom)
+            applyZoomPreferences(map, mapMaxZoom)
 
             if (sourceManager.isVectorSource(effectiveId)) {
                 val styleUrl = sourceManager.getResolvedStyleUrl(effectiveId)
@@ -86,6 +86,7 @@ class MapLibreManager(
                     )
                 } else {
                     map.setStyle(Style.Builder()) { style ->
+                        applyZoomPreferences(map, mapMaxZoom)
                         lastAppliedSourceKey = requestedSourceKey
                         pendingSourceKey = null
                         onStyleLoaded?.invoke(map, style)
@@ -96,6 +97,7 @@ class MapLibreManager(
                 val rasterUrl = sourceManager.getRasterUrl(effectiveId)
                 if (!rasterUrl.isNullOrBlank()) {
                     map.setStyle(Style.Builder()) { style ->
+                        applyZoomPreferences(map, mapMaxZoom)
                         try {
                             val tileSet = TileSet("2.1.0", rasterUrl).apply {
                                 maxZoom = MAX_ZOOM_LEVEL.toFloat()
@@ -121,6 +123,7 @@ class MapLibreManager(
                     }
                 } else {
                     map.setStyle(Style.Builder()) { style ->
+                        applyZoomPreferences(map, mapMaxZoom)
                         lastAppliedSourceKey = requestedSourceKey
                         pendingSourceKey = null
                         onStyleLoaded?.invoke(map, style)
@@ -132,6 +135,7 @@ class MapLibreManager(
             pendingSourceKey = null
             onStyleLoadFailed?.invoke(e.message ?: e.javaClass.simpleName)
             map.setStyle(Style.Builder()) { style ->
+                applyZoomPreferences(map, MAX_ZOOM_LEVEL.toDouble())
                 lastAppliedSourceKey = requestedSourceKey
                 onStyleLoaded?.invoke(map, style)
                 restoreCamera()
@@ -156,6 +160,7 @@ class MapLibreManager(
         MapStyleCache.getStyleJson(context, styleUrl, isOurServer, serverBase) { json ->
             if (!json.isNullOrBlank()) {
                 map.setStyle(Style.Builder().fromJson(json)) { style ->
+                    applyZoomPreferences(map, MAX_ZOOM_LEVEL_VECTOR.toDouble())
                     lastAppliedSourceKey = sourceKey
                     pendingSourceKey = null
                     onStyleLoaded?.invoke(map, style)
@@ -187,13 +192,14 @@ class MapLibreManager(
         val rasterUrl = sourceManager.getStreetFallbackRasterUrl()
         if (rasterUrl.isNullOrBlank()) {
             map.setStyle(Style.Builder()) { style ->
+                applyZoomPreferences(map, MAX_ZOOM_LEVEL.toDouble())
                 onStyleLoaded?.invoke(map, style)
                 restoreCamera()
             }
             return
         }
 
-        map.setMaxZoomPreference(MAX_ZOOM_LEVEL.toDouble())
+        applyZoomPreferences(map, MAX_ZOOM_LEVEL.toDouble())
         map.setStyle(Style.Builder()) { style ->
             try {
                 style.addSource(
@@ -204,6 +210,7 @@ class MapLibreManager(
                     ),
                 )
                 val rasterLayer = RasterLayer(RASTER_LAYER_ID, RASTER_SOURCE_ID)
+                applyZoomPreferences(map, MAX_ZOOM_LEVEL.toDouble())
                 onStyleLoaded?.invoke(map, style)
                 restoreCamera()
                 mapView.post {
@@ -235,33 +242,61 @@ class MapLibreManager(
         }
     }
 
+    private fun applyZoomPreferences(map: MapLibreMap, maxZoom: Double) {
+        map.setMinZoomPreference(MIN_ZOOM_LEVEL.toDouble())
+        map.setMaxZoomPreference(maxZoom)
+    }
+
+    fun reapplyZoomPreferences(map: MapLibreMap) {
+        val effectiveId = sourceManager.getEffectiveSourceId()
+        val maxZoom = if (sourceManager.isVectorSource(effectiveId)) {
+            MAX_ZOOM_LEVEL_VECTOR.toDouble()
+        } else {
+            MAX_ZOOM_LEVEL.toDouble()
+        }
+        applyZoomPreferences(map, maxZoom)
+    }
+
     fun animateCameraWithPadding(
         map: MapLibreMap,
         update: CameraUpdate,
         padding: DoubleArray? = null,
         durationMs: Int = 300,
         callback: MapLibreMap.CancelableCallback? = null,
+        maxZoom: Double = resolveEffectiveMaxZoom(),
     ) {
         val lastPadding = padding ?: defaultPadding
-        val position = update.getCameraPosition(map)
-        if (position != null) {
-            val builder = CameraPosition.Builder(position)
-            if (lastPadding != null) builder.padding(lastPadding)
-            map.animateCamera(CameraUpdateFactory.newCameraPosition(builder.build()), durationMs, callback)
-        }
+        val position = update.getCameraPosition(map) ?: return
+        val clampedZoom = position.zoom
+            .coerceAtLeast(MIN_ZOOM_LEVEL.toDouble())
+            .coerceAtMost(maxZoom)
+        val builder = CameraPosition.Builder(position).zoom(clampedZoom)
+        if (lastPadding != null) builder.padding(lastPadding)
+        map.animateCamera(CameraUpdateFactory.newCameraPosition(builder.build()), durationMs, callback)
     }
 
     fun moveCameraWithPadding(
         map: MapLibreMap,
         update: CameraUpdate,
         padding: DoubleArray? = null,
+        maxZoom: Double = resolveEffectiveMaxZoom(),
     ) {
         val lastPadding = padding ?: defaultPadding
-        val position = update.getCameraPosition(map)
-        if (position != null) {
-            val builder = CameraPosition.Builder(position)
-            if (lastPadding != null) builder.padding(lastPadding)
-            map.moveCamera(CameraUpdateFactory.newCameraPosition(builder.build()))
+        val position = update.getCameraPosition(map) ?: return
+        val clampedZoom = position.zoom
+            .coerceAtLeast(MIN_ZOOM_LEVEL.toDouble())
+            .coerceAtMost(maxZoom)
+        val builder = CameraPosition.Builder(position).zoom(clampedZoom)
+        if (lastPadding != null) builder.padding(lastPadding)
+        map.moveCamera(CameraUpdateFactory.newCameraPosition(builder.build()))
+    }
+
+    fun resolveEffectiveMaxZoom(): Double {
+        val effectiveId = sourceManager.getEffectiveSourceId()
+        return if (sourceManager.isVectorSource(effectiveId)) {
+            MAX_ZOOM_LEVEL_VECTOR.toDouble()
+        } else {
+            MAX_ZOOM_LEVEL.toDouble()
         }
     }
 
@@ -277,8 +312,10 @@ class MapLibreManager(
         const val RASTER_SOURCE_ID = "geovault-raster"
         const val RASTER_LAYER_ID = "geovault-raster-layer"
         const val ANNOTATIONS_LAYER_ID = "org.maplibre.annotations.points"
-        const val MAX_ZOOM_LEVEL = 25
-        const val MAX_ZOOM_LEVEL_VECTOR = 25
+        const val MIN_ZOOM_LEVEL = 1
+        const val MAX_ZOOM_LEVEL = 18
+        const val MAX_ZOOM_LEVEL_VECTOR = 18
+        const val BOUNDS_FIT_MAX_ZOOM = 15.0
         const val DEFAULT_POINT_ZOOM = 12.0
         val DEFAULT_WORLD_CENTER = LatLng(0.0, 0.0)
     }

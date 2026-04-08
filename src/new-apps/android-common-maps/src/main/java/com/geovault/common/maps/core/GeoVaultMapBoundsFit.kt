@@ -43,6 +43,7 @@ fun GeoVaultBaseMap.moveCameraToFitLatLngBounds(bounds: LatLngBounds, paddingPx:
             paddingPx[2],
             paddingPx[3],
         ),
+        maxZoom = MapLibreManager.BOUNDS_FIT_MAX_ZOOM,
     )
 }
 
@@ -61,5 +62,6 @@ fun GeoVaultBaseMap.animateCameraToFitLatLngBounds(
             paddingPx[3],
         ),
         durationMs = durationMs,
+        maxZoom = MapLibreManager.BOUNDS_FIT_MAX_ZOOM,
     )
 }

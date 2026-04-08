@@ -23,7 +23,6 @@ import androidx.core.content.ContextCompat
 import com.geovault.common.maps.core.GeoVaultBaseMap
 import com.geovault.common.maps.core.GeoVaultMapPhase
 import com.geovault.common.maps.location.GeoVaultUserLocationCapability
-import com.geovault.common.maps.core.MapLibreManager
 import com.geovault.common.maps.location.LocationUpdates
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -48,7 +47,6 @@ fun geoVaultZoomInFabAction(
     id: String = "zoom_in",
     order: Int = 40,
     contentDescription: String = "Zoom in",
-    maxZoom: Double = MapLibreManager.MAX_ZOOM_LEVEL.toDouble(),
 ): GeoVaultMapFabAction {
     return GeoVaultMapFabAction(
         id = id,
@@ -58,8 +56,7 @@ fun geoVaultZoomInFabAction(
         onTap = {
             val mapLibreMap = map.maplibreMap
             if (mapLibreMap != null) {
-                val targetZoom = (mapLibreMap.cameraPosition.zoom + 1.0).coerceAtMost(maxZoom)
-                map.animateCameraWithPadding(CameraUpdateFactory.zoomTo(targetZoom))
+                map.animateCameraWithPadding(CameraUpdateFactory.zoomBy(1.0))
             }
         },
     )
@@ -70,7 +67,6 @@ fun geoVaultZoomOutFabAction(
     id: String = "zoom_out",
     order: Int = 50,
     contentDescription: String = "Zoom out",
-    minZoom: Double = 1.0,
 ): GeoVaultMapFabAction {
     return GeoVaultMapFabAction(
         id = id,
@@ -80,8 +76,7 @@ fun geoVaultZoomOutFabAction(
         onTap = {
             val mapLibreMap = map.maplibreMap
             if (mapLibreMap != null) {
-                val targetZoom = (mapLibreMap.cameraPosition.zoom - 1.0).coerceAtLeast(minZoom)
-                map.animateCameraWithPadding(CameraUpdateFactory.zoomTo(targetZoom))
+                map.animateCameraWithPadding(CameraUpdateFactory.zoomBy(-1.0))
             }
         },
     )

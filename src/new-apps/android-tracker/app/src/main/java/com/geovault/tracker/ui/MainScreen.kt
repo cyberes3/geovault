@@ -17,10 +17,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.geovault.common.maps.core.rememberGeoVaultMainMap
 import com.geovault.common.ui.components.GeoVaultBottomNavDestination
 import com.geovault.common.ui.components.GeoVaultBottomNavScaffold
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
@@ -38,6 +40,7 @@ import com.geovault.tracker.presentation.TrackersGroupsSubTab
 import com.geovault.tracker.settings.TrackerTrackingProfile
 import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.R
+import com.geovault.tracker.TrackerApplication
 
 @Composable
 fun MainScreen(
@@ -76,6 +79,7 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     val releaseLauncher = remember(context) { CustomTabReleasePageLauncher(context) }
+    val trackerMainMap = rememberGeoVaultMainMap(TrackerApplication.TRACKER_MAIN_MAP_KEY)
     val mapViewModel: TrackerMapViewModel = viewModel()
     val sharedViewModel: SharedViewModel = viewModel()
     var selectedTab by rememberSaveable { mutableStateOf(TrackerTab.HOME.name) }
@@ -265,6 +269,22 @@ fun MainScreen(
                 modifier = Modifier.fillMaxSize(),
             ) { _ ->
                 Box(modifier = Modifier.fillMaxSize()) {
+                    MapScreen(
+                        map = trackerMainMap,
+                        mapViewModel = mapViewModel,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .alpha(if (selectedTab == TrackerTab.MAP.name) 1f else 0f),
+                        isActive = selectedTab == TrackerTab.MAP.name,
+                        isAuthenticated = state.isAuthenticated,
+                        serverUrl = state.serverUrl,
+                        onAuthServerUrlChanged = onAuthServerUrlChanged,
+                        onAuthConnect = onAuthConnect,
+                        isConnecting = state.isConnecting,
+                        onOpenSettings = openSettingsTab,
+                        onHostNavigationRequested = onMapHostNavigationRequested,
+                        onRequestTrackerParams = { args -> trackerParamsArgs = args },
+                    )
                     when (selectedTab) {
                     TrackerTab.HOME.name -> {
                     HomeScreen(
@@ -284,20 +304,7 @@ fun MainScreen(
                         onRequestTrackerParams = { args -> trackerParamsArgs = args },
                     )
                     }
-
-                    TrackerTab.MAP.name -> {
-                    MapScreen(
-                        mapViewModel = mapViewModel,
-                        isAuthenticated = state.isAuthenticated,
-                        serverUrl = state.serverUrl,
-                        onAuthServerUrlChanged = onAuthServerUrlChanged,
-                        onAuthConnect = onAuthConnect,
-                        isConnecting = state.isConnecting,
-                        onOpenSettings = openSettingsTab,
-                        onHostNavigationRequested = onMapHostNavigationRequested,
-                        onRequestTrackerParams = { args -> trackerParamsArgs = args },
-                    )
-                    }
+                    TrackerTab.MAP.name -> Unit
 
                     TrackerTab.TRACKERS.name -> {
                     TrackersScreen(

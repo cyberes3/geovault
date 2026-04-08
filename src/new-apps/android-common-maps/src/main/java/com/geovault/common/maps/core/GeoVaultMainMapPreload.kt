@@ -287,6 +287,7 @@ private fun GeoVaultMainMapPreloadHostAuthenticatedBody(
                         preloadBoundsFitPaddingPx[3],
                     ),
                     padding = preloadPaddingPx,
+                    maxZoom = MapLibreManager.BOUNDS_FIT_MAX_ZOOM,
                 )
             }
 

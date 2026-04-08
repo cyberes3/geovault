@@ -63,7 +63,6 @@ import com.geovault.common.maps.core.geoVaultCreateGestureMoveStartedListener
 import com.geovault.common.maps.core.geoVaultLatLngBoundsUnion
 import com.geovault.common.maps.core.moveCameraToFitLatLngBounds
 import com.geovault.common.maps.core.geoVaultResetCameraBearingAndTilt
-import com.geovault.common.maps.core.rememberGeoVaultMainMap
 import com.geovault.common.maps.core.rememberGeoVaultMapBoundsFitPaddingPx
 import com.geovault.common.maps.location.rememberGeoVaultMapUserLocationPlugin
 import com.geovault.common.maps.render.GeoJsonRenderConfig
@@ -85,7 +84,6 @@ import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.params.toTrackerParamsRouteArgs
 import com.geovault.tracker.R
-import com.geovault.tracker.TrackerApplication
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.services.TrackingUiStatus
 import com.geovault.tracker.presentation.TrackerMapCameraLockPolicy
@@ -101,7 +99,10 @@ import java.util.Locale
 
 @Composable
 fun MapScreen(
+    map: GeoVaultMainMap,
     mapViewModel: TrackerMapViewModel,
+    modifier: Modifier = Modifier,
+    isActive: Boolean = true,
     isAuthenticated: Boolean,
     serverUrl: String,
     onAuthServerUrlChanged: (String) -> Unit,
@@ -112,7 +113,7 @@ fun MapScreen(
     onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit,
 ) {
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         topBar = {
             GeoVaultTopTitleBar(
                 title = stringResource(R.string.map_screen_title),
@@ -140,8 +141,9 @@ fun MapScreen(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 TrackerMapAuthenticatedContent(
-                    map = rememberGeoVaultMainMap(TrackerApplication.TRACKER_MAIN_MAP_KEY),
+                    map = map,
                     viewModel = mapViewModel,
+                    isActive = isActive,
                     onHostNavigationRequested = onHostNavigationRequested,
                     onRequestTrackerParams = onRequestTrackerParams,
                 )
@@ -155,6 +157,7 @@ fun MapScreen(
 private fun TrackerMapAuthenticatedContent(
     map: GeoVaultMainMap,
     viewModel: TrackerMapViewModel,
+    isActive: Boolean,
     onHostNavigationRequested: (MapHostNavigationRequest) -> Unit,
     onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit,
 ) {
@@ -165,9 +168,17 @@ private fun TrackerMapAuthenticatedContent(
         mutableStateOf(TrackingPermissionGate.hasLocationPermission(context))
     }
 
-    DisposableEffect(viewModel) {
-        viewModel.onMapSurfaceVisible()
-        onDispose { viewModel.onMapSurfaceHidden() }
+    DisposableEffect(viewModel, isActive) {
+        if (isActive) {
+            viewModel.onMapSurfaceVisible()
+        } else {
+            viewModel.onMapSurfaceHidden()
+        }
+        onDispose {
+            if (isActive) {
+                viewModel.onMapSurfaceHidden()
+            }
+        }
     }
 
     DisposableEffect(lifecycleOwner) {
