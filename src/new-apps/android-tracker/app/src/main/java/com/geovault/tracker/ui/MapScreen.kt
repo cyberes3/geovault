@@ -292,7 +292,11 @@ private fun TrackerMapAuthenticatedContent(
             map.removeOnCameraMoveStartedListener(listener)
         }
     }
-    DisposableEffect(map) {
+    DisposableEffect(
+        map,
+        state.displayedTrackerId,
+        state.runtime.selectedTrackerId,
+    ) {
         val clickListener = MapLibreMap.OnMapClickListener { latLng ->
             val maplibreMap = map.maplibreMap ?: return@OnMapClickListener false
             val screenPoint: PointF = maplibreMap.projection.toScreenLocation(latLng)
@@ -315,10 +319,10 @@ private fun TrackerMapAuthenticatedContent(
                 }
                 .firstOrNull()
             if (trackId != null) {
-                viewModel.selectMapTrackerFromTap(trackId)
+                viewModel.onTrackerMarkerTapped(trackId)
                 true
             } else {
-                false
+                viewModel.onMapBackgroundTapped()
             }
         }
         map.addOnMapClickListener(clickListener)
@@ -484,99 +488,97 @@ private fun TrackerMapAuthenticatedContent(
             }
         }
 
-        Spacer(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(GeoVaultColorTokens.BorderLight),
-        )
+        val selection = state.selectedMapTracker
+        if (state.isBottomCardVisible && selection != null) {
+            Spacer(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(GeoVaultColorTokens.BorderLight),
+            )
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = androidx.compose.ui.graphics.RectangleShape,
-            backgroundColor = GeoVaultColorTokens.Background,
-            elevation = 0.dp,
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                Text(
-                    text = stringResource(R.string.map_mode_section_title),
-                    color = GeoVaultColorTokens.TextPrimary,
-                    style = MaterialTheme.typography.subtitle2,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                MapStatusStrip(
-                    state = state,
-                    mapReady = phase == GeoVaultMapPhase.Ready,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    ModeTextButton(
-                        label = stringResource(R.string.map_mode_session),
-                        selected = state.mode == TrackerMapDisplayMode.SINGLE_SESSION,
-                        onClick = { viewModel.setMode(TrackerMapDisplayMode.SINGLE_SESSION) },
-                        modifier = Modifier.weight(1f),
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = androidx.compose.ui.graphics.RectangleShape,
+                backgroundColor = GeoVaultColorTokens.Background,
+                elevation = 0.dp,
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                    Text(
+                        text = stringResource(R.string.map_mode_section_title),
+                        color = GeoVaultColorTokens.TextPrimary,
+                        style = MaterialTheme.typography.subtitle2,
+                        fontWeight = FontWeight.Bold,
                     )
-                    ModeTextButton(
-                        label = stringResource(R.string.map_mode_all),
-                        selected = state.mode == TrackerMapDisplayMode.ALL_QUEUE,
-                        onClick = { viewModel.setMode(TrackerMapDisplayMode.ALL_QUEUE) },
-                        modifier = Modifier.weight(1f),
+                    Spacer(modifier = Modifier.height(6.dp))
+                    MapStatusStrip(
+                        state = state,
+                        mapReady = phase == GeoVaultMapPhase.Ready,
                     )
-                    ModeTextButton(
-                        label = stringResource(R.string.map_mode_group),
-                        selected = state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER,
-                        onClick = { viewModel.setMode(TrackerMapDisplayMode.GROUP_PLACEHOLDER) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    GroupModeSelector(
-                        options = state.groupModeOptions,
-                        selectedGroupId = state.currentGroupId,
-                        onSelectGroup = viewModel::setGroupModeGroup
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    ModeTextButton(
-                        label = stringResource(R.string.map_action_view_in_list),
-                        selected = false,
-                        onClick = {
-                            onHostNavigationRequested(
-                                MapHostNavigationRequestResolver.fromListNavigationTarget(
-                                    viewModel.resolveListNavigationTarget()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        ModeTextButton(
+                            label = stringResource(R.string.map_mode_session),
+                            selected = state.mode == TrackerMapDisplayMode.SINGLE_SESSION,
+                            onClick = { viewModel.setMode(TrackerMapDisplayMode.SINGLE_SESSION) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        ModeTextButton(
+                            label = stringResource(R.string.map_mode_all),
+                            selected = state.mode == TrackerMapDisplayMode.ALL_QUEUE,
+                            onClick = { viewModel.setMode(TrackerMapDisplayMode.ALL_QUEUE) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        ModeTextButton(
+                            label = stringResource(R.string.map_mode_group),
+                            selected = state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+                            onClick = { viewModel.setMode(TrackerMapDisplayMode.GROUP_PLACEHOLDER) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        GroupModeSelector(
+                            options = state.groupModeOptions,
+                            selectedGroupId = state.currentGroupId,
+                            onSelectGroup = viewModel::setGroupModeGroup
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        ModeTextButton(
+                            label = stringResource(R.string.map_action_view_in_list),
+                            selected = false,
+                            onClick = {
+                                onHostNavigationRequested(
+                                    MapHostNavigationRequestResolver.fromListNavigationTarget(
+                                        viewModel.resolveListNavigationTarget()
+                                    )
                                 )
-                            )
-                        },
-                        modifier = Modifier.weight(1f),
-                    )
-                    ModeTextButton(
-                        label = stringResource(R.string.map_action_view_params),
-                        selected = false,
-                        onClick = {
-                            state.selectedMapTracker
-                                ?.toTrackerParamsRouteArgs()
-                                ?.let(onRequestTrackerParams)
-                        },
-                        modifier = Modifier.weight(1f),
-                    )
-                    ModeTextButton(
-                        label = stringResource(R.string.map_action_open_shared),
-                        selected = false,
-                        onClick = { onHostNavigationRequested(MapHostNavigationRequestResolver.forShared(state)) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                val selection = state.selectedMapTracker
-                if (selection != null) {
+                            },
+                            modifier = Modifier.weight(1f),
+                        )
+                        ModeTextButton(
+                            label = stringResource(R.string.map_action_view_params),
+                            selected = false,
+                            onClick = {
+                                onRequestTrackerParams(selection.toTrackerParamsRouteArgs())
+                            },
+                            modifier = Modifier.weight(1f),
+                        )
+                        ModeTextButton(
+                            label = stringResource(R.string.map_action_open_shared),
+                            selected = false,
+                            onClick = { onHostNavigationRequested(MapHostNavigationRequestResolver.forShared(state)) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     MapTrackerSelectionPanel(
                         selection = selection,

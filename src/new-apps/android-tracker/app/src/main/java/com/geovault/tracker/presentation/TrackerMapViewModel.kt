@@ -47,6 +47,7 @@ data class TrackerMapUiState(
     val groupModeOptions: List<TrackerMapGroupModeOption> = emptyList(),
     val displayedTrackerId: String = "",
     val displayedTrackerName: String = "",
+    val isBottomCardVisible: Boolean = false,
     val selectedMapTracker: TrackerMapSelectionCard? = null,
     val selectionLockTrackerId: String = "",
     val mode: TrackerMapDisplayMode = TrackerMapDisplayMode.SINGLE_SESSION,
@@ -140,6 +141,31 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 return HistoryClearRefreshAction.REFRESH_SELECTED_SINGLE
             }
             return HistoryClearRefreshAction.NO_OP
+        }
+
+        @JvmStatic
+        internal fun resolveBottomCardVisibilityForMarkerTap(
+            hasSelectionCard: Boolean
+        ): Boolean {
+            return hasSelectionCard
+        }
+
+        @JvmStatic
+        internal fun resolveBackgroundTapShouldCloseBottomCard(
+            isBottomCardVisible: Boolean,
+            hasSelectionCard: Boolean
+        ): Boolean {
+            return isBottomCardVisible || hasSelectionCard
+        }
+
+        @JvmStatic
+        internal fun resolveRenderSelectedMapTrackerId(
+            isBottomCardVisible: Boolean,
+            selectedMapTrackerId: String?
+        ): String? {
+            return selectedMapTrackerId
+                ?.trim()
+                ?.takeIf { isBottomCardVisible && it.isNotEmpty() }
         }
     }
 
@@ -338,6 +364,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             mode = mode,
             currentGroupId = preferredGroupId,
             groupModeOptions = groupOptions,
+            isBottomCardVisible = false,
             selectedMapTracker = null,
             selectionLockTrackerId = "",
         )
@@ -358,6 +385,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         _uiState.value = state.copy(
             currentGroupId = normalized,
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            isBottomCardVisible = false,
             selectedMapTracker = null,
             selectionLockTrackerId = "",
         )
@@ -383,6 +411,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             displayedTrackerName = resolvedName,
             currentGroupId = "",
             groupModeOptions = emptyList(),
+            isBottomCardVisible = false,
             selectedMapTracker = null,
             selectionLockTrackerId = "",
         )
@@ -402,6 +431,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             currentGroupId = resolvedGroupId,
             groupModeOptions = groupOptions,
+            isBottomCardVisible = false,
             selectedMapTracker = null,
             selectionLockTrackerId = "",
         )
@@ -421,6 +451,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             displayedTrackerName = state.runtime.selectedTrackerName,
             currentGroupId = "",
             groupModeOptions = emptyList(),
+            isBottomCardVisible = false,
             selectedMapTracker = null,
             selectionLockTrackerId = "",
         )
@@ -451,23 +482,46 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         )
     }
 
-    fun selectMapTrackerFromTap(trackerId: String) {
+    fun onTrackerMarkerTapped(trackerId: String) {
         val normalizedTrackerId = trackerId.trim()
         if (normalizedTrackerId.isEmpty()) return
         val state = _uiState.value
+        val selection = buildSelectionCard(state, normalizedTrackerId)
+        if (selection == null) {
+            _uiState.value = closeBottomCardState(state)
+            return
+        }
+        val nextSelectionLockId = state.selectionLockTrackerId.trim()
+            .takeIf { it.isNotEmpty() && it == selection.trackerId }
+            .orEmpty()
         _uiState.value = state.copy(
-            selectedMapTracker = buildSelectionCard(state, normalizedTrackerId)
+            isBottomCardVisible = resolveBottomCardVisibilityForMarkerTap(
+                hasSelectionCard = true
+            ),
+            selectedMapTracker = selection,
+            selectionLockTrackerId = nextSelectionLockId,
         )
     }
 
-    fun clearMapTrackerSelection() {
+    fun onMapBackgroundTapped(): Boolean {
         val state = _uiState.value
-        if (state.selectedMapTracker == null) return
-        val clearLock = state.selectionLockTrackerId == state.selectedMapTracker.trackerId
-        _uiState.value = state.copy(
-            selectedMapTracker = null,
-            selectionLockTrackerId = if (clearLock) "" else state.selectionLockTrackerId,
-        )
+        if (!resolveBackgroundTapShouldCloseBottomCard(
+                isBottomCardVisible = state.isBottomCardVisible,
+                hasSelectionCard = state.selectedMapTracker != null
+            )
+        ) {
+            return false
+        }
+        _uiState.value = closeBottomCardState(state)
+        return true
+    }
+
+    fun selectMapTrackerFromTap(trackerId: String) {
+        onTrackerMarkerTapped(trackerId)
+    }
+
+    fun clearMapTrackerSelection() {
+        onMapBackgroundTapped()
     }
 
     fun focusSelectedTrackerOnMap() {
@@ -555,6 +609,17 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             longitude = longitude,
             lastUpdatedMs = remotePoint?.timestampMs ?: singleTrailPoint?.time ?: tracker?.updated_at,
             accuracyMeters = remotePoint?.accuracyMeters ?: singleTrailPoint?.accuracy,
+        )
+    }
+
+    private fun closeBottomCardState(state: TrackerMapUiState): TrackerMapUiState {
+        val selectedTrackerId = state.selectedMapTracker?.trackerId.orEmpty()
+        val clearSelectionLock = selectedTrackerId.isNotEmpty() &&
+            state.selectionLockTrackerId == selectedTrackerId
+        return state.copy(
+            isBottomCardVisible = false,
+            selectedMapTracker = null,
+            selectionLockTrackerId = if (clearSelectionLock) "" else state.selectionLockTrackerId,
         )
     }
 
@@ -676,6 +741,9 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 _uiState.value = _uiState.value.copy(
                     displayedTrackerId = "",
                     displayedTrackerName = "",
+                    isBottomCardVisible = false,
+                    selectedMapTracker = null,
+                    selectionLockTrackerId = "",
                     remoteLastPoints = emptyMap(),
                     streamTargetIds = emptySet()
                 )
@@ -697,7 +765,10 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     }
                     _uiState.value = _uiState.value.copy(
                         displayedTrackerId = trackerId,
-                        displayedTrackerName = trackerName
+                        displayedTrackerName = trackerName,
+                        isBottomCardVisible = false,
+                        selectedMapTracker = null,
+                        selectionLockTrackerId = "",
                     )
                 }
                 reloadTrailFromDatabase(force = true)
@@ -752,7 +823,10 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             allQueueTrailsByTracker = s.allQueueTrailsByTracker,
             trackerColorById = trackerColors,
             displayedTrackerId = effectiveDisplayedId,
-            selectedMapTrackerId = s.selectedMapTracker?.trackerId,
+            selectedMapTrackerId = resolveRenderSelectedMapTrackerId(
+                isBottomCardVisible = s.isBottomCardVisible,
+                selectedMapTrackerId = s.selectedMapTracker?.trackerId
+            ),
             trackerRenderOrder = trackerRenderOrder,
             streamedAccuracyMeters = streamedAccuracy,
             fallbackAccuracyMeters = s.runtime.lastAccuracyMeters,

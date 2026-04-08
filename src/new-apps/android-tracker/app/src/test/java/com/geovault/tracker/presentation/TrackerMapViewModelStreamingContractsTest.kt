@@ -124,4 +124,48 @@ class TrackerMapViewModelStreamingContractsTest {
         )
         assertEquals(TrackerMapViewModel.HistoryClearRefreshAction.REFRESH_GROUP_OR_ALL, action)
     }
+
+    @Test
+    fun resolveBottomCardVisibilityForMarkerTap_withSelection_showsCard() {
+        val visible = TrackerMapViewModel.resolveBottomCardVisibilityForMarkerTap(
+            hasSelectionCard = true
+        )
+        assertEquals(true, visible)
+    }
+
+    @Test
+    fun resolveBackgroundTapShouldCloseBottomCard_hiddenAndNoSelection_noClose() {
+        val shouldClose = TrackerMapViewModel.resolveBackgroundTapShouldCloseBottomCard(
+            isBottomCardVisible = false,
+            hasSelectionCard = false
+        )
+        assertEquals(false, shouldClose)
+    }
+
+    @Test
+    fun resolveBackgroundTapShouldCloseBottomCard_visible_closes() {
+        val shouldClose = TrackerMapViewModel.resolveBackgroundTapShouldCloseBottomCard(
+            isBottomCardVisible = true,
+            hasSelectionCard = true
+        )
+        assertEquals(true, shouldClose)
+    }
+
+    @Test
+    fun resolveRenderSelectedMapTrackerId_hiddenCard_dropsSelectionHighlight() {
+        val selectedId = TrackerMapViewModel.resolveRenderSelectedMapTrackerId(
+            isBottomCardVisible = false,
+            selectedMapTrackerId = "tracker-1"
+        )
+        assertEquals(null, selectedId)
+    }
+
+    @Test
+    fun resolveRenderSelectedMapTrackerId_visibleCard_keepsSelectionHighlight() {
+        val selectedId = TrackerMapViewModel.resolveRenderSelectedMapTrackerId(
+            isBottomCardVisible = true,
+            selectedMapTrackerId = "tracker-1"
+        )
+        assertEquals("tracker-1", selectedId)
+    }
 }
