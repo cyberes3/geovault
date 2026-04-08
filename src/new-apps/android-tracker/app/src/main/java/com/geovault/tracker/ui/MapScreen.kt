@@ -248,6 +248,8 @@ private fun TrackerMapAuthenticatedContent(
     val fabDescFollow = stringResource(R.string.map_fab_follow_lock)
     val fabDescZoomIn = stringResource(R.string.map_fab_zoom_in)
     val fabDescZoomOut = stringResource(R.string.map_fab_zoom_out)
+    val fabDescLockSelection = stringResource(R.string.map_action_lock_selection)
+    val fabDescUnlockSelection = stringResource(R.string.map_action_unlock_selection)
 
     val phase by map.phase.collectAsState()
     LaunchedEffect(phase) {
@@ -309,6 +311,7 @@ private fun TrackerMapAuthenticatedContent(
     DisposableEffect(map) {
         val listener = geoVaultCreateGestureMoveStartedListener {
             viewModel.clearFollowLockAfterUserGesture()
+            viewModel.clearSelectionLockAfterUserGesture()
         }
         map.addOnCameraMoveStartedListener(listener)
         onDispose {
@@ -411,7 +414,16 @@ private fun TrackerMapAuthenticatedContent(
                 includeDefaultFabColumnPadding = true,
             )
 
-            val followSelected = state.followLockEnabled
+            val effectiveDisplayedTrackerId = state.displayedTrackerId
+                .ifBlank { state.runtime.selectedTrackerId }
+                .trim()
+            val singleTrackerMapView = state.mode == TrackerMapDisplayMode.SINGLE_SESSION &&
+                effectiveDisplayedTrackerId.isNotEmpty()
+            val lockSelected = if (singleTrackerMapView) {
+                state.selectionLockTrackerId == effectiveDisplayedTrackerId
+            } else {
+                state.followLockEnabled
+            }
             val mapFabActions = buildGeoVaultMapFabActions {
                 action(
                     id = "source",
@@ -432,24 +444,40 @@ private fun TrackerMapAuthenticatedContent(
                         }
                     },
                 )
-                action(
-                    id = gpsFabAction.id,
-                    order = gpsFabAction.order,
-                    icon = gpsFabAction.icon,
-                    contentDescription = gpsFabAction.contentDescription,
-                    onTap = {
-                        viewModel.setFollowLock(false)
-                        gpsFabAction.onTap?.invoke()
-                    },
-                )
+                if (!singleTrackerMapView) {
+                    action(
+                        id = gpsFabAction.id,
+                        order = gpsFabAction.order,
+                        icon = gpsFabAction.icon,
+                        contentDescription = gpsFabAction.contentDescription,
+                        onTap = {
+                            viewModel.setFollowLock(false)
+                            gpsFabAction.onTap?.invoke()
+                        },
+                    )
+                }
                 action(
                     id = "follow_lock",
                     order = 25,
                     icon = GeoVaultMapFabIcon.Vector(
-                        if (followSelected) Icons.Default.Lock else Icons.Outlined.LockOpen,
+                        if (lockSelected) Icons.Default.Lock else Icons.Outlined.LockOpen,
                     ),
-                    contentDescription = fabDescFollow,
-                    onTap = { viewModel.setFollowLock(!followSelected) },
+                    contentDescription = if (singleTrackerMapView) {
+                        if (lockSelected) {
+                            fabDescUnlockSelection
+                        } else {
+                            fabDescLockSelection
+                        }
+                    } else {
+                        fabDescFollow
+                    },
+                    onTap = {
+                        if (singleTrackerMapView) {
+                            viewModel.toggleDisplayedTrackerLock()
+                        } else {
+                            viewModel.setFollowLock(!lockSelected)
+                        }
+                    },
                 )
                 action(
                     id = "zoom_in",

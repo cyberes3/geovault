@@ -519,8 +519,20 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     fun toggleSelectedTrackerLock() {
         val state = _uiState.value
         val selection = state.selectedMapTracker ?: return
-        val selectedId = selection.trackerId.trim()
+        toggleTrackerLock(selection.trackerId)
+    }
+
+    fun toggleDisplayedTrackerLock() {
+        val state = _uiState.value
+        val displayedId = effectiveDisplayedTrackerId(state)
+        if (displayedId.isEmpty()) return
+        toggleTrackerLock(displayedId)
+    }
+
+    private fun toggleTrackerLock(trackerId: String) {
+        val selectedId = trackerId.trim()
         if (selectedId.isEmpty()) return
+        val state = _uiState.value
         _uiState.value = state.copy(
             selectionLockTrackerId = if (state.selectionLockTrackerId == selectedId) "" else selectedId,
             // Local follow-lock is for device tracking; keep selection lock mutually exclusive.
@@ -801,6 +813,12 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         if (_uiState.value.followLockEnabled) {
             _uiState.value = _uiState.value.copy(followLockEnabled = false)
         }
+    }
+
+    fun clearSelectionLockAfterUserGesture() {
+        val state = _uiState.value
+        if (state.selectionLockTrackerId.isEmpty()) return
+        _uiState.value = state.copy(selectionLockTrackerId = "")
     }
 
     fun requestFitTrail() {
