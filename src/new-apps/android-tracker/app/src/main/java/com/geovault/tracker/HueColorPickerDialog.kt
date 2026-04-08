@@ -13,9 +13,15 @@ import com.flask.colorpicker.ColorPickerView
 import com.flask.colorpicker.builder.ColorPickerDialogBuilder
 import com.geovault.common.R as CommonR
 
-/** Fallback tracker color hex from [CommonR.color.gv_common_color_blue_400]. */
+/** Legacy tracker default color from `gv_common_color_blue_400`. */
+const val DEFAULT_TRACKER_COLOR_HEX: String = "#6C93DE"
+
+/** Fallback tracker color hex used across tracker UI and map rendering. */
 fun defaultTrackerColorHex(context: Context): String =
     colorIntToHex(ContextCompat.getColor(context, CommonR.color.gv_common_color_blue_400))
+
+/** Static fallback for contexts where Android resources are unavailable (e.g. JVM tests). */
+fun defaultTrackerColorHex(): String = DEFAULT_TRACKER_COLOR_HEX
 
 /**
  * Parses a hex color string (with or without #) to Android color int.

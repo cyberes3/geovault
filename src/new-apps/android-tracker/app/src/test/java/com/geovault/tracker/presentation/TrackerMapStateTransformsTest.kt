@@ -78,9 +78,14 @@ class TrackerMapStateTransformsTest {
         )
         assertEquals(1, st.lines.size)
         assertTrue(st.lines.first().id.startsWith("tracker-trail-"))
+        assertEquals(TrackerMapIconIds.DEFAULT_COLOR_HEX, st.lines.first().lineColorHex)
         assertEquals(1, st.points.size)
         assertEquals("last-fix", st.points.first().id)
-        assertEquals(33.5f, st.points.first().iconRotationDegrees)
+        assertEquals(
+            TrackerMapIconIds.selectedForColor(TrackerMapIconIds.DEFAULT_COLOR_HEX),
+            st.points.first().iconImageId
+        )
+        assertEquals(45.0f, st.points.first().iconRotationDegrees)
         assertEquals("T1", st.points.first().title)
     }
 
@@ -95,8 +100,7 @@ class TrackerMapStateTransformsTest {
             ),
         )
         assertTrue(st.lines.isEmpty())
-        assertEquals(1, st.points.size)
-        assertEquals(-33.0, st.points.first().latitude, 1e-9)
+        assertTrue(st.points.isEmpty())
     }
 
     @Test
@@ -174,4 +178,79 @@ class TrackerMapStateTransformsTest {
         assertTrue(render.lines.any { it.id.startsWith("all-track-t1-") && it.lineColorHex == "#FF0000" })
         assertTrue(render.lines.any { it.id.startsWith("all-track-t2-") && it.lineColorHex == "#00FF00" })
     }
+
+    @Test
+    fun singleSession_usesDisplayedTrackerColorForChevronIconId() {
+        val render = TrackerMapStateTransforms.buildRenderState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            trail = listOf(
+                QueuedLocation(
+                    time = 1L,
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    altitude = null,
+                    speed = null,
+                    bearing = null,
+                    accuracy = null,
+                ),
+                QueuedLocation(
+                    time = 2L,
+                    latitude = 1.001,
+                    longitude = 2.002,
+                    altitude = null,
+                    speed = null,
+                    bearing = null,
+                    accuracy = null,
+                )
+            ),
+            runtime = TrackingRuntimeSnapshot(selectedTrackerId = "selected"),
+            displayedTrackerId = "displayed",
+            trackerColorById = mapOf(
+                "displayed" to "#AA33CC",
+                "selected" to "#00FF00",
+            ),
+        )
+
+        val marker = render.points.first { it.id == "last-fix" }
+        assertEquals(TrackerMapIconIds.selectedForColor("#AA33CC"), marker.iconImageId)
+        assertEquals("#AA33CC", render.lines.first().lineColorHex)
+    }
+
+    @Test
+    fun singleSession_emitsAccuracyPolygonWhenAccuracyPresent() {
+        val render = TrackerMapStateTransforms.buildRenderState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            trail = listOf(
+                QueuedLocation(
+                    time = 1L,
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    altitude = null,
+                    speed = null,
+                    bearing = null,
+                    accuracy = 12f,
+                ),
+                QueuedLocation(
+                    time = 2L,
+                    latitude = 1.001,
+                    longitude = 2.001,
+                    altitude = null,
+                    speed = null,
+                    bearing = null,
+                    accuracy = 11f,
+                )
+            ),
+            runtime = TrackingRuntimeSnapshot(),
+            displayedTrackerId = "t1",
+            trackerColorById = mapOf("t1" to "#3366CC"),
+            streamedAccuracyMeters = 10f,
+            fallbackAccuracyMeters = null,
+            allowAccuracyFallback = false,
+        )
+
+        assertEquals(1, render.polygons.size)
+        assertEquals("last-fix-accuracy", render.polygons.first().id)
+        assertEquals("#403366CC", render.polygons.first().fillColorHex)
+    }
+
 }

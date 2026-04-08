@@ -37,7 +37,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,7 +50,6 @@ import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.Group
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.parseHexToColorInt
 
 data class GroupMemberRow(
     val trackerId: String,
@@ -198,8 +196,8 @@ private fun GroupMemberCard(
 ) {
     val context = LocalContext.current
     var menuExpanded by remember { mutableStateOf(false) }
-    val trackerColorInt = remember(row.tracker?.color) {
-        parseHexToColorInt(row.tracker?.color, context)
+    val chevronTint = remember(row.tracker?.color) {
+        TrackerChevronStylePolicy.tintForTrackerColorHex(row.tracker?.color, context)
     }
     val cardBackground = if (isHighlighted) {
         MaterialTheme.colors.primary.copy(alpha = 0.14f)
@@ -225,12 +223,10 @@ private fun GroupMemberCard(
                 .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_chevron_track),
-                contentDescription = null,
-                tint = Color(trackerColorInt),
+            TrackerChevronIcon(
+                tint = chevronTint,
                 modifier = Modifier
-                    .size(16.dp)
+                    .size(TrackerChevronStylePolicy.TrackerRowChevronSize)
                     .padding(end = 0.dp),
             )
             Text(

@@ -39,7 +39,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,7 +57,6 @@ import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.parseHexToColorInt
 
 private enum class PickerPhase { LIST, ADD }
 
@@ -360,7 +358,9 @@ private fun MemberTrackerCard(
     borderColor: Color,
     onRemove: () -> Unit,
 ) {
-    val trackerColorInt = parseHexToColorInt(item.tracker?.color, context)
+    val chevronTint = remember(item.tracker?.color) {
+        TrackerChevronStylePolicy.tintForTrackerColorHex(item.tracker?.color, context)
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -376,11 +376,9 @@ private fun MemberTrackerCard(
                 .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_chevron_track),
-                contentDescription = null,
-                tint = Color(trackerColorInt),
-                modifier = Modifier.size(18.dp),
+            TrackerChevronIcon(
+                tint = chevronTint,
+                modifier = Modifier.size(TrackerChevronStylePolicy.TrackerRowChevronSize),
             )
             Spacer(modifier = Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {

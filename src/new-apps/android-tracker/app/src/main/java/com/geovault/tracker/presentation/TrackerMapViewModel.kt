@@ -10,6 +10,7 @@ import com.geovault.tracker.MapStreamingServiceHelper
 import com.geovault.tracker.TrackingService
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.RepositoryResult
+import com.geovault.tracker.defaultTrackerColorHex
 import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.di.TrackerAppServices
@@ -734,6 +735,13 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     fun buildMapRenderState(): com.geovault.common.maps.render.MapRenderState {
         val s = _uiState.value
         val trackerColors = trackerManagementStateStore.trackers.value.associate { it.id to (it.color ?: "") }
+        val trackerRenderOrder = trackerManagementStateStore.trackers.value.map { it.id }
+        val effectiveDisplayedId = effectiveDisplayedTrackerId(s)
+        val allowAccuracyFallback = s.mode == TrackerMapDisplayMode.SINGLE_SESSION &&
+            s.runtime.isRunning &&
+            effectiveDisplayedId.isNotBlank() &&
+            effectiveDisplayedId == s.runtime.selectedTrackerId.trim()
+        val streamedAccuracy = s.trail.lastOrNull()?.accuracy
         return TrackerMapStateTransforms.buildRenderState(
             mode = s.mode,
             trail = s.trail,
@@ -743,6 +751,13 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             activeStreamedTrackerIds = s.activeStreamedTrackerIds,
             allQueueTrailsByTracker = s.allQueueTrailsByTracker,
             trackerColorById = trackerColors,
+            displayedTrackerId = effectiveDisplayedId,
+            selectedMapTrackerId = s.selectedMapTracker?.trackerId,
+            trackerRenderOrder = trackerRenderOrder,
+            streamedAccuracyMeters = streamedAccuracy,
+            fallbackAccuracyMeters = s.runtime.lastAccuracyMeters,
+            allowAccuracyFallback = allowAccuracyFallback,
+            defaultIconColorHex = defaultTrackerColorHex(appContext),
         )
     }
 

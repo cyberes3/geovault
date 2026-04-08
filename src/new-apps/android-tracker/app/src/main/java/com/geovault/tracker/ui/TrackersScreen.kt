@@ -1,18 +1,17 @@
 package com.geovault.tracker.ui
 
-import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.widget.Toast
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -104,7 +103,7 @@ private val LIST_DATE_FORMAT = SimpleDateFormat("MMM d, yyyy, h:mm a", Locale.ge
 private data class TrackerRowModel(
     val id: String,
     val name: String,
-    val chevronTint: Color,
+    val chevronColorHex: String?,
     val formattedLastUpdate: String?,
     val formattedCoordinates: String?,
     val ownerEmail: String?,
@@ -162,7 +161,7 @@ private fun Tracker.toRowModel(
     return TrackerRowModel(
         id = id,
         name = name,
-        chevronTint = trackerChevronTint(color),
+        chevronColorHex = color,
         formattedLastUpdate = lastUpdateMs?.let(::formatTrackerListTime),
         formattedCoordinates = lastPosition?.let {
             String.format(Locale.US, "%.4f, %.4f", it.first, it.second)
@@ -1051,6 +1050,10 @@ private fun TrackerRowCard(
     onAction: (TrackerRowAction) -> Unit,
     enabled: Boolean,
 ) {
+    val context = LocalContext.current
+    val chevronTint = remember(model.chevronColorHex) {
+        TrackerChevronStylePolicy.tintForTrackerColorHex(model.chevronColorHex, context)
+    }
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1065,11 +1068,9 @@ private fun TrackerRowCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Image(
-                    painter = painterResource(R.drawable.ic_chevron_track),
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    colorFilter = ColorFilter.tint(model.chevronTint)
+                TrackerChevronIcon(
+                    tint = chevronTint,
+                    modifier = Modifier.size(TrackerChevronStylePolicy.TrackerRowChevronSize),
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
@@ -1264,12 +1265,6 @@ private fun GroupRowCard(
 private fun isVisibleOwnerTracker(tracker: Tracker): Boolean {
     val hidden = (tracker.settings?.get("hidden") as? Boolean) == true
     return tracker.isOwner() && !hidden
-}
-
-private fun trackerChevronTint(colorHex: String?): Color {
-    if (colorHex.isNullOrBlank()) return GeoVaultColorTokens.PrimaryBlue
-    return runCatching { Color(AndroidColor.parseColor(colorHex)) }
-        .getOrElse { GeoVaultColorTokens.PrimaryBlue }
 }
 
 private fun Tracker.lastUpdateMsOrNull(): Long? {

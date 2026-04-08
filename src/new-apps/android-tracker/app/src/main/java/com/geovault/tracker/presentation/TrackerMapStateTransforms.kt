@@ -1,9 +1,13 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.common.maps.core.geoVaultSplitTrackByDistance
-import com.geovault.common.maps.render.CommonMapIconIds
+import com.geovault.common.maps.location.AccuracyGeometryBuilder
+import com.geovault.common.maps.location.AccuracyRadiusInput
+import com.geovault.common.maps.location.AccuracyRadiusPolicy
+import com.geovault.common.maps.location.LatLon
 import com.geovault.common.maps.render.MapRenderLine
 import com.geovault.common.maps.render.MapRenderPoint
+import com.geovault.common.maps.render.MapRenderPolygon
 import com.geovault.common.maps.render.MapRenderState
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.policy.TrackPointEvent
@@ -37,7 +41,22 @@ object TrackerMapStateTransforms {
         activeStreamedTrackerIds: Set<String> = emptySet(),
         allQueueTrailsByTracker: Map<String, List<QueuedLocation>> = emptyMap(),
         trackerColorById: Map<String, String> = emptyMap(),
+        displayedTrackerId: String = "",
+        selectedMapTrackerId: String? = null,
+        trackerRenderOrder: List<String> = emptyList(),
+        streamedAccuracyMeters: Float? = null,
+        fallbackAccuracyMeters: Float? = null,
+        allowAccuracyFallback: Boolean = false,
+        defaultIconColorHex: String = TrackerMapIconIds.DEFAULT_COLOR_HEX,
     ): MapRenderState {
+        val singleIconId = TrackerMapMarkerStylePolicy.singleTrackerIconId(
+            trackerColorById = trackerColorById,
+            displayedTrackerId = displayedTrackerId,
+            selectedTrackerId = runtime.selectedTrackerId,
+            fallbackColorHex = defaultIconColorHex,
+        )
+        val singleLineColorHex = TrackerMapIconIds.parseSpec(singleIconId)?.colorHex
+            ?: TrackerMapIconIds.DEFAULT_COLOR_HEX
         val effectiveTrail = effectiveTrail(mode, trail, runtime)
         val lines = buildTrailLines(
             mode = mode,
@@ -45,45 +64,98 @@ object TrackerMapStateTransforms {
             allQueueTrailsByTracker = allQueueTrailsByTracker,
             trackerColorById = trackerColorById,
             trailOutlineColorHex = trailOutlineColorHex,
+            singleTrackerLineColorHex = singleLineColorHex,
         )
-        val lastQueued = effectiveTrail.lastOrNull()
-        val isMultiContext = mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER
-        val lastLat = if (isMultiContext) null else (runtime.lastTrackedLatitude ?: lastQueued?.latitude)
-        val lastLon = if (isMultiContext) null else (runtime.lastTrackedLongitude ?: lastQueued?.longitude)
-        val lastBearing = lastQueued?.bearing
-
         val markers = mutableListOf<MapRenderPoint>()
-        if (lastLat != null && lastLon != null) {
-            markers.add(
-                MapRenderPoint(
-                    id = "last-fix",
-                    latitude = lastLat,
-                    longitude = lastLon,
-                    title = runtime.selectedTrackerName.takeIf { it.isNotBlank() },
-                    iconImageId = CommonMapIconIds.MARKER_DEFAULT,
-                    iconRotationDegrees = lastBearing,
-                    iconSize = 1.05f,
-                ),
+        if (mode == TrackerMapDisplayMode.SINGLE_SESSION) {
+            val lastQueued = effectiveTrail.lastOrNull()
+            val lastLat = lastQueued?.latitude
+            val lastLon = lastQueued?.longitude
+            val lastRotation = trackDirectionDegrees(
+                effectiveTrail.map { LatLng(it.latitude, it.longitude) }
             )
-        }
-        remoteLastPoints.values
-            .filter { activeStreamedTrackerIds.isNotEmpty() && it.trackId in activeStreamedTrackerIds }
-            .forEach { point ->
+            if (lastLat != null && lastLon != null) {
                 markers.add(
                     MapRenderPoint(
-                        id = "remote-${point.trackId}",
-                        latitude = point.lat,
-                        longitude = point.lon,
-                        title = point.trackId,
-                        iconImageId = CommonMapIconIds.MARKER_DEFAULT,
-                        iconSize = 0.9f,
+                        id = "last-fix",
+                        latitude = lastLat,
+                        longitude = lastLon,
+                        title = runtime.selectedTrackerName.takeIf { it.isNotBlank() },
+                        iconImageId = singleIconId,
+                        iconRotationDegrees = lastRotation,
                     )
                 )
             }
+        } else {
+            val selectedMarkerTrackerId = selectedMapTrackerId?.trim().orEmpty()
+            val orderedTrackerIds = buildList {
+                trackerRenderOrder.map { it.trim() }.filter { it.isNotEmpty() }.forEach { id ->
+                    if (id in allQueueTrailsByTracker) add(id)
+                }
+                allQueueTrailsByTracker.keys.sorted().forEach { id ->
+                    if (id !in this) add(id)
+                }
+            }
+            orderedTrackerIds.forEach { trackerId ->
+                val trackerTrail = allQueueTrailsByTracker[trackerId] ?: return@forEach
+                    val lastPoint = trackerTrail.lastOrNull() ?: return@forEach
+                    val rotation = trackDirectionDegrees(trackerTrail.map { LatLng(it.latitude, it.longitude) })
+                    val iconId = TrackerMapMarkerStylePolicy.multiTrackerIconId(
+                        trackerId = trackerId,
+                        trackerColorById = trackerColorById,
+                        selectedMapTrackerId = selectedMarkerTrackerId,
+                        fallbackColorHex = defaultIconColorHex,
+                    )
+                    markers.add(
+                        MapRenderPoint(
+                            id = "remote-$trackerId",
+                            latitude = lastPoint.latitude,
+                            longitude = lastPoint.longitude,
+                            title = trackerId,
+                            iconImageId = iconId,
+                            iconRotationDegrees = rotation,
+                        )
+                    )
+            }
+            val renderedTrackerIds = markers.map { it.id.removePrefix("remote-") }.toSet()
+            remoteLastPoints.values
+                .filter { activeStreamedTrackerIds.isNotEmpty() && it.trackId in activeStreamedTrackerIds }
+                .filter { it.trackId !in renderedTrackerIds }
+                .forEach { point ->
+                    val iconId = TrackerMapMarkerStylePolicy.multiTrackerIconId(
+                        trackerId = point.trackId,
+                        trackerColorById = trackerColorById,
+                        selectedMapTrackerId = selectedMarkerTrackerId,
+                        fallbackColorHex = defaultIconColorHex,
+                    )
+                    markers.add(
+                        MapRenderPoint(
+                            id = "remote-${point.trackId}",
+                            latitude = point.lat,
+                            longitude = point.lon,
+                            title = point.trackId,
+                            iconImageId = iconId,
+                        )
+                    )
+                }
+        }
+
+        val polygons = if (mode == TrackerMapDisplayMode.SINGLE_SESSION) {
+            buildSingleSessionAccuracyPolygons(
+                marker = markers.firstOrNull { it.id == "last-fix" },
+                streamedAccuracyMeters = streamedAccuracyMeters,
+                fallbackAccuracyMeters = fallbackAccuracyMeters,
+                allowAccuracyFallback = allowAccuracyFallback,
+                centerColorHex = singleLineColorHex,
+            )
+        } else {
+            emptyList()
+        }
 
         return MapRenderState(
             points = markers,
             lines = lines,
+            polygons = polygons,
         )
     }
 
@@ -123,6 +195,7 @@ object TrackerMapStateTransforms {
         allQueueTrailsByTracker: Map<String, List<QueuedLocation>>,
         trackerColorById: Map<String, String>,
         trailOutlineColorHex: String,
+        singleTrackerLineColorHex: String,
     ): List<MapRenderLine> {
         return if (
             (mode == TrackerMapDisplayMode.ALL_QUEUE || mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) &&
@@ -133,7 +206,7 @@ object TrackerMapStateTransforms {
             buildSegmentedLines(
                 lineIdPrefix = "tracker-trail",
                 points = effectiveTrail.map { it.latitude to it.longitude },
-                lineColorHex = TRAIL_LINE_COLOR_HEX,
+                lineColorHex = singleTrackerLineColorHex,
                 outlineColorHex = trailOutlineColorHex,
             )
         }
@@ -177,5 +250,61 @@ object TrackerMapStateTransforms {
     private fun normalizeColor(raw: String?): String? {
         if (raw.isNullOrBlank()) return null
         return if (raw.startsWith("#")) raw else "#$raw"
+    }
+
+    private fun trackDirectionDegrees(points: List<LatLng>): Float {
+        val validPoints = points.filter(::isValidPoint)
+        if (validPoints.size < 2) return 0f
+        val prev = validPoints[validPoints.size - 2]
+        val last = validPoints.last()
+        val dLon = last.longitude - prev.longitude
+        val dLat = last.latitude - prev.latitude
+        if (dLon == 0.0 && dLat == 0.0) return 0f
+        return (Math.atan2(dLon, dLat) * 180.0 / Math.PI).toFloat()
+    }
+
+    private fun isValidPoint(point: LatLng): Boolean {
+        return point.latitude.isFinite() &&
+            point.longitude.isFinite() &&
+            point.latitude in -90.0..90.0 &&
+            point.longitude in -180.0..180.0
+    }
+
+    private fun buildSingleSessionAccuracyPolygons(
+        marker: MapRenderPoint?,
+        streamedAccuracyMeters: Float?,
+        fallbackAccuracyMeters: Float?,
+        allowAccuracyFallback: Boolean,
+        centerColorHex: String,
+    ): List<MapRenderPolygon> {
+        val center = marker ?: return emptyList()
+        val radiusMeters = AccuracyRadiusPolicy.resolveAccuracyRadiusMeters(
+            AccuracyRadiusInput(
+                streamedAccuracyMeters = streamedAccuracyMeters,
+                fallbackAccuracyMeters = fallbackAccuracyMeters,
+                allowFallback = allowAccuracyFallback,
+            )
+        )
+        if (radiusMeters <= 0.0) return emptyList()
+        val ring = AccuracyGeometryBuilder.buildAccuracyRing(
+            center = LatLon(center.latitude, center.longitude),
+            radiusMeters = radiusMeters,
+        )
+        if (ring.isEmpty()) return emptyList()
+        val fillColorHex = withAlpha(centerColorHex, 0x40)
+        return listOf(
+            MapRenderPolygon(
+                id = "last-fix-accuracy",
+                rings = listOf(ring.map { it.lat to it.lon }),
+                fillColorHex = fillColorHex,
+                outlineColorHex = fillColorHex,
+            )
+        )
+    }
+
+    private fun withAlpha(colorHex: String, alpha: Int): String {
+        val normalized = colorHex.removePrefix("#")
+        if (normalized.length != 6) return "#40${TrackerMapIconIds.DEFAULT_COLOR_HEX.removePrefix("#")}"
+        return "#${alpha.coerceIn(0, 255).toString(16).padStart(2, '0')}${normalized}".uppercase()
     }
 }

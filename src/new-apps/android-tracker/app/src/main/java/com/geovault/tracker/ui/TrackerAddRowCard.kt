@@ -44,7 +44,7 @@ fun TrackerAddRowCard(
     name: String,
     ownerEmail: String?,
     iconRes: Int = R.drawable.ic_chevron_track,
-    iconTint: Color = GeoVaultColorTokens.PrimaryBlue,
+    iconTint: Color = TrackerChevronStylePolicy.DefaultAddRowTint,
     state: TrackerAddRowActionState,
     borderColor: Color,
     enabled: Boolean = true,
@@ -71,12 +71,19 @@ fun TrackerAddRowCard(
                 .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                painter = painterResource(iconRes),
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier.size(18.dp),
-            )
+            if (iconRes == R.drawable.ic_chevron_track) {
+                TrackerChevronIcon(
+                    tint = iconTint,
+                    modifier = Modifier.size(TrackerChevronStylePolicy.TrackerRowChevronSize),
+                )
+            } else {
+                Icon(
+                    painter = painterResource(iconRes),
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
             Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(

@@ -20,12 +20,16 @@ object OutlinedGeoJsonLineLayers {
     fun createOuterLayer(
         layerId: String,
         sourceId: String,
+        context: Context? = null,
         visibility: String = Property.VISIBLE,
     ): LineLayer {
+        val outerColor = context?.let {
+            ContextCompat.getColor(it, CommonR.color.gv_common_map_linework_outer_halo)
+        } ?: 0xFFFFFFFF.toInt()
         return LineLayer(layerId, sourceId).apply {
             setProperties(
                 PropertyFactory.lineWidth(WIDTH_OUTER_PX),
-                PropertyFactory.lineColor(Expression.get(PROPERTY_OUTLINE_COLOR)),
+                PropertyFactory.lineColor(outerColor),
                 PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                 PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                 PropertyFactory.visibility(visibility),
@@ -36,16 +40,12 @@ object OutlinedGeoJsonLineLayers {
     fun createBorderLayer(
         layerId: String,
         sourceId: String,
-        context: Context? = null,
         visibility: String = Property.VISIBLE,
     ): LineLayer {
-        val borderColor = context?.let {
-            ContextCompat.getColor(it, CommonR.color.gv_common_map_linework_outer_halo)
-        } ?: 0xFFFFFFFF.toInt()
         return LineLayer(layerId, sourceId).apply {
             setProperties(
                 PropertyFactory.lineWidth(WIDTH_BORDER_PX),
-                PropertyFactory.lineColor(borderColor),
+                PropertyFactory.lineColor(Expression.get(PROPERTY_OUTLINE_COLOR)),
                 PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                 PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                 PropertyFactory.visibility(visibility),

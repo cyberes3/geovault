@@ -34,7 +34,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Public
-import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -45,7 +44,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -78,7 +76,6 @@ import com.geovault.tracker.params.toTrackerParamsRouteArgs
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.parseHexToColorInt
 import com.geovault.tracker.presentation.OwnershipActionPolicy
 import com.geovault.tracker.presentation.DiscoverOverlayMode
 import com.geovault.tracker.presentation.SharedEditActionPolicy
@@ -886,7 +883,7 @@ private fun DiscoverOnMapTrackerCard(
         name = item.name,
         ownerEmail = item.owner_email,
         iconRes = R.drawable.ic_chevron_track,
-        iconTint = GeoVaultColorTokens.PrimaryBlue,
+        iconTint = TrackerChevronStylePolicy.DefaultAddRowTint,
         state = if (isPendingRemove) TrackerAddRowActionState.REMOVING else TrackerAddRowActionState.ADDED_DELETE,
         borderColor = MaterialTheme.colors.onSurface.copy(alpha = 0.16f),
         enabled = enabled,
@@ -1041,7 +1038,9 @@ private fun SharedTrackerCard(
         String.format(Locale.getDefault(), "%.4f, %.4f", it[1], it[0])
     }.orEmpty()
     val ownerLine = tracker.owner_email?.takeIf { it.isNotBlank() }
-    val chevronTint = androidx.compose.ui.graphics.Color(parseHexToColorInt(tracker.color, context))
+    val chevronTint = remember(tracker.color) {
+        TrackerChevronStylePolicy.tintForTrackerColorHex(tracker.color, context)
+    }
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1056,11 +1055,9 @@ private fun SharedTrackerCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Image(
-                    painter = painterResource(R.drawable.ic_chevron_track),
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    colorFilter = ColorFilter.tint(chevronTint),
+                TrackerChevronIcon(
+                    tint = chevronTint,
+                    modifier = Modifier.size(TrackerChevronStylePolicy.TrackerRowChevronSize),
                 )
                 Text(
                     text = tracker.name,
@@ -1267,7 +1264,7 @@ private fun DiscoverIncomingTrackerCard(
         name = item.name,
         ownerEmail = item.owner_email,
         iconRes = R.drawable.ic_chevron_track,
-        iconTint = GeoVaultColorTokens.PrimaryBlue,
+        iconTint = TrackerChevronStylePolicy.DefaultAddRowTint,
         state = if (isPendingAdd) TrackerAddRowActionState.ADDING else TrackerAddRowActionState.IDLE,
         borderColor = MaterialTheme.colors.onSurface.copy(alpha = 0.16f),
         enabled = enabled,
@@ -1313,7 +1310,7 @@ private fun PublicAddTrackerCard(
         name = item.name,
         ownerEmail = item.owner_email,
         iconRes = R.drawable.ic_chevron_track,
-        iconTint = GeoVaultColorTokens.PrimaryBlue,
+        iconTint = TrackerChevronStylePolicy.DefaultAddRowTint,
         state = when {
             isPendingAdd -> TrackerAddRowActionState.ADDING
             isPendingRemove -> TrackerAddRowActionState.REMOVING

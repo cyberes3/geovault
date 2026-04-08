@@ -183,10 +183,19 @@ private fun TrackerMapAuthenticatedContent(
                 synchronousGeoJsonApplication = true,
                 showPointCircles = false,
                 showPointLabelsAndIcons = true,
-                showPointTextLabels = true,
+                showPointTextLabels = false,
+                renderPointSymbolsAboveLines = true,
+                useSynchronousSourceUpdates = true,
+                disablePointSymbolFade = true,
+                defaultIconSize = 0.75f,
+                showPolygonOutline = false,
+                defaultPolygonFillOpacity = 1f,
             ),
             context = context,
         )
+    }
+    val markerIconPlugin = remember(context) {
+        TrackerMapMarkerIconPlugin(context.applicationContext)
     }
     val locationPlugin = rememberGeoVaultMapUserLocationPlugin(context = context)
     var gpsHomeAnchor by remember { mutableStateOf<LatLng?>(null) }
@@ -202,9 +211,11 @@ private fun TrackerMapAuthenticatedContent(
 
     DisposableEffect(map) {
         map.registerPlugin(renderPlugin)
+        map.registerPlugin(markerIconPlugin)
         map.registerPlugin(locationPlugin)
         onDispose {
             map.unregisterPlugin(renderPlugin)
+            map.unregisterPlugin(markerIconPlugin)
             map.unregisterPlugin(locationPlugin)
         }
     }
@@ -315,14 +326,19 @@ private fun TrackerMapAuthenticatedContent(
     }
 
     LaunchedEffect(
+        phase,
         state.trail,
         state.allQueueTrailsByTracker,
         state.runtime,
         state.mode,
         state.remoteLastPoints,
-        state.activeStreamedTrackerIds
+        state.activeStreamedTrackerIds,
+        state.selectedMapTracker,
     ) {
-        renderPlugin.setRenderState(viewModel.buildMapRenderState())
+        if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
+        val renderState = viewModel.buildMapRenderState()
+        val resolvedState = markerIconPlugin.resolveRenderStateWithFallback(renderState)
+        renderPlugin.setRenderState(resolvedState)
     }
 
     var didInitialBounds by remember { mutableStateOf(false) }
@@ -338,6 +354,7 @@ private fun TrackerMapAuthenticatedContent(
 
     LaunchedEffect(Unit) {
         viewModel.fitTrailEvents.collect {
+            if (map.phase.value != GeoVaultMapPhase.Ready) return@collect
             val bounds = viewModel.trailBoundsOrNull()
             val anchor = gpsHomeAnchor
             val effective = when {
@@ -382,8 +399,10 @@ private fun TrackerMapAuthenticatedContent(
                     icon = GeoVaultMapFabIcon.Vector(Icons.Default.Home),
                     contentDescription = fabDescFitTrail,
                     onTap = {
-                        geoVaultResetCameraBearingAndTilt(map)
-                        viewModel.requestFitTrail()
+                        if (phase == GeoVaultMapPhase.Ready) {
+                            geoVaultResetCameraBearingAndTilt(map)
+                            viewModel.requestFitTrail()
+                        }
                     },
                 )
                 action(
@@ -410,14 +429,22 @@ private fun TrackerMapAuthenticatedContent(
                     order = 40,
                     icon = zoomInFabAction.icon,
                     contentDescription = fabDescZoomIn,
-                    onTap = zoomInFabAction.onTap,
+                    onTap = {
+                        if (phase == GeoVaultMapPhase.Ready) {
+                            zoomInFabAction.onTap?.invoke()
+                        }
+                    },
                 )
                 action(
                     id = "zoom_out",
                     order = 50,
                     icon = zoomOutFabAction.icon,
                     contentDescription = fabDescZoomOut,
-                    onTap = zoomOutFabAction.onTap,
+                    onTap = {
+                        if (phase == GeoVaultMapPhase.Ready) {
+                            zoomOutFabAction.onTap?.invoke()
+                        }
+                    },
                 )
             }
 

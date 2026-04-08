@@ -12,9 +12,12 @@ import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
+import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
+import org.maplibre.android.style.layers.TransitionOptions
 import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.android.style.sources.GeoJsonOptions
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.LineString
@@ -70,6 +73,10 @@ class GeoJsonRenderPlugin(
 
     override fun onStyleLoaded(map: MapLibreMap, style: Style) {
         this.map = map
+        if (config.disablePointSymbolFade) {
+            // Keep symbol appearance deterministic during frequent source updates.
+            style.setTransition(TransitionOptions(0L, 0L, false))
+        }
         ensureCommonPlacemarkImages(style)
         ensureLayers(style)
         applyState(style, renderState)
@@ -80,6 +87,7 @@ class GeoJsonRenderPlugin(
         ensureSource(style, linesSourceId)
         ensureSource(style, polygonsSourceId)
 
+        var pendingPointSymbolLayer: SymbolLayer? = null
         if (config.showPointCircles && style.getLayer(pointsCircleLayerId) == null) {
             addLayerWithPlacement(
                 style,
@@ -112,9 +120,7 @@ class GeoJsonRenderPlugin(
             )
         }
         if (config.showPointLabelsAndIcons && style.getLayer(pointsSymbolLayerId) == null) {
-            addLayerWithPlacement(
-                style,
-                SymbolLayer(pointsSymbolLayerId, pointsSourceId).withProperties(
+            val symbolLayer = SymbolLayer(pointsSymbolLayerId, pointsSourceId).withProperties(
                     PropertyFactory.textField(
                         if (config.showPointTextLabels) {
                             Expression.get("title")
@@ -148,9 +154,18 @@ class GeoJsonRenderPlugin(
                             Expression.literal(0.0),
                         ),
                     ),
+                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
                     PropertyFactory.iconAllowOverlap(true),
-                ),
+                    PropertyFactory.iconIgnorePlacement(true),
             )
+            if (config.disablePointSymbolFade) {
+                symbolLayer.setIconOpacityTransition(TransitionOptions(0L, 0L))
+            }
+            if (config.renderPointSymbolsAboveLines) {
+                pendingPointSymbolLayer = symbolLayer
+            } else {
+                addLayerWithPlacement(style, symbolLayer)
+            }
         }
         if (style.getLayer(lineOuterLayerId) == null) {
             addLayerWithPlacement(
@@ -158,6 +173,7 @@ class GeoJsonRenderPlugin(
                 OutlinedGeoJsonLineLayers.createOuterLayer(
                     layerId = lineOuterLayerId,
                     sourceId = linesSourceId,
+                    context = context?.applicationContext,
                 )
             )
         }
@@ -167,7 +183,6 @@ class GeoJsonRenderPlugin(
                 OutlinedGeoJsonLineLayers.createBorderLayer(
                     layerId = lineBorderLayerId,
                     sourceId = linesSourceId,
-                    context = context?.applicationContext,
                 )
             )
         }
@@ -191,6 +206,9 @@ class GeoJsonRenderPlugin(
                     PropertyFactory.lineWidth(config.defaultPolygonOutlineWidth),
                 ),
             )
+        }
+        if (pendingPointSymbolLayer != null && style.getLayer(pointsSymbolLayerId) == null) {
+            addLayerWithPlacement(style, pendingPointSymbolLayer)
         }
     }
 
@@ -243,7 +261,16 @@ class GeoJsonRenderPlugin(
 
     private fun ensureSource(style: Style, id: String) {
         if (style.getSource(id) == null) {
-            style.addSource(GeoJsonSource(id, FeatureCollection.fromFeatures(emptyList())))
+            if (config.useSynchronousSourceUpdates) {
+                style.addSource(
+                    GeoJsonSource(
+                        id,
+                        GeoJsonOptions().apply { this["synchronousUpdate"] = true }
+                    )
+                )
+            } else {
+                style.addSource(GeoJsonSource(id, FeatureCollection.fromFeatures(emptyList())))
+            }
         }
     }
 
