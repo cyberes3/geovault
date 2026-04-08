@@ -400,6 +400,20 @@ private fun TrackerMapAuthenticatedContent(
     }
 
     var didInitialBounds by remember { mutableStateOf(false) }
+    val viewportContextSeed = remember(
+        state.mode,
+        state.currentGroupId,
+        state.displayedTrackerId,
+        state.runtime.selectedTrackerId,
+    ) {
+        val effectiveDisplayedTrackerId = state.displayedTrackerId
+            .ifBlank { state.runtime.selectedTrackerId }
+            .trim()
+        "${state.mode}|${state.currentGroupId.trim()}|$effectiveDisplayedTrackerId"
+    }
+    LaunchedEffect(viewportContextSeed) {
+        didInitialBounds = false
+    }
     LaunchedEffect(phase, state.trail, state.runtime) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
         if (didInitialBounds) return@LaunchedEffect
@@ -558,7 +572,7 @@ private fun TrackerMapAuthenticatedContent(
                     onResetClick = viewModel::restoreSelectedTrackerMapContext,
                 )
             }
-            if (state.isHistoryLoading) {
+            if (state.isGeometryLoading) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
