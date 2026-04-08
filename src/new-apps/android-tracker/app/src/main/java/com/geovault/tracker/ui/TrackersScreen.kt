@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
@@ -66,7 +65,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.geovault.common.NaturalSort
 import com.geovault.common.ui.components.GeoVaultCheckmark
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInput
@@ -201,6 +200,7 @@ private fun Group.toRowModel(
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun TrackersScreen(
+    vm: TrackersGroupsViewModel,
     isAuthenticated: Boolean,
     serverUrl: String,
     onAuthServerUrlChanged: (String) -> Unit,
@@ -214,7 +214,6 @@ fun TrackersScreen(
     onOpenGroupOnMap: (groupId: String) -> Unit = {},
     onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit = {},
 ) {
-    val vm: TrackersGroupsViewModel = viewModel()
     val state by vm.uiState.collectAsState()
     val context = LocalContext.current
     var pendingKmlBytes by remember { mutableStateOf<ByteArray?>(null) }
@@ -668,15 +667,26 @@ private fun TrackersGroupsAuthenticatedBody(
     onViewTrackerParams: (Tracker) -> Unit,
     onOpenGroupActions: (group: Group, highlightedTrackerId: String?) -> Unit,
 ) {
-    val trackersListState = rememberLazyListState()
-    val groupsListState = rememberLazyListState()
+    val trackersListState = remember { androidx.compose.foundation.lazy.LazyListState() }
+    val groupsListState = remember { androidx.compose.foundation.lazy.LazyListState() }
     val context = LocalContext.current
     val selectedTrackerId = remember(state.trackers, state.dialog) { SelectedTrackerPrefs.selectedTrackerId(context) }
     val visibleTrackers = remember(state.trackers) { state.trackers.filter(::isVisibleOwnerTracker) }
     val visibleGroups = remember(state.groups) { state.groups.filter(::isVisibleOwnerGroup) }
+    val orderedVisibleTrackers = remember(visibleTrackers) {
+        val locale = Locale.getDefault()
+        visibleTrackers.sortedWith(
+            NaturalSort.naturalOrderBy<Tracker> { tracker ->
+                tracker.name.lowercase(locale)
+            }.thenBy { tracker ->
+                tracker.id.lowercase(locale)
+            }
+        )
+    }
     var navigationRefreshAttempts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var highlightedTrackerId by remember { mutableStateOf<String?>(null) }
     var highlightedGroupId by remember { mutableStateOf<String?>(null) }
+    var didInitialTrackersTopScroll by remember { mutableStateOf(false) }
 
     val hiddenTrackIds = remember(state.mapVisibility) {
         state.mapVisibility?.hidden_track_ids.orEmpty().toSet()
@@ -684,13 +694,13 @@ private fun TrackersGroupsAuthenticatedBody(
     val hiddenGroupIds = remember(state.mapVisibility) {
         state.mapVisibility?.hidden_group_ids.orEmpty().toSet()
     }
-    val trackerModels = remember(visibleTrackers, hiddenTrackIds, selectedTrackerId, highlightedTrackerId) {
-        visibleTrackers.map { it.toRowModel(hiddenTrackIds, selectedTrackerId, highlightedTrackerId) }
+    val trackerModels = remember(orderedVisibleTrackers, hiddenTrackIds, selectedTrackerId, highlightedTrackerId) {
+        orderedVisibleTrackers.map { it.toRowModel(hiddenTrackIds, selectedTrackerId, highlightedTrackerId) }
     }
     val groupModels = remember(visibleGroups, hiddenGroupIds, highlightedGroupId) {
         visibleGroups.map { it.toRowModel(hiddenGroupIds, highlightedGroupId) }
     }
-    val trackerLookup = remember(visibleTrackers) { visibleTrackers.associateBy { it.id } }
+    val trackerLookup = remember(orderedVisibleTrackers) { orderedVisibleTrackers.associateBy { it.id } }
     val groupLookup = remember(visibleGroups) { visibleGroups.associateBy { it.id } }
 
     val onTrackerAction: (TrackerRowAction) -> Unit = { action ->
@@ -730,12 +740,7 @@ private fun TrackersGroupsAuthenticatedBody(
     val loadingTrackersText = stringResource(R.string.loading_trackers)
     val loadingGroupsText = stringResource(R.string.loading_groups)
 
-    LaunchedEffect(Unit) {
-        trackersListState.scrollToItem(0)
-        groupsListState.scrollToItem(0)
-    }
-
-    LaunchedEffect(navigationRequest, state.subTab, visibleTrackers, visibleGroups, state.isLoading, state.isPullRefreshing) {
+    LaunchedEffect(navigationRequest, state.subTab, orderedVisibleTrackers, visibleGroups, state.isLoading, state.isPullRefreshing) {
         val request = navigationRequest ?: return@LaunchedEffect
         if (request.subTab != state.subTab || request.focus != MapHostNavigationFocus.SCROLL_TO_ITEM) {
             if (request.subTab == state.subTab) {
@@ -749,7 +754,7 @@ private fun TrackersGroupsAuthenticatedBody(
                 if (trackerId.isNullOrBlank()) {
                     Triple(-1, null, null)
                 } else {
-                    val index = visibleTrackers.indexOfFirst { it.id == trackerId }
+                    val index = orderedVisibleTrackers.indexOfFirst { it.id == trackerId }
                     Triple(index, if (index >= 0) trackerId else null, null)
                 }
             }
@@ -792,6 +797,16 @@ private fun TrackersGroupsAuthenticatedBody(
         navigationRefreshAttempts = navigationRefreshAttempts - requestKey
         onNavigationRequestHandled()
     }
+    LaunchedEffect(state.subTab, state.isLoading, state.isPullRefreshing, orderedVisibleTrackers, navigationRequest) {
+        if (state.subTab != TrackersGroupsSubTab.TRACKERS) return@LaunchedEffect
+        if (didInitialTrackersTopScroll) return@LaunchedEffect
+        if (state.isLoading || state.isPullRefreshing) return@LaunchedEffect
+        if (navigationRequest != null) return@LaunchedEffect
+        if (orderedVisibleTrackers.isNotEmpty()) {
+            trackersListState.scrollToItem(0)
+        }
+        didInitialTrackersTopScroll = true
+    }
     LaunchedEffect(highlightedTrackerId, highlightedGroupId) {
         if (highlightedTrackerId == null && highlightedGroupId == null) return@LaunchedEffect
         delay(1800)
@@ -817,7 +832,7 @@ private fun TrackersGroupsAuthenticatedBody(
                     TrackersGroupsSubTab.TRACKERS -> TrackersListPage(
                         models = trackerModels,
                         listState = trackersListState,
-                        isEmpty = visibleTrackers.isEmpty() && !state.isLoading,
+                        isEmpty = orderedVisibleTrackers.isEmpty() && !state.isLoading,
                         onAction = onTrackerAction,
                         enabled = !state.isLoading,
                     )

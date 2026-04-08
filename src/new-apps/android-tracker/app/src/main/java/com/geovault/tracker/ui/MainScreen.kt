@@ -37,6 +37,7 @@ import com.geovault.tracker.presentation.SharedSubTab
 import com.geovault.tracker.presentation.SharedViewModel
 import com.geovault.tracker.presentation.TrackerMapViewModel
 import com.geovault.tracker.presentation.TrackersGroupsSubTab
+import com.geovault.tracker.presentation.TrackersGroupsViewModel
 import com.geovault.tracker.settings.TrackerTrackingProfile
 import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.R
@@ -81,6 +82,7 @@ fun MainScreen(
     val releaseLauncher = remember(context) { CustomTabReleasePageLauncher(context) }
     val trackerMainMap = rememberGeoVaultMainMap(TrackerApplication.TRACKER_MAIN_MAP_KEY)
     val mapViewModel: TrackerMapViewModel = viewModel()
+    val trackersGroupsViewModel: TrackersGroupsViewModel = viewModel()
     val sharedViewModel: SharedViewModel = viewModel()
     var selectedTab by rememberSaveable { mutableStateOf(TrackerTab.HOME.name) }
     var lastSelectedTab by rememberSaveable { mutableStateOf("") }
@@ -92,7 +94,8 @@ fun MainScreen(
     var trackerParamsArgs by remember { mutableStateOf<TrackerParamsRouteArgs?>(null) }
     LaunchedEffect(state.isAuthenticated) {
         if (state.isAuthenticated) {
-            // Preload only main shared list data on app startup.
+            // Preload tab data that should be instant on first open.
+            trackersGroupsViewModel.preloadTrackersSurface()
             sharedViewModel.preloadSharedSurface()
         }
     }
@@ -308,6 +311,7 @@ fun MainScreen(
 
                     TrackerTab.TRACKERS.name -> {
                     TrackersScreen(
+                        vm = trackersGroupsViewModel,
                         isAuthenticated = state.isAuthenticated,
                         serverUrl = state.serverUrl,
                         onAuthServerUrlChanged = onAuthServerUrlChanged,

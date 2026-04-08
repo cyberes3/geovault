@@ -74,7 +74,25 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                 _uiState.update { it.copy(mapVisibility = mapVisibility) }
             }
         }
-        refreshAll()
+        preloadTrackersSurface()
+    }
+
+    fun preloadTrackersSurface() {
+        val state = _uiState.value
+        if (state.isLoading || state.hasCompletedInitialLoad) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isLoading = true,
+                    isPullRefreshing = false,
+                    userMessage = null,
+                )
+            }
+            refreshStateFromServer(
+                userMessage = null,
+                forceRefresh = true,
+            )
+        }
     }
 
     fun setSubTab(tab: TrackersGroupsSubTab) {

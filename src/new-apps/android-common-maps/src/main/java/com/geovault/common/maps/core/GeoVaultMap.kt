@@ -97,11 +97,10 @@ private fun GeoVaultMapHost(
     val mapStateBundle = remember { Bundle() }
 
     val effectivePaddingPx = remember(density, includeDefaultFabColumnPadding, mapPaddingDp) {
-        computeMapPaddingPx(
-            density = density,
+        GeoVaultMapPaddingPolicy(
             includeDefaultFabColumnPadding = includeDefaultFabColumnPadding,
             mapPaddingDp = mapPaddingDp,
-        )
+        ).computeViewportPaddingPx(density)
     }
 
     SideEffect {
@@ -181,43 +180,3 @@ private fun GeoVaultMapHost(
     }
 
 }
-
-internal fun computeMapPaddingPx(
-    density: androidx.compose.ui.unit.Density,
-    includeDefaultFabColumnPadding: Boolean,
-    mapPaddingDp: GeoVaultMapPaddingDp,
-): DoubleArray {
-    fun Dp.orZeroPx(): Double {
-        return if (this == Dp.Unspecified) 0.0 else with(density) { toPx().toDouble() }
-    }
-    if (includeDefaultFabColumnPadding) {
-        // Same edge inset on all sides, plus additional right-side reserve for the FAB stack
-        // (see GeoVaultMapFabColumn default end margin + fabSize) to keep fitted content clear.
-        val edge = with(density) { DEFAULT_MAP_EDGE_PADDING_DP.toPx().toDouble() }
-        val fabColumnReserve = with(density) {
-            (DEFAULT_MAP_FAB_COLUMN_END_MARGIN_DP + DEFAULT_MAP_FAB_COLUMN_FAB_SIZE_DP).toPx().toDouble()
-        }
-        val leftExtra = with(density) { DEFAULT_MAP_LEFT_SAFE_EXTRA_DP.toPx().toDouble() }
-        val rightExtra = with(density) { DEFAULT_MAP_RIGHT_SAFE_EXTRA_DP.toPx().toDouble() }
-        return doubleArrayOf(
-            edge + leftExtra + mapPaddingDp.left.orZeroPx(),
-            edge + mapPaddingDp.top.orZeroPx(),
-            edge + fabColumnReserve + rightExtra + mapPaddingDp.right.orZeroPx(),
-            edge + mapPaddingDp.bottom.orZeroPx(),
-        )
-    }
-    return doubleArrayOf(
-        mapPaddingDp.left.orZeroPx(),
-        mapPaddingDp.top.orZeroPx(),
-        mapPaddingDp.right.orZeroPx(),
-        mapPaddingDp.bottom.orZeroPx(),
-    )
-}
-
-private val DEFAULT_MAP_EDGE_PADDING_DP = 16.dp
-private val DEFAULT_MAP_LEFT_SAFE_EXTRA_DP = 8.dp
-private val DEFAULT_MAP_RIGHT_SAFE_EXTRA_DP = 12.dp
-
-/** Matches [GeoVaultMapFabColumn] default `Modifier.padding` end inset and FAB width. */
-private val DEFAULT_MAP_FAB_COLUMN_END_MARGIN_DP = 16.dp
-private val DEFAULT_MAP_FAB_COLUMN_FAB_SIZE_DP = 44.dp

@@ -30,6 +30,10 @@ class MapLibreManager(
     /** Invoked when a remote/vector style cannot be applied (network/cache miss, parse errors, etc.). */
     var onStyleLoadFailed: ((String) -> Unit)? = null
     var defaultPadding: DoubleArray? = null
+        set(value) {
+            field = value
+            applyViewportPadding(value)
+        }
 
     fun setupBaseMapSettings(map: MapLibreMap) {
         maplibreMap = map
@@ -42,6 +46,7 @@ class MapLibreManager(
         map.uiSettings.isRotateGesturesEnabled = false
         map.setLatLngBoundsForCameraTarget(LatLngBounds.world())
         applyZoomPreferences(map, MAX_ZOOM_LEVEL.toDouble())
+        applyViewportPadding(defaultPadding)
     }
 
     fun fetchMapSources(onFetched: () -> Unit = {}) {
@@ -65,6 +70,8 @@ class MapLibreManager(
 
         fun restoreCamera() {
             map.setCameraPosition(savedCamera)
+            // Style reload can yield a snapshot without our viewport padding; re-apply defaults.
+            applyViewportPadding(defaultPadding)
         }
 
         try {
@@ -298,6 +305,35 @@ class MapLibreManager(
         } else {
             MAX_ZOOM_LEVEL.toDouble()
         }
+    }
+
+    private fun applyViewportPadding(padding: DoubleArray?) {
+        val map = maplibreMap ?: return
+        val resolved = if (padding == null || padding.size != 4) {
+            doubleArrayOf(0.0, 0.0, 0.0, 0.0)
+        } else {
+            doubleArrayOf(
+                padding[0].coerceAtLeast(0.0),
+                padding[1].coerceAtLeast(0.0),
+                padding[2].coerceAtLeast(0.0),
+                padding[3].coerceAtLeast(0.0),
+            )
+        }
+        // MapLibre setPadding is lazy; use paddingTo for immediate viewport update.
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(
+                TAG,
+                "applyViewportPadding px L=${resolved[0]} T=${resolved[1]} R=${resolved[2]} B=${resolved[3]}",
+            )
+        }
+        map.moveCamera(
+            CameraUpdateFactory.paddingTo(
+                resolved[0],
+                resolved[1],
+                resolved[2],
+                resolved[3],
+            )
+        )
     }
 
     fun addMarkerIcon(style: Style, id: String, drawableId: Int) {

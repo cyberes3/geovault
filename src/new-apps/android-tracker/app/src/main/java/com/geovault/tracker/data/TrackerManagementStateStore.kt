@@ -4,6 +4,7 @@ import com.geovault.common.NaturalSort
 import com.geovault.tracker.Group
 import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.Tracker
+import java.util.Locale
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -23,6 +24,13 @@ sealed interface TrackerManagementEvent {
 }
 
 class TrackerManagementStateStore {
+    private val locale: Locale = Locale.getDefault()
+    private val trackerNameComparator = NaturalSort.naturalOrderBy<Tracker> { tracker ->
+        tracker.name.lowercase(locale)
+    }.thenBy { tracker ->
+        tracker.id.lowercase(locale)
+    }
+
     private val _events = MutableSharedFlow<TrackerManagementEvent>(extraBufferCapacity = 128)
     val events: SharedFlow<TrackerManagementEvent> = _events.asSharedFlow()
 
@@ -47,7 +55,7 @@ class TrackerManagementStateStore {
         _trackers.value = _trackers.value
             .filterNot { it.id == tracker.id }
             .plus(tracker)
-            .sortedBy { it.name.lowercase() }
+            .sortedWith(trackerNameComparator)
         if (emitEvent) {
             _events.tryEmit(TrackerManagementEvent.TrackerUpserted(tracker))
         }

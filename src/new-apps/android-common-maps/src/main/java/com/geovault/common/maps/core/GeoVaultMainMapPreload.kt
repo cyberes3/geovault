@@ -247,15 +247,17 @@ private fun GeoVaultMainMapPreloadHostAuthenticatedBody(
     val map = handle.map
     val phase by map.phase.collectAsState()
     val density = LocalDensity.current
-    val preloadPaddingPx = remember(density) {
-        computeMapPaddingPx(
-            density = density,
+    val preloadPaddingPolicy = remember {
+        GeoVaultMapPaddingPolicy(
             includeDefaultFabColumnPadding = true,
             mapPaddingDp = GeoVaultMapPaddingDp(),
         )
     }
-    val preloadBoundsFitPaddingPx = remember(density) {
-        computeGeoVaultMapBoundsFitPaddingPx(density)
+    val preloadPaddingPx = remember(density, preloadPaddingPolicy) {
+        preloadPaddingPolicy.computeViewportPaddingPx(density)
+    }
+    val preloadBoundsFitPaddingPx = remember(density, preloadPaddingPolicy) {
+        preloadPaddingPolicy.computeBoundsFitPaddingPx(density)
     }
     var lastAppliedTarget by remember(mainMapKey) {
         mutableStateOf<GeoVaultMainMapPreloadCameraTarget?>(null)

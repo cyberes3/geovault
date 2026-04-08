@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -62,7 +63,6 @@ import com.geovault.common.maps.core.geoVaultCreateGestureMoveStartedListener
 import com.geovault.common.maps.core.geoVaultLatLngBoundsUnion
 import com.geovault.common.maps.core.moveCameraToFitLatLngBounds
 import com.geovault.common.maps.core.geoVaultResetCameraBearingAndTilt
-import com.geovault.common.maps.core.rememberGeoVaultMapBoundsFitPaddingPx
 import com.geovault.common.maps.location.rememberGeoVaultMapUserLocationPlugin
 import com.geovault.common.maps.render.GeoJsonRenderConfig
 import com.geovault.common.maps.render.GeoJsonRenderPlugin
@@ -163,7 +163,9 @@ private fun TrackerMapAuthenticatedContent(
     onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
+    val mapPaddingPolicy = remember { TrackerMapPaddingPolicy() }
     val topLeftChipMapper = remember { TrackerMapTopLeftChipMapper() }
+    val topLeftChipModel = topLeftChipMapper.map(state)
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var locationPermission by remember {
@@ -200,7 +202,10 @@ private fun TrackerMapAuthenticatedContent(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val boundsFitPaddingPx = rememberGeoVaultMapBoundsFitPaddingPx()
+    val density = LocalDensity.current
+    val boundsFitPaddingPx = remember(density, mapPaddingPolicy) {
+        mapPaddingPolicy.computeBoundsFitPaddingPx(density)
+    }
     val renderPlugin = remember {
         GeoJsonRenderPlugin(
             sourceIdPrefix = TrackerMapRenderContract.SOURCE_ID_PREFIX,
@@ -413,7 +418,8 @@ private fun TrackerMapAuthenticatedContent(
                 modifier = Modifier.fillMaxSize(),
                 map = map,
                 showDefaultSourceToggle = false,
-                includeDefaultFabColumnPadding = true,
+                includeDefaultFabColumnPadding = mapPaddingPolicy.includeDefaultFabColumnPadding,
+                mapPaddingDp = mapPaddingPolicy.mapPaddingDp,
             )
 
             val effectiveDisplayedTrackerId = state.displayedTrackerId
@@ -512,7 +518,6 @@ private fun TrackerMapAuthenticatedContent(
                 actions = mapFabActions,
             )
 
-            val topLeftChipModel = topLeftChipMapper.map(state)
             if (topLeftChipModel is TrackerMapTopLeftChipUiModel.Visible) {
                 MapTopLeftTrackerChip(
                     modifier = Modifier

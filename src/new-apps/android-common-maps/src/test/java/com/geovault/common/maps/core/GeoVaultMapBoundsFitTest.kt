@@ -1,6 +1,7 @@
 package com.geovault.common.maps.core
 
 import androidx.compose.ui.unit.Density
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -13,6 +14,10 @@ class GeoVaultMapBoundsFitTest {
         val px = computeGeoVaultMapBoundsFitPaddingPx(density)
         assertEquals(4, px.size)
         assertTrueAllNonNegative(px)
+        assertArrayEquals(
+            intArrayOf(48, 32, 176, 32),
+            px,
+        )
     }
 
     private fun assertTrueAllNonNegative(px: IntArray) {
