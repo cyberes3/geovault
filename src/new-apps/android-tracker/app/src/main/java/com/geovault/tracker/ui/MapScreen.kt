@@ -39,6 +39,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,7 +86,6 @@ import com.geovault.tracker.params.toTrackerParamsRouteArgs
 import com.geovault.tracker.R
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.services.TrackingUiStatus
-import com.geovault.tracker.presentation.TrackerMapCameraLockPolicy
 import com.geovault.tracker.presentation.TrackerMapDisplayMode
 import com.geovault.tracker.presentation.TrackerMapGroupModeOption
 import com.geovault.tracker.presentation.TrackerMapRenderContract
@@ -93,6 +93,8 @@ import com.geovault.tracker.presentation.TrackerMapSelectionCard
 import com.geovault.tracker.presentation.TrackerMapTopLeftChipMapper
 import com.geovault.tracker.presentation.TrackerMapTopLeftChipUiModel
 import com.geovault.tracker.presentation.TrackerMapUiState
+import com.geovault.tracker.presentation.TrackerMapUserLocationInput
+import com.geovault.tracker.presentation.TrackerMapUserLocationPolicy
 import com.geovault.tracker.presentation.TrackerMapViewModel
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
@@ -228,6 +230,8 @@ private fun TrackerMapAuthenticatedContent(
         TrackerMapMarkerIconPlugin(context.applicationContext)
     }
     val locationPlugin = rememberGeoVaultMapUserLocationPlugin(context = context)
+    val userLocationPolicy = remember { TrackerMapUserLocationPolicy() }
+    var followLockArmedThisSession by rememberSaveable { mutableStateOf(false) }
     var gpsHomeAnchor by remember { mutableStateOf<LatLng?>(null) }
     val layerFabAction = remember(map) { geoVaultLayerToggleFabAction(map) }
     val zoomInFabAction = remember(map) { geoVaultZoomInFabAction(map) }
@@ -262,30 +266,47 @@ private fun TrackerMapAuthenticatedContent(
     LaunchedEffect(phase) {
         viewModel.setMapReady(phase == GeoVaultMapPhase.Ready)
     }
-    DisposableEffect(map, locationPermission, phase, state.runtime.isRunning) {
-        val shouldStreamGps = locationPermission &&
-            phase == GeoVaultMapPhase.Ready &&
-            TrackerMapCameraLockPolicy.shouldRenderUserLocation(state.runtime.isRunning)
-        if (shouldStreamGps) {
+    LaunchedEffect(isActive, state.followLockEnabled) {
+        if (!isActive || !state.followLockEnabled) {
+            followLockArmedThisSession = false
+        }
+    }
+
+    val userLocationDecision = remember(
+        isActive,
+        locationPermission,
+        phase,
+        followLockArmedThisSession,
+        state.followLockEnabled,
+        state.runtime.isRunning
+    ) {
+        userLocationPolicy.evaluate(
+            TrackerMapUserLocationInput(
+                isMapActive = isActive,
+                hasLocationPermission = locationPermission,
+                isMapReady = phase == GeoVaultMapPhase.Ready,
+                userFollowLockArmedThisSession = followLockArmedThisSession,
+                followLockEnabled = state.followLockEnabled,
+                runtimeRunning = state.runtime.isRunning
+            )
+        )
+    }
+
+    DisposableEffect(map, userLocationDecision.shouldStreamGps) {
+        if (userLocationDecision.shouldStreamGps) {
             locationPlugin.startRenderingGpsLocation(intervalMs = 2000L)
         }
         onDispose {
-            if (shouldStreamGps) {
+            if (userLocationDecision.shouldStreamGps) {
                 locationPlugin.stopRenderingGpsLocation()
             }
         }
     }
 
-    LaunchedEffect(state.followLockEnabled, phase) {
+    LaunchedEffect(phase, userLocationDecision) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
-        val allowPuck = TrackerMapCameraLockPolicy.shouldRenderUserLocation(state.runtime.isRunning)
-        locationPlugin.setEnabled(allowPuck)
-        locationPlugin.setCameraTracking(
-            TrackerMapCameraLockPolicy.shouldEnableFollowCamera(
-                runtimeRunning = state.runtime.isRunning,
-                followLockEnabled = state.followLockEnabled
-            )
-        )
+        locationPlugin.setEnabled(userLocationDecision.shouldEnablePuck)
+        locationPlugin.setCameraTracking(userLocationDecision.shouldEnableFollowCamera)
     }
 
     LaunchedEffect(
@@ -459,6 +480,7 @@ private fun TrackerMapAuthenticatedContent(
                         icon = gpsFabAction.icon,
                         contentDescription = gpsFabAction.contentDescription,
                         onTap = {
+                            followLockArmedThisSession = false
                             viewModel.setFollowLock(false)
                             gpsFabAction.onTap?.invoke()
                         },
@@ -483,7 +505,9 @@ private fun TrackerMapAuthenticatedContent(
                         if (singleTrackerMapView) {
                             viewModel.toggleDisplayedTrackerLock()
                         } else {
-                            viewModel.setFollowLock(!lockSelected)
+                            val nextEnabled = !lockSelected
+                            followLockArmedThisSession = nextEnabled
+                            viewModel.setFollowLock(nextEnabled)
                         }
                     },
                 )
