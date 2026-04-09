@@ -44,8 +44,6 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
             GeoVaultMainMapControllerStore.forceReleaseKeyForReset(TRACKER_MAIN_MAP_KEY)
         }
 
-        GeovaultAuthManager.fetchUserStatus(this)
-
         TrackingNotificationChannels.ensureTrackingChannel(this)
         TrackingRecoveryCoordinator.createRecoveryChannel(this)
     }

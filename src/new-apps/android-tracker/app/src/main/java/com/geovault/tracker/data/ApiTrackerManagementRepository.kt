@@ -46,6 +46,7 @@ class ApiTrackerManagementRepository(
     @Volatile private var mapVisibilityCache: MapVisibilityResponse? = null
     @Volatile private var cachedApiBaseUrl: String? = null
     @Volatile private var cachedApi: TrackerApi? = null
+    private val readRequestGate = SingleFlightRequestGate<String, Any>()
 
     override suspend fun loadTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> {
         if (!forceRefresh) {
@@ -54,81 +55,96 @@ class ApiTrackerManagementRepository(
                 return RepositoryResult.Success(cachedTrackers)
             }
         }
-        val networkResult = executeApiCall { api -> api.getTrackers().execute() }
-        if (networkResult is RepositoryResult.Success) {
-            val trackers = stateStore.canonicalizeTrackers(networkResult.data.toDomainModels())
-            cacheMutex.withLock {
-                trackersCache = trackers
+        @Suppress("UNCHECKED_CAST")
+        return readRequestGate.run("trackers") {
+            if (!forceRefresh) {
+                val cachedTrackers = cacheMutex.withLock { trackersCache }
+                if (cachedTrackers != null) {
+                    return@run RepositoryResult.Success(cachedTrackers) as Any
+                }
             }
-            stateStore.publishTrackers(trackers)
-            return RepositoryResult.Success(trackers)
-        }
-        return when (networkResult) {
-            is RepositoryResult.Success -> error("Unexpected success branch")
-            is RepositoryResult.Failure -> networkResult
-        }
+            val networkResult = executeApiCall { api -> api.getTrackers().execute() }
+            if (networkResult is RepositoryResult.Success) {
+                val trackers = stateStore.canonicalizeTrackers(networkResult.data.toDomainModels())
+                cacheMutex.withLock {
+                    trackersCache = trackers
+                }
+                stateStore.publishTrackers(trackers)
+                return@run RepositoryResult.Success(trackers) as Any
+            }
+            networkResult as Any
+        } as RepositoryResult<List<Tracker>>
     }
 
     override suspend fun loadAvailableToAdd(forceRefresh: Boolean): RepositoryResult<AvailableToAddResponse> {
-        return executeApiCall { api -> api.getAvailableToAdd().execute() }
+        @Suppress("UNCHECKED_CAST")
+        return readRequestGate.run("available-to-add") {
+            executeApiCall { api -> api.getAvailableToAdd().execute() } as Any
+        } as RepositoryResult<AvailableToAddResponse>
     }
 
     override suspend fun loadTracker(trackerId: String): RepositoryResult<Tracker> {
-        Log.d(TAG, "Loading tracker details trackerId=$trackerId")
-        val networkResult = executeApiCall { api -> api.getTracker(trackerId).execute() }
-        if (networkResult is RepositoryResult.Success) {
-            val tracker = networkResult.data.toDomainModel()
-            cacheMutex.withLock {
-                trackersCache = trackersCache
-                    ?.filterNot { it.id == trackerId }
-                    .orEmpty()
-                    .plus(tracker)
-                    .distinctBy { it.id }
-                    .let(stateStore::canonicalizeTrackers)
+        @Suppress("UNCHECKED_CAST")
+        return readRequestGate.run("tracker:$trackerId") {
+            Log.d(TAG, "Loading tracker details trackerId=$trackerId")
+            val networkResult = executeApiCall { api -> api.getTracker(trackerId).execute() }
+            if (networkResult is RepositoryResult.Success) {
+                val tracker = networkResult.data.toDomainModel()
+                cacheMutex.withLock {
+                    trackersCache = trackersCache
+                        ?.filterNot { it.id == trackerId }
+                        .orEmpty()
+                        .plus(tracker)
+                        .distinctBy { it.id }
+                        .let(stateStore::canonicalizeTrackers)
+                }
+                stateStore.publishTracker(tracker)
+                Log.d(
+                    TAG,
+                    "Loaded tracker details trackerId=$trackerId recentDataWindow=${tracker.settings?.get("recent_data_window")} hidden=${tracker.settings?.get("hidden")}"
+                )
+                return@run RepositoryResult.Success(tracker) as Any
+            } else if (networkResult is RepositoryResult.Failure) {
+                Log.e(TAG, "Failed loading tracker details trackerId=$trackerId error=${networkResult.error}")
             }
-            stateStore.publishTracker(tracker)
-            Log.d(
-                TAG,
-                "Loaded tracker details trackerId=$trackerId recentDataWindow=${tracker.settings?.get("recent_data_window")} hidden=${tracker.settings?.get("hidden")}"
-            )
-            return RepositoryResult.Success(tracker)
-        } else if (networkResult is RepositoryResult.Failure) {
-            Log.e(TAG, "Failed loading tracker details trackerId=$trackerId error=${networkResult.error}")
-        }
-        return when (networkResult) {
-            is RepositoryResult.Success -> error("Unexpected success branch")
-            is RepositoryResult.Failure -> networkResult
-        }
+            networkResult as Any
+        } as RepositoryResult<Tracker>
     }
 
     override suspend fun loadTrackerGeometry(trackerId: String): RepositoryResult<Tracker> {
-        return when (val networkResult = executeApiCall { api -> api.getTrackerGeometry(trackerId).execute() }) {
-            is RepositoryResult.Success -> {
-                val incoming = networkResult.data.toDomainModel()
-                val merged = cacheMutex.withLock {
-                    val existing = trackersCache?.firstOrNull { it.id == incoming.id }
-                        ?: stateStore.trackers.value.firstOrNull { it.id == incoming.id }
-                    val mergedTracker = TrackerGeometryMergePolicy.merged(existing = existing, incoming = incoming)
-                    trackersCache = trackersCache
-                        ?.filterNot { it.id == mergedTracker.id }
-                        .orEmpty()
-                        .plus(mergedTracker)
-                        .distinctBy { it.id }
-                        .let(stateStore::canonicalizeTrackers)
-                    mergedTracker
+        @Suppress("UNCHECKED_CAST")
+        return readRequestGate.run("tracker-geometry:$trackerId") {
+            when (val networkResult = executeApiCall { api -> api.getTrackerGeometry(trackerId).execute() }) {
+                is RepositoryResult.Success -> {
+                    val incoming = networkResult.data.toDomainModel()
+                    val merged = cacheMutex.withLock {
+                        val existing = trackersCache?.firstOrNull { it.id == incoming.id }
+                            ?: stateStore.trackers.value.firstOrNull { it.id == incoming.id }
+                        val mergedTracker = TrackerGeometryMergePolicy.merged(existing = existing, incoming = incoming)
+                        trackersCache = trackersCache
+                            ?.filterNot { it.id == mergedTracker.id }
+                            .orEmpty()
+                            .plus(mergedTracker)
+                            .distinctBy { it.id }
+                            .let(stateStore::canonicalizeTrackers)
+                        mergedTracker
+                    }
+                    stateStore.publishTracker(merged)
+                    RepositoryResult.Success(merged) as Any
                 }
-                stateStore.publishTracker(merged)
-                RepositoryResult.Success(merged)
+                is RepositoryResult.Failure -> networkResult as Any
             }
-            is RepositoryResult.Failure -> networkResult
-        }
+        } as RepositoryResult<Tracker>
     }
 
     override suspend fun loadTrackerCoordinates(trackerId: String): RepositoryResult<TrackerCoordinatesResponse> {
-        return when (val networkResult = executeApiCall { api -> api.getTrackerCoordinates(trackerId).execute() }) {
-            is RepositoryResult.Success -> RepositoryResult.Success(networkResult.data.toDomainModel())
-            is RepositoryResult.Failure -> networkResult
-        }
+        @Suppress("UNCHECKED_CAST")
+        return readRequestGate.run("tracker-coordinates:$trackerId") {
+            when (val networkResult = executeApiCall { api -> api.getTrackerCoordinates(trackerId).execute() }) {
+                is RepositoryResult.Success -> RepositoryResult.Success(networkResult.data.toDomainModel()) as Any
+                is RepositoryResult.Failure -> networkResult as Any
+            }
+        } as RepositoryResult<TrackerCoordinatesResponse>
     }
 
     override suspend fun loadTrackersGeometry(trackerIds: List<String>): RepositoryResult<List<Tracker>> {
@@ -136,37 +152,41 @@ class ApiTrackerManagementRepository(
         if (normalizedIds.isEmpty()) {
             return RepositoryResult.Success(emptyList())
         }
-        return when (
-            val networkResult = executeApiCall {
-                api -> api.getTrackersGeometry(TrackerBulkGeometryRequest(tracker_ids = normalizedIds)).execute()
-            }
-        ) {
-            is RepositoryResult.Success -> {
-                val incomingTrackers = networkResult.data.toDomainModels()
-                val mergedTrackers = cacheMutex.withLock {
-                    val existingById = trackersCache
-                        ?.associateBy { it.id }
-                        .orEmpty() +
-                        stateStore.trackers.value.associateBy { it.id }
-                    val mergedById = incomingTrackers.associate { incoming ->
-                        incoming.id to TrackerGeometryMergePolicy.merged(
-                            existing = existingById[incoming.id],
-                            incoming = incoming
-                        )
-                    }
-                    trackersCache = trackersCache
-                        ?.filterNot { it.id in mergedById.keys }
-                        .orEmpty()
-                        .plus(mergedById.values)
-                        .distinctBy { it.id }
-                        .let(stateStore::canonicalizeTrackers)
-                    mergedById.values.toList()
+        val key = "trackers-geometry:${normalizedIds.sorted().joinToString(",")}"
+        @Suppress("UNCHECKED_CAST")
+        return readRequestGate.run(key) {
+            when (
+                val networkResult = executeApiCall {
+                    api -> api.getTrackersGeometry(TrackerBulkGeometryRequest(tracker_ids = normalizedIds)).execute()
                 }
-                mergedTrackers.forEach { tracker -> stateStore.publishTracker(tracker) }
-                RepositoryResult.Success(mergedTrackers)
+            ) {
+                is RepositoryResult.Success -> {
+                    val incomingTrackers = networkResult.data.toDomainModels()
+                    val mergedTrackers = cacheMutex.withLock {
+                        val existingById = trackersCache
+                            ?.associateBy { it.id }
+                            .orEmpty() +
+                            stateStore.trackers.value.associateBy { it.id }
+                        val mergedById = incomingTrackers.associate { incoming ->
+                            incoming.id to TrackerGeometryMergePolicy.merged(
+                                existing = existingById[incoming.id],
+                                incoming = incoming
+                            )
+                        }
+                        trackersCache = trackersCache
+                            ?.filterNot { it.id in mergedById.keys }
+                            .orEmpty()
+                            .plus(mergedById.values)
+                            .distinctBy { it.id }
+                            .let(stateStore::canonicalizeTrackers)
+                        mergedById.values.toList()
+                    }
+                    mergedTrackers.forEach { tracker -> stateStore.publishTracker(tracker) }
+                    RepositoryResult.Success(mergedTrackers) as Any
+                }
+                is RepositoryResult.Failure -> networkResult as Any
             }
-            is RepositoryResult.Failure -> networkResult
-        }
+        } as RepositoryResult<List<Tracker>>
     }
 
     override suspend fun createTracker(request: TrackerCreateRequest): RepositoryResult<Tracker> {
@@ -293,6 +313,7 @@ class ApiTrackerManagementRepository(
         mapVisibilityCache = null
         cachedApiBaseUrl = null
         cachedApi = null
+        readRequestGate.clear()
         stateStore.clearAll()
     }
 
@@ -302,15 +323,21 @@ class ApiTrackerManagementRepository(
     }
 
     override suspend fun fetchTrackerKml(trackerId: String): RepositoryResult<ByteArray> {
-        val result = executeApiCall<ResponseBody> { api -> api.getTrackerKml(trackerId).execute() }
-        return when (result) {
-            is RepositoryResult.Success -> RepositoryResult.Success(result.data.bytes())
-            is RepositoryResult.Failure -> result
-        }
+        @Suppress("UNCHECKED_CAST")
+        return readRequestGate.run("tracker-kml:$trackerId") {
+            val result = executeApiCall<ResponseBody> { api -> api.getTrackerKml(trackerId).execute() }
+            when (result) {
+                is RepositoryResult.Success -> RepositoryResult.Success(result.data.bytes()) as Any
+                is RepositoryResult.Failure -> result as Any
+            }
+        } as RepositoryResult<ByteArray>
     }
 
     override suspend fun loadUsers(): RepositoryResult<UsersResponse> {
-        return executeApiCall { api -> api.getUsers().execute() }
+        @Suppress("UNCHECKED_CAST")
+        return readRequestGate.run("users") {
+            executeApiCall { api -> api.getUsers().execute() } as Any
+        } as RepositoryResult<UsersResponse>
     }
 
     override suspend fun loadMapVisibility(forceRefresh: Boolean): RepositoryResult<MapVisibilityResponse> {
@@ -320,14 +347,23 @@ class ApiTrackerManagementRepository(
                 return RepositoryResult.Success(cachedMapVisibility)
             }
         }
-        val result = executeApiCall { api -> api.getMapVisibility().execute() }
-        if (result is RepositoryResult.Success) {
-            cacheMutex.withLock {
-                mapVisibilityCache = result.data
+        @Suppress("UNCHECKED_CAST")
+        return readRequestGate.run("map-visibility") {
+            if (!forceRefresh) {
+                val cachedMapVisibility = cacheMutex.withLock { mapVisibilityCache }
+                if (cachedMapVisibility != null) {
+                    return@run RepositoryResult.Success(cachedMapVisibility) as Any
+                }
             }
-            stateStore.publishMapVisibility(result.data)
-        }
-        return result
+            val result = executeApiCall { api -> api.getMapVisibility().execute() }
+            if (result is RepositoryResult.Success) {
+                cacheMutex.withLock {
+                    mapVisibilityCache = result.data
+                }
+                stateStore.publishMapVisibility(result.data)
+            }
+            result as Any
+        } as RepositoryResult<MapVisibilityResponse>
     }
 
     override suspend fun patchMapVisibility(request: MapVisibilityRequest): RepositoryResult<MapVisibilityResponse> {
@@ -348,15 +384,24 @@ class ApiTrackerManagementRepository(
                 return RepositoryResult.Success(cachedGroups)
             }
         }
-        val result = executeApiCall { api -> api.getGroups().execute() }
-        if (result is RepositoryResult.Success) {
-            val sortedGroups = result.data.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
-            cacheMutex.withLock {
-                groupsCache = sortedGroups
+        @Suppress("UNCHECKED_CAST")
+        return readRequestGate.run("groups") {
+            if (!forceRefresh) {
+                val cachedGroups = cacheMutex.withLock { groupsCache }
+                if (cachedGroups != null) {
+                    return@run RepositoryResult.Success(cachedGroups) as Any
+                }
             }
-            stateStore.publishGroups(sortedGroups)
-        }
-        return result
+            val result = executeApiCall { api -> api.getGroups().execute() }
+            if (result is RepositoryResult.Success) {
+                val sortedGroups = result.data.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
+                cacheMutex.withLock {
+                    groupsCache = sortedGroups
+                }
+                stateStore.publishGroups(sortedGroups)
+            }
+            result as Any
+        } as RepositoryResult<List<Group>>
     }
 
     override suspend fun loadGroup(groupId: String): RepositoryResult<Group> {

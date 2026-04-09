@@ -2,7 +2,6 @@ package com.geovault.tracker.presentation
 
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.TrackerCoordinatesResponse
 import com.geovault.tracker.db.QueuedLocation
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -12,7 +11,7 @@ import org.junit.Test
 class TrackerMapTrailDataCoordinatorTest {
 
     @Test
-    fun loadSingleTrackerTrail_usesQueueFallbackWhenMergedIsEmpty() = runBlocking {
+    fun loadSingleTrackerTrail_usesQueueFallbackWhenGeometryIsEmpty() = runBlocking {
         var anchorCleared = false
         val fallback = listOf(
             QueuedLocation(
@@ -32,7 +31,6 @@ class TrackerMapTrailDataCoordinatorTest {
 
         val result = TrackerMapTrailDataCoordinator.loadSingleTrackerTrail(
             trackerId = "t1",
-            loadTrackerCoordinates = { RepositoryResult.Success(TrackerCoordinatesResponse(coordinates = emptyList())) },
             loadTrackerGeometry = {
                 RepositoryResult.Success(Tracker(id = "t1", name = "T1", color = null))
             },
@@ -40,7 +38,6 @@ class TrackerMapTrailDataCoordinatorTest {
             resolveSessionStartMs = { null },
             onSessionStartResolved = { _, _ -> Unit },
             onSessionAnchorResolved = { anchorCleared = true },
-            mergeCoordinates = { _, _ -> emptyList() },
             mapCoordinatesToTrail = { emptyList() }
         )
 
@@ -67,12 +64,8 @@ class TrackerMapTrailDataCoordinatorTest {
                     )
                 )
             },
-            loadTrackerCoordinates = {
-                RepositoryResult.Success(TrackerCoordinatesResponse(coordinates = emptyList()))
-            },
             resolveSessionStartMs = { null },
             onSessionStartResolved = { _, _ -> Unit },
-            mergeCoordinates = { geometry, _ -> geometry },
             mapCoordinatesToTrail = { coordinates ->
                 coordinates.mapIndexed { index, point ->
                     QueuedLocation(

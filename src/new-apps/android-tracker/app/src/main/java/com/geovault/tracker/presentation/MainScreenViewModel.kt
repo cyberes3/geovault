@@ -24,13 +24,11 @@ import com.geovault.tracker.R
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.settings.TrackerSettingsLoadState
 import com.geovault.tracker.settings.TrackerSettingsRepository
-import com.geovault.tracker.data.GroupManagementRepository
+import com.geovault.tracker.data.TrackerBootstrapOrchestrator
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.TrackingService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,8 +60,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         TrackerAppServices.from(application).trackerSettingsRepository()
     private val trackerManagementRepository: TrackerManagementRepository =
         TrackerAppServices.from(application).trackerManagementRepository()
-    private val groupManagementRepository: GroupManagementRepository =
-        TrackerAppServices.from(application).groupManagementRepository()
+    private val trackerBootstrapOrchestrator: TrackerBootstrapOrchestrator =
+        TrackerAppServices.from(application).trackerBootstrapOrchestrator()
 
     private val _state = MutableStateFlow(MainScreenState())
     val state: StateFlow<MainScreenState> = _state.asStateFlow()
@@ -245,19 +243,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         startupRefreshJob = viewModelScope.launch {
             startupRefreshHandled = true
             refreshUserStatus()
-            val outcome = MainStartupRefreshCoordinator.run(
-                selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(app),
-                loadTrackers = { trackerManagementRepository.loadTrackers(forceRefresh = true) },
-                loadGroups = { groupManagementRepository.loadGroups(forceRefresh = true) },
-                loadMapVisibility = { trackerManagementRepository.loadMapVisibility(forceRefresh = true) },
-                loadTracker = { trackerId -> trackerManagementRepository.loadTracker(trackerId) },
-                loadTrackerGeometry = { trackerId ->
-                    trackerManagementRepository.loadTrackerGeometry(trackerId)
-                },
-                loadTrackerCoordinates = { trackerId ->
-                    trackerManagementRepository.loadTrackerCoordinates(trackerId)
-                },
-            )
+            val outcome = trackerBootstrapOrchestrator.refreshForLaunch()
             _state.update { it.copy(isServerAccessible = outcome.isServerAccessible) }
         }
     }
@@ -266,18 +252,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         if (!_state.value.isAuthenticated) return
         if (serverAccessibilityRefreshJob?.isActive == true) return
         serverAccessibilityRefreshJob = viewModelScope.launch {
-            val isAccessible = coroutineScope {
-                val trackersDef = async { trackerManagementRepository.loadTrackers(forceRefresh = true) }
-                val groupsDef = async { groupManagementRepository.loadGroups(forceRefresh = true) }
-                val visibilityDef = async { trackerManagementRepository.loadMapVisibility(forceRefresh = true) }
-                val refreshResults = listOf(
-                    trackersDef.await(),
-                    groupsDef.await(),
-                    visibilityDef.await(),
-                )
-                refreshResults.any { it is RepositoryResult.Success }
-            }
-            _state.update { it.copy(isServerAccessible = isAccessible) }
+            val outcome = trackerBootstrapOrchestrator.refreshForResume()
+            _state.update { it.copy(isServerAccessible = outcome.isServerAccessible) }
         }
     }
 
@@ -353,6 +329,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun resetPostAuthStartupState() {
+        trackerBootstrapOrchestrator.resetLaunchState()
         startupTrackingAutomationHandled = false
         startupRefreshHandled = false
         hasStartedVersionCheck = false

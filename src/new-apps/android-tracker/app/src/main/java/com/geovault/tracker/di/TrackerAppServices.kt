@@ -8,6 +8,8 @@ import com.geovault.common.auth.GeovaultAuthServices
 import com.geovault.tracker.settings.TrackerSettingsDataStore
 import com.geovault.tracker.data.ApiTrackerManagementRepository
 import com.geovault.tracker.data.GroupManagementRepository
+import com.geovault.tracker.data.RepositoryTrackerBootstrapDataSource
+import com.geovault.tracker.data.TrackerBootstrapOrchestrator
 import com.geovault.tracker.data.TrackerDetailRepository
 import com.geovault.tracker.data.TrackerDetailRepositoryImpl
 import com.geovault.tracker.data.TrackerManagementRepository
@@ -46,6 +48,15 @@ class TrackerAppServices private constructor(private val appContext: Context) {
         TrackerDetailRepositoryImpl(trackerAndGroupManagementRepository)
     }
 
+    private val trackerBootstrapOrchestrator by lazy {
+        TrackerBootstrapOrchestrator(
+            dataSource = RepositoryTrackerBootstrapDataSource(
+                trackerRepository = trackerAndGroupManagementRepository,
+                groupRepository = trackerAndGroupManagementRepository,
+            )
+        )
+    }
+
     fun initialAuthController(): CommonInitialAuthController = authController
 
     fun trackerSettingsRepository(): TrackerSettingsRepository = trackerSettingsRepository
@@ -57,6 +68,8 @@ class TrackerAppServices private constructor(private val appContext: Context) {
     fun trackerManagementStateStore(): TrackerManagementStateStore = trackerManagementStateStore
 
     fun trackerDetailRepository(): TrackerDetailRepository = trackerDetailRepository
+
+    fun trackerBootstrapOrchestrator(): TrackerBootstrapOrchestrator = trackerBootstrapOrchestrator
 
     companion object {
         @Volatile

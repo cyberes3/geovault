@@ -29,8 +29,10 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -205,6 +207,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private var lastObservedTrackingRunning: Boolean? = null
     private val runtimeResyncPolicy = TrackerMapRuntimeResyncPolicy()
     private val reopenOrchestrator = TrackerMapReopenOrchestrator()
+    private val sessionRequestDeduper = TrackerMapSessionRequestDeduper()
     private val geometryLoadingTracker = TrackerMapGeometryLoadingTracker(
         onLoadingChanged = ::setGeometryLoading
     )
@@ -275,19 +278,24 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             }
         }
         viewModelScope.launch {
-            trackerManagementStateStore.trackers.collectLatest {
-                requestRuntimeTrailReload()
-                refreshStreamTargets()
-            }
-        }
-        viewModelScope.launch {
-            trackerManagementStateStore.groups.collectLatest {
-                requestRuntimeTrailReload()
-                refreshStreamTargets()
-            }
-        }
-        viewModelScope.launch {
-            trackerManagementStateStore.mapVisibility.collectLatest {
+            combine(
+                trackerManagementStateStore.trackers,
+                trackerManagementStateStore.groups,
+                trackerManagementStateStore.mapVisibility
+            ) { trackers, groups, visibility ->
+                val trackerFingerprint = trackers.joinToString(separator = "|") { tracker ->
+                    "${tracker.id}:${tracker.updated_at ?: 0L}:${tracker.geometry?.coordinates?.size ?: 0}"
+                }
+                val groupFingerprint = groups.joinToString(separator = "|") { group ->
+                    "${group.id}:${group.updated_at ?: 0L}:${group.track_ids?.size ?: 0}"
+                }
+                val visibilityFingerprint = if (visibility == null) {
+                    "none"
+                } else {
+                    "${visibility.hidden_group_ids.orEmpty().sorted()}|${visibility.hidden_track_ids.orEmpty().sorted()}"
+                }
+                "$trackerFingerprint#$groupFingerprint#$visibilityFingerprint"
+            }.distinctUntilChanged().collectLatest {
                 requestRuntimeTrailReload()
                 refreshStreamTargets()
             }
@@ -368,17 +376,20 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         } else {
             ""
         }
-        _uiState.value = _uiState.value.copy(
+        val nextState = _uiState.value.copy(
             mode = mode,
             currentGroupId = preferredGroupId,
             groupModeOptions = groupOptions,
         )
-        _uiState.value = stateWithResetMapContext(_uiState.value)
-        if (mode != TrackerMapDisplayMode.SINGLE_SESSION) {
-            pendingReopenSingleTrackerLoadId = null
+        val pendingReopenTrackerId = if (mode == TrackerMapDisplayMode.SINGLE_SESSION) {
+            pendingReopenSingleTrackerLoadId
+        } else {
+            null
         }
-        requestRuntimeTrailReload()
-        refreshStreamTargets()
+        applyMapContextTransition(
+            nextState = nextState,
+            pendingReopenTrackerId = pendingReopenTrackerId
+        )
     }
 
     fun setGroupModeGroup(groupId: String) {
@@ -388,14 +399,14 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         if (state.currentGroupId == normalized && state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
             return
         }
-        _uiState.value = state.copy(
+        val nextState = state.copy(
             currentGroupId = normalized,
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
         )
-        _uiState.value = stateWithResetMapContext(_uiState.value)
-        pendingReopenSingleTrackerLoadId = null
-        requestRuntimeTrailReload()
-        refreshStreamTargets()
+        applyMapContextTransition(
+            nextState = nextState,
+            pendingReopenTrackerId = null
+        )
     }
 
     fun openTrackerOnMap(trackerId: String, trackerName: String?) {
@@ -409,17 +420,17 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 state.displayedTrackerName
             }
         }
-        _uiState.value = state.copy(
+        val nextState = state.copy(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             displayedTrackerId = normalizedId,
             displayedTrackerName = resolvedName,
             currentGroupId = "",
             groupModeOptions = emptyList(),
         )
-        _uiState.value = stateWithResetMapContext(_uiState.value)
-        pendingReopenSingleTrackerLoadId = normalizedId
-        requestRuntimeTrailReload()
-        refreshStreamTargets()
+        applyMapContextTransition(
+            nextState = nextState,
+            pendingReopenTrackerId = normalizedId
+        )
     }
 
     fun openGroupOnMap(groupId: String) {
@@ -429,15 +440,15 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         val resolvedGroupId = normalizedId.takeIf { candidate ->
             groupOptions.any { it.groupId == candidate }
         } ?: groupOptions.firstOrNull()?.groupId.orEmpty()
-        _uiState.value = _uiState.value.copy(
+        val nextState = _uiState.value.copy(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             currentGroupId = resolvedGroupId,
             groupModeOptions = groupOptions,
         )
-        _uiState.value = stateWithResetMapContext(_uiState.value)
-        pendingReopenSingleTrackerLoadId = null
-        requestRuntimeTrailReload()
-        refreshStreamTargets()
+        applyMapContextTransition(
+            nextState = nextState,
+            pendingReopenTrackerId = null
+        )
     }
 
     fun restoreSelectedTrackerAfterStreamingStop() {
@@ -449,7 +460,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     fun restoreSelectedTrackerMapContext() {
         val state = _uiState.value
         val selectedId = state.runtime.selectedTrackerId.trim()
-        _uiState.value = state.copy(
+        val nextState = state.copy(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             displayedTrackerId = selectedId,
             displayedTrackerName = if (selectedId.isNotEmpty()) {
@@ -460,10 +471,10 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             currentGroupId = "",
             groupModeOptions = emptyList(),
         )
-        _uiState.value = stateWithResetMapContext(_uiState.value)
-        pendingReopenSingleTrackerLoadId = selectedId.ifEmpty { null }
-        requestRuntimeTrailReload()
-        refreshStreamTargets()
+        applyMapContextTransition(
+            nextState = nextState,
+            pendingReopenTrackerId = selectedId.ifEmpty { null }
+        )
     }
 
     fun resolveListNavigationTarget(preferredTrackerIdOverride: String? = null): MapListNavigationTarget {
@@ -663,6 +674,17 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         )
     }
 
+    private fun applyMapContextTransition(
+        nextState: TrackerMapUiState,
+        pendingReopenTrackerId: String?
+    ) {
+        _uiState.value = stateWithResetMapContext(nextState)
+        pendingReopenSingleTrackerLoadId = pendingReopenTrackerId
+        lastTrailLoadSeed = null
+        requestRuntimeTrailReload()
+        refreshStreamTargets()
+    }
+
     fun onHostPaused() {
         lastBackgroundAtElapsedMs = SystemClock.elapsedRealtime()
     }
@@ -695,6 +717,9 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         lastBackgroundAtElapsedMs = SystemClock.elapsedRealtime()
         lastStreamingServiceSeed = null
         MapStreamingServiceHelper.stopStreaming(appContext)
+        viewModelScope.launch {
+            sessionRequestDeduper.clear()
+        }
     }
 
     fun markPendingInitialTrackerForMap() {
@@ -902,48 +927,46 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun refreshStreamTargets() {
-        viewModelScope.launch {
-            val state = _uiState.value
-            val groupSelection = resolveGroupModeSelection(state)
-            val seed = TrackerMapReloadSeedPolicy.streamSeed(
-                TrackerMapStreamSeedInput(
-                    mode = state.mode,
-                    runtimeRunning = state.runtime.isRunning,
-                    selectedTrackerId = state.runtime.selectedTrackerId,
-                    displayedTrackerId = effectiveDisplayedTrackerId(state),
-                    rosterTrackerIds = trackerManagementStateStore.trackers.value.map { it.id },
-                    groupSelection = groupSelection
-                )
+        val state = _uiState.value
+        val groupSelection = resolveGroupModeSelection(state)
+        val seed = TrackerMapReloadSeedPolicy.streamSeed(
+            TrackerMapStreamSeedInput(
+                mode = state.mode,
+                runtimeRunning = state.runtime.isRunning,
+                selectedTrackerId = state.runtime.selectedTrackerId,
+                displayedTrackerId = effectiveDisplayedTrackerId(state),
+                rosterTrackerIds = trackerManagementStateStore.trackers.value.map { it.id },
+                groupSelection = groupSelection
             )
-            if (seed == lastStreamTargetsSeed) return@launch
-            lastStreamTargetsSeed = seed
-            val streamTargetResult = TrackerMapStreamTargetCoordinator.resolve(
-                TrackerMapStreamTargetInput(
-                    mode = state.mode,
-                    runtimeRunning = state.runtime.isRunning,
-                    selectedTrackerId = state.runtime.selectedTrackerId,
-                    displayedTrackerId = effectiveDisplayedTrackerId(state),
-                    rosterTrackerIds = trackerManagementStateStore.trackers.value
-                        .map { it.id.trim() }
-                        .filter { it.isNotEmpty() }
-                        .toSet(),
-                    groupSelection = groupSelection
-                )
+        )
+        if (seed == lastStreamTargetsSeed) return
+        lastStreamTargetsSeed = seed
+        val streamTargetResult = TrackerMapStreamTargetCoordinator.resolve(
+            TrackerMapStreamTargetInput(
+                mode = state.mode,
+                runtimeRunning = state.runtime.isRunning,
+                selectedTrackerId = state.runtime.selectedTrackerId,
+                displayedTrackerId = effectiveDisplayedTrackerId(state),
+                rosterTrackerIds = trackerManagementStateStore.trackers.value
+                    .map { it.id.trim() }
+                    .filter { it.isNotEmpty() }
+                    .toSet(),
+                groupSelection = groupSelection
             )
-            _uiState.value = _uiState.value.copy(
-                streamTargetIds = streamTargetResult.streamTargetIds,
-                currentGroupId = if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
-                    streamTargetResult.resolvedGroupId
-                } else {
-                    state.currentGroupId
-                },
-                groupModeOptions = if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
-                    resolveGroupModeOptions()
-                } else {
-                    emptyList()
-                },
-            )
-        }
+        )
+        _uiState.value = _uiState.value.copy(
+            streamTargetIds = streamTargetResult.streamTargetIds,
+            currentGroupId = if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+                streamTargetResult.resolvedGroupId
+            } else {
+                state.currentGroupId
+            },
+            groupModeOptions = if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+                resolveGroupModeOptions()
+            } else {
+                emptyList()
+            },
+        )
     }
 
     private suspend fun reloadTrailFromDatabase(force: Boolean = false) {
@@ -1002,6 +1025,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             }
         }
         if (trailSeedForState(_uiState.value) != seed) {
+            lastTrailLoadSeed = null
             return
         }
         _uiState.value = _uiState.value.copy(
@@ -1061,9 +1085,10 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private suspend fun loadSingleTrackerTrailFromServer(trackerId: String): List<QueuedLocation> {
         return TrackerMapTrailDataCoordinator.loadSingleTrackerTrail(
             trackerId = trackerId,
-            loadTrackerCoordinates = { id -> trackerManagementRepository.loadTrackerCoordinates(id) },
             loadTrackerGeometry = { id ->
-                geometryLoadingTracker.track { trackerManagementRepository.loadTrackerGeometry(id) }
+                sessionRequestDeduper.loadOnce("single:geometry:$id") {
+                    geometryLoadingTracker.track { trackerManagementRepository.loadTrackerGeometry(id) }
+                }
             },
             loadQueueTrailWithOverlay = { loadQueueTrailWithOverlay() },
             resolveSessionStartMs = { pointParams ->
@@ -1075,12 +1100,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 }
             },
             onSessionAnchorResolved = { id -> clearSessionAnchorResync(id) },
-            mergeCoordinates = { geometryCoords, responseCoords ->
-                TrackerMapCoordinateMergePolicy.mergedCoordinates(
-                    geometryCoords = geometryCoords,
-                    responseCoords = responseCoords
-                )
-            },
             mapCoordinatesToTrail = { merged -> mapCoordinatesToTrail(merged) }
         )
     }
@@ -1089,9 +1108,12 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         return TrackerMapTrailDataCoordinator.loadTrailsForTrackerIds(
             trackerIds = trackerIds,
             loadTrackersGeometry = { ids ->
-                geometryLoadingTracker.track { trackerManagementRepository.loadTrackersGeometry(ids) }
+                val normalizedIds = ids.map { it.trim() }.filter { it.isNotEmpty() }.sorted()
+                val key = "multi:geometry:${normalizedIds.joinToString(",")}"
+                sessionRequestDeduper.loadOnce(key) {
+                    geometryLoadingTracker.track { trackerManagementRepository.loadTrackersGeometry(ids) }
+                }
             },
-            loadTrackerCoordinates = { id -> trackerManagementRepository.loadTrackerCoordinates(id) },
             resolveSessionStartMs = { pointParams ->
                 TrackerMapSessionWindowPolicy.resolveLatestSessionStartMs(pointParams)
             },
@@ -1099,12 +1121,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 if (latestSessionStart != null) {
                     remoteSessionStartByTrack[id] = latestSessionStart
                 }
-            },
-            mergeCoordinates = { geometryCoords, responseCoords ->
-                TrackerMapCoordinateMergePolicy.mergedCoordinates(
-                    geometryCoords = geometryCoords,
-                    responseCoords = responseCoords
-                )
             },
             mapCoordinatesToTrail = { merged -> mapCoordinatesToTrail(merged) }
         )

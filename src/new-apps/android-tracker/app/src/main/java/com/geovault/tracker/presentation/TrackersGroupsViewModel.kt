@@ -15,6 +15,7 @@ import com.geovault.tracker.TrackerSettingsRequest
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.UserItem
 import com.geovault.tracker.data.GroupManagementRepository
+import com.geovault.tracker.data.TrackerBootstrapOrchestrator
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.common.NaturalSort
@@ -38,6 +39,8 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
         TrackerAppServices.from(application).trackerManagementRepository()
     private val groupRepository: GroupManagementRepository =
         TrackerAppServices.from(application).groupManagementRepository()
+    private val bootstrapOrchestrator: TrackerBootstrapOrchestrator =
+        TrackerAppServices.from(application).trackerBootstrapOrchestrator()
     private val stateStore = TrackerAppServices.from(application).trackerManagementStateStore()
 
     private val _uiState = MutableStateFlow(
@@ -88,10 +91,15 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                     userMessage = null,
                 )
             }
-            refreshStateFromServer(
-                userMessage = null,
-                forceRefresh = true,
-            )
+            val outcome = bootstrapOrchestrator.refreshForLaunch()
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    isPullRefreshing = false,
+                    hasCompletedInitialLoad = true,
+                    userMessage = if (outcome.isServerAccessible) null else appErrorMessage(AppError.Network),
+                )
+            }
         }
     }
 

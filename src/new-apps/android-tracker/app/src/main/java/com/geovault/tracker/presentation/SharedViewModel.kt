@@ -8,10 +8,12 @@ import com.geovault.tracker.R
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.data.GroupManagementRepository
+import com.geovault.tracker.data.TrackerBootstrapOrchestrator
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.di.TrackerAppServices
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -27,6 +29,9 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         TrackerAppServices.from(application).trackerManagementRepository()
     private val groupRepository: GroupManagementRepository =
         TrackerAppServices.from(application).groupManagementRepository()
+    private val bootstrapOrchestrator: TrackerBootstrapOrchestrator =
+        TrackerAppServices.from(application).trackerBootstrapOrchestrator()
+    private val stateStore = TrackerAppServices.from(application).trackerManagementStateStore()
 
     private val _uiState = MutableStateFlow(SharedUiState())
     val uiState: StateFlow<SharedUiState> = _uiState.asStateFlow()
@@ -36,6 +41,24 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     private var refreshInFlightJob: Job? = null
     private var refreshPending: Boolean = false
     private var refreshPendingFeedbackMessage: String? = null
+
+    init {
+        viewModelScope.launch {
+            stateStore.trackers.collectLatest { trackers ->
+                _uiState.update { it.copy(trackers = trackers) }
+            }
+        }
+        viewModelScope.launch {
+            stateStore.groups.collectLatest { groups ->
+                _uiState.update { it.copy(groups = groups) }
+            }
+        }
+        viewModelScope.launch {
+            stateStore.mapVisibility.collectLatest { mapVisibility ->
+                _uiState.update { it.copy(mapVisibility = mapVisibility) }
+            }
+        }
+    }
 
     fun showSharedList() {
         _uiState.update { it.copy(viewMode = SharedViewMode.SHARED_LIST) }
@@ -444,22 +467,16 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         if (current.isLoading || current.hasCompletedInitialLoad) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            val trackersDef = async { trackerRepository.loadTrackers(forceRefresh = false) }
-            val groupsDef = async { groupRepository.loadGroups(forceRefresh = false) }
-            val visibilityDef = async { trackerRepository.loadMapVisibility(forceRefresh = false) }
-            val trackersResult = trackersDef.await()
-            val groupsResult = groupsDef.await()
-            val visibilityResult = visibilityDef.await()
+            val bootstrap = bootstrapOrchestrator.refreshForLaunch()
             _uiState.update { state ->
                 state.copy(
                     isLoading = false,
-                    trackers = trackersResult.successDataOr(state.trackers),
-                    groups = groupsResult.successDataOr(state.groups),
-                    mapVisibility = visibilityResult.successDataOr(state.mapVisibility),
                     hasCompletedInitialLoad = true,
                 )
             }
-            emitSnackbar(firstError(trackersResult, groupsResult, visibilityResult)?.let(::appErrorMessage))
+            if (!bootstrap.isServerAccessible) {
+                emitSnackbar(appErrorMessage(AppError.Network))
+            }
         }
     }
 
