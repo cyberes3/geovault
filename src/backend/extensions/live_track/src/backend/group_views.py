@@ -173,6 +173,10 @@ def group_get_patch_delete(request, group_id):
         data, err = get_json_body(request)
         if err is not None:
             return err
+        # Patch contract:
+        # - omitted keys: no change
+        # - explicit null: clear/reset when field semantics allow it
+        #   (e.g. hidden -> False via bool(None), world_share_enabled -> disable)
         update_fields = ["updated_at"]
         if "name" in data:
             name = (data.get("name") or "").strip()

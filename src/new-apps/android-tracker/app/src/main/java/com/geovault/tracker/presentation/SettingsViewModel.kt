@@ -9,13 +9,8 @@ import androidx.lifecycle.viewModelScope
 import com.geovault.common.AppResetFlow
 import com.geovault.common.UnitUtils
 import com.geovault.common.auth.CommonInitialAuthController
-import com.geovault.tracker.AppError
-import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.R
 import com.geovault.tracker.RepositoryResult
-import com.geovault.tracker.SelectedTrackerManager
-import com.geovault.tracker.SelectedTrackerPrefs
-import com.geovault.tracker.Tracker
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.TrackerManagementRepository
@@ -39,19 +34,10 @@ data class SettingsState(
     val trackerLoadState: TrackerSettingsLoadState = TrackerSettingsLoadState.Loading,
     val trackerSettings: TrackerSettings = TrackerSettings(),
     val trackerRevision: Long = 0L,
-    val selectedTrackerId: String = "",
-    val selectedTrackerName: String = "",
-    val selectableTrackers: List<SelectableTracker> = emptyList(),
-    val isSelectableTrackersLoading: Boolean = false,
-    val hiddenMapItems: List<HiddenMapItem> = emptyList(),
-    val isHiddenMapItemsUpdating: Boolean = false,
+    val hiddenTrackerItems: List<HiddenTrackerItem> = emptyList(),
+    val isHiddenTrackerItemsLoading: Boolean = false,
     val usesImperialUnits: Boolean = false,
     val significantMotionSensorAvailable: Boolean = true,
-)
-
-data class SelectableTracker(
-    val id: String,
-    val name: String,
 )
 
 class SettingsViewModel(
@@ -90,15 +76,13 @@ class SettingsViewModel(
     fun initialize() {
         enforceMotionSensorSupport()
         refreshAuthState()
-        refreshSelectableTrackers()
-        refreshHiddenMapItems()
+        refreshHiddenTrackerItems()
     }
 
     fun onHostResumed() {
         enforceMotionSensorSupport()
         refreshAuthState()
-        refreshSelectableTrackers()
-        refreshHiddenMapItems()
+        refreshHiddenTrackerItems()
     }
 
     fun onServerUrlChanged(url: String) {
@@ -194,7 +178,7 @@ class SettingsViewModel(
     fun setSignificantDataOnly(enabled: Boolean) {
         if (enabled && !_state.value.significantMotionSensorAvailable) {
             _state.update {
-                it.copy(infoMessage = appContext.getString(R.string.settings_motion_sensor_unavailable))
+                it.copy(infoMessage = appContext.getString(R.string.motion_sensor_unavailable_toast))
             }
             trackerSettingsRepository.setSignificantDataOnly(false)
             return
@@ -214,120 +198,131 @@ class SettingsViewModel(
         _state.update { it.copy(infoMessage = null) }
     }
 
-    fun refreshSelectableTrackers() {
+    fun refreshHiddenTrackerItems() {
         viewModelScope.launch {
-            _state.update { it.copy(isSelectableTrackersLoading = true) }
-            when (val loaded = trackerManagementRepository.loadTrackers(forceRefresh = true)) {
-                is RepositoryResult.Success -> {
-                    val selectedId = SelectedTrackerPrefs.selectedTrackerId(appContext)
-                    val selectedName = SelectedTrackerPrefs.selectedTrackerName(appContext)
-                    _state.update {
-                        it.copy(
-                            isSelectableTrackersLoading = false,
-                            selectedTrackerId = selectedId,
-                            selectedTrackerName = selectedName,
-                            selectableTrackers = loaded.data
-                                .sortedBy { tracker -> tracker.name.lowercase() }
-                                .map { tracker -> SelectableTracker(id = tracker.id, name = tracker.name) }
-                        )
-                    }
-                }
-                is RepositoryResult.Failure -> {
-                    _state.update {
-                        it.copy(
-                            isSelectableTrackersLoading = false,
-                            infoMessage = appErrorMessage(loaded.error)
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    fun setSelectedTracker(trackerId: String) {
-        val selected = _state.value.selectableTrackers.firstOrNull { it.id == trackerId } ?: return
-        SelectedTrackerManager.setSelectedTracker(
-            context = appContext,
-            trackerId = selected.id,
-            trackerName = selected.name,
-            restartTrackingIfRunning = true
-        )
-        _state.update {
-            it.copy(
-                selectedTrackerId = selected.id,
-                selectedTrackerName = selected.name
-            )
-        }
-    }
-
-    fun clearSelectedTracker() {
-        SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(appContext)
-        _state.update {
-            it.copy(
-                selectedTrackerId = "",
-                selectedTrackerName = ""
-            )
-        }
-    }
-
-    fun refreshHiddenMapItems() {
-        viewModelScope.launch {
-            refreshHiddenMapItemsFromServer(forceRefresh = true, clearMessage = false)
-        }
-    }
-
-    fun unhideMapItem(item: HiddenMapItem) {
-        viewModelScope.launch {
-            _state.update { it.copy(isHiddenMapItemsUpdating = true, infoMessage = null) }
-            val visibility = when (val result = trackerManagementRepository.loadMapVisibility(forceRefresh = false)) {
+            _state.update { it.copy(isHiddenTrackerItemsLoading = true) }
+            val trackers = when (val result = trackerManagementRepository.loadTrackers(forceRefresh = true)) {
                 is RepositoryResult.Success -> result.data
                 is RepositoryResult.Failure -> {
                     _state.update {
                         it.copy(
-                            isHiddenMapItemsUpdating = false,
-                            infoMessage = appErrorMessage(result.error)
+                            isHiddenTrackerItemsLoading = false,
+                            infoMessage = appContext.getString(R.string.failed_to_load_tracker)
                         )
                     }
                     return@launch
                 }
             }
-            val request = HiddenMapItemsCoordinator.buildUnhideItemRequest(visibility, item)
-            when (val patch = trackerManagementRepository.patchMapVisibility(request)) {
-                is RepositoryResult.Success -> {
-                    refreshHiddenMapItemsFromServer(forceRefresh = false, clearMessage = false)
-                }
+            val groups = when (val result = groupManagementRepository.loadGroups(forceRefresh = true)) {
+                is RepositoryResult.Success -> result.data
                 is RepositoryResult.Failure -> {
                     _state.update {
                         it.copy(
-                            isHiddenMapItemsUpdating = false,
-                            infoMessage = appErrorMessage(patch.error)
+                            isHiddenTrackerItemsLoading = false,
+                            infoMessage = appContext.getString(R.string.failed_to_save_group)
                         )
                     }
+                    return@launch
                 }
+            }
+            _state.update {
+                it.copy(
+                    isHiddenTrackerItemsLoading = false,
+                    hiddenTrackerItems = HiddenTrackersPolicy.buildItems(trackers, groups)
+                )
             }
         }
     }
 
-    fun unhideAllMapItems() {
+    fun unhideTrackerItem(item: HiddenTrackerItem) {
         viewModelScope.launch {
-            _state.update { it.copy(isHiddenMapItemsUpdating = true, infoMessage = null) }
-            when (
-                val patch = trackerManagementRepository.patchMapVisibility(
-                    HiddenMapItemsCoordinator.buildUnhideAllRequest()
-                )
-            ) {
-                is RepositoryResult.Success -> {
-                    refreshHiddenMapItemsFromServer(forceRefresh = false, clearMessage = false)
+            when (item.type) {
+                HiddenTrackerItemType.TRACKER -> {
+                    val tracker = when (val loadResult = trackerManagementRepository.loadTracker(item.id)) {
+                        is RepositoryResult.Success -> loadResult.data
+                        is RepositoryResult.Failure -> {
+                            _state.update {
+                                it.copy(infoMessage = appContext.getString(R.string.failed_to_load_tracker))
+                            }
+                            return@launch
+                        }
+                    }
+                    val result = trackerManagementRepository.updateTrackerSettings(
+                        trackerId = item.id,
+                        request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(
+                            tracker = tracker,
+                            hidden = false,
+                        )
+                    )
+                    if (result is RepositoryResult.Failure) {
+                        _state.update { it.copy(infoMessage = appContext.getString(R.string.failed_to_load_tracker)) }
+                        return@launch
+                    }
                 }
-                is RepositoryResult.Failure -> {
-                    _state.update {
-                        it.copy(
-                            isHiddenMapItemsUpdating = false,
-                            infoMessage = appErrorMessage(patch.error)
+                HiddenTrackerItemType.GROUP -> {
+                    val group = when (val loadResult = groupManagementRepository.loadGroup(item.id)) {
+                        is RepositoryResult.Success -> loadResult.data
+                        is RepositoryResult.Failure -> {
+                            _state.update {
+                                it.copy(infoMessage = appContext.getString(R.string.failed_to_save_group))
+                            }
+                            return@launch
+                        }
+                    }
+                    val result = groupManagementRepository.patchGroup(
+                        groupId = item.id,
+                        request = GroupSharingSettingsPolicy.buildUnhidePatch(group)
+                    )
+                    if (result is RepositoryResult.Failure) {
+                        _state.update { it.copy(infoMessage = appContext.getString(R.string.failed_to_save_group)) }
+                        return@launch
+                    }
+                }
+            }
+            _state.update { current ->
+                current.copy(
+                    hiddenTrackerItems = current.hiddenTrackerItems.filterNot {
+                        it.id == item.id && it.type == item.type
+                    }
+                )
+            }
+        }
+    }
+
+    fun unhideAllTrackerItems() {
+        viewModelScope.launch {
+            _state.update { it.copy(isHiddenTrackerItemsLoading = true) }
+            val items = _state.value.hiddenTrackerItems
+            items.forEach { item ->
+                when (item.type) {
+                    HiddenTrackerItemType.TRACKER -> {
+                        val tracker = when (val loadResult = trackerManagementRepository.loadTracker(item.id)) {
+                            is RepositoryResult.Success -> loadResult.data
+                            is RepositoryResult.Failure -> null
+                        }
+                        if (tracker == null) return@forEach
+                        trackerManagementRepository.updateTrackerSettings(
+                            trackerId = item.id,
+                            request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(
+                                tracker = tracker,
+                                hidden = false,
+                            )
+                        )
+                    }
+                    HiddenTrackerItemType.GROUP -> {
+                        val group = when (val loadResult = groupManagementRepository.loadGroup(item.id)) {
+                            is RepositoryResult.Success -> loadResult.data
+                            is RepositoryResult.Failure -> null
+                        }
+                        if (group == null) return@forEach
+                        groupManagementRepository.patchGroup(
+                            groupId = item.id,
+                            request = GroupSharingSettingsPolicy.buildUnhidePatch(group)
                         )
                     }
                 }
             }
+            refreshHiddenTrackerItems()
         }
     }
 
@@ -340,8 +335,6 @@ class SettingsViewModel(
             it.copy(
                 serverUrl = server,
                 isLoggedIn = loggedIn,
-                selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(appContext),
-                selectedTrackerName = SelectedTrackerPrefs.selectedTrackerName(appContext),
                 usesImperialUnits = UnitUtils.usesImperialUnitsDefault(appContext),
                 significantMotionSensorAvailable = motionSensorAvailable,
                 loggedInText = if (loggedIn && cachedEmail.isNotBlank()) {
@@ -373,49 +366,4 @@ class SettingsViewModel(
         return manager?.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION) != null
     }
 
-    private fun appErrorMessage(error: AppError): String {
-        return when (error) {
-            AppError.MissingServerUrl -> appContext.getString(R.string.trackers_error_missing_server)
-            AppError.Network -> appContext.getString(R.string.trackers_error_network)
-            AppError.Unauthorized -> appContext.getString(R.string.trackers_error_unauthorized)
-            AppError.NotFound -> appContext.getString(R.string.trackers_error_not_found)
-            is AppError.Server -> appContext.getString(R.string.trackers_error_server, error.code)
-            is AppError.Validation -> error.message?.takeIf { it.isNotBlank() }
-                ?: appContext.getString(R.string.trackers_error_validation)
-            AppError.Unknown -> appContext.getString(R.string.trackers_error_unknown)
-        }
-    }
-
-    private suspend fun refreshHiddenMapItemsFromServer(
-        forceRefresh: Boolean,
-        clearMessage: Boolean,
-    ) {
-        when (
-            val snapshotResult = HiddenMapItemsCoordinator.loadSnapshot(
-                forceRefresh = forceRefresh,
-                loadMapVisibility = { force -> trackerManagementRepository.loadMapVisibility(forceRefresh = force) },
-                loadTrackers = { force -> trackerManagementRepository.loadTrackers(forceRefresh = force) },
-                loadGroups = { force -> groupManagementRepository.loadGroups(forceRefresh = force) }
-            )
-        ) {
-            is RepositoryResult.Success -> {
-                val warningMessage = snapshotResult.data.warning?.let(::appErrorMessage)
-                _state.update {
-                    it.copy(
-                        isHiddenMapItemsUpdating = false,
-                        hiddenMapItems = HiddenMapItemsCoordinator.buildHiddenItems(snapshotResult.data),
-                        infoMessage = if (clearMessage) null else warningMessage
-                    )
-                }
-            }
-            is RepositoryResult.Failure -> {
-                _state.update {
-                    it.copy(
-                        isHiddenMapItemsUpdating = false,
-                        infoMessage = appErrorMessage(snapshotResult.error)
-                    )
-                }
-            }
-        }
-    }
 }

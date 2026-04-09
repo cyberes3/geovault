@@ -30,7 +30,7 @@ import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
 import com.geovault.common.update.CustomTabReleasePageLauncher
 import com.geovault.common.update.UpdateAvailablePromptComposer
-import com.geovault.tracker.presentation.HiddenMapItem
+import com.geovault.tracker.presentation.HiddenTrackerItem
 import com.geovault.tracker.presentation.MainScreenState
 import com.geovault.tracker.presentation.SettingsState
 import com.geovault.tracker.presentation.SharedSubTab
@@ -71,12 +71,9 @@ fun MainScreen(
     onSettingsSignificantMotionOnly: (Boolean) -> Unit,
     onSettingsAutoTrackingMode: (Boolean) -> Unit,
     onSettingsKeepScreenOnMap: (Boolean) -> Unit,
-    onSettingsRefreshSelectableTrackers: () -> Unit,
-    onSettingsSetSelectedTracker: (String) -> Unit,
-    onSettingsClearSelectedTracker: () -> Unit,
-    onSettingsRefreshHiddenMapItems: () -> Unit,
-    onSettingsUnhideMapItem: (HiddenMapItem) -> Unit,
-    onSettingsUnhideAllMapItems: () -> Unit,
+    onSettingsRefreshHiddenTrackerItems: () -> Unit,
+    onSettingsUnhideTrackerItem: (HiddenTrackerItem) -> Unit,
+    onSettingsUnhideAllTrackerItems: () -> Unit,
 ) {
     val context = LocalContext.current
     val releaseLauncher = remember(context) { CustomTabReleasePageLauncher(context) }
@@ -180,7 +177,17 @@ fun MainScreen(
             true
         },
     )
-    val openSettingsTab = remember { { selectedTab = TrackerTab.SETTINGS.name } }
+    val openSettingsTab = remember {
+        {
+            if (!isHandlingTabBack &&
+                selectedTab.isNotBlank() &&
+                selectedTab != TrackerTab.SETTINGS.name
+            ) {
+                tabBackStack = (tabBackStack + selectedTab).takeLast(16)
+            }
+            selectedTab = TrackerTab.SETTINGS.name
+        }
+    }
     val onMapHostNavigationRequested = remember {
         { request: MapHostNavigationRequest ->
             if (!isHandlingTabBack && selectedTab.isNotBlank()) {
@@ -369,13 +376,16 @@ fun MainScreen(
                         onSignificantMotionOnly = onSettingsSignificantMotionOnly,
                         onAutoTrackingMode = onSettingsAutoTrackingMode,
                         onKeepScreenOnMap = onSettingsKeepScreenOnMap,
-                        onRefreshSelectableTrackers = onSettingsRefreshSelectableTrackers,
-                        onSetSelectedTracker = onSettingsSetSelectedTracker,
-                        onClearSelectedTracker = onSettingsClearSelectedTracker,
-                        onRefreshHiddenMapItems = onSettingsRefreshHiddenMapItems,
-                        onUnhideMapItem = onSettingsUnhideMapItem,
-                        onUnhideAllMapItems = onSettingsUnhideAllMapItems,
+                        onRefreshHiddenTrackerItems = onSettingsRefreshHiddenTrackerItems,
+                        onUnhideTrackerItem = onSettingsUnhideTrackerItem,
+                        onUnhideAllTrackerItems = onSettingsUnhideAllTrackerItems,
                         onOpenAllTrackersOnMap = {
+                            if (!isHandlingTabBack &&
+                                selectedTab.isNotBlank() &&
+                                selectedTab != TrackerTab.MAP.name
+                            ) {
+                                tabBackStack = (tabBackStack + selectedTab).takeLast(16)
+                            }
                             pendingMapReturnContext = null
                             mapViewModel.setMode(com.geovault.tracker.presentation.TrackerMapDisplayMode.ALL_QUEUE)
                             selectedTab = TrackerTab.MAP.name

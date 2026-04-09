@@ -40,7 +40,7 @@ class TrackerSharingSettingsPolicyTest {
         )
         assertEquals("public", request.visibility)
         assertEquals(true, request.world_share_enabled)
-        assertEquals(emptyList<String>(), request.shared_with_emails)
+        assertEquals(null, request.shared_with_emails)
     }
 
     @Test
@@ -85,6 +85,57 @@ class TrackerSharingSettingsPolicyTest {
         )
         assertEquals("private", request.visibility)
         assertEquals(false, request.world_share_enabled)
+    }
+
+    @Test
+    fun buildPreservingSettingsRequest_carriesForwardExistingTrackerValues() {
+        val tracker = Tracker(
+            id = "t1",
+            name = "Tracker One",
+            color = "#112233",
+            settings = mapOf(
+                "recent_data_window" to "1h",
+                "hidden" to true,
+                "allow_group_reshare" to true,
+            ),
+            visibility = "shared",
+            share_params_with_recipients = true,
+            share_params_with_world = false,
+            shared_with_emails = listOf("a@example.com"),
+            world_share_id = "ws-1",
+        )
+        val request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(tracker)
+
+        assertEquals("Tracker One", request.name)
+        assertEquals("#112233", request.color)
+        assertEquals("1h", request.recent_data_window)
+        assertEquals("shared", request.visibility)
+        assertEquals(true, request.share_params_with_recipients)
+        assertEquals(false, request.share_params_with_world)
+        assertEquals(listOf("a@example.com"), request.shared_with_emails)
+        assertEquals(true, request.world_share_enabled)
+        assertEquals(true, request.hidden)
+        assertEquals(true, request.allow_group_reshare)
+    }
+
+    @Test
+    fun buildPreservingSettingsRequest_allowsTargetedOverrides() {
+        val tracker = Tracker(
+            id = "t1",
+            name = "Tracker One",
+            color = "#112233",
+            settings = mapOf("hidden" to true),
+            visibility = "public",
+        )
+        val request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(
+            tracker = tracker,
+            hidden = false,
+            worldShareEnabled = false,
+            visibility = "public",
+        )
+        assertEquals(false, request.hidden)
+        assertEquals(false, request.world_share_enabled)
+        assertEquals("public", request.visibility)
     }
 
     @Test

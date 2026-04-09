@@ -276,10 +276,18 @@ fun TrackerEditScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
+                    val openColorPicker = {
+                        showHueColorPickerDialog(
+                            context = context,
+                            initialHex = dialog.colorDraft.ifBlank { null },
+                            onColorPicked = onColorDraftChanged,
+                        )
+                    }
                     Box(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)
+                            .clickable(enabled = !isSaving) { openColorPicker() }
                             .background(colorPreview.backgroundColor),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -293,13 +301,7 @@ fun TrackerEditScreen(
                         }
                     }
                     IconButton(
-                        onClick = {
-                            showHueColorPickerDialog(
-                                context = context,
-                                initialHex = dialog.colorDraft.ifBlank { null },
-                                onColorPicked = onColorDraftChanged,
-                            )
-                        },
+                        onClick = openColorPicker,
                         enabled = !isSaving,
                     ) {
                         Icon(

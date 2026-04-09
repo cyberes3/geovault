@@ -183,6 +183,7 @@ import SearchableCheckboxList from 'platform/components/parts/SearchableCheckbox
 import ScrollingSelect from 'platform/components/parts/ScrollingSelect.vue';
 import ToggleButton from 'platform/components/parts/ToggleButton.vue';
 import SharingSection from './SharingSection.vue';
+import { buildGroupPreservingPatchPayload } from './settingsPayloadBuilders.js';
 
 export default {
   name: 'GroupModal',
@@ -275,15 +276,13 @@ export default {
       if (!props.group?.id || !name.value.trim()) return;
       saving.value = true;
       try {
-        const payload = {
+        const payload = buildGroupPreservingPatchPayload(props.group, {
           name: name.value.trim(),
           hidden: groupHidden.value,
           visibility: visibility.value,
           world_share_enabled: worldShareEnabled.value,
-        };
-        if (visibility.value === 'shared') {
-          payload.shared_with_emails = [...sharedWithEmails.value];
-        }
+          shared_with_emails: visibility.value === 'shared' ? [...sharedWithEmails.value] : null,
+        });
         const patchRes = await props.api.patch(`/groups/${props.group.id}/`, payload);
         const patchData = patchRes?.data;
         if (patchData) {

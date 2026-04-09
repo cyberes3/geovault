@@ -206,6 +206,7 @@ import CreateSuccessView from './CreateSuccessView.vue';
 import EditTrackForm from './EditTrackForm.vue';
 import GpsLoggerInstructionsModal from './GpsLoggerInstructionsModal.vue';
 import HaukInstructionsModal from './HaukInstructionsModal.vue';
+import { buildTrackerSettingsPayloadFromSnapshot } from './settingsPayloadBuilders.js';
 
 export default {
   name: 'TrackSidebar',
@@ -373,24 +374,6 @@ export default {
       return JSON.stringify(normalizeSnapshot(a)) === JSON.stringify(normalizeSnapshot(b));
     }
 
-    function buildSettingsPayload(snapshot) {
-      const payload = {
-        name: snapshot.name.trim(),
-        color: snapshot.color,
-        recent_data_window: snapshot.recentDataWindow || null,
-        visibility: snapshot.visibility,
-        share_params_with_recipients: snapshot.shareParamsWithRecipients,
-        share_params_with_world: snapshot.shareParamsWithWorld,
-        world_share_enabled: snapshot.worldShareEnabled,
-        hidden: snapshot.trackerHidden,
-        allow_group_reshare: snapshot.allowGroupReshare
-      };
-      if (snapshot.visibility === 'shared') {
-        payload.shared_with_emails = snapshot.sharedWithEmails;
-      }
-      return payload;
-    }
-
     function stopAutosaveTimer() {
       if (autosaveTimerId != null) {
         clearTimeout(autosaveTimerId);
@@ -427,7 +410,7 @@ export default {
       error.value = '';
       saving.value = true;
       try {
-        const payload = buildSettingsPayload(current);
+        const payload = buildTrackerSettingsPayloadFromSnapshot(current);
         const res = await api.post(`/trackers/${props.track.id}/settings/`, payload);
         if (seq !== autosaveSeq) return;
         lastSavedSnapshot.value = makeSnapshotFromState();

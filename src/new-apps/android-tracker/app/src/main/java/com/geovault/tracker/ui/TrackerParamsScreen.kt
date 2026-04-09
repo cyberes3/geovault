@@ -71,7 +71,7 @@ fun TrackerParamsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colors.surface),
+            .background(MaterialTheme.colors.background),
     ) {
         GeoVaultCompactDismissTitleBar(
             title = stringResource(R.string.latest_params_title),

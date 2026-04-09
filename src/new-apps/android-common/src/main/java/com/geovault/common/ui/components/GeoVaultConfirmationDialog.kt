@@ -5,6 +5,7 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 
@@ -12,12 +13,7 @@ object GeoVaultDialogDefaults {
     val NegativeButtonColor = GeoVaultColorTokens.Error
 
     @Composable
-    fun cancelButtonColor() =
-        if (MaterialTheme.colors.isLight) {
-            GeoVaultColorTokens.PrimaryBlue
-        } else {
-            GeoVaultColorTokens.DarkOnSurface
-        }
+    fun cancelButtonColor() = GeoVaultColorTokens.PrimaryBlue
 }
 
 @Composable
@@ -29,12 +25,7 @@ fun GeoVaultConfirmationDialog(
     confirmText: String = "Delete",
     cancelText: String = "Cancel"
 ) {
-    val bodyColor =
-        if (MaterialTheme.colors.isLight) {
-            GeoVaultColorTokens.TextPrimary
-        } else {
-            GeoVaultColorTokens.DarkOnSurface
-        }
+    val bodyColor = Color.Black
     AlertDialog(
         onDismissRequest = onCancel,
         title = {

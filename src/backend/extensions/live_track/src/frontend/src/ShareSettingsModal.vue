@@ -55,6 +55,7 @@ import BaseModal from 'platform/components/parts/BaseModal.vue';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import Loader from 'platform/components/parts/Loader.vue';
 import ScrollingSelect from 'platform/components/parts/ScrollingSelect.vue';
+import { buildTrackerSharingPayload } from './settingsPayloadBuilders.js';
 
 export default {
   name: 'ShareSettingsModal',
@@ -121,12 +122,11 @@ export default {
       error.value = '';
       saving.value = true;
       try {
-        const payload = {
-          visibility: visibility.value,
-        };
-        if (visibility.value === 'shared') {
-          payload.shared_with_emails = [...(sharedWithEmails.value || [])].map((e) => String(e || '').toLowerCase()).filter(Boolean);
-        }
+        const payload = buildTrackerSharingPayload(
+          props.track,
+          visibility.value,
+          sharedWithEmails.value,
+        );
         const res = await props.api.post(`/trackers/${props.track.id}/settings/`, payload);
         emit('saved', res?.data);
         emit('close');

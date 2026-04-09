@@ -1,52 +1,81 @@
 package com.geovault.tracker.ui
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.AlertDialog
 import androidx.compose.material.Divider
+import androidx.compose.material.DropdownMenuItem
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.ExposedDropdownMenuBox
+import androidx.compose.material.ExposedDropdownMenuDefaults
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
-import androidx.compose.material.TextButton
+import androidx.compose.material.TextFieldDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.geovault.tracker.presentation.SettingsMeasurementPolicy
-import com.geovault.tracker.presentation.HiddenMapItem
-import com.geovault.tracker.presentation.HiddenMapItemType
-import com.geovault.tracker.presentation.SelectableTracker
-import com.geovault.common.ui.components.GeoVaultInitialAuthView
+import com.geovault.tracker.TrackingLocationPolicy
 import com.geovault.common.ui.components.GeoVaultInfoDialog
+import com.geovault.common.ui.components.GeoVaultInitialAuthView
 import com.geovault.common.ui.components.GeoVaultInput
-import com.geovault.common.ui.components.GeoVaultLoadingSpinner
+import com.geovault.common.ui.components.GeoVaultConfirmationDialog
+import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultServerConfigBlock
-import com.geovault.common.ui.components.GeoVaultToggle
+import com.geovault.common.ui.components.GeoVaultToggleHelpCard
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
+import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
+import com.geovault.common.ui.modifier.geoVaultKeyboardAwareVerticalScroll
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
+import com.geovault.tracker.presentation.HiddenTrackerItem
+import com.geovault.tracker.presentation.HiddenTrackerItemType
+import com.geovault.tracker.presentation.SettingsAutoModePolicy
 import com.geovault.tracker.presentation.SettingsState
 import com.geovault.tracker.settings.TrackerSettingsLoadState
 import com.geovault.tracker.settings.TrackerTrackingProfile
 
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun SettingsScreen(
     state: SettingsState,
@@ -65,500 +94,874 @@ fun SettingsScreen(
     onSignificantMotionOnly: (Boolean) -> Unit,
     onAutoTrackingMode: (Boolean) -> Unit,
     onKeepScreenOnMap: (Boolean) -> Unit,
-    onRefreshSelectableTrackers: () -> Unit,
-    onSetSelectedTracker: (String) -> Unit,
-    onClearSelectedTracker: () -> Unit,
-    onRefreshHiddenMapItems: () -> Unit,
-    onUnhideMapItem: (HiddenMapItem) -> Unit,
-    onUnhideAllMapItems: () -> Unit,
+    onRefreshHiddenTrackerItems: () -> Unit,
+    onUnhideTrackerItem: (HiddenTrackerItem) -> Unit,
+    onUnhideAllTrackerItems: () -> Unit,
     onOpenAllTrackersOnMap: () -> Unit = {},
 ) {
-    var showSelectedTrackerDialog by remember { mutableStateOf(false) }
-    var showHiddenMapItemsDialog by remember { mutableStateOf(false) }
+    var showLoggingHelpDialog by remember { mutableStateOf(false) }
+    var showHiddenTrackersOverlay by remember { mutableStateOf(false) }
+    var isBindingSettings by remember { mutableStateOf(true) }
+    var hasHydratedSettings by remember { mutableStateOf(false) }
+    var lastRenderRevision by remember { mutableStateOf(-1L) }
+    var lastRenderImperial by remember { mutableStateOf(state.usesImperialUnits) }
+    var isUpdatingFromProfile by remember { mutableStateOf(false) }
+
+    var selectedProfile by remember { mutableStateOf(TrackerTrackingProfile.BIKING) }
+    var profileDropdownExpanded by remember { mutableStateOf(false) }
+
+    var intervalText by remember { mutableStateOf("") }
+    var distanceText by remember { mutableStateOf("") }
+    var accuracyText by remember { mutableStateOf("") }
+    var lowAccuracyTimeoutText by remember { mutableStateOf("") }
+
+    var intervalFocused by remember { mutableStateOf(false) }
+    var distanceFocused by remember { mutableStateOf(false) }
+    var accuracyFocused by remember { mutableStateOf(false) }
+    var timeoutFocused by remember { mutableStateOf(false) }
+    val autoText = stringResource(R.string.profile_auto)
+
+    fun shouldIgnoreSettingChange(): Boolean = isBindingSettings || !hasHydratedSettings
+
+    fun promoteToCustomProfile() {
+        if (selectedProfile != TrackerTrackingProfile.CUSTOM) {
+            selectedProfile = TrackerTrackingProfile.CUSTOM
+            onTrackingProfileSelected(TrackerTrackingProfile.CUSTOM)
+        }
+    }
+
+    fun applyTrackerSettingsToUi(force: Boolean) {
+        if (state.trackerLoadState != TrackerSettingsLoadState.Ready) return
+        val settings = state.trackerSettings
+        isBindingSettings = true
+        if (settings.autoTrackingMode) {
+            if (SettingsAutoModePolicy.shouldOverwriteUiField(intervalFocused, force)) intervalText = autoText
+            if (SettingsAutoModePolicy.shouldOverwriteUiField(distanceFocused, force)) distanceText = autoText
+            if (SettingsAutoModePolicy.shouldOverwriteUiField(accuracyFocused, force)) accuracyText = autoText
+            selectedProfile = settings.trackingProfile
+        } else {
+            selectedProfile = settings.trackingProfile
+            val interval = settings.loggingIntervalSec.toString()
+            val distance = SettingsMeasurementPolicy.metersToDisplayText(
+                meters = settings.distanceFilterMeters,
+                usesImperial = state.usesImperialUnits
+            )
+            val accuracy = SettingsMeasurementPolicy.metersToDisplayText(
+                meters = settings.accuracyFilterMeters,
+                usesImperial = state.usesImperialUnits
+            )
+            if (SettingsAutoModePolicy.shouldOverwriteUiField(intervalFocused, force)) intervalText = interval
+            if (SettingsAutoModePolicy.shouldOverwriteUiField(distanceFocused, force)) distanceText = distance
+            if (SettingsAutoModePolicy.shouldOverwriteUiField(accuracyFocused, force)) accuracyText = accuracy
+        }
+        val fallback = settings.lowAccuracyFallbackTimeoutSec.toString()
+        if (SettingsAutoModePolicy.shouldOverwriteUiField(timeoutFocused, force)) {
+            lowAccuracyTimeoutText = fallback
+        }
+        hasHydratedSettings = true
+        isBindingSettings = false
+    }
+
+    fun maybePromoteCustomFromInterval(raw: String) {
+        if (isBindingSettings || isUpdatingFromProfile || state.trackerLoadState != TrackerSettingsLoadState.Ready) {
+            return
+        }
+        val parsed = raw.trim().toLongOrNull() ?: run {
+            promoteToCustomProfile()
+            return
+        }
+        val clamped = com.geovault.tracker.settings.TrackerSettings.clampLoggingIntervalSec(parsed)
+        if (clamped != state.trackerSettings.loggingIntervalSec) promoteToCustomProfile()
+    }
+
+    fun maybePromoteCustomFromDistance(raw: String) {
+        if (isBindingSettings || isUpdatingFromProfile || state.trackerLoadState != TrackerSettingsLoadState.Ready) {
+            return
+        }
+        val parsedDisplay = raw.trim().toFloatOrNull() ?: run {
+            promoteToCustomProfile()
+            return
+        }
+        val meters = if (state.usesImperialUnits) parsedDisplay / 3.28084f else parsedDisplay
+        val clamped = com.geovault.tracker.settings.TrackerSettings.clampDistanceFilterMeters(meters)
+        if (kotlin.math.abs(clamped - state.trackerSettings.distanceFilterMeters) > 0.0001f) {
+            promoteToCustomProfile()
+        }
+    }
+
+    fun maybePromoteCustomFromAccuracy(raw: String) {
+        if (isBindingSettings || isUpdatingFromProfile || state.trackerLoadState != TrackerSettingsLoadState.Ready) {
+            return
+        }
+        val parsedDisplay = raw.trim().toFloatOrNull() ?: run {
+            promoteToCustomProfile()
+            return
+        }
+        val meters = if (state.usesImperialUnits) parsedDisplay / 3.28084f else parsedDisplay
+        val clamped = com.geovault.tracker.settings.TrackerSettings.clampAccuracyFilterMeters(meters)
+        if (kotlin.math.abs(clamped - state.trackerSettings.accuracyFilterMeters) > 0.0001f) {
+            promoteToCustomProfile()
+        }
+    }
+
+    fun commitInterval() {
+        if (state.trackerLoadState != TrackerSettingsLoadState.Ready) return
+        val parsed = intervalText.trim().toLongOrNull()
+        if (parsed == null) {
+            intervalText = state.trackerSettings.loggingIntervalSec.toString()
+            return
+        }
+        onLoggingIntervalInput(parsed.toString())
+        val clamped = com.geovault.tracker.settings.TrackerSettings.clampLoggingIntervalSec(parsed)
+        if (clamped != state.trackerSettings.loggingIntervalSec) {
+            promoteToCustomProfile()
+        }
+    }
+
+    fun commitDistance() {
+        if (state.trackerLoadState != TrackerSettingsLoadState.Ready) return
+        val parsed = distanceText.trim().toFloatOrNull()
+        if (parsed == null) {
+            distanceText = SettingsMeasurementPolicy.metersToDisplayText(
+                meters = state.trackerSettings.distanceFilterMeters,
+                usesImperial = state.usesImperialUnits
+            )
+            return
+        }
+        onDistanceFilterInput(parsed.toString())
+        val meters = if (state.usesImperialUnits) parsed / 3.28084f else parsed
+        val clamped = com.geovault.tracker.settings.TrackerSettings.clampDistanceFilterMeters(meters)
+        if (kotlin.math.abs(clamped - state.trackerSettings.distanceFilterMeters) > 0.0001f) {
+            promoteToCustomProfile()
+        }
+    }
+
+    fun commitAccuracy() {
+        if (state.trackerLoadState != TrackerSettingsLoadState.Ready) return
+        val parsed = accuracyText.trim().toFloatOrNull()
+        if (parsed == null) {
+            accuracyText = SettingsMeasurementPolicy.metersToDisplayText(
+                meters = state.trackerSettings.accuracyFilterMeters,
+                usesImperial = state.usesImperialUnits
+            )
+            return
+        }
+        onAccuracyFilterInput(parsed.toString())
+        val meters = if (state.usesImperialUnits) parsed / 3.28084f else parsed
+        val clamped = com.geovault.tracker.settings.TrackerSettings.clampAccuracyFilterMeters(meters)
+        if (kotlin.math.abs(clamped - state.trackerSettings.accuracyFilterMeters) > 0.0001f) {
+            promoteToCustomProfile()
+        }
+    }
+
+    fun commitLowAccuracyTimeout() {
+        if (state.trackerLoadState != TrackerSettingsLoadState.Ready) return
+        val parsed = lowAccuracyTimeoutText.trim().toLongOrNull()
+        if (parsed == null) {
+            lowAccuracyTimeoutText = state.trackerSettings.lowAccuracyFallbackTimeoutSec.toString()
+            return
+        }
+        onLowAccuracyTimeoutInput(parsed.toString())
+    }
+
+    LaunchedEffect(state.trackerLoadState, state.trackerRevision, state.usesImperialUnits) {
+        if (state.trackerLoadState != TrackerSettingsLoadState.Ready) return@LaunchedEffect
+        val shouldApply = state.trackerRevision != lastRenderRevision ||
+            state.usesImperialUnits != lastRenderImperial
+        if (shouldApply) {
+            applyTrackerSettingsToUi(force = false)
+            lastRenderRevision = state.trackerRevision
+            lastRenderImperial = state.usesImperialUnits
+        }
+    }
+
+    DisposableEffect(state.trackerLoadState, state.usesImperialUnits) {
+        onDispose {
+            if (isBindingSettings || state.trackerLoadState != TrackerSettingsLoadState.Ready) return@onDispose
+            val autoTrackingEnabled = state.trackerSettings.autoTrackingMode
+            if (SettingsAutoModePolicy.shouldApplyManualDefaults(autoTrackingEnabled)) {
+                if (intervalText.trim().toLongOrNull() == null) {
+                    onLoggingIntervalInput(com.geovault.tracker.settings.TrackerSettings.DEFAULT_LOGGING_INTERVAL_SEC.toString())
+                } else {
+                    commitInterval()
+                }
+                if (distanceText.trim().toFloatOrNull() == null) {
+                    onDistanceFilterInput(
+                        SettingsMeasurementPolicy.metersToDisplayText(
+                            meters = com.geovault.tracker.settings.TrackerSettings.DEFAULT_DISTANCE_FILTER_METERS,
+                            usesImperial = state.usesImperialUnits
+                        )
+                    )
+                } else {
+                    commitDistance()
+                }
+                if (accuracyText.trim().toFloatOrNull() == null) {
+                    onAccuracyFilterInput(
+                        SettingsMeasurementPolicy.metersToDisplayText(
+                            meters = com.geovault.tracker.settings.TrackerSettings.DEFAULT_ACCURACY_FILTER_METERS,
+                            usesImperial = state.usesImperialUnits
+                        )
+                    )
+                } else {
+                    commitAccuracy()
+                }
+            }
+            if (lowAccuracyTimeoutText.trim().toLongOrNull() == null) {
+                onLowAccuracyTimeoutInput(
+                    com.geovault.tracker.settings.TrackerSettings.DEFAULT_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC.toString()
+                )
+            } else {
+                commitLowAccuracyTimeout()
+            }
+        }
+    }
+
+    val profileDisplay = if (state.trackerSettings.autoTrackingMode) {
+        stringResource(R.string.profile_auto)
+    } else {
+        when (selectedProfile) {
+            TrackerTrackingProfile.WALKING -> stringResource(R.string.profile_walking)
+            TrackerTrackingProfile.BIKING -> stringResource(R.string.profile_biking)
+            TrackerTrackingProfile.DRIVING -> stringResource(R.string.profile_driving)
+            TrackerTrackingProfile.CUSTOM -> stringResource(R.string.profile_custom)
+        }
+    }
+    val distanceUnit = stringResource(if (state.usesImperialUnits) R.string.unit_ft else R.string.unit_m)
+
     Scaffold(
         topBar = {
-            GeoVaultTopTitleBar(title = stringResource(R.string.settings_screen_title))
+            GeoVaultTopTitleBar(title = stringResource(R.string.nav_settings))
         },
-    ) { padding ->
+    ) { contentPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(contentPadding)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .navigationBarsPadding()
-                    .verticalScroll(rememberScrollState())
-                    .padding(20.dp),
-            ) {
-            if (!state.isLoggedIn) {
-                GeoVaultInitialAuthView(
-                    serverUrl = state.serverUrl,
-                    onServerUrlChanged = onServerUrlChanged,
-                    onConnect = onConnect,
-                    isConnecting = state.isConnecting,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            } else {
-                val email = state.loggedInText
-                    .removePrefix("Logged in as").trim()
-                    .ifBlank { "Authenticated User" }
-                GeoVaultServerConfigBlock(
-                    serverUrl = state.serverUrl,
-                    loggedInEmail = email,
-                    onDisconnectConfirmed = onDisconnect,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-                TrackerSettingsSection(
-                    state = state,
-                    onTrackingProfileSelected = onTrackingProfileSelected,
-                    onLoggingIntervalInput = onLoggingIntervalInput,
-                    onDistanceFilterInput = onDistanceFilterInput,
-                    onAccuracyFilterInput = onAccuracyFilterInput,
-                    onLowAccuracyFallbackEnabled = onLowAccuracyFallbackEnabled,
-                    onLowAccuracyTimeoutInput = onLowAccuracyTimeoutInput,
-                    onStartOnBoot = onStartOnBoot,
-                    onStartOnLaunch = onStartOnLaunch,
-                    onSendExtendedData = onSendExtendedData,
-                    onSignificantMotionOnly = onSignificantMotionOnly,
-                    onAutoTrackingMode = onAutoTrackingMode,
-                    onKeepScreenOnMap = onKeepScreenOnMap,
-                    selectedTrackerId = state.selectedTrackerId,
-                    selectedTrackerName = state.selectedTrackerName,
-                    onManageSelectedTracker = {
-                        onRefreshSelectableTrackers()
-                        showSelectedTrackerDialog = true
-                    },
-                    onManageHiddenItems = {
-                        onRefreshHiddenMapItems()
-                        showHiddenMapItemsDialog = true
-                    },
-                    onOpenAllTrackersOnMap = onOpenAllTrackersOnMap,
-                )
-            }
-            if (!state.infoMessage.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(state.infoMessage)
-            }
-            }
-            TrackerParamsOverlayLayer()
-        }
-    }
-    if (showSelectedTrackerDialog) {
-        SelectedTrackerDialog(
-            selectedTrackerId = state.selectedTrackerId,
-            selectedTrackerName = state.selectedTrackerName,
-            selectableTrackers = state.selectableTrackers,
-            isLoading = state.isSelectableTrackersLoading,
-            onDismiss = { showSelectedTrackerDialog = false },
-            onSelectTracker = { trackerId ->
-                onSetSelectedTracker(trackerId)
-                showSelectedTrackerDialog = false
-            },
-            onClearSelection = {
-                onClearSelectedTracker()
-                showSelectedTrackerDialog = false
-            },
-        )
-    }
-    if (showHiddenMapItemsDialog) {
-        HiddenMapItemsDialog(
-            items = state.hiddenMapItems,
-            isUpdating = state.isHiddenMapItemsUpdating,
-            onDismiss = { showHiddenMapItemsDialog = false },
-            onUnhideOne = onUnhideMapItem,
-            onUnhideAll = onUnhideAllMapItems,
-        )
-    }
-}
-
-@Composable
-private fun TrackerSettingsSection(
-    state: SettingsState,
-    onTrackingProfileSelected: (TrackerTrackingProfile) -> Unit,
-    onLoggingIntervalInput: (String) -> Unit,
-    onDistanceFilterInput: (String) -> Unit,
-    onAccuracyFilterInput: (String) -> Unit,
-    onLowAccuracyFallbackEnabled: (Boolean) -> Unit,
-    onLowAccuracyTimeoutInput: (String) -> Unit,
-    onStartOnBoot: (Boolean) -> Unit,
-    onStartOnLaunch: (Boolean) -> Unit,
-    onSendExtendedData: (Boolean) -> Unit,
-    onSignificantMotionOnly: (Boolean) -> Unit,
-    onAutoTrackingMode: (Boolean) -> Unit,
-    onKeepScreenOnMap: (Boolean) -> Unit,
-    selectedTrackerId: String,
-    selectedTrackerName: String,
-    onManageSelectedTracker: () -> Unit,
-    onManageHiddenItems: () -> Unit,
-    onOpenAllTrackersOnMap: () -> Unit,
-) {
-    var showLoggingHelpDialog by remember { mutableStateOf(false) }
-    Divider(
-        color = GeoVaultColorTokens.BorderLight,
-        thickness = 1.dp,
-    )
-    Spacer(modifier = Modifier.height(16.dp))
-    Text(
-        text = stringResource(R.string.settings_tracker_section_title),
-        style = MaterialTheme.typography.subtitle1,
-    )
-    Spacer(modifier = Modifier.height(12.dp))
-    when (state.trackerLoadState) {
-        TrackerSettingsLoadState.Loading -> {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .navigationBarsPadding()
+                .geoVaultKeyboardAwareVerticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 20.dp),
+        ) {
+        if (state.trackerLoadState == TrackerSettingsLoadState.Loading) {
             Text(
                 text = stringResource(R.string.settings_tracker_loading),
                 style = MaterialTheme.typography.body2,
             )
-        }
-        TrackerSettingsLoadState.Error -> {
+        } else if (state.trackerLoadState == TrackerSettingsLoadState.Error) {
             Text(
                 text = stringResource(R.string.settings_tracker_error),
                 style = MaterialTheme.typography.body2,
             )
         }
-        TrackerSettingsLoadState.Ready -> {
-            val s = state.trackerSettings
+
+        val trackerSettings = state.trackerSettings
+        GeoVaultToggleHelpCard(
+            checked = trackerSettings.sendExtendedData,
+            onCheckedChange = { if (!shouldIgnoreSettingChange()) onSendExtendedData(it) },
+            title = stringResource(R.string.extended_params_label),
+            helpText = stringResource(R.string.extended_params_help_text),
+            modifier = Modifier.padding(vertical = 6.dp),
+        )
+        GeoVaultToggleHelpCard(
+            checked = trackerSettings.significantDataOnly,
+            onCheckedChange = {
+                if (!shouldIgnoreSettingChange() && state.significantMotionSensorAvailable) {
+                    onSignificantMotionOnly(it)
+                }
+            },
+            title = stringResource(R.string.significant_motion_label),
+            helpText = stringResource(R.string.significant_motion_help_text),
+            modifier = Modifier.padding(vertical = 6.dp),
+            enabled = state.significantMotionSensorAvailable,
+        )
+        GeoVaultToggleHelpCard(
+            checked = trackerSettings.startOnBoot,
+            onCheckedChange = { if (!shouldIgnoreSettingChange()) onStartOnBoot(it) },
+            title = stringResource(R.string.start_on_boot_label),
+            helpText = stringResource(R.string.start_on_boot_help_text),
+            modifier = Modifier.padding(vertical = 6.dp),
+        )
+        GeoVaultToggleHelpCard(
+            checked = trackerSettings.startTrackingOnLaunch,
+            onCheckedChange = { if (!shouldIgnoreSettingChange()) onStartOnLaunch(it) },
+            title = stringResource(R.string.start_tracking_on_launch_label),
+            helpText = stringResource(R.string.start_tracking_on_launch_help_text),
+            modifier = Modifier.padding(vertical = 6.dp),
+        )
+        GeoVaultToggleHelpCard(
+            checked = trackerSettings.keepScreenOnWhileViewingMap,
+            onCheckedChange = { if (!shouldIgnoreSettingChange()) onKeepScreenOnMap(it) },
+            title = stringResource(R.string.keep_screen_on_while_viewing_map_label),
+            helpText = stringResource(R.string.keep_screen_on_while_viewing_map_help_text),
+            modifier = Modifier.padding(vertical = 6.dp),
+        )
+
+        GeoVaultSecondaryButton(
+            text = stringResource(R.string.hidden_trackers),
+            onClick = {
+                onRefreshHiddenTrackerItems()
+                showHiddenTrackersOverlay = true
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp, bottom = 16.dp),
+        )
+        GeoVaultSecondaryButton(
+            text = stringResource(R.string.show_all_trackers_in_settings),
+            onClick = onOpenAllTrackersOnMap,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+        )
+
+        Divider(
+            color = GeoVaultColorTokens.BorderLight,
+            thickness = 1.dp,
+            modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
+        )
+
+        GeoVaultToggleHelpCard(
+            checked = trackerSettings.autoTrackingMode,
+            onCheckedChange = {
+                if (shouldIgnoreSettingChange()) return@GeoVaultToggleHelpCard
+                if (it) {
+                    isBindingSettings = true
+                    intervalText = autoText
+                    distanceText = autoText
+                    accuracyText = autoText
+                    isBindingSettings = false
+                }
+                onAutoTrackingMode(it)
+            },
+            title = stringResource(R.string.auto_tracking_label),
+            helpText = stringResource(R.string.auto_tracking_help_text),
+            modifier = Modifier.padding(vertical = 6.dp),
+        )
+
+        Text(
+            text = stringResource(R.string.tracking_profile_label),
+            style = MaterialTheme.typography.subtitle2,
+            modifier = Modifier.padding(top = 6.dp, bottom = 8.dp),
+        )
+        ExposedDropdownMenuBox(
+            expanded = profileDropdownExpanded,
+            onExpandedChange = {
+                if (!trackerSettings.autoTrackingMode) profileDropdownExpanded = it
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            GeoVaultInput(
+                value = profileDisplay,
+                onValueChange = {},
+                label = stringResource(R.string.tracking_profile_label),
+                modifier = Modifier.fillMaxWidth(),
+                readOnly = true,
+                enabled = !trackerSettings.autoTrackingMode,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(profileDropdownExpanded) },
+            )
+            ExposedDropdownMenu(
+                expanded = profileDropdownExpanded,
+                onDismissRequest = { profileDropdownExpanded = false },
+            ) {
+                listOf(
+                    TrackerTrackingProfile.WALKING,
+                    TrackerTrackingProfile.BIKING,
+                    TrackerTrackingProfile.DRIVING,
+                    TrackerTrackingProfile.CUSTOM
+                ).forEach { profile ->
+                    val label = when (profile) {
+                        TrackerTrackingProfile.WALKING -> stringResource(R.string.profile_walking)
+                        TrackerTrackingProfile.BIKING -> stringResource(R.string.profile_biking)
+                        TrackerTrackingProfile.DRIVING -> stringResource(R.string.profile_driving)
+                        TrackerTrackingProfile.CUSTOM -> stringResource(R.string.profile_custom)
+                    }
+                    DropdownMenuItem(
+                        onClick = {
+                            profileDropdownExpanded = false
+                            selectedProfile = profile
+                            if (profile != TrackerTrackingProfile.CUSTOM) {
+                                val params = TrackingLocationPolicy.getProfileParams(profile.index)
+                                isUpdatingFromProfile = true
+                                intervalText = params.first.toString()
+                                distanceText = SettingsMeasurementPolicy.metersToDisplayText(
+                                    meters = params.second,
+                                    usesImperial = state.usesImperialUnits
+                                )
+                                accuracyText = SettingsMeasurementPolicy.metersToDisplayText(
+                                    meters = params.third,
+                                    usesImperial = state.usesImperialUnits
+                                )
+                                isUpdatingFromProfile = false
+                            }
+                            onTrackingProfileSelected(profile)
+                        },
+                    ) {
+                        Text(label)
+                    }
+                }
+            }
+        }
+        Text(
+            text = stringResource(R.string.tracking_profile_help_text),
+            color = GeoVaultColorTokens.TextSecondary,
+            style = MaterialTheme.typography.body2,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
             Text(
-                text = stringResource(R.string.settings_tracker_profile_title),
-                style = MaterialTheme.typography.body2,
+                text = stringResource(R.string.logging_interval_label),
+                style = MaterialTheme.typography.subtitle2,
+                modifier = Modifier.weight(1f),
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            ProfilePicker(
-                selected = s.trackingProfile,
-                onSelect = onTrackingProfileSelected,
-                enabled = !s.autoTrackingMode,
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            var intervalText by remember { mutableStateOf(s.loggingIntervalSec.toString()) }
-            LaunchedEffect(s.loggingIntervalSec) {
-                intervalText = s.loggingIntervalSec.toString()
+            IconButton(onClick = { showLoggingHelpDialog = true }) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = stringResource(R.string.logging_help_button),
+                    tint = GeoVaultColorTokens.PrimaryBlue,
+                )
             }
-            GeoVaultInput(
-                value = intervalText,
-                onValueChange = {
-                    intervalText = it
-                    onLoggingIntervalInput(it)
+        }
+        SettingsNumericInput(
+            value = intervalText,
+            onValueChange = {
+                intervalText = it
+                maybePromoteCustomFromInterval(it)
+            },
+            enabled = !trackerSettings.autoTrackingMode,
+            onDone = { commitInterval() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged {
+                    val lostFocus = intervalFocused && !it.isFocused
+                    intervalFocused = it.isFocused
+                    if (lostFocus) commitInterval()
                 },
-                label = stringResource(R.string.settings_tracker_interval_label),
-                enabled = !s.autoTrackingMode,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            GeoVaultSecondaryButton(
-                text = stringResource(R.string.settings_tracker_logging_help_button),
-                onClick = { showLoggingHelpDialog = true },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            val unitLabel = stringResource(
-                if (state.usesImperialUnits) R.string.unit_ft else R.string.unit_m
-            )
-            var distanceText by remember {
-                mutableStateOf(
-                    SettingsMeasurementPolicy.metersToDisplayText(
-                        meters = s.distanceFilterMeters,
-                        usesImperial = state.usesImperialUnits
-                    )
-                )
-            }
-            LaunchedEffect(s.distanceFilterMeters, state.usesImperialUnits) {
-                distanceText = SettingsMeasurementPolicy.metersToDisplayText(
-                    meters = s.distanceFilterMeters,
-                    usesImperial = state.usesImperialUnits
-                )
-            }
-            GeoVaultInput(
-                value = distanceText,
-                onValueChange = {
-                    distanceText = it
-                    onDistanceFilterInput(it)
+        )
+        Text(
+            text = stringResource(R.string.logging_interval_help_text),
+            color = GeoVaultColorTokens.TextSecondary,
+            style = MaterialTheme.typography.body2,
+            modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
+        )
+
+        Text(
+            text = stringResource(R.string.distance_filter_label, distanceUnit),
+            style = MaterialTheme.typography.subtitle2,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        SettingsNumericInput(
+            value = distanceText,
+            onValueChange = {
+                distanceText = it
+                maybePromoteCustomFromDistance(it)
+            },
+            enabled = !trackerSettings.autoTrackingMode,
+            onDone = { commitDistance() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged {
+                    val lostFocus = distanceFocused && !it.isFocused
+                    distanceFocused = it.isFocused
+                    if (lostFocus) commitDistance()
                 },
-                label = stringResource(R.string.settings_tracker_distance_label, unitLabel),
-                enabled = !s.autoTrackingMode,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            var accuracyText by remember {
-                mutableStateOf(
-                    SettingsMeasurementPolicy.metersToDisplayText(
-                        meters = s.accuracyFilterMeters,
-                        usesImperial = state.usesImperialUnits
-                    )
-                )
-            }
-            LaunchedEffect(s.accuracyFilterMeters, state.usesImperialUnits) {
-                accuracyText = SettingsMeasurementPolicy.metersToDisplayText(
-                    meters = s.accuracyFilterMeters,
-                    usesImperial = state.usesImperialUnits
-                )
-            }
-            GeoVaultInput(
-                value = accuracyText,
-                onValueChange = {
-                    accuracyText = it
-                    onAccuracyFilterInput(it)
+        )
+        Text(
+            text = stringResource(R.string.distance_filter_help_text),
+            color = GeoVaultColorTokens.TextSecondary,
+            style = MaterialTheme.typography.body2,
+            modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
+        )
+
+        Text(
+            text = stringResource(R.string.accuracy_filter_label, distanceUnit),
+            style = MaterialTheme.typography.subtitle2,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        SettingsNumericInput(
+            value = accuracyText,
+            onValueChange = {
+                accuracyText = it
+                maybePromoteCustomFromAccuracy(it)
+            },
+            enabled = !trackerSettings.autoTrackingMode,
+            onDone = { commitAccuracy() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged {
+                    val lostFocus = accuracyFocused && !it.isFocused
+                    accuracyFocused = it.isFocused
+                    if (lostFocus) commitAccuracy()
                 },
-                label = stringResource(R.string.settings_tracker_accuracy_label, unitLabel),
-                enabled = !s.autoTrackingMode,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            GeoVaultToggle(
-                checked = s.lowAccuracyFallbackEnabled,
-                onCheckedChange = onLowAccuracyFallbackEnabled,
-                label = stringResource(R.string.settings_tracker_low_accuracy_fallback),
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            var fallbackTimeoutText by remember { mutableStateOf(s.lowAccuracyFallbackTimeoutSec.toString()) }
-            LaunchedEffect(s.lowAccuracyFallbackTimeoutSec) {
-                fallbackTimeoutText = s.lowAccuracyFallbackTimeoutSec.toString()
-            }
-            GeoVaultInput(
-                value = fallbackTimeoutText,
-                onValueChange = {
-                    fallbackTimeoutText = it
-                    onLowAccuracyTimeoutInput(it)
+        )
+        Text(
+            text = stringResource(R.string.accuracy_filter_help_text),
+            color = GeoVaultColorTokens.TextSecondary,
+            style = MaterialTheme.typography.body2,
+            modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
+        )
+
+        Text(
+            text = stringResource(R.string.tracking_settings_apply_after_restart),
+            color = GeoVaultColorTokens.TextSecondary,
+            style = MaterialTheme.typography.body2,
+            modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
+        )
+
+        Divider(
+            color = GeoVaultColorTokens.BorderLight,
+            thickness = 1.dp,
+            modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
+        )
+
+        GeoVaultToggleHelpCard(
+            checked = trackerSettings.lowAccuracyFallbackEnabled,
+            onCheckedChange = {
+                if (!shouldIgnoreSettingChange()) onLowAccuracyFallbackEnabled(it)
+            },
+            title = stringResource(R.string.low_accuracy_fallback_label),
+            helpText = stringResource(R.string.low_accuracy_fallback_help_text),
+            modifier = Modifier.padding(vertical = 6.dp),
+        )
+        Text(
+            text = stringResource(R.string.low_accuracy_fallback_timeout_label),
+            style = MaterialTheme.typography.subtitle2,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        SettingsNumericInput(
+            value = lowAccuracyTimeoutText,
+            onValueChange = { lowAccuracyTimeoutText = it },
+            enabled = trackerSettings.lowAccuracyFallbackEnabled,
+            onDone = { commitLowAccuracyTimeout() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged {
+                    val lostFocus = timeoutFocused && !it.isFocused
+                    timeoutFocused = it.isFocused
+                    if (lostFocus) commitLowAccuracyTimeout()
                 },
-                label = stringResource(R.string.settings_tracker_low_accuracy_timeout_label),
-                enabled = s.lowAccuracyFallbackEnabled,
-                modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            text = stringResource(R.string.low_accuracy_fallback_timeout_help_text),
+            color = GeoVaultColorTokens.TextSecondary,
+            style = MaterialTheme.typography.body2,
+            modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
+        )
+
+        if (!state.isLoggedIn) {
+            Divider(
+                color = GeoVaultColorTokens.BorderLight,
+                thickness = 1.dp,
+                modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
             )
-            Spacer(modifier = Modifier.height(12.dp))
-            GeoVaultToggle(
-                checked = s.startOnBoot,
-                onCheckedChange = onStartOnBoot,
-                label = stringResource(R.string.settings_tracker_start_on_boot),
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            GeoVaultToggle(
-                checked = s.startTrackingOnLaunch,
-                onCheckedChange = onStartOnLaunch,
-                label = stringResource(R.string.settings_tracker_start_on_launch),
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            GeoVaultToggle(
-                checked = s.sendExtendedData,
-                onCheckedChange = onSendExtendedData,
-                label = stringResource(R.string.settings_tracker_send_extended),
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            GeoVaultToggle(
-                checked = s.significantDataOnly,
-                onCheckedChange = onSignificantMotionOnly,
-                label = stringResource(R.string.settings_tracker_significant_motion_only),
-                enabled = state.significantMotionSensorAvailable,
-            )
-            if (!state.significantMotionSensorAvailable) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = stringResource(R.string.settings_motion_sensor_unavailable),
-                    style = MaterialTheme.typography.caption,
-                    color = GeoVaultColorTokens.TextSecondary,
-                )
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            GeoVaultToggle(
-                checked = s.autoTrackingMode,
-                onCheckedChange = onAutoTrackingMode,
-                label = stringResource(R.string.settings_tracker_auto_tracking_mode),
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            GeoVaultToggle(
-                checked = s.keepScreenOnWhileViewingMap,
-                onCheckedChange = onKeepScreenOnMap,
-                label = stringResource(R.string.settings_tracker_keep_screen_on_map),
-            )
-            Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = stringResource(
-                    R.string.settings_tracker_selected_tracker_label,
-                    selectedTrackerName.ifBlank { stringResource(R.string.settings_tracker_none_selected) }
-                ),
-                style = MaterialTheme.typography.body2,
+                text = stringResource(R.string.server_url_label),
+                style = MaterialTheme.typography.subtitle2,
+                modifier = Modifier.padding(bottom = 8.dp),
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            GeoVaultSecondaryButton(
-                text = if (selectedTrackerId.isBlank()) {
-                    stringResource(R.string.settings_tracker_manage_selected_tracker)
-                } else {
-                    stringResource(R.string.settings_tracker_change_selected_tracker)
-                },
-                onClick = onManageSelectedTracker,
-                modifier = Modifier.fillMaxWidth(),
+            GeoVaultInput(
+                value = state.serverUrl,
+                onValueChange = onServerUrlChanged,
+                placeholder = "geovault.example.com",
+                enabled = true,
+                readOnly = false,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp),
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            GeoVaultSecondaryButton(
-                text = stringResource(R.string.settings_tracker_manage_hidden_items),
-                onClick = onManageHiddenItems,
-                modifier = Modifier.fillMaxWidth(),
+            GeoVaultPrimaryButton(
+                text = stringResource(R.string.connect_account),
+                onClick = onConnect,
+                enabled = !state.isConnecting,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            GeoVaultSecondaryButton(
-                text = stringResource(R.string.settings_tracker_view_all_tracks_on_map),
-                onClick = onOpenAllTrackersOnMap,
-                modifier = Modifier.fillMaxWidth(),
+        } else {
+            val loggedInEmail = state.loggedInText
+                .removePrefix("Logged in as")
+                .trim()
+                .ifBlank { "Authenticated User" }
+            GeoVaultServerConfigBlock(
+                serverUrl = state.serverUrl,
+                loggedInEmail = loggedInEmail,
+                onDisconnectConfirmed = onDisconnect,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                title = stringResource(R.string.server_settings_title),
+                disconnectButtonText = stringResource(R.string.disconnect),
             )
         }
+        if (!state.infoMessage.isNullOrBlank()) {
+            Text(
+                text = state.infoMessage,
+                color = GeoVaultColorTokens.TextSecondary,
+                style = MaterialTheme.typography.body2,
+            )
+        }
+            TrackerParamsOverlayLayer()
+        }
+            if (showHiddenTrackersOverlay) {
+                HiddenTrackersSubView(
+                    items = state.hiddenTrackerItems,
+                    isLoading = state.isHiddenTrackerItemsLoading,
+                    onDismiss = { showHiddenTrackersOverlay = false },
+                    onRefresh = onRefreshHiddenTrackerItems,
+                    onUnhideItem = onUnhideTrackerItem,
+                    onUnhideAll = onUnhideAllTrackerItems,
+                )
+            }
+        }
     }
+
     if (showLoggingHelpDialog) {
         GeoVaultInfoDialog(
-            title = stringResource(R.string.settings_logging_help_title),
+            title = stringResource(R.string.logging_help_title),
             onDismissRequest = { showLoggingHelpDialog = false },
-            closeButtonText = stringResource(R.string.trackers_dialog_cancel),
+            closeButtonText = stringResource(R.string.close),
         ) {
-            Text(stringResource(R.string.settings_logging_help_message))
+            Text(text = stringResource(R.string.logging_help_message))
         }
     }
 }
 
 @Composable
-private fun ProfilePicker(
-    selected: TrackerTrackingProfile,
-    onSelect: (TrackerTrackingProfile) -> Unit,
+private fun SettingsNumericInput(
+    value: String,
+    onValueChange: (String) -> Unit,
     enabled: Boolean,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        TrackerTrackingProfile.entries.forEach { profile ->
-            val label = when (profile) {
-                TrackerTrackingProfile.WALKING -> stringResource(R.string.settings_tracker_profile_walking)
-                TrackerTrackingProfile.BIKING -> stringResource(R.string.settings_tracker_profile_biking)
-                TrackerTrackingProfile.DRIVING -> stringResource(R.string.settings_tracker_profile_driving)
-                TrackerTrackingProfile.CUSTOM -> stringResource(R.string.settings_tracker_profile_custom)
-            }
-            Spacer(modifier = Modifier.height(6.dp))
-            if (profile == selected) {
-                GeoVaultPrimaryButton(
-                    text = label,
-                    onClick = { onSelect(profile) },
-                    enabled = enabled,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            } else {
-                GeoVaultSecondaryButton(
-                    text = label,
-                    onClick = { onSelect(profile) },
-                    enabled = enabled,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
+    val fieldBackground = if (MaterialTheme.colors.isLight) {
+        GeoVaultColorTokens.Surface
+    } else {
+        MaterialTheme.colors.surface
     }
-}
-
-@Composable
-private fun HiddenMapItemsDialog(
-    items: List<HiddenMapItem>,
-    isUpdating: Boolean,
-    onDismiss: () -> Unit,
-    onUnhideOne: (HiddenMapItem) -> Unit,
-    onUnhideAll: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.settings_hidden_items_title)) },
-        text = {
-            if (isUpdating) {
-                GeoVaultLoadingSpinner(spinnerSize = 24.dp)
-            } else if (items.isEmpty()) {
-                Text(stringResource(R.string.settings_hidden_items_empty))
-            } else {
-                Column {
-                    items.forEach { item ->
-                        val typeLabel = if (item.type == HiddenMapItemType.TRACKER) {
-                            stringResource(R.string.settings_hidden_item_tracker)
-                        } else {
-                            stringResource(R.string.settings_hidden_item_group)
-                        }
-                        Text(
-                            text = "$typeLabel: ${item.name}",
-                            style = MaterialTheme.typography.body2,
-                        )
-                        TextButton(
-                            onClick = { onUnhideOne(item) },
-                            enabled = !isUpdating,
-                        ) {
-                            Text(stringResource(R.string.settings_hidden_item_unhide))
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = onUnhideAll,
-                enabled = !isUpdating && items.isNotEmpty(),
-            ) {
-                Text(stringResource(R.string.settings_hidden_items_unhide_all))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isUpdating) {
-                Text(stringResource(R.string.trackers_dialog_cancel))
-            }
-        }
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        enabled = enabled,
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Number,
+            imeAction = ImeAction.Done,
+        ),
+        keyboardActions = KeyboardActions(onDone = { onDone() }),
+        colors = TextFieldDefaults.outlinedTextFieldColors(
+            backgroundColor = fieldBackground,
+            focusedBorderColor = GeoVaultColorTokens.PrimaryBlue,
+            unfocusedBorderColor = GeoVaultColorTokens.PrimaryBlue,
+            focusedLabelColor = GeoVaultColorTokens.PrimaryBlue,
+            unfocusedLabelColor = GeoVaultColorTokens.PrimaryBlue,
+            disabledTextColor = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+            disabledBorderColor = GeoVaultColorTokens.PrimaryBlue,
+            disabledLabelColor = GeoVaultColorTokens.PrimaryBlue.copy(alpha = 0.6f),
+            disabledPlaceholderColor = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.6f),
+            disabledTrailingIconColor = Color.Unspecified,
+            disabledLeadingIconColor = Color.Unspecified,
+        ),
     )
 }
 
 @Composable
-private fun SelectedTrackerDialog(
-    selectedTrackerId: String,
-    selectedTrackerName: String,
-    selectableTrackers: List<SelectableTracker>,
+private fun HiddenTrackersSubView(
+    items: List<HiddenTrackerItem>,
     isLoading: Boolean,
     onDismiss: () -> Unit,
-    onSelectTracker: (String) -> Unit,
-    onClearSelection: () -> Unit,
+    onRefresh: () -> Unit,
+    onUnhideItem: (HiddenTrackerItem) -> Unit,
+    onUnhideAll: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.settings_tracker_select_title)) },
-        text = {
-            if (isLoading) {
-                GeoVaultLoadingSpinner(spinnerSize = 24.dp)
-            } else if (selectableTrackers.isEmpty()) {
-                Text(stringResource(R.string.settings_tracker_select_empty))
-            } else {
-                LazyColumn {
-                    item {
+    var showUnhideAllConfirm by remember { mutableStateOf(false) }
+    GeoVaultRegisterBackHandler(
+        priority = TrackerBackPriorities.FULL_SCREEN_OVERLAY,
+        onBack = {
+            onDismiss()
+            true
+        },
+    )
+    val scrollState = rememberScrollState()
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colors.background)
+            .navigationBarsPadding(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 12.dp, top = 14.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.hidden_trackers),
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = GeoVaultColorTokens.TextPrimary,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.size(48.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = stringResource(R.string.close),
+                    tint = GeoVaultColorTokens.TextPrimary,
+                )
+            }
+        }
+        Divider(
+            color = GeoVaultColorTokens.BorderLight,
+            thickness = 1.dp,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            GeoVaultSecondaryButton(
+                text = stringResource(R.string.show_all),
+                onClick = { showUnhideAllConfirm = true },
+                enabled = !isLoading && items.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        GeoVaultPullRefreshLoadingContainer(
+            refreshing = isLoading,
+            showBlockingLoader = isLoading,
+            onRefresh = onRefresh,
+            loadingText = stringResource(R.string.loading_trackers),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(20.dp),
+            ) {
+                if (items.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.hidden_trackers_empty),
+                        color = GeoVaultColorTokens.TextSecondary,
+                        style = MaterialTheme.typography.body2,
+                        modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
+                    )
+                } else {
+                    val trackers = items.filter { it.type == HiddenTrackerItemType.TRACKER }
+                    val groups = items.filter { it.type == HiddenTrackerItemType.GROUP }
+                    if (trackers.isNotEmpty() && groups.isNotEmpty()) {
                         Text(
-                            text = stringResource(
-                                R.string.settings_tracker_selected_tracker_label,
-                                selectedTrackerName.ifBlank { stringResource(R.string.settings_tracker_none_selected) }
-                            ),
-                            style = MaterialTheme.typography.body2,
+                            text = stringResource(R.string.hidden_list_section_trackers),
+                            color = GeoVaultColorTokens.TextSecondary,
+                            style = MaterialTheme.typography.caption,
+                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
                     }
-                    items(items = selectableTrackers, key = { it.id }) { tracker ->
-                        GeoVaultSecondaryButton(
-                            text = if (tracker.id == selectedTrackerId) {
-                                stringResource(R.string.settings_tracker_selected_prefix, tracker.name)
-                            } else {
-                                tracker.name
-                            },
-                            onClick = { onSelectTracker(tracker.id) },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
+                    trackers.forEach { item ->
+                        HiddenTrackerRow(item = item, onUnhideItem = onUnhideItem, isLoading = isLoading)
+                    }
+                    if (groups.isNotEmpty()) {
+                        if (trackers.isNotEmpty()) {
+                            Text(
+                                text = stringResource(R.string.hidden_groups),
+                                color = GeoVaultColorTokens.TextSecondary,
+                                style = MaterialTheme.typography.caption,
+                                modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+                            )
+                        }
+                        groups.forEach { item ->
+                            HiddenTrackerRow(item = item, onUnhideItem = onUnhideItem, isLoading = isLoading)
+                        }
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = onClearSelection,
-                enabled = selectedTrackerId.isNotBlank() && !isLoading
-            ) {
-                Text(stringResource(R.string.settings_tracker_clear_selected))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isLoading) {
-                Text(stringResource(R.string.trackers_dialog_cancel))
-            }
-        },
-    )
+        }
+    }
+    if (showUnhideAllConfirm) {
+        GeoVaultConfirmationDialog(
+            title = stringResource(R.string.hidden_unhide_all_confirm_title),
+            message = stringResource(R.string.hidden_unhide_all_confirm_message),
+            onConfirm = {
+                showUnhideAllConfirm = false
+                onUnhideAll()
+            },
+            onCancel = { showUnhideAllConfirm = false },
+            confirmText = stringResource(R.string.show_all),
+            cancelText = stringResource(R.string.cancel_button),
+        )
+    }
+}
+
+@Composable
+private fun HiddenTrackerRow(
+    item: HiddenTrackerItem,
+    onUnhideItem: (HiddenTrackerItem) -> Unit,
+    isLoading: Boolean,
+) {
+    val rowShape = RoundedCornerShape(12.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .clip(rowShape)
+            .clickable(enabled = !isLoading) { onUnhideItem(item) }
+            .background(
+                color = MaterialTheme.colors.surface,
+                shape = rowShape,
+            )
+            .border(
+                width = 1.dp,
+                color = GeoVaultColorTokens.PrimaryBlue,
+                shape = rowShape,
+            )
+            .padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_chevron_track),
+            contentDescription = null,
+            tint = GeoVaultColorTokens.PrimaryBlue,
+            modifier = Modifier
+                .size(18.dp),
+        )
+        Text(
+            text = item.name,
+            style = MaterialTheme.typography.body1.copy(fontSize = 16.sp),
+            color = GeoVaultColorTokens.TextPrimary,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        IconButton(
+            onClick = { onUnhideItem(item) },
+            enabled = !isLoading,
+            modifier = Modifier.size(40.dp),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_eye),
+                contentDescription = stringResource(R.string.show_button),
+                tint = GeoVaultColorTokens.PrimaryBlue,
+            )
+        }
+    }
 }

@@ -164,7 +164,7 @@ fun GeoVaultBottomNavScaffold(
                 }
                 GeoVaultBottomNavRow(
                     destinations = effectiveDestinations,
-                    selectedDestinationId = activeDestination.id,
+                    selectedDestinationId = selectedDestinationId,
                     onDestinationSelected = onDestinationSelected,
                 )
             }

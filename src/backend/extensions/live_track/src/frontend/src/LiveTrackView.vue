@@ -538,6 +538,7 @@ import { setupMapFollowListeners } from './mapFollowLock.js';
 import { setupCopyMapCoordinatesOnContextMenu } from 'platform/utils/map/copyMapCoordinatesOnContextMenu.js';
 import { useTileSources } from './useTileSources.js';
 import { formatTimestampLocal } from './paramFormatters.js';
+import { buildGroupUnhidePayload, buildTrackerUnhidePayload } from './settingsPayloadBuilders.js';
 import {
   computeVisibleSharedGroups,
   computeVisibleSharedTrackers,
@@ -1798,9 +1799,15 @@ export default {
 
     async function onUnhideTracker(trackerId) {
       if (!trackerId || !api) return;
+      const idStr = String(trackerId);
       try {
-        await api.post(`/trackers/${trackerId}/settings/`, { hidden: false });
-        const idStr = String(trackerId);
+        const tracker = trackers.value.find((t) => String(t.id) === idStr);
+        if (!tracker) return;
+        const payload = buildTrackerUnhidePayload(tracker);
+        const response = await api.post(`/trackers/${trackerId}/settings/`, payload);
+        if (response?.data?.id) {
+          upsertTrackerInLocalState(response.data, { updateMap: false });
+        }
         const idx = trackers.value.findIndex((t) => String(t.id) === idStr);
         if (idx >= 0) {
           const t = trackers.value[idx];
@@ -1823,9 +1830,15 @@ export default {
 
     async function onUnhideGroup(groupId) {
       if (!groupId || !api) return;
+      const idStr = String(groupId);
       try {
-        await api.patch(`/groups/${groupId}/`, { hidden: false });
-        const idStr = String(groupId);
+        const group = groups.value.find((g) => String(g.id) === idStr);
+        if (!group) return;
+        const payload = buildGroupUnhidePayload(group);
+        const response = await api.patch(`/groups/${groupId}/`, payload);
+        if (response?.data?.id) {
+          upsertGroupInLocalState(response.data, { updateMap: false });
+        }
         const idx = groups.value.findIndex((g) => String(g.id) === idStr);
         if (idx >= 0) {
           const g = groups.value[idx];

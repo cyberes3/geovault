@@ -44,6 +44,7 @@ import { ref, watch } from 'vue';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import Loader from 'platform/components/parts/Loader.vue';
+import { buildTrackerSharingPayload } from './settingsPayloadBuilders.js';
 
 export default {
   name: 'PublicSharePopup',
@@ -92,7 +93,8 @@ export default {
       error.value = '';
       deleting.value = true;
       try {
-        const res = await props.api.post(`/trackers/${props.track.id}/settings/`, { visibility: 'private' });
+        const payload = buildTrackerSharingPayload(props.track, 'private', []);
+        const res = await props.api.post(`/trackers/${props.track.id}/settings/`, payload);
         emit('deleted', res?.data);
         emit('close');
       } catch (e) {

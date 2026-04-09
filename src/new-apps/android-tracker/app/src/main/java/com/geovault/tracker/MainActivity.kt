@@ -107,12 +107,9 @@ class MainActivity : ComponentActivity() {
                     onSettingsSignificantMotionOnly = settingsViewModel::setSignificantDataOnly,
                     onSettingsAutoTrackingMode = settingsViewModel::setAutoTrackingMode,
                     onSettingsKeepScreenOnMap = settingsViewModel::setKeepScreenOnWhileViewingMap,
-                    onSettingsRefreshSelectableTrackers = settingsViewModel::refreshSelectableTrackers,
-                    onSettingsSetSelectedTracker = settingsViewModel::setSelectedTracker,
-                    onSettingsClearSelectedTracker = settingsViewModel::clearSelectedTracker,
-                    onSettingsRefreshHiddenMapItems = settingsViewModel::refreshHiddenMapItems,
-                    onSettingsUnhideMapItem = settingsViewModel::unhideMapItem,
-                    onSettingsUnhideAllMapItems = settingsViewModel::unhideAllMapItems,
+                    onSettingsRefreshHiddenTrackerItems = settingsViewModel::refreshHiddenTrackerItems,
+                    onSettingsUnhideTrackerItem = settingsViewModel::unhideTrackerItem,
+                    onSettingsUnhideAllTrackerItems = settingsViewModel::unhideAllTrackerItems,
                 )
             }
         }

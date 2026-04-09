@@ -1,5 +1,6 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.tracker.Group
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -32,7 +33,7 @@ class GroupSharingSettingsPolicyTest {
         assertEquals("Ops", request.name)
         assertEquals("public", request.visibility)
         assertEquals(true, request.world_share_enabled)
-        assertEquals(emptyList<String>(), request.shared_with_emails)
+        assertEquals(null, request.shared_with_emails)
     }
 
     @Test
@@ -106,5 +107,59 @@ class GroupSharingSettingsPolicyTest {
         )
         assertNull(request.add_track_ids)
         assertNull(request.remove_track_ids)
+    }
+
+    @Test
+    fun buildPreservingPatchRequest_carriesForwardExistingGroupValues() {
+        val group = Group(
+            id = "g1",
+            name = "Group A",
+            hidden = true,
+            visibility = "shared",
+            shared_with_emails = listOf("a@example.com"),
+            world_share_id = "wg-1",
+        )
+        val request = GroupSharingSettingsPolicy.buildPreservingPatchRequest(group)
+        assertEquals("Group A", request.name)
+        assertEquals(true, request.hidden)
+        assertEquals("shared", request.visibility)
+        assertEquals(listOf("a@example.com"), request.shared_with_emails)
+        assertEquals(true, request.world_share_enabled)
+    }
+
+    @Test
+    fun buildWorldShareTogglePatch_preservesNonTargetFields() {
+        val group = Group(
+            id = "g1",
+            name = "Group A",
+            hidden = true,
+            visibility = "public",
+            shared_with_emails = listOf("a@example.com"),
+            world_share_id = "wg-1",
+        )
+        val request = GroupSharingSettingsPolicy.buildWorldShareTogglePatch(group, enabling = false)
+        assertEquals("Group A", request.name)
+        assertEquals(true, request.hidden)
+        assertEquals("public", request.visibility)
+        assertEquals(null, request.shared_with_emails)
+        assertEquals(false, request.world_share_enabled)
+    }
+
+    @Test
+    fun buildUnhidePatch_setsHiddenFalseAndPreservesOtherFields() {
+        val group = Group(
+            id = "g1",
+            name = "Group A",
+            hidden = true,
+            visibility = "public",
+            shared_with_emails = listOf("a@example.com"),
+            world_share_id = "wg-1",
+        )
+        val request = GroupSharingSettingsPolicy.buildUnhidePatch(group)
+        assertEquals("Group A", request.name)
+        assertEquals(false, request.hidden)
+        assertEquals("public", request.visibility)
+        assertEquals(null, request.shared_with_emails)
+        assertEquals(true, request.world_share_enabled)
     }
 }

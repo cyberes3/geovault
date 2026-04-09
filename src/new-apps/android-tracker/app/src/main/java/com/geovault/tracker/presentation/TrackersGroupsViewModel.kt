@@ -11,7 +11,6 @@ import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.SelectedTrackerManager
 import com.geovault.tracker.TrackerCreateRequest
 import com.geovault.tracker.TrackerRecentDataWindowOptions
-import com.geovault.tracker.TrackerSettingsRequest
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.UserItem
 import com.geovault.tracker.data.GroupManagementRepository
@@ -344,9 +343,10 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                 when (
                     val result = trackerRepository.updateTrackerSettings(
                         trackerId = trackerId,
-                        request = TrackerSettingsRequest(
+                        request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(
+                            tracker = d.tracker,
                             visibility = visibilityForWorldShare.apiValue,
-                            world_share_enabled = true,
+                            worldShareEnabled = true,
                         ),
                         publishToStore = true,
                     )
@@ -396,7 +396,11 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                 when (
                     val result = trackerRepository.updateTrackerSettings(
                         trackerId = trackerId,
-                        request = TrackerSettingsRequest(world_share_enabled = false),
+                        request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(
+                            tracker = d.tracker,
+                            visibility = visibilityForWorldShare.apiValue,
+                            worldShareEnabled = false,
+                        ),
                         publishToStore = true,
                     )
                 ) {
@@ -453,9 +457,10 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             when (
                 val result = trackerRepository.updateTrackerSettings(
                     trackerId = trackerId,
-                    request = TrackerSettingsRequest(
+                    request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(
+                        tracker = tracker,
                         visibility = visibilityForWorldShare.apiValue,
-                        world_share_enabled = true,
+                        worldShareEnabled = true,
                     ),
                     publishToStore = true,
                 )
@@ -606,7 +611,10 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                     ),
                 )
             }
-            val request = com.geovault.tracker.GroupPatchRequest(world_share_enabled = enabling)
+            val request = GroupSharingSettingsPolicy.buildWorldShareTogglePatch(
+                group = d.group,
+                enabling = enabling,
+            )
             when (val result = groupRepository.patchGroup(groupId, request, publishToStore = true)) {
                 is RepositoryResult.Success -> {
                     val g = result.data
@@ -780,23 +788,24 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             mutation = {
                 trackerRepository.updateTrackerSettings(
                     trackerId = d.tracker.id,
-                    request = TrackerSettingsRequest(
+                    request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(
+                        tracker = d.tracker,
                         name = name,
                         color = d.colorDraft.trim().ifBlank { null },
-                        recent_data_window = recentResolved,
+                        recentDataWindow = recentResolved,
                         visibility = d.visibilityDraft.apiValue,
-                        share_params_with_recipients = d.shareParamsWithRecipientsDraft,
-                        share_params_with_world = d.visibilityDraft != TrackerShareVisibility.PRIVATE &&
+                        shareParamsWithRecipients = d.shareParamsWithRecipientsDraft,
+                        shareParamsWithWorld = d.visibilityDraft != TrackerShareVisibility.PRIVATE &&
                             d.worldShareEnabledDraft && d.shareParamsWithWorldDraft,
-                        shared_with_emails = if (d.visibilityDraft == TrackerShareVisibility.SHARED) {
+                        sharedWithEmails = if (d.visibilityDraft == TrackerShareVisibility.SHARED) {
                             sharingValidation.normalizedEmails
                         } else {
                             null
                         },
-                        world_share_enabled = d.visibilityDraft != TrackerShareVisibility.PRIVATE &&
+                        worldShareEnabled = d.visibilityDraft != TrackerShareVisibility.PRIVATE &&
                             d.worldShareEnabledDraft,
                         hidden = if (d.setAsSelectedTracker) false else d.hiddenDraft,
-                        allow_group_reshare = d.allowGroupReshareDraft,
+                        allowGroupReshare = d.allowGroupReshareDraft,
                     ),
                 )
             },

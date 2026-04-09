@@ -2412,6 +2412,58 @@ class TestLiveTrackAPI(TestCase):
         data = response.json()
         self.assertEqual(data["settings"]["recent_data_window"], "current_session")
 
+    def test_post_settings_omitted_fields_preserve_existing_values(self):
+        """POST settings with omitted keys preserves existing settings values."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Preserve"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+
+        with _patch_live_track_enabled():
+            baseline_resp = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"color": "#112233", "recent_data_window": "1h"}),
+                content_type="application/json",
+            )
+        self.assertEqual(baseline_resp.status_code, 200)
+
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"name": "Preserve Renamed"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["name"], "Preserve Renamed")
+        self.assertEqual(data["color"], "#112233")
+        self.assertEqual(data["settings"]["color"], "#112233")
+        self.assertEqual(data["settings"]["recent_data_window"], "1h")
+
+    def test_post_settings_color_null_clears_color_setting(self):
+        """POST settings with color=null clears persisted color setting."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "ClearColor", "color": "#445566"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"color": None}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["color"], DEFAULT_TRACK_COLOR)
+        self.assertNotIn("color", data["settings"])
+
     def test_post_settings_rejects_camel_case_aliases(self):
         """POST settings rejects camelCase keys; canonical snake_case is required."""
         with _patch_live_track_enabled():
@@ -3848,6 +3900,58 @@ class TestLiveTrackGroups(TestCase):
         self.assertEqual(get_resp.status_code, 200)
         self.assertIn(t2_id, get_resp.json()["track_ids"])
         self.assertNotIn(t1_id, get_resp.json()["track_ids"])
+
+    def test_group_patch_omitted_fields_preserve_existing_values(self):
+        """PATCH groups/<id>/ with omitted keys preserves existing hidden value."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Preserve Group"}),
+                content_type="application/json",
+            )
+        group_id = create_resp.json()["id"]
+
+        with _patch_live_track_enabled():
+            self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"hidden": True}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            response = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"name": "Preserve Group Renamed"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["name"], "Preserve Group Renamed")
+        self.assertTrue(data["hidden"])
+
+    def test_group_patch_hidden_null_resets_hidden_to_false(self):
+        """PATCH groups/<id>/ with hidden=null resets hidden to false."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Reset Group"}),
+                content_type="application/json",
+            )
+        group_id = create_resp.json()["id"]
+
+        with _patch_live_track_enabled():
+            self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"hidden": True}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            response = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"hidden": None}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["hidden"])
 
     def test_group_leave_self_unshare(self):
         """Non-owner shared with group can leave via DELETE groups/<id>/leave/ (removes their LiveTrackGroupShare)."""

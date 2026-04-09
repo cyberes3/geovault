@@ -408,7 +408,11 @@ def tracker_post_settings(request, tracker_id):
             return error_response("A track with this name already exists", 409)
         track.name = name
         update_fields.append("name")
-    # Settings JSON: color, recent_data_window, hidden, allow_group_reshare (visibility etc. are model fields)
+    # Patch contract:
+    # - omitted keys: no change
+    # - explicit null: clear/reset setting key
+    # Settings JSON keys: color, recent_data_window, hidden, allow_group_reshare.
+    # (visibility/share fields are model fields handled below)
     settings_keys = {"color", "recent_data_window", "hidden", "allow_group_reshare"}
     settings_dump = {k: v for k, v in body.model_dump(exclude_unset=True).items() if k in settings_keys}
     if settings_dump:
