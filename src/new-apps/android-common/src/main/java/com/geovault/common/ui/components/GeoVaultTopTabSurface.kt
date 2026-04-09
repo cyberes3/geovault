@@ -72,13 +72,13 @@ fun <T> GeoVaultTopTabSurface(
             }
         }
     }
-    LaunchedEffect(pagerState.currentPage, tabs) {
-        val nextTab = tabs.getOrNull(pagerState.currentPage)?.value ?: return@LaunchedEffect
+    LaunchedEffect(pagerState.settledPage, tabs) {
+        val nextTab = tabs.getOrNull(pagerState.settledPage)?.value ?: return@LaunchedEffect
         if (nextTab != selectedTab) {
             onTabSelected(nextTab)
         }
     }
-    val activeTab = tabs.getOrNull(pagerState.currentPage)?.value ?: selectedTab
+    val activeTab = tabs.getOrNull(pagerState.settledPage)?.value ?: selectedTab
     val isBlocking = behavior.isTabBlocking(activeTab)
     val isRefreshing = behavior.isTabRefreshing(activeTab)
     val canRefresh = behavior.canRefreshTab(activeTab)

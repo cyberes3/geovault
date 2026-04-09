@@ -2,6 +2,8 @@ package com.geovault.tracker.ui
 
 import android.content.Context
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +19,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.Divider
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,9 +32,11 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,16 +52,16 @@ import com.geovault.common.NaturalSort
 import com.geovault.common.ui.components.GeoVaultCompactDismissTitleBar
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
+import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
 import com.geovault.common.ui.components.GeoVaultTab
-import com.geovault.common.ui.components.GeoVaultTopTabBehavior
-import com.geovault.common.ui.components.GeoVaultTopTabSurface
-import com.geovault.common.ui.components.GeoVaultTopTabSwipeMode
+import com.geovault.common.ui.components.GeoVaultTabBar
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
+import kotlinx.coroutines.launch
 
 private enum class PickerPhase { LIST, ADD }
 
@@ -68,6 +74,7 @@ private data class TrackerRowItem(
     val isOwned: Boolean get() = tracker?.isOwner() == true
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GroupTrackerPickerScreen(
     groupName: String,
@@ -84,44 +91,28 @@ fun GroupTrackerPickerScreen(
 ) {
     GeoVaultRequestBottomTabsDisabled(shouldDisable = true)
 
-    var phase by remember { mutableStateOf(PickerPhase.LIST) }
     val tabs = remember {
         listOf(
-            GeoVaultTab(
-                value = PickerPhase.LIST,
-                label = "",
-            ),
-            GeoVaultTab(
-                value = PickerPhase.ADD,
-                label = "",
-            ),
+            GeoVaultTab(value = PickerPhase.LIST, label = ""),
+            GeoVaultTab(value = PickerPhase.ADD, label = ""),
         )
     }
-    val localizedTabs = listOf(
-        tabs[0].copy(label = stringResource(R.string.trackers_subtab_trackers)),
-        tabs[1].copy(label = stringResource(R.string.groups_tracker_add_title)),
-    )
+    val localizedTabs = remember(tabs) {
+        tabs
+    }.let {
+        listOf(
+            it[0].copy(label = stringResource(R.string.trackers_subtab_trackers)),
+            it[1].copy(label = stringResource(R.string.groups_tracker_add_title)),
+        )
+    }
 
-    GeoVaultRegisterBackHandler(
-        priority = TrackerBackPriorities.NESTED_FULL_SCREEN_OVERLAY,
-        onBack = {
-            if (phase == PickerPhase.ADD) {
-                phase = PickerPhase.LIST
-            } else {
-                onDismiss()
-            }
-            true
-        },
-    )
     PickerTabContent(
         allTrackers = allTrackers,
         selectedTrackerIds = selectedTrackerIds,
         tabs = localizedTabs,
-        selectedPhase = phase,
         isLoading = isLoading,
         addingTrackerIds = addingTrackerIds,
         doneButtonLabel = doneButtonLabel,
-        onPhaseSelected = { phase = it },
         onRemoveTracker = { id -> onSelectionChanged(selectedTrackerIds - id) },
         onAddTracker = onAddTracker,
         onRefresh = onRefreshTrackers,
@@ -135,8 +126,6 @@ private fun PickerTabContent(
     allTrackers: List<Tracker>,
     selectedTrackerIds: Set<String>,
     tabs: List<GeoVaultTab<PickerPhase>>,
-    selectedPhase: PickerPhase,
-    onPhaseSelected: (PickerPhase) -> Unit,
     onRemoveTracker: (String) -> Unit,
     isLoading: Boolean,
     addingTrackerIds: Set<String>,
@@ -147,7 +136,44 @@ private fun PickerTabContent(
     doneButtonLabel: String,
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var searchQuery by remember { mutableStateOf("") }
+    val pagerState = rememberPagerState(
+        initialPage = 0,
+        pageCount = { tabs.size },
+    )
+    var settledPhase by remember { mutableStateOf(PickerPhase.LIST) }
+    val activePhase = tabs.getOrNull(pagerState.currentPage)?.value ?: settledPhase
+
+    LaunchedEffect(pagerState.settledPage, tabs) {
+        settledPhase = tabs.getOrNull(pagerState.settledPage)?.value ?: PickerPhase.LIST
+    }
+
+    val scrollToPhase: (PickerPhase, Boolean) -> Unit = { phase, animated ->
+        val targetIndex = tabs.indexOfFirst { it.value == phase }
+        if (targetIndex >= 0) {
+            coroutineScope.launch {
+                if (animated) {
+                    pagerState.animateScrollToPage(targetIndex)
+                } else {
+                    pagerState.scrollToPage(targetIndex)
+                }
+            }
+        }
+    }
+
+    GeoVaultRegisterBackHandler(
+        priority = TrackerBackPriorities.NESTED_FULL_SCREEN_OVERLAY,
+        onBack = {
+            if (settledPhase == PickerPhase.ADD || activePhase == PickerPhase.ADD) {
+                scrollToPhase(PickerPhase.LIST, true)
+            } else {
+                onDismiss()
+            }
+            true
+        },
+    )
+
     val borderColor = if (isSystemInDarkTheme()) {
         GeoVaultColorTokens.DarkBorderLight
     } else {
@@ -176,24 +202,61 @@ private fun PickerTabContent(
     }
     val loadingTrackersText = stringResource(R.string.loading_trackers)
 
-    GeoVaultTopTabSurface(
-        tabs = tabs,
-        selectedTab = selectedPhase,
-        onTabSelected = onPhaseSelected,
-        animateTabChanges = true,
-        behavior = GeoVaultTopTabBehavior(
-            swipeMode = GeoVaultTopTabSwipeMode.WHILE_NOT_BLOCKING,
-            isTabRefreshing = { false },
-            isTabBlocking = { tab -> tab == PickerPhase.ADD && isLoading },
-            canRefreshTab = { tab -> tab == PickerPhase.ADD && !isLoading },
-            isPullRefreshEnabled = { tab -> tab == PickerPhase.ADD && !isLoading },
-            loadingTextForTab = { tab -> if (tab == PickerPhase.ADD) loadingTrackersText else null },
-            onRefreshTab = { tab ->
-                if (tab == PickerPhase.ADD && !isLoading) onRefresh()
-            },
-        ),
-        contentForTab = { phase ->
-            when (phase) {
+    androidx.compose.material.Scaffold(
+        topBar = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                GeoVaultCompactDismissTitleBar(
+                    title = stringResource(R.string.groups_tracker_title),
+                    onClose = onDismiss,
+                )
+                GeoVaultTabBar(
+                    tabs = tabs,
+                    selectedTab = activePhase,
+                    onTabSelected = { scrollToPhase(it, true) },
+                    indicatorPage = pagerState.currentPage,
+                    indicatorOffsetFraction = pagerState.currentPageOffsetFraction,
+                )
+            }
+            Divider(
+                color = borderColor,
+                thickness = 1.dp,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        bottomBar = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .drawBehind {
+                        drawLine(
+                            color = borderColor,
+                            start = Offset.Zero,
+                            end = Offset(size.width, 0f),
+                            strokeWidth = 1.dp.toPx(),
+                        )
+                    }
+                    .navigationBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                GeoVaultPrimaryButton(
+                    text = doneButtonLabel,
+                    onClick = {
+                        if (activePhase == PickerPhase.ADD) scrollToPhase(PickerPhase.LIST, true)
+                        else onDone()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+    ) { innerPadding ->
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            userScrollEnabled = true,
+        ) { page ->
+            when (tabs.getOrNull(page)?.value ?: PickerPhase.LIST) {
                 PickerPhase.LIST -> {
                     if (memberItems.isEmpty()) {
                         Box(
@@ -230,103 +293,87 @@ private fun PickerTabContent(
                         }
                     }
                 }
+
                 PickerPhase.ADD -> {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        GeoVaultInput(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            label = stringResource(R.string.trackers_edit_share_user_picker_filter_label),
-                            placeholder = stringResource(R.string.groups_tracker_picker_filter_hint),
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                        )
+                    GeoVaultPullRefreshLoadingContainer(
+                        refreshing = isLoading,
+                        showBlockingLoader = false,
+                        onRefresh = onRefresh,
+                        pullRefreshEnabled = !isLoading,
+                        showPullRefreshIndicator = !isLoading,
+                        canRefresh = !isLoading,
+                        loadingText = loadingTrackersText,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            GeoVaultInput(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                label = stringResource(R.string.trackers_edit_share_user_picker_filter_label),
+                                placeholder = stringResource(R.string.groups_tracker_picker_filter_hint),
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                            )
 
-                        Divider(
-                            color = borderColor,
-                            thickness = 1.dp,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                            Divider(
+                                color = borderColor,
+                                thickness = 1.dp,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
 
-                        if (filteredItems.isEmpty()) {
+                            if (filteredItems.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.groups_tracker_picker_empty),
+                                        style = MaterialTheme.typography.body2,
+                                        color = GeoVaultColorTokens.TextSecondary,
+                                    )
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(
+                                        start = 12.dp,
+                                        end = 12.dp,
+                                        top = 4.dp,
+                                        bottom = 12.dp,
+                                    ),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    items(filteredItems, key = { it.trackerId }) { item ->
+                                        val isAdding = item.trackerId in addingTrackerIds
+                                        AddableTrackerCard(
+                                            item = item,
+                                            isAdding = isAdding,
+                                            borderColor = borderColor,
+                                            onAdd = { onAddTracker(item.trackerId) },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (isLoading) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(16.dp),
+                                    .background(MaterialTheme.colors.background.copy(alpha = 0.94f)),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text(
-                                    text = stringResource(R.string.groups_tracker_picker_empty),
-                                    style = MaterialTheme.typography.body2,
-                                    color = GeoVaultColorTokens.TextSecondary,
-                                )
-                            }
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(
-                                    start = 12.dp,
-                                    end = 12.dp,
-                                    top = 4.dp,
-                                    bottom = 12.dp,
-                                ),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                items(filteredItems, key = { it.trackerId }) { item ->
-                                    val isAdding = item.trackerId in addingTrackerIds
-                                    AddableTrackerCard(
-                                        item = item,
-                                        isAdding = isAdding,
-                                        borderColor = borderColor,
-                                        onAdd = { onAddTracker(item.trackerId) },
-                                    )
-                                }
+                                GeoVaultLoadingSpinner(bottomText = loadingTrackersText)
                             }
                         }
                     }
                 }
             }
-        },
-        titleForTab = { tab ->
-            GeoVaultCompactDismissTitleBar(
-                title = stringResource(R.string.groups_tracker_title),
-                onClose = onDismiss,
-            )
-        },
-        headerForTab = {
-            Divider(
-                color = borderColor,
-                thickness = 1.dp,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        },
-        bottomForTab = { tab ->
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .drawBehind {
-                        drawLine(
-                            color = borderColor,
-                            start = Offset.Zero,
-                            end = Offset(size.width, 0f),
-                            strokeWidth = 1.dp.toPx(),
-                        )
-                    }
-                    .navigationBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
-            ) {
-                GeoVaultPrimaryButton(
-                    text = doneButtonLabel,
-                    onClick = {
-                        if (tab == PickerPhase.ADD) onPhaseSelected(PickerPhase.LIST)
-                        else onDone()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        },
-    )
+        }
+    }
 }
 
 @Composable
